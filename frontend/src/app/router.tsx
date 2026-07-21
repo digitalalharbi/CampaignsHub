@@ -5,10 +5,12 @@ import { RequireAuth } from '@/features/auth/RequireAuth'
 import { LeadsPage } from '@/features/crm/LeadsPage'
 import { DesignSystemPage } from '@/features/design/DesignSystemPage'
 import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
+import { MarketingPage } from '@/features/marketing/MarketingPage'
 import { SystemStatusPage } from '@/features/system/SystemStatusPage'
 import { AppShell } from '@/layouts/AppShell'
 
 export const router = createBrowserRouter([
+  { path: '/welcome', element: <MarketingPage /> },
   { path: '/login', element: <LoginPage /> },
   {
     element: <RequireAuth />,
