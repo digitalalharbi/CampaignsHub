@@ -6,6 +6,7 @@ namespace Database\Seeders;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\CRM\Models\Lead;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Models\Workspace;
@@ -76,6 +77,23 @@ class DatabaseSeeder extends Seeder
             ['name' => 'Demo Owner', 'password' => Hash::make('password'), 'tenant_id' => $tenant->id],
         );
         $ownerUser->assignRole($owner);
+
+        // Demo CRM leads (only if none exist yet for this tenant).
+        if (Lead::count() === 0) {
+            $seed = [
+                ['name' => 'Acme Co', 'source' => 'website', 'status' => 'qualified', 'estimated_value' => 12000],
+                ['name' => 'Nova Retail', 'source' => 'referral', 'status' => 'new', 'estimated_value' => 8400],
+                ['name' => 'Zahra Store', 'source' => 'whatsapp', 'status' => 'proposal_sent', 'estimated_value' => 21000],
+                ['name' => 'Falcon Media', 'source' => 'event', 'status' => 'negotiation', 'estimated_value' => 5600],
+                ['name' => 'Bright Foods', 'source' => 'paid', 'status' => 'contacted', 'estimated_value' => 15250],
+            ];
+            foreach ($seed as $row) {
+                Lead::create(array_merge($row, [
+                    'owner_id' => $ownerUser->id,
+                    'currency' => 'SAR',
+                ]));
+            }
+        }
 
         $context->forget();
     }
