@@ -47,6 +47,10 @@ const dictionary = {
     search_leads: 'ابحث في العملاء المحتملين…',
     lead_converted: 'تم التحويل إلى فرصة',
     no_leads: 'لا يوجد عملاء محتملون بعد',
+    integrations: 'التكاملات',
+    connect: 'ربط',
+    sync: 'مزامنة',
+    not_connected: 'غير مربوط',
   },
   en: {
     app_name: 'MediaBuying Platform',
@@ -93,6 +97,10 @@ const dictionary = {
     search_leads: 'Search leads…',
     lead_converted: 'Converted to opportunity',
     no_leads: 'No leads yet',
+    integrations: 'Integrations',
+    connect: 'Connect',
+    sync: 'Sync',
+    not_connected: 'Not connected',
   },
 } as const
 
