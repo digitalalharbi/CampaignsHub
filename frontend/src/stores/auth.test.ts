@@ -13,27 +13,29 @@ const baseUser: AuthUser = {
 }
 
 describe('auth store', () => {
-  beforeEach(() => useAuth.getState().clear())
+  beforeEach(() => useAuth.getState().setUser(null))
 
-  it('has no permissions when signed out', () => {
+  it('starts as a guest with no permissions', () => {
+    expect(useAuth.getState().status).toBe('guest')
     expect(useAuth.getState().hasPermission('clients.view')).toBe(false)
   })
 
-  it('respects explicit tenant permissions', () => {
-    useAuth.getState().setSession(baseUser, 'token')
+  it('respects explicit tenant permissions when authenticated', () => {
+    useAuth.getState().setUser(baseUser)
+    expect(useAuth.getState().status).toBe('authenticated')
     expect(useAuth.getState().hasPermission('clients.view')).toBe(true)
     expect(useAuth.getState().hasPermission('campaigns.launch')).toBe(false)
   })
 
   it('grants platform admins every permission', () => {
-    useAuth.getState().setSession({ ...baseUser, is_platform_admin: true, permissions: [] }, 'token')
+    useAuth.getState().setUser({ ...baseUser, is_platform_admin: true, permissions: [] })
     expect(useAuth.getState().hasPermission('anything.at.all')).toBe(true)
   })
 
-  it('clears the session', () => {
-    useAuth.getState().setSession(baseUser, 'token')
-    useAuth.getState().clear()
+  it('returns to guest when the user is cleared', () => {
+    useAuth.getState().setUser(baseUser)
+    useAuth.getState().setUser(null)
     expect(useAuth.getState().user).toBeNull()
-    expect(useAuth.getState().token).toBeNull()
+    expect(useAuth.getState().status).toBe('guest')
   })
 })

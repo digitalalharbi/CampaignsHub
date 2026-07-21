@@ -1,9 +1,10 @@
-import { postData } from '@/lib/api/client'
-import type { AuthResult } from '@/lib/api/types'
+import { ensureCsrfCookie, getData, postData } from '@/lib/api/client'
+import type { AuthUser } from '@/lib/api/types'
 
 export interface LoginInput {
   email: string
   password: string
+  remember?: boolean
 }
 
 export interface RegisterInput {
@@ -14,14 +15,32 @@ export interface RegisterInput {
   password_confirmation: string
 }
 
-export function login(input: LoginInput): Promise<AuthResult> {
-  return postData<AuthResult>('/auth/login', input)
+interface UserEnvelope {
+  user: AuthUser
 }
 
-export function register(input: RegisterInput): Promise<AuthResult> {
-  return postData<AuthResult>('/auth/register', input)
+export async function login(input: LoginInput): Promise<AuthUser> {
+  await ensureCsrfCookie()
+  const { user } = await postData<UserEnvelope>('/auth/login', input)
+  return user
 }
 
-export function logout(): Promise<null> {
-  return postData<null>('/auth/logout')
+export async function register(input: RegisterInput): Promise<AuthUser> {
+  await ensureCsrfCookie()
+  const { user } = await postData<UserEnvelope>('/auth/register', input)
+  return user
+}
+
+export async function logout(): Promise<void> {
+  await postData<null>('/auth/logout')
+}
+
+/** Probe the session on app load; returns null when the visitor is a guest. */
+export async function fetchCurrentUser(): Promise<AuthUser | null> {
+  try {
+    const { user } = await getData<UserEnvelope>('/auth/me')
+    return user
+  } catch {
+    return null
+  }
 }

@@ -1,7 +1,8 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   BarChart3,
   LayoutDashboard,
+  LogOut,
   Megaphone,
   Moon,
   Palette,
@@ -10,7 +11,9 @@ import {
   Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { logout } from '@/features/auth/api'
 import { useT } from '@/lib/i18n'
+import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import type { TranslationKey } from '@/lib/i18n'
 
@@ -25,7 +28,15 @@ const nav: { to: string; key: TranslationKey; icon: typeof LayoutDashboard }[] =
 
 export function AppShell() {
   const t = useT()
+  const navigate = useNavigate()
   const { theme, locale, toggleTheme, toggleLocale } = useUi()
+  const { user, setUser } = useAuth()
+
+  const handleLogout = async () => {
+    await logout().catch(() => undefined)
+    setUser(null)
+    navigate('/login', { replace: true })
+  }
 
   return (
     <div className="flex min-h-screen bg-background text-text-primary">
@@ -64,11 +75,19 @@ export function AppShell() {
             {t('app_name')}
           </span>
           <div className="ms-auto flex items-center gap-2">
+            {user && (
+              <span className="hidden text-[12px] text-text-secondary sm:inline" title={user.email}>
+                {user.name}
+              </span>
+            )}
             <Button variant="secondary" onClick={toggleLocale} aria-label="Toggle language">
               {locale === 'ar' ? 'EN' : 'ع'}
             </Button>
             <Button variant="secondary" onClick={toggleTheme} aria-label="Toggle theme">
               {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+            </Button>
+            <Button variant="ghost" onClick={handleLogout} aria-label={t('sign_out')}>
+              <LogOut size={16} />
             </Button>
           </div>
         </header>

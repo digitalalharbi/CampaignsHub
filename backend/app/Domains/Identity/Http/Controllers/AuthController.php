@@ -12,23 +12,28 @@ use App\Domains\Identity\Resources\UserResource;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
-use Illuminate\Auth\Events\Login;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
-use Laravel\Sanctum\PersonalAccessToken;
 
+/**
+ * SPA cookie-session authentication (Sanctum stateful). See ADR 0001.
+ * Personal Access Tokens are issued only via {@see issueToken()} for non-browser clients.
+ */
 final class AuthController extends Controller
 {
     public function register(RegisterRequest $request, RegisterTenantAction $action): JsonResponse
     {
         $user = $action->execute(RegisterData::fromArray($request->validated()));
 
-        $token = $user->createToken($request->input('device_name', 'web'))->plainTextToken;
+        // Establish the SPA session (fires the Login event → audited).
+        Auth::guard('web')->login($user);
+        $request->session()->regenerate();
 
         return ApiResponse::success(
-            ['user' => new UserResource($user), 'token' => $token],
+            ['user' => new UserResource($user)],
             'Account created successfully.',
             status: 201,
         );
@@ -45,17 +50,16 @@ final class AuthController extends Controller
             ]);
         }
 
-        // Fire the Login event so the audit listener records it.
-        event(new Login('sanctum', $user, false));
-
-        $token = $user->createToken($request->input('device_name', 'web'))->plainTextToken;
+        Auth::guard('web')->login($user, (bool) $request->boolean('remember'));
+        $request->session()->regenerate();
 
         return ApiResponse::success(
-            ['user' => new UserResource($user), 'token' => $token],
+            ['user' => new UserResource($user)],
             'Signed in successfully.',
         );
     }
 
+    /** Current authenticated user — used by the SPA to restore its session on load. */
     public function me(Request $request): JsonResponse
     {
         return ApiResponse::success(
@@ -66,11 +70,33 @@ final class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $token = $request->user()->currentAccessToken();
-        if ($token instanceof PersonalAccessToken) {
-            $token->delete();
-        }
+        Auth::guard('web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
 
         return ApiResponse::success(null, 'Signed out successfully.');
+    }
+
+    /**
+     * Issue a Personal Access Token for NON-browser API clients (mobile, integrations).
+     * Browsers use the cookie session above and never receive a token.
+     */
+    public function issueToken(LoginRequest $request): JsonResponse
+    {
+        /** @var User|null $user */
+        $user = User::where('email', $request->string('email'))->first();
+
+        if ($user === null || ! Hash::check((string) $request->string('password'), $user->password)) {
+            throw ValidationException::withMessages([
+                'email' => ['These credentials do not match our records.'],
+            ]);
+        }
+
+        $token = $user->createToken((string) $request->input('device_name', 'api'))->plainTextToken;
+
+        return ApiResponse::success(
+            ['user' => new UserResource($user), 'token' => $token],
+            'Token issued successfully.',
+        );
     }
 }

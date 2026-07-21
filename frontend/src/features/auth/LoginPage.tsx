@@ -11,14 +11,14 @@ import { useAuth } from '@/stores/auth'
 export function LoginPage() {
   const t = useT()
   const navigate = useNavigate()
-  const setSession = useAuth((s) => s.setSession)
+  const setUser = useAuth((s) => s.setUser)
   const [email, setEmail] = useState('owner@demo-agency.local')
   const [password, setPassword] = useState('password')
 
   const mutation = useMutation({
     mutationFn: login,
-    onSuccess: (result) => {
-      setSession(result.user, result.token)
+    onSuccess: (user) => {
+      setUser(user)
       navigate('/', { replace: true })
     },
   })

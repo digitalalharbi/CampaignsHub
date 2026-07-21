@@ -14,15 +14,18 @@ final class AuthTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** Requests from the SPA origin are treated as stateful (cookie session) by Sanctum. */
+    private array $spaHeaders = ['Origin' => 'http://localhost:5173'];
+
     protected function setUp(): void
     {
         parent::setUp();
         $this->seed(\Database\Seeders\PermissionSeeder::class);
     }
 
-    public function test_registration_provisions_tenant_and_returns_token(): void
+    public function test_registration_provisions_tenant_and_starts_session(): void
     {
-        $response = $this->postJson('/api/v1/auth/register', [
+        $response = $this->withHeaders($this->spaHeaders)->postJson('/api/v1/auth/register', [
             'tenant_name' => 'Acme Media',
             'name' => 'Sara',
             'email' => 'sara@acme.test',
@@ -32,22 +35,23 @@ final class AuthTest extends TestCase
 
         $response->assertCreated()
             ->assertJson(['success' => true])
-            ->assertJsonStructure(['data' => ['user' => ['id', 'email', 'tenant_id'], 'token']]);
+            ->assertJsonStructure(['data' => ['user' => ['id', 'email', 'tenant_id']]])
+            ->assertJsonMissingPath('data.token'); // SPA never receives a token
 
         $this->assertDatabaseHas('tenants', ['name' => 'Acme Media']);
-        $this->assertDatabaseHas('users', ['email' => 'sara@acme.test']);
         $this->assertNotNull(User::where('email', 'sara@acme.test')->first()->tenant_id);
     }
 
     public function test_registration_validates_input(): void
     {
-        $this->postJson('/api/v1/auth/register', ['email' => 'not-an-email'])
+        $this->withHeaders($this->spaHeaders)
+            ->postJson('/api/v1/auth/register', ['email' => 'not-an-email'])
             ->assertStatus(422)
             ->assertJson(['success' => false])
             ->assertJsonValidationErrors(['tenant_name', 'name', 'email', 'password']);
     }
 
-    public function test_login_succeeds_and_writes_audit_log(): void
+    public function test_login_authenticates_session_and_writes_audit_log(): void
     {
         $tenant = Tenant::create(['name' => 'T', 'slug' => 't', 'status' => 'active']);
         $user = User::create([
@@ -57,10 +61,15 @@ final class AuthTest extends TestCase
             'password' => 'secret123',
         ]);
 
-        $this->postJson('/api/v1/auth/login', [
-            'email' => 'ali@t.test',
-            'password' => 'secret123',
-        ])->assertOk()->assertJsonStructure(['data' => ['user', 'token']]);
+        $this->withHeaders($this->spaHeaders)
+            ->postJson('/api/v1/auth/login', ['email' => 'ali@t.test', 'password' => 'secret123'])
+            ->assertOk()
+            ->assertJsonMissingPath('data.token');
+
+        // The session established above authenticates the follow-up request.
+        $this->withHeaders($this->spaHeaders)->getJson('/api/v1/auth/me')
+            ->assertOk()
+            ->assertJson(['data' => ['user' => ['email' => 'ali@t.test']]]);
 
         $this->assertTrue(
             AuditLog::where('action', 'user.login')->where('user_id', $user->id)->exists(),
@@ -72,7 +81,8 @@ final class AuthTest extends TestCase
     {
         User::create(['name' => 'X', 'email' => 'x@t.test', 'password' => 'secret123']);
 
-        $this->postJson('/api/v1/auth/login', ['email' => 'x@t.test', 'password' => 'wrong'])
+        $this->withHeaders($this->spaHeaders)
+            ->postJson('/api/v1/auth/login', ['email' => 'x@t.test', 'password' => 'wrong'])
             ->assertStatus(422)
             ->assertJsonValidationErrors(['email']);
     }
@@ -83,13 +93,23 @@ final class AuthTest extends TestCase
             ->assertJson(['success' => false]);
     }
 
-    public function test_me_returns_current_user_when_authenticated(): void
+    public function test_token_endpoint_issues_pat_for_api_clients(): void
     {
-        $user = User::create(['name' => 'Z', 'email' => 'z@t.test', 'password' => 'secret123']);
+        $user = User::create(['name' => 'Api', 'email' => 'api@t.test', 'password' => 'secret123']);
 
-        $this->actingAs($user, 'sanctum')
-            ->getJson('/api/v1/auth/me')
+        $response = $this->postJson('/api/v1/auth/tokens', [
+            'email' => 'api@t.test',
+            'password' => 'secret123',
+            'device_name' => 'mobile',
+        ])->assertOk()->assertJsonStructure(['data' => ['user', 'token']]);
+
+        $token = $response->json('data.token');
+
+        // The PAT authenticates a stateless API request.
+        $this->withToken($token)->getJson('/api/v1/auth/me')
             ->assertOk()
-            ->assertJson(['data' => ['user' => ['email' => 'z@t.test']]]);
+            ->assertJson(['data' => ['user' => ['email' => 'api@t.test']]]);
+
+        $this->assertSame(1, $user->tokens()->count());
     }
 }

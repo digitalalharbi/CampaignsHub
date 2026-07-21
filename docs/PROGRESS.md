@@ -46,7 +46,14 @@ without evidence (command output / test result / screenshot).
 - Gate: `tsc` clean, `oxlint` clean, `vitest` 4 passed, `vite build` OK. Verified live in browser:
   components in Arabic RTL (light) and DataTable in English/dark — 0 console errors.
 - ⬜ Later: Command Palette (⌘K), Toast provider, Date range picker, mobile card fallback for tables.
-## Phase 3 — CRM ⬜
+## Auth upgrade — Sanctum cookie SPA ✅ (ADR 0001, verified live)
+- Migrated SPA auth from in-memory PAT to Sanctum stateful cookie/session (CSRF + withCredentials +
+  stateful domains). PATs retained for non-browser clients via `POST /api/v1/auth/tokens`.
+- CORS configured (supports_credentials). RequireAuth gate + session restore on load.
+- Backend 15 tests green (6 auth incl. session + PAT). Live: guest→/login (401), login (csrf+session),
+  refresh keeps session (`/auth/me` 200), logout — 0 console errors.
+
+## Phase 3 — CRM 🚧
 ## Phase 4 — Campaign Operations ⬜
 ## Phase 5 — Tracking & Ecommerce ⬜
 ## Phase 6 — Advertising Integrations ⏳ (needs platform credentials; Sandbox connectors first)

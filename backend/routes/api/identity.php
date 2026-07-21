@@ -14,6 +14,9 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
     Route::post('/register', [AuthController::class, 'register'])->name('register');
     Route::post('/login', [AuthController::class, 'login'])->name('login')
         ->middleware('throttle:6,1');
+    // Personal Access Token issuance for non-browser API clients only.
+    Route::post('/tokens', [AuthController::class, 'issueToken'])->name('tokens')
+        ->middleware('throttle:6,1');
 
     Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
         Route::get('/me', [AuthController::class, 'me'])->name('me');

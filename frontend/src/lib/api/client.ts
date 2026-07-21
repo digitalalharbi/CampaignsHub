@@ -2,27 +2,22 @@ import axios, { AxiosError } from 'axios'
 import type { ApiEnvelope } from './types'
 
 /**
- * Central Axios client. Points at the versioned API and carries credentials so a future migration
- * to Sanctum cookie-session auth needs no call-site changes. A bearer token (when present) is
- * attached from the in-memory auth store.
+ * Central Axios client for the SPA. Uses Sanctum cookie-session auth (ADR 0001):
+ * `withCredentials` sends the session + XSRF cookies, and Axios echoes the XSRF-TOKEN cookie back
+ * as the X-XSRF-TOKEN header automatically. No auth token is stored in JS.
  */
 export const api = axios.create({
   baseURL: '/api/v1',
   withCredentials: true,
+  xsrfCookieName: 'XSRF-TOKEN',
+  xsrfHeaderName: 'X-XSRF-TOKEN',
   headers: { Accept: 'application/json' },
 })
 
-let authToken: string | null = null
-export function setAuthToken(token: string | null): void {
-  authToken = token
+/** Prime the CSRF cookie before the first unsafe (POST/PUT/DELETE) request. */
+export async function ensureCsrfCookie(): Promise<void> {
+  await axios.get('/sanctum/csrf-cookie', { withCredentials: true })
 }
-
-api.interceptors.request.use((config) => {
-  if (authToken) {
-    config.headers.Authorization = `Bearer ${authToken}`
-  }
-  return config
-})
 
 /** Normalized error surfaced to the UI. */
 export interface ApiError {
@@ -41,14 +36,22 @@ export function toApiError(error: unknown): ApiError {
   }
 }
 
-/** Unwrap the envelope's `data` for a GET. */
 export async function getData<T>(url: string): Promise<T> {
   const response = await api.get<ApiEnvelope<T>>(url)
   return response.data.data
 }
 
-/** Unwrap the envelope's `data` for a POST. */
 export async function postData<T>(url: string, body?: unknown): Promise<T> {
   const response = await api.post<ApiEnvelope<T>>(url, body)
+  return response.data.data
+}
+
+export async function putData<T>(url: string, body?: unknown): Promise<T> {
+  const response = await api.put<ApiEnvelope<T>>(url, body)
+  return response.data.data
+}
+
+export async function deleteData<T>(url: string): Promise<T> {
+  const response = await api.delete<ApiEnvelope<T>>(url)
   return response.data.data
 }
