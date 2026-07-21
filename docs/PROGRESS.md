@@ -53,6 +53,16 @@ without evidence (command output / test result / screenshot).
 - Backend 15 tests green (6 auth incl. session + PAT). Live: guest→/login (401), login (csrf+session),
   refresh keeps session (`/auth/me` 200), logout — 0 console errors.
 
+## Project management + wider isolation ✅ (priority #2, tested + multi-domain live proof)
+- ProjectController: CRUD + clone + archive/restore + pause/resume + statuses; project_memberships
+  + team management (last-admin protection). BelongsToProject applied to Task + AppNotification.
+- Per-project routes (team/tasks/notifications); ProjectsPage create+archive; project Tasks card.
+- **Live-proven multi-domain switch**: project #1 shows bound account AND task; switching to project
+  #2 empties BOTH — accounts AND tasks change with no leakage. 61 backend tests. Commits 52b456c, 6ba6f7f.
+- Note: campaigns/reports/AI-context/cache/queue/websocket per-project isolation will be proven as
+  those domains are built — the mechanism (ProjectContext + BelongsToProject + isolated query keys)
+  is done and reused.
+
 ## Per-project integration bindings ✅ (priority #1, backend tested + UI live-proven)
 - Full chain: Tenant→ClientWorkspace→Project→ProjectIntegrationBinding→ExternalAccount→
   ProviderConnection→IntegrationCredential (encrypted). 6 tables/models.
