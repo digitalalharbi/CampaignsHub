@@ -26,6 +26,11 @@ final class PermissionSeeder extends Seeder
         'automations' => ['view', 'manage'],
         'users' => ['view', 'invite', 'update', 'remove'],
         'audit' => ['view'],
+        'workspaces' => ['view', 'create', 'update', 'delete', 'members.manage'],
+        'projects' => ['view', 'create', 'update', 'delete'],
+        'ai' => ['view', 'manage', 'use'],
+        'notifications' => ['view'],
+        'tasks' => ['view', 'create', 'update', 'delete'],
     ];
 
     public function run(): void

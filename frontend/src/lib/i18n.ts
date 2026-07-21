@@ -3,7 +3,7 @@ import { useUi } from '@/stores/ui'
 /** Minimal bilingual dictionary. Real i18n (per-domain namespaces) arrives with the design system. */
 const dictionary = {
   ar: {
-    app_name: 'منصة الميديا باينج',
+    app_name: 'CampaignsHub',
     dashboard: 'لوحة التحكم',
     system_status: 'حالة النظام',
     clients: 'العملاء',
@@ -53,7 +53,7 @@ const dictionary = {
     not_connected: 'غير مربوط',
   },
   en: {
-    app_name: 'MediaBuying Platform',
+    app_name: 'CampaignsHub',
     dashboard: 'Dashboard',
     system_status: 'System Status',
     clients: 'Clients',
