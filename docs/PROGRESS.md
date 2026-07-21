@@ -53,6 +53,19 @@ without evidence (command output / test result / screenshot).
 - Backend 15 tests green (6 auth incl. session + PAT). Live: guest→/login (401), login (csrf+session),
   refresh keeps session (`/auth/me` 200), logout — 0 console errors.
 
+## CampaignsHub rebrand + rentable SaaS ✅ (backend tested; key UIs live)
+- Brand: central config/brand.php + /api/v1/brand + SPA brand module; title/OG/schema/manifest/i18n.
+- Client Workspaces (Managed/Collaborative/Self-Service) + Projects; AI BYOK (encrypted/masked/
+  isolated); Notifications (per-recipient); Tasks (8-status). 10 new tests. **51 backend tests total.**
+- Content protection: dynamic Watermark component + honest CONTENT_PROTECTION.md / WATERMARK_POLICY
+  (no absolute screenshot-prevention claim).
+- Marketing site `/welcome` (CampaignsHub) verified live; demo seed for all new domains.
+- Docs: BRAND_GUIDELINES, DOMAIN_ARCHITECTURE, CLIENT_WORKSPACES, AI_BYOK_ARCHITECTURE,
+  NOTIFICATION_ARCHITECTURE, TASK_MANAGEMENT, WATERMARK_POLICY, CLIENT_PORTAL, MARKETING_SITE,
+  DEMO_GUIDE, DEMO_ACCOUNTS, LIVE_TEST_EVIDENCE.
+- Remaining: client portal UI, platform-admin UI, plans/billing enforcement, invite flow, live
+  integrations/AI calls, Playwright E2E — see KNOWN_LIMITATIONS.md.
+
 ## Phase 3 — CRM 🚧 (Leads vertical done & verified live)
 - Backend: leads/companies/contacts/pipelines/opportunities/activities (tenant-scoped), actions
   (Create/Update/Convert/RecordActivity), controllers, resources, routes, permissions. 22 tests green.

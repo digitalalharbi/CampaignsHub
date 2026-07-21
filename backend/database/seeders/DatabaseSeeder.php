@@ -6,7 +6,12 @@ namespace Database\Seeders;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\AI\Models\AIProviderCredential;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\CRM\Models\Lead;
+use App\Domains\Notifications\Models\AppNotification;
+use App\Domains\Projects\Models\Project;
+use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Models\Workspace;
@@ -93,6 +98,53 @@ class DatabaseSeeder extends Seeder
                     'currency' => 'SAR',
                 ]));
             }
+        }
+
+        // Demo client workspaces (3 modes) + projects + a task + notification + sandbox AI key.
+        if (ClientWorkspace::count() === 0) {
+            $modes = ['managed' => 'Acme (Managed) — Demo', 'collaborative' => 'Nova (Collaborative) — Demo', 'self_service' => 'Zahra (Self-Service) — Demo'];
+            foreach ($modes as $mode => $name) {
+                $ws = ClientWorkspace::create([
+                    'name' => $name,
+                    'slug' => 'demo-'.$mode,
+                    'mode' => $mode,
+                    'branding' => ['brand_name' => $name],
+                ]);
+                Project::create([
+                    'client_workspace_id' => $ws->id,
+                    'name' => 'Q3 Launch — Demo',
+                    'account_manager_id' => $ownerUser->id,
+                    'status' => 'active',
+                    'setup_completion' => 70,
+                ]);
+            }
+
+            Task::create([
+                'title' => 'Prepare tracking — Demo',
+                'status' => 'in_progress',
+                'priority' => 'high',
+                'assignee_id' => $ownerUser->id,
+                'created_by' => $ownerUser->id,
+            ]);
+
+            AppNotification::create([
+                'user_id' => $ownerUser->id,
+                'type' => 'integration.disconnected',
+                'severity' => 'warning',
+                'title' => 'Sandbox integration needs attention — Demo',
+                'message' => 'Simulated alert for the demo tour.',
+            ]);
+
+            // Sandbox AI key (clearly marked, encrypted at rest).
+            $aiKey = new AIProviderCredential([
+                'provider' => 'openai',
+                'credential_scope' => 'tenant',
+                'status' => 'active',
+                'created_by' => $ownerUser->id,
+                'allowed_models' => ['gpt-4o-mini'],
+            ]);
+            $aiKey->setSecret('sk-DEMO-SANDBOX-0000');
+            $aiKey->save();
         }
 
         $context->forget();
