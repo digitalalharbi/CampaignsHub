@@ -6,6 +6,8 @@ import { LeadsPage } from '@/features/crm/LeadsPage'
 import { DesignSystemPage } from '@/features/design/DesignSystemPage'
 import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
 import { MarketingPage } from '@/features/marketing/MarketingPage'
+import { ProjectIntegrationsPage } from '@/features/projects/ProjectIntegrationsPage'
+import { ProjectsPage } from '@/features/projects/ProjectsPage'
 import { SystemStatusPage } from '@/features/system/SystemStatusPage'
 import { AppShell } from '@/layouts/AppShell'
 
@@ -21,6 +23,8 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <SystemStatusPage /> },
           { path: 'leads', element: <LeadsPage /> },
+          { path: 'projects', element: <ProjectsPage /> },
+          { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
           { path: 'clients', element: <PagePlaceholder title="Clients" /> },
           { path: 'campaigns', element: <PagePlaceholder title="Campaigns" /> },
           { path: 'integrations', element: <IntegrationsPage /> },
