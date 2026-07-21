@@ -8,6 +8,7 @@ import {
   detachBinding,
   listProjectBindings,
   listProjects,
+  listProjectTasks,
   syncBinding,
   type ExternalAccount,
 } from './api'
@@ -32,6 +33,13 @@ export function ProjectIntegrationsPage() {
   const bindings = useQuery({
     queryKey: ['project', projectId, 'integrations'],
     queryFn: () => listProjectBindings(projectId),
+    enabled: Boolean(projectId),
+  })
+
+  // Project-scoped tasks — also namespaced by projectId, proving multi-domain switch isolation.
+  const tasks = useQuery({
+    queryKey: ['project', projectId, 'tasks'],
+    queryFn: () => listProjectTasks(projectId),
     enabled: Boolean(projectId),
   })
 
@@ -165,6 +173,34 @@ export function ProjectIntegrationsPage() {
                   >
                     <Unplug size={14} /> {t('detach')}
                   </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Project-scoped tasks — these change when the active project changes (no leakage). */}
+      <Card>
+        <CardTitle>{t('project_tasks')}</CardTitle>
+        {tasks.isLoading ? (
+          <div className="mt-3 space-y-2">
+            <Skeleton className="h-8 w-full" />
+          </div>
+        ) : (tasks.data?.length ?? 0) === 0 ? (
+          <div className="mt-3">
+            <EmptyState title={t('no_project_tasks')} />
+          </div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {tasks.data?.map((task) => (
+              <div key={task.id} className="flex items-center justify-between rounded-[9px] border border-border p-2.5">
+                <span className="text-[13px] font-semibold">{task.title}</span>
+                <div className="flex items-center gap-2">
+                  <Badge tone={task.priority === 'high' || task.priority === 'urgent' ? 'warning' : 'neutral'}>
+                    {task.priority}
+                  </Badge>
+                  <Badge tone={task.is_overdue ? 'danger' : 'info'}>{task.status}</Badge>
                 </div>
               </div>
             ))}

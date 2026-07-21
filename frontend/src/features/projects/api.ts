@@ -41,8 +41,31 @@ export interface Binding {
   created_at: string | null
 }
 
+export interface ProjectTask {
+  id: string
+  title: string
+  status: string
+  priority: string
+  is_overdue: boolean
+}
+
 export function listProjects(): Promise<Project[]> {
   return getData<Project[]>('/projects')
+}
+
+export async function createProject(input: { client_workspace_id: string; name: string }): Promise<Project> {
+  await ensureCsrfCookie()
+  return postData<Project>('/projects', input)
+}
+
+export async function archiveProject(projectId: string): Promise<Project> {
+  await ensureCsrfCookie()
+  return postData<Project>(`/projects/${projectId}/archive`)
+}
+
+/** Project-scoped tasks (change when the active project changes). */
+export function listProjectTasks(projectId: string): Promise<ProjectTask[]> {
+  return getData<ProjectTask[]>(`/projects/${projectId}/tasks`)
 }
 
 export function listClientWorkspaces(): Promise<ClientWorkspace[]> {

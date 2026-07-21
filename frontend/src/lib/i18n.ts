@@ -65,6 +65,11 @@ const dictionary = {
     primary: 'أساسي',
     disabled: 'معطّل',
     detach: 'فصل',
+    project_tasks: 'مهام هذا المشروع',
+    no_project_tasks: 'لا مهام لهذا المشروع',
+    new_project: 'مشروع جديد',
+    archive: 'أرشفة',
+    client_workspace: 'مساحة العميل',
   },
   en: {
     app_name: 'CampaignsHub',
@@ -129,6 +134,11 @@ const dictionary = {
     primary: 'Primary',
     disabled: 'Disabled',
     detach: 'Detach',
+    project_tasks: 'Tasks for this project',
+    no_project_tasks: 'No tasks for this project',
+    new_project: 'New project',
+    archive: 'Archive',
+    client_workspace: 'Client workspace',
   },
 } as const
 

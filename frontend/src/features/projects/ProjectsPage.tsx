@@ -1,24 +1,56 @@
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { FolderKanban } from 'lucide-react'
-import { listClientWorkspaces, listProjects, type ClientWorkspace } from './api'
+import { Archive, FolderKanban, Plus } from 'lucide-react'
+import {
+  archiveProject,
+  createProject,
+  listClientWorkspaces,
+  listProjects,
+  type ClientWorkspace,
+} from './api'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { Field } from '@/components/ui/Field'
+import { Input } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
+import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { useT } from '@/lib/i18n'
 
 export function ProjectsPage() {
   const t = useT()
+  const queryClient = useQueryClient()
+  const [modalOpen, setModalOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [workspaceId, setWorkspaceId] = useState('')
+
   const projects = useQuery({ queryKey: ['projects'], queryFn: listProjects })
   const workspaces = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces })
-
   const wsById = new Map<string, ClientWorkspace>((workspaces.data ?? []).map((w) => [w.id, w]))
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['projects'] })
+  const createMutation = useMutation({
+    mutationFn: createProject,
+    onSuccess: () => {
+      setModalOpen(false)
+      setName('')
+      invalidate()
+    },
+  })
+  const archiveMutation = useMutation({ mutationFn: archiveProject, onSuccess: invalidate })
 
   return (
     <section className="space-y-5">
-      <div>
-        <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('projects')}</h1>
-        <p className="mt-1 text-[13px] text-text-secondary">{t('data_source')}: CampaignsHub API</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('projects')}</h1>
+          <p className="mt-1 text-[13px] text-text-secondary">{t('data_source')}: CampaignsHub API</p>
+        </div>
+        <Button onClick={() => setModalOpen(true)}>
+          <Plus size={15} /> {t('new_project')}
+        </Button>
       </div>
 
       {projects.isLoading ? (
@@ -47,18 +79,62 @@ export function ProjectsPage() {
                   <span className="text-[11px] text-text-muted">
                     {t('setup')}: <span className="tnum">{p.setup_completion}%</span>
                   </span>
-                  <Link
-                    to={`/projects/${p.id}/integrations`}
-                    className="text-[12px] font-bold text-brand-600 hover:underline"
-                  >
-                    {t('integrations')} →
-                  </Link>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => archiveMutation.mutate(p.id)}
+                      className="inline-flex items-center gap-1 text-[12px] text-text-muted hover:text-danger"
+                      aria-label={t('archive')}
+                    >
+                      <Archive size={13} /> {t('archive')}
+                    </button>
+                    <Link
+                      to={`/projects/${p.id}/integrations`}
+                      className="text-[12px] font-bold text-brand-600 hover:underline"
+                    >
+                      {t('integrations')} →
+                    </Link>
+                  </div>
                 </div>
               </Card>
             )
           })}
         </div>
       )}
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={t('new_project')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setModalOpen(false)}>
+              {t('cancel')}
+            </Button>
+            <Button
+              loading={createMutation.isPending}
+              disabled={!name || !workspaceId}
+              onClick={() => createMutation.mutate({ client_workspace_id: workspaceId, name })}
+            >
+              {t('save')}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Field label={t('client_workspace')} required>
+            <Select
+              value={workspaceId}
+              onChange={(e) => setWorkspaceId(e.target.value)}
+              placeholder="—"
+              options={(workspaces.data ?? []).map((w) => ({ value: w.id, label: w.name }))}
+            />
+          </Field>
+          <Field label={t('name')} required>
+            <Input value={name} onChange={(e) => setName(e.target.value)} data-autofocus />
+          </Field>
+        </div>
+      </Modal>
     </section>
   )
 }

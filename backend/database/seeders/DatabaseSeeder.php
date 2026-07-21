@@ -138,10 +138,13 @@ class DatabaseSeeder extends Seeder
                 ]);
             }
 
+            // Project-scoped task on the FIRST demo project only (so switching projects changes
+            // tasks too, not just bound accounts).
             Task::create([
                 'title' => 'Prepare tracking — Demo',
                 'status' => 'in_progress',
                 'priority' => 'high',
+                'project_id' => $firstProject?->id,
                 'assignee_id' => $ownerUser->id,
                 'created_by' => $ownerUser->id,
             ]);
