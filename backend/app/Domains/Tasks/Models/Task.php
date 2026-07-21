@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Tasks\Models;
 
+use App\Domains\Projects\Concerns\BelongsToProject;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use App\Models\User;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 final class Task extends Model
 {
+    use BelongsToProject;
     use BelongsToTenant;
     use HasUuidKey;
     use SoftDeletes;

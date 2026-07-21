@@ -51,7 +51,7 @@ final class ClientWorkspaceTest extends TestCase
         $this->actingAs($this->user, 'sanctum')->postJson('/api/v1/projects', [
             'client_workspace_id' => $workspace->id,
             'name' => 'Launch Q3',
-        ])->assertCreated()->assertJsonPath('data.status', 'setup');
+        ])->assertCreated()->assertJsonPath('data.status', 'draft');
 
         $this->assertDatabaseHas('projects', ['name' => 'Launch Q3', 'client_workspace_id' => $workspace->id]);
     }

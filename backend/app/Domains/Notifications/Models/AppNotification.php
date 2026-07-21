@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Models;
 
+use App\Domains\Projects\Concerns\BelongsToProject;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 /** Tenant/project/user-scoped in-app notification. */
 final class AppNotification extends Model
 {
+    use BelongsToProject;
     use BelongsToTenant;
     use HasUuidKey;
 

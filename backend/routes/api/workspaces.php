@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Domains\AI\Http\Controllers\AICredentialController;
 use App\Domains\ClientWorkspaces\Http\Controllers\ClientWorkspaceController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
-use App\Domains\Projects\Http\Controllers\ProjectController;
 use App\Domains\Tasks\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
 
@@ -14,9 +13,6 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
     Route::get('client-workspaces', [ClientWorkspaceController::class, 'index'])->name('client-workspaces.index');
     Route::post('client-workspaces', [ClientWorkspaceController::class, 'store'])->name('client-workspaces.store');
     Route::get('client-workspaces/{clientWorkspace}', [ClientWorkspaceController::class, 'show'])->name('client-workspaces.show');
-
-    Route::get('projects', [ProjectController::class, 'index'])->name('projects.index');
-    Route::post('projects', [ProjectController::class, 'store'])->name('projects.store');
 
     // AI BYOK (masked; secrets never returned).
     Route::get('ai/credentials', [AICredentialController::class, 'index'])->name('ai.credentials.index');
