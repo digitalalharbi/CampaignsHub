@@ -27,7 +27,7 @@ export function ProjectIntegrationsPage() {
   const { projectId = '' } = useParams()
   const [discovered, setDiscovered] = useState<ExternalAccount[] | null>(null)
 
-  const projects = useQuery({ queryKey: ['projects'], queryFn: listProjects })
+  const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
 
   // Query key is namespaced by projectId → switching projects yields a fresh, isolated cache.
   const bindings = useQuery({

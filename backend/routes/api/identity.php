@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Identity\Http\Controllers\AuthController;
+use App\Domains\Identity\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -23,3 +24,8 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
         Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     });
 });
+
+// Tenant users (for member/team pickers).
+Route::middleware(['auth:sanctum', 'tenant'])
+    ->get('users', [UserController::class, 'index'])
+    ->name('users.index');
