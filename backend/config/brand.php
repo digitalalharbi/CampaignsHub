@@ -14,4 +14,11 @@ return [
     'status_url' => env('STATUS_URL', 'https://status.campaignshub.io'),
     'support_email' => env('SUPPORT_EMAIL', 'support@campaignshub.io'),
     'tagline' => 'Run every client, project, and campaign from one place.',
+
+    // Feature flags (platform defaults; a tenant may override in its settings later).
+    'features' => [
+        // Generic sales CRM (leads/opportunities/proposals) — OFF by default; the media-buying
+        // operational nav is the primary experience.
+        'sales_crm_enabled' => (bool) env('FEATURE_SALES_CRM', false),
+    ],
 ];

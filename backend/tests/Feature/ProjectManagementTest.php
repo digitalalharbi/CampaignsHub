@@ -86,6 +86,41 @@ final class ProjectManagementTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_update_member_role_and_block_demoting_last_admin(): void
+    {
+        $project = $this->makeProject();
+        $admin = User::create(['tenant_id' => $this->user->tenant_id, 'name' => 'A', 'email' => 'a@agency.test', 'password' => 'secret123']);
+        $member = User::create(['tenant_id' => $this->user->tenant_id, 'name' => 'M', 'email' => 'm@agency.test', 'password' => 'secret123']);
+
+        $adminId = $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$project->id}/team", ['user_id' => $admin->id, 'role' => 'account_manager'])->json('data.id');
+        $memberId = $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$project->id}/team", ['user_id' => $member->id, 'role' => 'analyst'])->json('data.id');
+
+        // Promote analyst → account_manager (allowed).
+        $this->actingAs($this->user, 'sanctum')->patchJson("/api/v1/projects/{$project->id}/team/{$memberId}", ['role' => 'account_manager'])
+            ->assertOk()->assertJsonPath('data.role', 'account_manager');
+
+        // Demote member back, then try to demote the remaining single admin → blocked.
+        $this->actingAs($this->user, 'sanctum')->patchJson("/api/v1/projects/{$project->id}/team/{$memberId}", ['role' => 'analyst'])->assertOk();
+        $this->actingAs($this->user, 'sanctum')->patchJson("/api/v1/projects/{$project->id}/team/{$adminId}", ['role' => 'analyst'])
+            ->assertStatus(422);
+    }
+
+    public function test_project_overview_returns_real_counts_and_not_available_markers(): void
+    {
+        $project = $this->makeProject();
+        app(TenantContext::class)->setTenantId($this->user->tenant_id);
+        app(ProjectContext::class)->setProjectId($project->id);
+        Task::create(['title' => 'T1', 'created_by' => $this->user->id]);
+        app(ProjectContext::class)->forget();
+        app(TenantContext::class)->forget();
+
+        $this->actingAs($this->user, 'sanctum')->getJson("/api/v1/projects/{$project->id}/overview")
+            ->assertOk()
+            ->assertJsonPath('data.project.name', 'P')
+            ->assertJsonPath('data.built.open_tasks', 1)
+            ->assertJsonFragment(['not_available_yet' => ['campaigns', 'spend', 'revenue', 'roas', 'tracking_health', 'onboarding_progress', 'active_campaigns', 'critical_alerts']]);
+    }
+
     public function test_switching_projects_changes_tasks_and_notifications_with_no_leakage(): void
     {
         $a = $this->makeProject('Project A');

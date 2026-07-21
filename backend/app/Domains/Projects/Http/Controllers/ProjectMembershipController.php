@@ -62,6 +62,40 @@ final class ProjectMembershipController extends Controller
         return ApiResponse::success(['id' => $member->id, 'role' => $member->role], 'Member added.', status: 201);
     }
 
+    public function update(Request $request, AuditLogger $audit): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('users.update'), 403);
+        $membershipId = (string) $request->route('membership');
+
+        $member = ProjectMembership::find($membershipId);
+        abort_if($member === null, 404, 'Member not found in this project.');
+
+        $validated = $request->validate([
+            'role' => ['sometimes', Rule::in(self::ROLES)],
+            'status' => ['sometimes', Rule::in(['invited', 'active', 'suspended', 'expired', 'removed'])],
+            'permissions' => ['nullable', 'array'],
+            'expires_at' => ['nullable', 'date'],
+        ]);
+
+        // Do not allow demoting/suspending the last admin.
+        $wasAdmin = in_array($member->role, self::ADMIN_ROLES, true);
+        $becomingNonAdmin = isset($validated['role']) && ! in_array($validated['role'], self::ADMIN_ROLES, true);
+        $suspending = ($validated['status'] ?? null) === 'suspended';
+        if ($wasAdmin && ($becomingNonAdmin || $suspending)) {
+            $otherAdmins = ProjectMembership::whereIn('role', self::ADMIN_ROLES)
+                ->where('status', 'active')
+                ->where('id', '!=', $member->id)
+                ->count();
+            abort_if($otherAdmins === 0, 422, 'Cannot demote or suspend the last admin of the project.');
+        }
+
+        $before = $member->only(['role', 'status']);
+        $member->update($validated);
+        $audit->log(action: 'project.member.updated', entityType: ProjectMembership::class, entityId: (string) $member->id, before: $before, after: $member->only(['role', 'status']));
+
+        return ApiResponse::success(['id' => $member->id, 'role' => $member->role, 'status' => $member->status], 'Member updated.');
+    }
+
     public function destroy(Request $request, AuditLogger $audit): JsonResponse
     {
         abort_unless($request->user()->hasPermission('users.remove'), 403);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\Projects\Http\Controllers\ProjectController;
 use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
+use App\Domains\Projects\Http\Controllers\ProjectOverviewController;
 use App\Domains\Tasks\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
 
@@ -23,8 +24,10 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('projects')->name('project
 
 // Project-scoped resources (ResolveProject enforces project isolation).
 Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{project}')->name('projects.scoped.')->group(function (): void {
+    Route::get('overview', [ProjectOverviewController::class, 'show'])->name('overview');
     Route::get('team', [ProjectMembershipController::class, 'index'])->name('team.index');
     Route::post('team', [ProjectMembershipController::class, 'store'])->name('team.store');
+    Route::match(['put', 'patch'], 'team/{membership}', [ProjectMembershipController::class, 'update'])->name('team.update');
     Route::delete('team/{membership}', [ProjectMembershipController::class, 'destroy'])->name('team.destroy');
 
     // Project-scoped views of tasks and notifications — switching projects changes these too.

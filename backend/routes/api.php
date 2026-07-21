@@ -31,6 +31,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             'status' => config('brand.status_url'),
         ],
         'support_email' => config('brand.support_email'),
+        'features' => config('brand.features'),
     ], 'Brand identity.'))->name('brand');
 
     // Domain route files are included here as the platform grows.
