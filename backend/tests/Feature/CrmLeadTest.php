@@ -63,9 +63,24 @@ final class CrmLeadTest extends TestCase
             ->assertJsonValidationErrors(['name', 'source']);
     }
 
+    public function test_can_show_a_lead_via_route_binding(): void
+    {
+        $lead = Lead::create(['name' => 'Bound', 'source' => 'manual']);
+
+        // Force reliance on the ResolveTenant middleware (must run before route-model binding).
+        app(TenantContext::class)->forget();
+
+        $this->actingAs($this->user, 'sanctum')->getJson("/api/v1/leads/{$lead->id}")
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Bound');
+    }
+
     public function test_converting_a_lead_creates_company_and_opportunity(): void
     {
         $lead = Lead::create(['name' => 'Convert Me', 'source' => 'referral', 'estimated_value' => 5000]);
+
+        // Clear context so the request must resolve the tenant via middleware before binding.
+        app(TenantContext::class)->forget();
 
         $response = $this->actingAs($this->user, 'sanctum')
             ->postJson("/api/v1/leads/{$lead->id}/convert")

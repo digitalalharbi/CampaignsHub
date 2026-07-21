@@ -8,6 +8,7 @@ import {
   Palette,
   Settings,
   Sun,
+  UserPlus,
   Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -19,6 +20,7 @@ import type { TranslationKey } from '@/lib/i18n'
 
 const nav: { to: string; key: TranslationKey; icon: typeof LayoutDashboard }[] = [
   { to: '/', key: 'dashboard', icon: LayoutDashboard },
+  { to: '/leads', key: 'leads', icon: UserPlus },
   { to: '/clients', key: 'clients', icon: Users },
   { to: '/campaigns', key: 'campaigns', icon: Megaphone },
   { to: '/reports', key: 'reports', icon: BarChart3 },

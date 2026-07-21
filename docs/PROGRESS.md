@@ -53,7 +53,16 @@ without evidence (command output / test result / screenshot).
 - Backend 15 tests green (6 auth incl. session + PAT). Live: guest→/login (401), login (csrf+session),
   refresh keeps session (`/auth/me` 200), logout — 0 console errors.
 
-## Phase 3 — CRM 🚧
+## Phase 3 — CRM 🚧 (Leads vertical done & verified live)
+- Backend: leads/companies/contacts/pipelines/opportunities/activities (tenant-scoped), actions
+  (Create/Update/Convert/RecordActivity), controllers, resources, routes, permissions. 22 tests green.
+- Fixed middleware ordering bug: ResolveTenant now runs before SubstituteBindings (tenant scope
+  active during route-model binding). Regression test added (binding + convert with cleared context).
+- Frontend: Leads list (filters + DataTable), create modal, convert action — wired to API.
+- Verified live: list loads (200), create + convert (`/convert` 201) update UI to "converted",
+  0 console errors, RTL Arabic. Screenshots captured.
+- Remaining in Phase 3 (later): Lead detail + timeline UI, Companies/Contacts screens, Opportunities
+  kanban, Proposals/Contracts, Onboarding, Client Portal.
 ## Phase 4 — Campaign Operations ⬜
 ## Phase 5 — Tracking & Ecommerce ⬜
 ## Phase 6 — Advertising Integrations ⏳ (needs platform credentials; Sandbox connectors first)
