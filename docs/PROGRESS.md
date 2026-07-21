@@ -53,6 +53,11 @@ without evidence (command output / test result / screenshot).
 - Backend 15 tests green (6 auth incl. session + PAT). Live: guest→/login (401), login (csrf+session),
   refresh keeps session (`/auth/me` 200), logout — 0 console errors.
 
+## Project management UI ✅ (edit/clone/team proven live; pause/archive/restore wired+tested)
+- ProjectsPage full action set (edit modal, clone, pause/resume, archive/restore, show-archived,
+  team). ProjectTeamPage add/remove members via GET /users. Live: clone 201, edit PATCH 200, team
+  add 201 — all rendered, 0 console errors. Commit 30f5735.
+
 ## Project management + wider isolation 🚧 (Backend ✅ ahead of Frontend)
 - **Backend (done + tested):** ProjectController CRUD + clone + archive/restore + pause/resume +
   statuses; project_memberships + team management (last-admin protection); BelongsToProject on Task
