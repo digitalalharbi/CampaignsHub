@@ -53,6 +53,19 @@ without evidence (command output / test result / screenshot).
 - Backend 15 tests green (6 auth incl. session + PAT). Live: guest→/login (401), login (csrf+session),
   refresh keeps session (`/auth/me` 200), logout — 0 console errors.
 
+## Per-project integration bindings ✅ (priority #1, backend tested + UI live-proven)
+- Full chain: Tenant→ClientWorkspace→Project→ProjectIntegrationBinding→ExternalAccount→
+  ProviderConnection→IntegrationCredential (encrypted). 6 tables/models.
+- ProjectContext + ResolveProject (route-only, fail-closed 404) + BelongsToProject + named
+  ProjectScope; middleware priority resolves project before route binding.
+- Sandbox wizard: connect→discover accounts→bind→sync; detach keeps other project + doesn't revoke;
+  revoke disables all bindings; sharing needs confirm=true. 7 tests (57 backend total).
+- Projects UI (/projects) + per-project integrations page with project selector (cache isolated).
+- **Live-proven**: project A shows bound Sandbox ad account; switching to another project shows
+  empty — bound accounts change with no leakage; 0 console errors. Commits 7ed31af, c50dbe1.
+- Remaining priorities (client portal, notif/tasks/AI-BYOK UIs, invitations, platform admin,
+  billing, demo tour, rest of media-buying journey) — next.
+
 ## CampaignsHub rebrand + rentable SaaS ✅ (backend tested; key UIs live)
 - Brand: central config/brand.php + /api/v1/brand + SPA brand module; title/OG/schema/manifest/i18n.
 - Client Workspaces (Managed/Collaborative/Self-Service) + Projects; AI BYOK (encrypted/masked/
