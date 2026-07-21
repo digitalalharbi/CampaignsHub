@@ -1,0 +1,117 @@
+/* Design tokens — single source of truth for color, radius, elevation.
+   See docs/design-tokens.md. Never hard-code a color; reference a token. */
+
+:root {
+  --brand-50: #ecfdf5;
+  --brand-100: #d1fae5;
+  --brand-200: #a7f3d0;
+  --brand-500: #10b981;
+  --brand-600: #0d8a6f;
+  --brand-700: #047857;
+
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --info: #1e40af;
+  --purple: #7c3aed;
+  --teal: #0891b2;
+
+  --background: #f5f7f9;
+  --surface: #ffffff;
+  --surface-secondary: #f8fafc;
+
+  --border: #e6e9ee;
+  --border-strong: #d3d9e0;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --ring: #e2e8f0;
+
+  --positive-background: #f0fdf4;
+  --negative-background: #fef2f2;
+  --warning-background: #fffbeb;
+  --info-background: #eff6ff;
+  --purple-background: #f5f0ff;
+  --brand-background: #ecfdf5;
+
+  --shadow-small: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-medium: 0 4px 14px rgba(15, 23, 42, 0.07);
+  --shadow-large: 0 16px 40px rgba(15, 23, 42, 0.14);
+
+  --radius-extra-small: 6px;
+  --radius-small: 8px;
+  --radius-medium: 9px;
+  --radius-large: 12px;
+  --radius-extra-large: 14px;
+  --radius-modal: 16px;
+  --radius-pill: 999px;
+
+  --font-body: 'IBM Plex Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Plus Jakarta Sans', 'IBM Plex Sans Arabic', sans-serif;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Sans Arabic', monospace;
+}
+
+:root[data-theme='dark'] {
+  --brand-50: #04201e;
+  --brand-100: #063831;
+  --brand-200: #0a544a;
+  --brand-500: #14c39a;
+  --brand-600: #14c39a;
+  --brand-700: #34d4ab;
+
+  --success: #22c55e;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --info: #60a5fa;
+  --purple: #c4b5fd;
+  --teal: #22d3ee;
+
+  --background: #0b0f14;
+  --surface: #151b23;
+  --surface-secondary: #1c242e;
+
+  --border: #2a323d;
+  --border-strong: #3a4550;
+
+  --text-primary: #e6edf3;
+  --text-secondary: #aab4c0;
+  --text-muted: #6e7a88;
+  --ring: #2a323d;
+
+  --positive-background: rgba(34, 197, 94, 0.1);
+  --negative-background: rgba(220, 38, 38, 0.13);
+  --warning-background: rgba(245, 158, 11, 0.14);
+  --info-background: rgba(59, 130, 246, 0.13);
+  --purple-background: rgba(124, 58, 237, 0.16);
+  --brand-background: rgba(20, 195, 154, 0.12);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Latin, tabular numerals for numbers/dates/ids even inside RTL Arabic UI. */
+.tnum {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

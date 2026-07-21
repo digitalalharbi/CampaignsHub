@@ -13,15 +13,28 @@ without evidence (command output / test result / screenshot).
   2.50. Docker not installed. Target folder was empty (greenfield).
 - Decision: foundation-first; build inside `MediaBying System/`; Laravel pinned to **12** per spec.
 
-## Phase 1 — Foundation 🚧
+## Phase 1 — Foundation ✅ (verified end-to-end)
 - ✅ Git repo + monorepo structure (`backend/ frontend/ infrastructure/ docs/ .claude/`).
-- ✅ Laravel 12.64 scaffolded (`backend/`).
-- 🚧 PostgreSQL + Redis config, Sanctum, `/api/v1` routing, response envelope, health/ready.
-- ⬜ Domain skeleton + multi-tenancy + isolation test.
-- ⬜ Roles/Permissions + append-only Audit Log.
-- ⬜ React + TS + Vite frontend + design tokens + App Shell.
-- ⬜ Docker Compose (authored; not locally runnable — no Docker on machine).
-- ⬜ CI pipeline.
+- ✅ Laravel 12.64 API-only on PostgreSQL 16 + Redis (predis) + Sanctum.
+- ✅ Response envelope + request-id middleware + JSON exception handler; `/api/v1/health` + `/ready`.
+- ✅ Domain skeleton (`app/Domains/{Identity,Tenancy,Access,Audit}`) + multi-tenancy
+  (TenantContext, global TenantScope, BelongsToTenant, ResolveTenant) with 5 isolation tests.
+- ✅ RBAC (roles/permissions/pivots + HasRoles) + append-only Audit Log + auth listeners.
+- ✅ Auth: register (provisions tenant+workspace+owner), login, me, logout.
+- ✅ React 19 + TS(strict) + Vite frontend: design tokens (light/dark), App Shell (sidebar/topbar),
+  RTL/LTR, theme toggle, TanStack Query + Axios client, login page, live system-status dashboard.
+- ⬜ Docker Compose authored; NOT locally runnable (no Docker on machine) — verify before use.
+- ⬜ CI pipeline (next).
+
+### Phase 1 evidence (2026-07-21)
+- Backend gate: `php artisan test` → **15 passed (51 assertions)** incl. 5 tenant-isolation;
+  `pint` → passed; `phpstan` (larastan, level 5) → **No errors**.
+- Live HTTP: `/api/v1/health` 200 + `X-Request-Id`; `/ready` → `database:up, redis:up`;
+  `POST /auth/register` provisions tenant + returns token.
+- Frontend gate: `tsc -b` clean; `oxlint` exit 0; `vitest` → **4 passed**; `vite build` OK.
+- Live browser (localhost:5173 → proxy → API): dashboard shows real health/ready data in Arabic RTL
+  and English dark-mode LTR (0 console errors); `POST /api/v1/auth/login → 200` then redirect to the
+  authenticated shell. Screenshots captured in the build session.
 
 ## Phase 2 — Design System ⬜
 ## Phase 3 — CRM ⬜
