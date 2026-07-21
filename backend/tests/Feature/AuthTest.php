@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
+use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -20,7 +21,7 @@ final class AuthTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\PermissionSeeder::class);
+        $this->seed(PermissionSeeder::class);
     }
 
     public function test_registration_provisions_tenant_and_starts_session(): void

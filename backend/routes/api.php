@@ -20,4 +20,5 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     // Domain route files are included here as the platform grows.
     require __DIR__.'/api/identity.php';
     require __DIR__.'/api/crm.php';
+    require __DIR__.'/api/integrations.php';
 });
