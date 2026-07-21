@@ -36,7 +36,16 @@ without evidence (command output / test result / screenshot).
   and English dark-mode LTR (0 console errors); `POST /api/v1/auth/login → 200` then redirect to the
   authenticated shell. Screenshots captured in the build session.
 
-## Phase 2 — Design System ⬜
+## Phase 2 — Design System ✅ (core library, verified live)
+- ✅ Form primitives: Field, Input, Textarea, Select, Checkbox, Switch (token-based, RTL-aware).
+- ✅ UI states: Skeleton, EmptyState, ErrorState, NoPermission.
+- ✅ DataTable: client search + sortable columns + pagination + loading/empty/error, sticky header,
+  horizontal scroll, Latin tabular numbers.
+- ✅ Overlay/nav: Modal (focus-trap + Escape + click-outside), Tabs, Alert (icon + text severity).
+- ✅ `/design` showcase route + sidebar entry.
+- Gate: `tsc` clean, `oxlint` clean, `vitest` 4 passed, `vite build` OK. Verified live in browser:
+  components in Arabic RTL (light) and DataTable in English/dark — 0 console errors.
+- ⬜ Later: Command Palette (⌘K), Toast provider, Date range picker, mobile card fallback for tables.
 ## Phase 3 — CRM ⬜
 ## Phase 4 — Campaign Operations ⬜
 ## Phase 5 — Tracking & Ecommerce ⬜

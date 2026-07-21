@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Megaphone,
   Moon,
+  Palette,
   Settings,
   Sun,
   Users,
@@ -18,6 +19,7 @@ const nav: { to: string; key: TranslationKey; icon: typeof LayoutDashboard }[] =
   { to: '/clients', key: 'clients', icon: Users },
   { to: '/campaigns', key: 'campaigns', icon: Megaphone },
   { to: '/reports', key: 'reports', icon: BarChart3 },
+  { to: '/design', key: 'design', icon: Palette },
   { to: '/settings', key: 'settings', icon: Settings },
 ]
 
