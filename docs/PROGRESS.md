@@ -65,6 +65,12 @@ without evidence (command output / test result / screenshot).
   kanban, Proposals/Contracts, Onboarding, Client Portal.
 ## Phase 4 — Campaign Operations ⬜
 ## Phase 5 — Tracking & Ecommerce ⬜
+## Integrations architecture ✅ (Awaiting Credentials; 41 backend tests incl. contract tests)
+- Unified `AdvertisingConnector` + `AwaitingCredentialsConnector` base (never fabricates success)
+- Sandbox connector (deterministic, labelled, non-prod) + 6 platform stubs
+- `ConnectorRegistry`, `Integration` model (encrypted-credentials column), status/health/connect/sync API
+- Contract test across all connectors + feature tests; live status board UI
+
 ## Phase 6 — Advertising Integrations ⏳ (needs platform credentials; Sandbox connectors first)
 ## Phase 7 — Analytics & Reports ⬜
 ## Phase 8 — AI & MCP ⬜
