@@ -34,13 +34,14 @@ return Application::configure(basePath: dirname(__DIR__))
             AssignRequestId::class,
         ]);
 
-        // Route-middleware alias: resolves the active tenant from the authenticated user.
+        // Route-middleware aliases.
         $middleware->alias([
             'tenant' => ResolveTenant::class,
+            'project' => \App\Domains\Projects\Middleware\ResolveProject::class,
         ]);
 
-        // Ensure the tenant is resolved BEFORE route-model binding, so the tenant global scope is
-        // active when bound models are fetched (otherwise binding fails closed → 404).
+        // Ensure tenant (then project) is resolved BEFORE route-model binding, so the global scopes
+        // are active when bound models are fetched (otherwise binding fails closed → 404).
         $middleware->priority([
             \Illuminate\Cookie\Middleware\EncryptCookies::class,
             \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
@@ -49,6 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Auth\Middleware\Authenticate::class,
             \Illuminate\Session\Middleware\AuthenticateSession::class,
             ResolveTenant::class,
+            \App\Domains\Projects\Middleware\ResolveProject::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \Illuminate\Auth\Middleware\Authorize::class,
         ]);

@@ -9,6 +9,8 @@ use App\Domains\Access\Models\Role;
 use App\Domains\AI\Models\AIProviderCredential;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\CRM\Models\Lead;
+use App\Domains\Integrations\Actions\EstablishSandboxConnection;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tasks\Models\Task;
@@ -103,6 +105,7 @@ class DatabaseSeeder extends Seeder
         // Demo client workspaces (3 modes) + projects + a task + notification + sandbox AI key.
         if (ClientWorkspace::count() === 0) {
             $modes = ['managed' => 'Acme (Managed) — Demo', 'collaborative' => 'Nova (Collaborative) — Demo', 'self_service' => 'Zahra (Self-Service) — Demo'];
+            $firstProject = null;
             foreach ($modes as $mode => $name) {
                 $ws = ClientWorkspace::create([
                     'name' => $name,
@@ -110,12 +113,28 @@ class DatabaseSeeder extends Seeder
                     'mode' => $mode,
                     'branding' => ['brand_name' => $name],
                 ]);
-                Project::create([
+                $project = Project::create([
                     'client_workspace_id' => $ws->id,
                     'name' => 'Q3 Launch — Demo',
                     'account_manager_id' => $ownerUser->id,
                     'status' => 'active',
                     'setup_completion' => 70,
+                ]);
+                $firstProject ??= $project;
+            }
+
+            // Bind a Sandbox ad account to the FIRST demo project only, so switching projects in the
+            // UI visibly changes bound accounts (second/third projects start empty).
+            if ($firstProject !== null) {
+                $result = app(EstablishSandboxConnection::class)->execute('client_shared', 'Demo Sandbox connection');
+                $adAccount = $result['accounts']->firstWhere('account_type', 'ad_account');
+                ProjectIntegrationBinding::create([
+                    'project_id' => $firstProject->id,
+                    'external_account_id' => $adAccount->id,
+                    'provider' => 'sandbox',
+                    'purpose' => 'advertising',
+                    'is_primary' => true,
+                    'campaign_management_enabled' => true,
                 ]);
             }
 
