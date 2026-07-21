@@ -1,0 +1,42 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Database\Seeders;
+
+use App\Domains\Access\Models\Permission;
+use Illuminate\Database\Seeder;
+
+/**
+ * Seeds the global permission catalogue. Keys follow "<group>.<action>".
+ * Sensitive actions (launch/pause/budget/refund) are separate permissions so they can be gated.
+ */
+final class PermissionSeeder extends Seeder
+{
+    /** @var array<string, list<string>> */
+    private array $catalogue = [
+        'clients' => ['view', 'create', 'update', 'delete'],
+        'leads' => ['view', 'create', 'update', 'delete', 'convert'],
+        'proposals' => ['view', 'create', 'update', 'approve'],
+        'campaigns' => ['view', 'create', 'update', 'launch', 'pause', 'budget.change'],
+        'content' => ['view', 'create', 'update', 'approve', 'reject'],
+        'integrations' => ['view', 'connect', 'disconnect'],
+        'reports' => ['view', 'export'],
+        'billing' => ['view', 'manage', 'refund'],
+        'automations' => ['view', 'manage'],
+        'users' => ['view', 'invite', 'update', 'remove'],
+        'audit' => ['view'],
+    ];
+
+    public function run(): void
+    {
+        foreach ($this->catalogue as $group => $actions) {
+            foreach ($actions as $action) {
+                Permission::firstOrCreate(
+                    ['key' => "{$group}.{$action}"],
+                    ['group' => $group, 'description' => ucfirst($group).' — '.$action],
+                );
+            }
+        }
+    }
+}

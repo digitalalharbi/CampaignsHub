@@ -1,0 +1,64 @@
+# Local orchestration for the MediaBuying Platform.
+# NOTE: authored per spec; Docker is not installed on the current dev machine, so this compose
+# file has not been run locally yet. Verify before relying on it.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: mediabuying
+      POSTGRES_USER: mediabuying
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mediabuying"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../infrastructure/docker/backend.Dockerfile
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    env_file: ./backend/.env
+    ports: ["8000:8000"]
+
+  queue:
+    build:
+      context: ./backend
+      dockerfile: ../infrastructure/docker/backend.Dockerfile
+    command: php artisan horizon
+    depends_on:
+      backend: { condition: service_started }
+    env_file: ./backend/.env
+
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: ../infrastructure/docker/backend.Dockerfile
+    command: php artisan schedule:work
+    depends_on:
+      backend: { condition: service_started }
+    env_file: ./backend/.env
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../infrastructure/docker/frontend.Dockerfile
+    ports: ["5173:5173"]
+    env_file: ./frontend/.env
+
+volumes:
+  pgdata:

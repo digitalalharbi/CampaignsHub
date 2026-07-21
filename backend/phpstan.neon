@@ -1,0 +1,13 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 5
+    # Framework PHPDoc return types (e.g. currentAccessToken) are not runtime-certain.
+    treatPhpDocTypesAsCertain: false
+    paths:
+        - app
+        - routes
+        - database/seeders
+    excludePaths:
+        - app/Http/Controllers/Controller.php

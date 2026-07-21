@@ -1,0 +1,30 @@
+# Secrets — never commit
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dependencies / build
+**/node_modules/
+**/vendor/
+frontend/dist/
+backend/public/build/
+backend/public/hot
+
+# Laravel
+backend/storage/*.key
+backend/storage/framework/cache/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/storage/logs/*
+backend/bootstrap/cache/*.php
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# Temp
+.tmp.*
+*.tmp
+*.output

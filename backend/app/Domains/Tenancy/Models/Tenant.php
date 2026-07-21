@@ -1,0 +1,28 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domains\Tenancy\Models;
+
+use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+/**
+ * A tenant is the top-level isolation boundary (an agency/company on the platform).
+ */
+final class Tenant extends Model
+{
+    use HasUuidKey;
+    use SoftDeletes;
+
+    protected $fillable = ['name', 'slug', 'status', 'settings'];
+
+    protected $casts = ['settings' => 'array'];
+
+    public function workspaces(): HasMany
+    {
+        return $this->hasMany(Workspace::class);
+    }
+}
