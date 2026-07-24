@@ -108,7 +108,22 @@ without evidence (command output / test result / screenshot).
   0 console errors, RTL Arabic. Screenshots captured.
 - Remaining in Phase 3 (later): Lead detail + timeline UI, Companies/Contacts screens, Opportunities
   kanban, Proposals/Contracts, Onboarding, Client Portal.
-## Phase 4 — Campaign Operations ⬜
+## Phase 4 — Campaign Operations 🚧 (C1: Unified + External campaigns + linking done & verified)
+- Architecture + ERD: `docs/CAMPAIGNS_ARCHITECTURE.md` (Campaigns/Metrics/Reports/Alerts, phase plan C1–C6).
+- Backend domain `app/Domains/Campaigns`: `unified_campaigns` + `external_campaigns` migration (reversible);
+  models (BelongsToTenant + BelongsToProject), `CampaignObjective`/`CampaignStatus` enums
+  (`fromProvider()` normalization), resources, `CampaignLinker` service (link/unlink/duplicate-guard/
+  name-similarity suggestions), `ImportExternalCampaigns` action.
+- External campaigns are imported from the REAL Sandbox connector — wired into
+  `ProjectIntegrationController@sync` (idempotent upsert per `(external_account_id, external_id)`);
+  no fabricated rows.
+- API (project-scoped, fail-closed): unified CRUD + pause/activate/archive; external list;
+  link (409 `requires_confirmation` on move) / unlink / suggestions; project-wide external-campaigns list.
+- Uses existing `campaigns.*` permissions (view/create/update/pause). Server-side RBAC enforced.
+- `CampaignTest`: 12 tests (CRUD, real-sync import, idempotency, link/unlink, 409 move-guard,
+  suggestions, RBAC 403, per-project + cross-tenant isolation). Full suite **75 green**; Pint + Larastan clean.
+- Remaining in Phase 4 (later): ad groups/ads/creatives (C2), campaign detail/notes/activity UI,
+  live budget/status writes via connectors (permissioned + audited).
 ## Phase 5 — Tracking & Ecommerce ⬜
 ## Integrations architecture ✅ (Awaiting Credentials; 41 backend tests incl. contract tests)
 - Unified `AdvertisingConnector` + `AwaitingCredentialsConnector` base (never fabricates success)
@@ -128,3 +143,5 @@ without evidence (command output / test result / screenshot).
 _(append newest first: date — what — command — result)_
 
 - 2026-07-21 — Laravel 12 scaffold — `php artisan --version` → `Laravel Framework 12.64.0`.
+
+- 2026-07-24 — Campaigns C1 (Unified+External+linking) — `php artisan test` → 75 passed (338 assertions); `pint --test` passed; `phpstan` No errors; migrate rollback+fresh clean.

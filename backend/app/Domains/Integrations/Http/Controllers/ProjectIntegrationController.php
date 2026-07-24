@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Campaigns\Actions\ImportExternalCampaigns;
 use App\Domains\Integrations\Actions\EstablishSandboxConnection;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
@@ -93,8 +94,11 @@ final class ProjectIntegrationController extends Controller
         return ApiResponse::success($this->bindingArray($binding->load('externalAccount.connection')), 'Account bound to project.', status: 201);
     }
 
-    /** Run a Sandbox sync for a binding; records an IntegrationSyncRun (project-scoped). */
-    public function sync(Request $request): JsonResponse
+    /**
+     * Run a Sandbox sync for a binding; records an IntegrationSyncRun and imports the returned
+     * campaigns into external_campaigns (idempotent upsert) — project-scoped.
+     */
+    public function sync(Request $request, ImportExternalCampaigns $import): JsonResponse
     {
         abort_unless($request->user()->hasPermission('integrations.view'), 403);
 
@@ -111,6 +115,7 @@ final class ProjectIntegrationController extends Controller
         ]);
 
         $result = (new SandboxAdvertisingConnector)->syncCampaigns($model->externalAccount->external_id);
+        $imported = $import->execute($model->externalAccount, $result);
 
         $run->update([
             'status' => $result->success ? 'success' : 'failed',
@@ -121,7 +126,7 @@ final class ProjectIntegrationController extends Controller
         $model->externalAccount->update(['last_synced_at' => now()]);
 
         return ApiResponse::success(
-            ['sync_run_id' => $run->id, 'status' => $run->status, 'records' => $run->records],
+            ['sync_run_id' => $run->id, 'status' => $run->status, 'records' => $run->records, 'imported' => $imported],
             'Sync complete.',
         );
     }
