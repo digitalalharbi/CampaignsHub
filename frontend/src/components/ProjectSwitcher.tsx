@@ -1,0 +1,55 @@
+import { useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { ChevronsUpDown } from 'lucide-react'
+import { listProjects } from '@/features/projects/api'
+import { useProject } from '@/stores/project'
+import { Button } from '@/components/ui/Button'
+import { useT } from '@/lib/i18n'
+
+export function ProjectSwitcher() {
+  const t = useT()
+  const { currentProjectId, setCurrentProjectId } = useProject()
+
+  const { data: projects = [], isLoading } = useQuery({
+    queryKey: ['projects', 'list'],
+    queryFn: () => listProjects(false),
+  })
+
+  // Auto-select first project if none is selected
+  useEffect(() => {
+    if (!currentProjectId && projects.length > 0) {
+      setCurrentProjectId(projects[0].id)
+    }
+  }, [currentProjectId, projects, setCurrentProjectId])
+
+  if (isLoading) {
+    return <div className="h-9 w-full animate-pulse rounded-md bg-surface-secondary" />
+  }
+
+  if (projects.length === 0) {
+    return (
+      <Button variant="secondary" className="w-full justify-start text-sm text-text-muted" disabled>
+        {t('no_projects')}
+      </Button>
+    )
+  }
+
+  const selectedProject = projects.find((p) => p.id === currentProjectId) || projects[0]
+
+  return (
+    <div className="relative w-full">
+      <select
+        className="w-full cursor-pointer appearance-none rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+        value={selectedProject?.id || ''}
+        onChange={(e) => setCurrentProjectId(e.target.value)}
+      >
+        {projects.map((project) => (
+          <option key={project.id} value={project.id}>
+            {project.name}
+          </option>
+        ))}
+      </select>
+      <ChevronsUpDown className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
+    </div>
+  )
+}
