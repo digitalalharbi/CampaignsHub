@@ -2,18 +2,27 @@
 
 declare(strict_types=1);
 
+use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Tenancy\Middleware\ResolveTenant;
 use App\Http\Middleware\AssignRequestId;
 use App\Support\ApiResponse;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Auth\Middleware\Authenticate;
+use Illuminate\Auth\Middleware\Authorize;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Session\Middleware\AuthenticateSession;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Session\TokenMismatchException;
 use Illuminate\Validation\ValidationException;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
@@ -37,22 +46,22 @@ return Application::configure(basePath: dirname(__DIR__))
         // Route-middleware aliases.
         $middleware->alias([
             'tenant' => ResolveTenant::class,
-            'project' => \App\Domains\Projects\Middleware\ResolveProject::class,
+            'project' => ResolveProject::class,
         ]);
 
         // Ensure tenant (then project) is resolved BEFORE route-model binding, so the global scopes
         // are active when bound models are fetched (otherwise binding fails closed → 404).
         $middleware->priority([
-            \Illuminate\Cookie\Middleware\EncryptCookies::class,
-            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
-            \Illuminate\Session\Middleware\StartSession::class,
-            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
-            \Illuminate\Auth\Middleware\Authenticate::class,
-            \Illuminate\Session\Middleware\AuthenticateSession::class,
+            EncryptCookies::class,
+            AddQueuedCookiesToResponse::class,
+            StartSession::class,
+            ShareErrorsFromSession::class,
+            Authenticate::class,
+            AuthenticateSession::class,
             ResolveTenant::class,
-            \App\Domains\Projects\Middleware\ResolveProject::class,
-            \Illuminate\Routing\Middleware\SubstituteBindings::class,
-            \Illuminate\Auth\Middleware\Authorize::class,
+            ResolveProject::class,
+            SubstituteBindings::class,
+            Authorize::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
