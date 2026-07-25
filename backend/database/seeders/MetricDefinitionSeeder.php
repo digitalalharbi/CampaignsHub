@@ -19,6 +19,9 @@ final class MetricDefinitionSeeder extends Seeder
             // key, name, unit, value_type, aggregation, is_currency, is_additive
             ['impressions', 'Impressions', 'count', 'integer', 'sum', false, true],
             ['clicks', 'Clicks', 'count', 'integer', 'sum', false, true],
+            ['landing_page_views', 'Landing Page Views', 'count', 'integer', 'sum', false, true],
+            ['add_to_cart', 'Add to Cart', 'count', 'integer', 'sum', false, true],
+            ['checkout', 'Checkout', 'count', 'integer', 'sum', false, true],
             ['spend', 'Spend', 'currency', 'decimal', 'sum', true, true],
             ['conversions', 'Conversions', 'count', 'decimal', 'sum', false, true],
             ['revenue', 'Revenue', 'currency', 'decimal', 'sum', true, true],
