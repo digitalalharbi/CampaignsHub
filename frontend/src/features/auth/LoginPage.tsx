@@ -33,7 +33,7 @@ export function LoginPage() {
             {t('app_name')}
           </h1>
           <p className="mt-1 text-sm font-bold text-text-primary">{t('welcome_back')}</p>
-          <p className="text-[13px] text-text-secondary">{t('sign_in_subtitle')}</p>
+          <p className="text-sm text-text-secondary">{t('sign_in_subtitle')}</p>
         </div>
 
         <form
@@ -49,7 +49,7 @@ export function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="username"
-              className="w-full rounded-[9px] border border-border bg-surface-secondary px-3 py-2.5 text-[13px] outline-none focus:border-brand-500 focus:bg-surface focus:ring-[3px] focus:ring-brand-500/15"
+              className="w-full rounded-[9px] border border-border bg-surface-secondary px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:bg-surface focus:ring-[3px] focus:ring-brand-500/15"
             />
           </Field>
 
@@ -59,12 +59,12 @@ export function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
-              className="w-full rounded-[9px] border border-border bg-surface-secondary px-3 py-2.5 text-[13px] outline-none focus:border-brand-500 focus:bg-surface focus:ring-[3px] focus:ring-brand-500/15"
+              className="w-full rounded-[9px] border border-border bg-surface-secondary px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:bg-surface focus:ring-[3px] focus:ring-brand-500/15"
             />
           </Field>
 
           {error && !error.errors && (
-            <p className="rounded-[9px] bg-[var(--negative-background)] px-3 py-2 text-[12px] text-danger">
+            <p className="rounded-[9px] bg-[var(--negative-background)] px-3 py-2 text-xs text-danger">
               {error.message}
             </p>
           )}
@@ -89,9 +89,9 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[12px] font-semibold text-text-secondary">{label}</span>
+      <span className="mb-1 block text-xs font-semibold text-text-secondary">{label}</span>
       {children}
-      {error && <span className="mt-1 block text-[11px] text-danger">{error}</span>}
+      {error && <span className="mt-1 block text-xs text-danger">{error}</span>}
     </label>
   )
 }

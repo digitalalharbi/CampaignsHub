@@ -28,7 +28,7 @@ export function Tabs({
             role="tab"
             aria-selected={selected}
             onClick={() => onChange(it.key)}
-            className={`whitespace-nowrap rounded-[10px] px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
+            className={`whitespace-nowrap rounded-[10px] px-3.5 py-1.5 text-sm font-semibold transition-colors ${
               selected
                 ? 'bg-brand-600 text-white shadow-[var(--shadow-small)]'
                 : 'text-text-secondary hover:text-text-primary'

@@ -38,8 +38,11 @@ export function ProjectSwitcher() {
 
   return (
     <div className="relative w-full">
+      <span className="pointer-events-none absolute start-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md bg-brand-100 text-xs font-bold text-brand-700">
+        {(selectedProject?.name ?? '?').charAt(0)}
+      </span>
       <select
-        className="w-full cursor-pointer appearance-none rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+        className="w-full cursor-pointer appearance-none rounded-xl border border-border bg-surface-secondary py-2.5 pe-9 ps-11 text-sm font-semibold text-text-primary transition-colors hover:border-border-strong focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/25"
         value={selectedProject?.id || ''}
         onChange={(e) => setCurrentProjectId(e.target.value)}
       >
@@ -49,7 +52,7 @@ export function ProjectSwitcher() {
           </option>
         ))}
       </select>
-      <ChevronsUpDown className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
+      <ChevronsUpDown className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
     </div>
   )
 }

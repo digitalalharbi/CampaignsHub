@@ -9,7 +9,7 @@ interface SwitchProps {
 /** Accessible toggle switch (role=switch, keyboard-operable via the underlying button). */
 export function Switch({ checked, onCheckedChange, label, disabled, id }: SwitchProps) {
   return (
-    <label htmlFor={id} className="inline-flex cursor-pointer items-center gap-2 text-[13px] text-text-primary">
+    <label htmlFor={id} className="inline-flex cursor-pointer items-center gap-2 text-sm text-text-primary">
       <button
         id={id}
         type="button"

@@ -22,7 +22,7 @@ export function SystemStatusPage() {
     <section className="space-y-5">
       <div>
         <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('dashboard')}</h1>
-        <p className="mt-1 text-[13px] text-text-secondary">{t('system_status')}</p>
+        <p className="mt-1 text-sm text-text-secondary">{t('system_status')}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -40,7 +40,7 @@ export function SystemStatusPage() {
               <Badge tone="success">{t('healthy')}</Badge>
             )}
           </div>
-          <p className="mt-3 text-[11px] text-text-muted">
+          <p className="mt-3 text-xs text-text-muted">
             {t('data_source')}: MediaBuying API · {t('last_updated')}:{' '}
             <span className="tnum">{new Date(health.dataUpdatedAt).toLocaleTimeString()}</span>
           </p>
@@ -81,7 +81,7 @@ function DependencyRow({
   t: ReturnType<typeof useT>
 }) {
   return (
-    <div className="flex items-center justify-between text-[13px]">
+    <div className="flex items-center justify-between text-sm">
       <dt className="text-text-secondary">{label}</dt>
       <dd>
         {state === 'up' ? (

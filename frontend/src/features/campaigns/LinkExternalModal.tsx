@@ -96,7 +96,7 @@ export function LinkExternalModal({ open, onClose, projectId, campaignId }: Prop
   return (
     <Modal open={open} onClose={onClose} title={t('link_external')} size="lg">
       <div className="space-y-3">
-        <p className="text-[12px] text-text-muted">{t('demo_source_note')}</p>
+        <p className="text-xs text-text-muted">{t('demo_source_note')}</p>
 
         {genericError && <Alert severity="danger" title={genericError.message} />}
 
@@ -118,8 +118,8 @@ export function LinkExternalModal({ open, onClose, projectId, campaignId }: Prop
         {/* Move-confirmation — shown only after the backend replies 409 requires_confirmation. */}
         {pendingMove && (
           <Alert severity="warning" title={t('move_confirm_title')}>
-            <p className="text-[12px]">{t('move_confirm_body')}</p>
-            <p className="mt-1 text-[11px] text-text-muted">
+            <p className="text-xs">{t('move_confirm_body')}</p>
+            <p className="mt-1 text-xs text-text-muted">
               {t('current_link')}: <span className="tnum">{pendingMove.current ?? '—'}</span>
             </p>
             <div className="mt-2 flex gap-2">
@@ -155,7 +155,7 @@ export function LinkExternalModal({ open, onClose, projectId, campaignId }: Prop
                 <div key={ext.id} className="flex items-center justify-between rounded-[9px] border border-border p-2.5">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-[13px] font-semibold">{ext.name}</span>
+                      <span className="truncate text-sm font-semibold">{ext.name}</span>
                       <Badge tone={isDemoProvider(ext.provider) ? 'warning' : 'neutral'}>
                         {providerLabel(ext.provider, locale)}
                         {isDemoProvider(ext.provider) ? ` · ${t('demo_label')}` : ''}
@@ -164,7 +164,7 @@ export function LinkExternalModal({ open, onClose, projectId, campaignId }: Prop
                       {suggestedIds.has(ext.id) && <Badge tone="info">{t('suggestions_label')}</Badge>}
                       {linkedElsewhere && <Badge tone="danger">{t('linked_platforms')}</Badge>}
                     </div>
-                    <span className="text-[11px] text-text-muted">
+                    <span className="text-xs text-text-muted">
                       {t('ad_account_label')}: <span className="tnum">{ext.external_id}</span>
                     </span>
                   </div>

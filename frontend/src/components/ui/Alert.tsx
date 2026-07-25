@@ -30,8 +30,8 @@ export function Alert({
     >
       <Icon size={18} style={{ color: c.fg }} className="mt-0.5 shrink-0" aria-hidden />
       <div>
-        <p className="text-[13px] font-bold text-text-primary">{title}</p>
-        {children && <div className="mt-0.5 text-[12px] text-text-secondary">{children}</div>}
+        <p className="text-sm font-bold text-text-primary">{title}</p>
+        {children && <div className="mt-0.5 text-xs text-text-secondary">{children}</div>}
       </div>
     </div>
   )

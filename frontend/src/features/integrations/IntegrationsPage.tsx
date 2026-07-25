@@ -38,11 +38,11 @@ export function IntegrationsPage() {
     <section className="space-y-5">
       <div>
         <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('integrations')}</h1>
-        <p className="mt-1 text-[13px] text-text-secondary">{t('data_source')}: MediaBuying API</p>
+        <p className="mt-1 text-sm text-text-secondary">{t('data_source')}: MediaBuying API</p>
       </div>
 
       {connectError && (
-        <div className="rounded-[12px] bg-[var(--warning-background)] px-4 py-3 text-[13px] text-warning">
+        <div className="rounded-[12px] bg-[var(--warning-background)] px-4 py-3 text-sm text-warning">
           {connectError.message}
         </div>
       )}

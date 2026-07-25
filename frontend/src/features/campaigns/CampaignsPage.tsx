@@ -69,7 +69,7 @@ export function CampaignsPage() {
       value: (r) => r.total_budget ?? 0,
       render: (r) => <span className="tnum">{money(r.total_budget, r.budget_currency)}</span>,
     },
-    { key: 'period', header: t('period_label'), render: (r) => <span className="tnum text-[12px]">{period(r.starts_on, r.ends_on)}</span> },
+    { key: 'period', header: t('period_label'), render: (r) => <span className="tnum text-xs">{period(r.starts_on, r.ends_on)}</span> },
     {
       key: 'linked',
       header: t('linked_count'),
@@ -94,7 +94,7 @@ export function CampaignsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('campaigns')}</h1>
-          <p className="mt-1 text-[13px] text-text-secondary">{t('campaigns_subtitle')}</p>
+          <p className="mt-1 text-sm text-text-secondary">{t('campaigns_subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           {canCreate && projectId && (
@@ -111,15 +111,15 @@ export function CampaignsPage() {
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Card>
-              <div className="text-[12px] text-text-muted">{t('campaigns')}</div>
+              <div className="text-xs text-text-muted">{t('campaigns')}</div>
               <div className="tnum mt-1 text-2xl font-extrabold">{summary.total}</div>
             </Card>
             <Card>
-              <div className="text-[12px] text-text-muted">{campaignStatusLabel('active', locale)}</div>
+              <div className="text-xs text-text-muted">{campaignStatusLabel('active', locale)}</div>
               <div className="tnum mt-1 text-2xl font-extrabold">{summary.active}</div>
             </Card>
             <Card>
-              <div className="text-[12px] text-text-muted">{t('budget_label')} (SAR)</div>
+              <div className="text-xs text-text-muted">{t('budget_label')} (SAR)</div>
               <div className="tnum mt-1 text-2xl font-extrabold">{summary.budget.toLocaleString('en-US')}</div>
             </Card>
           </div>

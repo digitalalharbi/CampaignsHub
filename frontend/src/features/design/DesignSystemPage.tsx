@@ -58,7 +58,7 @@ export function DesignSystemPage() {
     <section className="space-y-6">
       <div>
         <h1 className="font-[var(--font-heading)] text-xl font-extrabold">Design System</h1>
-        <p className="mt-1 text-[13px] text-text-secondary">
+        <p className="mt-1 text-sm text-text-secondary">
           Reusable, token-driven components. Toggle theme/language from the top bar to preview both modes.
         </p>
       </div>
@@ -166,7 +166,7 @@ export function DesignSystemPage() {
               <CardDescription>Metric with trend & data freshness</CardDescription>
               <div className="mt-3 flex items-end justify-between">
                 <div>
-                  <p className="text-[11px] text-text-muted">ROAS</p>
+                  <p className="text-xs text-text-muted">ROAS</p>
                   <p className="font-[var(--font-heading)] text-2xl font-extrabold tnum">3.84x</p>
                 </div>
                 <Badge tone="success">+12%</Badge>

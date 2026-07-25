@@ -76,7 +76,7 @@ export function ProjectsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('projects')}</h1>
-          <p className="mt-1 text-[13px] text-text-secondary">{t('data_source')}: CampaignsHub API</p>
+          <p className="mt-1 text-sm text-text-secondary">{t('data_source')}: CampaignsHub API</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant={showArchived ? 'secondary' : 'ghost'} onClick={() => setShowArchived((v) => !v)}>
@@ -117,12 +117,12 @@ export function ProjectsPage() {
                   </div>
                   <Badge tone={p.status === 'active' ? 'success' : archived ? 'neutral' : 'warning'}>{p.status}</Badge>
                 </div>
-                <p className="mt-2 text-[12px] text-text-secondary">{ws?.name ?? '—'}</p>
-                <span className="mt-1 block text-[11px] text-text-muted">
+                <p className="mt-2 text-xs text-text-secondary">{ws?.name ?? '—'}</p>
+                <span className="mt-1 block text-xs text-text-muted">
                   {t('setup')}: <span className="tnum">{p.setup_completion}%</span>
                 </span>
 
-                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border pt-3 text-[12px]">
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border pt-3 text-xs">
                   <button type="button" onClick={() => openEdit(p)} className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary">
                     <Pencil size={13} /> {t('edit')}
                   </button>

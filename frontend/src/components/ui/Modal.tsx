@@ -68,7 +68,7 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="text-[13px] text-text-secondary">{children}</div>
+        <div className="text-sm text-text-secondary">{children}</div>
         {footer && <div className="mt-4 flex justify-end gap-2">{footer}</div>}
       </div>
     </div>

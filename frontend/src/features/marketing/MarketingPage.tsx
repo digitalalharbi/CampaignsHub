@@ -64,7 +64,7 @@ export function MarketingPage() {
 
       {/* Hero */}
       <section className="mx-auto max-w-[1240px] px-6 py-20 text-center">
-        <span className="inline-block rounded-[var(--radius-pill)] bg-[var(--brand-background)] px-3 py-1 text-[12px] font-bold text-brand-600">
+        <span className="inline-block rounded-[var(--radius-pill)] bg-[var(--brand-background)] px-3 py-1 text-xs font-bold text-brand-600">
           {ar ? 'منصة إدارة الميديا باينج' : 'Media-buying operations platform'}
         </span>
         <h1 className="mx-auto mt-5 max-w-3xl font-[var(--font-heading)] text-4xl font-extrabold leading-tight md:text-5xl">
@@ -86,7 +86,7 @@ export function MarketingPage() {
         <div className="mx-auto grid max-w-[1240px] gap-8 px-6 py-16 md:grid-cols-2">
           <div>
             <h2 className="font-[var(--font-heading)] text-2xl font-bold">{ar ? 'المشكلة' : 'The problem'}</h2>
-            <ul className="mt-4 space-y-2 text-[14px] text-text-secondary">
+            <ul className="mt-4 space-y-2 text-base text-text-secondary">
               {(ar
                 ? ['تشتت الحسابات بين المنصات', 'اختلاف التقارير', 'ضياع صلاحيات العملاء', 'تأخر اعتماد المحتوى', 'غياب الربط بين الإنفاق والمبيعات', 'صعوبة إدارة عشرات المشاريع']
                 : ['Accounts scattered across platforms', 'Inconsistent reports', 'Lost client permissions', 'Slow content approvals', 'No link between spend and sales', 'Hard to manage dozens of projects']
@@ -95,7 +95,7 @@ export function MarketingPage() {
           </div>
           <div>
             <h2 className="font-[var(--font-heading)] text-2xl font-bold">{ar ? 'الحل' : 'The solution'}</h2>
-            <ol className="mt-4 space-y-2 text-[14px] text-text-secondary">
+            <ol className="mt-4 space-y-2 text-base text-text-secondary">
               {(ar
                 ? ['أنشئ مساحة العميل', 'أنشئ المشروع', 'اربط مصادره', 'جهّز الحملة واعتمد المحتوى', 'تابع الأداء واستلم التنبيهات', 'شارك التقرير بأمان']
                 : ['Create a client workspace', 'Create a project', 'Connect its sources', 'Prepare the campaign & approve content', 'Track performance & get alerts', 'Share the report securely']
@@ -114,7 +114,7 @@ export function MarketingPage() {
           {features.map((f) => (
             <div key={f.en} className="rounded-[14px] border border-border bg-surface p-4 shadow-[var(--shadow-small)]">
               <f.icon size={20} className="text-brand-600" />
-              <p className="mt-2 text-[13px] font-bold">{ar ? f.ar : f.en}</p>
+              <p className="mt-2 text-sm font-bold">{ar ? f.ar : f.en}</p>
             </div>
           ))}
         </div>
@@ -124,13 +124,13 @@ export function MarketingPage() {
       <section className="border-y border-border bg-surface">
         <div className="mx-auto max-w-[1240px] px-6 py-16">
           <h2 className="text-center font-[var(--font-heading)] text-2xl font-bold">{ar ? 'الباقات' : 'Pricing'}</h2>
-          <p className="mt-2 text-center text-[13px] text-text-muted">
+          <p className="mt-2 text-center text-sm text-text-muted">
             {ar ? 'تُدار الأسعار والحدود من لوحة المنصة.' : 'Prices and limits are managed from the platform admin.'}
           </p>
           <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-5">
             {plans.map((p) => (
               <div key={p.name} className="rounded-[14px] border border-border bg-background p-4 text-center">
-                <p className="text-[13px] font-bold">{ar ? p.ar : p.name}</p>
+                <p className="text-sm font-bold">{ar ? p.ar : p.name}</p>
                 <p className="mt-2 font-[var(--font-heading)] text-xl font-extrabold tnum">{p.price}</p>
                 <Link to="/login"><Button variant="secondary" className="mt-3 w-full">{ar ? 'اختيار' : 'Choose'}</Button></Link>
               </div>
@@ -145,7 +145,7 @@ export function MarketingPage() {
           <Shield size={20} className="text-brand-600" />
           <h2 className="font-[var(--font-heading)] text-2xl font-bold">{ar ? 'الأمان' : 'Security'}</h2>
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-2 text-[14px] text-text-secondary md:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-2 text-base text-text-secondary md:grid-cols-2">
           {(ar
             ? ['عزل بيانات المؤسسات والمشاريع', 'صلاحيات دقيقة خادمية', 'تشفير البيانات الحساسة', 'سجل تدقيق', 'مصادقة آمنة بالجلسة', 'علامات مائية للمحتوى الحساس']
             : ['Tenant + project data isolation', 'Fine-grained server-side permissions', 'Encryption of sensitive data', 'Audit log', 'Secure session auth', 'Watermarks on sensitive content']
@@ -153,7 +153,7 @@ export function MarketingPage() {
             <div key={s} className="flex items-center gap-2"><CheckCircle2 size={16} className="text-success" />{s}</div>
           ))}
         </div>
-        <p className="mt-3 text-[12px] text-text-muted">
+        <p className="mt-3 text-xs text-text-muted">
           {ar
             ? 'ملاحظة: لا ندّعي منع تصوير الشاشة بشكل كامل؛ نوفّر ردعاً وتتبعاً وعلامات مائية.'
             : 'Note: we do not claim to prevent screen capture; we provide deterrence, attribution, and watermarks.'}
@@ -167,8 +167,8 @@ export function MarketingPage() {
           <div className="mt-6 space-y-3">
             {faqs.map((f) => (
               <details key={f.en} className="rounded-[12px] border border-border bg-background p-4">
-                <summary className="cursor-pointer text-[14px] font-semibold">{ar ? f.ar : f.en}</summary>
-                <p className="mt-2 text-[13px] text-text-secondary">
+                <summary className="cursor-pointer text-base font-semibold">{ar ? f.ar : f.en}</summary>
+                <p className="mt-2 text-sm text-text-secondary">
                   {ar ? 'نعم — النظام يدعم ذلك مع عزل كامل للبيانات وصلاحيات دقيقة.' : 'Yes — supported, with full data isolation and fine-grained permissions.'}
                 </p>
               </details>
@@ -186,7 +186,7 @@ export function MarketingPage() {
         </div>
       </section>
       <footer className="border-t border-border bg-surface">
-        <div className="mx-auto flex max-w-[1240px] flex-col items-center justify-between gap-2 px-6 py-6 text-[12px] text-text-muted md:flex-row">
+        <div className="mx-auto flex max-w-[1240px] flex-col items-center justify-between gap-2 px-6 py-6 text-xs text-text-muted md:flex-row">
           <span>© {brand.name} — {brand.domain}</span>
           <span>{ar ? 'المنتج · المزايا · الأسعار · الأمان · الخصوصية · الشروط · الدعم' : 'Product · Features · Pricing · Security · Privacy · Terms · Support'}</span>
         </div>

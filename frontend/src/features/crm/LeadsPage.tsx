@@ -85,7 +85,7 @@ export function LeadsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('leads')}</h1>
-          <p className="mt-1 text-[13px] text-text-secondary">
+          <p className="mt-1 text-sm text-text-secondary">
             {t('data_source')}: MediaBuying API
           </p>
         </div>

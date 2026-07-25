@@ -21,8 +21,8 @@ import { useUi } from '@/stores/ui'
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-0">
-      <span className="text-[12px] text-text-muted">{label}</span>
-      <span className="text-[13px] font-semibold">{children}</span>
+      <span className="text-xs text-text-muted">{label}</span>
+      <span className="text-sm font-semibold">{children}</span>
     </div>
   )
 }
@@ -115,7 +115,7 @@ export function CampaignDetailPage() {
     <section className="space-y-4">
       <button
         onClick={() => navigate('/campaigns')}
-        className="inline-flex items-center gap-1 text-[12px] text-text-secondary hover:text-text-primary"
+        className="inline-flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary"
       >
         <ArrowRight size={14} className="rtl:rotate-180" /> {t('back_to_campaigns')}
       </button>
@@ -126,7 +126,7 @@ export function CampaignDetailPage() {
             <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{c.name}</h1>
             <Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge>
           </div>
-          <p className="mt-1 text-[13px] text-text-secondary">{objectiveLabel(c.objective, locale)}</p>
+          <p className="mt-1 text-sm text-text-secondary">{objectiveLabel(c.objective, locale)}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {canUpdate && (
@@ -180,7 +180,7 @@ export function CampaignDetailPage() {
                   </span>
                 </Row>
                 <Row label={t('period_label')}>
-                  <span className="tnum text-[12px]">
+                  <span className="tnum text-xs">
                     {c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}
                   </span>
                 </Row>
@@ -192,7 +192,7 @@ export function CampaignDetailPage() {
             </Card>
             <Card>
               <CardTitle>{t('audience_label')}</CardTitle>
-              <p className="mt-2 whitespace-pre-wrap text-[13px] text-text-secondary">{c.audience || '—'}</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">{c.audience || '—'}</p>
             </Card>
           </div>
         </TabPanel>
@@ -220,14 +220,14 @@ export function CampaignDetailPage() {
                 <div key={ext.id} className="flex items-center justify-between rounded-[9px] border border-border p-2.5">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-[13px] font-semibold">{ext.name}</span>
+                      <span className="truncate text-sm font-semibold">{ext.name}</span>
                       <Badge tone={isDemoProvider(ext.provider) ? 'warning' : 'neutral'}>
                         {providerLabel(ext.provider, locale)}
                         {isDemoProvider(ext.provider) ? ` · ${t('demo_label')}` : ''}
                       </Badge>
                       <Badge tone={campaignStatusTone(ext.status)}>{campaignStatusLabel(ext.status, locale)}</Badge>
                     </div>
-                    <span className="text-[11px] text-text-muted">
+                    <span className="text-xs text-text-muted">
                       {t('ad_account_label')}: <span className="tnum">{ext.external_id}</span>
                     </span>
                   </div>

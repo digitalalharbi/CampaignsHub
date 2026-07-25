@@ -60,9 +60,9 @@ export function ProjectTeamPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('project_team')}</h1>
-          <p className="mt-1 text-[13px] text-text-secondary">{t('project_team_hint')}</p>
+          <p className="mt-1 text-sm text-text-secondary">{t('project_team_hint')}</p>
         </div>
-        <Link to={`/projects/${projectId}/integrations`} className="text-[12px] font-bold text-brand-600 hover:underline">
+        <Link to={`/projects/${projectId}/integrations`} className="text-xs font-bold text-brand-600 hover:underline">
           {t('integrations')} →
         </Link>
       </div>
@@ -87,7 +87,7 @@ export function ProjectTeamPage() {
             <UserPlus size={15} /> {t('add')}
           </Button>
         </div>
-        {addError && !addError.errors && <p className="mt-2 text-[12px] text-danger">{addError.message}</p>}
+        {addError && !addError.errors && <p className="mt-2 text-xs text-danger">{addError.message}</p>}
       </Card>
 
       <Card>
@@ -105,8 +105,8 @@ export function ProjectTeamPage() {
             {team.data?.map((m) => (
               <div key={m.id} className="flex items-center justify-between rounded-[9px] border border-border p-3">
                 <div>
-                  <span className="text-[13px] font-bold">{m.name}</span>
-                  <span className="ms-2 text-[11px] text-text-muted">{m.email}</span>
+                  <span className="text-sm font-bold">{m.name}</span>
+                  <span className="ms-2 text-xs text-text-muted">{m.email}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge tone="info">{m.role}</Badge>

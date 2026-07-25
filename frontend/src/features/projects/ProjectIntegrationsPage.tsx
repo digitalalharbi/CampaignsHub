@@ -73,13 +73,13 @@ export function ProjectIntegrationsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('project_integrations')}</h1>
-          <p className="mt-1 text-[13px] text-text-secondary">{t('project_switch_hint')}</p>
+          <p className="mt-1 text-sm text-text-secondary">{t('project_switch_hint')}</p>
         </div>
         {/* Project selector — switching reloads project-scoped data with no leakage. */}
         <select
           value={projectId}
           onChange={(e) => navigate(`/projects/${e.target.value}/integrations`)}
-          className="rounded-[9px] border border-border bg-surface-secondary px-3 py-2 text-[13px]"
+          className="rounded-[9px] border border-border bg-surface-secondary px-3 py-2 text-sm"
           aria-label={t('projects')}
         >
           {projects.data?.map((p, i) => (
@@ -106,8 +106,8 @@ export function ProjectIntegrationsPage() {
             {discovered.map((a) => (
               <div key={a.id} className="flex items-center justify-between rounded-[9px] border border-border p-2.5">
                 <div>
-                  <span className="text-[13px] font-semibold">{a.name}</span>
-                  <span className="ms-2 text-[11px] text-text-muted">
+                  <span className="text-sm font-semibold">{a.name}</span>
+                  <span className="ms-2 text-xs text-text-muted">
                     {a.account_type} · <span className="tnum">{a.external_id}</span>
                   </span>
                 </div>
@@ -142,12 +142,12 @@ export function ProjectIntegrationsPage() {
               <div key={b.id} className="flex items-center justify-between rounded-[9px] border border-border p-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[13px] font-bold">{b.account?.name ?? '—'}</span>
+                    <span className="text-sm font-bold">{b.account?.name ?? '—'}</span>
                     <Badge tone="info">{b.purpose}</Badge>
                     {b.is_primary && <Badge tone="success">{t('primary')}</Badge>}
                     {!b.is_active && <Badge tone="danger">{t('disabled')}</Badge>}
                   </div>
-                  <span className="text-[11px] text-text-muted">
+                  <span className="text-xs text-text-muted">
                     {b.account?.account_type} · <span className="tnum">{b.account?.external_id}</span>
                     {b.account?.last_synced_at && (
                       <>
@@ -195,7 +195,7 @@ export function ProjectIntegrationsPage() {
           <div className="mt-3 space-y-2">
             {tasks.data?.map((task) => (
               <div key={task.id} className="flex items-center justify-between rounded-[9px] border border-border p-2.5">
-                <span className="text-[13px] font-semibold">{task.title}</span>
+                <span className="text-sm font-semibold">{task.title}</span>
                 <div className="flex items-center gap-2">
                   <Badge tone={task.priority === 'high' || task.priority === 'urgent' ? 'warning' : 'neutral'}>
                     {task.priority}

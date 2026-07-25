@@ -1,10 +1,12 @@
-/* Design tokens — single source of truth for color, radius, elevation.
-   See docs/design-tokens.md. Never hard-code a color; reference a token. */
+/* Design tokens — single source of truth for color, typography, radius, elevation.
+   See docs/design-tokens.md. Never hard-code a color or a raw font-size; reference a token. */
 
 :root {
+  /* ---- Brand + semantic color ---- */
   --brand-50: #ecfdf5;
   --brand-100: #d1fae5;
   --brand-200: #a7f3d0;
+  --brand-400: #34d399;
   --brand-500: #10b981;
   --brand-600: #0d8a6f;
   --brand-700: #047857;
@@ -12,50 +14,81 @@
   --success: #16a34a;
   --warning: #d97706;
   --danger: #dc2626;
-  --info: #1e40af;
+  --info: #2563eb;
   --purple: #7c3aed;
   --teal: #0891b2;
 
-  --background: #f5f7f9;
+  --background: #f6f8fa;
   --surface: #ffffff;
-  --surface-secondary: #f8fafc;
+  --surface-secondary: #f3f6f9;
+  --surface-hover: #eef2f6;
 
-  --border: #e6e9ee;
-  --border-strong: #d3d9e0;
+  --border: #e6eaef;
+  --border-strong: #d4dae1;
 
-  --text-primary: #0f172a;
+  --text-primary: #0d1526;
   --text-secondary: #475569;
-  --text-muted: #94a3b8;
-  --ring: #e2e8f0;
+  --text-muted: #8a95a5;
+  --ring: #cfd8e3;
 
-  --positive-background: #f0fdf4;
+  --positive-background: #eefbf3;
   --negative-background: #fef2f2;
   --warning-background: #fffbeb;
-  --info-background: #eff6ff;
+  --info-background: #eff5ff;
   --purple-background: #f5f0ff;
-  --brand-background: #ecfdf5;
+  --brand-background: #eafaf4;
 
-  --shadow-small: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-medium: 0 4px 14px rgba(15, 23, 42, 0.07);
-  --shadow-large: 0 16px 40px rgba(15, 23, 42, 0.14);
+  /* ---- Elevation (soft, restrained) ---- */
+  --shadow-small: 0 1px 2px rgba(13, 21, 38, 0.05), 0 1px 1px rgba(13, 21, 38, 0.03);
+  --shadow-medium: 0 4px 16px rgba(13, 21, 38, 0.06), 0 1px 3px rgba(13, 21, 38, 0.04);
+  --shadow-large: 0 18px 44px rgba(13, 21, 38, 0.12), 0 4px 10px rgba(13, 21, 38, 0.05);
+  --shadow-ring: 0 0 0 1px rgba(13, 21, 38, 0.04);
 
+  /* ---- Radius ---- */
   --radius-extra-small: 6px;
   --radius-small: 8px;
-  --radius-medium: 9px;
+  --radius-medium: 10px;
   --radius-large: 12px;
-  --radius-extra-large: 14px;
-  --radius-modal: 16px;
+  --radius-extra-large: 16px;
+  --radius-modal: 20px;
   --radius-pill: 999px;
 
-  --font-body: 'IBM Plex Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-heading: 'Plus Jakarta Sans', 'IBM Plex Sans Arabic', sans-serif;
-  --font-mono: 'JetBrains Mono', 'IBM Plex Sans Arabic', monospace;
+  /* ---- Typography: families (Latin→Inter, Arabic→Plex; ordered so each script picks its own) ---- */
+  --font-body: 'Inter Variable', 'IBM Plex Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Inter Variable', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', 'IBM Plex Sans Arabic', monospace;
+
+  /* ---- Typography: scale (rem, 1rem = 16px). Never smaller than 13px for real text. ---- */
+  --text-xs: 0.8125rem; /* 13px — small metadata only */
+  --text-sm: 0.875rem; /* 14px — secondary text */
+  --text-base: 1rem; /* 16px — body */
+  --text-lg: 1.125rem; /* 18px */
+  --text-xl: 1.25rem; /* 20px — section title */
+  --text-2xl: 1.5rem; /* 24px — section title (large) */
+  --text-3xl: 1.875rem; /* 30px — page title */
+  --text-4xl: 2.25rem; /* 36px — page title (large) */
+  --text-kpi: 2.125rem; /* 34px — KPI value */
+
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-normal: 1.6;
+  --leading-relaxed: 1.75;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --tracking-tight: -0.02em;
+  --tracking-snug: -0.01em;
+  --tracking-normal: 0;
 }
 
 :root[data-theme='dark'] {
   --brand-50: #04201e;
   --brand-100: #063831;
   --brand-200: #0a544a;
+  --brand-400: #14c39a;
   --brand-500: #14c39a;
   --brand-600: #14c39a;
   --brand-700: #34d4ab;
@@ -67,24 +100,30 @@
   --purple: #c4b5fd;
   --teal: #22d3ee;
 
-  --background: #0b0f14;
-  --surface: #151b23;
-  --surface-secondary: #1c242e;
+  --background: #0a0e14;
+  --surface: #141a22;
+  --surface-secondary: #1a212b;
+  --surface-hover: #212a35;
 
-  --border: #2a323d;
+  --border: #29323d;
   --border-strong: #3a4550;
 
-  --text-primary: #e6edf3;
-  --text-secondary: #aab4c0;
-  --text-muted: #6e7a88;
-  --ring: #2a323d;
+  --text-primary: #e8eef5;
+  --text-secondary: #a7b2bf;
+  --text-muted: #6b7684;
+  --ring: #3a4550;
 
-  --positive-background: rgba(34, 197, 94, 0.1);
-  --negative-background: rgba(220, 38, 38, 0.13);
-  --warning-background: rgba(245, 158, 11, 0.14);
-  --info-background: rgba(59, 130, 246, 0.13);
-  --purple-background: rgba(124, 58, 237, 0.16);
-  --brand-background: rgba(20, 195, 154, 0.12);
+  --positive-background: rgba(34, 197, 94, 0.12);
+  --negative-background: rgba(248, 113, 113, 0.14);
+  --warning-background: rgba(251, 191, 36, 0.14);
+  --info-background: rgba(96, 165, 250, 0.14);
+  --purple-background: rgba(196, 181, 253, 0.14);
+  --brand-background: rgba(20, 195, 154, 0.13);
+
+  --shadow-small: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-medium: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-large: 0 18px 44px rgba(0, 0, 0, 0.5);
+  --shadow-ring: 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 html,
@@ -98,13 +137,41 @@ body {
   background: var(--background);
   color: var(--text-primary);
   font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Sensible heading defaults so pages read as a clear hierarchy without per-page sizes. */
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-heading);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  font-weight: var(--weight-bold);
+  margin: 0;
+}
+
+/* Inputs never below 16px so mobile Safari does not auto-zoom on focus. */
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+}
+input,
+select,
+textarea {
+  font-size: var(--text-base);
 }
 
 /* Latin, tabular numerals for numbers/dates/ids even inside RTL Arabic UI. */
 .tnum {
-  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   direction: ltr;
   unicode-bidi: isolate;
 }

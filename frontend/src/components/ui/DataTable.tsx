@@ -96,7 +96,7 @@ export function DataTable<T>({
       )}
 
       <div className="overflow-x-auto rounded-[13px] border border-border bg-surface shadow-[var(--shadow-small)]">
-        <table className="w-full min-w-[560px] border-collapse text-[13px]">
+        <table className="w-full min-w-[560px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-secondary">
               {columns.map((c) => (
@@ -166,7 +166,7 @@ export function DataTable<T>({
       </div>
 
       {!loading && !error && filtered.length > pageSize && (
-        <div className="flex items-center justify-between text-[12px] text-text-secondary">
+        <div className="flex items-center justify-between text-xs text-text-secondary">
           <span className="tnum">
             {(current - 1) * pageSize + 1}–{Math.min(current * pageSize, filtered.length)} / {filtered.length}
           </span>

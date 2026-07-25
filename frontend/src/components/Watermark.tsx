@@ -48,7 +48,7 @@ export function Watermark({
         className="pointer-events-none absolute inset-0 z-10 select-none"
         style={{ backgroundImage: `url("${svg}")`, backgroundRepeat: 'repeat' }}
       />
-      <span className="pointer-events-none absolute bottom-2 end-2 z-10 rounded bg-black/5 px-1.5 py-0.5 text-[10px] text-text-muted">
+      <span className="pointer-events-none absolute bottom-2 end-2 z-10 rounded bg-black/5 px-1.5 py-0.5 text-xs text-text-muted">
         Confidential — {text}
       </span>
     </div>

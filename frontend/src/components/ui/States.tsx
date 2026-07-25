@@ -22,7 +22,7 @@ function Stub({
     <div className="flex flex-col items-center justify-center gap-2 rounded-[14px] border border-dashed border-border bg-surface px-6 py-10 text-center">
       <div className="text-text-muted">{icon}</div>
       <h4 className="text-sm font-bold text-text-primary">{title}</h4>
-      {description && <p className="max-w-sm text-[12px] text-text-secondary">{description}</p>}
+      {description && <p className="max-w-sm text-xs text-text-secondary">{description}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>
   )
