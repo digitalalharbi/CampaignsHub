@@ -1,27 +1,11 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+import { AUTH, switchToEnglish } from './helpers'
 
 /**
- * Full-path campaigns E2E against the seeded demo tenant (owner@demo-agency.local / password).
- * Run the backend (migrate:fresh --seed + serve) and frontend (npm run dev) first — see
- * playwright.config.ts. All external/platform data here is Sandbox (Demo), never production.
+ * Core campaigns paths (authenticated as the demo owner via reused storage state).
+ * All external/platform data is Sandbox (Demo), never production.
  */
-
-async function login(page: Page) {
-  await page.goto('/login')
-  // The demo login form is pre-filled with the demo owner; submit it.
-  await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
-  await expect(page).not.toHaveURL(/\/login$/)
-}
-
-async function switchToEnglish(page: Page) {
-  // The app defaults to Arabic; flip to English for stable selectors if a toggle is present.
-  const toggle = page.getByRole('button', { name: /EN|English|اللغة/ }).first()
-  if (await toggle.count()) await toggle.click().catch(() => {})
-}
-
-test.beforeEach(async ({ page }) => {
-  await login(page)
-})
+test.use({ storageState: AUTH.owner })
 
 test('create a unified campaign and see it in the list', async ({ page }) => {
   await page.goto('/campaigns')

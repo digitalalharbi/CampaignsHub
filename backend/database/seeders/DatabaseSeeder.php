@@ -85,6 +85,28 @@ class DatabaseSeeder extends Seeder
         );
         $ownerUser->assignRole($owner);
 
+        // Read-only Analyst (view campaigns + reports, but cannot create/edit) — used by E2E RBAC tests.
+        $analyst = Role::firstOrCreate(
+            ['tenant_id' => $tenant->id, 'slug' => 'analyst'],
+            ['name' => 'Analyst', 'is_system' => true],
+        );
+        $analyst->givePermissionTo('campaigns.view', 'projects.view', 'integrations.view', 'reports.view');
+        User::firstOrCreate(
+            ['email' => 'analyst@demo-agency.local'],
+            ['name' => 'Demo Analyst', 'password' => Hash::make('password'), 'tenant_id' => $tenant->id],
+        )->assignRole($analyst);
+
+        // Client Viewer (campaigns.view only, NO projects.view) — blocked from project-scoped routes.
+        $clientViewer = Role::firstOrCreate(
+            ['tenant_id' => $tenant->id, 'slug' => 'client-viewer'],
+            ['name' => 'Client Viewer', 'is_system' => true],
+        );
+        $clientViewer->givePermissionTo('campaigns.view', 'reports.view');
+        User::firstOrCreate(
+            ['email' => 'viewer@demo-agency.local'],
+            ['name' => 'Demo Viewer', 'password' => Hash::make('password'), 'tenant_id' => $tenant->id],
+        )->assignRole($clientViewer);
+
         // Demo CRM leads (only if none exist yet for this tenant).
         if (Lead::count() === 0) {
             $seed = [

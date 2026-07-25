@@ -1,0 +1,24 @@
+import { expect, test as setup } from '@playwright/test'
+import { AUTH } from './helpers'
+
+/**
+ * Logs in each demo role ONCE and saves its authenticated storage state, so the specs reuse the
+ * session instead of logging in per-test (which trips the backend login throttle). Runs as a
+ * dependency before the test project.
+ */
+const ROLES = [
+  { email: 'owner@demo-agency.local', file: AUTH.owner },
+  { email: 'analyst@demo-agency.local', file: AUTH.analyst },
+  { email: 'viewer@demo-agency.local', file: AUTH.viewer },
+]
+
+for (const role of ROLES) {
+  setup(`authenticate ${role.email}`, async ({ page }) => {
+    await page.goto('/login')
+    await page.locator('input[type="email"]').fill(role.email)
+    await page.locator('input[type="password"]').fill('password')
+    await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
+    await expect(page).not.toHaveURL(/\/login$/)
+    await page.context().storageState({ path: role.file })
+  })
+}

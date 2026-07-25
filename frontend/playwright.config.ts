@@ -23,7 +23,10 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     locale: 'en-US',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'setup', testMatch: /auth\.setup\.ts/ },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, dependencies: ['setup'] },
+  ],
   // Reuse the already-running dev server (do not auto-start — the backend must be up too).
   webServer: {
     command: 'npm run dev',
