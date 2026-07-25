@@ -7,6 +7,7 @@ use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\Projects\Http\Controllers\ProjectController;
 use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
 use App\Domains\Projects\Http\Controllers\ProjectOverviewController;
+use App\Domains\Reports\Http\Controllers\ReportController;
 use App\Domains\Tasks\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
 
@@ -35,6 +36,15 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{proj
     Route::get('metrics/funnel', [MetricsController::class, 'funnel'])->name('metrics.funnel');
     Route::get('metrics/budget', [MetricsController::class, 'budget'])->name('metrics.budget');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
+
+    // Reports (project-scoped; reports.view / reports.export).
+    Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::post('reports', [ReportController::class, 'store'])->name('reports.store');
+    Route::get('reports/{report}', [ReportController::class, 'show'])->name('reports.show');
+    Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->name('reports.regenerate');
+    Route::post('reports/{report}/export', [ReportController::class, 'export'])->name('reports.export');
+    Route::post('reports/{report}/send', [ReportController::class, 'send'])->name('reports.send');
+    Route::delete('reports/{report}', [ReportController::class, 'destroy'])->name('reports.destroy');
 
     Route::get('team', [ProjectMembershipController::class, 'index'])->name('team.index');
     Route::post('team', [ProjectMembershipController::class, 'store'])->name('team.store');

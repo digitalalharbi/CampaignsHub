@@ -148,9 +148,14 @@ final class MetricsAggregator
         $elapsedDays = max(1, $from->diffInDays($today->min($to)) + 1);
         $elapsedFraction = min(1.0, $elapsedDays / $periodDays);
 
-        $campaigns = DB::table('unified_campaigns')
-            ->whereIn('id', $spentByCampaign->keys())
-            ->get(['id', 'name', 'total_budget', 'budget_currency', 'status']);
+        // Metrics not linked to a unified campaign group under a null key — exclude it so we never
+        // pass an empty string to a uuid column.
+        $campaignIds = $spentByCampaign->keys()->filter(fn ($k) => $k !== null && $k !== '')->values();
+        $campaigns = $campaignIds->isEmpty()
+            ? collect()
+            : DB::table('unified_campaigns')
+                ->whereIn('id', $campaignIds->all())
+                ->get(['id', 'name', 'total_budget', 'budget_currency', 'status']);
 
         $rows = [];
         foreach ($campaigns as $c) {

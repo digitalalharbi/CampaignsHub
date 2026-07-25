@@ -7,10 +7,15 @@ namespace App\Console\Commands;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Models\ReportExport;
+use App\Domains\Reports\Models\ReportRecipient;
+use App\Domains\Reports\Models\ReportSchedule;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Storage;
 
 /** php artisan demo:remove — delete ONLY demo analytics data (is_demo rows + the demo store workspace). */
 final class DemoRemoveCommand extends Command
@@ -30,6 +35,18 @@ final class DemoRemoveCommand extends Command
         $metrics = DailyMetric::withoutGlobalScopes()->where('is_demo', true)->delete();
         $runs = MetricSyncRun::withoutGlobalScopes()->where('is_demo', true)->delete();
 
+        // Delete demo report export files, then the rows (reports themselves also cascade with the
+        // demo workspace below, but this clears exports/schedules/recipients + any stray is_demo rows).
+        foreach (ReportExport::withoutGlobalScopes()->where('is_demo', true)->get() as $ex) {
+            if ($ex->path) {
+                Storage::disk($ex->disk)->delete($ex->path);
+            }
+        }
+        ReportExport::withoutGlobalScopes()->where('is_demo', true)->delete();
+        ReportRecipient::withoutGlobalScopes()->where('is_demo', true)->delete();
+        ReportSchedule::withoutGlobalScopes()->where('is_demo', true)->delete();
+        $reports = Report::withoutGlobalScopes()->where('is_demo', true)->delete();
+
         $tenant = Tenant::where('slug', 'demo-agency')->first();
         $workspaces = 0;
         if ($tenant) {
@@ -40,7 +57,7 @@ final class DemoRemoveCommand extends Command
             app(TenantContext::class)->forget();
         }
 
-        $this->info("Removed demo analytics: {$metrics} metrics, {$runs} sync runs, {$workspaces} workspace(s).");
+        $this->info("Removed demo: {$metrics} metrics, {$runs} sync runs, {$reports} reports, {$workspaces} workspace(s).");
 
         return self::SUCCESS;
     }

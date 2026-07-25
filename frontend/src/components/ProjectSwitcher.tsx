@@ -15,10 +15,14 @@ export function ProjectSwitcher() {
     queryFn: () => listProjects(false),
   })
 
-  // Auto-select first project if none is selected
+  // Validate the persisted project (a stale id after a re-seed no longer exists) and, when none is
+  // valid, prefer the rich demo analytics project so the first screen isn't empty for the demo admin.
   useEffect(() => {
-    if (!currentProjectId && projects.length > 0) {
-      setCurrentProjectId(projects[0].id)
+    if (projects.length === 0) return
+    const isValid = projects.some((p) => p.id === currentProjectId)
+    if (!isValid) {
+      const preferred = projects.find((p) => /متجر تجريبي|demo store/i.test(p.name)) ?? projects[0]
+      setCurrentProjectId(preferred.id)
     }
   }, [currentProjectId, projects, setCurrentProjectId])
 

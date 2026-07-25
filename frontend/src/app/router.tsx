@@ -7,6 +7,7 @@ import { CampaignsPage } from '@/features/campaigns/CampaignsPage'
 import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { LeadsPage } from '@/features/crm/LeadsPage'
+import { ReportsPage } from '@/features/reports/ReportsPage'
 import { DesignSystemPage } from '@/features/design/DesignSystemPage'
 import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
 import { MarketingPage } from '@/features/marketing/MarketingPage'
@@ -41,7 +42,7 @@ export const router = createBrowserRouter([
           { path: 'content', element: <PagePlaceholder title="Content" /> },
           { path: 'approvals', element: <PagePlaceholder title="Approvals" /> },
           { path: 'tracking', element: <PagePlaceholder title="Tracking" /> },
-          { path: 'reports', element: <PagePlaceholder title="Reports" /> },
+          { path: 'reports', element: <ReportsPage /> },
           { path: 'optimization', element: <PagePlaceholder title="Optimization" /> },
           { path: 'tasks', element: <PagePlaceholder title="Tasks" /> },
           { path: 'notifications', element: <PagePlaceholder title="Notifications" /> },
