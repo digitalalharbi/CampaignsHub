@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Metrics\Http\Controllers\MetricsController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\Projects\Http\Controllers\ProjectController;
 use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
@@ -25,6 +26,16 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('projects')->name('project
 // Project-scoped resources (ResolveProject enforces project isolation).
 Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{project}')->name('projects.scoped.')->group(function (): void {
     Route::get('overview', [ProjectOverviewController::class, 'show'])->name('overview');
+
+    // C3 metrics aggregation (read-only; requires campaigns.view).
+    Route::get('metrics/summary', [MetricsController::class, 'summary'])->name('metrics.summary');
+    Route::get('metrics/timeseries', [MetricsController::class, 'timeseries'])->name('metrics.timeseries');
+    Route::get('metrics/platforms', [MetricsController::class, 'platforms'])->name('metrics.platforms');
+    Route::get('metrics/campaigns', [MetricsController::class, 'campaigns'])->name('metrics.campaigns');
+    Route::get('metrics/funnel', [MetricsController::class, 'funnel'])->name('metrics.funnel');
+    Route::get('metrics/budget', [MetricsController::class, 'budget'])->name('metrics.budget');
+    Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
+
     Route::get('team', [ProjectMembershipController::class, 'index'])->name('team.index');
     Route::post('team', [ProjectMembershipController::class, 'store'])->name('team.store');
     Route::match(['put', 'patch'], 'team/{membership}', [ProjectMembershipController::class, 'update'])->name('team.update');
