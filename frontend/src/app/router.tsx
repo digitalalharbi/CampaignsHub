@@ -4,6 +4,8 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { CampaignDetailPage } from '@/features/campaigns/CampaignDetailPage'
 import { CampaignsPage } from '@/features/campaigns/CampaignsPage'
+import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
+import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { LeadsPage } from '@/features/crm/LeadsPage'
 import { DesignSystemPage } from '@/features/design/DesignSystemPage'
 import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
@@ -24,7 +26,9 @@ export const router = createBrowserRouter([
         path: '/',
         element: <AppShell />,
         children: [
-          { index: true, element: <SystemStatusPage /> },
+          { index: true, element: <DashboardPage /> },
+          { path: 'analytics', element: <AnalyticsPage /> },
+          { path: 'system', element: <SystemStatusPage /> },
           { path: 'projects', element: <ProjectsPage /> },
           { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
           { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },

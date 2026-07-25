@@ -5,6 +5,7 @@ const dictionary = {
   ar: {
     app_name: 'CampaignsHub',
     search: 'بحث',
+    analytics: 'التحليلات',
     dashboard: 'لوحة التحكم',
     overview: 'نظرة عامة',
     system_status: 'حالة النظام',
@@ -158,6 +159,7 @@ const dictionary = {
   en: {
     app_name: 'CampaignsHub',
     search: 'Search',
+    analytics: 'Analytics',
     dashboard: 'Dashboard',
     overview: 'Overview',
     system_status: 'System Status',

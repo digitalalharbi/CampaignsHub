@@ -12,6 +12,7 @@ import {
   Search,
   Settings,
   Sun,
+  TrendingUp,
   X,
 } from 'lucide-react'
 import { ProjectSwitcher } from '@/components/ProjectSwitcher'
@@ -24,8 +25,9 @@ import type { TranslationKey } from '@/lib/i18n'
 type NavItem = { to: string; key: TranslationKey; icon: typeof LayoutDashboard }
 
 const operationalNav: NavItem[] = [
-  { to: '/', key: 'overview', icon: LayoutDashboard },
+  { to: '/', key: 'dashboard', icon: LayoutDashboard },
   { to: '/campaigns', key: 'campaigns', icon: Megaphone },
+  { to: '/analytics', key: 'analytics', icon: TrendingUp },
   { to: '/reports', key: 'reports', icon: BarChart3 },
   { to: '/integrations', key: 'integrations', icon: Plug },
 ]
