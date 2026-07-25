@@ -6,6 +6,7 @@ namespace App\Domains\Projects\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Projects\Resources\ProjectResource;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -19,9 +20,19 @@ final class ProjectController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('projects.view'), 403);
+        $user = $request->user();
+        abort_unless($user->hasPermission('projects.view'), 403);
 
         $query = Project::query()->latest();
+        // Agency-wide viewers (projects.view.all) see every project in the tenant; project-scoped
+        // users (e.g. client viewers) see only the projects they are an active member of.
+        if (! $user->hasPermission('projects.view.all')) {
+            $memberProjectIds = ProjectMembership::query()
+                ->where('user_id', $user->id)
+                ->where('status', 'active')
+                ->pluck('project_id');
+            $query->whereIn('id', $memberProjectIds);
+        }
         if ($workspace = $request->string('client_workspace_id')->toString()) {
             $query->where('client_workspace_id', $workspace);
         }

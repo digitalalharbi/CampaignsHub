@@ -6,6 +6,7 @@ namespace App\Domains\Projects\Middleware;
 
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Projects\Models\ProjectMembership;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -29,9 +30,20 @@ final class ResolveProject
         $project = Project::find($projectId);
         abort_if($project === null, 404, 'Project not found.');
 
-        // Agency staff with projects.view may access any project in their tenant. (Client-portal
-        // membership checks are layered on client routes.)
-        abort_unless($request->user()?->hasPermission('projects.view'), 403);
+        $user = $request->user();
+        abort_unless($user?->hasPermission('projects.view'), 403);
+
+        // Agency-wide viewers (projects.view.all) may access any project in their tenant. Project-scoped
+        // users (e.g. client viewers) may only access projects they are an active member of — checked
+        // before the project context is set so the membership lookup itself spans projects.
+        if (! $user->hasPermission('projects.view.all')) {
+            $isMember = ProjectMembership::query()
+                ->where('project_id', $project->id)
+                ->where('user_id', $user->id)
+                ->where('status', 'active')
+                ->exists();
+            abort_unless($isMember, 403, 'You do not have access to this project.');
+        }
 
         $this->context->setProjectId((string) $project->id);
 

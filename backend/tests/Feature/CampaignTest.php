@@ -276,7 +276,7 @@ final class CampaignTest extends TestCase
     {
         app(TenantContext::class)->setTenantId($this->owner->tenant_id);
         $role = Role::create(['tenant_id' => $this->owner->tenant_id, 'name' => 'Analyst', 'slug' => 'analyst']);
-        $role->givePermissionTo('campaigns.view', 'projects.view', 'integrations.view');
+        $role->givePermissionTo('campaigns.view', 'projects.view', 'projects.view.all', 'integrations.view');
         $user = User::create(['tenant_id' => $this->owner->tenant_id, 'name' => 'A', 'email' => 'a@agency.test', 'password' => 'secret123']);
         $user->assignRole($role);
         app(TenantContext::class)->forget();

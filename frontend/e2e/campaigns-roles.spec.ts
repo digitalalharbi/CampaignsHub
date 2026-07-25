@@ -41,24 +41,43 @@ test.describe('Analyst (read-only)', () => {
   })
 })
 
-test.describe('Client Viewer (no projects.view)', () => {
+test.describe('Client Viewer (scoped to one project)', () => {
   test.use({ storageState: AUTH.viewer })
 
-  test('is blocked from project-scoped campaign routes (403)', async ({ page, playwright }) => {
-    // Obtain a real project id via an owner-authenticated context (the viewer cannot list projects).
+  test('sees only the authorized project; cross-project access is denied', async ({ page, playwright }) => {
+    // The viewer's own project list is scoped to their membership → exactly one project.
+    const viewerProjects = (await (await page.request.get('/api/v1/projects', { headers: API_HEADERS })).json())
+      .data as Array<{ id: string }>
+    expect(viewerProjects).toHaveLength(1)
+    const authorizedId = viewerProjects[0].id
+
+    // Authorized project → 200.
+    const ok = await page.request.get(`/api/v1/projects/${authorizedId}/campaigns`, {
+      headers: API_HEADERS,
+      failOnStatusCode: false,
+    })
+    expect(ok.status()).toBe(200)
+
+    // A project they are NOT a member of (from the owner's full list) → 403, even by hand-swapping the id.
     const owner = await playwright.request.newContext({
       baseURL: 'http://localhost:5173',
       storageState: AUTH.owner,
       extraHTTPHeaders: API_HEADERS,
     })
-    const projectId = ((await (await owner.get('/api/v1/projects')).json()).data as Array<{ id: string }>)[0].id
+    const allProjects = (await (await owner.get('/api/v1/projects')).json()).data as Array<{ id: string }>
     await owner.dispose()
-
-    // The viewer is authenticated but lacks projects.view → ResolveProject fails closed with 403.
-    const res = await page.request.get(`/api/v1/projects/${projectId}/campaigns`, {
+    const forbidden = allProjects.find((p) => p.id !== authorizedId)
+    expect(forbidden, 'owner should see more projects than the viewer').toBeTruthy()
+    const denied = await page.request.get(`/api/v1/projects/${forbidden!.id}/campaigns`, {
       headers: API_HEADERS,
       failOnStatusCode: false,
     })
-    expect([403, 404]).toContain(res.status())
+    expect(denied.status()).toBe(403)
+
+    // UI: the switcher exposes only the authorized project, and there is no create action.
+    await page.goto('/campaigns')
+    await switchToEnglish(page)
+    await expect(page.getByRole('button', { name: /New campaign|حملة جديدة/ })).toHaveCount(0)
+    await expect(page.locator('aside select option')).toHaveCount(1)
   })
 })
