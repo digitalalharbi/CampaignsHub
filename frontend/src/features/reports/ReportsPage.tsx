@@ -18,7 +18,7 @@ import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/States'
 import { DemoBadge } from '@/features/analytics/components'
-import { money, num, ratio } from '@/features/analytics/format'
+import { InteractiveReport } from './InteractiveReport'
 import { useProject } from '@/stores/project'
 
 const STATUS_STYLE: Record<string, string> = {
@@ -301,52 +301,19 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
 function ReportPreview({ projectId, id, onClose }: { projectId: string; id: string; onClose: () => void }) {
   const q = useQuery({ queryKey: ['report', projectId, id], queryFn: () => getReport(projectId, id) })
   const r = q.data as ReportDetail | undefined
-  const k = r?.data?.kpis
+  const platforms = (r?.data?.platforms ?? []).map((p) => String(p.provider))
   return (
-    <Modal open onClose={onClose} title={r?.name ?? 'معاينة التقرير'}>
+    <Modal open onClose={onClose} title={r?.name ?? "معاينة التقرير"} size="xl">
       {q.isLoading ? (
         <Skeleton className="h-64 w-full" />
       ) : !r?.data ? (
         <p className="py-8 text-center text-sm text-text-secondary">{r?.status === 'failed' ? `فشل: ${r.error}` : 'التقرير قيد المعالجة…'}</p>
       ) : (
-        <div className="max-h-[70vh] space-y-5 overflow-y-auto">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {[
-              ['الإنفاق', money(Number(k?.spend))],
-              ['الإيرادات', money(Number(k?.revenue))],
-              ['ROAS', ratio(k?.roas ?? null)],
-              ['النتائج', num(Number(k?.conversions))],
-            ].map(([l, v]) => (
-              <div key={l} className="rounded-xl border border-border bg-surface-secondary p-3">
-                <div className="text-xs text-text-muted">{l}</div>
-                <div className="tnum text-lg font-bold">{v}</div>
-              </div>
-            ))}
-          </div>
-          {(r.data.summary?.length ?? 0) > 0 && (
-            <div>
-              <h4 className="mb-1 text-sm font-bold">الملخص التنفيذي</h4>
-              <ul className="list-disc space-y-1 ps-5 text-sm text-text-secondary">
-                {r.data.summary.map((line, i) => <li key={i}>{line}</li>)}
-              </ul>
-            </div>
-          )}
-          <div>
-            <h4 className="mb-1 text-sm font-bold">أداء المنصات</h4>
-            <table className="w-full text-sm">
-              <thead><tr className="border-b border-border text-text-muted"><th className="py-1.5 text-start">المنصة</th><th className="py-1.5 text-end">الإنفاق</th><th className="py-1.5 text-end">ROAS</th><th className="py-1.5 text-end">CPA</th></tr></thead>
-              <tbody>
-                {r.data.platforms.map((p, i) => (
-                  <tr key={i} className="border-b border-border last:border-0">
-                    <td className="py-1.5 font-semibold">{String(p.provider)}</td>
-                    <td className="tnum py-1.5 text-end">{money(Number(p.spend))}</td>
-                    <td className="tnum py-1.5 text-end">{ratio(p.roas as number)}</td>
-                    <td className="tnum py-1.5 text-end">{money(p.cpa as number)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="max-h-[76vh] overflow-y-auto">
+          <InteractiveReport
+            data={r.data as never}
+            meta={{ reportName: r.name, platforms, isDemo: r.is_demo, agencyName: 'CampaignsHub' }}
+          />
         </div>
       )}
     </Modal>

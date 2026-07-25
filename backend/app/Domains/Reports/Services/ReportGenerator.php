@@ -17,7 +17,11 @@ use Illuminate\Support\Carbon;
  */
 final class ReportGenerator
 {
-    public function __construct(private readonly MetricsAggregator $agg) {}
+    public function __construct(
+        private readonly MetricsAggregator $agg,
+        private readonly ReportTemplateEngine $template,
+        private readonly CreativeRankingService $ranking,
+    ) {}
 
     public function generate(Report $report): array
     {
@@ -41,23 +45,83 @@ final class ReportGenerator
         $platforms = $this->agg->byProvider($from, $to);
         $campaigns = $this->agg->byCampaign($from, $to);
 
+        $objective = $report->campaign_objective ?: $this->inferObjective($campaigns);
+        $providerList = array_values(array_map(fn ($p) => $p['provider'], $platforms));
+
+        // Initialise the slide layout once (from the objective + connected platforms) if not authored yet.
+        $config = $report->config;
+        if (empty($config['slides'])) {
+            $config = $this->template->defaultConfig($objective, $providerList);
+            $report->forceFill(['config' => $config, 'campaign_objective' => $objective])->saveQuietly();
+        }
+
+        $topCreatives = $this->ranking->rank($objective, $campaigns);
+
         $data = [
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'currency' => $report->currency,
+            'objective' => $objective,
+            'platform_order' => $config['platform_order'] ?? $providerList,
+            'metric_set' => $config['metric_set'] ?? $this->template->metricSet($objective),
             'kpis' => $totals,
             'previous' => $previous,
             'delta' => $delta,
             'timeseries' => $this->agg->timeseries($from, $to),
             'platforms' => $platforms,
             'campaigns' => $campaigns,
+            'top_creatives' => $topCreatives,
+            'creative_level' => 'campaign', // ad-level arrives once connectors provide it
+            'platform_notes' => $this->platformNotes($platforms, $report->currency),
             'funnel' => $this->agg->funnel($from, $to),
             'budget' => $this->agg->budgetPacing($from, $to, Carbon::today()),
             'summary' => $this->executiveSummary($totals, $delta, $platforms, $campaigns, $report->currency),
+            'slides' => $config['slides'] ?? [],
         ];
 
         app(ProjectContext::class)->forget();
 
         return $data;
+    }
+
+    private function inferObjective(array $campaigns): string
+    {
+        // Revenue present → sales; else conversions → leads; else traffic.
+        $revenue = array_sum(array_map(fn ($c) => (float) ($c['revenue'] ?? 0), $campaigns));
+        $conv = array_sum(array_map(fn ($c) => (float) ($c['conversions'] ?? 0), $campaigns));
+
+        return $revenue > 0 ? 'sales' : ($conv > 0 ? 'leads' : 'traffic');
+    }
+
+    /** Auto strengths/weaknesses per platform (suggestions — the user approves before a client sees them). */
+    private function platformNotes(array $platforms, string $currency): array
+    {
+        $notes = [];
+        $avgRoas = $this->avg($platforms, 'roas');
+        $avgCpa = $this->avg($platforms, 'cpa');
+        foreach ($platforms as $p) {
+            $strengths = [];
+            $weaknesses = [];
+            if ($p['roas'] !== null && $avgRoas !== null && $p['roas'] >= $avgRoas) {
+                $strengths[] = sprintf('ROAS أعلى من المتوسط (%s×).', number_format((float) $p['roas'], 2));
+            } elseif ($p['roas'] !== null) {
+                $weaknesses[] = sprintf('ROAS أقل من المتوسط (%s×).', number_format((float) $p['roas'], 2));
+            }
+            if ($p['cpa'] !== null && $avgCpa !== null && $p['cpa'] <= $avgCpa) {
+                $strengths[] = sprintf('تكلفة نتيجة تنافسية (CPA %s %s).', number_format((float) $p['cpa']), $currency);
+            } elseif ($p['cpa'] !== null) {
+                $weaknesses[] = sprintf('تكلفة نتيجة مرتفعة (CPA %s %s).', number_format((float) $p['cpa']), $currency);
+            }
+            $notes[$p['provider']] = ['strengths' => $strengths, 'weaknesses' => $weaknesses];
+        }
+
+        return $notes;
+    }
+
+    private function avg(array $rows, string $key): ?float
+    {
+        $vals = array_filter(array_map(fn ($r) => $r[$key] ?? null, $rows), fn ($v) => $v !== null);
+
+        return $vals === [] ? null : array_sum($vals) / count($vals);
     }
 
     /** A few plain-language findings derived from the numbers (not fabricated). */

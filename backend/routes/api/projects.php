@@ -39,8 +39,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{proj
 
     // Reports (project-scoped; reports.view / reports.export).
     Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::get('reports/template', [ReportController::class, 'template'])->name('reports.template');
     Route::post('reports', [ReportController::class, 'store'])->name('reports.store');
     Route::get('reports/{report}', [ReportController::class, 'show'])->name('reports.show');
+    Route::match(['put', 'patch'], 'reports/{report}', [ReportController::class, 'update'])->name('reports.update');
     Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->name('reports.regenerate');
     Route::post('reports/{report}/export', [ReportController::class, 'export'])->name('reports.export');
     Route::post('reports/{report}/send', [ReportController::class, 'send'])->name('reports.send');

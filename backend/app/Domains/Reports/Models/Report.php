@@ -17,9 +17,9 @@ final class Report extends Model
     use HasUuidKey;
 
     protected $fillable = [
-        'tenant_id', 'project_id', 'name', 'type', 'status', 'period_start', 'period_end',
-        'currency', 'timezone', 'attribution_window', 'data_source', 'config', 'data', 'error',
-        'created_by', 'generated_at', 'last_sent_at', 'is_demo',
+        'tenant_id', 'project_id', 'name', 'type', 'mode', 'version', 'campaign_objective', 'status',
+        'period_start', 'period_end', 'currency', 'timezone', 'attribution_window', 'data_source',
+        'config', 'data', 'error', 'created_by', 'generated_at', 'last_sent_at', 'is_demo',
     ];
 
     protected $casts = [

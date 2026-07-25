@@ -9,6 +9,7 @@ use App\Domains\Reports\Jobs\GenerateReportExportJob;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
+use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -56,6 +57,8 @@ final class ReportController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:160'],
             'type' => ['required', Rule::in(self::TYPES)],
+            'mode' => ['nullable', Rule::in(['live', 'snapshot'])],
+            'campaign_objective' => ['nullable', Rule::in(['sales', 'awareness', 'traffic', 'leads', 'app_installs', 'video', 'custom'])],
             'period_start' => ['nullable', 'date'],
             'period_end' => ['nullable', 'date'],
             'currency' => ['nullable', 'string', 'size:3'],
@@ -65,6 +68,8 @@ final class ReportController extends Controller
         $report = Report::create([
             'name' => $data['name'],
             'type' => $data['type'],
+            'mode' => $data['mode'] ?? 'snapshot',
+            'campaign_objective' => $data['campaign_objective'] ?? null,
             'status' => 'processing',
             'period_start' => $data['period_start'] ?? Carbon::today()->subDays(29),
             'period_end' => $data['period_end'] ?? Carbon::today(),
@@ -79,7 +84,7 @@ final class ReportController extends Controller
         return ApiResponse::success($this->shape($report), 'Report queued for generation.', status: 201);
     }
 
-    public function show(Request $request, string $report): JsonResponse
+    public function show(Request $request, string $project, string $report): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
         $model = $this->find($report);
@@ -87,7 +92,32 @@ final class ReportController extends Controller
         return ApiResponse::success($this->shape($model, withData: true), 'Report retrieved.');
     }
 
-    public function regenerate(Request $request, string $report): JsonResponse
+    /** Default slide layout for a campaign objective (drives the builder before a report exists). */
+    public function template(Request $request, ReportTemplateEngine $engine): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.view'), 403);
+        $objective = $request->string('objective')->toString() ?: 'custom';
+        $platforms = array_filter(explode(',', $request->string('platforms')->toString()));
+
+        return ApiResponse::success($engine->defaultConfig($objective, array_values($platforms)), 'Template retrieved.');
+    }
+
+    /** Save builder edits (name / slide config / notes / mode / objective). Does not re-generate. */
+    public function update(Request $request, string $project, string $report): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.view'), 403);
+        $model = $this->find($report);
+        $data = $request->validate([
+            'name' => ['sometimes', 'string', 'max:160'],
+            'mode' => ['sometimes', Rule::in(['live', 'snapshot'])],
+            'config' => ['sometimes', 'array'],
+        ]);
+        $model->update($data);
+
+        return ApiResponse::success($this->shape($model->fresh(), withData: true), 'Report updated.');
+    }
+
+    public function regenerate(Request $request, string $project, string $report): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
         $model = $this->find($report);
@@ -97,7 +127,7 @@ final class ReportController extends Controller
         return ApiResponse::success($this->shape($model), 'Report regenerating.');
     }
 
-    public function export(Request $request, string $report): JsonResponse
+    public function export(Request $request, string $project, string $report): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.export'), 403);
         $model = $this->find($report);
@@ -116,7 +146,7 @@ final class ReportController extends Controller
         return ApiResponse::success(['id' => $export->id, 'format' => $format, 'status' => 'processing'], 'Export queued.', status: 202);
     }
 
-    public function send(Request $request, AuditLogger $audit, string $report): JsonResponse
+    public function send(Request $request, AuditLogger $audit, string $project, string $report): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.export'), 403);
         $model = $this->find($report);
@@ -130,7 +160,7 @@ final class ReportController extends Controller
         return ApiResponse::success(['sent_to' => count($emails), 'at' => $model->last_sent_at], 'Report sent.');
     }
 
-    public function destroy(Request $request, string $report): JsonResponse
+    public function destroy(Request $request, string $project, string $report): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
         $this->find($report)->delete();
@@ -152,9 +182,13 @@ final class ReportController extends Controller
             'id' => $r->id,
             'name' => $r->name,
             'type' => $r->type,
+            'mode' => $r->mode,
+            'campaign_objective' => $r->campaign_objective,
+            'version' => $r->version,
             'status' => $r->status,
             'period' => ['from' => $r->period_start?->toDateString(), 'to' => $r->period_end?->toDateString()],
             'currency' => $r->currency,
+            'config' => $r->config,
             'is_demo' => $r->is_demo,
             'generated_at' => $r->generated_at?->toIso8601String(),
             'last_sent_at' => $r->last_sent_at?->toIso8601String(),

@@ -1,12 +1,13 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 
-type Size = 'sm' | 'md' | 'lg'
+type Size = 'sm' | 'md' | 'lg' | 'xl'
 
 const sizes: Record<Size, string> = {
   sm: 'max-w-[420px]',
   md: 'max-w-[560px]',
   lg: 'max-w-[760px]',
+  xl: 'max-w-[1000px]',
 }
 
 /** Accessible modal: Escape to close, click-outside to close, focus trapped inside. */
