@@ -9,6 +9,7 @@ use App\Domains\Projects\Http\Controllers\ProjectController;
 use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
 use App\Domains\Projects\Http\Controllers\ProjectOverviewController;
 use App\Domains\Reports\Http\Controllers\ReportController;
+use App\Domains\Reports\Http\Controllers\ReportPrintController;
 use App\Domains\Reports\Http\Controllers\ReportShareController;
 use App\Domains\Tasks\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
@@ -50,6 +51,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{proj
     Route::match(['put', 'patch'], 'reports/{report}', [ReportController::class, 'update'])->name('reports.update');
     Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->name('reports.regenerate');
     Route::get('reports/{report}/validation', [ReportController::class, 'validation'])->name('reports.validation');
+    Route::post('reports/{report}/print-token', [ReportPrintController::class, 'issue'])->name('reports.print-token');
     Route::post('reports/{report}/export', [ReportController::class, 'export'])->name('reports.export');
     Route::post('reports/{report}/send', [ReportController::class, 'send'])->name('reports.send');
     Route::delete('reports/{report}', [ReportController::class, 'destroy'])->name('reports.destroy');

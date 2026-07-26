@@ -1,0 +1,95 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domains\Reports\Services;
+
+use App\Domains\Reports\Models\Report;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
+use RuntimeException;
+use Symfony\Component\Process\Process;
+
+/**
+ * Renders a report to PDF by driving headless Chromium (Playwright) over the React print route, so the
+ * PDF is pixel-identical to the interactive report (same components, fonts, RTL). It mints a print
+ * token via the internal endpoint, points Chromium at /reports/print/{token}, and waits for the page's
+ * readiness signals. Any failure throws — the caller marks the export Failed rather than shipping a
+ * broken/partial file. Config lives in config/reports.php.
+ */
+final class ChromiumPdfRenderer
+{
+    public function __construct(private readonly ExportReadinessGate $gate) {}
+
+    public function isEnabled(): bool
+    {
+        return (bool) config('reports.chromium.enabled', false);
+    }
+
+    /**
+     * @param  'presentation'|'document'  $type
+     */
+    public function render(Report $report, string $type = 'presentation', string $theme = 'light'): string
+    {
+        $this->gate->ensureReady($report);
+
+        $token = $this->issueToken($report, $type, $theme);
+        $appUrl = rtrim((string) config('reports.chromium.app_url'), '/');
+        $url = "{$appUrl}/reports/print/{$token}?type={$type}&theme={$theme}";
+
+        $out = tempnam(sys_get_temp_dir(), 'chpdf_').'.pdf';
+        $config = [
+            'url' => $url,
+            'out' => $out,
+            'landscape' => $type === 'presentation',
+            'timeoutMs' => (int) config('reports.chromium.timeout_ms', 45000),
+            'chromiumPath' => config('reports.chromium.chromium_path') ?: null,
+            'requireBase' => config('reports.chromium.require_base'),
+        ];
+
+        $process = new Process(
+            [config('reports.chromium.node_bin', 'node'), config('reports.chromium.script'), json_encode($config)],
+            base_path(),
+            ['NODE_ENV' => 'production'],
+            null,
+            (int) config('reports.chromium.timeout_ms', 45000) / 1000 + 15,
+        );
+        $process->run();
+
+        if (! $process->isSuccessful() || ! is_file($out) || filesize($out) === 0) {
+            $err = trim($process->getErrorOutput()) ?: trim($process->getOutput());
+            @unlink($out);
+            throw new RuntimeException('Chromium PDF render failed: '.Str::limit($err, 500));
+        }
+
+        $bytes = (string) file_get_contents($out);
+        @unlink($out);
+
+        return $bytes;
+    }
+
+    /** Call the internal print-token endpoint so the token is minted through the same gated flow. */
+    private function issueToken(Report $report, string $type, string $theme): string
+    {
+        // In-process token mint (no HTTP round-trip): mirror ReportPrintController::issue.
+        $token = Str::random(48);
+        Cache::put(
+            'report-print:'.hash('sha256', $token),
+            ['report_id' => (string) $report->id, 'type' => $type, 'theme' => $theme],
+            300,
+        );
+
+        return $token;
+    }
+
+    /** Best-effort reachability check for the print app (used by health/preflight). */
+    public function appReachable(): bool
+    {
+        try {
+            return Http::timeout(3)->get((string) config('reports.chromium.app_url'))->status() < 500;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+}

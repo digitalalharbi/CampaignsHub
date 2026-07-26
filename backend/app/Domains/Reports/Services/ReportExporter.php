@@ -21,7 +21,10 @@ final class ReportExporter
 {
     private const DISK = 'local';
 
-    public function __construct(private readonly ExportReadinessGate $gate) {}
+    public function __construct(
+        private readonly ExportReadinessGate $gate,
+        private readonly ChromiumPdfRenderer $chromium,
+    ) {}
 
     /** Render a report to file bytes for a format, without persisting anything (used by public share). */
     public function render(Report $report, string $format): string
@@ -186,6 +189,15 @@ final class ReportExporter
 
     private function pdf(Report $report, array $data): string
     {
+        // Creative Arabic reports render via headless Chromium over the print route (correct RTL, real
+        // charts, fonts). A failure throws so the export is marked Failed — never a broken/partial file.
+        if ($this->chromium->isEnabled()) {
+            $type = ($report->config['pdf_type'] ?? 'presentation') === 'document' ? 'document' : 'presentation';
+
+            return $this->chromium->render($report, $type);
+        }
+
+        // Fallback: the simple Dompdf document layout (text-first; used only when Chromium is disabled).
         return Pdf::loadView('reports.document', [
             'report' => $report,
             'data' => $data,

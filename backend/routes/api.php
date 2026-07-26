@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Reports\Http\Controllers\PublicReportController;
 use App\Domains\Reports\Http\Controllers\ReportDownloadController;
+use App\Domains\Reports\Http\Controllers\ReportPrintController;
 use App\Http\Controllers\HealthController;
 use App\Support\ApiResponse;
 use Illuminate\Support\Facades\Route;
@@ -26,6 +27,9 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     // Public secure client report links (token-gated, sanitized, logged).
     Route::get('/reports/shared/{token}', [PublicReportController::class, 'show'])->name('reports.shared.show');
     Route::get('/reports/shared/{token}/download/{format}', [PublicReportController::class, 'download'])->name('reports.shared.download');
+
+    // Print pipeline: token-gated snapshot for the headless-Chromium print route (no session).
+    Route::get('/reports/print/{token}', [ReportPrintController::class, 'data'])->name('reports.print.data');
 
     // Public brand/domain identity, consumed by the SPA and marketing site.
     Route::get('/brand', fn () => ApiResponse::success([

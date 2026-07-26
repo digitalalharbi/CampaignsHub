@@ -10,6 +10,7 @@ import { LeadsPage } from '@/features/crm/LeadsPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { PublicReport } from '@/features/reports/PublicReport'
+import { PrintReport } from '@/features/reports/PrintReport'
 import { DesignSystemPage } from '@/features/design/DesignSystemPage'
 import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
 import { MarketingPage } from '@/features/marketing/MarketingPage'
@@ -23,6 +24,7 @@ export const router = createBrowserRouter([
   { path: '/welcome', element: <MarketingPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/reports/share/:token', element: <PublicReport /> },
+  { path: '/reports/print/:token', element: <PrintReport /> },
   {
     element: <RequireAuth />,
     children: [

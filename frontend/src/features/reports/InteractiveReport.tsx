@@ -16,9 +16,9 @@ import { TrendPill } from '@/features/analytics/components'
 import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import type { ResolvedDisclaimer } from '@/features/disclaimers/api'
 
-interface Slide { id: string; type: string; platform?: string; order: number; visible: boolean }
+export interface Slide { id: string; type: string; platform?: string; order: number; visible: boolean }
 type Row = Record<string, number | string | null>
-interface ReportData {
+export interface ReportData {
   period: { from: string; to: string }
   currency: string
   objective?: string
@@ -37,7 +37,25 @@ interface ReportData {
   slides?: Slide[]
   disclaimer?: ResolvedDisclaimer | null
 }
-interface Meta { reportName: string; clientName?: string; agencyName?: string; platforms: string[]; isDemo?: boolean }
+export interface Meta { reportName: string; clientName?: string; agencyName?: string; platforms: string[]; isDemo?: boolean }
+
+/** Single slide renderer shared by the interactive deck AND the print/PDF route — identical output. */
+export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportData; meta: Meta }) {
+  switch (slide.type) {
+    case 'cover': return <CoverSlide data={data} meta={meta} />
+    case 'recommendations': return <RecommendationsSlide data={data} />
+    case 'executive_summary': return <ExecutiveSlide data={data} />
+    case 'platform_performance': return <PlatformSlide data={data} platform={slide.platform!} />
+    case 'platform_screenshot': return <ScreenshotSlide platform={slide.platform!} />
+    case 'top_creatives': return <CreativesSlide data={data} platform={slide.platform!} />
+    case 'platform_notes': return <NotesSlide data={data} platform={slide.platform!} />
+    case 'platform_comparison': return <ComparisonSlide data={data} />
+    case 'funnel': return <FunnelSlide data={data} />
+    case 'budget': return <BudgetSlide data={data} />
+    case '__methodology': return <PerformanceNotice data={data.disclaimer} variant="methodology" objective={data.objective} />
+    default: return null
+  }
+}
 
 const OBJECTIVE_LABEL: Record<string, string> = {
   sales: 'المبيعات', awareness: 'الوعي', traffic: 'الزيارات', leads: 'العملاء المحتملون', app_installs: 'تثبيت التطبيق', video: 'الفيديو', custom: 'مخصص',
@@ -56,22 +74,7 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
   }, [data.slides, data.disclaimer])
   const cur = slides[i]
 
-  const render = (s: Slide) => {
-    switch (s.type) {
-      case 'cover': return <CoverSlide data={data} meta={meta} />
-      case 'recommendations': return <RecommendationsSlide data={data} />
-      case 'executive_summary': return <ExecutiveSlide data={data} />
-      case 'platform_performance': return <PlatformSlide data={data} platform={s.platform!} />
-      case 'platform_screenshot': return <ScreenshotSlide platform={s.platform!} />
-      case 'top_creatives': return <CreativesSlide data={data} platform={s.platform!} />
-      case 'platform_notes': return <NotesSlide data={data} platform={s.platform!} />
-      case 'platform_comparison': return <ComparisonSlide data={data} />
-      case 'funnel': return <FunnelSlide data={data} />
-      case 'budget': return <BudgetSlide data={data} />
-      case '__methodology': return <PerformanceNotice data={data.disclaimer} variant="methodology" objective={data.objective} />
-      default: return null
-    }
-  }
+  const render = (s: Slide) => <SlideBody slide={s} data={data} meta={meta} />
   // Short performance note repeated quietly under each slide (footer), except the cover.
   const footer = (s: Slide) => (s.type !== 'cover' && data.disclaimer ? <div className="mt-3 border-t border-border pt-2"><PerformanceNotice data={data.disclaimer} variant="footer" /></div> : null)
 
