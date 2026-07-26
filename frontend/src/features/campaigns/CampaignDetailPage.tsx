@@ -28,7 +28,14 @@ import {
   stageTone,
 } from './labels'
 import { isDemoProvider } from './types'
-import { CampaignExecutiveSummary, CampaignKpis, CampaignPerformanceTab } from './CampaignCommandCenter'
+import {
+  CampaignActivityTab,
+  CampaignBudgetTab,
+  CampaignExecutiveSummary,
+  CampaignFunnelTab,
+  CampaignKpis,
+  CampaignPerformanceTab,
+} from './CampaignCommandCenter'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { RangeTabs } from '@/features/analytics/components'
 import { Alert } from '@/components/ui/Alert'
@@ -284,6 +291,11 @@ export function CampaignDetailPage() {
               <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">{c.audience || '—'}</p>
             </Card>
           </div>
+          {/* CMC-5 — recent activity timeline. */}
+          <Card className="mt-4">
+            <CardTitle>{t('tab_activity')}</CardTitle>
+            <div className="mt-3"><CampaignActivityTab campaign={c} projectId={projectId} limit={6} /></div>
+          </Card>
         </TabPanel>
       )}
 
@@ -329,8 +341,26 @@ export function CampaignDetailPage() {
         </TabPanel>
       )}
 
+      {tab === 'budget' && (
+        <TabPanel>
+          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
+          <CampaignBudgetTab campaign={c} projectId={projectId} range={range} locale={locale} />
+        </TabPanel>
+      )}
+      {tab === 'funnel' && (
+        <TabPanel>
+          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
+          <CampaignFunnelTab campaign={c} projectId={projectId} range={range} />
+        </TabPanel>
+      )}
+      {tab === 'activity' && (
+        <TabPanel>
+          <CampaignActivityTab campaign={c} projectId={projectId} />
+        </TabPanel>
+      )}
+
       {/* Sections wired to their real backends in the following CMC batches. */}
-      {(['creatives', 'budget', 'funnel', 'notes', 'alerts', 'reports', 'activity'] as TabKey[]).includes(tab) && (
+      {(['creatives', 'notes', 'alerts', 'reports'] as TabKey[]).includes(tab) && (
         <TabPanel>
           <EmptyState title={t(`tab_${tab}` as never)} description={t('cmc_section_building')} />
         </TabPanel>

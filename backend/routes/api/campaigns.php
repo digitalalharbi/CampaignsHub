@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Campaigns\Http\Controllers\CampaignActivityController;
 use App\Domains\Campaigns\Http\Controllers\CampaignMetricsController;
 use App\Domains\Campaigns\Http\Controllers\ExternalCampaignController;
 use App\Domains\Campaigns\Http\Controllers\UnifiedCampaignController;
@@ -32,6 +33,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])
         Route::get('campaigns/{campaign}/platforms', [CampaignMetricsController::class, 'platforms'])->name('platforms');
         Route::get('campaigns/{campaign}/budget', [CampaignMetricsController::class, 'budget'])->name('budget');
         Route::get('campaigns/{campaign}/funnel', [CampaignMetricsController::class, 'funnel'])->name('funnel');
+        Route::get('campaigns/{campaign}/activity', [CampaignActivityController::class, 'index'])->name('activity');
 
         // Project-wide external campaigns (imported by connector sync).
         Route::get('external-campaigns', [ExternalCampaignController::class, 'index'])->name('external-campaigns.index');

@@ -28,3 +28,23 @@ export const useCampaignBudget = (p: string | null, c: string | null, r: Range) 
   useCampaignMetric<BudgetRow[]>('budget', p, c, r)
 export const useCampaignFunnel = (p: string | null, c: string | null, r: Range) =>
   useCampaignMetric<FunnelStage[]>('funnel', p, c, r)
+
+export interface CampaignActivityEvent {
+  id: string
+  action: string
+  label: string
+  actor: string
+  at: string | null
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+  source: string
+}
+
+/** Activity timeline (audit log) — not range-scoped; keyed per campaign for isolation. */
+export function useCampaignActivity(projectId: string | null, campaignId: string | null) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'campaigns', campaignId, 'activity'],
+    queryFn: () => getData<CampaignActivityEvent[]>(`${base(projectId!, campaignId!)}/activity`),
+    enabled: Boolean(projectId && campaignId),
+  })
+}

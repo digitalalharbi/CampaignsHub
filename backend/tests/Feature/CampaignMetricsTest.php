@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
@@ -113,5 +114,25 @@ final class CampaignMetricsTest extends TestCase
         $this->actingAs($stranger)
             ->getJson($this->url($this->projectA, $this->campA1->id))
             ->assertForbidden();
+    }
+
+    public function test_activity_timeline_is_scoped_to_the_campaign(): void
+    {
+        AuditLog::create([
+            'tenant_id' => $this->tenant->id, 'action' => 'campaign.updated',
+            'entity_type' => UnifiedCampaign::class, 'entity_id' => (string) $this->campA1->id,
+            'before' => ['total_budget' => 100], 'after' => ['total_budget' => 200],
+        ]);
+        AuditLog::create([
+            'tenant_id' => $this->tenant->id, 'action' => 'campaign.paused',
+            'entity_type' => UnifiedCampaign::class, 'entity_id' => (string) $this->campA2->id,
+        ]);
+
+        $a1 = $this->actingAs($this->owner)->getJson($this->url($this->projectA, $this->campA1->id, 'activity'))->assertOk()->json('data');
+        $this->assertCount(1, $a1);
+        $this->assertSame('campaign.updated', $a1[0]['action']);
+
+        // Cross-project campaign id → 404 (never another project's timeline).
+        $this->actingAs($this->owner)->getJson($this->url($this->projectB, $this->campA1->id, 'activity'))->assertNotFound();
     }
 }
