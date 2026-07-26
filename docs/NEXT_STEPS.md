@@ -4,8 +4,11 @@ _Single source of truth for "where we are" so work survives context/session loss
 
 ## Current state (2026-07-26)
 - **Branch:** `feat/premium-ui` (integration branch) in worktree `~/Developer/CampaignsHub-UI`.
-- **Last commits:** `be1dc16` (disclaimers), `14ebde1` (premium charts), `95ab5f9` (secure links).
-- **Gates green:** backend 111 tests, pint + phpstan clean, tsc + lint + build ok, vitest 18.
+- **Last commits:** `9328efa` (settings complete), `866e66b` (settings shell), `be1dc16` (disclaimers),
+  `14ebde1` (premium charts).
+- **Gates green:** backend **121 tests**, pint + phpstan clean, migrations reversible, tsc + lint +
+  build ok, vitest 18.
+- **NEXT PHASE (mandatory, separate clean worktree):** Reports/PDF rebuild — see "Reports rebuild" below.
 - **Worktrees:** UI `feat/premium-ui` (active), C3 `feat/metrics-c3`, Preview (detached @37aa464).
   Never run two agents on one worktree. Do not touch `Desktop/MediaBying System` (dirty main).
 
@@ -25,10 +28,24 @@ Foundation · RBAC/Audit · Campaigns C1 · Metrics C3.2/C3.5 · Dashboard+Analy
 (builder, queued gen, PDF/XLSX/CSV) · Interactive slide reports · Secure client links ·
 **Premium chart design system** · **Central disclaimer & methodology**.
 
-## Remaining roadmap (ordered)
-1. **Settings (integrated)** — General, Clients, Projects, Team & Permissions, Notifications,
-   Security, Branding, Disclaimer (management UI; API already built).
-2. **Alerts & Notifications** — rules engine, notification center, dedup/cooldown/quiet-hours, email.
+## Reports rebuild (NEXT — do in a clean worktree `feat/reports-rebuild`, NOT mixed with settings)
+Root cause list to close: Arabic reversed/disjointed in PDF, near-empty pages, huge whitespace,
+repeated footers/notes, missing charts in PDF, big gap between interactive link and PDF quality,
+contradictory data (results>0 with spend=revenue=0 must BLOCK export).
+Plan (each its own step): Canonical Report Snapshot (single source for all formats, with checksum +
+data_version in metadata) → ReportDataValidator/ConsistencyChecker/ExportReadinessGate (blocks export
+on any inconsistency, never zero-fills) → replace Dompdf for creative reports with **headless
+Chromium (Playwright) printing a signed `/reports/{id}/print` React route** (wait for fonts/charts/
+images/`__REPORT_*_READY__`) → embed IBM Plex Sans Arabic + Inter, `dir`/`lang` + `<bdi>` for mixed
+values, no manual reshaping → Presentation (16:9/A4 landscape, 1 slide/page) + Document (A4 portrait)
+PDF types → ReportPrintLayoutEngine (no empty/footer-only pages, no split cards/charts) → redesigned
+client link (less text, more charts, accordion/appendix) → balanced Notes|Recommendations two-column →
+unified charts → export consistency (same renderer/snapshot) → XLSX sheets + CSV zip (UTF-8 BOM) →
+visual-regression (PDF page→PNG vs baseline) + **manual page-by-page audit** → 3 Arabic sample PDFs
+(weekly/monthly/comparison) + 1 English → Reports commit → merge after green → resume roadmap.
+
+## Remaining roadmap (ordered, after Reports rebuild)
+1. **Alerts & Notifications** — rules engine, notification center, dedup/cooldown/quiet-hours, email.
 3. **Scheduled Reports & Email** — scheduler + queue jobs + delivery log.
 4. **Campaign Tasks & Approvals** — lightweight, campaign/report-scoped.
 5. **Connection Center** + Custom Connector Builder (Direct/Aggregator/Sheets/CSV/Webhook/DB/MCP).

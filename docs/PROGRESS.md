@@ -153,6 +153,16 @@ _(append newest first: date — what — command — result)_
   `ReportGenerator` emits platform_series+best+funnel+budget. Verified live: 67 chart surfaces in one
   report, 0 console errors. Gates: backend 106 passed, pint+phpstan clean, tsc/lint/build ok.
 
+- 2026-07-26 — Integrated Settings section (commits `866e66b`, `9328efa`) — tabbed shell replacing the
+  placeholder route. **General** (org profile → tenant.settings, validated+audited). **Disclaimer**
+  management (bilingual per-section editor, live preview, restore, versioned). **Team & Permissions**
+  (invite/role/enable-disable/remove with server-side last-Owner & self guards). **Notifications**
+  (per-user channels/categories/quiet-hours/frequency). **Security** (password, real RFC-6238 TOTP 2FA,
+  sign-in history+devices from the audit trail, org policy). **Branding** (colors/logo/footer + live
+  preview). **Clients** (create/rename/archive). **Projects** (create/archive via existing project API).
+  No placeholders. Gates: backend **121 tests**, pint+phpstan clean, migrations reversible, tsc/lint/
+  build ok, vitest 18. Verified live: all 8 tabs render, real data, guards enforced, 0 app errors.
+
 - 2026-07-26 — Central disclaimer & methodology system (commit `be1dc16`) — two-level bilingual copy
   (full/short) resolved project→client→org→system (`config/disclaimers.php` base). `disclaimers` table +
   `DisclaimerResolver`; snapshotted into every report's data; PDF final methodology page + per-page short
