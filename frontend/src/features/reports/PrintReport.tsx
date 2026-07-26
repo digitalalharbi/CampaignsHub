@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
 import { SlideBody, type Meta, type ReportData, type Slide } from './InteractiveReport'
+import { PrintDocument } from './PrintDocument'
 import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
 interface PrintPayload {
@@ -70,7 +71,8 @@ export function PrintReport() {
   // Readiness protocol — Chromium waits on these before printing. Also publishes a per-page layout
   // audit (utilization / overflow / empty / footer) that the print script uses as a hard gate.
   useEffect(() => {
-    if (!payload) return
+    // The document layout publishes its own readiness/layout signals (see PrintDocument).
+    if (!payload || type === 'document') return
     let cancelled = false
     const w = window as Window & {
       __REPORT_DATA_READY__?: boolean; __REPORT_CHARTS_READY__?: boolean; __REPORT_IMAGES_READY__?: boolean; __REPORT_LAYOUT__?: unknown
@@ -97,6 +99,17 @@ export function PrintReport() {
 
   if (failed) return <div className="p-10 text-center text-danger">تعذّر تحميل بيانات الطباعة (رمز غير صالح أو منتهٍ).</div>
   if (!payload) return <div className="p-10 text-center text-text-muted">جارٍ التحضير…</div>
+
+  // English, LTR, A4-portrait document flow (distinct from the RTL slide deck).
+  if (type === 'document') {
+    return (
+      <PrintDocument
+        data={payload.data}
+        reportName={payload.name}
+        currency={payload.currency}
+      />
+    )
+  }
 
   const d = payload.data
   const meta: Meta = { reportName: payload.name, platforms: (d.platforms ?? []).map((p) => String(p.provider)), isDemo: payload.is_demo, agencyName: 'CampaignsHub' }
