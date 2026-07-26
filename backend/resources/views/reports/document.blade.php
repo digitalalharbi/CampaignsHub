@@ -17,6 +17,14 @@
   table.data th { background: #f3f6f9; }
   .badge { background: #fffbeb; color: #d97706; padding: 2px 6px; border-radius: 6px; font-size: 10px; }
   ul.summary li { margin: 3px 0; }
+  @page { margin: 40px 34px 60px; }
+  .doc-footer { position: fixed; bottom: -40px; left: 0; right: 0; font-size: 9px; color: #8a94a6;
+    border-top: 1px solid #e6eaef; padding-top: 5px; text-align: justify; line-height: 1.5; }
+  .doc-footer .pnum:after { content: counter(page); }
+  .methodology { page-break-before: always; }
+  .methodology p { line-height: 1.7; text-align: justify; color: #33405a; }
+  .note-box { background: #f3f6f9; border: 1px solid #e6eaef; border-radius: 8px; padding: 10px 12px;
+    margin-top: 10px; line-height: 1.7; text-align: justify; color: #33405a; }
 </style>
 </head>
 <body>
@@ -68,5 +76,51 @@
   </table>
 
   <p class="muted" style="margin-top:20px">مصدر البيانات: {{ $report->data_source }} · CampaignsHub</p>
+
+  @php
+    $disc = $data['disclaimer'] ?? [];
+    $loc = $disc['locale_default'] ?? 'ar';
+    $sec = $disc['sections'] ?? [];
+    $en = fn($k) => ($disc['enabled'][$k] ?? true) === true;
+    $txt = fn($k) => data_get($sec, "$k.$loc") ?? data_get($sec, "$k.ar");
+    $objText = $en('objectives') && !empty($data['objective']) ? data_get($sec, "objectives.{$data['objective']}.$loc", data_get($sec, "objectives.{$data['objective']}.ar")) : null;
+  @endphp
+
+  {{-- Short note repeated as a small page footer on every page. --}}
+  @if($en('short') && $txt('short'))
+  <div class="doc-footer">
+    {{ $txt('short') }}
+    <span style="float:{{ $loc === 'ar' ? 'left' : 'right' }}">CampaignsHub · <span class="pnum"></span></span>
+  </div>
+  @endif
+
+  {{-- Full methodology & data notes on a dedicated final page. --}}
+  @if($en('full') || $en('methodology'))
+  <div class="methodology">
+    <h1>منهجية التقرير وملاحظات البيانات</h1>
+    <div class="muted">Report Methodology &amp; Data Notes</div>
+    @if($en('full') && $txt('full'))<p class="note-box">{{ $txt('full') }}</p>@endif
+    @if($en('methodology') && $txt('methodology'))
+      <h2>منهجية الحملات القائمة على الأداء</h2>
+      <p>{{ $txt('methodology') }}</p>
+    @endif
+    @if($objText)
+      <h2>ملاحظة حسب هدف الحملة</h2>
+      <p>{{ $objText }}</p>
+    @endif
+    @if($en('freshness') && $txt('freshness'))
+      <h2>تحديث البيانات والإسناد</h2>
+      <p>{{ $txt('freshness') }}</p>
+    @endif
+    <table class="data" style="margin-top:14px">
+      <tr><th>مصدر البيانات</th><td>{{ $report->data_source }}</td></tr>
+      <tr><th>نموذج/نافذة الإسناد</th><td>{{ $report->attribution_window ?? '—' }}</td></tr>
+      <tr><th>العملة</th><td>{{ $report->currency }}</td></tr>
+      <tr><th>المنطقة الزمنية</th><td>{{ $report->timezone }}</td></tr>
+      <tr><th>وضع التقرير</th><td>{{ ($report->config['mode'] ?? 'snapshot') === 'live' ? 'Live' : 'Snapshot' }}</td></tr>
+      <tr><th>تاريخ الإنشاء</th><td>{{ optional($report->generated_at)->toDateTimeString() ?? now()->toDateTimeString() }}</td></tr>
+    </table>
+  </div>
+  @endif
 </body>
 </html>

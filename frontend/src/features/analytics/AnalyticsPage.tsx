@@ -25,6 +25,7 @@ import {
 import { DemoBadge, KpiCard, Panel, RangeTabs, SERIES, platformColor, tooltipProps } from './components'
 import { compact, money, num, percent, ratio } from './format'
 import { useProject } from '@/stores/project'
+import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
 const TABS = [
   { id: 'performance', label: 'نظرة عامة على الأداء' },
@@ -77,6 +78,8 @@ export function AnalyticsPage() {
       {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} />}
       {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} />}
       {tab === 'quality' && <QualityTab projectId={currentProjectId} range={range} />}
+
+      <LivePerformanceNotice variant="compact" />
     </div>
   )
 }

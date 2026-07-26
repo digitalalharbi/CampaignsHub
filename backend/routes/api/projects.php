@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\Projects\Http\Controllers\ProjectController;
@@ -28,6 +29,9 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('projects')->name('project
 // Project-scoped resources (ResolveProject enforces project isolation).
 Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{project}')->name('projects.scoped.')->group(function (): void {
     Route::get('overview', [ProjectOverviewController::class, 'show'])->name('overview');
+
+    // Effective disclaimer/methodology copy for live surfaces (dashboard/analytics/live report).
+    Route::get('disclaimer', [DisclaimerController::class, 'resolve'])->name('disclaimer.resolve');
 
     // C3 metrics aggregation (read-only; requires campaigns.view).
     Route::get('metrics/summary', [MetricsController::class, 'summary'])->name('metrics.summary');

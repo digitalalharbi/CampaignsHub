@@ -13,6 +13,8 @@ import {
 import { platformColor } from '@/features/analytics/components'
 import { compact, money, num, percent, ratio } from '@/features/analytics/format'
 import { TrendPill } from '@/features/analytics/components'
+import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
+import type { ResolvedDisclaimer } from '@/features/disclaimers/api'
 
 interface Slide { id: string; type: string; platform?: string; order: number; visible: boolean }
 type Row = Record<string, number | string | null>
@@ -33,6 +35,7 @@ interface ReportData {
   budget?: Row[]
   summary?: string[]
   slides?: Slide[]
+  disclaimer?: ResolvedDisclaimer | null
 }
 interface Meta { reportName: string; clientName?: string; agencyName?: string; platforms: string[]; isDemo?: boolean }
 
@@ -43,7 +46,14 @@ const OBJECTIVE_LABEL: Record<string, string> = {
 export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta }) {
   const [mode, setMode] = useState<'deck' | 'scroll'>('deck')
   const [i, setI] = useState(0)
-  const slides = useMemo(() => (data.slides ?? []).filter((s) => s.visible).sort((a, b) => a.order - b.order), [data.slides])
+  const slides = useMemo(() => {
+    const visible = (data.slides ?? []).filter((s) => s.visible).sort((a, b) => a.order - b.order)
+    // Always close the deck with a methodology & data-notes section when a disclaimer is present.
+    if (data.disclaimer) {
+      visible.push({ id: '__methodology', type: '__methodology', order: 9999, visible: true })
+    }
+    return visible
+  }, [data.slides, data.disclaimer])
   const cur = slides[i]
 
   const render = (s: Slide) => {
@@ -58,9 +68,12 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
       case 'platform_comparison': return <ComparisonSlide data={data} />
       case 'funnel': return <FunnelSlide data={data} />
       case 'budget': return <BudgetSlide data={data} />
+      case '__methodology': return <PerformanceNotice data={data.disclaimer} variant="methodology" objective={data.objective} />
       default: return null
     }
   }
+  // Short performance note repeated quietly under each slide (footer), except the cover.
+  const footer = (s: Slide) => (s.type !== 'cover' && data.disclaimer ? <div className="mt-3 border-t border-border pt-2"><PerformanceNotice data={data.disclaimer} variant="footer" /></div> : null)
 
   if (slides.length === 0) return <p className="py-8 text-center text-sm text-text-secondary">لا شرائح مرئية.</p>
 
@@ -80,9 +93,9 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
         )}
       </div>
       {mode === 'deck' ? (
-        <div className="min-h-[440px] rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6">{cur && render(cur)}</div>
+        <div className="min-h-[440px] rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6">{cur && render(cur)}{cur && footer(cur)}</div>
       ) : (
-        <div className="space-y-4">{slides.map((s) => <div key={s.id} className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6">{render(s)}</div>)}</div>
+        <div className="space-y-4">{slides.map((s) => <div key={s.id} className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6">{render(s)}{footer(s)}</div>)}</div>
       )}
     </div>
   )
@@ -151,6 +164,7 @@ function RecommendationsSlide({ data }: { data: ReportData }) {
           ))}
         </ul>
       ) : <p className="text-sm text-text-muted">لا ملاحظات مضافة بعد.</p>}
+      {data.disclaimer && <div className="mt-5"><PerformanceNotice data={data.disclaimer} variant="full" objective={data.objective} /></div>}
     </div>
   )
 }

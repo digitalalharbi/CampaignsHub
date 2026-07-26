@@ -112,10 +112,36 @@ export function PublicReport() {
                 data={report.data as never}
                 meta={{ reportName: report.name, platforms, isDemo: report.is_demo, agencyName: 'CampaignsHub' }}
               />
+              <ReportMetaStrip report={report} />
             </div>
           </div>
         )}
       </main>
+    </div>
+  )
+}
+
+/** Truthful data-lineage strip for the client link: what the numbers are, and how fresh. */
+function ReportMetaStrip({ report }: { report: Shared }) {
+  const d = report.data as Record<string, unknown>
+  const period = d.period as { from?: string; to?: string } | undefined
+  const objective = typeof d.objective === 'string' ? d.objective : undefined
+  const mode = (d.mode as string) === 'live' ? 'Live' : 'Snapshot'
+  const items: Array<[string, string]> = [
+    ['آخر تحديث', report.generated_at ? new Date(report.generated_at).toLocaleString('en-GB') : '—'],
+    ['الفترة', period?.from && period?.to ? `${period.from} → ${period.to}` : '—'],
+    ['العملة', report.currency],
+    ['مصدر البيانات', String((d.data_source as string) ?? 'daily_metrics')],
+    ['نموذج/نافذة الإسناد', String((d.attribution_window as string) ?? '—')],
+    ['المنطقة الزمنية', String((d.timezone as string) ?? 'Asia/Riyadh')],
+    ['حالة التقرير', mode],
+  ]
+  if (objective) items.push(['هدف الحملة', objective])
+  return (
+    <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5 rounded-xl border border-border bg-surface-secondary px-4 py-3 text-xs text-text-secondary">
+      {items.map(([k, v]) => (
+        <span key={k}><span className="text-text-muted">{k}:</span> <b className="tnum font-semibold text-text-primary">{v}</b></span>
+      ))}
     </div>
   )
 }

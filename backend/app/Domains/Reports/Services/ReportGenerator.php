@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Disclaimers\Services\DisclaimerResolver;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Snapshots a report's data from the SAME metrics aggregation the dashboard/analytics use, so a
@@ -21,6 +23,7 @@ final class ReportGenerator
         private readonly MetricsAggregator $agg,
         private readonly ReportTemplateEngine $template,
         private readonly CreativeRankingService $ranking,
+        private readonly DisclaimerResolver $disclaimers,
     ) {}
 
     public function generate(Report $report): array
@@ -83,6 +86,13 @@ final class ReportGenerator
             'budget' => $this->agg->budgetPacing($from, $to, Carbon::today()),
             'summary' => $this->executiveSummary($totals, $delta, $platforms, $campaigns, $report->currency),
             'slides' => $config['slides'] ?? [],
+            // Effective disclaimer/methodology copy, snapshotted so a shared report is self-contained
+            // and reproducible even if the org later edits its notes.
+            'disclaimer' => $this->disclaimers->resolve(
+                (string) $report->tenant_id,
+                DB::table('projects')->where('id', $report->project_id)->value('client_workspace_id'),
+                (string) $report->project_id,
+            ),
         ];
 
         app(ProjectContext::class)->forget();

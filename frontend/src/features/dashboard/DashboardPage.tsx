@@ -38,6 +38,7 @@ import {
 } from '../analytics/components'
 import { compact, money, num, percent, ratio } from '../analytics/format'
 import { useProject } from '@/stores/project'
+import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
 const axis = { stroke: 'var(--text-muted)', fontSize: 12 }
 
@@ -276,6 +277,8 @@ export function DashboardPage() {
           </div>
         </Panel>
       </div>
+
+      <LivePerformanceNotice variant="compact" />
     </div>
   )
 }
