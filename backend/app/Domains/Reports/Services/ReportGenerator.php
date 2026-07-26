@@ -86,8 +86,9 @@ final class ReportGenerator
             'budget' => $this->agg->budgetPacing($from, $to, Carbon::today()),
             'summary' => $this->executiveSummary($totals, $delta, $platforms, $campaigns, $report->currency),
             // Structured two-column content: findings (left) + recommendations (right). Cards, not prose.
-            'findings' => $this->findings($totals, $delta, $platforms, $campaigns, $report->currency),
-            'recommendations' => $this->recommendations($platforms, $campaigns, $report->currency),
+            'findings' => $this->tagAnnotations($this->findings($totals, $delta, $platforms, $campaigns, $report->currency), 'finding', $report),
+            'recommendations' => $this->tagAnnotations($this->recommendations($platforms, $campaigns, $report->currency), 'recommendation', $report),
+            'audience' => $config['audience'] ?? 'client',
             'slides' => $config['slides'] ?? [],
             // Effective disclaimer/methodology copy, snapshotted so a shared report is self-contained
             // and reproducible even if the org later edits its notes.
@@ -226,6 +227,36 @@ final class ReportGenerator
         }
 
         return array_slice($out, 0, 5);
+    }
+
+    /**
+     * Stamp each auto-generated finding/recommendation with a stable id + approval status. Findings are
+     * factual observations (client-visible). Recommendations are AI-generated and start as `draft`;
+     * only `approved` ones reach a client (approval ids live in report.config). Demo reports are
+     * pre-approved so the demo client view is complete.
+     *
+     * @param  list<array<string,mixed>>  $items
+     * @return list<array<string,mixed>>
+     */
+    private function tagAnnotations(array $items, string $type, Report $report): array
+    {
+        $approved = (array) ($report->config['approved_recommendations'] ?? []);
+
+        return array_map(function ($item) use ($type, $report, $approved) {
+            $id = substr(hash('sha256', $type.'|'.($item['title'] ?? '').'|'.($item['platform'] ?? '')), 0, 12);
+            $isRec = $type === 'recommendation';
+            $status = $isRec
+                ? (in_array($id, $approved, true) || $report->is_demo ? 'approved' : 'draft')
+                : 'reviewed';
+
+            return $item + [
+                'id' => $id,
+                'type' => $type,
+                'is_ai_generated' => true,
+                'status' => $status,
+                'evidence' => ['kpi' => $item['kpi'] ?? null, 'value' => $item['value'] ?? null, 'platform' => $item['platform'] ?? null],
+            ];
+        }, $items);
     }
 
     /** A few plain-language findings derived from the numbers (not fabricated). */

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Services\ReportExporter;
 use App\Domains\Reports\Services\ShareService;
 use App\Http\Controllers\Controller;
@@ -49,7 +50,10 @@ final class PublicReportController extends Controller
         $share->update(['last_viewed_at' => now()]);
         $this->shares->log($share, 'view', $request);
 
-        $data = $this->shares->sanitize($report->data ?? [], $share);
+        // Shared links are CLIENT-facing: approved recommendations only, client campaign names, no
+        // internal/technical fields — then the per-share hide flags (spend/revenue/names).
+        $data = app(ClientReportView::class)->filter($report->data ?? []);
+        $data = $this->shares->sanitize($data, $share);
 
         return ApiResponse::success([
             'name' => $report->name,
@@ -75,9 +79,11 @@ final class PublicReportController extends Controller
         $report = Report::withoutGlobalScopes()->find($share->report_id);
         abort_if($report === null || $report->status !== 'completed', 404, 'Report not available.');
 
-        // Export a sanitized copy so hidden figures never leak into the file.
+        // Client-facing export: audience filter (approved recs / client names / no internal fields)
+        // then the per-share hide flags, so nothing internal or hidden leaks into the file.
         $sanitized = $report->replicate();
-        $sanitized->data = $this->shares->sanitize($report->data ?? [], $share);
+        $sanitized->setAttribute('id', $report->id); // replicate() drops the key; the gate needs it
+        $sanitized->data = $this->shares->sanitize(app(ClientReportView::class)->filter($report->data ?? []), $share);
         $content = app(ReportExporter::class)->render($sanitized, $format);
         $this->shares->log($share, 'download', $request, $format);
 
