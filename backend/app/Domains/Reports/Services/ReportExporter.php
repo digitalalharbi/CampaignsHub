@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use RuntimeException;
 
 /**
  * Renders a generated report's snapshot into a real downloadable file (PDF / XLSX / CSV), stores it
@@ -21,11 +22,15 @@ final class ReportExporter
 {
     private const DISK = 'local';
 
+    /** Bumped whenever the creative template changes so old exports are detected as stale on download. */
+    public const TEMPLATE_VERSION = '2';
+
     public function __construct(
         private readonly ExportReadinessGate $gate,
         private readonly ChromiumPdfRenderer $chromium,
         private readonly ClientReportView $clientView,
         private readonly ClientReportContentValidator $contentValidator,
+        private readonly NarrativeConsistencyValidator $narrativeValidator,
     ) {}
 
     /** Render a report to file bytes for a format, without persisting anything (used by public share). */
@@ -66,6 +71,15 @@ final class ReportExporter
             );
         }
 
+        // Narrative ↔ snapshot consistency for EVERY audience — a report may never claim "0 results"
+        // while the snapshot shows 1,158, nor disagree between its prose and its tables.
+        $narrative = $this->narrativeValidator->scan($data);
+        abort_if(
+            $narrative !== [],
+            422,
+            'Export blocked — narrative/data mismatch: '.implode(', ', array_unique(array_column($narrative, 'code'))),
+        );
+
         return $data;
     }
 
@@ -86,7 +100,34 @@ final class ReportExporter
             'size' => strlen($content),
             'signed_token' => Str::random(48),
             'expires_at' => Carbon::now()->addDays(7),
+            // Provenance so a download can prove the file is current (else regenerate). PDF client/exec
+            // exports are always chromium (fail-closed); other paths record what actually produced them.
+            'renderer' => $export->format === 'pdf' ? $this->rendererFor($report) : 'tabular',
+            'renderer_version' => (string) config('reports.chromium.renderer_version', 'chromium-1228'),
+            'template_version' => self::TEMPLATE_VERSION,
+            'snapshot_checksum' => (string) ($report->data['checksum'] ?? ''),
+            'locale' => $this->localeFor($report),
+            'layout_mode' => ($report->config['pdf_type'] ?? 'presentation') === 'document' ? 'document' : 'presentation',
+            'validation_status' => 'passed', // reached here ⇒ every gate passed (else render() threw)
         ]);
+    }
+
+    private function rendererFor(Report $report): string
+    {
+        $audience = $report->audience ?? 'client';
+        if ($this->chromium->isEnabled()) {
+            return 'chromium';
+        }
+
+        // Client/exec never reach here (pdf() throws); only internal text reports fall back.
+        return in_array($audience, ['client', 'executive'], true) ? 'blocked' : 'dompdf';
+    }
+
+    private function localeFor(Report $report): string
+    {
+        $locale = $report->config['locale'] ?? null;
+
+        return in_array($locale, ['ar', 'en'], true) ? $locale : 'ar';
     }
 
     private function csv(Report $report, array $data): string
@@ -309,7 +350,19 @@ final class ReportExporter
             return $this->chromium->render($report, $type);
         }
 
-        // Fallback: the simple Dompdf document layout (text-first; used only when Chromium is disabled).
+        // FAIL-CLOSED for client-facing reports: the Dompdf fallback is text-first and cannot render the
+        // creative RTL layout, charts, or a client-safe presentation. A client/executive PDF must never
+        // silently degrade to it — that is exactly how a broken legacy file reaches a client. Only plain
+        // INTERNAL text reports may use Dompdf, and only when Chromium is genuinely unavailable.
+        $audience = $report->audience ?? 'client';
+        if (in_array($audience, ['client', 'executive'], true)) {
+            throw new RuntimeException(
+                'Client PDF export requires the Chromium renderer, which is disabled '.
+                '(set REPORTS_CHROMIUM_ENABLED=true). Refusing to ship a Dompdf fallback to a client.'
+            );
+        }
+
+        // Fallback: the simple Dompdf document layout (INTERNAL text reports only).
         return Pdf::loadView('reports.document', [
             'report' => $report,
             'data' => $data,
