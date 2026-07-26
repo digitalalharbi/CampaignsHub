@@ -74,3 +74,17 @@ shared (`ReportShareController` 422) nor emailed to external recipients (`Report
 - Recommendation approval workflow (Draft/Reviewed/Approved/Hidden — client link shows Approved only).
 - Edge-case reports (single platform/campaign, no revenue/conversions, missing funnel, long names…).
 - Visual-regression baselines from the PDF page PNGs (no auto-baseline-update).
+
+## Re-audit from the ACTUAL PDF file (2026-07-27, fix/pdf-campaigns-experience)
+Triggered by a report of reversed/disjointed Arabic. Verified against the generated file itself:
+- **Font embedding (pdfplumber reads the font dict):** page uses `IBMPlexSansArabic-Regular/SemiBold/
+  Bold` (subsetted, embedded) for Arabic and `Inter-*` for Latin — the correct fonts are embedded, not
+  substituted. No system-font fallback.
+- **Two independent renderers agree** the Arabic is correct (connected, RTL, no reversal/disjointing/
+  tofu): Apple PDFKit (qlmanage) and pdfium (pdfplumber to_image). The rasterised exec-summary page
+  shows "الملخص التنفيذي", the exact-totals strip "96,122 … 795,606 … CPA 83 SAR", donut + area charts,
+  and a correct footer — all Arabic well-formed, mixed AR/EN via `<bdi>`.
+- Conclusion: the **Chromium** engine's Arabic PDF is sound. Earlier reversed/disjointed output was the
+  legacy **Dompdf** path, which is no longer used for creative reports. Note: extracted PDF *text* is in
+  visual order (normal for RTL) — that is a text-layer property, not a rendering defect; audits use the
+  rasterised page images for script correctness and the text layer only for numeric parity.
