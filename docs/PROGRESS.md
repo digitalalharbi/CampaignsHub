@@ -153,7 +153,7 @@ _(append newest first: date — what — command — result)_
   `ReportGenerator` emits platform_series+best+funnel+budget. Verified live: 67 chart surfaces in one
   report, 0 console errors. Gates: backend 106 passed, pint+phpstan clean, tsc/lint/build ok.
 
-- 2026-07-26 — **Reports rebuild — merged to `feat/premium-ui`** (`44613ca`; branch `feat/reports-rebuild`
+- 2026-07-26 — **Reports Core: Completed · Reports Hardening: In Progress** — merged to `feat/premium-ui`** (`44613ca`; branch `feat/reports-rebuild`
   ff-merged, 11 commits). Rebuilt the report output engine + data integrity + client audience:
   • Data validation gate — export blocked on inconsistency (e.g. results>0 with spend=revenue=0).
   • **Headless-Chromium PDF engine** replacing Dompdf for creative reports: React print route rendering

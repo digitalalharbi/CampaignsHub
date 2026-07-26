@@ -23,6 +23,9 @@ php artisan demo:reset
 ```
 Demo login: `owner@demo-agency.local` / `password` (see docs/DEMO_ACCOUNTS.md).
 
+## Status
+**Reports Core: Completed** (merged `44613ca`). **Reports Hardening: In Progress** on `feat/reports-hardening` — visual-regression harness, recommendation approval workflow (persisted, reviewed_by/approved_by), `client_display_name` DB fields.
+
 ## Completed phases (verified)
 Foundation · RBAC/Audit · Campaigns C1 · Metrics C3.2/C3.5 · Dashboard+Analytics · Reports
 (builder, queued gen, PDF/XLSX/CSV) · Interactive slide reports · Secure client links ·
