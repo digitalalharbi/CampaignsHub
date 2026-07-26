@@ -4,11 +4,14 @@ import type { UnifiedCampaign } from './types'
 import {
   useCampaignActivity,
   useCampaignAlerts,
+  useCampaignAnnotations,
   useCampaignFunnel,
   useCampaignPerformance,
   useCampaignPlatforms,
   useCampaignReports,
   useCampaignSummary,
+  useCreateAnnotation,
+  useUpdateAnnotation,
 } from './metrics'
 import type { MetricTotals, PlatformRow, Range, TimePoint } from '@/features/analytics/api'
 import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, PlatformDonutChart, ProgressRing, SpendRevenueAreaChart } from '@/features/analytics/charts'
@@ -510,5 +513,92 @@ export function CampaignReportsTab({ campaign, projectId }: { campaign: UnifiedC
         </li>
       ))}
     </ul>
+  )
+}
+
+/** CMC-11 — Notes & Recommendations: two columns, Draft→Approved workflow, evidence-backed. */
+export function CampaignNotesTab({ campaign, projectId, canUpdate, canApprove }: { campaign: UnifiedCampaign; projectId: string; canUpdate: boolean; canApprove: boolean }) {
+  const annotations = useCampaignAnnotations(projectId, campaign.id)
+  const create = useCreateAnnotation(projectId, campaign.id)
+  const update = useUpdateAnnotation(projectId, campaign.id)
+  const [adding, setAdding] = useState<'note' | 'recommendation' | null>(null)
+  const [form, setForm] = useState({ title: '', body: '', kpi: '', evidence: '', platform: '', priority: 'medium', proposed_action: '' })
+
+  const rows = annotations.data ?? []
+  const notes = rows.filter((a) => a.kind === 'note')
+  const recs = rows.filter((a) => a.kind === 'recommendation')
+
+  const submit = (kind: 'note' | 'recommendation') => {
+    if (!form.title.trim()) return
+    create.mutate({ kind, ...form } as never, { onSuccess: () => { setAdding(null); setForm({ title: '', body: '', kpi: '', evidence: '', platform: '', priority: 'medium', proposed_action: '' }) } })
+  }
+
+  const statusTone: Record<string, string> = { approved: 'bg-success/15 text-success', reviewed: 'bg-info/15 text-info', draft: 'bg-surface-secondary text-text-muted', hidden: 'bg-surface-secondary text-text-muted', rejected: 'bg-danger/15 text-danger' }
+  const prioTone: Record<string, string> = { critical: 'text-danger', high: 'text-warning', medium: 'text-info', low: 'text-text-muted' }
+
+  const Card2 = ({ a }: { a: import('./metrics').CampaignAnnotation }) => (
+    <div className="rounded-xl border border-border bg-surface p-3">
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-sm font-bold text-text-primary">{a.title}</span>
+        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${statusTone[a.status] ?? statusTone.draft}`}>{a.status}</span>
+      </div>
+      {a.body && <p className="mt-1 text-xs text-text-secondary">{a.body}</p>}
+      {a.evidence && <p className="mt-1 text-[11px] text-text-muted">الدليل: {a.evidence}</p>}
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-muted">
+        {a.platform && <span>{a.platform}</span>}
+        {a.kpi && <span>· {a.kpi}</span>}
+        <span className={prioTone[a.priority] ?? ''}>· {a.priority}</span>
+        {a.due_date && <span>· موعد {a.due_date}</span>}
+      </div>
+      {a.proposed_action && <p className="mt-1 text-[11px] text-brand-700">الإجراء: {a.proposed_action}</p>}
+      {canApprove && a.status !== 'approved' && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <button onClick={() => update.mutate({ id: a.id, status: 'approved' } as never)} className="rounded border border-success/40 px-1.5 py-0.5 text-[10px] font-semibold text-success">اعتماد</button>
+          <button onClick={() => update.mutate({ id: a.id, status: 'reviewed' } as never)} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-secondary">مراجعة</button>
+          <button onClick={() => update.mutate({ id: a.id, status: 'rejected' } as never)} className="rounded border border-danger/40 px-1.5 py-0.5 text-[10px] font-semibold text-danger">رفض</button>
+          <button onClick={() => update.mutate({ id: a.id, status: 'hidden' } as never)} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">إخفاء</button>
+        </div>
+      )}
+    </div>
+  )
+
+  const AddForm = ({ kind }: { kind: 'note' | 'recommendation' }) => (
+    <div className="space-y-2 rounded-xl border border-dashed border-border p-3">
+      <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="العنوان" className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm" />
+      <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="النص" className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm" rows={2} />
+      <div className="grid grid-cols-2 gap-2">
+        <input value={form.kpi} onChange={(e) => setForm({ ...form, kpi: e.target.value })} placeholder="KPI" className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs" />
+        <input value={form.platform} onChange={(e) => setForm({ ...form, platform: e.target.value })} placeholder="المنصة" className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs" />
+      </div>
+      <input value={form.evidence} onChange={(e) => setForm({ ...form, evidence: e.target.value })} placeholder="الدليل الرقمي" className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs" />
+      {kind === 'recommendation' && <input value={form.proposed_action} onChange={(e) => setForm({ ...form, proposed_action: e.target.value })} placeholder="الإجراء المقترح" className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs" />}
+      <div className="flex items-center gap-2">
+        <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs">
+          {['critical', 'high', 'medium', 'low'].map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <button onClick={() => submit(kind)} disabled={create.isPending} className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">حفظ</button>
+        <button onClick={() => setAdding(null)} className="text-xs text-text-muted">إلغاء</button>
+      </div>
+    </div>
+  )
+
+  if (annotations.isLoading) return <div className="grid gap-4 lg:grid-cols-2"><Skeleton className="h-40" /><Skeleton className="h-40" /></div>
+  if (annotations.isError) return <ErrorState title="تعذّر تحميل الملاحظات" onRetry={() => annotations.refetch()} />
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2" dir="rtl">
+      {/* Right column: notes / findings */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between"><h3 className="text-sm font-bold">أبرز النتائج والملاحظات</h3>{canUpdate && <button onClick={() => setAdding('note')} className="text-xs font-semibold text-brand-700">+ ملاحظة</button>}</div>
+        {adding === 'note' && <AddForm kind="note" />}
+        {notes.length === 0 && adding !== 'note' ? <EmptyState title="لا ملاحظات" /> : notes.map((a) => <Card2 key={a.id} a={a} />)}
+      </div>
+      {/* Left column: recommendations */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between"><h3 className="text-sm font-bold">التوصيات والخطوات القادمة</h3>{canUpdate && <button onClick={() => setAdding('recommendation')} className="text-xs font-semibold text-brand-700">+ توصية</button>}</div>
+        {adding === 'recommendation' && <AddForm kind="recommendation" />}
+        {recs.length === 0 && adding !== 'recommendation' ? <EmptyState title="لا توصيات" /> : recs.map((a) => <Card2 key={a.id} a={a} />)}
+      </div>
+    </div>
   )
 }

@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { getData } from '@/lib/api/client'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getData, postData, api, ensureCsrfCookie } from '@/lib/api/client'
 import type { BudgetRow, FunnelStage, PlatformRow, Range, Summary, TimePoint } from '@/features/analytics/api'
 
 /**
@@ -89,5 +89,54 @@ export function useCampaignReports(projectId: string | null, campaignId: string 
     queryKey: ['projects', projectId, 'campaigns', campaignId, 'reports'],
     queryFn: () => getData<CampaignReport[]>(`${base(projectId!, campaignId!)}/reports`),
     enabled: Boolean(projectId && campaignId),
+  })
+}
+
+export interface CampaignAnnotation {
+  id: string
+  kind: 'note' | 'recommendation'
+  status: 'draft' | 'reviewed' | 'approved' | 'hidden' | 'rejected'
+  title: string
+  body: string | null
+  platform: string | null
+  kpi: string | null
+  evidence: string | null
+  priority: string
+  proposed_action: string | null
+  assignee_id: number | null
+  due_date: string | null
+  is_demo: boolean
+  approved_at: string | null
+  created_at: string | null
+}
+
+export function useCampaignAnnotations(projectId: string | null, campaignId: string | null) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'campaigns', campaignId, 'annotations'],
+    queryFn: () => getData<CampaignAnnotation[]>(`${base(projectId!, campaignId!)}/annotations`),
+    enabled: Boolean(projectId && campaignId),
+  })
+}
+
+export function useCreateAnnotation(projectId: string, campaignId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: Partial<CampaignAnnotation>) => {
+      await ensureCsrfCookie()
+      return postData<CampaignAnnotation>(`${base(projectId, campaignId)}/annotations`, input as Record<string, unknown>)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects', projectId, 'campaigns', campaignId, 'annotations'] }),
+  })
+}
+
+export function useUpdateAnnotation(projectId: string, campaignId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, ...patch }: { id: string } & Record<string, unknown>) => {
+      await ensureCsrfCookie()
+      const res = await api.patch(`${base(projectId, campaignId)}/annotations/${id}`, patch)
+      return res.data.data as CampaignAnnotation
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects', projectId, 'campaigns', campaignId, 'annotations'] }),
   })
 }

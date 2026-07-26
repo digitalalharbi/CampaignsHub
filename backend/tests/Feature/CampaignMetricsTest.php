@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Audit\Models\AuditLog;
+use App\Domains\Campaigns\Models\CampaignAnnotation;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
@@ -172,5 +173,30 @@ final class CampaignMetricsTest extends TestCase
         $this->assertCount(1, $r1);
         $this->assertSame('Campaign monthly', $r1[0]['name']);
         $this->actingAs($this->owner)->getJson($this->url($this->projectB, $this->campA1->id, 'reports'))->assertNotFound();
+    }
+
+    public function test_annotation_create_and_approval_workflow(): void
+    {
+        $base = "/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/annotations";
+
+        // Create a recommendation (starts as draft).
+        $id = $this->actingAs($this->owner)->postJson($base, [
+            'kind' => 'recommendation', 'title' => 'Scale Google', 'evidence' => 'ROAS 8.4x vs 4.9x', 'priority' => 'high',
+        ])->assertCreated()->json('data.id');
+        $this->assertSame('draft', CampaignAnnotation::find($id)->status);
+
+        // Approve it (owner has reports.approve).
+        $this->actingAs($this->owner)->patchJson("{$base}/{$id}", ['status' => 'approved'])->assertOk();
+        $this->assertSame('approved', CampaignAnnotation::find($id)->status);
+
+        // A user without reports.approve cannot change status.
+        $editor = User::create(['tenant_id' => $this->tenant->id, 'name' => 'E', 'email' => 'e@a.test', 'password' => 'secret123']);
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'ed', 'slug' => 'ed']);
+        $role->givePermissionTo(...Permission::whereIn('key', ['campaigns.view', 'campaigns.update'])->pluck('key')->all());
+        $editor->assignRole($role);
+        $this->actingAs($editor)->patchJson("{$base}/{$id}", ['status' => 'rejected'])->assertForbidden();
+
+        // Listing is campaign-scoped.
+        $this->actingAs($this->owner)->getJson("/api/v1/projects/{$this->projectB->id}/campaigns/{$this->campA1->id}/annotations")->assertNotFound();
     }
 }

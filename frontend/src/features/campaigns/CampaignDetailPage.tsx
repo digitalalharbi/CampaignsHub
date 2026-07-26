@@ -34,6 +34,7 @@ import {
   CampaignExecutiveSummary,
   CampaignFunnelTab,
   CampaignKpis,
+  CampaignNotesTab,
   CampaignPerformanceTab,
   CampaignPlatformsTab,
   CampaignReportsTab,
@@ -81,6 +82,7 @@ export function CampaignDetailPage() {
   const canView = useAuth((s) => s.hasPermission('campaigns.view'))
   const canUpdate = useAuth((s) => s.hasPermission('campaigns.update'))
   const canPause = useAuth((s) => s.hasPermission('campaigns.pause'))
+  const canApprove = useAuth((s) => s.hasPermission('reports.approve'))
 
   const tabParam = sp.get('tab') as TabKey | null
   const tab: TabKey = tabParam && TAB_KEYS.includes(tabParam) ? tabParam : 'overview'
@@ -360,7 +362,7 @@ export function CampaignDetailPage() {
       )}
       {tab === 'notes' && (
         <TabPanel>
-          <EmptyState title={t('tab_notes')} description={t('cmc_section_building')} />
+          <CampaignNotesTab campaign={c} projectId={projectId} canUpdate={canUpdate} canApprove={canApprove} />
         </TabPanel>
       )}
 
