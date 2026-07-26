@@ -56,11 +56,15 @@ export function PrintReport() {
     document.documentElement.setAttribute('lang', 'ar')
   }, [theme])
 
-  // Encode verifiable provenance into the document title → lands in the PDF /Title metadata, so an
-  // audit tool can confirm the file came from the right snapshot (report id + checksum + data version).
+  // Document title → PDF /Title metadata. INTERNAL audience carries verifiable provenance (report id
+  // + checksum + data version) so an audit tool can confirm the snapshot. CLIENT/EXECUTIVE files must
+  // NOT leak those internal identifiers into metadata — they get a clean, client-safe title.
   useEffect(() => {
     if (!payload) return
-    document.title = `CampaignsHub | rid=${payload.report_id} | cs=${payload.checksum ?? ''} | dv=${payload.data_version ?? ''} | cur=${payload.currency}`
+    document.title =
+      payload.audience === 'client' || payload.audience === 'executive'
+        ? `CampaignsHub — ${payload.currency} Report`
+        : `CampaignsHub | rid=${payload.report_id} | cs=${payload.checksum ?? ''} | dv=${payload.data_version ?? ''} | cur=${payload.currency}`
   }, [payload])
 
   // Readiness protocol — Chromium waits on these before printing. Also publishes a per-page layout
