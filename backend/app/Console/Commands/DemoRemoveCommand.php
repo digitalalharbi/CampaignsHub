@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Models\ReportRecipient;
@@ -45,6 +47,8 @@ final class DemoRemoveCommand extends Command
         ReportExport::withoutGlobalScopes()->where('is_demo', true)->delete();
         ReportRecipient::withoutGlobalScopes()->where('is_demo', true)->delete();
         ReportSchedule::withoutGlobalScopes()->where('is_demo', true)->delete();
+        AlertRule::withoutGlobalScopes()->where('is_demo', true)->delete();
+        AppNotification::query()->where('is_demo', true)->forceDelete();
         $reports = Report::withoutGlobalScopes()->where('is_demo', true)->delete();
 
         $tenant = Tenant::where('slug', 'demo-agency')->first();

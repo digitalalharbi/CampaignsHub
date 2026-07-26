@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Alerts\Console\EvaluateAlertsCommand;
 use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Tenancy\Middleware\ResolveTenant;
 use App\Http\Middleware\AssignRequestId;
@@ -34,6 +35,9 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    ->withCommands([
+        EvaluateAlertsCommand::class,
+    ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.
         $middleware->statefulApi();

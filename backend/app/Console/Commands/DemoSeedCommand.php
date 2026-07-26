@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use Database\Seeders\DemoAlertsSeeder;
 use Database\Seeders\DemoAnalyticsSeeder;
 use Database\Seeders\DemoReportsSeeder;
 use Database\Seeders\DemoSeeder;
@@ -27,6 +28,7 @@ final class DemoSeedCommand extends Command
         $this->call('db:seed', ['--class' => DemoSeeder::class, '--force' => true]);
         $this->call('db:seed', ['--class' => DemoAnalyticsSeeder::class, '--force' => true]);
         $this->call('db:seed', ['--class' => DemoReportsSeeder::class, '--force' => true]);
+        $this->call('db:seed', ['--class' => DemoAlertsSeeder::class, '--force' => true]);
         $this->call('cache:clear');
         $this->info('Demo data seeded.');
 
