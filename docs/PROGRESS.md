@@ -236,3 +236,34 @@ Route `/projects/{project}/campaigns/{campaign}` · isolation keys
 ### CMC batches remaining
 CMC-2 (KPIs + exec summary) · CMC-4 (per-campaign APIs) · CMC-5…14 (Overview timeline, Performance,
 Platforms, Creatives, Budget, Funnel, Notes & Recommendations, Alerts, Reports, Activity).
+
+## PDF export BUTTON path — root cause + closure (2026-07-26)
+
+**Root cause of the broken downloaded file:** `REPORTS_CHROMIUM_ENABLED` was unset, so the real
+export path (button → job → `ReportExporter::pdf`) fell back to legacy **Dompdf** — near-empty
+pages, broken Arabic, wrong narrative, `burner` leak. Script tests had bypassed this. Fixes
+(commits `fix(reports): export BUTTON path…`, `test(reports): prove … via real browser E2E`):
+
+- Chromium enabled; **client/executive PDFs fail-closed** (throw) instead of Dompdf fallback.
+- `NarrativeConsistencyValidator` blocks "0 results vs 1,158" (prose ↔ snapshot) — every export.
+- `report_exports` renderer provenance (renderer / renderer_version / template_version /
+  snapshot_checksum / locale / layout_mode / validation_status), stamped on export.
+- Download endpoint refuses **stale** exports (old engine/template/unvalidated) → 409.
+- `reports:invalidate-legacy-exports --demo-only`, `reports:regenerate-demo-exports`,
+  `reports:health` (Node/Playwright/Chromium/print-URL/fonts/storage/queue/normalizer →
+  "PDF Renderer: Chromium — Ready").
+- Fixed: `show()` didn't eager-load exports (detail returned `exports:[]`).
+
+**UI Export Button Test: PASSED** — `e2e/report-pdf-download.spec.ts` drives the real browser
+click-through (create → generate → export → queue → Chromium → download) and audits the
+DOWNLOADED bytes; downloaded SHA == stored SHA. Deliverables in
+`deliverables/report-audit/final-v2/` (+ `browser-downloads/`) with per-file audits + checksums.
+
+```
+Arabic client PDF export (button path): CLOSED
+English heading text-layer hardening:   Pending
+Firefox PDF.js / Adobe Acrobat:         Pending (no runtime on host)
+```
+
+Operational note: the report queue is named `reports` — workers must run
+`queue:work --queue=reports,default`, and be restarted on deploy to load new code.
