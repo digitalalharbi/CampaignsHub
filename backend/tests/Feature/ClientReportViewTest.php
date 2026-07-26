@@ -52,6 +52,19 @@ final class ClientReportViewTest extends TestCase
         $this->assertSame('Meta — Lead Gen', $client['best']['campaign']);
     }
 
+    public function test_client_display_name_wins_over_internal_name(): void
+    {
+        $snap = $this->internalSnapshot();
+        $snap['campaigns'][0]['client_display_name'] = 'حملة اليوم الوطني';
+        $client = app(ClientReportView::class)->filter($snap);
+
+        // Explicit client name used; internal name + ids never exposed.
+        $this->assertSame('حملة اليوم الوطني', $client['campaigns'][0]['campaign_name']);
+        $this->assertArrayNotHasKey('client_display_name', $client['campaigns'][0]);
+        $this->assertArrayNotHasKey('campaign_id', $client['campaigns'][0]);
+        $this->assertStringNotContainsStringIgnoringCase('burner', json_encode($client, JSON_UNESCAPED_UNICODE));
+    }
+
     public function test_content_validator_passes_client_view_and_catches_leaks(): void
     {
         $validator = app(ClientReportContentValidator::class);

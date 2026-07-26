@@ -70,18 +70,19 @@ final class MetricsAggregator
     {
         $rows = $this->base($from, $to)
             ->leftJoin('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
-            ->select('daily_metrics.unified_campaign_id as campaign_id', 'unified_campaigns.name as campaign_name')
+            ->select('daily_metrics.unified_campaign_id as campaign_id', 'unified_campaigns.name as campaign_name', 'unified_campaigns.client_display_name as client_display_name')
             ->selectRaw('MAX(daily_metrics.provider) AS provider')
             ->selectRaw(implode(', ', array_map(
                 fn ($e, $a) => str_replace('value', 'daily_metrics.value', str_replace('metric_key', 'daily_metrics.metric_key', $e))." AS {$a}",
                 self::PIVOT,
                 array_keys(self::PIVOT),
             )))
-            ->groupBy('daily_metrics.unified_campaign_id', 'unified_campaigns.name')
+            ->groupBy('daily_metrics.unified_campaign_id', 'unified_campaigns.name', 'unified_campaigns.client_display_name')
             ->get()
             ->map(fn ($r) => [
                 'campaign_id' => $r->campaign_id,
                 'campaign_name' => $r->campaign_name,
+                'client_display_name' => $r->client_display_name,
                 'provider' => $r->provider,
             ] + $this->withDerived((array) $r))
             ->all();

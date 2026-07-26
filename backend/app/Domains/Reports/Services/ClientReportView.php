@@ -41,12 +41,18 @@ final class ClientReportView
         ));
 
         // 3. Client-facing names on every list that carries a campaign/creative name.
+        //    Resolution order: explicit client_display_name → sanitised internal name → safe generated.
         foreach (['campaigns', 'top_creatives', 'budget'] as $key) {
             if (! empty($out[$key]) && is_array($out[$key])) {
                 $out[$key] = array_map(function ($row) {
-                    if (isset($row['campaign_name'])) {
+                    if (! empty($row['client_display_name'])) {
+                        $row['campaign_name'] = (string) $row['client_display_name'];
+                    } elseif (isset($row['campaign_name'])) {
                         $row['campaign_name'] = self::clientName((string) $row['campaign_name']);
                     }
+                    unset($row['client_display_name']); // internal field — never expose the mapping
+                    unset($row['campaign_id']);         // internal id — never expose to a client
+                    unset($row['external_account_id']);
 
                     return $row;
                 }, $out[$key]);

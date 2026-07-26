@@ -197,6 +197,7 @@ final class UnifiedCampaignController extends Controller
 
         return $request->validate([
             'name' => [$creating ? 'required' : 'sometimes', 'string', 'max:160', $nameRule],
+            'client_display_name' => ['nullable', 'string', 'max:160'], // the name a client sees in reports
             'objective' => ['sometimes', Rule::in(CampaignObjective::values())],
             'status' => ['sometimes', Rule::in(CampaignStatus::values())],
             'total_budget' => ['nullable', 'numeric', 'min:0'],
