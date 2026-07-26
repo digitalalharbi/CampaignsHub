@@ -10,6 +10,7 @@ use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Services\ExportReadinessGate;
+use App\Domains\Reports\Services\ReportDeliveryAudienceGuard;
 use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -159,11 +160,13 @@ final class ReportController extends Controller
         return ApiResponse::success(['id' => $export->id, 'format' => $format, 'status' => 'processing'], 'Export queued.', status: 202);
     }
 
-    public function send(Request $request, AuditLogger $audit, string $project, string $report): JsonResponse
+    public function send(Request $request, AuditLogger $audit, string $project, string $report, ReportDeliveryAudienceGuard $guard): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.export'), 403);
         $model = $this->find($report);
         $emails = $request->validate(['recipients' => ['required', 'array', 'min:1'], 'recipients.*' => ['email']])['recipients'];
+        // Never deliver an internal report to a client/external recipient.
+        $guard->assertDeliverable($model, $emails);
         foreach ($emails as $email) {
             $model->recipients()->create(['email' => $email, 'last_sent_at' => now(), 'is_demo' => $model->is_demo]);
         }

@@ -10,6 +10,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Services\ClientReportContentValidator;
+use App\Domains\Reports\Services\ReportExporter;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -17,6 +18,7 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Laravel\Sanctum\Sanctum;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
 /** Audience isolation: internal reports cannot be shared; the client print response carries no internal data. */
@@ -74,7 +76,7 @@ final class ReportAudienceTest extends TestCase
 
     public function test_authenticated_client_export_is_filtered_but_internal_is_full(): void
     {
-        $exporter = app(\App\Domains\Reports\Services\ReportExporter::class);
+        $exporter = app(ReportExporter::class);
 
         // Client CSV: internal marker sanitised, draft recommendation dropped — even for an admin export.
         $clientCsv = $exporter->render($this->report('client'), 'csv');
@@ -83,6 +85,51 @@ final class ReportAudienceTest extends TestCase
         // Internal CSV: full snapshot, internal campaign name retained for the team.
         $internalCsv = $exporter->render($this->report('internal'), 'csv');
         $this->assertStringContainsStringIgnoringCase('burner', $internalCsv);
+    }
+
+    public function test_xlsx_sheets_differ_by_audience(): void
+    {
+        $exporter = app(ReportExporter::class);
+        $sheetNames = function (string $xlsx): array {
+            $tmp = tempnam(sys_get_temp_dir(), 'aud_').'.xlsx';
+            file_put_contents($tmp, $xlsx);
+            $names = IOFactory::load($tmp)->getSheetNames();
+            @unlink($tmp);
+
+            return $names;
+        };
+
+        $client = $sheetNames($exporter->render($this->report('client'), 'xlsx'));
+        $internal = $sheetNames($exporter->render($this->report('internal'), 'xlsx'));
+
+        // Client has next-steps but NOT internal diagnostics sheets.
+        $this->assertContains('Next Steps', $client);
+        $this->assertNotContains('Data Quality', $client);
+        $this->assertNotContains('Raw Metrics', $client);
+        $this->assertNotContains('All Recommendations', $client);
+        // Internal has the diagnostic sheets.
+        $this->assertContains('Data Quality', $internal);
+        $this->assertContains('Raw Metrics', $internal);
+        $this->assertContains('All Recommendations', $internal);
+    }
+
+    public function test_delivery_guard_blocks_internal_to_external_recipient(): void
+    {
+        Sanctum::actingAs($this->owner);
+        $internal = $this->report('internal');
+
+        // External/client email is blocked.
+        $this->postJson("/api/v1/projects/{$this->project->id}/reports/{$internal->id}/send", ['recipients' => ['client@external.test']])
+            ->assertStatus(422);
+
+        // An internal team member (same tenant) is allowed.
+        $this->postJson("/api/v1/projects/{$this->project->id}/reports/{$internal->id}/send", ['recipients' => [$this->owner->email]])
+            ->assertOk();
+
+        // A client report can go to anyone.
+        $client = $this->report('client');
+        $this->postJson("/api/v1/projects/{$this->project->id}/reports/{$client->id}/send", ['recipients' => ['client@external.test']])
+            ->assertOk();
     }
 
     public function test_client_print_response_has_no_internal_data(): void

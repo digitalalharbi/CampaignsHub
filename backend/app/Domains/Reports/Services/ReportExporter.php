@@ -155,6 +155,50 @@ final class ReportExporter
             $row++;
         }
 
+        // Audience-specific sheets — CREATED per audience, never created-then-hidden. Client shows only
+        // approved recommendations + next steps; internal adds findings + all recommendations + raw
+        // metrics + data quality; executive stays lean.
+        $audience = $report->audience ?? 'client';
+        $add = fn (string $title, array $head, array $rows) => $this->xlsxSheet($book, $title, $head, $rows);
+
+        if ($audience === 'client' || $audience === 'executive') {
+            $add('Approved Recommendations', ['Action', 'Reason', 'Platform', 'Priority'], array_map(
+                fn ($r) => [$r['title'] ?? '', $r['detail'] ?? '', $r['platform'] ?? '', $r['priority'] ?? 'normal'],
+                array_filter($data['recommendations'] ?? [], fn ($r) => ($r['status'] ?? '') === 'approved'),
+            ));
+            $add('Next Steps', ['Action', 'Reason', 'Platform', 'Priority', 'Owner', 'Due'], array_map(
+                fn ($s) => [$s['action'] ?? '', $s['reason'] ?? '', $s['platform'] ?? '', $s['priority'] ?? '', $s['owner'] ?? '', $s['due'] ?? ''],
+                $data['next_steps'] ?? [],
+            ));
+        }
+        if ($audience === 'internal') {
+            $add('Findings', ['Title', 'Detail', 'Platform', 'Severity', 'Status'], array_map(
+                fn ($f) => [$f['title'] ?? '', $f['detail'] ?? '', $f['platform'] ?? '', $f['severity'] ?? '', $f['status'] ?? ''],
+                $data['findings'] ?? [],
+            ));
+            $add('All Recommendations', ['Title', 'Detail', 'Platform', 'Status', 'Priority', 'AI'], array_map(
+                fn ($r) => [$r['title'] ?? '', $r['detail'] ?? '', $r['platform'] ?? '', $r['status'] ?? '', $r['priority'] ?? '', ! empty($r['is_ai_generated']) ? 'yes' : 'no'],
+                $data['recommendations'] ?? [],
+            ));
+            $add('Data Quality', ['Check', 'Result'], $this->dataQualityRows($data));
+            $add('Raw Metrics', ['Date', 'Spend', 'Revenue', 'Conversions', 'ROAS', 'CPA'], array_map(
+                fn ($t) => [$t['date'] ?? '', $t['spend'] ?? null, $t['revenue'] ?? null, $t['conversions'] ?? null, $t['roas'] ?? null, $t['cpa'] ?? null],
+                $data['timeseries'] ?? [],
+            ));
+        }
+        if (! empty($data['funnel']) && $audience !== 'executive') {
+            $add('Funnel', ['Stage', 'Count', 'Step Rate', 'Cost Per'], array_map(
+                fn ($s) => [$s['label'] ?? '', $s['count'] ?? null, $s['step_rate'] ?? null, $s['cost_per'] ?? null],
+                $data['funnel'],
+            ));
+        }
+        if (! empty($data['budget'])) {
+            $add('Budget', ['Campaign', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Pace'], array_map(
+                fn ($b) => [$b['campaign_name'] ?? '', $b['budget'] ?? null, $b['spent'] ?? null, $b['remaining'] ?? null, $b['consumed_pct'] ?? null, $b['pace'] ?? null],
+                $data['budget'],
+            ));
+        }
+
         $notes = $book->createSheet();
         $notes->setTitle('Methodology & Notes');
         $notes->fromArray(['المنهجية والملاحظات', ''], null, 'A1');
@@ -172,6 +216,46 @@ final class ReportExporter
         $writer->save('php://output');
 
         return (string) ob_get_clean();
+    }
+
+    /**
+     * Append a titled sheet with a header row + data rows.
+     *
+     * @param  list<string>  $head
+     * @param  list<array<int,mixed>>  $rows
+     */
+    private function xlsxSheet(Spreadsheet $book, string $title, array $head, array $rows): void
+    {
+        $sheet = $book->createSheet();
+        $sheet->setTitle(substr($title, 0, 31)); // Excel sheet-name limit
+        $sheet->fromArray($head, null, 'A1');
+        $r = 2;
+        foreach ($rows as $row) {
+            $sheet->fromArray(array_values($row), null, "A{$r}");
+            $r++;
+        }
+    }
+
+    /**
+     * Internal-only data-quality checks derived from the snapshot (no secrets/stack traces).
+     *
+     * @param  array<string,mixed>  $data
+     * @return list<array{0:string,1:string}>
+     */
+    private function dataQualityRows(array $data): array
+    {
+        $k = $data['kpis'] ?? [];
+        $platformSpend = array_sum(array_map(fn ($p) => (float) ($p['spend'] ?? 0), $data['platforms'] ?? []));
+        $burners = count(array_filter($data['campaigns'] ?? [], fn ($c) => ($c['spend'] ?? 0) > 3000 && ($c['conversions'] ?? 0) < 2));
+
+        return [
+            ['Platform spend vs summary', abs($platformSpend - (float) ($k['spend'] ?? 0)) < 1 ? 'reconciled' : 'MISMATCH'],
+            ['Campaigns with spend, no conversions', (string) $burners],
+            ['Data source', (string) ($data['data_source'] ?? 'daily_metrics')],
+            ['Attribution window', (string) ($data['attribution_window'] ?? 'default')],
+            ['Report mode', (string) ($data['mode'] ?? 'snapshot')],
+            ['Generated at', (string) ($data['generated_at'] ?? '')],
+        ];
     }
 
     /**
