@@ -24,7 +24,7 @@
 | Empty Pages | 0 (layout gate hard-fails on empty/overflow before export) |
 | Overflow | none (print layout engine gate) |
 | Clipped Elements | none (measureLayout gate) |
-| **Text Search Test (PDFKit)** | PASS — all probe words found |
+| **Text Search Test (PDFKit)** | PASS — all probe words found (headings + ligature/hamza words all found) |
 | **Arabic Copy/Paste Test** | PASS — copied text reads logically: “بيانات تجريبية · Demo” |
 | macOS Preview | ✅ tested — PDFKit (renders + searches; same engine as Preview) |
 | Safari | ✅ covered — Safari PDF uses PDFKit (same result as Preview) |

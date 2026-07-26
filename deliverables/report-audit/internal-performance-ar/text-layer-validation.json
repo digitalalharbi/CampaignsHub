@@ -1,0 +1,33 @@
+{
+  "file": "/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI/deliverables/report-audit/internal-performance-ar/source.pdf",
+  "fonts": 3,
+  "tounicode_streams": 46,
+  "presentation_forms_before": 168,
+  "presentation_forms_remaining": 0,
+  "passes": [
+    {
+      "pass": 1,
+      "presentation_forms_before": 168,
+      "presentation_forms_after": 0,
+      "cmaps_modified": 169,
+      "duration_ms": 11.1
+    },
+    {
+      "pass": 2,
+      "presentation_forms_before": 0,
+      "presentation_forms_after": 0,
+      "cmaps_modified": 0,
+      "duration_ms": 10.5
+    }
+  ],
+  "max_passes": 3,
+  "checks": {
+    "presentation_forms_remaining": true,
+    "tounicode_preserved": true,
+    "page_count_preserved": true,
+    "tagged_structure_preserved": true,
+    "ascii_mappings_preserved": true,
+    "within_pass_budget": true
+  },
+  "status": "passed"
+}

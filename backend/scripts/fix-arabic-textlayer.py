@@ -86,12 +86,17 @@ def remap(data: bytes) -> tuple[bytes, int]:
 
 
 def _iter_tounicode(pdf):
+    # Dedup by objgen — pikepdf hands back a FRESH Python wrapper on each access, so id() is
+    # unstable and would count the same stream a varying number of times (flaky scans). objgen
+    # is the stable (objid, gen) identity for indirect objects; fall back to id() only for the
+    # rare direct object (objid 0).
     seen = set()
     for obj in pdf.objects:
         try:
             if isinstance(obj, pikepdf.Object) and "/ToUnicode" in obj.keys():
                 tu = obj["/ToUnicode"]
-                key = (getattr(tu, "objgen", None) or id(tu))
+                og = tu.objgen
+                key = og if og[0] != 0 else ("id", id(tu))
                 if key in seen:
                     continue
                 seen.add(key)
