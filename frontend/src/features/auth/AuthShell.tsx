@@ -1,14 +1,13 @@
-import { BarChart3, Layers, Megaphone, Moon, ShieldCheck, Sun, Users, Zap } from 'lucide-react'
+import { BarChart3, Layers, Megaphone, Moon, ShieldCheck, Sun } from 'lucide-react'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 
+// Four strong value props — not a wall of look-alike cards.
 const FEATURES = [
   { key: 'auth_feat_unified', icon: Layers },
   { key: 'auth_feat_realtime', icon: BarChart3 },
   { key: 'auth_feat_reports', icon: Megaphone },
-  { key: 'auth_feat_automation', icon: Zap },
   { key: 'auth_feat_isolation', icon: ShieldCheck },
-  { key: 'auth_feat_team', icon: Users },
 ] as const
 
 /** Premium split auth layout shared by login / register / forgot-password (marketing panel + form). */
@@ -58,21 +57,8 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <div className="mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center py-8">{children}</div>
+        <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col justify-center py-8">{children}</div>
       </main>
     </div>
   )
 }
-
-export function AuthField({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-sm font-semibold text-text-secondary">{label}</span>
-      {children}
-      {error && <span className="mt-1 block text-xs text-danger">{error}</span>}
-    </label>
-  )
-}
-
-export const authInputClass =
-  'w-full rounded-xl border border-border bg-surface-secondary px-3.5 py-3 text-base outline-none focus:border-brand-500 focus:bg-surface focus:ring-[3px] focus:ring-brand-500/15'
