@@ -26,3 +26,4 @@ Thumbs.db
 # report PDF audit artifacts (regenerated on demand)
 **/pdf-audit/
 *.pdf
+scripts/__pycache__/

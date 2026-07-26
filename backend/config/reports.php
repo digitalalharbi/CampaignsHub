@@ -28,5 +28,13 @@ return [
         'chromium_path' => env('REPORTS_CHROMIUM_PATH'),
 
         'timeout_ms' => (int) env('REPORTS_PRINT_TIMEOUT_MS', 45000),
+
+        // Post-process step that rewrites the Arabic text layer (ToUnicode) from Chromium's
+        // presentation-form glyphs to canonical base letters, so copy/search/screen-readers get
+        // real joinable Arabic. Visual glyphs are untouched. Best-effort: a failure never blocks
+        // the export (the visual PDF is already correct). Requires python3 + pikepdf.
+        'arabic_textlayer_fix' => env('REPORTS_ARABIC_TEXTLAYER_FIX', true),
+        'python_bin' => env('REPORTS_PYTHON_BIN', 'python3'),
+        'textlayer_script' => base_path('scripts/fix-arabic-textlayer.py'),
     ],
 ];

@@ -68,6 +68,10 @@ try {
     landscape,
     format: 'A4',
     margin: { top: '0', bottom: '0', left: '0', right: '0' },
+    // Tagged/accessible PDF → logical reading order in the text layer (searchable/copyable Arabic,
+    // screen-reader friendly) + a document outline. Addresses the RTL text-layer, not just visuals.
+    tagged: true,
+    outline: true,
   })
   process.stdout.write(JSON.stringify({ ok: true, out, pages: layout.length, layout }))
   await browser.close()

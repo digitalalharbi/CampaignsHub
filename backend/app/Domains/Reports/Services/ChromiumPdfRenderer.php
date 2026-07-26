@@ -63,10 +63,45 @@ final class ChromiumPdfRenderer
             throw new RuntimeException('Chromium PDF render failed: '.Str::limit($err, 500));
         }
 
+        $this->normalizeArabicTextLayer($out);
+
         $bytes = (string) file_get_contents($out);
         @unlink($out);
 
         return $bytes;
+    }
+
+    /**
+     * Rewrite the Arabic text layer (ToUnicode) in place so copy/search/AT get base letters
+     * instead of Chromium's presentation-form glyphs. Best-effort: any failure is swallowed —
+     * the already-correct visual PDF ships regardless.
+     */
+    private function normalizeArabicTextLayer(string $path): void
+    {
+        if (! config('reports.chromium.arabic_textlayer_fix', true)) {
+            return;
+        }
+        $script = (string) config('reports.chromium.textlayer_script');
+        if ($script === '' || ! is_file($script)) {
+            return;
+        }
+        try {
+            $proc = new Process(
+                [(string) config('reports.chromium.python_bin', 'python3'), $script, $path],
+                base_path(),
+                null,
+                null,
+                60,
+            );
+            $proc->run();
+            if (! $proc->isSuccessful()) {
+                logger()->warning('Arabic text-layer normalization skipped', [
+                    'error' => Str::limit(trim($proc->getErrorOutput()), 300),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            logger()->warning('Arabic text-layer normalization threw', ['error' => $e->getMessage()]);
+        }
     }
 
     /** Call the internal print-token endpoint so the token is minted through the same gated flow. */

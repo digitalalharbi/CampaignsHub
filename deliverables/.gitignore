@@ -1,0 +1,4 @@
+# Delivered PDFs and rasters are large binaries — kept on disk for review, not committed.
+# The per-file audit.md reports ARE tracked.
+**/source.pdf
+**/*.png
