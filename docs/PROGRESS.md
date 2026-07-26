@@ -236,3 +236,39 @@ Route `/projects/{project}/campaigns/{campaign}` · isolation keys
 ### CMC batches remaining
 CMC-2 (KPIs + exec summary) · CMC-4 (per-campaign APIs) · CMC-5…14 (Overview timeline, Performance,
 Platforms, Creatives, Budget, Funnel, Notes & Recommendations, Alerts, Reports, Activity).
+
+## Campaign Command Center — COMPLETE ✅ (2026-07-27)
+
+All 10 tabs live on real, project+campaign-scoped APIs (fail-closed 404 cross-project), keyed
+`['projects', projectId, 'campaigns', campaignId, section, filters]`, with Loading/Empty/Error
+states and no placeholders/static data:
+
+| Tab | Backend | Batch |
+|---|---|---|
+| Overview + Timeline | summary + activity (audit log) | CMC-2/5 |
+| Performance | performance (timeseries) | CMC-6 |
+| Platforms | platforms (per-provider) + linked externals | CMC-7 |
+| Creatives | creatives (external_creatives + creative_daily_metrics), ranked by objective | CMC-8 |
+| Budget | budget pacing + change history | CMC-9 |
+| Funnel | funnel (objective-aware) | CMC-10 |
+| Notes & Recommendations | campaign_annotations (Draft→Approved workflow, reports.approve gate) | CMC-11 |
+| Alerts | app_notifications filtered to campaign entity | CMC-12 |
+| Reports | reports.campaign_id link + real export tokens | CMC-13 |
+| Activity | audit-log timeline | CMC-14 |
+
+- Per-campaign metrics reuse `MetricsAggregator::forCampaign()` (identical KPI derivation as
+  project analytics). Backend `CampaignMetricsTest` = 8 isolation/workflow/ranking tests.
+- Creatives ranked by campaign OBJECTIVE with explainable reason + classification; thumbnails
+  NEVER fabricated (UI shows "preview unavailable"). `DemoCreativesSeeder` deterministic, is_demo.
+- `migrate:fresh --seed` now yields a complete demo (18 campaigns / 5 reports / 60 creatives /
+  10.8k metrics) via `DatabaseSeeder` → Demo/Analytics/Reports/Creatives seeders.
+
+Gates: backend **156 tests** + pint/phpstan clean + migrate:fresh --seed clean; frontend
+tsc/lint/**vitest 18**/build; e2e report-pdf-download + campaigns + campaigns-linking green;
+CMC-2/6/8/9/11 live-verified with screenshots.
+
+### Next (per directive, autonomous)
+Merge feat/premium-ui → feat/alerts → complete Alerts → **Objective-Based Report Engine**
+(ReportObjectiveController / ReportTemplateResolver / per-objective + per-platform strategies) →
+Connectors + Creative Sync (real data, "Awaiting Credentials" where no keys) → Scheduled Reports
+→ Tasks → Connection Center → Jobs/Horizon → MCP → PWA → Production.
