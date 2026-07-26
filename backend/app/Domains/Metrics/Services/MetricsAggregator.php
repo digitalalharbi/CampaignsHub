@@ -25,12 +25,33 @@ final class MetricsAggregator
         'revenue' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'revenue'), 0)",
     ];
 
+    /** When set, every aggregation is scoped to this single unified campaign (command center). */
+    private ?string $campaignId = null;
+
+    /**
+     * Return a campaign-scoped copy of the aggregator — every subsequent totals/byProvider/timeseries/
+     * funnel/budget call is filtered to this campaign's metrics (on top of the project/tenant scope).
+     * A clone keeps the shared singleton stateless.
+     */
+    public function forCampaign(?string $campaignId): self
+    {
+        $clone = clone $this;
+        $clone->campaignId = $campaignId;
+
+        return $clone;
+    }
+
     private function base(Carbon $from, Carbon $to): Builder
     {
         // Reuse the model's project/tenant scope, then drop to the query builder for aggregation.
-        return DailyMetric::query()
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-            ->toBase();
+        $query = DailyMetric::query()
+            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+
+        if ($this->campaignId !== null) {
+            $query->where('unified_campaign_id', $this->campaignId);
+        }
+
+        return $query->toBase();
     }
 
     /** @return array<string, float> base sums + derived KPIs for the period. */

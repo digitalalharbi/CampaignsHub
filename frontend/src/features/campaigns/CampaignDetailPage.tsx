@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowRight, Archive, Link2, Pause, Pencil, Play, Unlink } from 'lucide-react'
@@ -28,6 +28,9 @@ import {
   stageTone,
 } from './labels'
 import { isDemoProvider } from './types'
+import { CampaignExecutiveSummary, CampaignKpis, CampaignPerformanceTab } from './CampaignCommandCenter'
+import { useLastNDaysRange } from '@/features/analytics/hooks'
+import { RangeTabs } from '@/features/analytics/components'
 import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -61,6 +64,8 @@ export function CampaignDetailPage() {
   const queryClient = useQueryClient()
   const { projectId = '', campaignId = '' } = useParams()
   const [sp, setSp] = useSearchParams()
+  const [days, setDays] = useState(30)
+  const range = useLastNDaysRange(days)
 
   const { currentProjectId, setCurrentProjectId } = useProject()
 
@@ -247,6 +252,16 @@ export function CampaignDetailPage() {
 
       {tab === 'overview' && (
         <TabPanel>
+          {/* CMC-2 — KPIs + executive summary (this campaign only). */}
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <CardTitle>{t('cmc_performance')}</CardTitle>
+            <RangeTabs value={days} onChange={setDays} />
+          </div>
+          <CampaignKpis campaign={c} projectId={projectId} range={range} />
+          <div className="my-4">
+            <CardTitle>الملخص التنفيذي</CardTitle>
+            <div className="mt-2"><CampaignExecutiveSummary campaign={c} projectId={projectId} range={range} locale={locale} /></div>
+          </div>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
               <CardTitle>{t('tab_overview')}</CardTitle>
@@ -307,8 +322,15 @@ export function CampaignDetailPage() {
         </TabPanel>
       )}
 
+      {tab === 'performance' && (
+        <TabPanel>
+          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
+          <CampaignPerformanceTab campaign={c} projectId={projectId} range={range} locale={locale} />
+        </TabPanel>
+      )}
+
       {/* Sections wired to their real backends in the following CMC batches. */}
-      {(['performance', 'creatives', 'budget', 'funnel', 'notes', 'alerts', 'reports', 'activity'] as TabKey[]).includes(tab) && (
+      {(['creatives', 'budget', 'funnel', 'notes', 'alerts', 'reports', 'activity'] as TabKey[]).includes(tab) && (
         <TabPanel>
           <EmptyState title={t(`tab_${tab}` as never)} description={t('cmc_section_building')} />
         </TabPanel>
