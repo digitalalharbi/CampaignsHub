@@ -48,3 +48,46 @@ export function useCampaignActivity(projectId: string | null, campaignId: string
     enabled: Boolean(projectId && campaignId),
   })
 }
+
+export interface CampaignAlert {
+  id: string
+  type: string
+  severity: string
+  title: string
+  message: string | null
+  source: string | null
+  status: string
+  action_url: string | null
+  created_at: string | null
+}
+
+/** Campaign alerts (from the shared notification store, filtered to this campaign). */
+export function useCampaignAlerts(projectId: string | null, campaignId: string | null, status = '') {
+  return useQuery({
+    queryKey: ['projects', projectId, 'campaigns', campaignId, 'alerts', status],
+    queryFn: () => getData<CampaignAlert[]>(`${base(projectId!, campaignId!)}/alerts${status ? `?status=${status}` : ''}`),
+    enabled: Boolean(projectId && campaignId),
+  })
+}
+
+export interface CampaignReport {
+  id: string
+  name: string
+  type: string
+  audience: string | null
+  status: string
+  mode: string | null
+  is_demo: boolean
+  generated_at: string | null
+  last_sent_at: string | null
+  exports: Array<{ format: string; status: string; token: string | null }>
+}
+
+/** Reports linked to this campaign (same report pipeline, filtered). */
+export function useCampaignReports(projectId: string | null, campaignId: string | null) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'campaigns', campaignId, 'reports'],
+    queryFn: () => getData<CampaignReport[]>(`${base(projectId!, campaignId!)}/reports`),
+    enabled: Boolean(projectId && campaignId),
+  })
+}

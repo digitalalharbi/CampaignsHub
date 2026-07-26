@@ -1,11 +1,13 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { TrendingDown, TrendingUp } from 'lucide-react'
 import type { UnifiedCampaign } from './types'
 import {
   useCampaignActivity,
+  useCampaignAlerts,
   useCampaignFunnel,
   useCampaignPerformance,
   useCampaignPlatforms,
+  useCampaignReports,
   useCampaignSummary,
 } from './metrics'
 import type { MetricTotals, PlatformRow, Range, TimePoint } from '@/features/analytics/api'
@@ -430,5 +432,83 @@ function MiniStat({ label, value }: { label: string; value: string }) {
       <div className="text-[10px] uppercase text-text-muted">{label}</div>
       <div className="tnum text-sm font-bold text-text-primary">{value}</div>
     </div>
+  )
+}
+
+/** CMC-12 — Campaign alerts (from the shared notification store, filtered to this campaign). */
+export function CampaignAlertsTab({ campaign, projectId }: { campaign: UnifiedCampaign; projectId: string }) {
+  const [status, setStatus] = useState('')
+  const alerts = useCampaignAlerts(projectId, campaign.id, status)
+  const rows = alerts.data ?? []
+
+  const sevTone: Record<string, string> = {
+    critical: 'border-danger/40 bg-danger/5 text-danger', warning: 'border-warning/40 bg-warning/5 text-warning',
+    success: 'border-success/40 bg-success/5 text-success', info: 'border-border bg-surface text-text-secondary',
+  }
+  const FILTERS = [['', 'الكل'], ['unread', 'نشطة'], ['resolved', 'محلولة'], ['snoozed', 'مؤجّلة']] as const
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-1.5">
+        {FILTERS.map(([v, label]) => (
+          <button key={v} onClick={() => setStatus(v)} className={`rounded-lg px-3 py-1 text-xs font-semibold ${status === v ? 'bg-brand-600 text-white' : 'border border-border text-text-secondary hover:bg-surface-hover'}`}>{label}</button>
+        ))}
+      </div>
+      {alerts.isLoading ? <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
+        : alerts.isError ? <ErrorState title="تعذّر تحميل التنبيهات" onRetry={() => alerts.refetch()} />
+        : rows.length === 0 ? <EmptyState title="لا تنبيهات" description="لا توجد تنبيهات لهذه الحملة ضمن هذا الفلتر." />
+        : (
+          <ul className="space-y-2">
+            {rows.map((a) => (
+              <li key={a.id} className={`rounded-xl border p-3 ${sevTone[a.severity] ?? sevTone.info}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-bold">{a.title}</span>
+                  <span className="text-[11px] opacity-70">{a.created_at ? new Date(a.created_at).toLocaleString('en-GB') : ''}</span>
+                </div>
+                {a.message && <p className="mt-0.5 text-xs opacity-90">{a.message}</p>}
+                <div className="mt-1 flex items-center gap-2 text-[11px] opacity-70"><span>{a.severity}</span>{a.source && <><span>·</span><span>{a.source}</span></>}<span>·</span><span>{a.status}</span></div>
+              </li>
+            ))}
+          </ul>
+        )}
+    </div>
+  )
+}
+
+/** CMC-13 — Reports linked to this campaign (reuses the real report pipeline). */
+export function CampaignReportsTab({ campaign, projectId }: { campaign: UnifiedCampaign; projectId: string }) {
+  const reports = useCampaignReports(projectId, campaign.id)
+  const rows = reports.data ?? []
+
+  if (reports.isLoading) return <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
+  if (reports.isError) return <ErrorState title="تعذّر تحميل التقارير" onRetry={() => reports.refetch()} />
+  if (rows.length === 0) return <EmptyState title="لا تقارير" description="لا تقارير مرتبطة بهذه الحملة بعد. أنشئ تقريرًا من صفحة التقارير واربطه بالحملة." />
+
+  const statusTone: Record<string, string> = { completed: 'text-success', processing: 'text-warning', failed: 'text-danger', draft: 'text-text-muted' }
+  return (
+    <ul className="space-y-2">
+      {rows.map((r) => (
+        <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface p-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-sm font-bold text-text-primary">{r.name}</span>
+              <span className="rounded bg-surface-secondary px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">{r.type}</span>
+              {r.audience && <span className="rounded bg-surface-secondary px-1.5 py-0.5 text-[10px] text-text-muted">{r.audience}</span>}
+              {r.is_demo && <span className="rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">Demo</span>}
+            </div>
+            <div className="mt-0.5 flex items-center gap-2 text-[11px] text-text-muted">
+              <span className={statusTone[r.status] ?? ''}>{r.status}</span>
+              <span>· {r.mode === 'live' ? 'Live' : 'Snapshot'}</span>
+              {r.last_sent_at && <span>· أُرسل {new Date(r.last_sent_at).toLocaleDateString('en-GB')}</span>}
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {r.exports.filter((e) => e.status === 'completed' && e.token).map((e) => (
+              <a key={e.format} href={`/api/v1/reports/download/${e.token}`} className="rounded-lg border border-border px-2 py-1 text-xs font-semibold text-text-secondary hover:bg-surface-hover">{e.format.toUpperCase()}</a>
+            ))}
+          </div>
+        </li>
+      ))}
+    </ul>
   )
 }

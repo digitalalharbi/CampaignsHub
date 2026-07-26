@@ -11,7 +11,9 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
+use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Models\Report;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -134,5 +136,41 @@ final class CampaignMetricsTest extends TestCase
 
         // Cross-project campaign id → 404 (never another project's timeline).
         $this->actingAs($this->owner)->getJson($this->url($this->projectB, $this->campA1->id, 'activity'))->assertNotFound();
+    }
+
+    public function test_alerts_are_scoped_to_the_campaign(): void
+    {
+        AppNotification::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id, 'user_id' => $this->owner->id,
+            'type' => 'alert', 'severity' => 'critical', 'title' => 'CPA high',
+            'entity_type' => UnifiedCampaign::class, 'entity_id' => (string) $this->campA1->id, 'status' => 'unread',
+        ]);
+        AppNotification::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id, 'user_id' => $this->owner->id,
+            'type' => 'alert', 'severity' => 'info', 'title' => 'Other',
+            'entity_type' => UnifiedCampaign::class, 'entity_id' => (string) $this->campA2->id, 'status' => 'unread',
+        ]);
+
+        $a1 = $this->actingAs($this->owner)->getJson($this->url($this->projectA, $this->campA1->id, 'alerts'))->assertOk()->json('data');
+        $this->assertCount(1, $a1);
+        $this->assertSame('CPA high', $a1[0]['title']);
+        $this->actingAs($this->owner)->getJson($this->url($this->projectB, $this->campA1->id, 'alerts'))->assertNotFound();
+    }
+
+    public function test_reports_are_scoped_to_the_campaign(): void
+    {
+        Report::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id, 'campaign_id' => (string) $this->campA1->id,
+            'name' => 'Campaign monthly', 'type' => 'monthly', 'status' => 'completed', 'currency' => 'SAR', 'audience' => 'client',
+        ]);
+        Report::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id, 'campaign_id' => (string) $this->campA2->id,
+            'name' => 'Other campaign', 'type' => 'monthly', 'status' => 'completed', 'currency' => 'SAR', 'audience' => 'client',
+        ]);
+
+        $r1 = $this->actingAs($this->owner)->getJson($this->url($this->projectA, $this->campA1->id, 'reports'))->assertOk()->json('data');
+        $this->assertCount(1, $r1);
+        $this->assertSame('Campaign monthly', $r1[0]['name']);
+        $this->actingAs($this->owner)->getJson($this->url($this->projectB, $this->campA1->id, 'reports'))->assertNotFound();
     }
 }

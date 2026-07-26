@@ -29,12 +29,14 @@ import {
 import { isDemoProvider } from './types'
 import {
   CampaignActivityTab,
+  CampaignAlertsTab,
   CampaignBudgetTab,
   CampaignExecutiveSummary,
   CampaignFunnelTab,
   CampaignKpis,
   CampaignPerformanceTab,
   CampaignPlatformsTab,
+  CampaignReportsTab,
 } from './CampaignCommandCenter'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { RangeTabs } from '@/features/analytics/components'
@@ -339,11 +341,26 @@ export function CampaignDetailPage() {
           <CampaignActivityTab campaign={c} projectId={projectId} />
         </TabPanel>
       )}
-
-      {/* Sections wired to their real backends in the following CMC batches. */}
-      {(['creatives', 'notes', 'alerts', 'reports'] as TabKey[]).includes(tab) && (
+      {tab === 'alerts' && (
         <TabPanel>
-          <EmptyState title={t(`tab_${tab}` as never)} description={t('cmc_section_building')} />
+          <CampaignAlertsTab campaign={c} projectId={projectId} />
+        </TabPanel>
+      )}
+      {tab === 'reports' && (
+        <TabPanel>
+          <CampaignReportsTab campaign={c} projectId={projectId} />
+        </TabPanel>
+      )}
+
+      {/* Creatives (CMC-8) needs a real creative data layer (external_creatives + sync) — next batch. */}
+      {tab === 'creatives' && (
+        <TabPanel>
+          <EmptyState title={t('tab_creatives')} description={t('cmc_section_building')} />
+        </TabPanel>
+      )}
+      {tab === 'notes' && (
+        <TabPanel>
+          <EmptyState title={t('tab_notes')} description={t('cmc_section_building')} />
         </TabPanel>
       )}
 
