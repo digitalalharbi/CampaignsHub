@@ -13,6 +13,13 @@ export function money(n: number | null | undefined, currency = 'SAR'): string {
   return `${compact(n)} ${currency}`
 }
 
+/** Exact money with thousands separators (e.g. "96,122 SAR") — used so the precise figure is always
+ * present (and PDF-extractable) alongside the compact display value. */
+export function moneyExact(n: number | null | undefined, currency = 'SAR'): string {
+  if (n === null || n === undefined) return '—'
+  return `${num(n)} ${currency}`
+}
+
 export function num(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—'
   return new Intl.NumberFormat('en-US').format(Math.round(n))

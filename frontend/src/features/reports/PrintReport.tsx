@@ -144,11 +144,17 @@ function fitSlides() {
     const footer = el.querySelector<HTMLElement>('.report-slide-footer')
     const avail = el.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0) - (footer ? footer.offsetHeight + 8 : 0)
     inner.style.transform = ''
+    delete inner.dataset.fitScale
     const needed = inner.scrollHeight
     if (needed > avail + 2) {
-      const scale = Math.max(0.82, avail / needed)
+      const ideal = avail / needed
+      // Readable floor: never shrink below 0.85. If the content would need more than that, it is NOT
+      // silently crammed — we cap the scale and the layout gate flags "scaledBelowReadableLimit" so the
+      // content gets split / trimmed to an Appendix instead.
+      const scale = Math.max(0.85, ideal)
       inner.style.transformOrigin = 'top center'
       inner.style.transform = `scale(${scale})`
+      inner.dataset.fitScale = String(Math.round((ideal < 0.85 ? ideal : scale) * 1000) / 1000)
     }
   })
 }
@@ -225,13 +231,30 @@ function measureLayout() {
     const overflow = innerRect.bottom > bottom + 4
     const overflowX = el.scrollWidth > el.clientWidth + 2
     const footerCoverage = fr ? Math.round(((fr.height) / pr.height) * 100) / 100 : 0
-    // "empty" only for non-cover pages with almost no real content.
     const empty = !isCover && !isTextPage && contentUtilization < 0.1
     const sparse = !isCover && !isTextPage && largestEmptyRegion > 0.42
+
+    // Fit / clipping integrity — overflow:hidden must never HIDE important content.
+    const fitScale = scope.dataset.fitScale ? parseFloat(scope.dataset.fitScale) : 1
+    const scaledBelowReadableLimit = fitScale < 0.85
+    // Count real content elements whose painted box escapes the page content box (would be clipped).
+    let clipped = 0
+    scope.querySelectorAll<HTMLElement>('*').forEach((n) => {
+      const s2 = getComputedStyle(n)
+      if (s2.position === 'absolute' || s2.position === 'fixed' || s2.visibility === 'hidden' || s2.display === 'none') return
+      const tag = n.tagName.toLowerCase()
+      const isChart = n.classList.contains('recharts-surface') || tag === 'svg' || tag === 'canvas' || tag === 'img'
+      const hasText = Array.from(n.childNodes).some((c) => c.nodeType === 3 && (c.textContent ?? '').trim().length > 0)
+      if (!isChart && !hasText) return
+      const r = n.getBoundingClientRect()
+      if (r.width < 3 || r.height < 3) return
+      if (r.bottom > bottom + 6 || r.top < top - 6 || r.right > right + 6 || r.left < left - 6) clipped++
+    })
 
     pages.push({
       page: i + 1, isCover, contentUtilization, chartCoverage, textDensity, largestEmptyRegion,
       footerCoverage, overflow, overflowX, empty, sparse, footerDetected: !!footer || isCover,
+      fitScale, scaledBelowReadableLimit, clippedElements: clipped,
     })
   })
   return pages

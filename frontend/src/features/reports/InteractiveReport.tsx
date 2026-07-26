@@ -11,7 +11,7 @@ import {
   SpendRevenueAreaChart,
 } from '@/features/analytics/charts'
 import { platformColor } from '@/features/analytics/components'
-import { compact, money, num, percent, ratio } from '@/features/analytics/format'
+import { compact, money, moneyExact, num, percent, ratio } from '@/features/analytics/format'
 import { TrendPill } from '@/features/analytics/components'
 import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import type { ResolvedDisclaimer } from '@/features/disclaimers/api'
@@ -123,7 +123,7 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
 
 function Title({ platform, children, sub }: { platform?: string; children: React.ReactNode; sub?: string }) {
   return (
-    <div className="mb-5">
+    <div className="mb-3">
       <div className="flex items-center gap-2">
         {platform && <span className="h-3.5 w-3.5 rounded-full" style={{ background: platformColor(platform) }} />}
         <h2 className="text-2xl font-extrabold tracking-tight text-text-primary">{children}</h2>
@@ -133,15 +133,17 @@ function Title({ platform, children, sub }: { platform?: string; children: React
   )
 }
 
-function Kpi({ label, value, delta, invert, spark, accent }: { label: string; value: string; delta?: number | null; invert?: boolean; spark?: number[]; accent?: string }) {
+function Kpi({ label, value, exact, delta, invert, spark, accent }: { label: string; value: string; exact?: string; delta?: number | null; invert?: boolean; spark?: number[]; accent?: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-surface-secondary p-3.5">
+    <div className="rounded-2xl border border-border bg-surface-secondary p-3">
       <div className="flex items-center justify-between">
         <span className="text-sm text-text-secondary">{label}</span>
         {delta !== undefined && <TrendPill delta={delta} invertGood={invert} />}
       </div>
-      <div className="tnum mt-1 text-[26px] font-extrabold leading-none tracking-tight text-text-primary">{value}</div>
-      {spark && spark.length > 1 && <div className="mt-2"><KpiSparkline points={spark} color={accent} /></div>}
+      <div className="tnum mt-1 text-[24px] font-extrabold leading-none tracking-tight text-text-primary">{value}</div>
+      {/* Exact value under the (possibly compact) headline, so the precise figure is always in the PDF. */}
+      {exact && exact !== value && <div className="tnum mt-0.5 text-[11px] text-text-muted" data-exact>{exact}</div>}
+      {spark && spark.length > 1 && <div className="mt-1"><KpiSparkline points={spark} color={accent} height={22} /></div>}
     </div>
   )
 }
@@ -227,7 +229,7 @@ function RecommendationsSlide({ data }: { data: ReportData }) {
           </section>
         </div>
       )}
-      {data.disclaimer && <div className="mt-5"><PerformanceNotice data={data.disclaimer} variant="full" objective={data.objective} /></div>}
+      {data.disclaimer && <div className="mt-3"><PerformanceNotice data={data.disclaimer} variant="footer" /></div>}
     </div>
   )
 }
@@ -248,9 +250,16 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
         <Kpi label="CPA" value={money(k.cpa, data.currency)} delta={d.cpa} invert spark={seriesOf(data.timeseries, 'cpa')} accent="var(--purple)" />
         <Kpi label="CTR" value={percent(k.ctr, 2)} delta={d.ctr} spark={seriesOf(data.timeseries, 'ctr')} accent="var(--teal)" />
       </div>
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <ChartCard title="الإنفاق مقابل الإيرادات" subtitle="الاتجاه اليومي" className="lg:col-span-2"><SpendRevenueAreaChart data={data.timeseries} currency={data.currency} /></ChartCard>
-        <ChartCard title="توزيع الإنفاق" subtitle="حسب المنصة"><PlatformDonutChart data={donut} centerLabel="إجمالي الإنفاق" centerValue={compact(totalSpend)} currency={data.currency} /></ChartCard>
+      {/* Exact figures (compact strip) so precise values are always in the report + PDF-extractable. */}
+      <div className="tnum mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-muted" data-exact>
+        <span>الإنفاق {moneyExact(k.spend, data.currency)}</span>
+        <span>الإيرادات {moneyExact(k.revenue, data.currency)}</span>
+        <span>النتائج {num(k.conversions)}</span>
+        <span>CPA {moneyExact(k.cpa, data.currency)}</span>
+      </div>
+      <div className="mt-3 grid gap-3 lg:grid-cols-3">
+        <ChartCard title="الإنفاق مقابل الإيرادات" subtitle="الاتجاه اليومي" className="lg:col-span-2"><SpendRevenueAreaChart data={data.timeseries} currency={data.currency} height={200} /></ChartCard>
+        <ChartCard title="توزيع الإنفاق" subtitle="حسب المنصة"><PlatformDonutChart data={donut} centerLabel="إجمالي الإنفاق" centerValue={compact(totalSpend)} currency={data.currency} height={200} /></ChartCard>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         <Highlight label="أفضل منصة (ROAS)" value={data.best?.platform_by_roas ?? '—'} />
@@ -283,17 +292,17 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
   return (
     <div>
       <Title platform={platform} sub={`أداء ${platform} خلال الفترة`}>أداء {platform}</Title>
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {kpis.map(([l, v, c]) => <Kpi key={l} label={l} value={v} spark={seriesOf(series, l === 'ROAS' ? 'roas' : l === 'الإنفاق' ? 'spend' : l === 'الإيرادات' ? 'revenue' : l === 'النتائج' ? 'conversions' : l === 'CPA' ? 'cpa' : 'ctr')} accent={c} />)}
       </div>
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
         <ChartCard title="الأداء بمرور الوقت" subtitle="الإنفاق والإيرادات والنتائج">
-          <MetricLineChart data={series} currency={data.currency} series={[{ key: 'spend', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' }, { key: 'revenue', name: 'الإيرادات', color: 'var(--info)', kind: 'money' }, { key: 'conversions', name: 'النتائج', color: 'var(--purple)', kind: 'num' }]} height={240} />
+          <MetricLineChart data={series} currency={data.currency} series={[{ key: 'spend', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' }, { key: 'revenue', name: 'الإيرادات', color: 'var(--info)', kind: 'money' }, { key: 'conversions', name: 'النتائج', color: 'var(--purple)', kind: 'num' }]} height={155} />
         </ChartCard>
         <ChartCard title="أفضل الحملات" subtitle={campaigns.length >= 3 ? 'حسب الإنفاق' : 'أبرز الحملات'}>
           {/* Adaptive: a bar chart needs ≥3 bars to read well; otherwise ranking cards, not lonely bars. */}
           {campaigns.length >= 3
-            ? <RankingBarChart data={campaigns} bars={[{ key: 'spend', name: 'الإنفاق', kind: 'money' }]} horizontal height={240} colorByPlatform />
+            ? <RankingBarChart data={campaigns} bars={[{ key: 'spend', name: 'الإنفاق', kind: 'money' }]} horizontal height={155} colorByPlatform />
             : campaigns.length >= 1
               ? <CampaignRankingFallback data={data} platform={platform} campaigns={campaigns} />
               : <p className="py-10 text-center text-sm text-text-muted">لا حملات مرتبطة بهذه المنصة.</p>}
@@ -310,11 +319,11 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
 function PlatformInsights({ data, platform }: { data: ReportData; platform: string }) {
   const creative = (data.top_creatives ?? []).find((c) => c.provider === platform)
   const notes = data.platform_notes?.[platform]
-  const recs = (data.recommendations ?? []).filter((r) => r.platform === platform).slice(0, 2)
+  const recs = (data.recommendations ?? []).filter((r) => r.platform === platform).slice(0, 1)
   return (
-    <div className="mt-4 grid gap-3 lg:grid-cols-3">
-      <div className="rounded-2xl border border-border bg-surface-secondary p-3.5">
-        <h4 className="mb-2 text-sm font-bold text-text-primary">أفضل محتوى</h4>
+    <div className="mt-2.5 grid gap-2.5 lg:grid-cols-3">
+      <div className="rounded-2xl border border-border bg-surface-secondary p-3">
+        <h4 className="mb-1.5 text-sm font-bold text-text-primary">أفضل محتوى</h4>
         {creative ? (
           <div>
             <div className="truncate font-semibold text-text-primary" title={String(creative.campaign_name ?? '')}>{String(creative.campaign_name ?? '—')}</div>
@@ -329,8 +338,8 @@ function PlatformInsights({ data, platform }: { data: ReportData; platform: stri
       <div className="rounded-2xl border border-border bg-surface-secondary p-3.5">
         <h4 className="mb-2 text-sm font-bold text-text-primary">ملاحظات</h4>
         <ul className="space-y-1 text-xs">
-          {(notes?.strengths ?? []).slice(0, 2).map((s, i) => <li key={`s${i}`} className="flex gap-1.5"><CircleCheck size={13} className="mt-0.5 shrink-0 text-success" />{s}</li>)}
-          {(notes?.weaknesses ?? []).slice(0, 2).map((w, i) => <li key={`w${i}`} className="flex gap-1.5"><TriangleAlert size={13} className="mt-0.5 shrink-0 text-warning" />{w}</li>)}
+          {(notes?.strengths ?? []).slice(0, 1).map((s, i) => <li key={`s${i}`} className="flex gap-1.5"><CircleCheck size={13} className="mt-0.5 shrink-0 text-success" />{s}</li>)}
+          {(notes?.weaknesses ?? []).slice(0, 1).map((w, i) => <li key={`w${i}`} className="flex gap-1.5"><TriangleAlert size={13} className="mt-0.5 shrink-0 text-warning" />{w}</li>)}
           {(notes?.strengths?.length ?? 0) === 0 && (notes?.weaknesses?.length ?? 0) === 0 && <li className="text-text-muted">—</li>}
         </ul>
       </div>
@@ -503,7 +512,7 @@ function FunnelSlide({ data }: { data: ReportData }) {
 }
 
 function BudgetSlide({ data }: { data: ReportData }) {
-  const rows = (data.budget ?? []).slice(0, 8)
+  const rows = (data.budget ?? []).slice(0, 5)
   const totalBudget = rows.reduce((a, b) => a + Number(b.budget ?? 0), 0)
   const totalSpent = rows.reduce((a, b) => a + Number(b.spent ?? 0), 0)
   const consumed = totalBudget > 0 ? totalSpent / totalBudget : 0
@@ -511,12 +520,12 @@ function BudgetSlide({ data }: { data: ReportData }) {
   return (
     <div>
       <Title sub="المخطط مقابل المصروف وسرعة الصرف">تحليل الميزانية</Title>
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-3 lg:grid-cols-3">
         <ChartCard title="استهلاك الميزانية" className="flex items-center justify-center">
-          <ProgressRing value={consumed} sublabel={`${compact(totalSpent)} / ${compact(totalBudget)}`} size={150} tone={consumed > 0.95 ? 'danger' : consumed > 0.8 ? 'warning' : 'brand'} />
+          <ProgressRing value={consumed} sublabel={`${compact(totalSpent)} / ${compact(totalBudget)}`} size={128} tone={consumed > 0.95 ? 'danger' : consumed > 0.8 ? 'warning' : 'brand'} />
         </ChartCard>
         <ChartCard title="المخطط مقابل المصروف" className="lg:col-span-2">
-          <RankingBarChart data={bars} bars={[{ key: 'budget', name: 'الميزانية', color: 'var(--border-strong)', kind: 'money' }, { key: 'spent', name: 'المصروف', color: 'var(--brand-600)', kind: 'money' }]} horizontal height={220} currency={data.currency} />
+          <RankingBarChart data={bars} bars={[{ key: 'budget', name: 'الميزانية', color: 'var(--border-strong)', kind: 'money' }, { key: 'spent', name: 'المصروف', color: 'var(--brand-600)', kind: 'money' }]} horizontal height={170} currency={data.currency} />
         </ChartCard>
       </div>
       {rows.length > 0 && (

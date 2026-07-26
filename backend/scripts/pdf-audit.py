@@ -76,20 +76,29 @@ def main():
         mul = {"K": 1e3, "M": 1e6, "B": 1e9}[unit]
         compact_nums.add(round(float(num) * mul, 2))
 
-    def present(value):
+    def exact_present(value):
+        """The EXACT snapshot value must appear in the PDF (not only a rounded/compact form)."""
         if value is None:
             return True
-        v = round(float(value), 2)
-        if any(approx(v, n) for n in all_nums):
-            return True
-        # Compact display legitimately rounds (96121 → "96K"); accept within compact rounding error.
-        if any(approx(v, n, 0.02) for n in compact_nums):
-            return True
-        return False
+        return any(approx(round(float(value), 2), n) for n in all_nums)
 
+    def compact_present(value):
+        if value is None:
+            return True
+        return any(approx(round(float(value), 2), n, 0.02) for n in compact_nums)
+
+    # Big money totals may show COMPACT in the headline but MUST also appear EXACT somewhere (card
+    # subtitle / appendix). Ratios/counts are shown exact already. Rounding must not hide a real diff.
     for key in ("spend", "revenue", "conversions", "roas", "cpa"):
         val = expected.get("kpis", {}).get(key)
-        if val is not None and not present(val):
+        if val is None:
+            continue
+        if exact_present(val):
+            continue
+        if compact_present(val):
+            diffs.append({"field": f"kpi.{key}", "expected": val,
+                          "reason": "only a compact/rounded form found; exact value missing from PDF"})
+        else:
             diffs.append({"field": f"kpi.{key}", "expected": val, "reason": "value not found in PDF text"})
 
     consistency = {
@@ -103,6 +112,9 @@ def main():
     json.dump(consistency, open(os.path.join(out_dir, "data-consistency.json"), "w"), ensure_ascii=False, indent=2)
     if layout:
         json.dump(layout, open(os.path.join(out_dir, "layout-report.json"), "w"), ensure_ascii=False, indent=2)
+    # Raw extracted text + PDF metadata, so the audit is inspectable/reproducible.
+    open(os.path.join(out_dir, "pdf-text.txt"), "w").write(full_text)
+    json.dump(dict(pdf.metadata or {}), open(os.path.join(out_dir, "pdf-metadata.json"), "w"), ensure_ascii=False, indent=2)
 
     # 3) Rasterise pages + contact sheet.
     page_imgs = []
