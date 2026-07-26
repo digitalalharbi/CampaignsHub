@@ -8,6 +8,7 @@ import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { LeadsPage } from '@/features/crm/LeadsPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
+import { SettingsPage } from '@/features/settings/SettingsPage'
 import { PublicReport } from '@/features/reports/PublicReport'
 import { DesignSystemPage } from '@/features/design/DesignSystemPage'
 import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
@@ -48,7 +49,7 @@ export const router = createBrowserRouter([
           { path: 'optimization', element: <PagePlaceholder title="Optimization" /> },
           { path: 'tasks', element: <PagePlaceholder title="Tasks" /> },
           { path: 'notifications', element: <PagePlaceholder title="Notifications" /> },
-          { path: 'settings', element: <PagePlaceholder title="Settings" /> },
+          { path: 'settings', element: <SettingsPage /> },
           // Sales CRM (behind sales_crm_enabled; routes always exist, nav is gated).
           { path: 'leads', element: <LeadsPage /> },
           { path: 'opportunities', element: <PagePlaceholder title="Opportunities" /> },
