@@ -190,3 +190,8 @@ _(append newest first: date — what — command — result)_
   RTL/LTR+dark, 320px-safe) wired into dashboard, analytics, interactive report, client link.
   Gates: backend **111 passed (445)**, pint+phpstan clean, tsc/lint/build ok, vitest 18 passed; PDF/XLSX/CSV
   export smoke each carries methodology; verified live (dashboard note, report methodology+footer, 0 errors).
+
+- 2026-07-26 — Reports Hardening complete (`7fa324d` client_display_name · `cc70fbf` visual-regression
+  harness + baselines · `8a8cee0` persisted approval workflow · `3a071dc` approval panel UI). Merged to
+  `feat/premium-ui`. **Reports phase = Completed.** Post-merge gates: backend 142 tests, pint+phpstan
+  clean, migrate:fresh --seed clean, tsc/lint/build, vitest 18, PDF visual-regression PASS.

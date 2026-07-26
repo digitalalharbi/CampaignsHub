@@ -24,7 +24,7 @@ php artisan demo:reset
 Demo login: `owner@demo-agency.local` / `password` (see docs/DEMO_ACCOUNTS.md).
 
 ## Status
-**Reports Core: Completed** (merged `44613ca`). **Reports Hardening: In Progress** on `feat/reports-hardening` — visual-regression harness, recommendation approval workflow (persisted, reviewed_by/approved_by), `client_display_name` DB fields.
+**Reports: Completed** (Core + Hardening, merged to `feat/premium-ui` @ `3a071dc`). Hardening delivered: automated PDF visual-regression (`npm run test:pdf-visual` + committed baselines), persisted recommendation approval workflow (report_annotations, Draft→Reviewed→Approved, reviewed_by/approved_by, + approval panel UI), `client_display_name` DB fields (unified_campaigns/projects).
 
 ## Completed phases (verified)
 Foundation · RBAC/Audit · Campaigns C1 · Metrics C3.2/C3.5 · Dashboard+Analytics · Reports
