@@ -55,12 +55,14 @@ final class ReportPrintController extends Controller
         abort_if($report === null || $report->status !== 'completed', 404, 'Report not available.');
 
         return ApiResponse::success([
+            'report_id' => (string) $report->id,
             'name' => $report->name,
             'type' => $ctx['type'],
             'theme' => $ctx['theme'],
             'currency' => $report->currency,
             'is_demo' => (bool) $report->is_demo,
             'checksum' => $report->data['checksum'] ?? null,
+            'data_version' => $report->data['data_version'] ?? null,
             'data' => $report->data ?? [],
         ], 'Print data.');
     }

@@ -5,12 +5,14 @@ import { SlideBody, type Meta, type ReportData, type Slide } from './Interactive
 import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
 interface PrintPayload {
+  report_id: string
   name: string
   type: 'presentation' | 'document'
   theme: 'light' | 'dark'
   currency: string
   is_demo: boolean
   checksum: string | null
+  data_version: number | null
   data: ReportData
 }
 
@@ -50,6 +52,13 @@ export function PrintReport() {
     document.documentElement.setAttribute('lang', 'ar')
   }, [theme])
 
+  // Encode verifiable provenance into the document title → lands in the PDF /Title metadata, so an
+  // audit tool can confirm the file came from the right snapshot (report id + checksum + data version).
+  useEffect(() => {
+    if (!payload) return
+    document.title = `CampaignsHub | rid=${payload.report_id} | cs=${payload.checksum ?? ''} | dv=${payload.data_version ?? ''} | cur=${payload.currency}`
+  }, [payload])
+
   // Readiness protocol — Chromium waits on these before printing. Also publishes a per-page layout
   // audit (utilization / overflow / empty / footer) that the print script uses as a hard gate.
   useEffect(() => {
@@ -70,6 +79,8 @@ export function PrintReport() {
       }))))
       if (cancelled) return
       w.__REPORT_CHARTS_READY__ = true
+      fitSlides() // scale any slightly-too-tall slide to fit exactly one page (readable floor 0.82)
+      await new Promise((r) => setTimeout(r, 120))
       w.__REPORT_LAYOUT__ = measureLayout()
       w.__REPORT_IMAGES_READY__ = true
     })()
@@ -94,6 +105,13 @@ export function PrintReport() {
         <section key={s.id} className="report-slide" data-print-page={i + 1} data-slide-type={s.type}>
           <div className="report-slide-inner">
             <SlideBody slide={s} data={d} meta={meta} />
+            {/* Verifiable provenance line on the methodology page (latin → extractable from the PDF). */}
+            {s.type === '__methodology' && (
+              <div className="report-provenance" dir="ltr">
+                <bdi>Report {payload.report_id}</bdi> · <bdi>checksum {(payload.checksum ?? '').slice(0, 16)}</bdi> · <bdi>data_version {payload.data_version ?? '—'}</bdi>
+                {' · '}<bdi>{d.data_source ?? 'daily_metrics'}</bdi> · <bdi>{d.attribution_window ?? 'default'}</bdi> · <bdi>{payload.currency}</bdi> · <bdi>{d.timezone ?? 'Asia/Riyadh'}</bdi> · <bdi>{mode}</bdi>
+              </div>
+            )}
           </div>
           {/* Professional per-page footer — never on the cover; one per page, inside the safe area. */}
           {s.type !== 'cover' && (
@@ -111,6 +129,28 @@ export function PrintReport() {
       ))}
     </div>
   )
+}
+
+/**
+ * SlideContentFitter: scales a slide's content to fit exactly one page when it is slightly too tall,
+ * so nothing bleeds onto a near-empty extra page. Has a readable floor (0.82) — a slide needing more
+ * shrink than that is left alone so the layout gate flags it for a real content fix.
+ */
+function fitSlides() {
+  document.querySelectorAll<HTMLElement>('.report-slide').forEach((el) => {
+    const inner = el.querySelector<HTMLElement>('.report-slide-inner')
+    if (!inner) return
+    const cs = getComputedStyle(el)
+    const footer = el.querySelector<HTMLElement>('.report-slide-footer')
+    const avail = el.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0) - (footer ? footer.offsetHeight + 8 : 0)
+    inner.style.transform = ''
+    const needed = inner.scrollHeight
+    if (needed > avail + 2) {
+      const scale = Math.max(0.82, avail / needed)
+      inner.style.transformOrigin = 'top center'
+      inner.style.transform = `scale(${scale})`
+    }
+  })
 }
 
 /**
@@ -178,9 +218,11 @@ function measureLayout() {
     const textDensity = Math.round((text / total) * 100) / 100
     const largestEmptyRegion = Math.round(largestEmptyRect(grid, COLS, ROWS) * 100) / 100
 
-    // Overflow measured against the safe area (content pushing past the footer / page edge).
-    const innerH = scope.scrollHeight
-    const overflow = innerH > areaH + padB + 8
+    // Overflow measured from the POST-fit rendered box (getBoundingClientRect reflects the scale
+    // transform), so a fitted slide that now fits is not falsely flagged, but one that hit the
+    // readable floor and still spills is.
+    const innerRect = scope.getBoundingClientRect()
+    const overflow = innerRect.bottom > bottom + 4
     const overflowX = el.scrollWidth > el.clientWidth + 2
     const footerCoverage = fr ? Math.round(((fr.height) / pr.height) * 100) / 100 : 0
     // "empty" only for non-cover pages with almost no real content.
@@ -225,8 +267,11 @@ function printCss(landscape: boolean): string {
     position: relative;
     box-sizing: border-box;
     width: 100%;
-    min-height: 100vh;
-    padding: ${landscape ? '28px 34px 48px' : '32px 30px 52px'};
+    /* Exactly one printable page each — height (not min-height) + hidden overflow prevents a slide
+       from bleeding a sliver onto a second (near-empty) page. The layout gate guarantees content fits
+       before printing, so nothing is clipped in a passing report. */
+    height: 100vh;
+    padding: ${landscape ? '26px 34px 46px' : '30px 30px 50px'};
     break-after: page; page-break-after: always;
     break-inside: avoid; page-break-inside: avoid;
     overflow: hidden;
@@ -246,6 +291,8 @@ function printCss(landscape: boolean): string {
   .report-footer-note p { margin: 0; }
   .report-footer-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .report-footer-brand, .report-footer-page { font-size: 9.5px; color: var(--text-muted); white-space: nowrap; }
+  .report-provenance { margin-top: 14px; padding-top: 8px; border-top: 1px dashed var(--border);
+    font-size: 9px; color: var(--text-muted); word-break: break-all; line-height: 1.6; }
   /* Never split a chart, card, or table row across pages. */
   .recharts-wrapper, table, .rounded-2xl, .rounded-xl { break-inside: avoid; page-break-inside: avoid; }
   `

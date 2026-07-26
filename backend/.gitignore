@@ -22,3 +22,7 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# report PDF audit artifacts (regenerated on demand)
+**/pdf-audit/
+*.pdf
