@@ -19,8 +19,10 @@ final class NotificationController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        // Personal notifications (user_id = me) PLUS project-wide alerts (user_id null). The
+        // BelongsToProject global scope already limits to the active project.
         $query = AppNotification::query()
-            ->where('user_id', $request->user()->id)
+            ->where(fn ($q) => $q->whereNull('user_id')->orWhere('user_id', $request->user()->id))
             ->latest('created_at');
 
         if ($status = $request->string('status')->toString()) {

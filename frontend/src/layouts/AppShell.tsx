@@ -1,7 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   BarChart3,
-  Bell,
   LayoutDashboard,
   LogOut,
   Megaphone,
@@ -19,6 +18,7 @@ import { ProjectSwitcher } from '@/components/ProjectSwitcher'
 import { logout } from '@/features/auth/api'
 import { useT } from '@/lib/i18n'
 import { useAuth } from '@/stores/auth'
+import { NotificationBell } from '@/features/notifications/NotificationBell'
 import { useUi } from '@/stores/ui'
 import type { TranslationKey } from '@/lib/i18n'
 
@@ -211,13 +211,7 @@ export function AppShell() {
           </button>
 
           <div className="ms-auto flex items-center gap-1.5">
-            <button
-              aria-label="Notifications"
-              className="relative flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover"
-            >
-              <Bell size={18} />
-              <span className="absolute end-2 top-2 h-2 w-2 rounded-full bg-brand-500 ring-2 ring-surface" />
-            </button>
+            <NotificationBell />
             <button
               onClick={toggleLocale}
               aria-label="Toggle language"
