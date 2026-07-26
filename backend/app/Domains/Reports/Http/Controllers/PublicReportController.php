@@ -79,11 +79,11 @@ final class PublicReportController extends Controller
         $report = Report::withoutGlobalScopes()->find($share->report_id);
         abort_if($report === null || $report->status !== 'completed', 404, 'Report not available.');
 
-        // Client-facing export: audience filter (approved recs / client names / no internal fields)
-        // then the per-share hide flags, so nothing internal or hidden leaks into the file.
+        // ReportExporter applies the audience filter (client-safe); here we add the per-share hide flags
+        // (spend/revenue/names). replicate() keeps the audience so the exporter filters correctly.
         $sanitized = $report->replicate();
         $sanitized->setAttribute('id', $report->id); // replicate() drops the key; the gate needs it
-        $sanitized->data = $this->shares->sanitize(app(ClientReportView::class)->filter($report->data ?? []), $share);
+        $sanitized->data = $this->shares->sanitize($report->data ?? [], $share);
         $content = app(ReportExporter::class)->render($sanitized, $format);
         $this->shares->log($share, 'download', $request, $format);
 

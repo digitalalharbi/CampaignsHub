@@ -72,6 +72,19 @@ final class ReportAudienceTest extends TestCase
             ->assertStatus(201);
     }
 
+    public function test_authenticated_client_export_is_filtered_but_internal_is_full(): void
+    {
+        $exporter = app(\App\Domains\Reports\Services\ReportExporter::class);
+
+        // Client CSV: internal marker sanitised, draft recommendation dropped — even for an admin export.
+        $clientCsv = $exporter->render($this->report('client'), 'csv');
+        $this->assertStringNotContainsStringIgnoringCase('burner', $clientCsv);
+
+        // Internal CSV: full snapshot, internal campaign name retained for the team.
+        $internalCsv = $exporter->render($this->report('internal'), 'csv');
+        $this->assertStringContainsStringIgnoringCase('burner', $internalCsv);
+    }
+
     public function test_client_print_response_has_no_internal_data(): void
     {
         $client = $this->report('client');

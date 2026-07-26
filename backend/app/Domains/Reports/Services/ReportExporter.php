@@ -24,6 +24,8 @@ final class ReportExporter
     public function __construct(
         private readonly ExportReadinessGate $gate,
         private readonly ChromiumPdfRenderer $chromium,
+        private readonly ClientReportView $clientView,
+        private readonly ClientReportContentValidator $contentValidator,
     ) {}
 
     /** Render a report to file bytes for a format, without persisting anything (used by public share). */
@@ -31,7 +33,9 @@ final class ReportExporter
     {
         // No format may render until the snapshot passes the data-consistency gate.
         $this->gate->ensureReady($report);
-        $data = $report->data ?? [];
+        // SINGLE enforcement point: every export path (admin export, scheduled, email, share) is filtered
+        // by the report's audience here — an authenticated admin can NEVER bypass client filtering.
+        $data = $this->audienceData($report);
 
         return match ($format) {
             'csv' => $this->csv($report, $data),
@@ -39,6 +43,30 @@ final class ReportExporter
             'pdf' => $this->pdf($report, $data),
             default => throw new \InvalidArgumentException("Unsupported format: {$format}"),
         };
+    }
+
+    /**
+     * The audience-correct snapshot for a report. Client/executive exports are filtered (approved recs,
+     * client names, no internal fields) AND content-validated — a leaky client file is never produced.
+     * Internal exports keep the full snapshot.
+     *
+     * @return array<string,mixed>
+     */
+    private function audienceData(Report $report): array
+    {
+        $data = $report->data ?? [];
+        $audience = $report->audience ?? 'client';
+        if (in_array($audience, ['client', 'executive'], true)) {
+            $data = $this->clientView->filter($data);
+            $violations = $this->contentValidator->scan($data);
+            abort_if(
+                $violations !== [],
+                422,
+                'Client export blocked — internal content detected: '.implode(', ', array_unique(array_column($violations, 'code'))),
+            );
+        }
+
+        return $data;
     }
 
     public function export(Report $report, ReportExport $export): void
