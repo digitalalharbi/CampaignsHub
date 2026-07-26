@@ -28,11 +28,15 @@ class DatabaseSeeder extends Seeder
         );
 
         // 3) Demo tenant + demo users + Sandbox data — DEV/LOCAL/DEMO only, NEVER in production.
-        //    Ordered: base demo (tenant/projects/campaigns/connections) → metrics → reports →
-        //    creatives, so a fresh seed yields a fully-populated demo through the real tables.
         if (App::environment(['local', 'testing', 'demo'])) {
+            $this->call(DemoSeeder::class);
+        }
+
+        // 3b) Heavy demo data (metrics/reports/creatives) — local/demo ONLY, never in `testing`
+        //     (test cases seed their own minimal fixtures; this chain would bloat every test DB).
+        //     Ordered so a fresh local/demo seed yields a fully-populated demo via the real tables.
+        if (App::environment(['local', 'demo'])) {
             $this->call([
-                DemoSeeder::class,
                 DemoAnalyticsSeeder::class,
                 DemoReportsSeeder::class,
                 DemoCreativesSeeder::class,

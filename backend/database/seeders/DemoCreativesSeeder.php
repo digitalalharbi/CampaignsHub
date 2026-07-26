@@ -50,7 +50,7 @@ final class DemoCreativesSeeder extends Seeder
                         'tenant_id' => $campaign->tenant_id,
                         'campaign_id' => $campaign->id,
                         'name' => "Creative {$i} — {$format}",
-                        'client_display_name' => ['Hero Video', 'Product Shot', 'Bundle Carousel', 'Teaser'][$i] ?? "Creative {$i}",
+                        'client_display_name' => ['Hero Video', 'Product Shot', 'Bundle Carousel', 'Teaser'][$i],
                         'format' => $format,
                         'thumbnail_url' => null, // never fabricate a preview
                         'status' => $i === 2 ? 'paused' : 'active',
