@@ -78,8 +78,8 @@ describe('CampaignDetailPage', () => {
     renderWithProviders(<CampaignDetailPage />, DETAIL_ROUTE)
     await screen.findByText('National Day')
 
-    // Switch to the Linked tab.
-    fireEvent.click(screen.getByText('Linked campaigns'))
+    // Switch to the Platforms tab (linked external campaigns live here in the command center).
+    fireEvent.click(screen.getByText('Platforms'))
     expect(await screen.findByText('Sandbox Awareness')).toBeInTheDocument()
 
     fireEvent.click(screen.getByText('Unlink'))

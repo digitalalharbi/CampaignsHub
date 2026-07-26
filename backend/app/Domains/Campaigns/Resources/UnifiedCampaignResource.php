@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Resources;
 
+use App\Domains\Campaigns\Enums\CampaignPerformanceLabel;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -18,8 +19,13 @@ final class UnifiedCampaignResource extends JsonResource
             'id' => $this->id,
             'project_id' => $this->project_id,
             'name' => $this->name,
+            'client_display_name' => $this->client_display_name,
             'objective' => $this->objective,
             'status' => $this->status,
+            'stage' => $this->stage,
+            'performance_label' => $this->performance_label,
+            'priority' => $this->priority,
+            'needs_attention' => in_array($this->performance_label, CampaignPerformanceLabel::needsAttention(), true),
             'total_budget' => $this->total_budget !== null ? (float) $this->total_budget : null,
             'budget_currency' => $this->budget_currency,
             'starts_on' => optional($this->starts_on)->toDateString(),

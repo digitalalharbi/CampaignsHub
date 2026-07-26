@@ -22,8 +22,12 @@ export function getCampaign(projectId: string, campaignId: string): Promise<Unif
 
 export interface CampaignInput {
   name: string
+  client_display_name?: string | null
   objective?: string
   status?: string
+  stage?: string | null
+  performance_label?: string | null
+  priority?: string | null
   total_budget?: number | null
   budget_currency?: string
   starts_on?: string | null

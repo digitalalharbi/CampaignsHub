@@ -2,8 +2,13 @@ export interface UnifiedCampaign {
   id: string
   project_id: string
   name: string
+  client_display_name?: string | null
   objective: string
   status: string
+  stage?: string | null
+  performance_label?: string | null
+  priority?: string | null
+  needs_attention?: boolean
   total_budget: number | null
   budget_currency: string
   starts_on: string | null

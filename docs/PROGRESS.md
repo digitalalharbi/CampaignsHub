@@ -195,3 +195,44 @@ _(append newest first: date — what — command — result)_
   harness + baselines · `8a8cee0` persisted approval workflow · `3a071dc` approval panel UI). Merged to
   `feat/premium-ui`. **Reports phase = Completed.** Post-merge gates: backend 142 tests, pint+phpstan
   clean, migrate:fresh --seed clean, tsc/lint/build, vitest 18, PDF visual-regression PASS.
+
+---
+
+## PDF deliverable hardening (2026-07-26)
+
+- **Arabic PDF: Completed.** Root defect was the *text layer* (Chromium emits Arabic presentation
+  forms in visual order), not visuals. Fixed via `page.pdf({tagged,outline})` + a fail-closed
+  ToUnicode→NFKC normaliser (`fix-arabic-textlayer.py`, ≤3 passes, byte-idempotent, validates 0
+  presentation forms remaining / ToUnicode+pages+tagged preserved / ASCII untouched; throws to block
+  export otherwise). Verified in PDFKit (Preview/Safari/Quick Look/iOS) — 8/8 probe words incl.
+  ligature/hamza; Chrome/PDFium loads all pages. Client-safe metadata (no rid/checksum leak).
+  Six deliverables + per-file `audit.md` + `text-layer-validation.json` + `checksums.sha256` under
+  `deliverables/report-audit/`. Commits `11f4d07`, `cdc6d1b`, `a92af67`.
+- **English PDF (`client-monthly-en-document.pdf`): delivered** — real English LTR A4-portrait doc
+  (Inter, multi-page tables w/ repeated headers, appendix). Body+tables searchable.
+- **Open (do NOT block campaigns; PDF ≠ Production-Ready until closed):**
+  - [ ] English bold-heading text-layer extraction (Chromium Latin-subset quirk; raw-output, not ours).
+  - [ ] Firefox PDF.js verification (no runtime on host).
+  - [ ] Adobe Acrobat verification (not installed on host).
+
+## Campaign Command Center — CMC-1 ✅ (2026-07-26)
+
+Route `/projects/{project}/campaigns/{campaign}` · isolation keys
+`['projects', projectId, 'campaigns', campaignId, section, filters]`.
+
+- **Backend:** `stage` / `performance_label` / `priority` real columns (migration
+  `add_internal_classification_to_unified_campaigns`) + enums (`CampaignStage`,
+  `CampaignPerformanceLabel`, `CampaignPriority`). Controller: validation + index filters
+  (`stage`, `performance_label`, `priority`, `needs_attention`) + audited on update. Resource exposes
+  classification + `client_display_name` + `needs_attention`.
+- **Frontend:** command-center header (client/internal names, status + stage + performance + priority
+  badges, Demo + Needs-Attention badges, facts grid, inline classification editors = real PATCH),
+  10-tab nav persisted in `?tab=`. Un-backed tabs show an honest "section building" state (no fake
+  data), wired in CMC-4…14. Test-env `ResizeObserver` polyfill added.
+- **Gates:** backend **147 passed**, pint+phpstan clean; frontend **18 passed**, tsc/lint/build clean.
+- **Follow-up:** campaigns LIST page still hard-codes Arabic in several spots (only tested strings
+  localized here) — full `t()` localization for RTL/LTR parity pending.
+
+### CMC batches remaining
+CMC-2 (KPIs + exec summary) · CMC-4 (per-campaign APIs) · CMC-5…14 (Overview timeline, Performance,
+Platforms, Creatives, Budget, Funnel, Notes & Recommendations, Alerts, Reports, Activity).
