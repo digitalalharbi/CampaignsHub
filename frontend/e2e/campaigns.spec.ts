@@ -26,23 +26,23 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
   await page.goto('/campaigns')
   await switchToEnglish(page)
 
-  await page.getByRole('button', { name: /^Open$|^فتح$/ }).first().click()
+  await page.getByTestId('campaign-card').first().click()
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
 
-  // Tabs render; Performance shows the honest "pending C3" empty state (not fake data).
+  // Tabs render; a not-yet-backed tab shows the honest "section building" state (not fake data).
   await page.getByRole('tab', { name: /Performance|الأداء/ }).click()
-  await expect(page.getByText(/metrics layer|طبقة المقاييس/)).toBeVisible()
+  await expect(page.getByText(/section is being built|يُبنى هذا القسم/)).toBeVisible()
 
-  // Linked tab lists linked external campaigns (or an empty state).
-  await page.getByRole('tab', { name: /Linked campaigns|الحملات المرتبطة/ }).click()
+  // Platforms tab lists linked external campaigns (or an empty state).
+  await page.getByRole('tab', { name: /Platforms|المنصات/ }).click()
 })
 
 test('link-external modal opens and labels sandbox data as Demo', async ({ page }) => {
   await page.goto('/campaigns')
   await switchToEnglish(page)
-  await page.getByRole('button', { name: /^Open$|^فتح$/ }).first().click()
+  await page.getByTestId('campaign-card').first().click()
 
-  await page.getByRole('tab', { name: /Linked campaigns|الحملات المرتبطة/ }).click()
+  await page.getByRole('tab', { name: /Platforms|المنصات/ }).click()
   await page.getByRole('button', { name: /Link external campaign|ربط حملة خارجية/ }).click()
 
   // The modal makes clear this is demo data, not a production connection.

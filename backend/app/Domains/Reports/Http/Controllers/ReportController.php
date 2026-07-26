@@ -91,7 +91,7 @@ final class ReportController extends Controller
     public function show(Request $request, string $project, string $report): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
-        $model = $this->find($report);
+        $model = $this->find($report)->load('exports');
 
         return ApiResponse::success($this->shape($model, withData: true), 'Report retrieved.');
     }
@@ -202,6 +202,7 @@ final class ReportController extends Controller
             'campaign_objective' => $r->campaign_objective,
             'version' => $r->version,
             'status' => $r->status,
+            'audience' => $r->audience,
             'period' => ['from' => $r->period_start?->toDateString(), 'to' => $r->period_end?->toDateString()],
             'currency' => $r->currency,
             'config' => $r->config,
@@ -214,6 +215,11 @@ final class ReportController extends Controller
                 ? $r->exports->map(fn (ReportExport $e) => [
                     'id' => $e->id, 'format' => $e->format, 'status' => $e->status,
                     'size' => $e->size, 'token' => $e->signed_token,
+                    // Renderer provenance — lets the UI (and E2E) prove the file is a current, valid
+                    // Chromium export rather than a stale/legacy one.
+                    'renderer' => $e->renderer, 'renderer_version' => $e->renderer_version,
+                    'template_version' => $e->template_version, 'locale' => $e->locale,
+                    'layout_mode' => $e->layout_mode, 'validation_status' => $e->validation_status,
                 ])->all()
                 : [],
         ];

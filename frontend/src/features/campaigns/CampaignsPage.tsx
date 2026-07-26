@@ -163,7 +163,7 @@ export function CampaignsPage() {
             <thead><tr className="border-b border-border text-text-muted"><th className="p-3 text-start">الحملة</th><th className="p-3 text-start">الهدف</th><th className="p-3 text-start">الحالة</th><th className="p-3 text-end">الميزانية</th><th className="p-3 text-end">مرتبطة</th></tr></thead>
             <tbody>
               {campaigns.map((c) => (
-                <tr key={c.id} className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-hover" onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}>
+                <tr key={c.id} data-testid="campaign-row" className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-hover" onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}>
                   <td className="p-3 font-semibold text-text-primary">{c.name}</td>
                   <td className="p-3 text-text-secondary">{objectiveLabel(c.objective, locale)}</td>
                   <td className="p-3"><Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge></td>
@@ -197,7 +197,7 @@ function StatCard({ label, value, sub, delta, invert, tone }: { label: string; v
 function CampaignCard({ c, locale, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; onOpen: () => void }) {
   const unlinked = (c.external_campaigns_count ?? 0) === 0
   return (
-    <button onClick={onOpen} className="flex flex-col gap-2.5 rounded-2xl border border-border bg-surface p-4 text-start shadow-[var(--shadow-small)] transition-colors hover:border-brand-300 hover:bg-surface-hover">
+    <button onClick={onOpen} data-testid="campaign-card" className="flex flex-col gap-2.5 rounded-2xl border border-border bg-surface p-4 text-start shadow-[var(--shadow-small)] transition-colors hover:border-brand-300 hover:bg-surface-hover">
       <div className="flex items-start justify-between gap-2">
         <span className="line-clamp-2 font-bold text-text-primary">{c.name}</span>
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: STATUS_COLORS[c.status] ?? 'var(--text-muted)' }} title={campaignStatusLabel(c.status, locale)} />

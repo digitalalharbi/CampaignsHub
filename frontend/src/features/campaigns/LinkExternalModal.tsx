@@ -60,7 +60,10 @@ export function LinkExternalModal({ open, onClose, projectId, campaignId }: Prop
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['project', projectId, 'external'] })
-    queryClient.invalidateQueries({ queryKey: ['project', projectId, 'campaign', campaignId] })
+    // The command-center detail page (Platforms tab, KPIs) keys on the plural convention
+    // ['projects', projectId, 'campaigns', campaignId, …]; invalidate it so a link/move/unlink
+    // refetches the linked list. Also refetch the list (singular key) it uses.
+    queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'campaigns', campaignId] })
     queryClient.invalidateQueries({ queryKey: ['project', projectId, 'campaigns'] })
   }
 
