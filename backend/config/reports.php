@@ -36,5 +36,9 @@ return [
         'arabic_textlayer_fix' => env('REPORTS_ARABIC_TEXTLAYER_FIX', true),
         'python_bin' => env('REPORTS_PYTHON_BIN', 'python3'),
         'textlayer_script' => base_path('scripts/fix-arabic-textlayer.py'),
+
+        // Stamped onto each export as provenance; a download whose renderer_version differs from this
+        // is treated as stale and regenerated. Bump when the Chromium engine/pipeline changes.
+        'renderer_version' => env('REPORTS_RENDERER_VERSION', 'chromium-1228'),
     ],
 ];

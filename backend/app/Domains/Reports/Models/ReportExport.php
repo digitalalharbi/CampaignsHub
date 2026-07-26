@@ -16,6 +16,8 @@ final class ReportExport extends Model
     protected $fillable = [
         'tenant_id', 'report_id', 'format', 'status', 'disk', 'path', 'size',
         'signed_token', 'expires_at', 'error', 'created_by', 'is_demo',
+        'renderer', 'renderer_version', 'template_version', 'snapshot_checksum',
+        'locale', 'layout_mode', 'validation_status',
     ];
 
     protected $casts = [
