@@ -34,6 +34,11 @@ final class ReportShareController extends Controller
         abort_unless($request->user()->hasPermission('reports.share'), 403);
         $model = $this->findReport($report);
         abort_unless($model->status === 'completed', 409, 'Generate the report before sharing.');
+        // An internal report is never shareable externally — a client version must be created first.
+        abort_if(
+            ($model->audience ?? 'client') === 'internal',
+            422, 'This report must be converted to a client version before sharing.',
+        );
 
         $opts = $request->validate([
             'password' => ['nullable', 'string', 'min:4', 'max:64'],

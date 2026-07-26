@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -40,6 +41,7 @@ final class ReportPrintController extends Controller
             'report_id' => (string) $model->id,
             'type' => $opts['type'] ?? 'presentation',
             'theme' => $opts['theme'] ?? 'light',
+            'audience' => $model->audience ?? 'client',
         ], self::TTL);
 
         return ApiResponse::success(['token' => $token, 'expires_in' => self::TTL], 'Print token issued.');
@@ -54,16 +56,26 @@ final class ReportPrintController extends Controller
         $report = Report::withoutGlobalScopes()->find($ctx['report_id']);
         abort_if($report === null || $report->status !== 'completed', 404, 'Report not available.');
 
+        $audience = $ctx['audience'] ?? ($report->audience ?? 'client');
+        // Backend audience transform — the print route receives client-safe data for a client report;
+        // internal fields (checksum/tenant/project) are removed from the BODY, so CSS can never be the
+        // only thing hiding them. Provenance stays only in the response envelope for PDF /Title metadata.
+        $body = $report->data ?? [];
+        if ($audience === 'client') {
+            $body = app(ClientReportView::class)->filter($body);
+        }
+
         return ApiResponse::success([
             'report_id' => (string) $report->id,
             'name' => $report->name,
             'type' => $ctx['type'],
             'theme' => $ctx['theme'],
+            'audience' => $audience,
             'currency' => $report->currency,
             'is_demo' => (bool) $report->is_demo,
             'checksum' => $report->data['checksum'] ?? null,
             'data_version' => $report->data['data_version'] ?? null,
-            'data' => $report->data ?? [],
+            'data' => $body,
         ], 'Print data.');
     }
 

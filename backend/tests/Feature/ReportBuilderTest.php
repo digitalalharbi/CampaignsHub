@@ -22,11 +22,12 @@ final class ReportBuilderTest extends TestCase
         $types = array_column($config['slides'], 'type');
         $this->assertSame(['cover', 'recommendations', 'executive_summary'], array_slice($types, 0, 3));
         // 3 fixed (cover + recommendations + executive_summary) + 1 rich slide per platform × 2 platforms
-        // + closing (platform_comparison since >1 platform, funnel since sales, budget) = 3 + 2 + 3 = 8.
-        $this->assertCount(8, $config['slides']);
+        // + closing (platform_comparison, funnel since sales, budget, next_steps) = 3 + 2 + 4 = 9.
+        $this->assertCount(9, $config['slides']);
         $this->assertContains('platform_comparison', $types);
         $this->assertContains('funnel', $types);
         $this->assertContains('budget', $types);
+        $this->assertContains('next_steps', $types);
         // Exactly one performance slide per connected platform, and none for unconnected platforms.
         $platforms = array_filter(array_column($config['slides'], 'platform'));
         $this->assertEqualsCanonicalizing(['meta', 'snapchat'], array_values($platforms));

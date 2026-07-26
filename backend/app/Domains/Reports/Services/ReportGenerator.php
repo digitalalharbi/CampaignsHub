@@ -87,8 +87,10 @@ final class ReportGenerator
             'summary' => $this->executiveSummary($totals, $delta, $platforms, $campaigns, $report->currency),
             // Structured two-column content: findings (left) + recommendations (right). Cards, not prose.
             'findings' => $this->tagAnnotations($this->findings($totals, $delta, $platforms, $campaigns, $report->currency), 'finding', $report),
-            'recommendations' => $this->tagAnnotations($this->recommendations($platforms, $campaigns, $report->currency), 'recommendation', $report),
-            'audience' => $config['audience'] ?? 'client',
+            'recommendations' => ($recs = $this->tagAnnotations($this->recommendations($platforms, $campaigns, $report->currency), 'recommendation', $report)),
+            // Client "Next Steps" — built ONLY from approved recommendations (action/priority/owner/due).
+            'next_steps' => $this->nextSteps($recs),
+            'audience' => $report->audience ?? 'client',
             'slides' => $config['slides'] ?? [],
             // Effective disclaimer/methodology copy, snapshotted so a shared report is self-contained
             // and reproducible even if the org later edits its notes.
@@ -254,9 +256,35 @@ final class ReportGenerator
                 'type' => $type,
                 'is_ai_generated' => true,
                 'status' => $status,
+                'priority' => $item['severity'] === 'critical' ? 'high' : ($item['severity'] === 'warning' ? 'medium' : 'normal'),
+                'owner' => 'فريق الأداء',
+                'due' => 'الأسبوع القادم',
                 'evidence' => ['kpi' => $item['kpi'] ?? null, 'value' => $item['value'] ?? null, 'platform' => $item['platform'] ?? null],
             ];
         }, $items);
+    }
+
+    /**
+     * Client-facing next steps — approved recommendations only, presented as action items. Never
+     * exposes internal-only fields (evidence json / ai flag / confidence).
+     *
+     * @param  list<array<string,mixed>>  $recommendations
+     * @return list<array<string,mixed>>
+     */
+    private function nextSteps(array $recommendations): array
+    {
+        return array_values(array_map(
+            fn ($r) => [
+                'action' => $r['title'] ?? '',
+                'reason' => $r['detail'] ?? '',
+                'platform' => $r['platform'] ?? null,
+                'kpi' => $r['kpi'] ?? null,
+                'priority' => $r['priority'] ?? 'normal',
+                'owner' => $r['owner'] ?? 'فريق الأداء',
+                'due' => $r['due'] ?? null,
+            ],
+            array_filter($recommendations, fn ($r) => ($r['status'] ?? 'draft') === 'approved'),
+        ));
     }
 
     /** A few plain-language findings derived from the numbers (not fabricated). */

@@ -60,6 +60,7 @@ final class ReportController extends Controller
             'type' => ['required', Rule::in(self::TYPES)],
             'mode' => ['nullable', Rule::in(['live', 'snapshot'])],
             'campaign_objective' => ['nullable', Rule::in(['sales', 'awareness', 'traffic', 'leads', 'app_installs', 'video', 'custom'])],
+            'audience' => ['nullable', Rule::in(['client', 'internal', 'executive'])],
             'period_start' => ['nullable', 'date'],
             'period_end' => ['nullable', 'date'],
             'currency' => ['nullable', 'string', 'size:3'],
@@ -69,6 +70,7 @@ final class ReportController extends Controller
         $report = Report::create([
             'name' => $data['name'],
             'type' => $data['type'],
+            'audience' => $data['audience'] ?? 'client',
             'mode' => $data['mode'] ?? 'snapshot',
             'campaign_objective' => $data['campaign_objective'] ?? null,
             'status' => 'processing',

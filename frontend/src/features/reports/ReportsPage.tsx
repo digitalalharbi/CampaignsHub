@@ -275,12 +275,18 @@ function IconBtn({ children, title, onClick, danger }: { children: React.ReactNo
 function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState('')
   const [type, setType] = useState('executive')
+  const [audience, setAudience] = useState('client')
   const [from, setFrom] = useState(daysAgo(29))
   const [to, setTo] = useState(today())
   const create = useMutation({
-    mutationFn: () => createReport(projectId, { name: name || 'تقرير', type, period_start: from, period_end: to, currency: 'SAR' }),
+    mutationFn: () => createReport(projectId, { name: name || 'تقرير', type, audience, period_start: from, period_end: to, currency: 'SAR' }),
     onSuccess: onCreated,
   })
+  const AUDIENCES = [
+    { value: 'client', label: 'العميل', hint: 'رسوم أكثر ونصوص أقل، توصيات معتمدة فقط، بلا تفاصيل تقنية.' },
+    { value: 'internal', label: 'فريق الأداء', hint: 'كل المقاييس والحسابات والتشخيص وتوصيات Draft — لا يُشارك مع العميل.' },
+    { value: 'executive', label: 'الإدارة التنفيذية', hint: 'ملخص شديد الاختصار: الميزانية والنتائج والعائد والقرارات.' },
+  ]
   return (
     <Modal open onClose={onClose} title="منشئ التقرير">
       <div className="space-y-4">
@@ -293,6 +299,17 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </select>
+        </Field>
+        <Field label="هذا التقرير موجّه إلى">
+          <div className="grid gap-2 sm:grid-cols-3">
+            {AUDIENCES.map((a) => (
+              <button key={a.value} type="button" onClick={() => setAudience(a.value)} title={a.hint}
+                className={`rounded-xl border p-3 text-start transition-colors ${audience === a.value ? 'border-brand-600 bg-[var(--brand-background)]' : 'border-border hover:bg-surface-hover'}`}>
+                <div className="text-sm font-bold text-text-primary">{a.label}</div>
+                <div className="mt-0.5 text-[11px] leading-snug text-text-muted">{a.hint}</div>
+              </button>
+            ))}
+          </div>
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="من"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>

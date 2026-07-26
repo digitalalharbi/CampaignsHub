@@ -9,6 +9,7 @@ interface PrintPayload {
   name: string
   type: 'presentation' | 'document'
   theme: 'light' | 'dark'
+  audience: string
   currency: string
   is_demo: boolean
   checksum: string | null
@@ -40,7 +41,10 @@ export function PrintReport() {
   const slides = useMemo<Slide[]>(() => {
     const d = payload?.data
     if (!d) return []
-    const visible = (d.slides ?? []).filter((s) => s.visible).sort((a, b) => a.order - b.order)
+    const visible = (d.slides ?? [])
+      .filter((s) => s.visible)
+      .filter((s) => s.type !== 'next_steps' || (d.next_steps?.length ?? 0) > 0)
+      .sort((a, b) => a.order - b.order)
     if (d.disclaimer) visible.push({ id: '__methodology', type: '__methodology', order: 9999, visible: true })
     return visible
   }, [payload])
@@ -105,8 +109,9 @@ export function PrintReport() {
         <section key={s.id} className="report-slide" data-print-page={i + 1} data-slide-type={s.type}>
           <div className="report-slide-inner">
             <SlideBody slide={s} data={d} meta={meta} />
-            {/* Verifiable provenance line on the methodology page (latin → extractable from the PDF). */}
-            {s.type === '__methodology' && (
+            {/* Verifiable provenance line on the methodology page — INTERNAL/executive only; a client
+                report keeps checksum/id in PDF metadata, never as visible technical text. */}
+            {s.type === '__methodology' && payload.audience !== 'client' && (
               <div className="report-provenance" dir="ltr">
                 <bdi>Report {payload.report_id}</bdi> · <bdi>checksum {(payload.checksum ?? '').slice(0, 16)}</bdi> · <bdi>data_version {payload.data_version ?? '—'}</bdi>
                 {' · '}<bdi>{d.data_source ?? 'daily_metrics'}</bdi> · <bdi>{d.attribution_window ?? 'default'}</bdi> · <bdi>{payload.currency}</bdi> · <bdi>{d.timezone ?? 'Asia/Riyadh'}</bdi> · <bdi>{mode}</bdi>

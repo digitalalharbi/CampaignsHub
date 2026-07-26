@@ -63,6 +63,8 @@ final class ReportTemplateEngine
             $slides[] = ['id' => 'funnel', 'type' => 'funnel', 'order' => $order++, 'visible' => true];
         }
         $slides[] = ['id' => 'budget', 'type' => 'budget', 'order' => $order++, 'visible' => true];
+        // Client-facing action plan — rendered only when there are approved recommendations.
+        $slides[] = ['id' => 'next_steps', 'type' => 'next_steps', 'order' => $order++, 'visible' => true];
 
         return [
             'version' => self::VERSION,

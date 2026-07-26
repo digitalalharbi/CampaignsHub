@@ -36,6 +36,8 @@ export interface ReportData {
   summary?: string[]
   findings?: NoteCardData[]
   recommendations?: NoteCardData[]
+  next_steps?: NextStep[]
+  audience?: string
   slides?: Slide[]
   disclaimer?: ResolvedDisclaimer | null
   mode?: string
@@ -53,6 +55,16 @@ export interface NoteCardData {
   kpi?: string
   value?: string
   action?: string
+  status?: string
+}
+export interface NextStep {
+  action: string
+  reason?: string
+  platform?: string | null
+  kpi?: string | null
+  priority?: string
+  owner?: string
+  due?: string | null
 }
 export interface Meta { reportName: string; clientName?: string; agencyName?: string; platforms: string[]; isDemo?: boolean }
 
@@ -69,6 +81,7 @@ export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportDat
     case 'platform_comparison': return <ComparisonSlide data={data} />
     case 'funnel': return <FunnelSlide data={data} />
     case 'budget': return <BudgetSlide data={data} />
+    case 'next_steps': return <NextStepsSlide data={data} />
     case '__methodology': return <PerformanceNotice data={data.disclaimer} variant="methodology" objective={data.objective} />
     default: return null
   }
@@ -82,13 +95,16 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
   const [mode, setMode] = useState<'deck' | 'scroll'>('deck')
   const [i, setI] = useState(0)
   const slides = useMemo(() => {
-    const visible = (data.slides ?? []).filter((s) => s.visible).sort((a, b) => a.order - b.order)
-    // Always close the deck with a methodology & data-notes section when a disclaimer is present.
+    const visible = (data.slides ?? [])
+      .filter((s) => s.visible)
+      // Drop the Next Steps slide entirely when there are no approved steps (never show it empty).
+      .filter((s) => s.type !== 'next_steps' || (data.next_steps?.length ?? 0) > 0)
+      .sort((a, b) => a.order - b.order)
     if (data.disclaimer) {
       visible.push({ id: '__methodology', type: '__methodology', order: 9999, visible: true })
     }
     return visible
-  }, [data.slides, data.disclaimer])
+  }, [data.slides, data.disclaimer, data.next_steps])
   const cur = slides[i]
 
   const render = (s: Slide) => <SlideBody slide={s} data={data} meta={meta} />
@@ -467,6 +483,48 @@ function ComparisonSlide({ data }: { data: ReportData }) {
           </table>
         </div>
       </ChartCard>
+    </div>
+  )
+}
+
+const PRIORITY_LABEL: Record<string, { label: string; cls: string }> = {
+  high: { label: 'عالية', cls: 'bg-[var(--negative-background)] text-danger' },
+  medium: { label: 'متوسطة', cls: 'bg-[var(--warning-background)] text-warning' },
+  normal: { label: 'عادية', cls: 'bg-surface-secondary text-text-secondary' },
+}
+
+function NextStepsSlide({ data }: { data: ReportData }) {
+  const steps = data.next_steps ?? []
+  return (
+    <div>
+      <Title sub="خطة عمل مبنية على التوصيات المعتمدة">الخطوات القادمة</Title>
+      {steps.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-text-muted">لم تُعتمد خطوات قادمة لهذا الإصدار من التقرير.</div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2">
+          {steps.map((s, i) => {
+            const p = PRIORITY_LABEL[s.priority ?? 'normal'] ?? PRIORITY_LABEL.normal
+            return (
+              <div key={i} className="rounded-2xl border border-border bg-surface-secondary p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <ArrowRight size={16} className="mt-0.5 shrink-0 text-brand-600" />
+                    <span className="font-bold text-text-primary">{s.action}</span>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${p.cls}`}>{p.label}</span>
+                </div>
+                {s.reason && <p className="mt-1 ps-6 text-xs leading-relaxed text-text-secondary">السبب: {s.reason}</p>}
+                <div className="mt-2 flex flex-wrap gap-1.5 ps-6 text-[11px] text-text-muted">
+                  {s.platform && <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: platformColor(s.platform) }} />{s.platform}</span>}
+                  {s.kpi && <span>· {s.kpi}</span>}
+                  {s.owner && <span>· {s.owner}</span>}
+                  {s.due && <span>· {s.due}</span>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

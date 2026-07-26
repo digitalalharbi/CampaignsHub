@@ -72,11 +72,12 @@ final class ChromiumPdfRenderer
     /** Call the internal print-token endpoint so the token is minted through the same gated flow. */
     private function issueToken(Report $report, string $type, string $theme): string
     {
-        // In-process token mint (no HTTP round-trip): mirror ReportPrintController::issue.
+        // In-process token mint (no HTTP round-trip): mirror ReportPrintController::issue. The audience
+        // carries through so the print route receives backend-filtered (client-safe) data.
         $token = Str::random(48);
         Cache::put(
             'report-print:'.hash('sha256', $token),
-            ['report_id' => (string) $report->id, 'type' => $type, 'theme' => $theme],
+            ['report_id' => (string) $report->id, 'type' => $type, 'theme' => $theme, 'audience' => $report->audience ?? 'client'],
             300,
         );
 

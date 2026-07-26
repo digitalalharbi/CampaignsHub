@@ -20,9 +20,14 @@ final class ClientReportContentValidator
         'internal_version_tag' => '/\b(?:adset|ad set)[-\s]?copy\b|campaign[-\s]?final[-\s]?v\d+/i',
         'request_id' => '/\brequest[_\s-]?id\b/i',
         'checksum_word' => '/\bchecksum\b/i',
-        'sync_run' => '/\bsync[_\s-]?run\b/i',
-        'queue' => '/\bqueue\b|\bjob[_\s-]?id\b/i',
-        'token' => '/\bbearer\b|\baccess[_\s-]?token\b/i',
+        'sync_run' => '/\bsync[_\s-]?run\b|\bsync diagnostics\b/i',
+        'queue' => '/\bqueue\b|\bjob[_\s-]?id\b|\bretry\b/i',
+        'token' => '/\bbearer\b|\baccess[_\s-]?token\b|\boauth\b/i',
+        'payload' => '/\bpayload\b|\braw[_\s-]?field\b/i',
+        'stack_trace' => '/\bstack ?trace\b|\bexception\b/i',
+        'sql' => '/\bselect\s+.+\s+from\b|\binsert into\b/i',
+        'temp_marker' => '/\btmp\b|final[-\s]?v[23]\b/i',
+        'confidence' => '/\bconfidence[_\s-]?score\b|\bai[_\s-]?score\b/i',
     ];
 
     /**
@@ -76,6 +81,10 @@ final class ClientReportContentValidator
         }
         foreach (($data['summary'] ?? []) as $line) {
             $parts[] = (string) $line;
+        }
+        foreach (($data['next_steps'] ?? []) as $step) {
+            $parts[] = (string) ($step['action'] ?? '');
+            $parts[] = (string) ($step['reason'] ?? '');
         }
         $parts[] = (string) ($data['best']['campaign'] ?? '');
 
