@@ -114,4 +114,20 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Login Throttle (per minute, per IP)
+    |--------------------------------------------------------------------------
+    |
+    | Consumed by the 'auth-login' named rate limiter (AppServiceProvider). The
+    | production limit is deliberately strict; the local/CI limit only gives
+    | automated suites (Playwright --repeat-each, seeded roles) headroom and
+    | never applies in production.
+    |
+    */
+
+    'login_throttle' => (int) env('AUTH_LOGIN_THROTTLE', 6),
+
+    'login_throttle_local' => (int) env('AUTH_LOGIN_THROTTLE_LOCAL', 60),
+
 ];

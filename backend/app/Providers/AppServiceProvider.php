@@ -13,8 +13,11 @@ use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -49,5 +52,16 @@ class AppServiceProvider extends ServiceProvider
         // Audit authentication lifecycle events.
         Event::listen(Login::class, [RecordAuthAudit::class, 'handleLogin']);
         Event::listen(Logout::class, [RecordAuthAudit::class, 'handleLogout']);
+
+        // Login rate limiter. Production stays strict (6/min/IP, env-overridable); local & CI get
+        // headroom so automated suites that log in repeatedly (Playwright --repeat-each, seeded roles)
+        // don't trip the throttle. The production security control is unchanged.
+        RateLimiter::for('auth-login', function (Request $request): Limit {
+            $perMinute = $this->app->environment('production')
+                ? (int) config('auth.login_throttle', 6)
+                : (int) config('auth.login_throttle_local', 60);
+
+            return Limit::perMinute($perMinute)->by((string) $request->ip());
+        });
     }
 }

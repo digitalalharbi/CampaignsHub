@@ -65,6 +65,24 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 - **Next action:** add a styled `NotFound` element as a catch-all `{ path: '*' }` inside and outside the auth
   guard, matching brand + RTL. Small, self-contained.
 
+## G-007 — E2E flake under `--repeat-each=3` (login throttle) — DIAGNOSED + FIXED
+
+- **Severity:** High → CLOSED (2026-07-27)
+- **Symptom:** `playwright test --workers=1 --retries=0 --repeat-each=3` failed at `auth.setup.ts`
+  (viewer login) — page stayed on `/login`, `expect(page).not.toHaveURL(/\/login$/)` timed out.
+- **Cause (deterministic, NOT transient):** login route was `throttle:6,1` (6/min/IP). `--repeat-each=3`
+  repeats the setup project → 3 roles × 3 = 9 logins from one IP in ~10s → the 7th+ returns 429 → login
+  never completes. The throttle was doing its job (R2.6); the harness defeated itself. Proven by curling
+  `/auth/login` 8× and observing the old limit cut in at attempt 7.
+- **Fix (production security unchanged):** named `auth-login` rate limiter in `AppServiceProvider` reads
+  `config('auth.login_throttle')` — **production stays 6/min** (env-overridable via `AUTH_LOGIN_THROTTLE`);
+  non-production uses `login_throttle_local` (default 60, `AUTH_LOGIN_THROTTLE_LOCAL`). Route now uses
+  `throttle:auth-login`.
+- **Verification:** 8 rapid login probes → no 429 (limit live without server restart); `auth-redirect` +
+  `auth-forms` `--repeat-each=3` → **24/24 pass**. Backend suite 157/157, pint + phpstan clean.
+- **Note:** this is env-specific relaxation for automated testing, not lowering a control to pass a test —
+  production posture is identical and asserted by the default config value.
+
 ---
 
 _Last updated: 2026-07-27_
