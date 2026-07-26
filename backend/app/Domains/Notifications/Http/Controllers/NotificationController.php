@@ -41,11 +41,29 @@ final class NotificationController extends Controller
 
     public function markRead(Request $request, AppNotification $notification): JsonResponse
     {
-        abort_unless($notification->user_id === $request->user()->id, 403);
+        // Per-user notifications: only the owner. Project-wide alerts (null user): any tenant member.
+        abort_unless($notification->user_id === null || $notification->user_id === $request->user()->id, 403);
 
         $notification->update(['status' => 'read', 'read_at' => now()]);
 
         return ApiResponse::success(new NotificationResource($notification), 'Notification marked read.');
+    }
+
+    public function resolve(Request $request, AppNotification $notification): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('alerts.manage') || $notification->user_id === $request->user()->id, 403);
+        $notification->update(['status' => 'resolved', 'resolved_at' => now()]);
+
+        return ApiResponse::success(new NotificationResource($notification), 'Notification resolved.');
+    }
+
+    public function snooze(Request $request, AppNotification $notification): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('alerts.manage') || $notification->user_id === $request->user()->id, 403);
+        $until = $request->validate(['until' => ['required', 'date', 'after:now']])['until'];
+        $notification->update(['status' => 'snoozed', 'snoozed_until' => $until]);
+
+        return ApiResponse::success(new NotificationResource($notification), 'Notification snoozed.');
     }
 
     public function markAllRead(Request $request): JsonResponse

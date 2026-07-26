@@ -26,6 +26,8 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+    Route::post('notifications/{notification}/resolve', [NotificationController::class, 'resolve'])->name('notifications.resolve');
+    Route::post('notifications/{notification}/snooze', [NotificationController::class, 'snooze'])->name('notifications.snooze');
 
     // Tasks.
     Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');

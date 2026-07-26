@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Alerts\Http\Controllers\AlertRuleController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
@@ -73,4 +74,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{proj
     // Project-scoped views of tasks and notifications — switching projects changes these too.
     Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+
+    // Alert rules + evaluation (alerts.view / alerts.manage).
+    Route::get('alert-rules', [AlertRuleController::class, 'index'])->name('alert-rules.index');
+    Route::post('alert-rules', [AlertRuleController::class, 'store'])->name('alert-rules.store');
+    Route::match(['put', 'patch'], 'alert-rules/{rule}', [AlertRuleController::class, 'update'])->name('alert-rules.update');
+    Route::delete('alert-rules/{rule}', [AlertRuleController::class, 'destroy'])->name('alert-rules.destroy');
+    Route::post('alert-rules/evaluate', [AlertRuleController::class, 'evaluate'])->name('alert-rules.evaluate');
 });
