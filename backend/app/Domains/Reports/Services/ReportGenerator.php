@@ -85,6 +85,9 @@ final class ReportGenerator
             'funnel' => $this->agg->funnel($from, $to),
             'budget' => $this->agg->budgetPacing($from, $to, Carbon::today()),
             'summary' => $this->executiveSummary($totals, $delta, $platforms, $campaigns, $report->currency),
+            // Structured two-column content: findings (left) + recommendations (right). Cards, not prose.
+            'findings' => $this->findings($totals, $delta, $platforms, $campaigns, $report->currency),
+            'recommendations' => $this->recommendations($platforms, $campaigns, $report->currency),
             'slides' => $config['slides'] ?? [],
             // Effective disclaimer/methodology copy, snapshotted so a shared report is self-contained
             // and reproducible even if the org later edits its notes.
@@ -151,6 +154,78 @@ final class ReportGenerator
         $vals = array_filter(array_map(fn ($r) => $r[$key] ?? null, $rows), fn ($v) => $v !== null);
 
         return $vals === [] ? null : array_sum($vals) / count($vals);
+    }
+
+    /**
+     * Left column: short, card-shaped findings (icon/title/detail/severity/platform/kpi) — derived from
+     * the numbers, never fabricated. Max 5.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function findings(array $t, array $delta, array $platforms, array $campaigns, string $currency): array
+    {
+        $out = [];
+        if ($platforms !== []) {
+            $bestRoas = collect($platforms)->sortByDesc('roas')->first();
+            if ($bestRoas && $bestRoas['roas'] !== null) {
+                $out[] = ['severity' => 'positive', 'title' => "أعلى ROAS على {$bestRoas['provider']}", 'platform' => $bestRoas['provider'],
+                    'kpi' => 'ROAS', 'value' => number_format((float) $bestRoas['roas'], 2).'×', 'detail' => 'أفضل عائد إنفاق خلال الفترة.'];
+            }
+            $bestCpa = collect($platforms)->filter(fn ($p) => $p['cpa'] !== null)->sortBy('cpa')->first();
+            if ($bestCpa) {
+                $out[] = ['severity' => 'positive', 'title' => "أقل تكلفة نتيجة على {$bestCpa['provider']}", 'platform' => $bestCpa['provider'],
+                    'kpi' => 'CPA', 'value' => number_format((float) $bestCpa['cpa']).' '.$currency, 'detail' => 'تكلفة نتيجة تنافسية.'];
+            }
+            $worstRoas = collect($platforms)->filter(fn ($p) => $p['roas'] !== null && $p['spend'] > 0)->sortBy('roas')->first();
+            if ($worstRoas && count($platforms) > 1) {
+                $out[] = ['severity' => 'warning', 'title' => "{$worstRoas['provider']} دون المتوسط", 'platform' => $worstRoas['provider'],
+                    'kpi' => 'ROAS', 'value' => number_format((float) $worstRoas['roas'], 2).'×', 'detail' => 'يحتاج مراجعة الاستهداف والمحتوى.'];
+            }
+        }
+        $burner = collect($campaigns)->first(fn ($c) => ($c['spend'] ?? 0) > 3000 && ($c['conversions'] ?? 0) < 2);
+        if ($burner) {
+            $out[] = ['severity' => 'critical', 'title' => "حملة «{$burner['campaign_name']}» تنفق دون تحويلات", 'platform' => $burner['provider'] ?? null,
+                'kpi' => 'الإنفاق', 'value' => number_format((float) $burner['spend']).' '.$currency, 'detail' => 'مرشحة للإيقاف أو مراجعة التتبع.'];
+        }
+        if (isset($delta['revenue']) && $delta['revenue'] > 0.1) {
+            $out[] = ['severity' => 'positive', 'title' => 'نمو الإيرادات مقابل الفترة السابقة', 'platform' => null,
+                'kpi' => 'الإيرادات', 'value' => '+'.number_format((float) $delta['revenue'] * 100, 0).'%', 'detail' => 'اتجاه إيجابي في العائد.'];
+        }
+
+        return array_slice($out, 0, 5);
+    }
+
+    /**
+     * Right column: actionable recommendations. Suggestions only — the user approves before a client
+     * sees them (feature-flagged elsewhere). Max 5.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function recommendations(array $platforms, array $campaigns, string $currency): array
+    {
+        $out = [];
+        $bestRoas = collect($platforms)->sortByDesc('roas')->first();
+        if ($bestRoas && $bestRoas['roas'] !== null && $bestRoas['roas'] > 1) {
+            $out[] = ['severity' => 'positive', 'title' => "زيادة ميزانية {$bestRoas['provider']} تدريجيًا", 'platform' => $bestRoas['provider'],
+                'action' => 'scale', 'detail' => 'أعلى ROAS — وسّع بحذر مع مراقبة مرحلة التعلّم.', 'kpi' => 'ROAS'];
+        }
+        $worstCpa = collect($platforms)->filter(fn ($p) => $p['cpa'] !== null && $p['spend'] > 0)->sortByDesc('cpa')->first();
+        if ($worstCpa && count($platforms) > 1) {
+            $out[] = ['severity' => 'warning', 'title' => "تحسين استهداف {$worstCpa['provider']}", 'platform' => $worstCpa['provider'],
+                'action' => 'optimize', 'detail' => 'أعلى تكلفة نتيجة — راجع الجمهور والإبداع والصفحة.', 'kpi' => 'CPA'];
+        }
+        $burner = collect($campaigns)->first(fn ($c) => ($c['spend'] ?? 0) > 3000 && ($c['conversions'] ?? 0) < 2);
+        if ($burner) {
+            $out[] = ['severity' => 'critical', 'title' => "إيقاف مؤقت ومراجعة «{$burner['campaign_name']}»", 'platform' => $burner['provider'] ?? null,
+                'action' => 'pause', 'detail' => 'إنفاق دون تحويلات — تحقق من التتبع قبل الاستمرار.', 'kpi' => 'الإنفاق'];
+        }
+        $topConv = collect($campaigns)->sortByDesc('conversions')->first();
+        if ($topConv && ($topConv['conversions'] ?? 0) > 0) {
+            $out[] = ['severity' => 'positive', 'title' => "توسيع ما ينجح في «{$topConv['campaign_name']}»", 'platform' => $topConv['provider'] ?? null,
+                'action' => 'expand', 'detail' => 'أعلى نتائج — كرّر الزوايا الرابحة على جماهير مشابهة.', 'kpi' => 'النتائج'];
+        }
+
+        return array_slice($out, 0, 5);
     }
 
     /** A few plain-language findings derived from the numbers (not fabricated). */

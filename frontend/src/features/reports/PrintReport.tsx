@@ -50,25 +50,27 @@ export function PrintReport() {
     document.documentElement.setAttribute('lang', 'ar')
   }, [theme])
 
-  // Readiness protocol — Chromium waits on these before printing.
+  // Readiness protocol — Chromium waits on these before printing. Also publishes a per-page layout
+  // audit (utilization / overflow / empty / footer) that the print script uses as a hard gate.
   useEffect(() => {
     if (!payload) return
     let cancelled = false
-    const w = window as Window & { __REPORT_DATA_READY__?: boolean; __REPORT_CHARTS_READY__?: boolean; __REPORT_IMAGES_READY__?: boolean }
+    const w = window as Window & {
+      __REPORT_DATA_READY__?: boolean; __REPORT_CHARTS_READY__?: boolean; __REPORT_IMAGES_READY__?: boolean; __REPORT_LAYOUT__?: unknown
+    }
     ;(async () => {
       w.__REPORT_DATA_READY__ = true
       const fonts = (document as Document & { fonts?: FontFaceSet }).fonts
       if (fonts?.ready) await fonts.ready.catch(() => {})
-      // Settle time for ResponsiveContainer + recharts (animations disabled). Uses timers, not rAF,
-      // so it completes even if the tab is backgrounded during rendering.
       await new Promise((r) => setTimeout(r, 500))
       const imgs = Array.from(document.images)
       await Promise.all(imgs.map((img) => (img.complete ? Promise.resolve() : new Promise((res) => {
         img.onload = img.onerror = () => res(null)
-        setTimeout(() => res(null), 4000) // never hang on a stalled asset
+        setTimeout(() => res(null), 4000)
       }))))
       if (cancelled) return
       w.__REPORT_CHARTS_READY__ = true
+      w.__REPORT_LAYOUT__ = measureLayout()
       w.__REPORT_IMAGES_READY__ = true
     })()
     return () => { cancelled = true }
@@ -80,25 +82,54 @@ export function PrintReport() {
   const d = payload.data
   const meta: Meta = { reportName: payload.name, platforms: (d.platforms ?? []).map((p) => String(p.provider)), isDemo: payload.is_demo, agencyName: 'CampaignsHub' }
   const landscape = type === 'presentation'
+  const period = d.period ? `${d.period.from} → ${d.period.to}` : ''
+  const mode = (d.mode as string) === 'live' ? 'Live' : 'Snapshot'
+  const updated = d.generated_at ? new Date(String(d.generated_at)).toLocaleDateString('en-GB') : ''
+  const total = slides.length
 
   return (
     <div className={`report-print ${type}`} data-theme={theme} dir="rtl" lang="ar">
       <style>{printCss(landscape)}</style>
-      {slides.map((s) => (
-        <section key={s.id} className="report-slide">
+      {slides.map((s, i) => (
+        <section key={s.id} className="report-slide" data-print-page={i + 1}>
           <div className="report-slide-inner">
             <SlideBody slide={s} data={d} meta={meta} />
           </div>
-          {s.type !== 'cover' && d.disclaimer && (
+          {/* Professional per-page footer — never on the cover; one per page, inside the safe area. */}
+          {s.type !== 'cover' && (
             <footer className="report-slide-footer">
-              <PerformanceNotice data={d.disclaimer} variant="footer" />
-              <span className="report-slide-brand">CampaignsHub{payload.is_demo ? ' · Demo' : ''}</span>
+              <div className="report-footer-note">
+                {d.disclaimer && <PerformanceNotice data={d.disclaimer} variant="footer" />}
+              </div>
+              <div className="report-footer-meta">
+                <span className="report-footer-brand">CampaignsHub{payload.is_demo ? ' · Demo' : ''}{period ? ` · ${period}` : ''}</span>
+                <span className="report-footer-page">{mode}{updated ? ` · آخر تحديث ${updated}` : ''} · <bdi dir="ltr">{i + 1} / {total}</bdi></span>
+              </div>
             </footer>
           )}
         </section>
       ))}
     </div>
   )
+}
+
+/** Per-page layout audit read by the print script as a hard gate. */
+function measureLayout() {
+  const pages: Array<{ page: number; utilization: number; overflow: boolean; empty: boolean; footerDetected: boolean; overflowX: boolean }> = []
+  document.querySelectorAll<HTMLElement>('.report-slide').forEach((el, i) => {
+    const pageH = el.clientHeight || 1
+    const inner = el.querySelector<HTMLElement>('.report-slide-inner')
+    const contentH = inner ? inner.scrollHeight : el.scrollHeight
+    const footer = el.querySelector<HTMLElement>('.report-slide-footer')
+    const footerTop = footer ? footer.offsetTop : pageH
+    // Overflow: inner content taller than the space above the footer.
+    const overflow = contentH > footerTop + 4
+    const overflowX = el.scrollWidth > el.clientWidth + 2
+    const utilization = Math.max(0, Math.min(1.2, contentH / pageH))
+    const empty = contentH < pageH * 0.12
+    pages.push({ page: i + 1, utilization: Math.round(utilization * 100) / 100, overflow, overflowX, empty, footerDetected: !!footer || i === 0 })
+  })
+  return pages
 }
 
 function printCss(landscape: boolean): string {
@@ -118,13 +149,19 @@ function printCss(landscape: boolean): string {
     display: flex; flex-direction: column;
   }
   .report-slide:last-child { break-after: auto; page-break-after: auto; }
-  .report-slide-inner { flex: 1 1 auto; min-height: 0; }
+  .report-slide-inner { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .report-slide-inner > * { flex: 1 1 auto; }
+  /* Cover fills its page (no large empty band under it). */
+  .report-cover { height: 100%; }
   .report-slide-footer {
-    position: absolute; left: 34px; right: 34px; bottom: 14px;
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    position: absolute; left: 34px; right: 34px; bottom: 12px;
+    display: flex; flex-direction: column; gap: 3px;
     border-top: 1px solid var(--border); padding-top: 6px;
   }
-  .report-slide-brand { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+  .report-footer-note { font-size: 10px; line-height: 1.4; color: var(--text-muted); }
+  .report-footer-note p { margin: 0; }
+  .report-footer-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .report-footer-brand, .report-footer-page { font-size: 9.5px; color: var(--text-muted); white-space: nowrap; }
   /* Never split a chart, card, or table row across pages. */
   .recharts-wrapper, table, .rounded-2xl, .rounded-xl { break-inside: avoid; page-break-inside: avoid; }
   `

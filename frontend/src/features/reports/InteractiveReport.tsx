@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Image as ImageIcon, LayoutGrid, Rows, Trophy } from 'lucide-react'
+import { ArrowRight, ChevronLeft, ChevronRight, CircleCheck, Image as ImageIcon, Info, LayoutGrid, OctagonAlert, Rows, TriangleAlert, Trophy } from 'lucide-react'
 import {
   ChartCard,
   ConversionFunnelChart,
@@ -34,8 +34,25 @@ export interface ReportData {
   funnel?: Array<{ label: string; count: number; step_rate: number | null; cost_per: number | null }>
   budget?: Row[]
   summary?: string[]
+  findings?: NoteCardData[]
+  recommendations?: NoteCardData[]
   slides?: Slide[]
   disclaimer?: ResolvedDisclaimer | null
+  mode?: string
+  generated_at?: string
+  data_source?: string
+  attribution_window?: string | null
+  timezone?: string
+  checksum?: string
+}
+export interface NoteCardData {
+  severity?: 'positive' | 'warning' | 'critical' | 'info'
+  title: string
+  detail?: string
+  platform?: string | null
+  kpi?: string
+  value?: string
+  action?: string
 }
 export interface Meta { reportName: string; clientName?: string; agencyName?: string; platforms: string[]; isDemo?: boolean }
 
@@ -134,7 +151,7 @@ const pRow = (data: ReportData, p: string) => data.platforms.find((r) => r.provi
 
 function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
   return (
-    <div className="flex min-h-[380px] flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 via-brand-600 to-brand-700 p-8 text-white">
+    <div className="report-cover flex h-full min-h-[380px] flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 via-brand-600 to-brand-700 p-8 text-white">
       <div className="flex items-center justify-between">
         <span className="rounded-lg bg-white/15 px-3 py-1 text-sm font-bold">{meta.agencyName ?? 'CampaignsHub'}</span>
         {meta.isDemo && <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold">بيانات تجريبية · Demo</span>}
@@ -153,20 +170,63 @@ function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
   )
 }
 
+const SEV_STYLE: Record<string, { dot: string; icon: typeof CircleCheck }> = {
+  positive: { dot: 'text-success', icon: CircleCheck },
+  warning: { dot: 'text-warning', icon: TriangleAlert },
+  critical: { dot: 'text-danger', icon: OctagonAlert },
+  info: { dot: 'text-info', icon: Info },
+}
+
+function NoteCard({ note }: { note: NoteCardData }) {
+  const s = SEV_STYLE[note.severity ?? 'info'] ?? SEV_STYLE.info
+  const Icon = s.icon
+  return (
+    <div className="flex gap-2.5 rounded-xl border border-border bg-surface-secondary p-3">
+      <Icon size={16} className={`mt-0.5 shrink-0 ${s.dot}`} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <span className="text-sm font-bold leading-snug text-text-primary">{note.title}</span>
+          {note.value && <span className="tnum shrink-0 rounded-md bg-surface px-1.5 py-0.5 text-xs font-semibold text-text-secondary">{note.value}</span>}
+        </div>
+        {note.detail && <p className="mt-0.5 text-xs leading-relaxed text-text-secondary">{note.detail}</p>}
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {note.platform && <span className="inline-flex items-center gap-1 text-[11px] text-text-muted"><span className="h-2 w-2 rounded-full" style={{ background: platformColor(note.platform) }} />{note.platform}</span>}
+          {note.kpi && <span className="text-[11px] text-text-muted">· {note.kpi}</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function RecommendationsSlide({ data }: { data: ReportData }) {
+  // Two balanced columns: findings (right in RTL) + recommendations (left in RTL).
+  const findings = data.findings ?? []
+  const recs = data.recommendations ?? []
+  const legacy = findings.length === 0 && recs.length === 0 ? (data.summary ?? []) : []
   return (
     <div>
-      <Title>الملاحظات والتوصيات</Title>
-      {(data.summary?.length ?? 0) > 0 ? (
+      <Title sub="أبرز ما حدث، وما يُقترح فعله تاليًا">الملاحظات والتوصيات</Title>
+      {legacy.length > 0 ? (
         <ul className="space-y-2">
-          {data.summary!.map((line, idx) => (
+          {legacy.map((line, idx) => (
             <li key={idx} className="flex gap-3 rounded-xl border border-border bg-surface-secondary p-3.5 text-sm">
               <span className="mt-0.5 h-6 w-6 shrink-0 rounded-full bg-brand-100 text-center text-xs font-bold leading-6 text-brand-700">{idx + 1}</span>
               <span className="leading-relaxed">{line}</span>
             </li>
           ))}
         </ul>
-      ) : <p className="text-sm text-text-muted">لا ملاحظات مضافة بعد.</p>}
+      ) : (
+        <div className="notes-recommendations-grid grid grid-cols-1 gap-4 md:grid-cols-2">
+          <section>
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-extrabold text-text-primary"><CircleCheck size={15} className="text-brand-600" /> أبرز النتائج والملاحظات</h3>
+            <div className="space-y-2">{findings.length ? findings.map((n, i) => <NoteCard key={i} note={n} />) : <p className="text-sm text-text-muted">لا ملاحظات.</p>}</div>
+          </section>
+          <section>
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-extrabold text-text-primary"><ArrowRight size={15} className="text-brand-600" /> التوصيات والخطوات القادمة</h3>
+            <div className="space-y-2">{recs.length ? recs.map((n, i) => <NoteCard key={i} note={n} />) : <p className="text-sm text-text-muted">لا توصيات.</p>}</div>
+          </section>
+        </div>
+      )}
       {data.disclaimer && <div className="mt-5"><PerformanceNotice data={data.disclaimer} variant="full" objective={data.objective} /></div>}
     </div>
   )
@@ -230,11 +290,40 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
         <ChartCard title="الأداء بمرور الوقت" subtitle="الإنفاق والإيرادات والنتائج">
           <MetricLineChart data={series} currency={data.currency} series={[{ key: 'spend', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' }, { key: 'revenue', name: 'الإيرادات', color: 'var(--info)', kind: 'money' }, { key: 'conversions', name: 'النتائج', color: 'var(--purple)', kind: 'num' }]} height={240} />
         </ChartCard>
-        <ChartCard title="أفضل الحملات" subtitle="حسب الإنفاق">
-          {campaigns.length > 0 ? <RankingBarChart data={campaigns} bars={[{ key: 'spend', name: 'الإنفاق', kind: 'money' }]} horizontal height={240} colorByPlatform /> : <p className="py-10 text-center text-sm text-text-muted">لا حملات.</p>}
+        <ChartCard title="أفضل الحملات" subtitle={campaigns.length >= 2 ? 'حسب الإنفاق' : 'أبرز الحملات'}>
+          {/* Adaptive: a bar chart needs ≥2 bars to read well; otherwise show ranking cards, not a lone bar. */}
+          {campaigns.length >= 2
+            ? <RankingBarChart data={campaigns} bars={[{ key: 'spend', name: 'الإنفاق', kind: 'money' }]} horizontal height={240} colorByPlatform />
+            : campaigns.length === 1
+              ? <SingleCampaignFallback data={data} platform={platform} campaign={campaigns[0]} />
+              : <p className="py-10 text-center text-sm text-text-muted">لا حملات مرتبطة بهذه المنصة.</p>}
         </ChartCard>
       </div>
       <p className="mt-3 text-xs text-text-muted">Reach يُعرض لكل منصة على حدة ولا يُجمع كوصول فريد بين المنصات.</p>
+    </div>
+  )
+}
+
+/** Ranking/insight card used when a chart would otherwise show a single lonely bar. */
+function SingleCampaignFallback({ data, platform, campaign }: { data: ReportData; platform: string; campaign: { label: string; spend: number } }) {
+  const row = data.campaigns.find((c) => c.provider === platform && String(c.campaign_name ?? '—') === campaign.label) as Record<string, number | string> | undefined
+  const stats: Array<[string, string]> = [
+    ['الإنفاق', money(campaign.spend, data.currency)],
+    ['الإيرادات', money(Number(row?.revenue ?? 0), data.currency)],
+    ['ROAS', ratio(row?.roas as number)],
+    ['النتائج', num(Number(row?.conversions ?? 0))],
+  ]
+  return (
+    <div className="flex h-[240px] flex-col justify-center gap-3">
+      <div className="rounded-xl border border-border bg-surface-secondary p-4">
+        <div className="flex items-center gap-2">
+          <span className="grid h-8 w-8 place-items-center rounded-lg text-sm font-extrabold text-white" style={{ background: platformColor(platform) }}>#1</span>
+          <div className="min-w-0"><div className="truncate font-bold text-text-primary">{campaign.label}</div><div className="text-xs text-text-muted">الحملة الوحيدة النشطة على {platform}</div></div>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {stats.map(([l, v]) => <div key={l} className="rounded-lg bg-surface px-3 py-2"><div className="text-xs text-text-muted">{l}</div><div className="tnum font-bold text-text-primary">{v}</div></div>)}
+        </div>
+      </div>
     </div>
   )
 }

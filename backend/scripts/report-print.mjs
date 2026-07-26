@@ -49,6 +49,13 @@ try {
 
   if (fatalErrors.length) fail('console_errors', fatalErrors.slice(0, 5).join(' | '))
 
+  // Hard layout gate — no overflowing, horizontally-clipped, or empty pages may be printed.
+  const layout = await page.evaluate(() => window.__REPORT_LAYOUT__ || [])
+  const bad = layout.filter((p) => p.overflow || p.overflowX || p.empty)
+  if (bad.length && !cfg.ignoreLayout) {
+    fail('layout_validation_failed', bad.map((p) => `page ${p.page}: ${p.overflow ? 'overflow ' : ''}${p.overflowX ? 'overflowX ' : ''}${p.empty ? 'empty' : ''}`.trim()).join(' | '))
+  }
+
   await page.emulateMedia({ media: 'print' })
   await page.pdf({
     path: out,
@@ -58,7 +65,7 @@ try {
     format: 'A4',
     margin: { top: '0', bottom: '0', left: '0', right: '0' },
   })
-  process.stdout.write(JSON.stringify({ ok: true, out }))
+  process.stdout.write(JSON.stringify({ ok: true, out, pages: layout.length, layout }))
   await browser.close()
 } catch (e) {
   await browser.close().catch(() => {})
