@@ -56,6 +56,18 @@ Audit artifacts (`source.pdf`, `page-NN.png`, `contact-sheet.png`, `data-consist
 `layout-report.json`) are generated on demand under the scratch/audit dir — not committed (binary
 bloat); regenerate with the commands above.
 
+## Audience audit — same source report, three audiences (verified from the actual PDFs)
+| audience | pages | internal names ("burner") | checksum visible | recommendations |
+|---|---|---|---|---|
+| client | 12 | 0 (sanitised) | no (metadata only) | approved only |
+| executive | 6 | 0 (sanitised) | no | approved only, decision-focused slide subset |
+| internal | 12 | retained (team names) | provenance line shown | all (findings + draft + approved) |
+
+Enforcement is backend-side for every path (admin export, scheduled, email, share): `ReportExporter`
+applies `ClientReportView::filter` (client) / `::executive` (trimmed slides) before any format renders,
+and `ClientReportContentValidator` aborts a leaky client/executive export. Internal reports cannot be
+shared (`ReportShareController` 422) nor emailed to external recipients (`ReportDeliveryAudienceGuard`).
+
 ## Remaining before the reports phase is closed
 - Generate + audit the other three model PDFs: `weekly-ar`, `platform-comparison-ar`,
   `monthly-en-document` (LTR / A4 portrait / Inter / multi-page tables).

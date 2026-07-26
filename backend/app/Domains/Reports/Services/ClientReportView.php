@@ -102,6 +102,30 @@ final class ClientReportView
         return $out;
     }
 
+    /** Executive report is lean (5–7 pages): summary + comparison + budget + next steps, no per-platform detail. */
+    private const EXECUTIVE_SLIDE_TYPES = ['cover', 'executive_summary', 'platform_comparison', 'budget', 'next_steps'];
+
+    /**
+     * Executive view = the client filter PLUS a trimmed slide set (drop per-platform detail, funnel,
+     * standalone recommendations). Keeps the report to a handful of decision-focused pages.
+     *
+     * @param  array<string,mixed>  $data
+     * @return array<string,mixed>
+     */
+    public function executive(array $data): array
+    {
+        $out = $this->filter($data);
+        $out['audience'] = 'executive';
+        if (! empty($out['slides']) && is_array($out['slides'])) {
+            $out['slides'] = array_values(array_filter(
+                $out['slides'],
+                fn ($s) => in_array($s['type'] ?? '', self::EXECUTIVE_SLIDE_TYPES, true),
+            ));
+        }
+
+        return $out;
+    }
+
     /** Names still containing internal tokens after cleaning fall back to a generic safe label. */
     private const STILL_INTERNAL = '/\b(?:burner|test|tmp|copy|internal|draft|wip)\b/i';
 

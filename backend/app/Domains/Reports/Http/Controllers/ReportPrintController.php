@@ -63,6 +63,8 @@ final class ReportPrintController extends Controller
         $body = $report->data ?? [];
         if ($audience === 'client') {
             $body = app(ClientReportView::class)->filter($body);
+        } elseif ($audience === 'executive') {
+            $body = app(ClientReportView::class)->executive($body);
         }
 
         return ApiResponse::success([

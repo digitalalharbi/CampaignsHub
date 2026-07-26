@@ -57,7 +57,7 @@ final class ReportExporter
         $data = $report->data ?? [];
         $audience = $report->audience ?? 'client';
         if (in_array($audience, ['client', 'executive'], true)) {
-            $data = $this->clientView->filter($data);
+            $data = $audience === 'executive' ? $this->clientView->executive($data) : $this->clientView->filter($data);
             $violations = $this->contentValidator->scan($data);
             abort_if(
                 $violations !== [],
