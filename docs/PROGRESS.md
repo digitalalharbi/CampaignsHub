@@ -145,3 +145,19 @@ _(append newest first: date — what — command — result)_
 - 2026-07-21 — Laravel 12 scaffold — `php artisan --version` → `Laravel Framework 12.64.0`.
 
 - 2026-07-24 — Campaigns C1 (Unified+External+linking) — `php artisan test` → 75 passed (338 assertions); `pint --test` passed; `phpstan` No errors; migrate rollback+fresh clean.
+
+- 2026-07-26 — Reports premium chart design system (commit `14ebde1`) — shared `charts.tsx`
+  (line/area/donut/ranking-bar/funnel/progress-ring/sparkline, RTL+dark, ResponsiveContainer, no
+  data logic inside). Rebuilt interactive slides: executive summary, per-platform performance charts,
+  visual creative cards, platform comparison, funnel, budget pacing. `MetricsAggregator.timeseriesByProvider`,
+  `ReportGenerator` emits platform_series+best+funnel+budget. Verified live: 67 chart surfaces in one
+  report, 0 console errors. Gates: backend 106 passed, pint+phpstan clean, tsc/lint/build ok.
+
+- 2026-07-26 — Central disclaimer & methodology system (commit `be1dc16`) — two-level bilingual copy
+  (full/short) resolved project→client→org→system (`config/disclaimers.php` base). `disclaimers` table +
+  `DisclaimerResolver`; snapshotted into every report's data; PDF final methodology page + per-page short
+  footer; XLSX 'Methodology & Notes' sheet; CSV metadata block; settings API (versioned+audited, 403-gated);
+  live per-project resolve endpoint. Frontend `PerformanceNotice` (compact/full/footer/tooltip/methodology,
+  RTL/LTR+dark, 320px-safe) wired into dashboard, analytics, interactive report, client link.
+  Gates: backend **111 passed (445)**, pint+phpstan clean, tsc/lint/build ok, vitest 18 passed; PDF/XLSX/CSV
+  export smoke each carries methodology; verified live (dashboard note, report methodology+footer, 0 errors).
