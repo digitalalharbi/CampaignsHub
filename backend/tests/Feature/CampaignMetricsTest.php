@@ -6,17 +6,24 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Audit\Models\AuditLog;
+use App\Domains\Campaigns\Models\CampaignAnnotation;
+use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
+use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Models\Report;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
 use Tests\TestCase;
 
@@ -113,5 +120,119 @@ final class CampaignMetricsTest extends TestCase
         $this->actingAs($stranger)
             ->getJson($this->url($this->projectA, $this->campA1->id))
             ->assertForbidden();
+    }
+
+    public function test_activity_timeline_is_scoped_to_the_campaign(): void
+    {
+        AuditLog::create([
+            'tenant_id' => $this->tenant->id, 'action' => 'campaign.updated',
+            'entity_type' => UnifiedCampaign::class, 'entity_id' => (string) $this->campA1->id,
+            'before' => ['total_budget' => 100], 'after' => ['total_budget' => 200],
+        ]);
+        AuditLog::create([
+            'tenant_id' => $this->tenant->id, 'action' => 'campaign.paused',
+            'entity_type' => UnifiedCampaign::class, 'entity_id' => (string) $this->campA2->id,
+        ]);
+
+        $a1 = $this->actingAs($this->owner)->getJson($this->url($this->projectA, $this->campA1->id, 'activity'))->assertOk()->json('data');
+        $this->assertCount(1, $a1);
+        $this->assertSame('campaign.updated', $a1[0]['action']);
+
+        // Cross-project campaign id → 404 (never another project's timeline).
+        $this->actingAs($this->owner)->getJson($this->url($this->projectB, $this->campA1->id, 'activity'))->assertNotFound();
+    }
+
+    public function test_alerts_are_scoped_to_the_campaign(): void
+    {
+        AppNotification::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id, 'user_id' => $this->owner->id,
+            'type' => 'alert', 'severity' => 'critical', 'title' => 'CPA high',
+            'entity_type' => UnifiedCampaign::class, 'entity_id' => (string) $this->campA1->id, 'status' => 'unread',
+        ]);
+        AppNotification::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id, 'user_id' => $this->owner->id,
+            'type' => 'alert', 'severity' => 'info', 'title' => 'Other',
+            'entity_type' => UnifiedCampaign::class, 'entity_id' => (string) $this->campA2->id, 'status' => 'unread',
+        ]);
+
+        $a1 = $this->actingAs($this->owner)->getJson($this->url($this->projectA, $this->campA1->id, 'alerts'))->assertOk()->json('data');
+        $this->assertCount(1, $a1);
+        $this->assertSame('CPA high', $a1[0]['title']);
+        $this->actingAs($this->owner)->getJson($this->url($this->projectB, $this->campA1->id, 'alerts'))->assertNotFound();
+    }
+
+    public function test_reports_are_scoped_to_the_campaign(): void
+    {
+        Report::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id, 'campaign_id' => (string) $this->campA1->id,
+            'name' => 'Campaign monthly', 'type' => 'monthly', 'status' => 'completed', 'currency' => 'SAR', 'audience' => 'client',
+        ]);
+        Report::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id, 'campaign_id' => (string) $this->campA2->id,
+            'name' => 'Other campaign', 'type' => 'monthly', 'status' => 'completed', 'currency' => 'SAR', 'audience' => 'client',
+        ]);
+
+        $r1 = $this->actingAs($this->owner)->getJson($this->url($this->projectA, $this->campA1->id, 'reports'))->assertOk()->json('data');
+        $this->assertCount(1, $r1);
+        $this->assertSame('Campaign monthly', $r1[0]['name']);
+        $this->actingAs($this->owner)->getJson($this->url($this->projectB, $this->campA1->id, 'reports'))->assertNotFound();
+    }
+
+    public function test_annotation_create_and_approval_workflow(): void
+    {
+        $base = "/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/annotations";
+
+        // Create a recommendation (starts as draft).
+        $id = $this->actingAs($this->owner)->postJson($base, [
+            'kind' => 'recommendation', 'title' => 'Scale Google', 'evidence' => 'ROAS 8.4x vs 4.9x', 'priority' => 'high',
+        ])->assertCreated()->json('data.id');
+        $this->assertSame('draft', CampaignAnnotation::find($id)->status);
+
+        // Approve it (owner has reports.approve).
+        $this->actingAs($this->owner)->patchJson("{$base}/{$id}", ['status' => 'approved'])->assertOk();
+        $this->assertSame('approved', CampaignAnnotation::find($id)->status);
+
+        // A user without reports.approve cannot change status.
+        $editor = User::create(['tenant_id' => $this->tenant->id, 'name' => 'E', 'email' => 'e@a.test', 'password' => 'secret123']);
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'ed', 'slug' => 'ed']);
+        $role->givePermissionTo(...Permission::whereIn('key', ['campaigns.view', 'campaigns.update'])->pluck('key')->all());
+        $editor->assignRole($role);
+        $this->actingAs($editor)->patchJson("{$base}/{$id}", ['status' => 'rejected'])->assertForbidden();
+
+        // Listing is campaign-scoped.
+        $this->actingAs($this->owner)->getJson("/api/v1/projects/{$this->projectB->id}/campaigns/{$this->campA1->id}/annotations")->assertNotFound();
+    }
+
+    public function test_creatives_are_scoped_and_ranked_by_objective(): void
+    {
+        // Two creatives on campA1 with distinct ROAS (sales objective ranks by ROAS).
+        $this->creative($this->campA1, 'Winner', spend: 100, rev: 800, conv: 8);   // ROAS 8
+        $this->creative($this->campA1, 'Loser', spend: 100, rev: 200, conv: 2);    // ROAS 2
+        $this->creative($this->campA2, 'Other', spend: 100, rev: 500, conv: 5);
+
+        $data = $this->actingAs($this->owner)->getJson($this->url($this->projectA, $this->campA1->id, 'creatives'))->assertOk()->json('data');
+        $this->assertCount(2, $data);                       // only campA1's creatives
+        $this->assertSame('Winner', $data[0]['name']);       // ranked first by ROAS
+        $this->assertSame('top_performing', $data[0]['classification']);
+
+        $this->actingAs($this->owner)->getJson($this->url($this->projectB, $this->campA1->id, 'creatives'))->assertNotFound();
+    }
+
+    private function creative(UnifiedCampaign $campaign, string $name, float $spend, float $rev, float $conv): void
+    {
+        $creative = ExternalCreative::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $campaign->project_id, 'campaign_id' => $campaign->id,
+            'provider' => 'meta', 'external_creative_id' => Str::uuid()->toString(), 'name' => $name, 'format' => 'image', 'status' => 'active',
+        ]);
+        // 30 days of identical metrics so impressions>100 (avoids insufficient_data).
+        for ($d = 0; $d < 30; $d++) {
+            DB::table('creative_daily_metrics')->insert([
+                'id' => Str::uuid()->toString(), 'tenant_id' => $this->tenant->id, 'project_id' => $campaign->project_id,
+                'creative_id' => $creative->id, 'campaign_id' => $campaign->id,
+                'metric_date' => Carbon::parse('2026-06-01')->addDays($d)->toDateString(),
+                'spend' => $spend, 'impressions' => 500, 'clicks' => 20, 'conversions' => $conv, 'revenue' => $rev,
+                'video_views' => 0, 'video_completions' => 0, 'is_demo' => false, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
     }
 }

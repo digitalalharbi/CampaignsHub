@@ -78,11 +78,11 @@ describe('CampaignDetailPage', () => {
     renderWithProviders(<CampaignDetailPage />, DETAIL_ROUTE)
     await screen.findByText('National Day')
 
-    // Switch to the Platforms tab (linked external campaigns live here in the command center).
+    // Switch to the Platforms tab — the command center groups linked externals into platform cards.
     fireEvent.click(screen.getByText('Platforms'))
     expect(await screen.findByText('Sandbox Awareness')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByText('Unlink'))
+    fireEvent.click(screen.getByText('فك الربط'))
     await waitFor(() => expect(unlinkExternal).toHaveBeenCalledWith('p1', 'c1', 'e1'))
   })
 

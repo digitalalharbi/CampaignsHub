@@ -2,7 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Domains\Campaigns\Http\Controllers\CampaignActivityController;
+use App\Domains\Campaigns\Http\Controllers\CampaignAlertsController;
+use App\Domains\Campaigns\Http\Controllers\CampaignAnnotationController;
+use App\Domains\Campaigns\Http\Controllers\CampaignCreativesController;
 use App\Domains\Campaigns\Http\Controllers\CampaignMetricsController;
+use App\Domains\Campaigns\Http\Controllers\CampaignReportsController;
 use App\Domains\Campaigns\Http\Controllers\ExternalCampaignController;
 use App\Domains\Campaigns\Http\Controllers\UnifiedCampaignController;
 use Illuminate\Support\Facades\Route;
@@ -32,6 +37,13 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])
         Route::get('campaigns/{campaign}/platforms', [CampaignMetricsController::class, 'platforms'])->name('platforms');
         Route::get('campaigns/{campaign}/budget', [CampaignMetricsController::class, 'budget'])->name('budget');
         Route::get('campaigns/{campaign}/funnel', [CampaignMetricsController::class, 'funnel'])->name('funnel');
+        Route::get('campaigns/{campaign}/creatives', [CampaignCreativesController::class, 'index'])->name('creatives');
+        Route::get('campaigns/{campaign}/activity', [CampaignActivityController::class, 'index'])->name('activity');
+        Route::get('campaigns/{campaign}/alerts', [CampaignAlertsController::class, 'index'])->name('alerts');
+        Route::get('campaigns/{campaign}/reports', [CampaignReportsController::class, 'index'])->name('reports');
+        Route::get('campaigns/{campaign}/annotations', [CampaignAnnotationController::class, 'index'])->name('annotations.index');
+        Route::post('campaigns/{campaign}/annotations', [CampaignAnnotationController::class, 'store'])->name('annotations.store');
+        Route::match(['put', 'patch'], 'campaigns/{campaign}/annotations/{annotation}', [CampaignAnnotationController::class, 'update'])->name('annotations.update');
 
         // Project-wide external campaigns (imported by connector sync).
         Route::get('external-campaigns', [ExternalCampaignController::class, 'index'])->name('external-campaigns.index');

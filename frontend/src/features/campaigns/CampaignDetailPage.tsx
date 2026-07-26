@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowRight, Archive, Link2, Pause, Pencil, Play, Unlink } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Archive, Pause, Pencil, Play } from 'lucide-react'
 import {
   archiveCampaign,
   campaignAction,
@@ -23,19 +23,30 @@ import {
   performanceTone,
   priorityLabel,
   priorityTone,
-  providerLabel,
   stageLabel,
   stageTone,
 } from './labels'
 import { isDemoProvider } from './types'
-import { CampaignExecutiveSummary, CampaignKpis, CampaignPerformanceTab } from './CampaignCommandCenter'
+import {
+  CampaignActivityTab,
+  CampaignAlertsTab,
+  CampaignBudgetTab,
+  CampaignCreativesTab,
+  CampaignExecutiveSummary,
+  CampaignFunnelTab,
+  CampaignKpis,
+  CampaignNotesTab,
+  CampaignPerformanceTab,
+  CampaignPlatformsTab,
+  CampaignReportsTab,
+} from './CampaignCommandCenter'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { RangeTabs } from '@/features/analytics/components'
 import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardTitle } from '@/components/ui/Card'
-import { EmptyState, ErrorState, NoPermission, Skeleton } from '@/components/ui/States'
+import { ErrorState, NoPermission, Skeleton } from '@/components/ui/States'
 import { Tabs, TabPanel, type TabItem } from '@/components/ui/Tabs'
 import { useT } from '@/lib/i18n'
 import { useAuth } from '@/stores/auth'
@@ -72,6 +83,7 @@ export function CampaignDetailPage() {
   const canView = useAuth((s) => s.hasPermission('campaigns.view'))
   const canUpdate = useAuth((s) => s.hasPermission('campaigns.update'))
   const canPause = useAuth((s) => s.hasPermission('campaigns.pause'))
+  const canApprove = useAuth((s) => s.hasPermission('reports.approve'))
 
   const tabParam = sp.get('tab') as TabKey | null
   const tab: TabKey = tabParam && TAB_KEYS.includes(tabParam) ? tabParam : 'overview'
@@ -284,40 +296,26 @@ export function CampaignDetailPage() {
               <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">{c.audience || '—'}</p>
             </Card>
           </div>
+          {/* CMC-5 — recent activity timeline. */}
+          <Card className="mt-4">
+            <CardTitle>{t('tab_activity')}</CardTitle>
+            <div className="mt-3"><CampaignActivityTab campaign={c} projectId={projectId} limit={6} /></div>
+          </Card>
         </TabPanel>
       )}
 
       {tab === 'platforms' && (
         <TabPanel>
-          <div className="mb-3 flex items-center justify-between">
-            <CardTitle>{t('linked_campaigns')}</CardTitle>
-            {canUpdate && <Button onClick={() => setLinkOpen(true)}><Link2 size={14} /> {t('link_external')}</Button>}
-          </div>
+          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
           {linkedQuery.isLoading ? (
-            <Skeleton className="h-12 w-full" />
-          ) : linked.length === 0 ? (
-            <EmptyState title={t('no_linked_external')} description={t('no_linked_hint')} />
+            <Skeleton className="h-40 w-full" />
           ) : (
-            <div className="space-y-2">
-              {linked.map((ext) => (
-                <div key={ext.id} className="flex items-center justify-between rounded-[9px] border border-border p-2.5">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-sm font-semibold">{ext.name}</span>
-                      <Badge tone={isDemoProvider(ext.provider) ? 'warning' : 'neutral'}>
-                        {providerLabel(ext.provider, locale)}{isDemoProvider(ext.provider) ? ` · ${t('demo_label')}` : ''}
-                      </Badge>
-                      <Badge tone={campaignStatusTone(ext.status)}>{campaignStatusLabel(ext.status, locale)}</Badge>
-                    </div>
-                    <span className="text-xs text-text-muted">{t('ad_account_label')}: <span className="tnum">{ext.external_id}</span></span>
-                  </div>
-                  {canUpdate && (
-                    <Button variant="ghost" loading={unlinkMutation.isPending && unlinkMutation.variables === ext.id}
-                      onClick={() => unlinkMutation.mutate(ext.id)}><Unlink size={14} /> {t('unlink')}</Button>
-                  )}
-                </div>
-              ))}
-            </div>
+            <CampaignPlatformsTab
+              campaign={c} projectId={projectId} range={range} locale={locale} linked={linked}
+              onLink={() => setLinkOpen(true)} onUnlink={(id) => unlinkMutation.mutate(id)}
+              unlinkingId={unlinkMutation.isPending ? (unlinkMutation.variables as string) : undefined}
+              canUpdate={canUpdate}
+            />
           )}
         </TabPanel>
       )}
@@ -329,10 +327,43 @@ export function CampaignDetailPage() {
         </TabPanel>
       )}
 
-      {/* Sections wired to their real backends in the following CMC batches. */}
-      {(['creatives', 'budget', 'funnel', 'notes', 'alerts', 'reports', 'activity'] as TabKey[]).includes(tab) && (
+      {tab === 'budget' && (
         <TabPanel>
-          <EmptyState title={t(`tab_${tab}` as never)} description={t('cmc_section_building')} />
+          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
+          <CampaignBudgetTab campaign={c} projectId={projectId} range={range} locale={locale} />
+        </TabPanel>
+      )}
+      {tab === 'funnel' && (
+        <TabPanel>
+          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
+          <CampaignFunnelTab campaign={c} projectId={projectId} range={range} />
+        </TabPanel>
+      )}
+      {tab === 'activity' && (
+        <TabPanel>
+          <CampaignActivityTab campaign={c} projectId={projectId} />
+        </TabPanel>
+      )}
+      {tab === 'alerts' && (
+        <TabPanel>
+          <CampaignAlertsTab campaign={c} projectId={projectId} />
+        </TabPanel>
+      )}
+      {tab === 'reports' && (
+        <TabPanel>
+          <CampaignReportsTab campaign={c} projectId={projectId} />
+        </TabPanel>
+      )}
+
+      {tab === 'creatives' && (
+        <TabPanel>
+          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
+          <CampaignCreativesTab campaign={c} projectId={projectId} range={range} locale={locale} />
+        </TabPanel>
+      )}
+      {tab === 'notes' && (
+        <TabPanel>
+          <CampaignNotesTab campaign={c} projectId={projectId} canUpdate={canUpdate} canApprove={canApprove} />
         </TabPanel>
       )}
 
