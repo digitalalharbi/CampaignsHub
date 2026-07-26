@@ -17,6 +17,11 @@ final class RecordAuthAudit
 
     public function handleLogin(Login $event): void
     {
+        // Stamp last-login for the team roster (best-effort; never blocks auth).
+        if (method_exists($event->user, 'forceFill')) {
+            $event->user->forceFill(['last_login_at' => now()])->saveQuietly();
+        }
+
         $this->audit->log(
             action: 'user.login',
             entityType: $event->user::class,

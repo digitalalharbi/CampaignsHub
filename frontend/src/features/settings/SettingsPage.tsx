@@ -2,7 +2,12 @@ import { useState } from 'react'
 import { Building2, FileText, Palette, ShieldCheck, Users, Briefcase, FolderKanban, Bell } from 'lucide-react'
 import { GeneralTab } from './tabs/GeneralTab'
 import { DisclaimerTab } from './tabs/DisclaimerTab'
-import { PlaceholderTab } from './tabs/PlaceholderTab'
+import { TeamTab } from './tabs/TeamTab'
+import { NotificationsTab } from './tabs/NotificationsTab'
+import { SecurityTab } from './tabs/SecurityTab'
+import { BrandingTab } from './tabs/BrandingTab'
+import { ClientsTab } from './tabs/ClientsTab'
+import { ProjectsTab } from './tabs/ProjectsTab'
 
 const TABS = [
   { id: 'general', label: 'عام', icon: Building2 },
@@ -50,12 +55,12 @@ export function SettingsPage() {
         <div className="min-w-0">
           {tab === 'general' && <GeneralTab />}
           {tab === 'disclaimer' && <DisclaimerTab />}
-          {tab === 'clients' && <PlaceholderTab title="العملاء" hint="إدارة العملاء وأرشفتهم وأعضائهم وتقاريرهم." link="/clients" linkLabel="فتح إدارة العملاء" />}
-          {tab === 'projects' && <PlaceholderTab title="المشاريع" hint="إنشاء المشاريع وربطها بالعملاء وتحديد مصادر الحقيقة والإسناد." link="/campaigns" linkLabel="فتح المشاريع" />}
-          {tab === 'team' && <PlaceholderTab title="الفريق والصلاحيات" hint="تُدار عضوية كل مشروع وصلاحياته من صفحة فريق المشروع." />}
-          {tab === 'notifications' && <PlaceholderTab title="الإشعارات" hint="تفضيلات الإشعارات لكل مستخدم ومشروع." />}
-          {tab === 'security' && <PlaceholderTab title="الأمان" hint="كلمة المرور، الجلسات، الأجهزة، سجل الدخول، وMFA." />}
-          {tab === 'branding' && <PlaceholderTab title="الهوية" hint="الشعار والألوان واسم البوابة وتذييل التقارير." />}
+          {tab === 'clients' && <ClientsTab />}
+          {tab === 'team' && <TeamTab />}
+          {tab === 'notifications' && <NotificationsTab />}
+          {tab === 'security' && <SecurityTab />}
+          {tab === 'branding' && <BrandingTab />}
+          {tab === 'projects' && <ProjectsTab />}
         </div>
       </div>
     </div>

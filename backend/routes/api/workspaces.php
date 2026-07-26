@@ -13,6 +13,9 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
     Route::get('client-workspaces', [ClientWorkspaceController::class, 'index'])->name('client-workspaces.index');
     Route::post('client-workspaces', [ClientWorkspaceController::class, 'store'])->name('client-workspaces.store');
     Route::get('client-workspaces/{clientWorkspace}', [ClientWorkspaceController::class, 'show'])->name('client-workspaces.show');
+    Route::match(['put', 'patch'], 'client-workspaces/{clientWorkspace}', [ClientWorkspaceController::class, 'update'])->name('client-workspaces.update');
+    Route::delete('client-workspaces/{clientWorkspace}', [ClientWorkspaceController::class, 'archive'])->name('client-workspaces.archive');
+    Route::post('client-workspaces/{clientWorkspace}/restore', [ClientWorkspaceController::class, 'restore'])->name('client-workspaces.restore');
 
     // AI BYOK (masked; secrets never returned).
     Route::get('ai/credentials', [AICredentialController::class, 'index'])->name('ai.credentials.index');

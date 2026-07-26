@@ -42,6 +42,10 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_platform_admin' => 'bool',
+            'disabled_at' => 'datetime',
+            'last_login_at' => 'datetime',
+            'two_factor_secret' => 'encrypted',
+            'two_factor_enabled' => 'bool',
         ];
     }
 

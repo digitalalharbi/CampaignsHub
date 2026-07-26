@@ -61,6 +61,43 @@ final class ClientWorkspaceController extends Controller
         );
     }
 
+    public function update(Request $request, ClientWorkspace $clientWorkspace, AuditLogger $audit): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('clients.update'), 403);
+
+        $validated = $request->validate([
+            'name' => ['sometimes', 'required', 'string', 'max:160'],
+            'mode' => ['sometimes', 'required', Rule::in(WorkspaceMode::values())],
+            'branding' => ['nullable', 'array'],
+            'limits' => ['nullable', 'array'],
+        ]);
+        $before = $clientWorkspace->only(['name', 'mode', 'branding']);
+        $clientWorkspace->fill($validated)->save();
+
+        $audit->log(action: 'client_workspace.updated', entityType: ClientWorkspace::class, entityId: (string) $clientWorkspace->id, before: $before, after: $clientWorkspace->only(['name', 'mode', 'branding']));
+
+        return ApiResponse::success(new ClientWorkspaceResource($clientWorkspace->loadCount('projects')), 'Client workspace updated.');
+    }
+
+    public function archive(Request $request, ClientWorkspace $clientWorkspace, AuditLogger $audit): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('clients.delete'), 403);
+        $clientWorkspace->delete(); // soft delete
+        $audit->log(action: 'client_workspace.archived', entityType: ClientWorkspace::class, entityId: (string) $clientWorkspace->id);
+
+        return ApiResponse::success(null, 'Client workspace archived.');
+    }
+
+    public function restore(Request $request, string $clientWorkspace, AuditLogger $audit): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('clients.delete'), 403);
+        $ws = ClientWorkspace::withTrashed()->findOrFail($clientWorkspace);
+        $ws->restore();
+        $audit->log(action: 'client_workspace.restored', entityType: ClientWorkspace::class, entityId: (string) $ws->id);
+
+        return ApiResponse::success(new ClientWorkspaceResource($ws->loadCount('projects')), 'Client workspace restored.');
+    }
+
     private function uniqueSlug(string $name): string
     {
         $base = Str::slug($name) ?: 'workspace';
