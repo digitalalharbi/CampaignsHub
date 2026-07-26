@@ -44,3 +44,9 @@ export async function fetchCurrentUser(): Promise<AuthUser | null> {
     return null
   }
 }
+
+/** Request a password-reset link. Always resolves generically (no account enumeration). */
+export async function requestPasswordReset(input: { email: string }): Promise<void> {
+  await ensureCsrfCookie()
+  await postData('/auth/forgot-password', input)
+}

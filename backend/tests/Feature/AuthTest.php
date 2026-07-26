@@ -113,4 +113,15 @@ final class AuthTest extends TestCase
 
         $this->assertSame(1, $user->tokens()->count());
     }
+    public function test_forgot_password_returns_generic_success_without_enumeration(): void
+    {
+        \App\Models\User::factory()->create(['email' => 'known@a.test']);
+
+        // Known and unknown emails return the SAME 200 + message (no account enumeration).
+        $known = $this->postJson('/api/v1/auth/forgot-password', ['email' => 'known@a.test'])->assertOk()->json('message');
+        $unknown = $this->postJson('/api/v1/auth/forgot-password', ['email' => 'nobody@a.test'])->assertOk()->json('message');
+        $this->assertSame($known, $unknown);
+
+        $this->postJson('/api/v1/auth/forgot-password', ['email' => 'not-an-email'])->assertStatus(422);
+    }
 }

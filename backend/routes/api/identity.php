@@ -15,6 +15,8 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
     Route::post('/register', [AuthController::class, 'register'])->name('register');
     Route::post('/login', [AuthController::class, 'login'])->name('login')
         ->middleware('throttle:6,1');
+    Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password')
+        ->middleware('throttle:6,1');
     // Personal Access Token issuance for non-browser API clients only.
     Route::post('/tokens', [AuthController::class, 'issueToken'])->name('tokens')
         ->middleware('throttle:6,1');

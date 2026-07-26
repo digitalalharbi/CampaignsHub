@@ -78,6 +78,24 @@ final class AuthController extends Controller
     }
 
     /**
+     * Password-reset request. Responds with the SAME generic message whether or not the account
+     * exists (no account enumeration). Actual email delivery depends on mail credentials — until a
+     * mailer is configured this records the intent in the log and returns success (Awaiting
+     * Credentials), so the UI flow is complete end-to-end without leaking real vs. unknown emails.
+     */
+    public function forgotPassword(Request $request): JsonResponse
+    {
+        $data = $request->validate(['email' => ['required', 'email']]);
+
+        if (User::where('email', $data['email'])->exists()) {
+            // TODO(Awaiting Credentials): once a mailer is configured, dispatch the reset link here.
+            logger()->info('Password reset requested', ['email' => $data['email']]);
+        }
+
+        return ApiResponse::success(null, 'If an account exists for that email, a reset link has been sent.');
+    }
+
+    /**
      * Issue a Personal Access Token for NON-browser API clients (mobile, integrations).
      * Browsers use the cookie session above and never receive a token.
      */
