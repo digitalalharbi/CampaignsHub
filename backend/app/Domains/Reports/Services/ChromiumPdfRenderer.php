@@ -73,35 +73,44 @@ final class ChromiumPdfRenderer
 
     /**
      * Rewrite the Arabic text layer (ToUnicode) in place so copy/search/AT get base letters
-     * instead of Chromium's presentation-form glyphs. Best-effort: any failure is swallowed —
-     * the already-correct visual PDF ships regardless.
+     * instead of Chromium's presentation-form glyphs, then VALIDATE. This is a fail-closed gate:
+     * if normalisation cannot drive presentation forms to zero (or any invariant fails), the
+     * script exits non-zero and we throw — a client Arabic PDF is never shipped with a broken
+     * text layer. The written report (text-layer-validation.json) is returned to the caller.
+     *
+     * @return array<string,mixed> the validation report
      */
-    private function normalizeArabicTextLayer(string $path): void
+    private function normalizeArabicTextLayer(string $path): array
     {
         if (! config('reports.chromium.arabic_textlayer_fix', true)) {
-            return;
+            return ['status' => 'skipped'];
         }
         $script = (string) config('reports.chromium.textlayer_script');
         if ($script === '' || ! is_file($script)) {
-            return;
+            throw new RuntimeException('Arabic text-layer normaliser missing: '.$script);
         }
-        try {
-            $proc = new Process(
-                [(string) config('reports.chromium.python_bin', 'python3'), $script, $path],
-                base_path(),
-                null,
-                null,
-                60,
-            );
-            $proc->run();
-            if (! $proc->isSuccessful()) {
-                logger()->warning('Arabic text-layer normalization skipped', [
-                    'error' => Str::limit(trim($proc->getErrorOutput()), 300),
-                ]);
-            }
-        } catch (\Throwable $e) {
-            logger()->warning('Arabic text-layer normalization threw', ['error' => $e->getMessage()]);
+
+        $report = $path.'.textlayer.json';
+        $proc = new Process(
+            [(string) config('reports.chromium.python_bin', 'python3'), $script, $path, '--report', $report],
+            base_path(),
+            null,
+            null,
+            120,
+        );
+        $proc->run();
+
+        $data = is_file($report) ? json_decode((string) file_get_contents($report), true) : null;
+        @unlink($report);
+
+        if (! $proc->isSuccessful() || ! is_array($data) || ($data['status'] ?? null) !== 'passed') {
+            $reason = is_array($data)
+                ? 'checks='.json_encode($data['checks'] ?? [], JSON_UNESCAPED_UNICODE)
+                : Str::limit(trim($proc->getErrorOutput()), 300);
+            throw new RuntimeException('Arabic text-layer validation failed — export blocked. '.$reason);
         }
+
+        return $data;
     }
 
     /** Call the internal print-token endpoint so the token is minted through the same gated flow. */
