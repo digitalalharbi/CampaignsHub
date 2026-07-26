@@ -29,9 +29,9 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
   await page.getByTestId('campaign-card').first().click()
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
 
-  // Tabs render; a not-yet-backed tab shows the honest "section building" state (not fake data).
+  // Performance tab renders the real charts (Spend vs Revenue) from the campaign metrics API.
   await page.getByRole('tab', { name: /Performance|الأداء/ }).click()
-  await expect(page.getByText(/section is being built|يُبنى هذا القسم/)).toBeVisible()
+  await expect(page.getByText(/الإنفاق مقابل الإيرادات/)).toBeVisible({ timeout: 15000 })
 
   // Platforms tab lists linked external campaigns (or an empty state).
   await page.getByRole('tab', { name: /Platforms|المنصات/ }).click()

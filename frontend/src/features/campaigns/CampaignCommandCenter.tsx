@@ -8,7 +8,7 @@ import {
   useCampaignPlatforms,
   useCampaignSummary,
 } from './metrics'
-import type { MetricTotals, Range, TimePoint } from '@/features/analytics/api'
+import type { MetricTotals, PlatformRow, Range, TimePoint } from '@/features/analytics/api'
 import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, PlatformDonutChart, ProgressRing, SpendRevenueAreaChart } from '@/features/analytics/charts'
 import { compact, money, num, percent, ratio, trend } from '@/features/analytics/format'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
@@ -337,6 +337,98 @@ function Fact({ label, value, tone }: { label: string; value: string; tone?: 'da
     <div className="flex flex-col gap-0.5 rounded-xl border border-border bg-surface p-3">
       <span className="text-[11px] uppercase tracking-wide text-text-muted">{label}</span>
       <span className={`text-sm font-bold ${tone === 'danger' ? 'text-danger' : 'text-text-primary'}`}>{value}</span>
+    </div>
+  )
+}
+
+/** CMC-7 — Platforms tab: one rich card per LINKED platform (metrics + externals + last sync). */
+export function CampaignPlatformsTab({
+  campaign, projectId, range, locale, linked, onLink, onUnlink, unlinkingId, canUpdate,
+}: {
+  campaign: UnifiedCampaign; projectId: string; range: Range; locale: Locale
+  linked: import('./types').ExternalCampaign[]; onLink: () => void
+  onUnlink: (externalId: string) => void; unlinkingId?: string; canUpdate: boolean
+}) {
+  const platforms = useCampaignPlatforms(projectId, campaign.id, range)
+  const cur = campaign.budget_currency || 'SAR'
+
+  // Only providers that have a linked external campaign appear (never an unlinked platform).
+  const providers = useMemo(() => [...new Set(linked.map((e) => e.provider))], [linked])
+  const metricByProvider = useMemo(() => {
+    const map: Record<string, PlatformRow> = {}
+    for (const p of platforms.data ?? []) map[p.provider] = p
+    return map
+  }, [platforms.data])
+
+  if (platforms.isLoading) return <div className="grid gap-3 lg:grid-cols-2">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48" />)}</div>
+  if (providers.length === 0) {
+    return (
+      <div className="space-y-3">
+        {canUpdate && <div className="flex justify-end"><button onClick={onLink} className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white">ربط حملة خارجية</button></div>}
+        <EmptyState title="لا منصات مرتبطة" description="اربط حملة خارجية من حساباتك المتزامنة لتظهر هنا." />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {canUpdate && <div className="flex justify-end"><button onClick={onLink} className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white">ربط حملة خارجية</button></div>}
+      <div className="grid gap-3 lg:grid-cols-2">
+        {providers.map((prov) => {
+          const m = metricByProvider[prov]
+          const externals = linked.filter((e) => e.provider === prov)
+          const lastSync = externals.map((e) => e.last_synced_at).filter(Boolean).sort().at(-1)
+          const isDemo = externals.some((e) => e.provider.includes('sandbox') || e.provider === 'sandbox')
+          return (
+            <div key={prov} className="rounded-2xl border border-border bg-surface p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-bold text-text-primary">{providerLabel(prov, locale)}</span>
+                  {isDemo && <span className="rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">Demo</span>}
+                </div>
+                <span className="text-[11px] text-text-muted">آخر مزامنة: {lastSync ? new Date(lastSync).toLocaleDateString('en-GB') : '—'}</span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <MiniStat label="الإنفاق" value={money(Number(m?.spend ?? 0), cur)} />
+                <MiniStat label="النتائج" value={num(m?.conversions ?? 0)} />
+                <MiniStat label="CPA" value={money(m?.cpa ?? null, cur)} />
+                <MiniStat label="ROAS" value={ratio(m?.roas ?? null)} />
+                <MiniStat label="المساهمة" value={m?.spend_share != null ? percent(m.spend_share * 100, 0) : '—'} />
+                <MiniStat label="CTR" value={percent((m?.ctr ?? 0) * 100)} />
+                <MiniStat label="حملات خارجية" value={String(externals.length)} />
+                <MiniStat label="الحساب" value={externals[0]?.external_account_id?.slice(0, 8) ?? '—'} />
+              </div>
+              <div className="mt-3">
+                <div className="text-xs font-semibold text-text-secondary">الحملات الخارجية ({externals.length})</div>
+                <ul className="mt-2 space-y-1.5">
+                  {externals.map((e) => (
+                    <li key={e.id} className="flex items-center justify-between gap-2 rounded-lg border border-border p-2 text-xs">
+                      <span className="truncate font-medium">{e.name}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="tnum text-text-muted">{e.status} · {e.external_id}</span>
+                        {canUpdate && (
+                          <button onClick={() => onUnlink(e.id)} disabled={unlinkingId === e.id} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-muted hover:text-danger disabled:opacity-50">
+                            {unlinkingId === e.id ? '…' : 'فك الربط'}
+                          </button>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-surface-secondary p-2">
+      <div className="text-[10px] uppercase text-text-muted">{label}</div>
+      <div className="tnum text-sm font-bold text-text-primary">{value}</div>
     </div>
   )
 }

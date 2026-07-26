@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowRight, Archive, Link2, Pause, Pencil, Play, Unlink } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Archive, Pause, Pencil, Play } from 'lucide-react'
 import {
   archiveCampaign,
   campaignAction,
@@ -23,7 +23,6 @@ import {
   performanceTone,
   priorityLabel,
   priorityTone,
-  providerLabel,
   stageLabel,
   stageTone,
 } from './labels'
@@ -35,6 +34,7 @@ import {
   CampaignFunnelTab,
   CampaignKpis,
   CampaignPerformanceTab,
+  CampaignPlatformsTab,
 } from './CampaignCommandCenter'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { RangeTabs } from '@/features/analytics/components'
@@ -301,35 +301,16 @@ export function CampaignDetailPage() {
 
       {tab === 'platforms' && (
         <TabPanel>
-          <div className="mb-3 flex items-center justify-between">
-            <CardTitle>{t('linked_campaigns')}</CardTitle>
-            {canUpdate && <Button onClick={() => setLinkOpen(true)}><Link2 size={14} /> {t('link_external')}</Button>}
-          </div>
+          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
           {linkedQuery.isLoading ? (
-            <Skeleton className="h-12 w-full" />
-          ) : linked.length === 0 ? (
-            <EmptyState title={t('no_linked_external')} description={t('no_linked_hint')} />
+            <Skeleton className="h-40 w-full" />
           ) : (
-            <div className="space-y-2">
-              {linked.map((ext) => (
-                <div key={ext.id} className="flex items-center justify-between rounded-[9px] border border-border p-2.5">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-sm font-semibold">{ext.name}</span>
-                      <Badge tone={isDemoProvider(ext.provider) ? 'warning' : 'neutral'}>
-                        {providerLabel(ext.provider, locale)}{isDemoProvider(ext.provider) ? ` · ${t('demo_label')}` : ''}
-                      </Badge>
-                      <Badge tone={campaignStatusTone(ext.status)}>{campaignStatusLabel(ext.status, locale)}</Badge>
-                    </div>
-                    <span className="text-xs text-text-muted">{t('ad_account_label')}: <span className="tnum">{ext.external_id}</span></span>
-                  </div>
-                  {canUpdate && (
-                    <Button variant="ghost" loading={unlinkMutation.isPending && unlinkMutation.variables === ext.id}
-                      onClick={() => unlinkMutation.mutate(ext.id)}><Unlink size={14} /> {t('unlink')}</Button>
-                  )}
-                </div>
-              ))}
-            </div>
+            <CampaignPlatformsTab
+              campaign={c} projectId={projectId} range={range} locale={locale} linked={linked}
+              onLink={() => setLinkOpen(true)} onUnlink={(id) => unlinkMutation.mutate(id)}
+              unlinkingId={unlinkMutation.isPending ? (unlinkMutation.variables as string) : undefined}
+              canUpdate={canUpdate}
+            />
           )}
         </TabPanel>
       )}

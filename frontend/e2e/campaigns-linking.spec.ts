@@ -72,5 +72,5 @@ test('link → 409 move-confirmation → confirm move → unlink (full path)', a
 
   // --- Unlink from B → it returns to the unlinked pool ---
   await page.getByRole('button', { name: /^Unlink$|فك الربط/ }).click()
-  await expect(page.getByText(/No external campaigns linked yet|لا حملات خارجية مرتبطة بعد/)).toBeVisible()
+  await expect(page.getByText(/No linked platforms|لا منصات مرتبطة/)).toBeVisible()
 })
