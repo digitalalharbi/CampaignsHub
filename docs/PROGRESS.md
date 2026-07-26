@@ -153,6 +153,25 @@ _(append newest first: date — what — command — result)_
   `ReportGenerator` emits platform_series+best+funnel+budget. Verified live: 67 chart surfaces in one
   report, 0 console errors. Gates: backend 106 passed, pint+phpstan clean, tsc/lint/build ok.
 
+- 2026-07-26 — **Reports rebuild — merged to `feat/premium-ui`** (`44613ca`; branch `feat/reports-rebuild`
+  ff-merged, 11 commits). Rebuilt the report output engine + data integrity + client audience:
+  • Data validation gate — export blocked on inconsistency (e.g. results>0 with spend=revenue=0).
+  • **Headless-Chromium PDF engine** replacing Dompdf for creative reports: React print route rendering
+    the same SlideBody, correct Arabic RTL + embedded fonts + `<bdi>` numerals, real charts.
+  • Print layout engine: `height:100vh` + SlideContentFitter (readable floor 0.85), honest content-
+    utilization (grid over real content, not background), fixes the 11-slides→17-pages spill; hard gate
+    on overflow / horizontal-clip / empty / clipped-elements / unreadable-scale.
+  • Verified from the ACTUAL PDF (pdfplumber): page-count==slides, EXACT numeric parity (not just
+    compact), provenance in `/Title`; per-page PNG + contact sheet audit.
+  • **Audience separation client / internal / executive** enforced backend-side on EVERY export path
+    (admin/scheduled/email/share) via `ReportExporter` — approved-recs-only, client names, no internal
+    fields; `ClientReportContentValidator`; internal reports can't be shared or emailed externally
+    (`ReportDeliveryAudienceGuard`); audience-specific XLSX sheets; executive = 6-page decision subset.
+  • Two-column notes/recommendations, Next-Steps slide (approved only), single-item chart fallbacks.
+  Gates at merge: backend **139 tests**, pint+phpstan clean, migrate:fresh --seed clean, tsc/lint/build,
+  vitest 18. Follow-ups: automated visual-regression baselines, full annotation review UI
+  (reviewed_by/approved_by), `client_display_name` DB fields. See docs/PDF_VISUAL_AUDIT.md.
+
 - 2026-07-26 — Integrated Settings section (commits `866e66b`, `9328efa`) — tabbed shell replacing the
   placeholder route. **General** (org profile → tenant.settings, validated+audited). **Disclaimer**
   management (bilingual per-section editor, live preview, restore, versioned). **Team & Permissions**

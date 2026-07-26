@@ -3,7 +3,7 @@
 _Single source of truth for "where we are" so work survives context/session loss._
 
 ## Current state (2026-07-26)
-- **Branch:** `feat/premium-ui` (integration branch) in worktree `~/Developer/CampaignsHub-UI`.
+- **Branch:** `feat/premium-ui` (integration branch) — reports-rebuild MERGED (`44613ca`).
 - **Last commits:** `9328efa` (settings complete), `866e66b` (settings shell), `be1dc16` (disclaimers),
   `14ebde1` (premium charts).
 - **Gates green:** backend **121 tests**, pint + phpstan clean, migrations reversible, tsc + lint +
