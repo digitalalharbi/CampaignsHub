@@ -3,6 +3,7 @@ import { TrendingDown, TrendingUp } from 'lucide-react'
 import type { UnifiedCampaign } from './types'
 import {
   useCampaignActivity,
+  useCampaignCreatives,
   useCampaignAlerts,
   useCampaignAnnotations,
   useCampaignFunnel,
@@ -599,6 +600,91 @@ export function CampaignNotesTab({ campaign, projectId, canUpdate, canApprove }:
         {adding === 'recommendation' && <AddForm kind="recommendation" />}
         {recs.length === 0 && adding !== 'recommendation' ? <EmptyState title="لا توصيات" /> : recs.map((a) => <Card2 key={a.id} a={a} />)}
       </div>
+    </div>
+  )
+}
+
+const CREATIVE_CLASS: Record<string, { label: string; tone: string }> = {
+  top_performing: { label: 'أداء متميز', tone: 'bg-success/15 text-success' },
+  promising: { label: 'واعد', tone: 'bg-info/15 text-info' },
+  needs_improvement: { label: 'يحتاج تحسينًا', tone: 'bg-warning/15 text-warning' },
+  fatigued: { label: 'إجهاد إعلاني', tone: 'bg-warning/15 text-warning' },
+  paused: { label: 'متوقف', tone: 'bg-surface-secondary text-text-muted' },
+  insufficient_data: { label: 'بيانات غير كافية', tone: 'bg-surface-secondary text-text-muted' },
+}
+
+/** CMC-8 — Creatives ranked by campaign objective. Real metrics; previews only when the source has them. */
+export function CampaignCreativesTab({ campaign, projectId, range, locale }: { campaign: UnifiedCampaign; projectId: string; range: Range; locale: Locale }) {
+  const creatives = useCampaignCreatives(projectId, campaign.id, range)
+  const [view, setView] = useState<'grid' | 'table'>('grid')
+  const cur = campaign.budget_currency || 'SAR'
+  const rows = creatives.data ?? []
+
+  if (creatives.isLoading) return <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-56" />)}</div>
+  if (creatives.isError) return <ErrorState title="تعذّر تحميل المحتويات" onRetry={() => creatives.refetch()} />
+  if (rows.length === 0) return <EmptyState title="لا محتويات" description="لا توجد محتويات مزامنة لهذه الحملة بعد. تظهر تلقائيًا بعد مزامنة الإعلانات من المنصة." />
+
+  const cls = (k: string) => CREATIVE_CLASS[k] ?? CREATIVE_CLASS.insufficient_data
+  const Preview = ({ c }: { c: import('./metrics').CampaignCreative }) => (
+    c.has_preview && c.thumbnail_url
+      ? <img src={c.thumbnail_url} alt="" className="h-32 w-full rounded-lg object-cover" loading="lazy" />
+      : <div className="flex h-32 w-full items-center justify-center rounded-lg bg-surface-secondary text-center text-[11px] text-text-muted">معاينة المحتوى غير متاحة من مصدر المنصة</div>
+  )
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-text-muted">مرتّبة حسب هدف الحملة ({campaign.objective})</span>
+        <div className="flex gap-1">
+          {(['grid', 'table'] as const).map((v) => (
+            <button key={v} onClick={() => setView(v)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${view === v ? 'bg-brand-600 text-white' : 'border border-border text-text-secondary'}`}>{v === 'grid' ? 'شبكة' : 'جدول'}</button>
+          ))}
+        </div>
+      </div>
+
+      {view === 'grid' ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {rows.map((c) => (
+            <div key={c.id} className="space-y-2 rounded-2xl border border-border bg-surface p-3">
+              <Preview c={c} />
+              <div className="flex items-start justify-between gap-2">
+                <span className="truncate text-sm font-bold text-text-primary">{c.client_display_name || c.name}</span>
+                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${cls(c.classification).tone}`}>{cls(c.classification).label}</span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-text-muted">{providerLabel(c.provider, locale)} · {c.format}{c.is_demo && <span className="rounded bg-warning/15 px-1 text-warning">Demo</span>}</div>
+              <div className="grid grid-cols-3 gap-1.5 text-center">
+                <MiniStat label="الإنفاق" value={money(c.metrics.spend, cur)} />
+                <MiniStat label="النتائج" value={num(c.metrics.conversions)} />
+                <MiniStat label="ROAS" value={ratio(c.metrics.roas)} />
+                <MiniStat label="CPA" value={money(c.metrics.cpa, cur)} />
+                <MiniStat label="CTR" value={percent((c.metrics.ctr ?? 0) * 100)} />
+                <MiniStat label="مشاهدة" value={c.metrics.view_rate != null ? percent(c.metrics.view_rate * 100, 0) : '—'} />
+              </div>
+              <p className="text-[11px] text-text-muted">{c.ranking_reason}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-border">
+          <table className="w-full text-sm">
+            <thead className="bg-surface-secondary text-xs text-text-muted"><tr>{['المحتوى', 'المنصة', 'الإنفاق', 'النتائج', 'CPA', 'ROAS', 'CTR', 'التصنيف'].map((h) => <th key={h} className="p-2 text-start font-semibold">{h}</th>)}</tr></thead>
+            <tbody>
+              {rows.map((c) => (
+                <tr key={c.id} className="border-t border-border">
+                  <td className="p-2 font-semibold">{c.client_display_name || c.name}</td>
+                  <td className="p-2 text-text-muted">{providerLabel(c.provider, locale)}</td>
+                  <td className="tnum p-2">{money(c.metrics.spend, cur)}</td>
+                  <td className="tnum p-2">{num(c.metrics.conversions)}</td>
+                  <td className="tnum p-2">{money(c.metrics.cpa, cur)}</td>
+                  <td className="tnum p-2">{ratio(c.metrics.roas)}</td>
+                  <td className="tnum p-2">{percent((c.metrics.ctr ?? 0) * 100)}</td>
+                  <td className="p-2"><span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${cls(c.classification).tone}`}>{cls(c.classification).label}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

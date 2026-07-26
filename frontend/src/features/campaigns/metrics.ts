@@ -140,3 +140,25 @@ export function useUpdateAnnotation(projectId: string, campaignId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects', projectId, 'campaigns', campaignId, 'annotations'] }),
   })
 }
+
+export interface CampaignCreative {
+  id: string
+  name: string
+  client_display_name: string | null
+  provider: string
+  format: string
+  status: string
+  thumbnail_url: string | null
+  preview_url: string | null
+  has_preview: boolean
+  is_demo: boolean
+  metrics: { spend: number; impressions: number; clicks: number; conversions: number; revenue: number; roas: number | null; cpa: number | null; ctr: number | null; cpm: number | null; view_rate: number | null; completion_rate: number | null }
+  rank_metric: string
+  rank_value: number | null
+  classification: string
+  ranking_reason: string
+}
+
+export function useCampaignCreatives(projectId: string | null, campaignId: string | null, range: Range) {
+  return useCampaignMetric<CampaignCreative[]>('creatives', projectId, campaignId, range)
+}

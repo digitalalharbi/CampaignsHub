@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Campaigns\Models\CampaignAnnotation;
+use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
@@ -21,6 +22,8 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
 use Tests\TestCase;
 
@@ -198,5 +201,38 @@ final class CampaignMetricsTest extends TestCase
 
         // Listing is campaign-scoped.
         $this->actingAs($this->owner)->getJson("/api/v1/projects/{$this->projectB->id}/campaigns/{$this->campA1->id}/annotations")->assertNotFound();
+    }
+
+    public function test_creatives_are_scoped_and_ranked_by_objective(): void
+    {
+        // Two creatives on campA1 with distinct ROAS (sales objective ranks by ROAS).
+        $this->creative($this->campA1, 'Winner', spend: 100, rev: 800, conv: 8);   // ROAS 8
+        $this->creative($this->campA1, 'Loser', spend: 100, rev: 200, conv: 2);    // ROAS 2
+        $this->creative($this->campA2, 'Other', spend: 100, rev: 500, conv: 5);
+
+        $data = $this->actingAs($this->owner)->getJson($this->url($this->projectA, $this->campA1->id, 'creatives'))->assertOk()->json('data');
+        $this->assertCount(2, $data);                       // only campA1's creatives
+        $this->assertSame('Winner', $data[0]['name']);       // ranked first by ROAS
+        $this->assertSame('top_performing', $data[0]['classification']);
+
+        $this->actingAs($this->owner)->getJson($this->url($this->projectB, $this->campA1->id, 'creatives'))->assertNotFound();
+    }
+
+    private function creative(UnifiedCampaign $campaign, string $name, float $spend, float $rev, float $conv): void
+    {
+        $creative = ExternalCreative::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $campaign->project_id, 'campaign_id' => $campaign->id,
+            'provider' => 'meta', 'external_creative_id' => Str::uuid()->toString(), 'name' => $name, 'format' => 'image', 'status' => 'active',
+        ]);
+        // 30 days of identical metrics so impressions>100 (avoids insufficient_data).
+        for ($d = 0; $d < 30; $d++) {
+            DB::table('creative_daily_metrics')->insert([
+                'id' => Str::uuid()->toString(), 'tenant_id' => $this->tenant->id, 'project_id' => $campaign->project_id,
+                'creative_id' => $creative->id, 'campaign_id' => $campaign->id,
+                'metric_date' => Carbon::parse('2026-06-01')->addDays($d)->toDateString(),
+                'spend' => $spend, 'impressions' => 500, 'clicks' => 20, 'conversions' => $conv, 'revenue' => $rev,
+                'video_views' => 0, 'video_completions' => 0, 'is_demo' => false, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
     }
 }

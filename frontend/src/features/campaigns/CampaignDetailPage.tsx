@@ -31,6 +31,7 @@ import {
   CampaignActivityTab,
   CampaignAlertsTab,
   CampaignBudgetTab,
+  CampaignCreativesTab,
   CampaignExecutiveSummary,
   CampaignFunnelTab,
   CampaignKpis,
@@ -45,7 +46,7 @@ import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardTitle } from '@/components/ui/Card'
-import { EmptyState, ErrorState, NoPermission, Skeleton } from '@/components/ui/States'
+import { ErrorState, NoPermission, Skeleton } from '@/components/ui/States'
 import { Tabs, TabPanel, type TabItem } from '@/components/ui/Tabs'
 import { useT } from '@/lib/i18n'
 import { useAuth } from '@/stores/auth'
@@ -354,10 +355,10 @@ export function CampaignDetailPage() {
         </TabPanel>
       )}
 
-      {/* Creatives (CMC-8) needs a real creative data layer (external_creatives + sync) — next batch. */}
       {tab === 'creatives' && (
         <TabPanel>
-          <EmptyState title={t('tab_creatives')} description={t('cmc_section_building')} />
+          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
+          <CampaignCreativesTab campaign={c} projectId={projectId} range={range} locale={locale} />
         </TabPanel>
       )}
       {tab === 'notes' && (
