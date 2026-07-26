@@ -21,9 +21,13 @@ final class ReportExporter
 {
     private const DISK = 'local';
 
+    public function __construct(private readonly ExportReadinessGate $gate) {}
+
     /** Render a report to file bytes for a format, without persisting anything (used by public share). */
     public function render(Report $report, string $format): string
     {
+        // No format may render until the snapshot passes the data-consistency gate.
+        $this->gate->ensureReady($report);
         $data = $report->data ?? [];
 
         return match ($format) {

@@ -95,6 +95,18 @@ final class ReportGenerator
             ),
         ];
 
+        // Canonical-snapshot metadata: every export format renders from this exact data, and the
+        // checksum lets the print pipeline verify it rendered the snapshot it was given.
+        $data['data_version'] = 1;
+        $data['tenant_id'] = (string) $report->tenant_id;
+        $data['project_id'] = (string) $report->project_id;
+        $data['timezone'] = $report->timezone;
+        $data['attribution_window'] = $report->attribution_window;
+        $data['data_source'] = $report->data_source;
+        $data['mode'] = $report->config['mode'] ?? 'snapshot';
+        $data['generated_at'] = Carbon::now()->toIso8601String();
+        $data['checksum'] = ExportReadinessGate::checksum($data);
+
         app(ProjectContext::class)->forget();
 
         return $data;

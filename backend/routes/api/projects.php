@@ -49,6 +49,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{proj
     Route::get('reports/{report}', [ReportController::class, 'show'])->name('reports.show');
     Route::match(['put', 'patch'], 'reports/{report}', [ReportController::class, 'update'])->name('reports.update');
     Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->name('reports.regenerate');
+    Route::get('reports/{report}/validation', [ReportController::class, 'validation'])->name('reports.validation');
     Route::post('reports/{report}/export', [ReportController::class, 'export'])->name('reports.export');
     Route::post('reports/{report}/send', [ReportController::class, 'send'])->name('reports.send');
     Route::delete('reports/{report}', [ReportController::class, 'destroy'])->name('reports.destroy');

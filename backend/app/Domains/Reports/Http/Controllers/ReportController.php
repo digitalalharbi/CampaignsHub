@@ -9,6 +9,7 @@ use App\Domains\Reports\Jobs\GenerateReportExportJob;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
+use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -127,11 +128,21 @@ final class ReportController extends Controller
         return ApiResponse::success($this->shape($model), 'Report regenerating.');
     }
 
-    public function export(Request $request, string $project, string $report): JsonResponse
+    /** Export readiness + any consistency issues, so the UI can show/block export with reasons. */
+    public function validation(Request $request, string $project, string $report, ExportReadinessGate $gate): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.view'), 403);
+
+        return ApiResponse::success($gate->evaluate($this->find($report)), 'Report validation evaluated.');
+    }
+
+    public function export(Request $request, string $project, string $report, ExportReadinessGate $gate): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.export'), 403);
         $model = $this->find($report);
         abort_unless($model->status === 'completed', 409, 'Report is not generated yet.');
+        // Block export up-front (before queueing) when the snapshot is inconsistent.
+        $gate->ensureReady($model);
         $format = $request->validate(['format' => ['required', Rule::in(['pdf', 'xlsx', 'csv'])]])['format'];
 
         $export = ReportExport::create([
