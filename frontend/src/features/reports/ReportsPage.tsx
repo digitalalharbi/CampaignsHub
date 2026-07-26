@@ -22,6 +22,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/States'
 import { DemoBadge } from '@/features/analytics/components'
 import { InteractiveReport } from './InteractiveReport'
+import { AnnotationsPanel } from './AnnotationsPanel'
 import { useProject } from '@/stores/project'
 
 const STATUS_STYLE: Record<string, string> = {
@@ -335,7 +336,8 @@ function ReportPreview({ projectId, id, onClose }: { projectId: string; id: stri
       ) : !r?.data ? (
         <p className="py-8 text-center text-sm text-text-secondary">{r?.status === 'failed' ? `فشل: ${r.error}` : 'التقرير قيد المعالجة…'}</p>
       ) : (
-        <div className="max-h-[76vh] overflow-y-auto">
+        <div className="max-h-[76vh] space-y-4 overflow-y-auto">
+          <AnnotationsPanel projectId={projectId} reportId={id} />
           <InteractiveReport
             data={r.data as never}
             meta={{ reportName: r.name, platforms, isDemo: r.is_demo, agencyName: 'CampaignsHub' }}

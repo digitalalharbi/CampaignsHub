@@ -108,3 +108,21 @@ export async function fetchSharedReport(token: string, password?: string) {
 }
 export const sharedDownloadUrl = (token: string, format: ReportFormat) =>
   `/api/v1/reports/shared/${token}/download/${format}`
+
+// ---- Recommendation approval (report annotations) ----------------------------------------------
+export interface ReportAnnotation {
+  id: string
+  annotation_id: string
+  type: 'finding' | 'recommendation'
+  text_ar: string | null
+  platform: string | null
+  kpi: string | null
+  priority: string
+  status: 'draft' | 'reviewed' | 'approved' | 'hidden' | 'rejected'
+  is_ai_generated: boolean
+  approved_by: number | null
+}
+export const listAnnotations = (p: string, id: string) =>
+  getData<{ annotations: ReportAnnotation[] }>(`${base(p)}/${id}/annotations`)
+export const setAnnotationStatus = (p: string, id: string, annId: string, status: string) =>
+  postData(`${base(p)}/${id}/annotations/${annId}/status`, { status })
