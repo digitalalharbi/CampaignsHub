@@ -233,6 +233,7 @@ function ReportRowView({
                   <a
                     key={f}
                     href={downloadUrl(ready.token!)}
+                    data-testid={`download-${f}-${report.id}`}
                     className="rounded-lg border border-border px-2 py-1 text-xs font-semibold text-text-secondary hover:bg-surface-hover"
                     title={`تنزيل ${f.toUpperCase()}`}
                   >
@@ -242,6 +243,7 @@ function ReportRowView({
                   <button
                     key={f}
                     onClick={() => onExport(f)}
+                    data-testid={`export-${f}-${report.id}`}
                     className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold text-text-muted hover:bg-surface-hover"
                     title={`تصدير ${f.toUpperCase()}`}
                   >

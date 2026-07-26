@@ -13,10 +13,10 @@ import { API_HEADERS, AUTH, createCampaign, seedExternals, switchToEnglish, useP
 test.use({ storageState: AUTH.owner })
 
 async function openCampaignLinkedTab(page: Page, name: string) {
-  const row = page.getByRole('row', { name: new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })
-  await row.getByRole('button', { name: /^Open$|^فتح$/ }).click()
+  // The rebuilt list navigates via clickable campaign cards (no "Open" button).
+  await page.getByTestId('campaign-card').filter({ hasText: name }).first().click()
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
-  await page.getByRole('tab', { name: /Linked campaigns|الحملات المرتبطة/ }).click()
+  await page.getByRole('tab', { name: /Platforms|المنصات/ }).click()
 }
 
 test('link → 409 move-confirmation → confirm move → unlink (full path)', async ({ page }) => {
