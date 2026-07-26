@@ -10,6 +10,8 @@
     "lint": "oxlint",
     "test": "vitest run --passWithNoTests",
     "e2e": "playwright test",
+    "test:pdf-visual": "bash ../backend/scripts/pdf-visual.sh",
+    "test:pdf-visual:update": "bash ../backend/scripts/pdf-visual.sh --update",
     "preview": "vite preview"
   },
   "dependencies": {
