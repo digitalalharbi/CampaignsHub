@@ -8,6 +8,7 @@ import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { LeadsPage } from '@/features/crm/LeadsPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
+import { PublicReport } from '@/features/reports/PublicReport'
 import { DesignSystemPage } from '@/features/design/DesignSystemPage'
 import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
 import { MarketingPage } from '@/features/marketing/MarketingPage'
@@ -20,6 +21,7 @@ import { AppShell } from '@/layouts/AppShell'
 export const router = createBrowserRouter([
   { path: '/welcome', element: <MarketingPage /> },
   { path: '/login', element: <LoginPage /> },
+  { path: '/reports/share/:token', element: <PublicReport /> },
   {
     element: <RequireAuth />,
     children: [

@@ -68,3 +68,43 @@ export const deleteReport = (p: string, id: string) => api.delete(`${base(p)}/${
 
 /** Public, signed, expiring download link for a finished export. */
 export const downloadUrl = (token: string) => `/api/v1/reports/download/${token}`
+
+// ---- Secure client share links -----------------------------------------------------------------
+
+export interface ShareRow {
+  id: string
+  active: boolean
+  allow_download: boolean
+  hide_spend: boolean
+  hide_revenue: boolean
+  hide_campaign_names: boolean
+  watermark: boolean
+  password_protected: boolean
+  view_count: number
+  last_viewed_at: string | null
+  expires_at: string | null
+  revoked_at: string | null
+  logs_count: number | null
+  created_at: string | null
+}
+export interface CreatedShare extends ShareRow {
+  url: string
+  token: string
+}
+
+export const listShares = (p: string, reportId: string) => getData<ShareRow[]>(`${base(p)}/${reportId}/shares`)
+export const createShare = (p: string, reportId: string, opts: Record<string, unknown>) =>
+  postData<CreatedShare>(`${base(p)}/${reportId}/shares`, opts)
+export const revokeShare = (p: string, reportId: string, shareId: string) =>
+  postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/revoke`)
+
+/** Public (unauthenticated) shared report fetch. Sends the optional password via header. */
+export async function fetchSharedReport(token: string, password?: string) {
+  const res = await fetch(`/api/v1/reports/shared/${token}`, {
+    headers: { Accept: 'application/json', ...(password ? { 'X-Report-Password': password } : {}) },
+  })
+  const body = await res.json()
+  return { status: res.status, envelope: body }
+}
+export const sharedDownloadUrl = (token: string, format: ReportFormat) =>
+  `/api/v1/reports/shared/${token}/download/${format}`

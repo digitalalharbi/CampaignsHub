@@ -27,6 +27,7 @@ final class DemoSeedCommand extends Command
         $this->call('db:seed', ['--class' => DemoSeeder::class, '--force' => true]);
         $this->call('db:seed', ['--class' => DemoAnalyticsSeeder::class, '--force' => true]);
         $this->call('db:seed', ['--class' => DemoReportsSeeder::class, '--force' => true]);
+        $this->call('cache:clear');
         $this->info('Demo data seeded.');
 
         return self::SUCCESS;

@@ -8,6 +8,7 @@ use App\Domains\Projects\Http\Controllers\ProjectController;
 use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
 use App\Domains\Projects\Http\Controllers\ProjectOverviewController;
 use App\Domains\Reports\Http\Controllers\ReportController;
+use App\Domains\Reports\Http\Controllers\ReportShareController;
 use App\Domains\Tasks\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
 
@@ -47,6 +48,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{proj
     Route::post('reports/{report}/export', [ReportController::class, 'export'])->name('reports.export');
     Route::post('reports/{report}/send', [ReportController::class, 'send'])->name('reports.send');
     Route::delete('reports/{report}', [ReportController::class, 'destroy'])->name('reports.destroy');
+
+    // Secure client links for a report (reports.share).
+    Route::get('reports/{report}/shares', [ReportShareController::class, 'index'])->name('reports.shares.index');
+    Route::post('reports/{report}/shares', [ReportShareController::class, 'store'])->name('reports.shares.store');
+    Route::post('reports/{report}/shares/{share}/revoke', [ReportShareController::class, 'revoke'])->name('reports.shares.revoke');
+    Route::get('reports/{report}/shares/{share}/logs', [ReportShareController::class, 'logs'])->name('reports.shares.logs');
 
     Route::get('team', [ProjectMembershipController::class, 'index'])->name('team.index');
     Route::post('team', [ProjectMembershipController::class, 'store'])->name('team.store');

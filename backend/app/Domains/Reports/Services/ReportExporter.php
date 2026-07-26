@@ -21,19 +21,26 @@ final class ReportExporter
 {
     private const DISK = 'local';
 
-    public function export(Report $report, ReportExport $export): void
+    /** Render a report to file bytes for a format, without persisting anything (used by public share). */
+    public function render(Report $report, string $format): string
     {
         $data = $report->data ?? [];
+
+        return match ($format) {
+            'csv' => $this->csv($report, $data),
+            'xlsx' => $this->xlsx($report, $data),
+            'pdf' => $this->pdf($report, $data),
+            default => throw new \InvalidArgumentException("Unsupported format: {$format}"),
+        };
+    }
+
+    public function export(Report $report, ReportExport $export): void
+    {
         $slug = Str::slug($report->name) ?: 'report';
         $ext = $export->format;
         $path = "reports/{$report->tenant_id}/{$report->id}/{$slug}-".now()->format('Ymd-His').".{$ext}";
 
-        $content = match ($export->format) {
-            'csv' => $this->csv($report, $data),
-            'xlsx' => $this->xlsx($report, $data),
-            'pdf' => $this->pdf($report, $data),
-            default => throw new \InvalidArgumentException("Unsupported format: {$export->format}"),
-        };
+        $content = $this->render($report, $export->format);
 
         Storage::disk(self::DISK)->put($path, $content);
 

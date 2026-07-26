@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Reports\Http\Controllers\PublicReportController;
 use App\Domains\Reports\Http\Controllers\ReportDownloadController;
 use App\Http\Controllers\HealthController;
 use App\Support\ApiResponse;
@@ -21,6 +22,10 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
 
     // Public, token-gated, expiring report download (the shareable secure link).
     Route::get('/reports/download/{token}', ReportDownloadController::class)->name('reports.download');
+
+    // Public secure client report links (token-gated, sanitized, logged).
+    Route::get('/reports/shared/{token}', [PublicReportController::class, 'show'])->name('reports.shared.show');
+    Route::get('/reports/shared/{token}/download/{format}', [PublicReportController::class, 'download'])->name('reports.shared.download');
 
     // Public brand/domain identity, consumed by the SPA and marketing site.
     Route::get('/brand', fn () => ApiResponse::success([

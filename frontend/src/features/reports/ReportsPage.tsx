@@ -1,18 +1,21 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Download, FileText, Loader2, Plus, RefreshCw, Send, Trash2 } from 'lucide-react'
+import { Check, Copy, Download, FileText, Link2, Loader2, Plus, RefreshCw, Send, Share2, Trash2 } from 'lucide-react'
 import {
   REPORT_TYPES,
   createReport,
+  createShare,
   deleteReport,
   downloadUrl,
   exportReport,
   getReport,
   listReports,
+  listShares,
   regenerateReport,
+  revokeShare,
   sendReport,
 } from './api'
-import type { ReportDetail, ReportFormat, ReportRow } from './api'
+import type { CreatedShare, ReportDetail, ReportFormat, ReportRow, ShareRow } from './api'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
@@ -43,6 +46,7 @@ export function ReportsPage() {
   const [search, setSearch] = useState('')
   const [builderOpen, setBuilderOpen] = useState(false)
   const [previewId, setPreviewId] = useState<string | null>(null)
+  const [shareId, setShareId] = useState<string | null>(null)
 
   const params = new URLSearchParams()
   if (status) params.set('status', status)
@@ -149,6 +153,7 @@ export function ReportsPage() {
                     key={r.id}
                     report={r}
                     onPreview={() => setPreviewId(r.id)}
+                    onShare={() => setShareId(r.id)}
                     onRegenerate={() => regen.mutate(r.id)}
                     onExport={(f) => exp.mutate({ id: r.id, format: f })}
                     onSend={() => {
@@ -175,6 +180,7 @@ export function ReportsPage() {
         />
       )}
       {previewId && <ReportPreview projectId={currentProjectId!} id={previewId} onClose={() => setPreviewId(null)} />}
+      {shareId && <ShareManager projectId={currentProjectId!} reportId={shareId} onClose={() => setShareId(null)} />}
     </div>
   )
 }
@@ -182,6 +188,7 @@ export function ReportsPage() {
 function ReportRowView({
   report,
   onPreview,
+  onShare,
   onRegenerate,
   onExport,
   onSend,
@@ -189,6 +196,7 @@ function ReportRowView({
 }: {
   report: ReportRow
   onPreview: () => void
+  onShare: () => void
   onRegenerate: () => void
   onExport: (f: ReportFormat) => void
   onSend: () => void
@@ -240,6 +248,7 @@ function ReportRowView({
                   </button>
                 )
               })}
+              <IconBtn title="مشاركة رابط آمن" onClick={onShare}><Share2 size={15} /></IconBtn>
               <IconBtn title="إرسال" onClick={onSend}><Send size={15} /></IconBtn>
             </>
           )}
@@ -316,6 +325,108 @@ function ReportPreview({ projectId, id, onClose }: { projectId: string; id: stri
           />
         </div>
       )}
+    </Modal>
+  )
+}
+
+function ShareManager({ projectId, reportId, onClose }: { projectId: string; reportId: string; onClose: () => void }) {
+  const qc = useQueryClient()
+  const shares = useQuery({ queryKey: ['shares', projectId, reportId], queryFn: () => listShares(projectId, reportId) })
+  const [opts, setOpts] = useState({ password: '', allow_download: true, hide_spend: false, hide_revenue: false, hide_campaign_names: false, watermark: false, expires_at: '' })
+  const [created, setCreated] = useState<CreatedShare | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const create = useMutation({
+    mutationFn: () =>
+      createShare(projectId, reportId, {
+        allow_download: opts.allow_download,
+        hide_spend: opts.hide_spend,
+        hide_revenue: opts.hide_revenue,
+        hide_campaign_names: opts.hide_campaign_names,
+        watermark: opts.watermark,
+        ...(opts.password ? { password: opts.password } : {}),
+        ...(opts.expires_at ? { expires_at: opts.expires_at } : {}),
+      }),
+    onSuccess: (s) => {
+      setCreated(s)
+      qc.invalidateQueries({ queryKey: ['shares', projectId, reportId] })
+    },
+  })
+  const revoke = useMutation({
+    mutationFn: (id: string) => revokeShare(projectId, reportId, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shares', projectId, reportId] }),
+  })
+
+  const fullUrl = created ? `${window.location.origin}${created.url}` : ''
+  const copy = () => {
+    navigator.clipboard.writeText(fullUrl).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  const Toggle = ({ k, label }: { k: keyof typeof opts; label: string }) => (
+    <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
+      <span>{label}</span>
+      <input type="checkbox" checked={opts[k] as boolean} onChange={(e) => setOpts((o) => ({ ...o, [k]: e.target.checked }))} className="h-4 w-4 accent-brand-600" />
+    </label>
+  )
+
+  return (
+    <Modal open onClose={onClose} title="روابط العميل الآمنة" size="lg">
+      <div className="space-y-5">
+        {created ? (
+          <div className="rounded-2xl border border-brand-200 bg-[var(--brand-background)] p-4">
+            <div className="mb-2 flex items-center gap-2 text-sm font-bold text-brand-700"><Link2 size={16} /> تم إنشاء الرابط — انسخه الآن (يُعرض مرة واحدة)</div>
+            <div className="flex items-center gap-2">
+              <input readOnly value={fullUrl} className="tnum flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs" />
+              <Button size="sm" onClick={copy}>{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? 'نُسخ' : 'نسخ'}</Button>
+            </div>
+            <button onClick={() => setCreated(null)} className="mt-2 text-xs font-semibold text-brand-700 hover:underline">إنشاء رابط آخر</button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Toggle k="allow_download" label="السماح بالتنزيل" />
+              <Toggle k="watermark" label="علامة مائية" />
+              <Toggle k="hide_spend" label="إخفاء الإنفاق" />
+              <Toggle k="hide_revenue" label="إخفاء الإيرادات" />
+              <Toggle k="hide_campaign_names" label="إخفاء أسماء الحملات" />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Field label="كلمة مرور (اختياري)"><input type="text" value={opts.password} onChange={(e) => setOpts((o) => ({ ...o, password: e.target.value }))} placeholder="4 أحرف فأكثر" className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>
+              <Field label="تاريخ الانتهاء (اختياري)"><input type="date" value={opts.expires_at} onChange={(e) => setOpts((o) => ({ ...o, expires_at: e.target.value }))} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>
+            </div>
+            <Button loading={create.isPending} onClick={() => create.mutate()}><Share2 size={16} /> إنشاء رابط آمن</Button>
+          </div>
+        )}
+
+        <div>
+          <h4 className="mb-2 text-sm font-bold">الروابط الحالية</h4>
+          {shares.isLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : (shares.data?.length ?? 0) === 0 ? (
+            <p className="text-sm text-text-muted">لا روابط بعد.</p>
+          ) : (
+            <div className="space-y-2">
+              {shares.data!.map((s: ShareRow) => (
+                <div key={s.id} className="flex items-center justify-between rounded-xl border border-border p-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${s.active ? 'bg-[var(--positive-background)] text-success' : 'bg-surface-secondary text-text-muted'}`}>{s.active ? 'نشط' : s.revoked_at ? 'مُلغى' : 'منتهٍ'}</span>
+                    {s.password_protected && <span className="text-xs text-text-muted">🔒 محمي</span>}
+                    {s.hide_spend && <span className="text-xs text-text-muted">إنفاق مخفي</span>}
+                    <span className="tnum text-xs text-text-muted">{s.view_count} مشاهدة</span>
+                    {s.expires_at && <span className="tnum text-xs text-text-muted">ينتهي {new Date(s.expires_at).toLocaleDateString('en-GB')}</span>}
+                  </div>
+                  {s.active && (
+                    <button onClick={() => revoke.mutate(s.id)} className="text-xs font-semibold text-danger hover:underline">إلغاء</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </Modal>
   )
 }
