@@ -75,12 +75,12 @@ final class ReportExporter
         $put([]);
         $put(['Platforms', 'spend', 'revenue', 'conversions', 'roas', 'cpa', 'ctr', 'share']);
         foreach (($data['platforms'] ?? []) as $p) {
-            $put([$p['provider'], $p['spend'], $p['revenue'], $p['conversions'], $p['roas'], $p['cpa'], $p['ctr'], $p['spend_share'] ?? '']);
+            $put([$p['provider'] ?? '', $p['spend'] ?? '', $p['revenue'] ?? '', $p['conversions'] ?? '', $p['roas'] ?? '', $p['cpa'] ?? '', $p['ctr'] ?? '', $p['spend_share'] ?? '']);
         }
         $put([]);
         $put(['Campaigns', 'platform', 'spend', 'revenue', 'conversions', 'roas', 'cpa']);
         foreach (($data['campaigns'] ?? []) as $c) {
-            $put([$c['campaign_name'] ?? '—', $c['provider'] ?? '', $c['spend'], $c['revenue'], $c['conversions'], $c['roas'], $c['cpa']]);
+            $put([$c['campaign_name'] ?? '—', $c['provider'] ?? '', $c['spend'] ?? '', $c['revenue'] ?? '', $c['conversions'] ?? '', $c['roas'] ?? '', $c['cpa'] ?? '']);
         }
         // Methodology & metadata manifest appended once (never repeated per data row).
         $put([]);
@@ -114,7 +114,7 @@ final class ReportExporter
         $ps->fromArray(['Platform', 'Spend', 'Revenue', 'Conversions', 'ROAS', 'CPA', 'CTR', 'Share'], null, 'A1');
         $row = 2;
         foreach (($data['platforms'] ?? []) as $p) {
-            $ps->fromArray([$p['provider'], $p['spend'], $p['revenue'], $p['conversions'], $p['roas'], $p['cpa'], $p['ctr'], $p['spend_share'] ?? null], null, "A{$row}");
+            $ps->fromArray([$p['provider'] ?? '', $p['spend'] ?? null, $p['revenue'] ?? null, $p['conversions'] ?? null, $p['roas'] ?? null, $p['cpa'] ?? null, $p['ctr'] ?? null, $p['spend_share'] ?? null], null, "A{$row}");
             $row++;
         }
 
@@ -123,7 +123,7 @@ final class ReportExporter
         $cs->fromArray(['Campaign', 'Platform', 'Spend', 'Revenue', 'Conversions', 'ROAS', 'CPA'], null, 'A1');
         $row = 2;
         foreach (($data['campaigns'] ?? []) as $c) {
-            $cs->fromArray([$c['campaign_name'] ?? '—', $c['provider'] ?? '', $c['spend'], $c['revenue'], $c['conversions'], $c['roas'], $c['cpa']], null, "A{$row}");
+            $cs->fromArray([$c['campaign_name'] ?? '—', $c['provider'] ?? '', $c['spend'] ?? null, $c['revenue'] ?? null, $c['conversions'] ?? null, $c['roas'] ?? null, $c['cpa'] ?? null], null, "A{$row}");
             $row++;
         }
 

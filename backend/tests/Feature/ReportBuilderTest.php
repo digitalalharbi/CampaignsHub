@@ -21,22 +21,27 @@ final class ReportBuilderTest extends TestCase
 
         $types = array_column($config['slides'], 'type');
         $this->assertSame(['cover', 'recommendations', 'executive_summary'], array_slice($types, 0, 3));
-        // 3 fixed (cover + recommendations + executive_summary) + 4 slides per platform × 2 platforms
-        // + closing (platform_comparison since >1 platform, funnel since sales, budget) = 3 + 8 + 3 = 14.
-        $this->assertCount(14, $config['slides']);
+        // 3 fixed (cover + recommendations + executive_summary) + 1 rich slide per platform × 2 platforms
+        // + closing (platform_comparison since >1 platform, funnel since sales, budget) = 3 + 2 + 3 = 8.
+        $this->assertCount(8, $config['slides']);
         $this->assertContains('platform_comparison', $types);
         $this->assertContains('funnel', $types);
         $this->assertContains('budget', $types);
-        // No slide for an unconnected platform.
+        // Exactly one performance slide per connected platform, and none for unconnected platforms.
         $platforms = array_filter(array_column($config['slides'], 'platform'));
-        $this->assertEmpty(array_diff($platforms, ['meta', 'snapchat']));
+        $this->assertEqualsCanonicalizing(['meta', 'snapchat'], array_values($platforms));
     }
 
-    public function test_screenshot_slides_start_hidden(): void
+    public function test_screenshot_and_standalone_platform_slides_not_auto_generated(): void
     {
+        // Screenshots need a manual upload and notes/creatives render sparse standalone, so the default
+        // layout emits exactly one rich performance slide per platform — the rest are builder-only.
         $config = app(ReportTemplateEngine::class)->defaultConfig('awareness', ['tiktok']);
-        $shot = collect($config['slides'])->firstWhere('type', 'platform_screenshot');
-        $this->assertFalse($shot['visible']); // needs a manual upload before showing a client
+        $types = array_column($config['slides'], 'type');
+        $this->assertNotContains('platform_screenshot', $types);
+        $this->assertNotContains('platform_notes', $types);
+        $this->assertNotContains('top_creatives', $types);
+        $this->assertContains('platform_performance', $types);
     }
 
     public function test_platform_order_follows_convention(): void

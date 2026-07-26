@@ -49,7 +49,9 @@ try {
 
   if (fatalErrors.length) fail('console_errors', fatalErrors.slice(0, 5).join(' | '))
 
-  // Hard layout gate — no overflowing, horizontally-clipped, or empty pages may be printed.
+  // Hard layout gate — no overflowing, horizontally-clipped, or truly empty pages may be printed.
+  // Content utilization is measured over real content (not the page background); "sparse" pages are
+  // surfaced as warnings for review, not a hard block.
   const layout = await page.evaluate(() => window.__REPORT_LAYOUT__ || [])
   const bad = layout.filter((p) => p.overflow || p.overflowX || p.empty)
   if (bad.length && !cfg.ignoreLayout) {

@@ -91,7 +91,7 @@ export function PrintReport() {
     <div className={`report-print ${type}`} data-theme={theme} dir="rtl" lang="ar">
       <style>{printCss(landscape)}</style>
       {slides.map((s, i) => (
-        <section key={s.id} className="report-slide" data-print-page={i + 1}>
+        <section key={s.id} className="report-slide" data-print-page={i + 1} data-slide-type={s.type}>
           <div className="report-slide-inner">
             <SlideBody slide={s} data={d} meta={meta} />
           </div>
@@ -113,23 +113,107 @@ export function PrintReport() {
   )
 }
 
-/** Per-page layout audit read by the print script as a hard gate. */
+/**
+ * Per-page layout audit read by the print script as a hard gate. Utilization is measured over ACTUAL
+ * visible content (text + charts + images) via grid sampling of the safe content area — NOT the page
+ * background or a container that stretches to fill. Decorative/absolute/hidden elements and the footer
+ * are excluded, so a full-bleed cover gradient does not inflate the ratio.
+ */
 function measureLayout() {
-  const pages: Array<{ page: number; utilization: number; overflow: boolean; empty: boolean; footerDetected: boolean; overflowX: boolean }> = []
+  const COLS = 48
+  const ROWS = 32
+  const pages: Array<Record<string, unknown>> = []
+
   document.querySelectorAll<HTMLElement>('.report-slide').forEach((el, i) => {
-    const pageH = el.clientHeight || 1
-    const inner = el.querySelector<HTMLElement>('.report-slide-inner')
-    const contentH = inner ? inner.scrollHeight : el.scrollHeight
+    const isCover = !!el.querySelector('.report-cover')
+    // Methodology is a legitimate text page; like the cover it is exempt from the "sparse" heuristic.
+    const isTextPage = el.getAttribute('data-slide-type') === '__methodology'
+    const pr = el.getBoundingClientRect()
+    const cs = getComputedStyle(el)
+    const padT = parseFloat(cs.paddingTop) || 0
+    const padB = parseFloat(cs.paddingBottom) || 0
+    const padL = parseFloat(cs.paddingLeft) || 0
+    const padR = parseFloat(cs.paddingRight) || 0
     const footer = el.querySelector<HTMLElement>('.report-slide-footer')
-    const footerTop = footer ? footer.offsetTop : pageH
-    // Overflow: inner content taller than the space above the footer.
-    const overflow = contentH > footerTop + 4
+    const fr = footer?.getBoundingClientRect()
+    // Safe content area: page minus padding, minus the footer band.
+    const top = pr.top + padT
+    const bottom = (fr ? fr.top - 6 : pr.bottom - padB)
+    const left = pr.left + padL
+    const right = pr.right - padR
+    const areaW = Math.max(1, right - left)
+    const areaH = Math.max(1, bottom - top)
+
+    // Collect real content rects (leaf text / charts / images), excluding decoration + footer.
+    const scope = el.querySelector<HTMLElement>('.report-slide-inner') ?? el
+    const rects: Array<[number, number, number, number, boolean]> = [] // x0,y0,x1,y1,isChart
+    scope.querySelectorAll<HTMLElement>('*').forEach((n) => {
+      const s = getComputedStyle(n)
+      if (s.visibility === 'hidden' || s.display === 'none' || parseFloat(s.opacity) === 0) return
+      if (s.position === 'absolute' || s.position === 'fixed') return
+      const tag = n.tagName.toLowerCase()
+      const isChart = n.classList.contains('recharts-surface') || tag === 'svg' || tag === 'canvas' || tag === 'img'
+      const hasText = Array.from(n.childNodes).some((c) => c.nodeType === 3 && (c.textContent ?? '').trim().length > 0)
+      if (!isChart && !hasText) return
+      const r = n.getBoundingClientRect()
+      const x0 = Math.max(r.left, left), y0 = Math.max(r.top, top), x1 = Math.min(r.right, right), y1 = Math.min(r.bottom, bottom)
+      if (x1 - x0 > 3 && y1 - y0 > 3) rects.push([x0, y0, x1, y1, isChart])
+    })
+
+    // Rasterise onto a grid: 0 empty, 1 text, 2 chart.
+    const grid = new Uint8Array(COLS * ROWS)
+    const mark = (rc: [number, number, number, number, boolean]) => {
+      const c0 = Math.floor(((rc[0] - left) / areaW) * COLS), c1 = Math.ceil(((rc[2] - left) / areaW) * COLS)
+      const r0 = Math.floor(((rc[1] - top) / areaH) * ROWS), r1 = Math.ceil(((rc[3] - top) / areaH) * ROWS)
+      for (let r = Math.max(0, r0); r < Math.min(ROWS, r1); r++) for (let c = Math.max(0, c0); c < Math.min(COLS, c1); c++) {
+        grid[r * COLS + c] = rc[4] ? 2 : Math.max(grid[r * COLS + c], 1)
+      }
+    }
+    rects.forEach(mark)
+    let covered = 0, chart = 0, text = 0
+    for (let k = 0; k < grid.length; k++) { if (grid[k]) covered++; if (grid[k] === 2) chart++; if (grid[k] === 1) text++ }
+    const total = COLS * ROWS
+    const contentUtilization = Math.round((covered / total) * 100) / 100
+    const chartCoverage = Math.round((chart / total) * 100) / 100
+    const textDensity = Math.round((text / total) * 100) / 100
+    const largestEmptyRegion = Math.round(largestEmptyRect(grid, COLS, ROWS) * 100) / 100
+
+    // Overflow measured against the safe area (content pushing past the footer / page edge).
+    const innerH = scope.scrollHeight
+    const overflow = innerH > areaH + padB + 8
     const overflowX = el.scrollWidth > el.clientWidth + 2
-    const utilization = Math.max(0, Math.min(1.2, contentH / pageH))
-    const empty = contentH < pageH * 0.12
-    pages.push({ page: i + 1, utilization: Math.round(utilization * 100) / 100, overflow, overflowX, empty, footerDetected: !!footer || i === 0 })
+    const footerCoverage = fr ? Math.round(((fr.height) / pr.height) * 100) / 100 : 0
+    // "empty" only for non-cover pages with almost no real content.
+    const empty = !isCover && !isTextPage && contentUtilization < 0.1
+    const sparse = !isCover && !isTextPage && largestEmptyRegion > 0.42
+
+    pages.push({
+      page: i + 1, isCover, contentUtilization, chartCoverage, textDensity, largestEmptyRegion,
+      footerCoverage, overflow, overflowX, empty, sparse, footerDetected: !!footer || isCover,
+    })
   })
   return pages
+}
+
+/** Largest all-empty axis-aligned rectangle area as a fraction of the grid (maximal-rectangle histogram). */
+function largestEmptyRect(grid: Uint8Array, cols: number, rows: number): number {
+  const heights = new Array(cols).fill(0)
+  let best = 0
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) heights[c] = grid[r * cols + c] ? 0 : heights[c] + 1
+    // largest rectangle in histogram
+    const stack: number[] = []
+    for (let c = 0; c <= cols; c++) {
+      const h = c === cols ? 0 : heights[c]
+      while (stack.length && heights[stack[stack.length - 1]] >= h) {
+        const height = heights[stack.pop()!]
+        const width = stack.length ? c - stack[stack.length - 1] - 1 : c
+        best = Math.max(best, height * width)
+      }
+      stack.push(c)
+    }
+  }
+  return best / (cols * rows)
 }
 
 function printCss(landscape: boolean): string {

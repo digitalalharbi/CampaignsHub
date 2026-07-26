@@ -27,7 +27,10 @@ final class ReportTemplateEngine
         'custom' => ['spend', 'revenue', 'conversions', 'roas', 'cpa', 'ctr'],
     ];
 
-    private const PER_PLATFORM_SLIDES = ['platform_performance', 'platform_screenshot', 'top_creatives', 'platform_notes'];
+    // One rich slide per platform by default (KPIs + charts + top creative + notes + recommendations).
+    // top_creatives / platform_notes / platform_screenshot remain available slide types the user can
+    // add from the builder, but are NOT emitted automatically — standalone they render sparse.
+    private const PER_PLATFORM_SLIDES = ['platform_performance'];
 
     /** @param list<string> $platforms providers present in the data */
     public function defaultConfig(string $objective, array $platforms): array
@@ -48,8 +51,7 @@ final class ReportTemplateEngine
                     'type' => $type,
                     'platform' => $platform,
                     'order' => $order++,
-                    // Screenshot slides start hidden — they need a manual upload before showing a client.
-                    'visible' => $type !== 'platform_screenshot',
+                    'visible' => true,
                 ];
             }
         }

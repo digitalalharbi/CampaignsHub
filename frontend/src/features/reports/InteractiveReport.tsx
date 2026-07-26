@@ -290,40 +290,77 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
         <ChartCard title="الأداء بمرور الوقت" subtitle="الإنفاق والإيرادات والنتائج">
           <MetricLineChart data={series} currency={data.currency} series={[{ key: 'spend', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' }, { key: 'revenue', name: 'الإيرادات', color: 'var(--info)', kind: 'money' }, { key: 'conversions', name: 'النتائج', color: 'var(--purple)', kind: 'num' }]} height={240} />
         </ChartCard>
-        <ChartCard title="أفضل الحملات" subtitle={campaigns.length >= 2 ? 'حسب الإنفاق' : 'أبرز الحملات'}>
-          {/* Adaptive: a bar chart needs ≥2 bars to read well; otherwise show ranking cards, not a lone bar. */}
-          {campaigns.length >= 2
+        <ChartCard title="أفضل الحملات" subtitle={campaigns.length >= 3 ? 'حسب الإنفاق' : 'أبرز الحملات'}>
+          {/* Adaptive: a bar chart needs ≥3 bars to read well; otherwise ranking cards, not lonely bars. */}
+          {campaigns.length >= 3
             ? <RankingBarChart data={campaigns} bars={[{ key: 'spend', name: 'الإنفاق', kind: 'money' }]} horizontal height={240} colorByPlatform />
-            : campaigns.length === 1
-              ? <SingleCampaignFallback data={data} platform={platform} campaign={campaigns[0]} />
+            : campaigns.length >= 1
+              ? <CampaignRankingFallback data={data} platform={platform} campaigns={campaigns} />
               : <p className="py-10 text-center text-sm text-text-muted">لا حملات مرتبطة بهذه المنصة.</p>}
         </ChartCard>
       </div>
+      <PlatformInsights data={data} platform={platform} />
       <p className="mt-3 text-xs text-text-muted">Reach يُعرض لكل منصة على حدة ولا يُجمع كوصول فريد بين المنصات.</p>
     </div>
   )
 }
 
-/** Ranking/insight card used when a chart would otherwise show a single lonely bar. */
-function SingleCampaignFallback({ data, platform, campaign }: { data: ReportData; platform: string; campaign: { label: string; spend: number } }) {
-  const row = data.campaigns.find((c) => c.provider === platform && String(c.campaign_name ?? '—') === campaign.label) as Record<string, number | string> | undefined
-  const stats: Array<[string, string]> = [
-    ['الإنفاق', money(campaign.spend, data.currency)],
-    ['الإيرادات', money(Number(row?.revenue ?? 0), data.currency)],
-    ['ROAS', ratio(row?.roas as number)],
-    ['النتائج', num(Number(row?.conversions ?? 0))],
-  ]
+/** Bottom row of a platform slide: top creative + strengths/weaknesses + recommendations — fills the
+ * slide so each platform is one rich page instead of several sparse ones. */
+function PlatformInsights({ data, platform }: { data: ReportData; platform: string }) {
+  const creative = (data.top_creatives ?? []).find((c) => c.provider === platform)
+  const notes = data.platform_notes?.[platform]
+  const recs = (data.recommendations ?? []).filter((r) => r.platform === platform).slice(0, 2)
   return (
-    <div className="flex h-[240px] flex-col justify-center gap-3">
-      <div className="rounded-xl border border-border bg-surface-secondary p-4">
-        <div className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg text-sm font-extrabold text-white" style={{ background: platformColor(platform) }}>#1</span>
-          <div className="min-w-0"><div className="truncate font-bold text-text-primary">{campaign.label}</div><div className="text-xs text-text-muted">الحملة الوحيدة النشطة على {platform}</div></div>
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {stats.map(([l, v]) => <div key={l} className="rounded-lg bg-surface px-3 py-2"><div className="text-xs text-text-muted">{l}</div><div className="tnum font-bold text-text-primary">{v}</div></div>)}
-        </div>
+    <div className="mt-4 grid gap-3 lg:grid-cols-3">
+      <div className="rounded-2xl border border-border bg-surface-secondary p-3.5">
+        <h4 className="mb-2 text-sm font-bold text-text-primary">أفضل محتوى</h4>
+        {creative ? (
+          <div>
+            <div className="truncate font-semibold text-text-primary" title={String(creative.campaign_name ?? '')}>{String(creative.campaign_name ?? '—')}</div>
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5 text-xs">
+              <span className="rounded-lg bg-surface px-2 py-1">ROAS <b className="tnum">{ratio(creative.roas as number)}</b></span>
+              <span className="rounded-lg bg-surface px-2 py-1">CPA <b className="tnum">{money(creative.cpa as number, data.currency)}</b></span>
+            </div>
+            {creative.reason && <div className="mt-1.5 rounded-lg bg-[var(--brand-background)] px-2 py-1 text-xs text-brand-700">{String(creative.reason)}</div>}
+          </div>
+        ) : <p className="text-xs text-text-muted">لا محتوى مصنّف لهذه المنصة.</p>}
       </div>
+      <div className="rounded-2xl border border-border bg-surface-secondary p-3.5">
+        <h4 className="mb-2 text-sm font-bold text-text-primary">ملاحظات</h4>
+        <ul className="space-y-1 text-xs">
+          {(notes?.strengths ?? []).slice(0, 2).map((s, i) => <li key={`s${i}`} className="flex gap-1.5"><CircleCheck size={13} className="mt-0.5 shrink-0 text-success" />{s}</li>)}
+          {(notes?.weaknesses ?? []).slice(0, 2).map((w, i) => <li key={`w${i}`} className="flex gap-1.5"><TriangleAlert size={13} className="mt-0.5 shrink-0 text-warning" />{w}</li>)}
+          {(notes?.strengths?.length ?? 0) === 0 && (notes?.weaknesses?.length ?? 0) === 0 && <li className="text-text-muted">—</li>}
+        </ul>
+      </div>
+      <div className="rounded-2xl border border-border bg-surface-secondary p-3.5">
+        <h4 className="mb-2 text-sm font-bold text-text-primary">توصيات</h4>
+        {recs.length ? <div className="space-y-2">{recs.map((r, i) => <NoteCard key={i} note={r} />)}</div> : <p className="text-xs text-text-muted">لا توصيات خاصة بهذه المنصة.</p>}
+      </div>
+    </div>
+  )
+}
+
+/** Ranking cards used when a bar chart would otherwise show one or two lonely bars in empty space. */
+function CampaignRankingFallback({ data, platform, campaigns }: { data: ReportData; platform: string; campaigns: Array<{ label: string; spend: number }> }) {
+  const rows = campaigns.slice(0, 3).map((c) => ({ c, row: data.campaigns.find((x) => x.provider === platform && String(x.campaign_name ?? '—') === c.label) as Record<string, number | string> | undefined }))
+  return (
+    <div className="flex h-[240px] flex-col justify-center gap-2.5">
+      {rows.map(({ c, row }, i) => (
+        <div key={c.label} className="rounded-xl border border-border bg-surface-secondary p-3">
+          <div className="flex items-center gap-2">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-xs font-extrabold text-white" style={{ background: platformColor(platform) }}>#{i + 1}</span>
+            <div className="min-w-0 flex-1 truncate font-bold text-text-primary" title={c.label}>{c.label}</div>
+          </div>
+          <div className="mt-2 grid grid-cols-4 gap-1.5 text-xs">
+            <span className="rounded-lg bg-surface px-2 py-1">إنفاق <b className="tnum">{compact(c.spend)}</b></span>
+            <span className="rounded-lg bg-surface px-2 py-1">إيراد <b className="tnum">{compact(Number(row?.revenue ?? 0))}</b></span>
+            <span className="rounded-lg bg-surface px-2 py-1">ROAS <b className="tnum">{ratio(row?.roas as number)}</b></span>
+            <span className="rounded-lg bg-surface px-2 py-1">نتائج <b className="tnum">{num(Number(row?.conversions ?? 0))}</b></span>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -426,10 +463,41 @@ function ComparisonSlide({ data }: { data: ReportData }) {
 }
 
 function FunnelSlide({ data }: { data: ReportData }) {
+  const stages = data.funnel ?? []
+  // Biggest drop-off + overall conversion, to fill the slide with real insight beside the funnel.
+  const withDrop = stages.map((s, i) => ({ ...s, drop: i > 0 && s.step_rate !== null ? 1 - (s.step_rate ?? 0) : 0 }))
+  const worst = withDrop.slice(1).sort((a, b) => (b.drop ?? 0) - (a.drop ?? 0))[0]
+  const overall = stages.length > 1 && (stages[0]?.count ?? 0) > 0 ? (stages[stages.length - 1]?.count ?? 0) / (stages[0]?.count ?? 1) : null
   return (
     <div>
       <Title sub="من الظهور إلى الشراء — معدل الانتقال وتكلفة كل مرحلة">قمع التحويل</Title>
-      {(data.funnel?.length ?? 0) > 0 ? <ConversionFunnelChart stages={data.funnel!} currency={data.currency} /> : <p className="text-sm text-text-muted">لا بيانات قمع.</p>}
+      {stages.length > 0 ? (
+        <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+          <ChartCard title="مراحل القمع" subtitle="العدد ومعدل الانتقال وتكلفة كل مرحلة"><ConversionFunnelChart stages={stages} currency={data.currency} /></ChartCard>
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-border bg-surface-secondary p-4">
+              <div className="text-xs text-text-muted">معدل التحويل الكلي</div>
+              <div className="tnum text-3xl font-extrabold text-text-primary">{overall !== null ? percent(overall, 2) : '—'}</div>
+              <div className="mt-1 text-xs text-text-secondary">من {num(stages[0]?.count ?? 0)} ظهور إلى {num(stages[stages.length - 1]?.count ?? 0)} نتيجة</div>
+            </div>
+            {worst && (
+              <div className="rounded-2xl border border-border bg-[var(--warning-background)] p-4">
+                <div className="mb-1 flex items-center gap-1.5 text-sm font-bold text-warning"><TriangleAlert size={15} /> أكبر تسرّب</div>
+                <div className="font-semibold text-text-primary">{worst.label}</div>
+                <div className="tnum mt-0.5 text-sm text-text-secondary">تسرّب {percent(worst.drop ?? 0, 0)} · تكلفة {money(worst.cost_per, data.currency)}</div>
+              </div>
+            )}
+            <div className="rounded-2xl border border-border bg-surface-secondary p-4">
+              <div className="mb-1 text-sm font-bold text-text-primary">تكلفة كل مرحلة</div>
+              <div className="space-y-1 text-xs">
+                {stages.filter((s) => s.cost_per !== null).slice(-4).map((s) => (
+                  <div key={s.label} className="flex justify-between"><span className="text-text-secondary">{s.label}</span><span className="tnum font-semibold">{money(s.cost_per, data.currency)}</span></div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : <p className="text-sm text-text-muted">لا بيانات قمع.</p>}
     </div>
   )
 }
@@ -451,6 +519,31 @@ function BudgetSlide({ data }: { data: ReportData }) {
           <RankingBarChart data={bars} bars={[{ key: 'budget', name: 'الميزانية', color: 'var(--border-strong)', kind: 'money' }, { key: 'spent', name: 'المصروف', color: 'var(--brand-600)', kind: 'money' }]} horizontal height={220} currency={data.currency} />
         </ChartCard>
       </div>
+      {rows.length > 0 && (
+        <ChartCard title="سرعة الصرف والتوقعات" subtitle="Pace >1 صرف أسرع من المخطط" className="mt-4">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead><tr className="border-b border-border text-text-muted"><th className="py-2 text-start">الحملة</th><th className="py-2 text-end">الميزانية</th><th className="py-2 text-end">المصروف</th><th className="py-2 text-end">المتبقي</th><th className="py-2 text-end">الاستهلاك</th><th className="py-2 text-end">Pace</th><th className="py-2 text-end">الصرف المتوقع</th></tr></thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const pace = Number(r.pace ?? 0)
+                  return (
+                    <tr key={i} className="border-b border-border last:border-0">
+                      <td className="py-2 font-semibold text-text-primary">{String(r.campaign_name ?? '—')}</td>
+                      <td className="tnum py-2 text-end">{money(Number(r.budget ?? 0), data.currency)}</td>
+                      <td className="tnum py-2 text-end">{money(Number(r.spent ?? 0), data.currency)}</td>
+                      <td className="tnum py-2 text-end">{money(Number(r.remaining ?? 0), data.currency)}</td>
+                      <td className="tnum py-2 text-end">{r.consumed_pct !== null && r.consumed_pct !== undefined ? percent(Number(r.consumed_pct), 0) : '—'}</td>
+                      <td className={`tnum py-2 text-end font-semibold ${pace > 1.1 ? 'text-danger' : pace < 0.9 && pace > 0 ? 'text-warning' : 'text-text-primary'}`}>{pace ? pace.toFixed(2) : '—'}</td>
+                      <td className="tnum py-2 text-end">{money(Number(r.projected_spend ?? 0), data.currency)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </ChartCard>
+      )}
     </div>
   )
 }
