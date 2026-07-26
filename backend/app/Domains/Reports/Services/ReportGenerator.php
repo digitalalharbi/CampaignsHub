@@ -8,6 +8,7 @@ use App\Domains\Disclaimers\Services\DisclaimerResolver;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Models\ReportAnnotation;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -242,24 +243,41 @@ final class ReportGenerator
      */
     private function tagAnnotations(array $items, string $type, Report $report): array
     {
-        $approved = (array) ($report->config['approved_recommendations'] ?? []);
-
-        return array_map(function ($item) use ($type, $report, $approved) {
-            $id = substr(hash('sha256', $type.'|'.($item['title'] ?? '').'|'.($item['platform'] ?? '')), 0, 12);
+        return array_map(function ($item) use ($type, $report) {
+            $aid = substr(hash('sha256', $type.'|'.($item['title'] ?? '').'|'.($item['platform'] ?? '')), 0, 12);
             $isRec = $type === 'recommendation';
-            $status = $isRec
-                ? (in_array($id, $approved, true) || $report->is_demo ? 'approved' : 'draft')
-                : 'reviewed';
+            $priority = ($item['severity'] ?? '') === 'critical' ? 'high' : (($item['severity'] ?? '') === 'warning' ? 'medium' : 'normal');
+            $evidence = ['kpi' => $item['kpi'] ?? null, 'value' => $item['value'] ?? null, 'platform' => $item['platform'] ?? null];
+
+            // Persist the annotation, PRESERVING any human review decision across regeneration. New
+            // AI recommendations start Draft (Approved for demo so the demo client view is complete);
+            // findings are factual observations (Reviewed, client-visible).
+            $ann = ReportAnnotation::withoutGlobalScopes()->firstOrNew([
+                'report_id' => $report->id, 'annotation_id' => $aid,
+            ]);
+            if (! $ann->exists) {
+                $ann->forceFill([
+                    'tenant_id' => $report->tenant_id, 'type' => $type,
+                    'text_ar' => $item['title'] ?? null, 'platform' => $item['platform'] ?? null,
+                    'kpi' => $item['kpi'] ?? null, 'evidence' => $evidence, 'source' => 'auto',
+                    'priority' => $priority, 'proposed_action' => $item['detail'] ?? null,
+                    'is_ai_generated' => true, 'is_demo' => (bool) $report->is_demo,
+                    'status' => $isRec ? ($report->is_demo ? 'approved' : 'draft') : 'reviewed',
+                ])->save();
+            } else {
+                // Refresh the text/evidence but keep the lifecycle fields.
+                $ann->forceFill(['text_ar' => $item['title'] ?? null, 'evidence' => $evidence, 'priority' => $priority])->save();
+            }
 
             return $item + [
-                'id' => $id,
+                'id' => $aid,
                 'type' => $type,
                 'is_ai_generated' => true,
-                'status' => $status,
-                'priority' => $item['severity'] === 'critical' ? 'high' : ($item['severity'] === 'warning' ? 'medium' : 'normal'),
+                'status' => $ann->status,
+                'priority' => $priority,
                 'owner' => 'فريق الأداء',
                 'due' => 'الأسبوع القادم',
-                'evidence' => ['kpi' => $item['kpi'] ?? null, 'value' => $item['value'] ?? null, 'platform' => $item['platform'] ?? null],
+                'evidence' => $evidence,
             ];
         }, $items);
     }

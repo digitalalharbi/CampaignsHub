@@ -8,6 +8,7 @@ use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\Projects\Http\Controllers\ProjectController;
 use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
 use App\Domains\Projects\Http\Controllers\ProjectOverviewController;
+use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
 use App\Domains\Reports\Http\Controllers\ReportController;
 use App\Domains\Reports\Http\Controllers\ReportPrintController;
 use App\Domains\Reports\Http\Controllers\ReportShareController;
@@ -50,6 +51,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{proj
     Route::get('reports/{report}', [ReportController::class, 'show'])->name('reports.show');
     Route::match(['put', 'patch'], 'reports/{report}', [ReportController::class, 'update'])->name('reports.update');
     Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->name('reports.regenerate');
+    Route::get('reports/{report}/annotations', [ReportAnnotationController::class, 'index'])->name('reports.annotations.index');
+    Route::post('reports/{report}/annotations/{annotation}/status', [ReportAnnotationController::class, 'updateStatus'])->name('reports.annotations.status');
     Route::get('reports/{report}/validation', [ReportController::class, 'validation'])->name('reports.validation');
     Route::post('reports/{report}/print-token', [ReportPrintController::class, 'issue'])->name('reports.print-token');
     Route::post('reports/{report}/export', [ReportController::class, 'export'])->name('reports.export');
