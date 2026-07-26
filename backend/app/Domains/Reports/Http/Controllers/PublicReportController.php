@@ -64,7 +64,7 @@ final class PublicReportController extends Controller
         ], 'Shared report.');
     }
 
-    public function download(Request $request, string $token, string $format): StreamedResponse|JsonResponse
+    public function download(Request $request, string $token, string $format): StreamedResponse
     {
         $this->throttle($request);
         $share = $this->shares->resolveActive($token);

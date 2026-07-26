@@ -113,7 +113,7 @@ final class DemoAnalyticsSeeder extends Seeder
                 $clicks = $impr * $ctr;
                 // Late attribution: last 3 days show only ~55% of conversions/revenue (not yet attributed).
                 $lateFactor = $d >= self::DAYS - 3 ? 0.55 + 0.15 * ($d - (self::DAYS - 3)) : 1.0;
-                $conv = $clicks * $cvr * $lateFactor;
+                $conv = $clicks * $cvr * 0.42 * $lateFactor;
                 $spendOrig = $clicks * $cpc;
                 $revenueOrig = $conv * $aov;
 

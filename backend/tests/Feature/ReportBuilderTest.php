@@ -20,9 +20,13 @@ final class ReportBuilderTest extends TestCase
         $this->assertContains('roas', $config['metric_set']);
 
         $types = array_column($config['slides'], 'type');
-        $this->assertSame(['cover', 'recommendations'], array_slice($types, 0, 2));
-        // 2 fixed + 4 slides per platform × 2 platforms = 10.
-        $this->assertCount(10, $config['slides']);
+        $this->assertSame(['cover', 'recommendations', 'executive_summary'], array_slice($types, 0, 3));
+        // 3 fixed (cover + recommendations + executive_summary) + 4 slides per platform × 2 platforms
+        // + closing (platform_comparison since >1 platform, funnel since sales, budget) = 3 + 8 + 3 = 14.
+        $this->assertCount(14, $config['slides']);
+        $this->assertContains('platform_comparison', $types);
+        $this->assertContains('funnel', $types);
+        $this->assertContains('budget', $types);
         // No slide for an unconnected platform.
         $platforms = array_filter(array_column($config['slides'], 'platform'));
         $this->assertEmpty(array_diff($platforms, ['meta', 'snapchat']));

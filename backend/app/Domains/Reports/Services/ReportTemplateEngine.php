@@ -38,8 +38,9 @@ final class ReportTemplateEngine
         $slides = [
             ['id' => 'cover', 'type' => 'cover', 'order' => 1, 'visible' => true],
             ['id' => 'recommendations', 'type' => 'recommendations', 'order' => 2, 'visible' => true],
+            ['id' => 'executive_summary', 'type' => 'executive_summary', 'order' => 3, 'visible' => true],
         ];
-        $order = 3;
+        $order = 4;
         foreach ($ordered as $platform) {
             foreach (self::PER_PLATFORM_SLIDES as $type) {
                 $slides[] = [
@@ -52,6 +53,14 @@ final class ReportTemplateEngine
                 ];
             }
         }
+        // Cross-platform closing slides.
+        if (count($ordered) > 1) {
+            $slides[] = ['id' => 'platform_comparison', 'type' => 'platform_comparison', 'order' => $order++, 'visible' => true];
+        }
+        if (in_array($objective, ['sales', 'traffic', 'leads'], true)) {
+            $slides[] = ['id' => 'funnel', 'type' => 'funnel', 'order' => $order++, 'visible' => true];
+        }
+        $slides[] = ['id' => 'budget', 'type' => 'budget', 'order' => $order++, 'visible' => true];
 
         return [
             'version' => self::VERSION,

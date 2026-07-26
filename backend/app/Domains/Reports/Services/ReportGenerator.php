@@ -67,7 +67,14 @@ final class ReportGenerator
             'previous' => $previous,
             'delta' => $delta,
             'timeseries' => $this->agg->timeseries($from, $to),
+            'platform_series' => $this->agg->timeseriesByProvider($from, $to),
             'platforms' => $platforms,
+            'best' => [
+                'platform_by_roas' => collect($platforms)->sortByDesc('roas')->first()['provider'] ?? null,
+                'platform_by_cpa' => collect($platforms)->filter(fn ($p) => $p['cpa'] !== null)->sortBy('cpa')->first()['provider'] ?? null,
+                'platform_by_results' => collect($platforms)->sortByDesc('conversions')->first()['provider'] ?? null,
+                'campaign' => $campaigns[0]['campaign_name'] ?? null,
+            ],
             'campaigns' => $campaigns,
             'top_creatives' => $topCreatives,
             'creative_level' => 'campaign', // ad-level arrives once connectors provide it

@@ -104,6 +104,24 @@ final class MetricsAggregator
             ->all();
     }
 
+    /** @return array<string, list<array<string,mixed>>> daily series per provider (for per-platform charts). */
+    public function timeseriesByProvider(Carbon $from, Carbon $to): array
+    {
+        $rows = $this->base($from, $to)
+            ->select('provider', 'metric_date')
+            ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", self::PIVOT, array_keys(self::PIVOT))))
+            ->groupBy('provider', 'metric_date')
+            ->orderBy('metric_date')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $r) {
+            $out[$r->provider][] = ['date' => Carbon::parse($r->metric_date)->toDateString()] + $this->withDerived((array) $r);
+        }
+
+        return $out;
+    }
+
     /** Conversion funnel with per-step transition rate, drop-off and cost per stage. */
     public function funnel(Carbon $from, Carbon $to): array
     {
