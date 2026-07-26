@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { login } from './api'
+import { safeRedirect } from './redirect'
 import { AuthShell } from './AuthShell'
 import { Button } from '@/components/ui/Button'
 import { EmailInput, PasswordInput } from '@/components/ui/form'
@@ -14,6 +15,7 @@ const DEMO = { email: 'owner@demo-agency.local', password: 'password' }
 export function LoginPage() {
   const t = useT()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const setUser = useAuth((s) => s.setUser)
 
   const [email, setEmail] = useState('')
@@ -22,7 +24,7 @@ export function LoginPage() {
 
   const mutation = useMutation({
     mutationFn: login,
-    onSuccess: (user) => { setUser(user); navigate('/', { replace: true }) },
+    onSuccess: (user) => { setUser(user); navigate(safeRedirect(params.get('redirect')), { replace: true }) },
   })
   const error = mutation.isError ? toApiError(mutation.error) : null
 

@@ -1,0 +1,44 @@
+# CampaignsHub — Regression Checklist
+
+Run after **every** phase before moving on. The mandate: focusing on a new phase must not break prior features.
+Mark each `PASS` / `FAIL` / `SKIP (reason)` with the date + phase that ran it.
+
+## A. Core user journey (Review 2, run as a real user)
+- [ ] Open `/login` directly (full page, not modal)
+- [ ] Visit a protected route unauthenticated → redirected to `/login`
+- [ ] After login → land on originally requested page or dashboard
+- [ ] Register a new tenant + owner
+- [ ] Forgot-password → generic success (no enumeration)
+- [ ] Navigate between modules
+- [ ] Save a record → Refresh → value persists
+- [ ] Logout → protected routes locked again → Login again
+- [ ] Mobile (375×812): single column, no horizontal scroll, keyboard doesn't cover submit
+- [ ] Permissions: viewer cannot mutate; analyst/owner boundaries hold
+- [ ] Error cases: bad credentials, validation errors, network drop show clear messages
+
+## B. Carry-over features (must stay green)
+- [ ] Campaign Command Center: all 10 tabs load real data, isolation holds
+- [ ] Objective-based report renders correct KPIs/charts per objective
+- [ ] Arabic client PDF exports via button → Chromium (never Dompdf) → audited bytes
+- [ ] Analytics/creatives show real source data or "Awaiting Credentials" (no rand/fake thumbnails)
+- [ ] Alerts list scoped by entity
+- [ ] Project/tenant isolation: cross-project IDs 404
+
+## C. Cross-cutting UI
+- [ ] RTL (ar) and LTR (en) both correct
+- [ ] Light and Dark both correct
+- [ ] Latin digits everywhere
+- [ ] No console errors
+- [ ] No critical network (4xx/5xx unexpected) errors
+
+## D. Automated gates (no hidden flakiness)
+```bash
+cd backend && php artisan test && ./vendor/bin/pint --test && ./vendor/bin/phpstan analyse --memory-limit=1G
+cd ../frontend && npm run typecheck && npm run lint && npm run test && npm run build && npm run e2e
+npx playwright test --workers=1 --retries=0 --repeat-each=3
+```
+
+## Run log
+| Date | Phase | A | B | C | D | Notes |
+|------|-------|---|---|---|---|-------|
+| 2026-07-27 | Governance docs + flake diagnosis | n/a | vitest 13/13, e2e auth-forms 7/7 | RTL/forms verified | vitest+auth e2e green | G-001 logged as Watch |

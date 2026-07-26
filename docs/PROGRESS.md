@@ -272,3 +272,21 @@ Merge feat/premium-ui → feat/alerts → complete Alerts → **Objective-Based 
 (ReportObjectiveController / ReportTemplateResolver / per-objective + per-platform strategies) →
 Connectors + Creative Sync (real data, "Awaiting Credentials" where no keys) → Scheduled Reports
 → Tasks → Connection Center → Jobs/Horizon → MCP → PWA → Production.
+
+---
+
+## Governance layer added (2026-07-27) ✅
+Central review system now enforced per the two-review mandate:
+- ✅ `docs/MASTER_REQUIREMENTS.md` — every mandated requirement (R1–R8) with canonical status + evidence.
+- ✅ `docs/IMPLEMENTATION_MATRIX.md` — BE ↔ FE ↔ Test coverage per capability.
+- ✅ `docs/OPEN_GAPS.md` — nothing dismissed as "transient"; G-001..G-005 tracked.
+- ✅ `docs/REGRESSION_CHECKLIST.md` — run after every phase; run log started.
+
+### Flake diagnosis (retires the earlier "transient" claim)
+- Isolated `CampaignDetailPage.test.tsx` ×5 → 5/5 pass.
+- Full `vitest run` ×8 → 8/8 pass (18/18 each). Total **13/13 clean**.
+- Original failing assertion was not captured → cause **not** declared closed; logged as **G-001 (Watch)**
+  with leading hypothesis (unmocked CMC query hooks under parallel workers) and a concrete close-out action.
+- `e2e/auth-forms.spec.ts` → 7/7 pass (fields ≥50px, ≥16px, not pill, no overflow, RTL, mobile).
+
+_Auth Phase 1 + form system stand green. Next: G-005 post-login redirect, then registration journey._
