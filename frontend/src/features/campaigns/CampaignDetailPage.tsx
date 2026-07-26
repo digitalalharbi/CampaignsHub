@@ -1,11 +1,32 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Link2, Pencil, Play, Pause, Archive, Unlink } from 'lucide-react'
-import { archiveCampaign, campaignAction, getCampaign, listLinkedExternal, unlinkExternal } from './api'
+import { AlertTriangle, ArrowRight, Archive, Link2, Pause, Pencil, Play, Unlink } from 'lucide-react'
+import {
+  archiveCampaign,
+  campaignAction,
+  getCampaign,
+  listLinkedExternal,
+  unlinkExternal,
+  updateCampaign,
+} from './api'
 import { CampaignFormModal } from './CampaignFormModal'
 import { LinkExternalModal } from './LinkExternalModal'
-import { campaignStatusLabel, campaignStatusTone, objectiveLabel, providerLabel } from './labels'
+import {
+  PERFORMANCE_KEYS,
+  PRIORITY_KEYS,
+  STAGE_KEYS,
+  campaignStatusLabel,
+  campaignStatusTone,
+  objectiveLabel,
+  performanceLabel,
+  performanceTone,
+  priorityLabel,
+  priorityTone,
+  providerLabel,
+  stageLabel,
+  stageTone,
+} from './labels'
 import { isDemoProvider } from './types'
 import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
@@ -13,10 +34,16 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardTitle } from '@/components/ui/Card'
 import { EmptyState, ErrorState, NoPermission, Skeleton } from '@/components/ui/States'
 import { Tabs, TabPanel, type TabItem } from '@/components/ui/Tabs'
-import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
+import { useProject } from '@/stores/project'
+
+const TAB_KEYS = [
+  'overview', 'performance', 'platforms', 'creatives', 'budget',
+  'funnel', 'notes', 'alerts', 'reports', 'activity',
+] as const
+type TabKey = (typeof TAB_KEYS)[number]
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -27,14 +54,13 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
-import { useProject } from '@/stores/project'
-
 export function CampaignDetailPage() {
   const t = useT()
   const locale = useUi((s) => s.locale)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { projectId = '', campaignId = '' } = useParams()
+  const [sp, setSp] = useSearchParams()
 
   const { currentProjectId, setCurrentProjectId } = useProject()
 
@@ -42,32 +68,48 @@ export function CampaignDetailPage() {
   const canUpdate = useAuth((s) => s.hasPermission('campaigns.update'))
   const canPause = useAuth((s) => s.hasPermission('campaigns.pause'))
 
-  const [tab, setTab] = useState('overview')
-  const [editOpen, setEditOpen] = useState(false)
-  const [linkOpen, setLinkOpen] = useState(false)
+  const tabParam = sp.get('tab') as TabKey | null
+  const tab: TabKey = tabParam && TAB_KEYS.includes(tabParam) ? tabParam : 'overview'
+  const setTab = (key: string) => {
+    const next = new URLSearchParams(sp)
+    next.set('tab', key)
+    setSp(next, { replace: true })
+  }
 
-  // Sync the global project switcher if the URL points to a different project
+  const [editOpen, setEditOpen] = [sp.get('edit') === '1', (v: boolean) => {
+    const next = new URLSearchParams(sp)
+    if (v) next.set('edit', '1')
+    else next.delete('edit')
+    setSp(next, { replace: true })
+  }] as const
+  const linkOpen = sp.get('link') === '1'
+  const setLinkOpen = (v: boolean) => {
+    const next = new URLSearchParams(sp)
+    if (v) next.set('link', '1')
+    else next.delete('link')
+    setSp(next, { replace: true })
+  }
+
+  // Keep the global project switcher aligned with the URL's project.
   useEffect(() => {
-    if (projectId && currentProjectId !== projectId) {
-      setCurrentProjectId(projectId)
-    }
+    if (projectId && currentProjectId !== projectId) setCurrentProjectId(projectId)
   }, [projectId, currentProjectId, setCurrentProjectId])
 
+  // Project- AND campaign-scoped query keys (isolation): ['projects', projectId, 'campaigns', campaignId, ...].
   const campaignQuery = useQuery({
-    queryKey: ['project', projectId, 'campaign', campaignId, 'detail'],
+    queryKey: ['projects', projectId, 'campaigns', campaignId, 'detail'],
     queryFn: () => getCampaign(projectId, campaignId),
     enabled: canView && Boolean(projectId && campaignId),
   })
-
   const linkedQuery = useQuery({
-    queryKey: ['project', projectId, 'campaign', campaignId, 'linked'],
+    queryKey: ['projects', projectId, 'campaigns', campaignId, 'platforms'],
     queryFn: () => listLinkedExternal(projectId, campaignId),
     enabled: canView && Boolean(projectId && campaignId),
   })
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['project', projectId, 'campaign', campaignId] })
-    queryClient.invalidateQueries({ queryKey: ['project', projectId, 'campaigns'] })
+    queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'campaigns', campaignId] })
+    queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'campaigns'] })
   }
 
   const statusMutation = useMutation({
@@ -76,22 +118,25 @@ export function CampaignDetailPage() {
   })
   const archiveMutation = useMutation({
     mutationFn: () => archiveCampaign(projectId, campaignId),
-    onSuccess: () => {
-      invalidate()
-      navigate('/campaigns')
-    },
+    onSuccess: () => { invalidate(); navigate('/campaigns') },
   })
   const unlinkMutation = useMutation({
     mutationFn: (externalId: string) => unlinkExternal(projectId, campaignId, externalId),
     onSuccess: invalidate,
   })
+  // Internal classification — a real PATCH to the campaign (audited server-side), never a UI-only badge.
+  const classifyMutation = useMutation({
+    mutationFn: (patch: { stage?: string; performance_label?: string; priority?: string }) =>
+      updateCampaign(projectId, campaignId, patch),
+    onSuccess: invalidate,
+  })
 
   if (!canView) return <NoPermission />
-
   if (campaignQuery.isLoading) {
     return (
       <div className="space-y-3">
         <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-24 w-full" />
         <Skeleton className="h-40 w-full" />
       </div>
     )
@@ -101,15 +146,30 @@ export function CampaignDetailPage() {
   }
 
   const c = campaignQuery.data
-  const actionError = statusMutation.isError ? toApiError(statusMutation.error) : null
+  const linked = linkedQuery.data ?? []
+  const isDemo = linked.some((e) => isDemoProvider(e.provider))
+  const platforms = [...new Set(linked.map((e) => e.provider))]
+  const actionError = statusMutation.isError ? String(statusMutation.error) : null
 
-  const tabs: TabItem[] = [
-    { key: 'overview', label: t('tab_overview') },
-    { key: 'linked', label: t('tab_linked') },
-    { key: 'performance', label: t('tab_performance') },
-    { key: 'notes', label: t('tab_notes') },
-    { key: 'activity', label: t('tab_activity') },
-  ]
+  const tabs: TabItem[] = TAB_KEYS.map((k) => ({ key: k, label: t(`tab_${k}` as never) }))
+
+  const classSelect = (
+    field: 'stage' | 'performance_label' | 'priority',
+    value: string | null | undefined,
+    keys: string[],
+    toLabel: (k: string) => string,
+  ) => (
+    <select
+      aria-label={field}
+      disabled={!canUpdate || classifyMutation.isPending}
+      value={value ?? ''}
+      onChange={(e) => classifyMutation.mutate({ [field]: e.target.value } as never)}
+      className="rounded-lg border border-border bg-surface px-2 py-1 text-xs font-semibold text-text-primary disabled:opacity-60"
+    >
+      <option value="">{t('cmc_not_set')}</option>
+      {keys.map((k) => <option key={k} value={k}>{toLabel(k)}</option>)}
+    </select>
+  )
 
   return (
     <section className="space-y-4">
@@ -120,47 +180,68 @@ export function CampaignDetailPage() {
         <ArrowRight size={14} className="rtl:rotate-180" /> {t('back_to_campaigns')}
       </button>
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{c.name}</h1>
-            <Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge>
+      {/* ===== Command-center header ===== */}
+      <Card className="space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{c.client_display_name || c.name}</h1>
+              <Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge>
+              {c.stage && <Badge tone={stageTone(c.stage)}>{stageLabel(c.stage, locale)}</Badge>}
+              {c.performance_label && <Badge tone={performanceTone(c.performance_label)}>{performanceLabel(c.performance_label, locale)}</Badge>}
+              {c.priority && <Badge tone={priorityTone(c.priority)}>{priorityLabel(c.priority, locale)}</Badge>}
+              {isDemo && <Badge tone="warning">{t('demo_label')}</Badge>}
+              {c.needs_attention && (
+                <Badge tone="danger"><AlertTriangle size={12} className="me-1 inline" />{t('cmc_needs_attention')}</Badge>
+              )}
+            </div>
+            <p className="mt-1 text-sm text-text-secondary">
+              {objectiveLabel(c.objective, locale)}
+              {c.client_display_name && c.client_display_name !== c.name && (
+                <> · <span className="text-text-muted">{t('cmc_internal_name')}: {c.name}</span></>
+              )}
+            </p>
           </div>
-          <p className="mt-1 text-sm text-text-secondary">{objectiveLabel(c.objective, locale)}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {canUpdate && (
-            <Button variant="secondary" onClick={() => setEditOpen(true)}>
-              <Pencil size={14} /> {t('edit')}
-            </Button>
-          )}
-          {canPause && c.status === 'active' && (
-            <Button
-              variant="secondary"
-              loading={statusMutation.isPending && statusMutation.variables === 'pause'}
-              onClick={() => statusMutation.mutate('pause')}
-            >
-              <Pause size={14} /> {t('pause')}
-            </Button>
-          )}
-          {canUpdate && c.status !== 'active' && c.status !== 'archived' && (
-            <Button
-              variant="secondary"
-              loading={statusMutation.isPending && statusMutation.variables === 'activate'}
-              onClick={() => statusMutation.mutate('activate')}
-            >
-              <Play size={14} /> {t('activate')}
-            </Button>
-          )}
-          {canUpdate && (
-            <Button variant="ghost" loading={archiveMutation.isPending} onClick={() => archiveMutation.mutate()}>
-              <Archive size={14} /> {t('archive')}
-            </Button>
-          )}
-        </div>
-      </div>
 
-      {actionError && <Alert severity="danger" title={actionError.message} />}
+          <div className="flex flex-wrap gap-2">
+            {canUpdate && (
+              <Button variant="secondary" onClick={() => setEditOpen(true)}><Pencil size={14} /> {t('edit')}</Button>
+            )}
+            {canPause && c.status === 'active' && (
+              <Button variant="secondary" loading={statusMutation.isPending && statusMutation.variables === 'pause'}
+                onClick={() => statusMutation.mutate('pause')}><Pause size={14} /> {t('pause')}</Button>
+            )}
+            {canUpdate && c.status !== 'active' && c.status !== 'archived' && (
+              <Button variant="secondary" loading={statusMutation.isPending && statusMutation.variables === 'activate'}
+                onClick={() => statusMutation.mutate('activate')}><Play size={14} /> {t('activate')}</Button>
+            )}
+            {canUpdate && (
+              <Button variant="ghost" loading={archiveMutation.isPending} onClick={() => archiveMutation.mutate()}>
+                <Archive size={14} /> {t('archive')}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Header facts grid — campaign-scoped context. */}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 border-t border-border pt-3 text-sm sm:grid-cols-3 lg:grid-cols-4">
+          <HeaderFact label={t('period_label')}>
+            <span className="tnum text-xs">{c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}</span>
+          </HeaderFact>
+          <HeaderFact label={t('budget_label')}>
+            <span className="tnum">{c.total_budget != null ? `${c.total_budget.toLocaleString('en-US')} ${c.budget_currency}` : '—'}</span>
+          </HeaderFact>
+          <HeaderFact label={t('owner_label')}>{c.owner_id != null ? <span className="tnum">#{c.owner_id}</span> : '—'}</HeaderFact>
+          <HeaderFact label={t('cmc_attribution')}>{c.attribution_window || '—'}</HeaderFact>
+          <HeaderFact label={t('cmc_source_of_truth')}>{c.primary_conversion_purpose || '—'}</HeaderFact>
+          <HeaderFact label={t('linked_count')}><span className="tnum">{platforms.length}</span></HeaderFact>
+          <HeaderFact label={t('cmc_stage')}>{classSelect('stage', c.stage, STAGE_KEYS, (k) => stageLabel(k, locale))}</HeaderFact>
+          <HeaderFact label={t('cmc_performance')}>{classSelect('performance_label', c.performance_label, PERFORMANCE_KEYS, (k) => performanceLabel(k, locale))}</HeaderFact>
+          <HeaderFact label={t('cmc_priority')}>{classSelect('priority', c.priority, PRIORITY_KEYS, (k) => priorityLabel(k, locale))}</HeaderFact>
+        </div>
+      </Card>
+
+      {actionError && <Alert severity="danger" title={actionError} />}
 
       <Tabs items={tabs} active={tab} onChange={setTab} />
 
@@ -171,23 +252,16 @@ export function CampaignDetailPage() {
               <CardTitle>{t('tab_overview')}</CardTitle>
               <div className="mt-2">
                 <Row label={t('objective_label')}>{objectiveLabel(c.objective, locale)}</Row>
-                <Row label={t('status_label')}>
-                  <Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge>
-                </Row>
+                <Row label={t('status_label')}><Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge></Row>
+                <Row label={t('cmc_stage')}>{c.stage ? stageLabel(c.stage, locale) : '—'}</Row>
+                <Row label={t('cmc_priority')}>{c.priority ? priorityLabel(c.priority, locale) : '—'}</Row>
                 <Row label={t('budget_label')}>
-                  <span className="tnum">
-                    {c.total_budget != null ? `${c.total_budget.toLocaleString('en-US')} ${c.budget_currency}` : '—'}
-                  </span>
+                  <span className="tnum">{c.total_budget != null ? `${c.total_budget.toLocaleString('en-US')} ${c.budget_currency}` : '—'}</span>
                 </Row>
                 <Row label={t('period_label')}>
-                  <span className="tnum text-xs">
-                    {c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}
-                  </span>
+                  <span className="tnum text-xs">{c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}</span>
                 </Row>
-                <Row label={t('owner_label')}>{c.owner_id != null ? <span className="tnum">#{c.owner_id}</span> : '—'}</Row>
-                <Row label={t('linked_count')}>
-                  <Badge tone="info">{c.external_campaigns_count ?? linkedQuery.data?.length ?? 0}</Badge>
-                </Row>
+                <Row label={t('linked_count')}><Badge tone="info">{platforms.length}</Badge></Row>
               </div>
             </Card>
             <Card>
@@ -198,47 +272,33 @@ export function CampaignDetailPage() {
         </TabPanel>
       )}
 
-      {tab === 'linked' && (
+      {tab === 'platforms' && (
         <TabPanel>
           <div className="mb-3 flex items-center justify-between">
             <CardTitle>{t('linked_campaigns')}</CardTitle>
-            {canUpdate && (
-              <Button onClick={() => setLinkOpen(true)}>
-                <Link2 size={14} /> {t('link_external')}
-              </Button>
-            )}
+            {canUpdate && <Button onClick={() => setLinkOpen(true)}><Link2 size={14} /> {t('link_external')}</Button>}
           </div>
           {linkedQuery.isLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-12 w-full" />
-            </div>
-          ) : (linkedQuery.data?.length ?? 0) === 0 ? (
+            <Skeleton className="h-12 w-full" />
+          ) : linked.length === 0 ? (
             <EmptyState title={t('no_linked_external')} description={t('no_linked_hint')} />
           ) : (
             <div className="space-y-2">
-              {linkedQuery.data?.map((ext) => (
+              {linked.map((ext) => (
                 <div key={ext.id} className="flex items-center justify-between rounded-[9px] border border-border p-2.5">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate text-sm font-semibold">{ext.name}</span>
                       <Badge tone={isDemoProvider(ext.provider) ? 'warning' : 'neutral'}>
-                        {providerLabel(ext.provider, locale)}
-                        {isDemoProvider(ext.provider) ? ` · ${t('demo_label')}` : ''}
+                        {providerLabel(ext.provider, locale)}{isDemoProvider(ext.provider) ? ` · ${t('demo_label')}` : ''}
                       </Badge>
                       <Badge tone={campaignStatusTone(ext.status)}>{campaignStatusLabel(ext.status, locale)}</Badge>
                     </div>
-                    <span className="text-xs text-text-muted">
-                      {t('ad_account_label')}: <span className="tnum">{ext.external_id}</span>
-                    </span>
+                    <span className="text-xs text-text-muted">{t('ad_account_label')}: <span className="tnum">{ext.external_id}</span></span>
                   </div>
                   {canUpdate && (
-                    <Button
-                      variant="ghost"
-                      loading={unlinkMutation.isPending && unlinkMutation.variables === ext.id}
-                      onClick={() => unlinkMutation.mutate(ext.id)}
-                    >
-                      <Unlink size={14} /> {t('unlink')}
-                    </Button>
+                    <Button variant="ghost" loading={unlinkMutation.isPending && unlinkMutation.variables === ext.id}
+                      onClick={() => unlinkMutation.mutate(ext.id)}><Unlink size={14} /> {t('unlink')}</Button>
                   )}
                 </div>
               ))}
@@ -247,24 +307,24 @@ export function CampaignDetailPage() {
         </TabPanel>
       )}
 
-      {tab === 'performance' && (
+      {/* Sections wired to their real backends in the following CMC batches. */}
+      {(['performance', 'creatives', 'budget', 'funnel', 'notes', 'alerts', 'reports', 'activity'] as TabKey[]).includes(tab) && (
         <TabPanel>
-          <EmptyState title={t('tab_performance')} description={t('performance_pending')} />
-        </TabPanel>
-      )}
-      {tab === 'notes' && (
-        <TabPanel>
-          <EmptyState title={t('tab_notes')} description={t('notes_pending')} />
-        </TabPanel>
-      )}
-      {tab === 'activity' && (
-        <TabPanel>
-          <EmptyState title={t('tab_activity')} description={t('activity_pending')} />
+          <EmptyState title={t(`tab_${tab}` as never)} description={t('cmc_section_building')} />
         </TabPanel>
       )}
 
       <CampaignFormModal open={editOpen} onClose={() => setEditOpen(false)} projectId={projectId} campaign={c} />
       <LinkExternalModal open={linkOpen} onClose={() => setLinkOpen(false)} projectId={projectId} campaignId={campaignId} />
     </section>
+  )
+}
+
+function HeaderFact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[11px] uppercase tracking-wide text-text-muted">{label}</span>
+      <span className="text-sm font-semibold text-text-primary">{children}</span>
+    </div>
   )
 }

@@ -24,6 +24,7 @@ final class UnifiedCampaign extends Model
 
     protected $fillable = [
         'tenant_id', 'project_id', 'client_workspace_id', 'name', 'client_display_name', 'objective', 'status',
+        'stage', 'performance_label', 'priority',
         'total_budget', 'budget_currency', 'starts_on', 'ends_on', 'primary_conversion_purpose',
         'attribution_model', 'attribution_window', 'owner_id', 'target_kpi', 'audience', 'regions',
         'meta', 'created_by',

@@ -6,6 +6,9 @@ namespace App\Domains\Campaigns\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\CampaignPerformanceLabel;
+use App\Domains\Campaigns\Enums\CampaignPriority;
+use App\Domains\Campaigns\Enums\CampaignStage;
 use App\Domains\Campaigns\Enums\CampaignStatus;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
@@ -36,6 +39,14 @@ final class UnifiedCampaignController extends Controller
         }
         if ($objective = $request->string('objective')->toString()) {
             $query->where('objective', $objective);
+        }
+        foreach (['stage', 'performance_label', 'priority'] as $classField) {
+            if ($value = $request->string($classField)->toString()) {
+                $query->where($classField, $value);
+            }
+        }
+        if ($request->boolean('needs_attention')) {
+            $query->whereIn('performance_label', CampaignPerformanceLabel::needsAttention());
         }
         if ($search = $request->string('search')->toString()) {
             $query->where('name', 'ilike', "%{$search}%");
@@ -75,9 +86,9 @@ final class UnifiedCampaignController extends Controller
         $model = $this->find($campaign);
 
         $validated = $this->validatePayload($request, creating: false, ignoreId: (string) $model->id);
-        $before = $model->only(['name', 'status', 'objective', 'total_budget']);
+        $before = $model->only(['name', 'status', 'objective', 'total_budget', 'stage', 'performance_label', 'priority']);
         $model->update($validated);
-        $audit->log(action: 'campaign.updated', entityType: UnifiedCampaign::class, entityId: (string) $model->id, before: $before, after: $model->only(['name', 'status', 'objective', 'total_budget']));
+        $audit->log(action: 'campaign.updated', entityType: UnifiedCampaign::class, entityId: (string) $model->id, before: $before, after: $model->only(['name', 'status', 'objective', 'total_budget', 'stage', 'performance_label', 'priority']));
 
         return ApiResponse::success(new UnifiedCampaignResource($model), 'Unified campaign updated.');
     }
@@ -200,6 +211,9 @@ final class UnifiedCampaignController extends Controller
             'client_display_name' => ['nullable', 'string', 'max:160'], // the name a client sees in reports
             'objective' => ['sometimes', Rule::in(CampaignObjective::values())],
             'status' => ['sometimes', Rule::in(CampaignStatus::values())],
+            'stage' => ['nullable', Rule::in(CampaignStage::values())],
+            'performance_label' => ['nullable', Rule::in(CampaignPerformanceLabel::values())],
+            'priority' => ['sometimes', Rule::in(CampaignPriority::values())],
             'total_budget' => ['nullable', 'numeric', 'min:0'],
             'budget_currency' => ['sometimes', 'string', 'size:3'],
             'starts_on' => ['nullable', 'date'],

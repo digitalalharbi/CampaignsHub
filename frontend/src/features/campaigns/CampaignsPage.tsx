@@ -18,6 +18,7 @@ import { compact, money, num, ratio } from '@/features/analytics/format'
 import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
+import { useT } from '@/lib/i18n'
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'var(--success)', paused: 'var(--warning)', completed: 'var(--info)',
@@ -25,6 +26,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export function CampaignsPage() {
+  const t = useT()
   const locale = useUi((s) => s.locale)
   const navigate = useNavigate()
   const canCreate = useAuth((s) => s.hasPermission('campaigns.create'))
@@ -100,7 +102,7 @@ export function CampaignsPage() {
         </div>
         <div className="flex items-center gap-2">
           <RangeTabs value={days} onChange={setDays} />
-          {canCreate && <Button onClick={() => setModalOpen(true)}><Plus size={16} /> حملة جديدة</Button>}
+          {canCreate && <Button onClick={() => setModalOpen(true)}><Plus size={16} /> {t('new_campaign')}</Button>}
         </div>
       </div>
 
@@ -150,7 +152,7 @@ export function CampaignsPage() {
       {campaignsQuery.isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-40" />)}</div>
       ) : campaigns.length === 0 ? (
-        <EmptyState title="لا حملات في هذا المشروع" description="أنشئ أول حملة لهذا المشروع." />
+        <EmptyState title={t('no_campaigns')} description={t('no_campaigns_hint')} />
       ) : view === 'cards' ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {campaigns.map((c) => <CampaignCard key={c.id} c={c} locale={locale} onOpen={() => navigate(`/campaigns/${projectId}/${c.id}`)} />)}
