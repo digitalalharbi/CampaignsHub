@@ -7,6 +7,7 @@ namespace App\Domains\Requests\Services;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestStatus;
 use App\Domains\Requests\Models\RequestType;
+use App\Domains\Requests\Models\RequestUploadSession;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -66,6 +67,18 @@ final class RequestIntake
                 'token_hash' => hash('sha256', $plain),
                 'created_at' => now(),
             ]);
+
+            // Associate any files uploaded to a temp session, then retire the session.
+            if (! empty($data['upload_token'])) {
+                $session = RequestUploadSession::where('token_hash', hash('sha256', $data['upload_token']))->first();
+                if ($session !== null) {
+                    $session->files()->whereNull('request_id')->update([
+                        'request_id' => $request->id,
+                        'upload_session_id' => null,
+                    ]);
+                    $session->delete();
+                }
+            }
 
             return ['request' => $request->fresh(['type', 'status']), 'token' => $plain];
         });

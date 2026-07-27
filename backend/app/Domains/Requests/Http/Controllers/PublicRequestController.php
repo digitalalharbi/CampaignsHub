@@ -56,6 +56,7 @@ final class PublicRequestController
             'start_date' => ['nullable', 'date'],
             'due_date' => ['nullable', 'date', 'after_or_equal:start_date'],
             'metadata' => ['nullable', 'array'],
+            'upload_token' => ['nullable', 'string'],
         ]);
 
         ['request' => $req, 'token' => $token] = $this->intake->create($data);

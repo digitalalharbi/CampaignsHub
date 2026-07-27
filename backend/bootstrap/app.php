@@ -6,6 +6,7 @@ use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Reports\Console\InvalidateLegacyExportsCommand;
 use App\Domains\Reports\Console\RegenerateDemoExportsCommand;
 use App\Domains\Reports\Console\ReportsHealthCommand;
+use App\Domains\Requests\Console\PruneUploadSessions;
 use App\Domains\Tenancy\Middleware\ResolveTenant;
 use App\Http\Middleware\AssignRequestId;
 use App\Support\ApiResponse;
@@ -41,6 +42,7 @@ return Application::configure(basePath: dirname(__DIR__))
         InvalidateLegacyExportsCommand::class,
         RegenerateDemoExportsCommand::class,
         ReportsHealthCommand::class,
+        PruneUploadSessions::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.

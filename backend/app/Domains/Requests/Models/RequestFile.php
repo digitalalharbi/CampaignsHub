@@ -9,7 +9,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * @property int $id
- * @property string $request_id
+ * @property string|null $request_id
+ * @property string|null $upload_session_id
+ * @property string $disk
+ * @property string $path
+ * @property string $original_name
+ * @property string|null $mime
+ * @property int $size
  * @property bool $is_client_visible
  */
 class RequestFile extends Model
