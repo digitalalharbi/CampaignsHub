@@ -82,3 +82,11 @@ Permission slugs: `paid_media.access`, `influencer_marketing.access`.
 
 First application: auth marketing copy (`i18n.ts` auth_hero_eyebrow/title/subtitle, sign_in/create_account
 subtitles) now leads with the official term. Nav/marketing/onboarding/requests must reuse these exact strings.
+
+## Visual refinement — homepage + login rebalance (2026-07-27)
+Reference images used ONLY for balance/hierarchy/type-scale, never colors (Emerald-on-Graphite kept).
+- Homepage hero rebalanced to a wide value+preview column beside a ~360px journey card (equal height,
+  verified 706==706px); the interactive preview is the primary visual; added a workflow strip; H1 60px.
+- Login marketing panel widened to ~57% with a big title and FOUR described value props; fields → 56px;
+  demo card moved below the form. Commits 4756b17 (marketing) + 7c54bc7 (auth).
+- Prior visual baselines were discarded (old design no longer accepted) and regenerated for both surfaces.

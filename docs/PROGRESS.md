@@ -367,3 +367,14 @@ Cross-browser + acceptance work this batch:
 - **العوائق / Blockers:** mail stays Awaiting Credentials (intake still works, token issued)
 - **Regressions:** none (170/170)
 - **المرحلة التالية / Next:** dynamic intake form UI + tracking UI, then internal requests dashboard
+
+## Visual refinement batch — homepage + login (2026-07-27)
+- **Commits:** `4756b17` fix(marketing): rebalance homepage · `7c54bc7` fix(auth): restructure login
+- **Tests run:** auth+homepage e2e across Chromium+Firefox+WebKit (50 pass, 4 visual skips off-chromium) ·
+  account + auth-visual chromium 11/11 · vitest 22/22 · typecheck/build green · fresh visual baselines (8)
+- **Live review:** homepage 1440 — dominant H1 "كل حملاتك الإعلانية المدفوعة في مكان واحد", equal-height
+  columns (706==706), large interactive preview, journey card with 68px options, workflow strip; mobile 375
+  value-first, no overflow. Login — wider marketing panel, big title, 4 described features, 56px fields, demo
+  card below form; light+dark baselines clean.
+- **Remaining:** none for this refinement. **Next:** resume External Request Portal (dynamic form UI + tracking UI).
+- **Regressions:** none (request backend untouched — 16d40f2 intact).

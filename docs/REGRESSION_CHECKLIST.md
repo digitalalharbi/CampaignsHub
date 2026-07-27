@@ -48,3 +48,4 @@ npx playwright test --workers=1 --retries=0 --repeat-each=3
 | 2026-07-27 | User profile/password/security | name change reflects+persists live | backend 165/165, vitest 22/22 | RTL, mobile settings nav | account e2e 4/4 + MeAccountTest 8 | G-009 logged (sessions/2FA infra) |
 | 2026-07-27 | Public homepage | / live RTL light+dark, preview interactive | vitest 22/22 | RTL/LTR, mobile 375, no overflow | homepage e2e 9/9 (3 browsers) + auth/account 17/17 | app→/dashboard, no regression |
 | 2026-07-27 | Requests backend (intake+tracking) | live HTTP intake 201 + track hides tenant | backend 170/170, phpstan clean | n/a (backend) | RequestIntakeTest 5 + live curl | secure token hashed, internal hidden |
+| 2026-07-27 | Homepage+login visual refinement | 1440 balanced, 375 value-first live | vitest 22/22 | RTL, equal-height cols, no overflow | auth+home e2e 50/50 (3 browsers) + fresh baselines | request backend untouched |
