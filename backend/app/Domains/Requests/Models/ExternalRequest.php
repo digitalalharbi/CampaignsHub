@@ -34,6 +34,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $sla_paused_at
  * @property Carbon|null $sla_resumed_at
  * @property Carbon|null $sla_breached_at
+ * @property Carbon|null $sla_warned_at
  * @property int $sla_paused_seconds
  * @property Carbon|null $archived_at
  * @property Carbon|null $last_activity_at
@@ -57,6 +58,7 @@ class ExternalRequest extends Model
         'sla_paused_at' => 'datetime',
         'sla_resumed_at' => 'datetime',
         'sla_breached_at' => 'datetime',
+        'sla_warned_at' => 'datetime',
         'archived_at' => 'datetime',
         'last_activity_at' => 'datetime',
         'submitted_at' => 'datetime',

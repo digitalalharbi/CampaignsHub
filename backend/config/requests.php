@@ -10,6 +10,9 @@ return [
     // Default SLA window (hours) applied at intake; per-type SLA policies land with the dashboard phase.
     'default_sla_hours' => (int) env('REQUESTS_DEFAULT_SLA_HOURS', 48),
 
+    // Warn when the running SLA has fewer than this many hours remaining (evaluated by the scheduler).
+    'sla_warning_hours' => (int) env('REQUESTS_SLA_WARNING_HOURS', 4),
+
     // Public intake anti-abuse.
     'intake_throttle_per_minute' => (int) env('REQUESTS_INTAKE_THROTTLE', 6),
 

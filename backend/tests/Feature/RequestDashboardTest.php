@@ -31,6 +31,8 @@ final class RequestDashboardTest extends TestCase
         parent::setUp();
         $this->seed(PermissionSeeder::class);
         $this->seed(RequestCatalogSeeder::class);
+        // Deterministic: ignore any dev .env portal-tenant override so intake falls back to the first tenant.
+        config(['requests.portal_tenant_id' => null]);
 
         $this->tenant = Tenant::create(['name' => 'Agency', 'slug' => 'agency', 'status' => 'active']);
         app(TenantContext::class)->setTenantId($this->tenant->id);

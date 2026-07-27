@@ -10,3 +10,6 @@ Artisan::command('inspire', function () {
 
 // Prune expired upload sessions + orphaned files hourly.
 Schedule::command('requests:prune-uploads')->hourly();
+
+// Evaluate request SLA (warnings + breaches) every 10 minutes.
+Schedule::command('requests:evaluate-sla')->everyTenMinutes();

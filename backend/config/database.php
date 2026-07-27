@@ -97,6 +97,9 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // Pin the session timezone to UTC so timestamptz reads/writes agree with the app (config/app.php
+            // is UTC). Without this, Postgres uses the server tz and datetime comparisons shift by the offset.
+            'timezone' => env('DB_TIMEZONE', 'UTC'),
         ],
 
         'sqlsrv' => [
