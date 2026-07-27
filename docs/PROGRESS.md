@@ -578,3 +578,19 @@ Honest per-suite status (do not say "cross-browser ✓" for the visual gates):
 - **Verified in-browser (production preview):** SW activated + controlling; shell cache = [/,index.html,
   manifest,icon]; 0 API entries cached; React mounted; no console errors; RTL login renders.
 - **Next:** Production Readiness → Security Audit → Full Regression → Final Delivery Package.
+
+## Phase 11 — Security Audit + Full Regression + Delivery Package (2026-07-27)
+- **Commits:** `1551bab` security audit (isolation lock + report), `5ea51a7`+`…` E2E regression fixes,
+  final delivery package.
+- **Security audit:** tenant isolation reviewed (Role/AuditLog reads explicitly scoped — no global-scope
+  leak), authz + suspended block + entitlement fail-closed, secrets (no tracked .env, dev hatches hard-gated
+  in prod), scoped credentialed CORS. Added `AlertsIsolationTest` + `docs/SECURITY_AUDIT.md`.
+- **Full regression:** backend **290 passed (1220 assertions)**, phpstan + pint clean. E2E full suite on
+  Chromium/Firefox/WebKit: **144 passed, 0 failed, 2 flaky (retry-pass), 16 skipped**. The 14 initial E2E
+  failures were all stale test selectors (campaigns page gained H3 summary cards; row action became a card)
+  + backend-contention timing on write-heavy auth specs — NO app regressions; fixed selectors + gave the two
+  write-heavy specs retry budget (single-threaded dev backend saturates under the 3-browser load).
+- **Delivery:** `docs/FINAL_DELIVERY_PACKAGE.md` (scope, honest status, quality gates, run instructions),
+  `docs/PRODUCTION_RUNBOOK.md`, `docs/SECURITY_AUDIT.md`.
+- **Honest status unchanged:** Email/WhatsApp = Awaiting Provider Credentials; Google login = Awaiting
+  Credentials; alerts management UI (React page) is a documented follow-up (engine + API complete).
