@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { submitVerifiedRequest } from './helpers'
 
 /**
  * The full external→internal vertical flow — the acceptance path for the request portal:
@@ -8,22 +9,13 @@ import { expect, test } from '@playwright/test'
 test.use({ storageState: { cookies: [], origins: [] } })
 
 test('external submit → owner dashboard → assign/status/internal-note → tracking hides internal note', async ({ page }) => {
-  // 1) Guest submits an external request.
-  await page.goto('/requests/new')
-  await page.getByRole('button', { name: /استشارة|Consulting/ }).click()
-  await page.getByRole('button', { name: /التالي|Next/ }).click()
-  await page.getByLabel(/الاسم|Name/).fill('Vertical Client')
-  await page.getByLabel(/البريد|Email/).fill('vertical@example.com')
-  await page.getByRole('button', { name: /التالي|Next/ }).click()
-  await page.getByLabel(/هدف الطلب|Objective/).fill('End-to-end vertical flow verification request.')
-  await page.getByRole('button', { name: /التالي|Next/ }).click() // budget
-  await page.getByRole('button', { name: /التالي|Next/ }).click() // attachments
-  await page.getByRole('button', { name: /التالي|Next/ }).click() // review
-  await page.getByRole('button', { name: /إرسال الطلب|Submit request/ }).click()
-
+  // 1) Guest submits a VERIFIED external request (Consulting), returns the reference.
+  const reference = await submitVerifiedRequest(page, {
+    name: 'Vertical Client', email: `vertical.${Date.now()}@example.com`,
+    phone: `+96650${String(Date.now()).slice(-7)}`, company: 'Vertical Co',
+    objective: 'End-to-end vertical flow verification request.', service: /Consulting|استشارة/,
+  })
   await expect(page.getByText(/تم استلام طلبك|Request received/)).toBeVisible()
-  const reference = (await page.getByText(/REQ-\d{4}-[A-Z0-9]{6}/).first().textContent())?.match(/REQ-\d{4}-[A-Z0-9]{6}/)?.[0]
-  expect(reference).toBeTruthy()
   const trackHref = await page.getByRole('link', { name: /تتبع الطلب|Track request/ }).getAttribute('href')
   const trackUrl = new URL(trackHref!, page.url()).pathname + new URL(trackHref!, page.url()).search
 

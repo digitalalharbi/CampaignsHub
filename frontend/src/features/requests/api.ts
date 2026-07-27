@@ -22,6 +22,16 @@ export interface RequestSubmitPayload {
   metadata?: Record<string, unknown>
   upload_token?: string
   website?: string // honeypot — always empty
+  phone_verification_id?: string
+  email_verification_id?: string
+}
+
+export interface VerificationStart {
+  verification_id: string
+  channel: string
+  destination: string
+  delivery_status: string
+  dev_code: string | null // non-production only
 }
 
 export interface RequestSubmitResult {
@@ -74,6 +84,14 @@ export const deleteUploadFile = (uploadToken: string, fileId: number) =>
   deleteData<{ status: string }>(`/requests/uploads/${fileId}`, { upload_token: uploadToken })
 
 export const submitRequest = (payload: RequestSubmitPayload) => postData<RequestSubmitResult>('/requests', payload)
+
+/** Start an OTP challenge for a phone (sms/whatsapp) or email destination. */
+export const startVerification = (channel: 'sms' | 'whatsapp' | 'email', destination: string, purpose = 'contact_verify') =>
+  postData<VerificationStart>('/requests/verify/start', { channel, destination, purpose })
+
+/** Verify an OTP code; returns the verified verification id. */
+export const checkVerification = (verification_id: string, code: string) =>
+  postData<{ verification_id: string; verified: boolean }>('/requests/verify/check', { verification_id, code })
 
 export const trackRequest = (token: string) => getData<RequestTrackResult>(`/requests/track/${encodeURIComponent(token)}`)
 

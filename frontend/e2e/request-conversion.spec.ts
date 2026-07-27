@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { submitVerifiedRequest } from './helpers'
 
 /**
  * Full conversion vertical: guest submits → owner converts the request into a client/project/draft
@@ -10,20 +11,11 @@ test.use({ storageState: { cookies: [], origins: [] } })
 test('convert a request → client appears in portfolio and command center', async ({ page }, testInfo) => {
   // Unique company name per run so portfolio/command-center assertions match exactly one client.
   const company = `Conversion Co ${testInfo.project.name}-${Date.now()}`
-  // 1) Guest submits.
-  await page.goto('/requests/new')
-  await page.getByRole('button', { name: /إطلاق حملة إعلانية مدفوعة|Launch a paid campaign/ }).click()
-  await page.getByRole('button', { name: /التالي|Next/ }).click()
-  await page.getByLabel(/الاسم|Name/).fill('Conversion Client')
-  await page.getByLabel(/البريد|Email/).fill('conv@example.com')
-  await page.getByLabel(/اسم النشاط أو الشركة|Company/).fill(company)
-  await page.getByRole('button', { name: /التالي|Next/ }).click()
-  await page.getByLabel(/هدف الطلب|Objective/).fill('Convert this into a managed client.')
-  await page.getByRole('button', { name: /التالي|Next/ }).click() // budget
-  await page.getByRole('button', { name: /التالي|Next/ }).click() // attachments
-  await page.getByRole('button', { name: /التالي|Next/ }).click() // review
-  await page.getByRole('button', { name: /إرسال الطلب|Submit request/ }).click()
-  const reference = (await page.getByText(/REQ-\d{4}-[A-Z0-9]{6}/).first().textContent())?.match(/REQ-\d{4}-[A-Z0-9]{6}/)?.[0]
+  // 1) Guest submits a VERIFIED request (OTP phone + email), returns the reference.
+  const reference = await submitVerifiedRequest(page, {
+    name: 'Conversion Client', email: `conv.${Date.now()}@example.com`,
+    phone: `+96650${String(Date.now()).slice(-7)}`, company, objective: 'Convert this into a managed client.',
+  })
 
   // 2) Owner logs in and opens the request.
   await page.goto('/login')

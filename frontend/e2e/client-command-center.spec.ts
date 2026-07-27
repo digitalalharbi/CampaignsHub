@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { switchToEnglish } from './helpers'
+import { submitVerifiedRequest, switchToEnglish } from './helpers'
 
 /**
  * Full Client Command Center journey: guest submits a request → owner converts → opens the client → updates
@@ -13,21 +13,11 @@ test.use({ storageState: { cookies: [], origins: [] } })
 test('owner drives a converted client through every command-center tab', async ({ page }, testInfo) => {
   const company = `CC Co ${testInfo.project.name}-${Date.now()}`
 
-  // 1) Guest submits a request.
-  await page.goto('/requests/new')
-  await switchToEnglish(page)
-  await page.getByRole('button', { name: /Launch a paid campaign|إطلاق حملة إعلانية مدفوعة/ }).click()
-  await page.getByRole('button', { name: /Next|التالي/ }).click()
-  await page.getByLabel(/Name|الاسم/).fill('CC Client')
-  await page.getByLabel(/Email|البريد/).fill('cc@example.com')
-  await page.getByLabel(/Company|اسم النشاط أو الشركة/).fill(company)
-  await page.getByRole('button', { name: /Next|التالي/ }).click()
-  await page.getByLabel(/Objective|هدف الطلب/).fill('Full command center journey.')
-  await page.getByRole('button', { name: /Next|التالي/ }).click()
-  await page.getByRole('button', { name: /Next|التالي/ }).click()
-  await page.getByRole('button', { name: /Next|التالي/ }).click()
-  await page.getByRole('button', { name: /Submit request|إرسال الطلب/ }).click()
-  const reference = (await page.getByText(/REQ-\d{4}-[A-Z0-9]{6}/).first().textContent())?.match(/REQ-\d{4}-[A-Z0-9]{6}/)?.[0]
+  // 1) Guest submits a VERIFIED request (OTP), returns the reference.
+  const reference = await submitVerifiedRequest(page, {
+    name: 'CC Client', email: `cc.${Date.now()}@example.com`,
+    phone: `+96650${String(Date.now()).slice(-7)}`, company, objective: 'Full command center journey.',
+  })
 
   // 2) Owner logs in and opens the request.
   await page.goto('/login')

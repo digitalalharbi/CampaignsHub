@@ -27,6 +27,9 @@ import { SystemStatusPage } from '@/features/system/SystemStatusPage'
 import { PublicHomePage } from '@/features/marketing/PublicHomePage'
 import { RequestIntakePage } from '@/features/requests/RequestIntakePage'
 import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
+import { ClientPortalLoginPage } from '@/features/requests/portal/ClientPortalLoginPage'
+import { ClientRequestsPage } from '@/features/requests/portal/ClientRequestsPage'
+import { ClientRequestDetailPage } from '@/features/requests/portal/ClientRequestDetailPage'
 import { RequestsDashboardPage } from '@/features/requests/RequestsDashboardPage'
 import { RequestDetailPage } from '@/features/requests/RequestDetailPage'
 import { ClientsPortfolioPage } from '@/features/clients/ClientsPortfolioPage'
@@ -43,6 +46,10 @@ export const router = createBrowserRouter([
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/requests/new', element: <RequestIntakePage /> },
   { path: '/requests/track', element: <RequestTrackPage /> },
+  // External Client Portal (own cookie session; not the staff app).
+  { path: '/client/login', element: <ClientPortalLoginPage /> },
+  { path: '/client', element: <ClientRequestsPage /> },
+  { path: '/client/requests/:reference', element: <ClientRequestDetailPage /> },
   { path: '/reports/share/:token', element: <PublicReport /> },
   { path: '/reports/print/:token', element: <PrintReport /> },
   {

@@ -61,3 +61,40 @@ export async function createCampaign(page: Page, name: string) {
   await page.getByRole('button', { name: /^Save$|^حفظ$/ }).click()
   await expect(page.getByText(name)).toBeVisible()
 }
+
+/**
+ * Fill and submit the public intake wizard through the mandatory OTP verification step. Assumes the app is in
+ * English (call switchToEnglish first). Returns the created request reference (REQ-YYYY-XXXXXX).
+ */
+export async function submitVerifiedRequest(
+  page: Page,
+  opts: { name: string; email: string; phone: string; company: string; objective: string; service?: RegExp },
+): Promise<string> {
+  const service = opts.service ?? /Launch a paid campaign|إطلاق حملة إعلانية مدفوعة/
+  await page.goto('/requests/new')
+  await switchToEnglish(page)
+  await page.getByRole('button', { name: service }).click()
+  await page.getByRole('button', { name: /Next|التالي/ }).click()
+  await page.getByLabel(/Name|الاسم/).fill(opts.name)
+  await page.getByLabel(/Email|البريد/).fill(opts.email)
+  await page.getByLabel(/Phone|رقم الجوال/).fill(opts.phone)
+  await page.getByLabel(/Company|اسم النشاط أو الشركة/).fill(opts.company)
+  await page.getByRole('button', { name: /Next|التالي/ }).click()
+  await page.getByLabel(/Objective|هدف الطلب/).fill(opts.objective)
+  await page.getByRole('button', { name: /Next|التالي/ }).click() // budget
+  await page.getByRole('button', { name: /Next|التالي/ }).click() // attachments
+  await page.getByRole('button', { name: /Next|التالي/ }).click() // review
+  // Verify phone + email (dev auto-verifies via the exposed code).
+  await page.getByRole('button', { name: /Verify Mobile number|تحقّق رقم الجوال/ }).click()
+  await expect(page.getByText(/Verified|تم التحقق/)).toHaveCount(1)
+  await page.getByRole('button', { name: /Verify Email|تحقّق البريد الإلكتروني/ }).click()
+  await expect(page.getByText(/Verified|تم التحقق/)).toHaveCount(2)
+  const submitBtn = page.getByRole('button', { name: /Submit request|إرسال الطلب/ })
+  await expect(submitBtn).toBeEnabled()
+  await submitBtn.click()
+  // Wait for the success page to render the reference before reading it (avoids a null read race).
+  const refLocator = page.getByText(/REQ-\d{4}-[A-Z0-9]{6}/).first()
+  await expect(refLocator).toBeVisible()
+  const ref = (await refLocator.textContent())?.match(/REQ-\d{4}-[A-Z0-9]{6}/)?.[0]
+  return ref!
+}

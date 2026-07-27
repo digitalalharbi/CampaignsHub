@@ -6,6 +6,7 @@ import {
   deleteUploadFile, getRequestMeta, startUploadSession, submitRequest, uploadRequestFile,
   type RequestSubmitPayload, type RequestType,
 } from './api'
+import { ContactVerification } from './ContactVerification'
 import { Button } from '@/components/ui/Button'
 import { EmailInput, FormField, TextInput, TextareaField } from '@/components/ui/form'
 import { controlClass } from '@/components/ui/Field'
@@ -139,6 +140,9 @@ export function RequestIntakePage() {
   const [files, setFiles] = useState<UploadFile[]>([])
   const [notes, setNotes] = useState('')
   const anyUploading = files.some((f) => f.status === 'uploading')
+  // Verified contact ids (OTP). A final submit requires BOTH phone and email verified.
+  const [verifiedIds, setVerifiedIds] = useState<{ phone?: string; email?: string }>({})
+  const contactVerified = Boolean(verifiedIds.phone && verifiedIds.email)
 
   async function ensureSession(): Promise<string | null> {
     if (uploadToken) return uploadToken
@@ -203,6 +207,8 @@ export function RequestIntakePage() {
     if (s === 1) {
       if (form.contact_name.trim().length < 2) e.contact_name = ar ? 'الاسم مطلوب' : 'Name is required'
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.contact_email)) e.contact_email = ar ? 'بريد غير صحيح' : 'Invalid email'
+      if (!/^\+[1-9]\d{7,14}$/.test(form.contact_phone.trim())) e.contact_phone = ar ? 'أدخل رقمًا دوليًا مع رمز الدولة (مثال ‎+9665...)' : 'Enter an international number with country code (e.g. +9665…)'
+      if (form.company_name.trim().length < 2) e.company_name = ar ? 'اسم المنشأة مطلوب' : 'Company name is required'
     }
     if (s === 2 && form.objective.trim().length < 5) e.objective = ar ? 'اذكر هدف الطلب باختصار' : 'Describe the objective'
     if (s === 4 && anyUploading) e.files = ar ? 'انتظر اكتمال رفع الملفات قبل المتابعة' : 'Wait for uploads to finish before continuing'
@@ -214,7 +220,7 @@ export function RequestIntakePage() {
   const back = () => setStep((s) => Math.max(s - 1, 0))
 
   const submit = () => {
-    if (mutation.isPending || anyUploading) return // prevent double submit / submit mid-upload
+    if (mutation.isPending || anyUploading || !contactVerified) return // block until phone+email verified
     const platforms = (form.meta.platforms as string[] | undefined) ?? []
     const payload: RequestSubmitPayload = {
       type: form.type,
@@ -231,6 +237,8 @@ export function RequestIntakePage() {
       metadata: { ...form.meta, platforms, notes: notes || undefined, locale },
       upload_token: uploadToken ?? undefined,
       website: '', // honeypot stays empty
+      phone_verification_id: verifiedIds.phone,
+      email_verification_id: verifiedIds.email,
     }
     mutation.mutate(payload)
   }
@@ -300,8 +308,8 @@ export function RequestIntakePage() {
               <TextInput label={ar ? 'الاسم' : 'Name'} value={form.contact_name} onChange={(e) => set('contact_name', e.target.value)} required error={errors.contact_name} />
               <EmailInput label={ar ? 'البريد الإلكتروني' : 'Email'} value={form.contact_email} onChange={(e) => set('contact_email', e.target.value)} required error={errors.contact_email} />
               <div className="grid gap-4 sm:grid-cols-2">
-                <TextInput label={ar ? 'رقم الجوال' : 'Phone'} value={form.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} inputMode="tel" dir="ltr" />
-                <TextInput label={ar ? 'اسم النشاط أو الشركة' : 'Company'} value={form.company_name} onChange={(e) => set('company_name', e.target.value)} />
+                <TextInput label={ar ? 'رقم الجوال (مع رمز الدولة)' : 'Phone (with country code)'} value={form.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} inputMode="tel" dir="ltr" placeholder="+9665XXXXXXXX" required error={errors.contact_phone} />
+                <TextInput label={ar ? 'اسم النشاط أو الشركة' : 'Company'} value={form.company_name} onChange={(e) => set('company_name', e.target.value)} required error={errors.company_name} />
               </div>
             </div>
           )}
@@ -413,6 +421,14 @@ export function RequestIntakePage() {
                 <Row k={ar ? 'الأولوية' : 'Priority'} v={form.priority} />
                 <Row k={ar ? 'الملفات' : 'Files'} v={files.filter((f) => f.status === 'done').length ? files.filter((f) => f.status === 'done').map((f) => f.name).join('، ') : (ar ? 'لا يوجد' : 'None')} />
               </dl>
+
+              <div className="rounded-xl border border-border bg-surface-secondary p-3">
+                <FieldTitle ar={ar} title={ar ? 'تحقّق من وسيلة التواصل' : 'Verify your contact'} />
+                <div className="mt-2">
+                  <ContactVerification phone={form.contact_phone.trim()} email={form.contact_email.trim()} ar={ar} onChange={(ids) => setVerifiedIds((p) => ({ ...p, ...ids }))} />
+                </div>
+              </div>
+
               {apiError && <p className="rounded-lg bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{apiError.message}</p>}
             </div>
           )}
@@ -423,7 +439,7 @@ export function RequestIntakePage() {
             {step < STEPS.length - 1 ? (
               <Button onClick={next} disabled={step === 4 && anyUploading}>{ar ? 'التالي' : 'Next'} <Arrow size={15} className="ms-1.5" /></Button>
             ) : (
-              <Button onClick={submit} loading={mutation.isPending} disabled={anyUploading}>{ar ? 'إرسال الطلب' : 'Submit request'}</Button>
+              <Button onClick={submit} loading={mutation.isPending} disabled={anyUploading || !contactVerified}>{ar ? 'إرسال الطلب' : 'Submit request'}</Button>
             )}
           </div>
         </div>

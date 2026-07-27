@@ -21,6 +21,8 @@ test('homepage → request → dynamic form → submit → success with request 
   await expect(page.getByText(/الاسم مطلوب|Name is required/)).toBeVisible()
   await page.getByLabel(/الاسم|Name/).fill('QA Requester')
   await page.getByLabel(/البريد|Email/).fill('qa-requester@example.com')
+  await page.getByLabel(/رقم الجوال|Phone/).fill(`+96650${String(Date.now()).slice(-7)}`)
+  await page.getByLabel(/اسم النشاط أو الشركة|Company/).fill('QA Co')
   await page.getByRole('button', { name: /التالي|Next/ }).click()
 
   // Step 3 — details (objective required).
@@ -42,6 +44,10 @@ test('homepage → request → dynamic form → submit → success with request 
   // Step 6 — review shows the uploaded file, then submit.
   await expect(page.getByText(/مراجعة الطلب|Review your request/)).toBeVisible()
   await expect(page.getByText('brief.pdf')).toBeVisible()
+  await page.getByRole('button', { name: /تحقّق رقم الجوال|Verify Mobile number/ }).click()
+  await expect(page.getByText(/تم التحقق|Verified/)).toHaveCount(1)
+  await page.getByRole('button', { name: /تحقّق البريد|Verify Email/ }).click()
+  await expect(page.getByText(/تم التحقق|Verified/)).toHaveCount(2)
   await page.getByRole('button', { name: /إرسال الطلب|Submit request/ }).click()
 
   // Success page shows a real REQ-YYYY-XXXXXX number and a tracking link.
@@ -56,11 +62,17 @@ test('after submit, the tracking link shows status and accepts a client reply', 
   await page.getByRole('button', { name: /التالي|Next/ }).click()
   await page.getByLabel(/الاسم|Name/).fill('Track Tester')
   await page.getByLabel(/البريد|Email/).fill('track@example.com')
+  await page.getByLabel(/رقم الجوال|Phone/).fill(`+96650${String(Date.now()).slice(-7)}`)
+  await page.getByLabel(/اسم النشاط أو الشركة|Company/).fill('Track Co')
   await page.getByRole('button', { name: /التالي|Next/ }).click()
   await page.getByLabel(/هدف الطلب|Objective/).fill('Need advice on scaling our campaigns.')
   await page.getByRole('button', { name: /التالي|Next/ }).click() // → budget
   await page.getByRole('button', { name: /التالي|Next/ }).click() // → attachments
   await page.getByRole('button', { name: /التالي|Next/ }).click() // → review
+  await page.getByRole('button', { name: /تحقّق رقم الجوال|Verify Mobile number/ }).click()
+  await expect(page.getByText(/تم التحقق|Verified/)).toHaveCount(1)
+  await page.getByRole('button', { name: /تحقّق البريد|Verify Email/ }).click()
+  await expect(page.getByText(/تم التحقق|Verified/)).toHaveCount(2)
   await page.getByRole('button', { name: /إرسال الطلب|Submit request/ }).click()
 
   await expect(page.getByText(/تم استلام طلبك|Request received/)).toBeVisible()
