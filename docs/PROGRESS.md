@@ -355,3 +355,15 @@ Cross-browser + acceptance work this batch:
 - **العوائق / Blockers:** none new (integration keys stay Awaiting Credentials — shown honestly)
 - **Regressions:** none (app moved to /dashboard; all prior auth/account/campaign routes intact; 17/17 e2e)
 - **المرحلة التالية / Next:** External Request Portal → Request Tracking → Requests Dashboard → Clients
+
+## Phase 4 batch — External Request Portal (backend foundation) (2026-07-27)
+- **المرحلة / Phase:** External Request domain + secure intake + tracking (backend)
+- **Commit:** `16d40f2` feat(requests): add external request domain and secure intake
+- **Tests run:** backend `php artisan test` **170/170** (+5 RequestIntakeTest) · pint + phpstan clean · live HTTP
+- **Live HTTP verified:** POST /api/v1/requests → 201 (REQ-2026-XXXXXX, 48-char token, email_delivery=awaiting_credentials);
+  GET /requests/track/{token} → client-safe view, **no tenant_id / internal fields**, 410 on revoked
+- **المتبقي / Remaining:** dynamic multi-step form UI, attachments, confirmation page, tracking UI, internal
+  dashboard (Kanban/Table/Cards + SLA + assignment + comments), transactional conversion, clients + command center
+- **العوائق / Blockers:** mail stays Awaiting Credentials (intake still works, token issued)
+- **Regressions:** none (170/170)
+- **المرحلة التالية / Next:** dynamic intake form UI + tracking UI, then internal requests dashboard

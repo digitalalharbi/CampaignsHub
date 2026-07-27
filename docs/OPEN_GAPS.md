@@ -143,7 +143,7 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 ## G-012 — External request portal is stubbed (homepage CTAs live, portal pending)
 
 - **Severity:** Medium
-- **Status:** OPEN — Route Available, Workflow Not Implemented (next phase)
+- **Status:** OPEN — Backend intake+tracking DONE & tested (commit 16d40f2); the DYNAMIC FORM UI, tracking UI, internal dashboard, SLA, comments UI and conversion are the remaining work
 - **Detail:** `/requests/new` and `/requests/track` are real routes with honest placeholder pages so the
   homepage CTAs are never dead. The dynamic intake form, attachments, confirmation, secure token tracking,
   and the requests data model/backend are the next phase (External Request Portal → Tracking → Dashboard).

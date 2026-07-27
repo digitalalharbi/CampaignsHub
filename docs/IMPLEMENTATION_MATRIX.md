@@ -23,7 +23,9 @@ Status vocabulary matches MASTER_REQUIREMENTS.md.
 | Homepage → real routes | router (`/`, `/dashboard`, `/requests/*`) | `router.tsx` pathless app layout | auth-redirect + homepage e2e | Completed |
 | Requests intake `/requests/new` | — | `RequestsPublicStub.tsx` | CTA-reachability e2e | **Route Available — Workflow Not Implemented** |
 | Requests tracking `/requests/track` | — | `RequestsPublicStub.tsx` | — | **Route Available — Workflow Not Implemented** |
-| Requests domain (tables/model) | — | — | — | Not Started (next phase) |
+| Requests domain (tables/model) | `create_requests_tables` + 7 models + RequestCatalogSeeder | — | RequestIntakeTest (5) | Completed (schema) |
+| Public request intake | `PublicRequestController::store` + `RequestIntake` | (form UI pending) | RequestIntakeTest + live HTTP | Backend Done — Form UI Not Implemented |
+| Public request tracking | `PublicRequestController::track` (token, client-safe) | (tracking UI pending) | RequestIntakeTest + live HTTP | Backend Done — UI Not Implemented |
 | Requests dashboard | — | — | — | Not Started |
 | Clients classification | — | — | — | Not Started |
 | Client command center | — | — | — | Not Started |

@@ -65,9 +65,9 @@ Two-review gate per phase:
 
 | ID | Requirement | Status | Evidence |
 |----|-------------|--------|----------|
-| R5.1 | External request portal `/requests/new` (dynamic forms + attachments + confirmation) | Not Started | — |
-| R5.2 | `/requests/track/{token}` | Not Started | — |
-| R5.3 | Classification: category / stage / priority / service | Not Started | — |
+| R5.1 | External request portal `/requests/new` (dynamic forms + attachments + confirmation) | Backend Done — Form UI Not Implemented | `PublicRequestController::store`, `RequestIntake`; RequestIntakeTest + live HTTP; dynamic form UI pending |
+| R5.2 | `/requests/track/{token}` (secure, client-safe) | Backend Done — UI Not Implemented | `PublicRequestController::track` (sha256 token, hides internal/tenant); tests + live HTTP |
+| R5.3 | Classification: type(module) / status / priority | Implemented and Tested (schema) | `RequestCatalogSeeder` 11 types + 10 statuses; RequestIntakeTest |
 | R5.4 | Internal dashboard: Kanban / Table / Cards + KPIs + SLA + search/filter/sort/pagination | Not Started | — |
 | R5.5 | Convert request → client/project/campaign without re-entry | Not Started | — |
 
