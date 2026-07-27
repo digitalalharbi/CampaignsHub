@@ -1,0 +1,72 @@
+import { api, getData, patchData, postData } from '@/lib/api/client'
+
+export interface RequestRow {
+  id: string
+  reference: string
+  service: string
+  service_ar: string
+  module: string
+  status: string
+  status_label: string
+  priority: string
+  contact: string
+  assignee: string | null
+  assigned_to: number | null
+  source: string
+  sla_due_at: string | null
+  sla_breached: boolean
+  submitted_at: string | null
+  last_activity_at: string | null
+}
+
+export interface RequestListResult {
+  data: RequestRow[]
+  meta: { total: number; per_page: number; current_page: number; last_page: number }
+}
+
+export interface RequestComment { id: number; visibility: 'internal' | 'client'; author: string; body: string; at: string | null }
+export interface RequestEvent { type: string; from: string | null; to: string | null; message: string | null; client_visible: boolean; at: string | null }
+
+export interface RequestDetail extends RequestRow {
+  objective: string | null
+  contact_email: string
+  contact_phone: string | null
+  company_name: string | null
+  budget: string | null
+  currency: string
+  metadata: Record<string, unknown> | null
+  sla: { due_at: string | null; started_at: string | null; paused_at: string | null; breached_at: string | null; remaining_seconds: number | null }
+  comments: RequestComment[]
+  events: RequestEvent[]
+  files: { id: number; name: string; size: number; client_visible: boolean }[]
+  archived_at: string | null
+}
+
+export interface RequestFilters {
+  status?: string
+  priority?: string
+  q?: string
+  page?: number
+}
+
+/** The list endpoint returns { data, meta }; fetch the full envelope (getData would strip meta). */
+export async function listRequests(filters: RequestFilters): Promise<RequestListResult> {
+  const params = new URLSearchParams()
+  if (filters.status) params.set('status', filters.status)
+  if (filters.priority) params.set('priority', filters.priority)
+  if (filters.q) params.set('q', filters.q)
+  if (filters.page) params.set('page', String(filters.page))
+  const qs = params.toString()
+  const res = await api.get<RequestListResult>(`/app/requests${qs ? `?${qs}` : ''}`)
+  return res.data
+}
+
+export const getRequest = (id: string) => getData<RequestDetail>(`/app/requests/${id}`)
+
+export const assignRequest = (id: string, assignee_id: number | null) => patchData<{ status: string }>(`/app/requests/${id}/assign`, { assignee_id })
+export const changeRequestStatus = (id: string, status: string, reason?: string) => patchData<{ status: string }>(`/app/requests/${id}/status`, { status, reason })
+export const changeRequestPriority = (id: string, priority: string) => patchData<{ status: string }>(`/app/requests/${id}/priority`, { priority })
+export const requestInformation = (id: string, message: string) => postData<{ status: string }>(`/app/requests/${id}/request-information`, { message })
+export const addInternalNote = (id: string, body: string) => postData<{ status: string }>(`/app/requests/${id}/internal-note`, { body })
+export const replyToClientInternal = (id: string, body: string) => postData<{ status: string }>(`/app/requests/${id}/reply`, { body })
+export const archiveRequest = (id: string) => patchData<{ status: string }>(`/app/requests/${id}/archive`, {})

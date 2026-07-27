@@ -1,0 +1,159 @@
+import { useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, Lock, MessageSquare } from 'lucide-react'
+import {
+  addInternalNote, archiveRequest, assignRequest, changeRequestPriority, changeRequestStatus,
+  getRequest, replyToClientInternal, requestInformation,
+} from './internalApi'
+import { STATUS_LABELS, priorityTone, statusTone } from './labels'
+import { Button } from '@/components/ui/Button'
+import { controlClass } from '@/components/ui/Field'
+import { TextareaField } from '@/components/ui/form'
+import { toApiError } from '@/lib/api/client'
+import { useAuth } from '@/stores/auth'
+import { useT } from '@/lib/i18n'
+
+const STATUS_OPTIONS = ['under_review', 'waiting_client', 'qualified', 'approved', 'in_progress', 'completed', 'rejected', 'cancelled']
+const PRIORITY_OPTIONS = ['critical', 'high', 'medium', 'low']
+
+export function RequestDetailPage() {
+  const t = useT()
+  const { requestId = '' } = useParams()
+  const qc = useQueryClient()
+  const { user } = useAuth()
+  const query = useQuery({ queryKey: ['app', 'request', requestId], queryFn: () => getRequest(requestId) })
+
+  const [note, setNote] = useState('')
+  const [reply, setReply] = useState('')
+  const [info, setInfo] = useState('')
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const refresh = () => qc.invalidateQueries({ queryKey: ['app', 'request', requestId] })
+
+  const changeStatus = useMutation({ mutationFn: (s: string) => changeRequestStatus(requestId, s), onSuccess: () => { setActionError(null); void refresh() }, onError: (e) => setActionError(toApiError(e).errors?.status?.[0] ?? toApiError(e).message) })
+  const changePriority = useMutation({ mutationFn: (p: string) => changeRequestPriority(requestId, p), onSuccess: refresh })
+  const assign = useMutation({ mutationFn: (uid: number | null) => assignRequest(requestId, uid), onSuccess: refresh })
+  const noteMut = useMutation({ mutationFn: () => addInternalNote(requestId, note), onSuccess: () => { setNote(''); void refresh() } })
+  const replyMut = useMutation({ mutationFn: () => replyToClientInternal(requestId, reply), onSuccess: () => { setReply(''); void refresh() } })
+  const infoMut = useMutation({ mutationFn: () => requestInformation(requestId, info), onSuccess: () => { setInfo(''); void refresh() } })
+  const archiveMut = useMutation({ mutationFn: () => archiveRequest(requestId), onSuccess: refresh })
+
+  if (query.isLoading) return <div className="mx-auto max-w-4xl"><div className="h-64 animate-pulse rounded-2xl bg-surface-secondary" /></div>
+  if (query.isError) return <div className="mx-auto max-w-4xl rounded-2xl border border-danger/30 bg-[var(--negative-background)] p-6 text-center text-sm text-danger">{t('error_generic')}</div>
+  const d = query.data!
+
+  return (
+    <div className="mx-auto w-full max-w-4xl">
+      <Link to="/app/requests" className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {t('requests_inbox')}</Link>
+
+      {/* Header */}
+      <div className="rounded-2xl border border-border bg-surface p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="font-mono text-lg font-bold" dir="ltr">{d.reference}</div>
+            <div className="text-sm text-text-secondary">{d.service_ar} · {d.contact}</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(d.status)}`}>{d.status_label}</span>
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${priorityTone(d.priority)}`}>{d.priority}</span>
+            {d.sla.remaining_seconds !== null && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${d.sla.breached_at ? 'bg-danger/15 text-danger' : 'bg-surface-secondary text-text-muted'}`}>SLA {d.sla.paused_at ? t('sla_paused') : Math.round((d.sla.remaining_seconds ?? 0) / 3600) + 'h'}</span>}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+          <select aria-label={t('change_status')} className={`${controlClass} h-10 min-h-0 w-auto py-0`} defaultValue="" onChange={(e) => { if (e.target.value) changeStatus.mutate(e.target.value) }}>
+            <option value="">{t('change_status')}</option>
+            {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+          </select>
+          <select aria-label={t('col_priority')} className={`${controlClass} h-10 min-h-0 w-auto py-0`} value={d.priority} onChange={(e) => changePriority.mutate(e.target.value)}>
+            {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+          {user?.id && (d.assigned_to ? (
+            <Button variant="secondary" size="sm" onClick={() => assign.mutate(null)}>{t('unassign')}</Button>
+          ) : (
+            <Button variant="secondary" size="sm" onClick={() => assign.mutate(Number(user.id))}>{t('assign_to_me')}</Button>
+          ))}
+          {!d.archived_at && <Button variant="ghost" size="sm" onClick={() => archiveMut.mutate()}>{t('archive')}</Button>}
+        </div>
+        {actionError && <p className="mt-2 text-sm text-danger">{actionError}</p>}
+      </div>
+
+      {/* Details */}
+      <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_320px]">
+        <div className="space-y-5">
+          {/* Communication */}
+          <section className="rounded-2xl border border-border bg-surface p-5">
+            <h2 className="mb-3 text-sm font-bold text-text-primary">{t('communication')}</h2>
+            <ul className="space-y-2.5">
+              {d.comments.map((c) => (
+                <li key={c.id} className={`rounded-lg px-3 py-2.5 ${c.visibility === 'internal' ? 'border border-warning/30 bg-warning/10' : 'bg-surface-secondary'}`}>
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary">
+                    {c.visibility === 'internal' ? <><Lock size={12} className="text-warning" /> {t('internal_note')}</> : <><MessageSquare size={12} /> {c.author}</>}
+                  </div>
+                  <div className="mt-0.5 text-sm text-text-primary">{c.body}</div>
+                </li>
+              ))}
+              {d.comments.length === 0 && <li className="text-sm text-text-muted">{t('no_messages')}</li>}
+            </ul>
+
+            <div className="mt-4 space-y-3 border-t border-border pt-4">
+              <div>
+                <TextareaField label={t('add_internal_note')} value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} />
+                <Button size="sm" className="mt-2" onClick={() => noteMut.mutate()} loading={noteMut.isPending} disabled={note.trim().length < 2}>{t('add_internal_note')}</Button>
+              </div>
+              <div>
+                <TextareaField label={t('reply_to_client')} value={reply} onChange={(e) => setReply(e.target.value)} maxLength={2000} />
+                <Button size="sm" className="mt-2" onClick={() => replyMut.mutate()} loading={replyMut.isPending} disabled={reply.trim().length < 2}>{t('reply_to_client')}</Button>
+              </div>
+              <div>
+                <TextareaField label={t('request_information')} value={info} onChange={(e) => setInfo(e.target.value)} maxLength={2000} />
+                <Button size="sm" variant="secondary" className="mt-2" onClick={() => infoMut.mutate()} loading={infoMut.isPending} disabled={info.trim().length < 2}>{t('request_information')}</Button>
+              </div>
+            </div>
+          </section>
+
+          {/* Timeline */}
+          <section className="rounded-2xl border border-border bg-surface p-5">
+            <h2 className="mb-3 text-sm font-bold text-text-primary">{t('activity')}</h2>
+            <ol className="space-y-2">
+              {d.events.map((e, i) => (
+                <li key={i} className="flex gap-2 text-sm text-text-secondary">
+                  <span className="tnum text-xs text-text-muted" dir="ltr">{e.at?.slice(5, 16).replace('T', ' ')}</span>
+                  <span>{e.message ?? e.type}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        </div>
+
+        {/* Sidebar */}
+        <aside className="space-y-3">
+          <section className="rounded-2xl border border-border bg-surface p-5 text-sm">
+            <h2 className="mb-3 text-sm font-bold text-text-primary">{t('request_details')}</h2>
+            <dl className="space-y-2">
+              <Info k={t('field_job_title')} v={d.objective ?? '—'} />
+              <Info k="Email" v={d.contact_email} />
+              {d.company_name && <Info k={t('org_name')} v={d.company_name} />}
+              {d.budget && <Info k={t('field_number_format')} v={`${d.budget} ${d.currency}`} />}
+              <Info k={t('col_assignee')} v={d.assignee ?? '—'} />
+            </dl>
+          </section>
+          {d.files.length > 0 && (
+            <section className="rounded-2xl border border-border bg-surface p-5 text-sm">
+              <h2 className="mb-3 text-sm font-bold text-text-primary">{t('files')}</h2>
+              <ul className="space-y-1.5">
+                {d.files.map((f) => <li key={f.id} className="flex items-center justify-between gap-2 text-text-secondary"><span className="truncate">{f.name}</span>{!f.client_visible && <Lock size={12} className="shrink-0 text-warning" />}</li>)}
+              </ul>
+            </section>
+          )}
+        </aside>
+      </div>
+    </div>
+  )
+}
+
+function Info({ k, v }: { k: string; v: string }) {
+  return <div><dt className="text-xs text-text-muted">{k}</dt><dd className="break-words font-medium text-text-primary">{v}</dd></div>
+}

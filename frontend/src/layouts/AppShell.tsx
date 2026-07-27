@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import {
   BarChart3,
   Bell,
+  Inbox,
   LayoutDashboard,
   Megaphone,
   Menu,
@@ -25,6 +26,7 @@ type NavItem = { to: string; key: TranslationKey; icon: typeof LayoutDashboard }
 const operationalNav: NavItem[] = [
   { to: '/dashboard', key: 'dashboard', icon: LayoutDashboard },
   { to: '/campaigns', key: 'campaigns', icon: Megaphone },
+  { to: '/app/requests', key: 'requests_inbox', icon: Inbox },
   { to: '/analytics', key: 'analytics', icon: TrendingUp },
   { to: '/reports', key: 'reports', icon: BarChart3 },
   { to: '/integrations', key: 'integrations', icon: Plug },
