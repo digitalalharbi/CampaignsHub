@@ -75,9 +75,9 @@ Two-review gate per phase:
 
 | ID | Requirement | Status | Evidence |
 |----|-------------|--------|----------|
-| R6.1 | Client classification MANAGEMENT (status/service level/industry/owner/priority/currency/tz/language editable w/ validation+permission+audit) | In Progress | columns exist; editing endpoints being built |
+| R6.1 | Client classification MANAGEMENT (editable status/service_level/industry/owner/priority/currency/tz/language w/ validation+permission+audit) | Implemented and Tested | `ClientManagementController`; ClientManagementTest 8/8; e2e classify→persist 3 browsers |
 | R6.2 | Client card (logo, projects, active campaigns, spend, alerts, last report, last sync, owner, status, open requests, sources) | Not Started | — |
-| R6.3 | Client command center (all tabs: Overview/Projects/Campaigns/Requests + Analytics/Reports/Team/Files/Activity/Settings, no placeholders) | Partial | 4 tabs live+isolated; 6 tabs pending build |
+| R6.3 | Client command center — ALL 10 tabs (Overview/Projects/Campaigns/Analytics/Reports/Requests/Team/Files/Activity/Settings), no placeholders | Implemented and Tested | analytics/reports/team/files/activity built on existing engines; 4 backend suites; full e2e 3 browsers |
 | R6.4 | Isolation by org + client + project | Implemented and Tested | BelongsToTenant/Project scopes + CampaignMetricsTest |
 
 ## R7 — Public homepage

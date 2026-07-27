@@ -173,3 +173,17 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 ---
 
 _Last updated: 2026-07-27_
+
+## G-015 — Client Command Center visual-regression baselines (2026-07-27)
+- **Status:** Open. Functional E2E covers all 10 tabs on Chromium/Firefox/WebKit, but visual-regression
+  baselines (toHaveScreenshot) exist only for the homepage. Command-center baselines at 320/375/390/768/1440
+  are NOT yet captured, so visual drift there is not gated.
+- **Not a blocker:** functional behavior + isolation are covered by 234 backend tests + the 3-browser e2e.
+
+## G-016 — Email delivery + report completion depend on external/worker (2026-07-27)
+- **Email:** the notification delivery ledger records `awaiting_credentials` (never `sent`) until a real mail
+  provider is configured — by design (Awaiting Credentials, not a defect).
+- **Report generation:** creating a client report queues `GenerateReportJob`; without a running queue worker
+  the report stays `processing`. Sharing/export requires a `completed` report (seeded demo reports are used
+  to verify the share path).
+

@@ -455,3 +455,27 @@ Honest per-suite status (do not say "cross-browser ✓" for the visual gates):
   Client Command Center — Overview/Projects/Campaigns/Requests live+isolated (Analytics/Reports/Team/Files/
   Activity/Settings tabs pending). Notification hardening still Partial (G-014).
 - **Next:** remaining command-center tabs, then notification hardening → registration/onboarding → the rest.
+
+## Phase 6 — Full Client Command Center + Notification Hardening (2026-07-27)
+- **Commits:** `06a566d` classification/portfolio(Table+Cards+filters)/settings · `0e76902` analytics ·
+  `dd48cd8` reports · `5c7af5a` team+files+activity · `8b28c22` notification hardening · `4cece5f` full E2E.
+- **Client Command Center — all 10 tabs live, NO placeholders:** Overview/Projects/Campaigns/Requests +
+  Analytics (MetricsAggregator::forProjects reuse; mixed-currency not blended; ROAS gated to revenue
+  objectives; partial/stale/sync-failed surfaced) + Reports (existing report engine; internal not shareable;
+  Chromium client-PDF path) + Team (per-client access, backend-enforced, last-owner + cross-tenant guards) +
+  Files (existing private stores; visibility; secure download; no path leak) + Activity (real audit_logs +
+  request_events timeline) + Settings (client-level; archive=pause not delete).
+- **Classification MANAGEMENT:** editable status/service_level/industry/owner/priority/currency/tz/language,
+  enum-validated, permission+access gated, audited (feeds Activity). No 'awareness' as an industry.
+- **Notification Hardening:** central NotificationDispatcher — dedup key, per-user/per-client per-category
+  preferences, quiet hours (email held), per-channel delivery ledger (queued/awaiting_credentials/sent/
+  failed/retrying/suppressed_by_preference/suppressed_by_quiet_hours). Email never records 'sent'. Real
+  NotificationCenter UI (unread badge, read-on-click+deep-link, mark-all).
+- **Access model:** new `clients.*` permissions + ClientAccess guard (view_all vs membership, fail-closed).
+- **Tests:** backend **234 passed (930 assertions)**, +34 vs prior 200 (ClientManagement 8, ClientAnalytics 4,
+  ClientReports 6, ClientTeamAccess 5, ClientFilesActivity 4, NotificationHardening 7). Functional E2E
+  `client-command-center` **3/3 browsers** (Chromium/Firefox/WebKit). Chromium regression 10/10 incl. homepage
+  visual baselines. vitest 22/22, tsc/pint/phpstan clean.
+- **Honest gaps:** command-center visual-regression baselines not yet captured (homepage only) → OPEN_GAPS;
+  email delivery stays Awaiting Credentials; report generation needs a queue worker to reach 'completed'.
+- **Next:** Registration & Email Verification → Onboarding → Account Type → Module Selection → …
