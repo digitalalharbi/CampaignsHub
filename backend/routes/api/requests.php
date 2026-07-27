@@ -21,7 +21,7 @@ Route::prefix('requests')->name('requests.')->group(function (): void {
     Route::post('/verify/start', [ContactVerificationController::class, 'start'])->name('verify.start')
         ->middleware('throttle:otp-request');
     Route::post('/verify/check', [ContactVerificationController::class, 'check'])->name('verify.check')
-        ->middleware('throttle:30,1');
+        ->middleware('throttle:otp-check');
 
     Route::post('/', [PublicRequestController::class, 'store'])->name('store')
         ->middleware('throttle:requests-intake');
@@ -49,7 +49,7 @@ Route::prefix('client')->name('client.')->group(function (): void {
     Route::post('/login/start', [ClientPortalController::class, 'loginStart'])->name('login.start')
         ->middleware('throttle:otp-request');
     Route::post('/login/verify', [ClientPortalController::class, 'loginVerify'])->name('login.verify')
-        ->middleware('throttle:30,1');
+        ->middleware('throttle:otp-check');
     Route::post('/logout', [ClientPortalController::class, 'logout'])->name('logout');
     Route::get('/session', [ClientPortalController::class, 'session'])->name('session');
 

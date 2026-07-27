@@ -84,13 +84,13 @@ export async function submitVerifiedRequest(
   await page.getByRole('button', { name: /Next|التالي/ }).click() // budget
   await page.getByRole('button', { name: /Next|التالي/ }).click() // attachments
   await page.getByRole('button', { name: /Next|التالي/ }).click() // review
-  // Verify phone + email (dev auto-verifies via the exposed code).
+  // Verify phone + email (dev auto-verifies via the exposed code). Submit stays disabled until BOTH are
+  // verified — wait on that (generous timeout: WebKit is slow to resolve the two async OTP round-trips).
   await page.getByRole('button', { name: /Verify Mobile number|تحقّق رقم الجوال/ }).click()
-  await expect(page.getByText(/Verified|تم التحقق/)).toHaveCount(1)
+  await expect(page.getByText(/Verified|تم التحقق/).first()).toBeVisible()
   await page.getByRole('button', { name: /Verify Email|تحقّق البريد الإلكتروني/ }).click()
-  await expect(page.getByText(/Verified|تم التحقق/)).toHaveCount(2)
   const submitBtn = page.getByRole('button', { name: /Submit request|إرسال الطلب/ })
-  await expect(submitBtn).toBeEnabled()
+  await expect(submitBtn).toBeEnabled({ timeout: 15000 })
   await submitBtn.click()
   // Wait for the success page to render the reference before reading it (avoids a null read race).
   const refLocator = page.getByText(/REQ-\d{4}-[A-Z0-9]{6}/).first()

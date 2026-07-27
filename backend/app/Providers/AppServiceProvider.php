@@ -79,5 +79,13 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute($perMinute)->by($request->input('destination', '').'|'.$request->ip());
         });
+
+        // OTP code checks: keyed by IP. Kept modest in production, but generous off-prod — a shared office/
+        // household IP (and the E2E suite) can legitimately verify many codes per minute.
+        RateLimiter::for('otp-check', function (Request $request): Limit {
+            $perMinute = $this->app->environment('production') ? 30 : 600;
+
+            return Limit::perMinute($perMinute)->by((string) $request->ip());
+        });
     }
 }

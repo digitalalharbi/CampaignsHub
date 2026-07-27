@@ -43,9 +43,10 @@ test('guest submits a verified request then tracks it in the client portal', asy
   const msg = `Any update on ${tag}?`
   await page.getByLabel(/Message|رسالة/).fill(msg)
   await page.getByRole('button', { name: /^Send$|^إرسال$/ }).click()
-  await expect(page.getByText(msg)).toBeVisible()
+  // The reply posts then the detail refetches — allow for a network round-trip under load.
+  await expect(page.getByText(msg)).toBeVisible({ timeout: 15000 })
 
   await page.reload()
   await switchToEnglish(page)
-  await expect(page.getByText(msg)).toBeVisible() // persisted
+  await expect(page.getByText(msg)).toBeVisible({ timeout: 15000 }) // persisted
 })

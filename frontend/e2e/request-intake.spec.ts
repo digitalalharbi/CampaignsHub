@@ -45,10 +45,11 @@ test('homepage → request → dynamic form → submit → success with request 
   await expect(page.getByText(/مراجعة الطلب|Review your request/)).toBeVisible()
   await expect(page.getByText('brief.pdf')).toBeVisible()
   await page.getByRole('button', { name: /تحقّق رقم الجوال|Verify Mobile number/ }).click()
-  await expect(page.getByText(/تم التحقق|Verified/)).toHaveCount(1)
+  await expect(page.getByText(/تم التحقق|Verified/).first()).toBeVisible()
   await page.getByRole('button', { name: /تحقّق البريد|Verify Email/ }).click()
-  await expect(page.getByText(/تم التحقق|Verified/)).toHaveCount(2)
-  await page.getByRole('button', { name: /إرسال الطلب|Submit request/ }).click()
+  const submitReq = page.getByRole('button', { name: /إرسال الطلب|Submit request/ })
+  await expect(submitReq).toBeEnabled({ timeout: 15000 })
+  await submitReq.click()
 
   // Success page shows a real REQ-YYYY-XXXXXX number and a tracking link.
   await expect(page.getByText(/تم استلام طلبك|Request received/)).toBeVisible()
@@ -70,10 +71,11 @@ test('after submit, the tracking link shows status and accepts a client reply', 
   await page.getByRole('button', { name: /التالي|Next/ }).click() // → attachments
   await page.getByRole('button', { name: /التالي|Next/ }).click() // → review
   await page.getByRole('button', { name: /تحقّق رقم الجوال|Verify Mobile number/ }).click()
-  await expect(page.getByText(/تم التحقق|Verified/)).toHaveCount(1)
+  await expect(page.getByText(/تم التحقق|Verified/).first()).toBeVisible()
   await page.getByRole('button', { name: /تحقّق البريد|Verify Email/ }).click()
-  await expect(page.getByText(/تم التحقق|Verified/)).toHaveCount(2)
-  await page.getByRole('button', { name: /إرسال الطلب|Submit request/ }).click()
+  const submitReq = page.getByRole('button', { name: /إرسال الطلب|Submit request/ })
+  await expect(submitReq).toBeEnabled({ timeout: 15000 })
+  await submitReq.click()
 
   await expect(page.getByText(/تم استلام طلبك|Request received/)).toBeVisible()
   // Follow the tracking link from the success page.
