@@ -34,12 +34,25 @@ for (const path of PAGES) {
   })
 }
 
-test('/login mobile: single-column, no horizontal scroll, submit validates', async ({ page }) => {
-  await page.setViewportSize({ width: 375, height: 812 })
-  await page.goto('/login')
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)
-  expect(overflow).toBe(false)
-  // Empty submit is blocked by required fields (no navigation away from /login).
-  await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
-  await expect(page).toHaveURL(/\/login/)
-})
+for (const width of [320, 375, 390]) {
+  test(`/login mobile ${width}px: single-column, no horizontal scroll, submit validates`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 812 })
+    await page.goto('/login')
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)
+    expect(overflow).toBe(false)
+    // The form must be reachable at the top (marketing panel is hidden below lg).
+    await expect(page.locator('input[type="email"]')).toBeVisible()
+    // Empty submit is blocked by required fields (no navigation away from /login).
+    await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
+    await expect(page).toHaveURL(/\/login/)
+  })
+}
+
+for (const path of PAGES) {
+  test(`${path}: no leftover InfluencerHub branding`, async ({ page }) => {
+    await page.goto(path)
+    const body = (await page.locator('body').innerText()).toLowerCase()
+    expect(body).not.toContain('influencerhub')
+    expect(body).not.toContain('influencer hub')
+  })
+}

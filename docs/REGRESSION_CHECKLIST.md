@@ -44,3 +44,4 @@ npx playwright test --workers=1 --retries=0 --repeat-each=3
 | 2026-07-27 | Governance docs + flake diagnosis | n/a | vitest 13/13, e2e auth-forms 7/7 | RTL/forms verified | vitest+auth e2e green | G-001 logged as Watch |
 | 2026-07-27 | G-005 redirect + throttle fix | login→redirect live | backend 157/157 | RTL/forms | e2e auth 24/24 @repeat-each=3 | G-007 diagnosed+fixed (login throttle) |
 | 2026-07-27 | Auth visual unification | login light+dark+mobile live | metrics-mock: suite 22/22 ×8 | RTL, no overflow 320/375, no console err | vitest 22/22, auth e2e 10/10 | purple removed; G-001 mitigated |
+| 2026-07-27 | Auth cross-browser acceptance | /login light+dark live | vitest 22/22 | RTL/LTR, 320/375/390, no InfluencerHub text | auth e2e 39/39 (Chromium+Firefox+WebKit) + visual 6 + kbd/console | R1.6 Completed; G-008 logged |

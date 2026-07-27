@@ -89,6 +89,26 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 - **Note:** this is env-specific relaxation for automated testing, not lowering a control to pass a test —
   production posture is identical and asserted by the default config value.
 
+## G-008 — Demo-credentials card present as dead code in the production bundle
+
+- **Severity:** Low
+- **Status:** OPEN (accepted, non-blocking)
+- **Detail:** The login demo-credentials card is gated by `import.meta.env.DEV`, so it **never renders** in
+  production. However its component definition + the demo strings (`owner@demo-agency.local` / `password`)
+  remain in the built JS as inert dead code (rollup keeps the same-module function). Values are non-secret
+  public demo data, so this is cosmetic, not a leak.
+- **Next action (optional):** move `DemoCredentials` to its own module and dynamic-import only in dev to strip
+  it from the production chunk entirely.
+
+## Auth cross-browser acceptance — CLOSED (2026-07-27)
+
+- Firefox + WebKit Playwright projects added; **auth e2e 39/39 across Chromium + Firefox + WebKit**
+  (`auth-forms` incl. 320/375/390 mobile + no-InfluencerHub-branding, `auth-redirect` round-trip).
+- Visual-regression baselines established (`auth-visual.spec.ts`, chromium): /login /register /forgot-password
+  in light + dark (6 baselines). Keyboard-only nav + console-error guard pass (the guest `/auth/me` 401 probe
+  is explicitly allow-listed as expected auth behaviour, not an app error).
+- This retires the "Firefox/WebKit/visual-regression pending" caveat from the auth phase-1 acceptance.
+
 ---
 
 _Last updated: 2026-07-27_

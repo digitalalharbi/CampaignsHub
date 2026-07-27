@@ -290,3 +290,22 @@ Central review system now enforced per the two-review mandate:
 - `e2e/auth-forms.spec.ts` → 7/7 pass (fields ≥50px, ≥16px, not pill, no overflow, RTL, mobile).
 
 _Auth Phase 1 + form system stand green. Next: G-005 post-login redirect, then registration journey._
+
+---
+
+## Auth phase-1 — cross-browser acceptance CLOSED (2026-07-27)
+**Correction to the running tally:** this directive sequence has produced **5 commits** to date
+(`454b678`, `0313355`, `1f5e118`, `8703531`, `86d3b7f`) — the earlier "7 commits" summary was wrong;
+`eadce97` predates this sequence. Do not carry that miscount forward.
+
+Cross-browser + acceptance work this batch:
+- Added Firefox + WebKit Playwright projects (`playwright.config.ts`); installed both engines.
+- `auth-forms.spec.ts`: mobile now 320/375/390; added no-InfluencerHub-branding checks on all 3 auth pages.
+- New `auth-visual.spec.ts`: visual-regression baselines (/login /register /forgot-password × light+dark,
+  chromium), keyboard-only nav, console-error guard (guest `/auth/me` 401 allow-listed).
+- **Results:** auth e2e **39/39** across Chromium + Firefox + WebKit; visual+kbd **10/10** chromium.
+- Verified demo card never renders in production (`import.meta.env.DEV` gate); logged its dead-code
+  presence honestly as G-008 (Low).
+
+**Browsers tested:** Chromium, Firefox, WebKit. **Live review:** /login light+dark, desktop+mobile.
+**Remaining:** non-auth-page WCAG contrast audit; strip demo dead-code (optional, G-008).

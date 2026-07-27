@@ -19,9 +19,10 @@ Two-review gate per phase:
 
 | ID | Requirement | Status | Evidence |
 |----|-------------|--------|----------|
-| R1.1 | Original CampaignsHub palette (Emerald-on-Graphite), NOT InfluencerHub purple/blue; purple/green conflict removed from /login | Completed | `docs/DECISIONS.md`, tokens.css (`--auth-panel-*`, semantic aliases), live light+dark screenshots |
-| R1.2 | Central form design system (wide 54px fields, 16px, labels above, not pill, no in-field icons, textarea counter) | Completed | `components/ui/form.tsx`, `e2e/auth-forms.spec.ts` (7 green) |
-| R1.3 | Light + Dark complete, WCAG contrast | Implemented and Tested | live-verified /login light+dark desktop+mobile; auth-forms e2e; contrast audit of non-auth pages still pending |
+| R1.1 | Original CampaignsHub palette (Emerald-on-Graphite), NOT InfluencerHub purple/blue; purple/green conflict removed from /login | Completed | `docs/DECISIONS.md`, tokens.css; auth e2e 39/39 across Chromium+Firefox+WebKit incl. no-InfluencerHub-branding checks |
+| R1.2 | Central form design system (wide 54px fields, 16px, labels above, not pill, no in-field icons, textarea counter) | Completed | `components/ui/form.tsx`, `e2e/auth-forms.spec.ts` green on 3 browsers |
+| R1.3 | Light + Dark complete, WCAG contrast | Completed (auth) | auth: live + visual-regression baselines (light+dark ×3 pages) + keyboard + console-guard; non-auth-page contrast audit still pending |
+| R1.6 | Cross-browser + mobile 320/375/390 + visual regression + keyboard for /login /register /forgot-password | Completed | `playwright.config.ts` (firefox+webkit projects), `auth-forms`/`auth-redirect`/`auth-visual` specs — 39/39 (3 browsers) + 10/10 visual+kbd |
 | R1.4 | 3 color directions compared internally, best adopted, documented | Completed | `docs/DECISIONS.md` |
 | R1.5 | Official terminology unified — "إدارة الحملات الإعلانية المدفوعة / Paid Advertising Management"; internal enums paid_media/influencer_marketing/combined; no synonym mixing per page | In Progress | glossary in `docs/DECISIONS.md`; applied to auth copy (`i18n.ts`), live-verified; nav/marketing/onboarding still to align |
 

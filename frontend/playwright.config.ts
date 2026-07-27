@@ -26,6 +26,10 @@ export default defineConfig({
   projects: [
     { name: 'setup', testMatch: /auth\.setup\.ts/ },
     { name: 'chromium', use: { ...devices['Desktop Chrome'] }, dependencies: ['setup'] },
+    // Cross-browser acceptance (Firefox + WebKit). Reuse the same seeded storage state from setup.
+    // Run a subset with e.g. `npx playwright test --project=firefox --project=webkit e2e/auth-*.spec.ts`.
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] }, dependencies: ['setup'] },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] }, dependencies: ['setup'] },
   ],
   // Reuse the already-running dev server (do not auto-start — the backend must be up too).
   webServer: {
