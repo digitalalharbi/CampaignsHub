@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Identity\Http\Controllers\AuthController;
 use App\Domains\Identity\Http\Controllers\EmailVerificationController;
+use App\Domains\Identity\Http\Controllers\InvitationController;
 use App\Domains\Identity\Http\Controllers\MeController;
 use App\Domains\Identity\Http\Controllers\OnboardingController;
 use App\Domains\Identity\Http\Controllers\UserController;
@@ -34,6 +35,16 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
         Route::get('/me', [AuthController::class, 'me'])->name('me');
         Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     });
+});
+
+// Workspace invitations — public preview/accept + authorized invite/list.
+Route::prefix('invitations')->name('invitations.')->group(function (): void {
+    Route::get('/{token}', [InvitationController::class, 'preview'])->name('preview')->middleware('throttle:30,1');
+    Route::post('/accept', [InvitationController::class, 'accept'])->name('accept')->middleware('throttle:10,1');
+});
+Route::middleware(['auth:sanctum', 'tenant'])->prefix('app/team/invitations')->name('app.team.invitations.')->group(function (): void {
+    Route::get('/', [InvitationController::class, 'index'])->name('index');
+    Route::post('/', [InvitationController::class, 'store'])->name('store')->middleware('throttle:20,1');
 });
 
 // Resumable onboarding wizard (authenticated + tenant-scoped).
