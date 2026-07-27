@@ -33,7 +33,9 @@ final class ContactVerificationService
             'purpose' => $purpose,
             'code_hash' => hash('sha256', $code),
             'attempts' => 0,
-            'delivery_status' => $providerOn ? 'sent' : 'awaiting_provider_credentials',
+            // 'sent' is NEVER recorded without a confirmed send. Provider enabled → 'queued' (dispatch is
+            // wired where noted); no provider → 'awaiting_provider_credentials'.
+            'delivery_status' => $providerOn ? 'queued' : 'awaiting_provider_credentials',
             'expires_at' => Carbon::now()->addMinutes((int) config('requests.verification.code_ttl_minutes', 10)),
             'last_sent_at' => Carbon::now(),
         ]);
@@ -45,7 +47,7 @@ final class ContactVerificationService
             'channel' => $channel,
             'destination' => $destination,
             'delivery_status' => $v->delivery_status,
-            'dev_code' => config('requests.verification.expose_dev_code') ? $code : null,
+            'dev_code' => self::exposeDevSecrets() ? $code : null,
         ];
     }
 
@@ -100,5 +102,18 @@ final class ContactVerificationService
     private function providerKey(string $channel): string
     {
         return $channel === 'email' ? 'email' : ($channel === 'whatsapp' ? 'whatsapp' : 'sms');
+    }
+
+    /**
+     * Whether dev-only secrets (OTP dev_code, portal dev_token) may be surfaced. HARD-gated: NEVER in
+     * production, regardless of any config/env override — the testability escape hatch cannot leak live.
+     */
+    public static function exposeDevSecrets(): bool
+    {
+        if (app()->environment('production')) {
+            return false;
+        }
+
+        return (bool) config('requests.verification.expose_dev_code');
     }
 }

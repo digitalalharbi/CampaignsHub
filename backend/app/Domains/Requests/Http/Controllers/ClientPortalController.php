@@ -80,9 +80,10 @@ final class ClientPortalController
 
         $minutes = (int) config('requests.verification.portal_session_days', 14) * 24 * 60;
 
-        // The browser uses the httpOnly cookie (auto-sent, never in JS/localStorage). Non-production also
-        // returns the raw token so tests/tooling can authenticate via the X-Client-Token header.
-        $devToken = config('requests.verification.expose_dev_code') ? $plain : null;
+        // The browser uses the httpOnly cookie (auto-sent, never in JS/localStorage). Non-production ONLY also
+        // returns the raw token so tests/tooling can authenticate via the X-Client-Token header. HARD-gated:
+        // never in production, so the token never leaves the httpOnly cookie there.
+        $devToken = ContactVerificationService::exposeDevSecrets() ? $plain : null;
 
         // Secure only in production (over HTTPS); http://localhost dev + tests must keep the cookie.
         return response()->json(['data' => ['authenticated' => true, 'contact' => $v->destination, 'dev_token' => $devToken]])
@@ -219,9 +220,10 @@ final class ClientPortalController
 
     private function resolveSession(Request $request): ?ClientPortalToken
     {
-        // Browser: httpOnly cookie (auto-sent). Tests/tooling: X-Client-Token header. Never localStorage.
+        // Browser: httpOnly cookie (auto-sent, never localStorage). Tests/tooling: X-Client-Token header —
+        // HARD-gated to non-production so production is cookie-only and the header path cannot be abused live.
         $plain = $request->cookie(self::COOKIE);
-        if (! is_string($plain) || $plain === '') {
+        if ((! is_string($plain) || $plain === '') && ! app()->environment('production')) {
             $plain = $request->header('X-Client-Token');
         }
         if (! is_string($plain) || $plain === '') {
