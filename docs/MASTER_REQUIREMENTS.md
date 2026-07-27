@@ -99,6 +99,19 @@ Two-review gate per phase:
 | R8.6 | Project isolation | Implemented and Tested | scopes + tests |
 | R8.7 | PWA / accessibility / cross-browser / performance | Not Started | — |
 
+## R9 — Account & user settings
+
+| ID | Requirement | Status | Evidence |
+|----|-------------|--------|----------|
+| R9.1 | Unified user menu — same menu from topbar avatar + sidebar card; header shows name, FULL email, role, workspace, status; logout last | Completed | `features/account/UserMenu.tsx`; live screenshot; `account-settings.spec.ts` |
+| R9.2 | Sidebar card whole-clickable with chevron (not a stray logout button) | Completed | `AppShell.tsx` + `UserMenu.tsx` |
+| R9.3 | `/settings/profile` operational — name/first/last/job/phone/bio/locale/timezone/number-format; name reflects immediately in topbar+sidebar+menu and persists | Completed | `ProfilePage.tsx`, `MeController::updateProfile`; live + e2e (change→save→reload→verify) |
+| R9.4 | `/settings/password` — current/new/confirm, strength meter, show/hide, logout-other-devices; rate-limited; audited; no secret leak | Completed | `PasswordPage.tsx`, `MeController::updatePassword`; `MeAccountTest` |
+| R9.5 | `/settings/security` — current session summary + password-confirmed revoke others; 2FA honest "Awaiting" | Implemented and Tested (partial) | `SecurityPage.tsx`; full multi-session enumeration needs DB session driver (redis now) — G-009 |
+| R9.6 | Backend `/api/me/*` self-only (no client user id), tenant-isolated, audited, no token/hash leakage | Completed | `MeController`, `routes/api/identity.php`; `MeAccountTest` (8) |
+| R9.7 | `/settings/notifications` + `/settings/preferences` operational pages | Not Started | routes exist as placeholders; preferences overlaps profile locale/theme |
+| R9.8 | User settings vs Workspace settings separation (org settings owner-only) | In Progress | `/settings/workspace` → existing org SettingsPage; entitlement gate pending |
+
 ---
 
 _Last updated: 2026-07-27 · branch `feat/auth-premium`_

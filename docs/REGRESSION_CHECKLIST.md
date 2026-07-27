@@ -45,3 +45,4 @@ npx playwright test --workers=1 --retries=0 --repeat-each=3
 | 2026-07-27 | G-005 redirect + throttle fix | login→redirect live | backend 157/157 | RTL/forms | e2e auth 24/24 @repeat-each=3 | G-007 diagnosed+fixed (login throttle) |
 | 2026-07-27 | Auth visual unification | login light+dark+mobile live | metrics-mock: suite 22/22 ×8 | RTL, no overflow 320/375, no console err | vitest 22/22, auth e2e 10/10 | purple removed; G-001 mitigated |
 | 2026-07-27 | Auth cross-browser acceptance | /login light+dark live | vitest 22/22 | RTL/LTR, 320/375/390, no InfluencerHub text | auth e2e 39/39 (Chromium+Firefox+WebKit) + visual 6 + kbd/console | R1.6 Completed; G-008 logged |
+| 2026-07-27 | User profile/password/security | name change reflects+persists live | backend 165/165, vitest 22/22 | RTL, mobile settings nav | account e2e 4/4 + MeAccountTest 8 | G-009 logged (sessions/2FA infra) |

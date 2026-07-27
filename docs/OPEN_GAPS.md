@@ -109,6 +109,17 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
   is explicitly allow-listed as expected auth behaviour, not an app error).
 - This retires the "Firefox/WebKit/visual-regression pending" caveat from the auth phase-1 acceptance.
 
+## G-009 — Multi-session enumeration + per-session revoke + 2FA
+
+- **Severity:** Medium
+- **Status:** OPEN (partial by design)
+- **Detail:** `SESSION_DRIVER=redis` here, so the `sessions` table is not populated and other sessions
+  cannot be listed/revoked individually. `/settings/security` shows the current-session summary and a real
+  password-confirmed "revoke other sessions" (cycles remember-token); the full list + per-session revoke and
+  the 2FA enable/recovery-codes flow are surfaced honestly as "Awaiting external dependency".
+- **Next action:** switch to the database session driver (or a per-user token registry) to enumerate sessions;
+  wire TOTP + recovery codes for 2FA.
+
 ---
 
 _Last updated: 2026-07-27_

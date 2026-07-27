@@ -309,3 +309,20 @@ Cross-browser + acceptance work this batch:
 
 **Browsers tested:** Chromium, Firefox, WebKit. **Live review:** /login light+dark, desktop+mobile.
 **Remaining:** non-auth-page WCAG contrast audit; strip demo dead-code (optional, G-008).
+
+---
+
+## Phase 2 batch — User profile / password / security (2026-07-27)
+- **المرحلة / Phase:** User Profile Core → Password → Sessions → Unified User Menu
+- **Commits:** `f1a69f6` (backend /api/me), `d3eca8a` (frontend menu+settings), + this docs+e2e commit
+- **Tests run:** backend `php artisan test` 165/165 · pint + phpstan clean · frontend typecheck/lint clean ·
+  vitest 22/22 · build ✓ · e2e `account-settings.spec.ts` 4/4 (chromium)
+- **Browsers tested:** Chromium (account e2e). Firefox/WebKit for account flow: not yet run.
+- **Live review:** logged in, /settings/profile — changed display name → immediate update in topbar avatar
+  (DU) + sidebar card + persisted after reload; unified menu header shows full email + role (Tenant Owner) +
+  workspace (Demo Agency) + status; no console errors.
+- **المتبقي / Remaining:** /settings/notifications + /settings/preferences pages; avatar upload; workspace-
+  settings entitlement gate; account e2e on Firefox/WebKit.
+- **العوائق / Blockers:** multi-session enumeration + 2FA need infra (G-009); mail stays Awaiting Credentials.
+- **Regressions:** none (backend 165/165, frontend 22/22).
+- **المرحلة التالية / Next:** Public Homepage (`/`) — the primary conversion surface.
