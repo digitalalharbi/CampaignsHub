@@ -21,10 +21,10 @@ Status vocabulary matches MASTER_REQUIREMENTS.md.
 | Alerts | CampaignAlertsController | `CampaignAlertsTab` | part of CMC tests | In Progress |
 | Public homepage | — (static copy) | `PublicHomePage.tsx` + `homeCopy.ts` | Functional E2E Chromium+Firefox+WebKit; Visual Regression Chromium only | Completed (FF/WebKit visual Not Executed) |
 | Homepage → real routes | router (`/`, `/dashboard`, `/requests/*`) | `router.tsx` pathless app layout | auth-redirect + homepage e2e | Completed |
-| Requests intake `/requests/new` | — | `RequestsPublicStub.tsx` | CTA-reachability e2e | **Route Available — Workflow Not Implemented** |
+| Requests intake `/requests/new` | `PublicRequestController::store`+`meta` | `RequestIntakePage.tsx` (5-step dynamic form) | `request-intake.spec.ts` 9/9 (3 browsers) + RequestIntakeTest | Implemented and Tested (files pending) |
 | Requests tracking `/requests/track` | — | `RequestsPublicStub.tsx` | — | **Route Available — Workflow Not Implemented** |
 | Requests domain (tables/model) | `create_requests_tables` + 7 models + RequestCatalogSeeder | — | RequestIntakeTest (5) | Completed (schema) |
-| Public request intake | `PublicRequestController::store` + `RequestIntake` | (form UI pending) | RequestIntakeTest + live HTTP | Backend Done — Form UI Not Implemented |
+| Public request intake | `PublicRequestController::store`+`meta` + `RequestIntake` | `RequestIntakePage.tsx` | RequestIntakeTest (6) + request-intake e2e | Implemented and Tested |
 | Public request tracking | `PublicRequestController::track` (token, client-safe) | (tracking UI pending) | RequestIntakeTest + live HTTP | Backend Done — UI Not Implemented |
 | Requests dashboard | — | — | — | Not Started |
 | Clients classification | — | — | — | Not Started |

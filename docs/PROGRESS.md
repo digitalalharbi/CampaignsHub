@@ -391,3 +391,15 @@ Honest per-suite status (do not say "cross-browser ✓" for the visual gates):
 - **Firefox/WebKit Visual Regression — Not Executed** (chromium-only baselines by design)
 - **Request Backend — Implemented and Tested** (commit 16d40f2)
 - **Request Frontend — In Progress** (/requests/new + /requests/track UIs are still stubs)
+
+## Phase 4b — Dynamic external intake form (2026-07-27)
+- **Commit:** `f99a1ca` feat(requests): build dynamic external intake experience
+- **Tests run:** request-intake e2e **9/9** across Chromium+Firefox+WebKit (homepage→form→validation→submit→
+  REQ number; draft persists on reload) · RequestIntakeTest **6** (incl. meta) · backend pint/phpstan clean ·
+  frontend typecheck/lint/build green
+- **Live review:** /requests/new renders 5-step Stepper with 11 real service types from /requests/meta;
+  per-service fields; submit returns real REQ-2026-XXXXXX + tracking link + "Awaiting mail credentials"
+- **Honest status:** Functional E2E Chromium+Firefox+WebKit — Passed; secure FILE UPLOAD + real tracking UI +
+  internal dashboard + conversion are the remaining request commits
+- **Regressions:** none
+- **Next:** `feat(requests): add secure files tracking and client communication` (file upload + /requests/track UI)
