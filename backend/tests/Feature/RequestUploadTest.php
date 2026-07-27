@@ -10,6 +10,7 @@ use App\Domains\Requests\Models\RequestUploadSession;
 use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\VerifiesContact;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -17,6 +18,7 @@ use Tests\TestCase;
 final class RequestUploadTest extends TestCase
 {
     use RefreshDatabase;
+    use VerifiesContact;
 
     protected function setUp(): void
     {
@@ -97,10 +99,10 @@ final class RequestUploadTest extends TestCase
             'upload_token' => $token, 'file' => UploadedFile::fake()->create('brief.pdf', 10, 'application/pdf'),
         ])->assertCreated();
 
-        $this->postJson('/api/v1/requests', [
-            'type' => 'paid_campaign_launch', 'contact_name' => 'Sara', 'contact_email' => 's@ex.com',
+        $this->postJson('/api/v1/requests', $this->withVerifiedContact([
+            'type' => 'paid_campaign_launch', 'contact_name' => 'Sara', 'contact_email' => 's@ex.com', 'company_name' => 'Sara Co',
             'upload_token' => $token,
-        ])->assertCreated();
+        ]))->assertCreated();
 
         $request = ExternalRequest::firstOrFail();
         $this->assertEquals(1, RequestFile::where('request_id', $request->id)->count());
@@ -115,9 +117,9 @@ final class RequestUploadTest extends TestCase
         $this->postJson('/api/v1/requests/uploads', [
             'upload_token' => $token, 'file' => UploadedFile::fake()->create('brief.pdf', 10, 'application/pdf'),
         ])->assertCreated();
-        $tracking = $this->postJson('/api/v1/requests', [
-            'type' => 'paid_campaign_launch', 'contact_name' => 'Sara', 'contact_email' => 's@ex.com', 'upload_token' => $token,
-        ])->json('data.tracking_token');
+        $tracking = $this->postJson('/api/v1/requests', $this->withVerifiedContact([
+            'type' => 'paid_campaign_launch', 'contact_name' => 'Sara', 'contact_email' => 's@ex.com', 'company_name' => 'Sara Co', 'upload_token' => $token,
+        ]))->json('data.tracking_token');
 
         $file = RequestFile::firstOrFail();
 

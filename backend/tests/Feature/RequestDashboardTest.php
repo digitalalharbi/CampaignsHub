@@ -14,11 +14,13 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\VerifiesContact;
 use Tests\TestCase;
 
 final class RequestDashboardTest extends TestCase
 {
     use RefreshDatabase;
+    use VerifiesContact;
 
     private Tenant $tenant;
 
@@ -48,9 +50,9 @@ final class RequestDashboardTest extends TestCase
     private function submitExternal(): array
     {
         app(TenantContext::class)->forget();
-        $res = $this->postJson('/api/v1/requests', [
-            'type' => 'paid_campaign_launch', 'contact_name' => 'Client Co', 'contact_email' => 'c@co.test',
-        ])->assertCreated();
+        $res = $this->postJson('/api/v1/requests', $this->withVerifiedContact([
+            'type' => 'paid_campaign_launch', 'contact_name' => 'Client Co', 'contact_email' => 'c@co.test', 'company_name' => 'Client Co',
+        ]))->assertCreated();
         app(TenantContext::class)->setTenantId($this->tenant->id);
 
         return ['token' => $res->json('data.tracking_token'), 'reference' => $res->json('data.reference')];

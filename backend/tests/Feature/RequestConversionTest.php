@@ -18,11 +18,13 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\VerifiesContact;
 use Tests\TestCase;
 
 final class RequestConversionTest extends TestCase
 {
     use RefreshDatabase;
+    use VerifiesContact;
 
     private Tenant $tenant;
 
@@ -51,11 +53,11 @@ final class RequestConversionTest extends TestCase
     private function submit(string $type = 'paid_campaign_launch'): ExternalRequest
     {
         app(TenantContext::class)->forget();
-        $ref = $this->postJson('/api/v1/requests', [
+        $ref = $this->postJson('/api/v1/requests', $this->withVerifiedContact([
             'type' => $type, 'contact_name' => 'Client Co', 'contact_email' => 'c@co.test',
             'company_name' => 'Client Co LLC', 'budget' => 30000, 'currency' => 'SAR',
             'objective' => 'Scale Ramadan sales', 'metadata' => ['platforms' => ['Meta', 'Google']],
-        ])->json('data.reference');
+        ]))->json('data.reference');
         app(TenantContext::class)->setTenantId($this->tenant->id);
 
         return ExternalRequest::where('reference', $ref)->firstOrFail();

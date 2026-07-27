@@ -8,11 +8,13 @@ use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\VerifiesContact;
 use Tests\TestCase;
 
 final class RequestIntakeTest extends TestCase
 {
     use RefreshDatabase;
+    use VerifiesContact;
 
     protected function setUp(): void
     {
@@ -23,14 +25,15 @@ final class RequestIntakeTest extends TestCase
 
     private function payload(array $overrides = []): array
     {
-        return array_merge([
+        return $this->withVerifiedContact(array_merge([
             'type' => 'paid_campaign_launch',
             'contact_name' => 'Sara Ali',
             'contact_email' => 'sara@example.com',
+            'company_name' => 'Sara Store',
             'objective' => 'Increase online sales for Ramadan.',
             'budget' => 25000,
             'currency' => 'SAR',
-        ], $overrides);
+        ], $overrides));
     }
 
     public function test_meta_exposes_active_service_types(): void

@@ -8,12 +8,14 @@ use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\VerifiesContact;
 use Tests\TestCase;
 
 /** The public portal resolves its tenant by host / default-portal flag — never a fragile env UUID. */
 final class RequestPortalResolverTest extends TestCase
 {
     use RefreshDatabase;
+    use VerifiesContact;
 
     protected function setUp(): void
     {
@@ -24,7 +26,7 @@ final class RequestPortalResolverTest extends TestCase
 
     private function payload(): array
     {
-        return ['type' => 'consulting', 'contact_name' => 'Client Co', 'contact_email' => 'c@x.test'];
+        return $this->withVerifiedContact(['type' => 'consulting', 'contact_name' => 'Client Co', 'contact_email' => 'c@x.test', 'company_name' => 'Client Co']);
     }
 
     public function test_resolves_the_default_portal_tenant_without_env_or_uuid(): void
