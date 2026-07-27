@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Lock, MessageSquare } from 'lucide-react'
 import {
   addInternalNote, archiveRequest, assignRequest, changeRequestPriority, changeRequestStatus,
-  getRequest, replyToClientInternal, requestInformation,
+  convertRequest, getRequest, replyToClientInternal, requestInformation,
 } from './internalApi'
 import { STATUS_LABELS, priorityTone, statusTone } from './labels'
 import { Button } from '@/components/ui/Button'
@@ -38,6 +38,7 @@ export function RequestDetailPage() {
   const replyMut = useMutation({ mutationFn: () => replyToClientInternal(requestId, reply), onSuccess: () => { setReply(''); void refresh() } })
   const infoMut = useMutation({ mutationFn: () => requestInformation(requestId, info), onSuccess: () => { setInfo(''); void refresh() } })
   const archiveMut = useMutation({ mutationFn: () => archiveRequest(requestId), onSuccess: refresh })
+  const convertMut = useMutation({ mutationFn: () => convertRequest(requestId), onSuccess: refresh, onError: (e) => setActionError(toApiError(e).message) })
 
   if (query.isLoading) return <div className="mx-auto max-w-4xl"><div className="h-64 animate-pulse rounded-2xl bg-surface-secondary" /></div>
   if (query.isError) return <div className="mx-auto max-w-4xl rounded-2xl border border-danger/30 bg-[var(--negative-background)] p-6 text-center text-sm text-danger">{t('error_generic')}</div>
@@ -76,8 +77,21 @@ export function RequestDetailPage() {
             <Button variant="secondary" size="sm" onClick={() => assign.mutate(Number(user.id))}>{t('assign_to_me')}</Button>
           ))}
           {!d.archived_at && <Button variant="ghost" size="sm" onClick={() => archiveMut.mutate()}>{t('archive')}</Button>}
+          {!d.conversion && !d.archived_at && (
+            <Button size="sm" onClick={() => convertMut.mutate()} loading={convertMut.isPending}>{t('convert')}</Button>
+          )}
         </div>
         {actionError && <p className="mt-2 text-sm text-danger">{actionError}</p>}
+
+        {/* Conversion result — replaces the Convert button once done, with links to the created entities. */}
+        {d.conversion && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm">
+            <span className="font-semibold text-success">{t('converted')}</span>
+            <Link to={`/app/clients/${d.conversion.client_id}`} className="font-semibold text-brand-600 hover:underline">{t('view_client')}</Link>
+            <span className="text-text-muted" dir="ltr">·</span>
+            <Link to={`/campaigns/${d.conversion.project_id}/${d.conversion.campaign_id}`} className="font-semibold text-brand-600 hover:underline">{t('view_campaign')}</Link>
+          </div>
+        )}
       </div>
 
       {/* Details */}

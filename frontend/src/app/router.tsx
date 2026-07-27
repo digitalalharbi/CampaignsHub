@@ -29,6 +29,8 @@ import { RequestIntakePage } from '@/features/requests/RequestIntakePage'
 import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
 import { RequestsDashboardPage } from '@/features/requests/RequestsDashboardPage'
 import { RequestDetailPage } from '@/features/requests/RequestDetailPage'
+import { ClientsPortfolioPage } from '@/features/clients/ClientsPortfolioPage'
+import { ClientCommandCenterPage } from '@/features/clients/ClientCommandCenterPage'
 import { AppShell } from '@/layouts/AppShell'
 
 export const router = createBrowserRouter([
@@ -64,6 +66,9 @@ export const router = createBrowserRouter([
           // Internal requests inbox (external requests converted into operational work).
           { path: 'app/requests', element: <RequestsDashboardPage /> },
           { path: 'app/requests/:requestId', element: <RequestDetailPage /> },
+          // Client portfolio + command center (converted from requests).
+          { path: 'app/clients', element: <ClientsPortfolioPage /> },
+          { path: 'app/clients/:clientId', element: <ClientCommandCenterPage /> },
           { path: 'content', element: <PagePlaceholder title="Content" /> },
           { path: 'approvals', element: <PagePlaceholder title="Approvals" /> },
           { path: 'tracking', element: <PagePlaceholder title="Tracking" /> },

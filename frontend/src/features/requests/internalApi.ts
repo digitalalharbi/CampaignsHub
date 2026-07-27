@@ -27,6 +27,8 @@ export interface RequestListResult {
 export interface RequestComment { id: number; visibility: 'internal' | 'client'; author: string; body: string; at: string | null }
 export interface RequestEvent { type: string; from: string | null; to: string | null; message: string | null; client_visible: boolean; at: string | null }
 
+export interface ConversionResult { status: string; client_id: string | null; project_id: string | null; campaign_id: string | null }
+
 export interface RequestDetail extends RequestRow {
   objective: string | null
   contact_email: string
@@ -40,6 +42,7 @@ export interface RequestDetail extends RequestRow {
   events: RequestEvent[]
   files: { id: number; name: string; size: number; client_visible: boolean }[]
   archived_at: string | null
+  conversion: { client_id: string; project_id: string; campaign_id: string; completed_at: string | null } | null
 }
 
 export interface RequestFilters {
@@ -86,3 +89,4 @@ export const requestInformation = (id: string, message: string) => postData<{ st
 export const addInternalNote = (id: string, body: string) => postData<{ status: string }>(`/app/requests/${id}/internal-note`, { body })
 export const replyToClientInternal = (id: string, body: string) => postData<{ status: string }>(`/app/requests/${id}/reply`, { body })
 export const archiveRequest = (id: string) => patchData<{ status: string }>(`/app/requests/${id}/archive`, {})
+export const convertRequest = (id: string, client_id?: string) => postData<ConversionResult>(`/app/requests/${id}/convert`, client_id ? { client_id } : {})
