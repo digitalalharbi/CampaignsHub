@@ -47,7 +47,7 @@ test('homepage mobile (375): no horizontal scroll, hero + CTA reachable', async 
 })
 
 // Visual-regression baseline for the homepage (chromium only — cross-browser pixel diffs are noisy).
-test.describe('homepage visual regression', () => {
+test.describe('homepage visual regression @visual', () => {
   test.skip(({ browserName }) => browserName !== 'chromium', 'baselines are chromium-only')
 
   test('/ light matches baseline', async ({ page }) => {

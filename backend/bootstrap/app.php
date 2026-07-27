@@ -14,6 +14,7 @@ use App\Domains\Requests\Console\EvaluateSla;
 use App\Domains\Requests\Console\PruneUploadSessions;
 use App\Domains\Tenancy\Middleware\ResolveTenant;
 use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\ConditionalThrottle;
 use App\Support\ApiResponse;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -66,11 +67,13 @@ return Application::configure(basePath: dirname(__DIR__))
             EnsureAccountActive::class,
         ]);
 
-        // Route-middleware aliases.
+        // Route-middleware aliases. `throttle` is overridden so rate limiting is enforced in production but
+        // relaxed in local/dev (single-IP dev + E2E traffic must not trip per-IP limits).
         $middleware->alias([
             'tenant' => ResolveTenant::class,
             'project' => ResolveProject::class,
             'entitlement' => EnsureEntitlement::class,
+            'throttle' => ConditionalThrottle::class,
         ]);
 
         // Ensure tenant (then project) is resolved BEFORE route-model binding, so the global scopes

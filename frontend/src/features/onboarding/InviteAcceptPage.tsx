@@ -4,7 +4,6 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Loader2, UserPlus } from 'lucide-react'
 import { acceptInvite, previewInvite } from './inviteApi'
 import { OnboardingShell } from './OnboardingShell'
-import { fetchCurrentUser } from '@/features/auth/api'
 import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
@@ -24,7 +23,8 @@ export function InviteAcceptPage() {
 
   const accept = useMutation({
     mutationFn: () => acceptInvite(token, name, password),
-    onSuccess: async () => { const u = await fetchCurrentUser(); setUser(u); navigate('/dashboard', { replace: true }) },
+    // Use the user returned by accept directly — no second /auth/me round-trip to race the session cookie.
+    onSuccess: (user) => { setUser(user); navigate('/dashboard', { replace: true }) },
     onError: (e) => setError(toApiError(e).message),
   })
 
@@ -41,7 +41,7 @@ export function InviteAcceptPage() {
         <h1 className="font-heading text-xl font-extrabold text-text-primary">{ar ? 'انضمّ إلى' : 'Join'} {preview.data?.workspace_name ?? '…'}</h1>
         <p className="text-sm text-text-secondary">{ar ? 'دُعيت للانضمام كـ' : 'You were invited as'} <span className="font-semibold text-text-primary">{preview.data?.role_slug}</span> · <span dir="ltr">{preview.data?.email}</span></p>
       </div>
-      <form className="mt-5 grid gap-3" onSubmit={(e) => { e.preventDefault(); if (name.trim().length >= 2 && password.length >= 8) accept.mutate() }}>
+      <form className="mt-5 grid gap-3" onSubmit={(e) => { e.preventDefault(); accept.mutate() }}>
         <label className="text-xs font-semibold text-text-secondary">{ar ? 'الاسم الكامل' : 'Full name'}<input className={field} value={name} onChange={(e) => setName(e.target.value)} required /></label>
         <label className="text-xs font-semibold text-text-secondary">{ar ? 'كلمة المرور' : 'Password'}<input type="password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" required /></label>
         <button type="submit" disabled={name.trim().length < 2 || password.length < 8 || accept.isPending} className="flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60">

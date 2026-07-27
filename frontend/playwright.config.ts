@@ -1,20 +1,22 @@
 import { defineConfig, devices } from '@playwright/test'
 
 /**
- * E2E config for the campaigns full-path spec.
+ * E2E config. Self-contained: Playwright starts BOTH servers itself.
  *
- * Prereqs (both must be running):
- *   1. Backend:  cd backend  && php artisan migrate:fresh --seed && php artisan serve   (:8000)
- *   2. Frontend: cd frontend && npm run dev                                              (:5173)
- * Then:  npx playwright test
+ *   - Backend  (:8000): `php artisan serve --no-reload` with PHP_CLI_SERVER_WORKERS=4 so the built-in server
+ *     handles concurrent requests. Single-worker serving was the root cause of write-heavy specs (signup,
+ *     link/move) intermittently timing out under the full 3-browser load — this fixes it at the source, not
+ *     with test retries.
+ *   - Frontend (:5173): `npm run dev`, which proxies /api and /sanctum to :8000 (shared origin).
  *
- * The dev server proxies /api and /sanctum to :8000, so the SPA and API share an origin here.
+ * Visual-regression specs (tagged @visual) run on CHROMIUM ONLY — cross-browser pixel diffs are noisy — so
+ * they are excluded from firefox/webkit via grepInvert (never scheduled there, so never counted as skipped).
  */
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  retries: 0, // root causes are fixed, not masked; a genuine flake should fail the gate
   workers: 1,
   reporter: [['list']],
   use: {
@@ -26,16 +28,24 @@ export default defineConfig({
   projects: [
     { name: 'setup', testMatch: /auth\.setup\.ts/ },
     { name: 'chromium', use: { ...devices['Desktop Chrome'] }, dependencies: ['setup'] },
-    // Cross-browser acceptance (Firefox + WebKit). Reuse the same seeded storage state from setup.
-    // Run a subset with e.g. `npx playwright test --project=firefox --project=webkit e2e/auth-*.spec.ts`.
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] }, dependencies: ['setup'] },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] }, dependencies: ['setup'] },
+    // Cross-browser acceptance. Visual-baseline specs are chromium-only, so exclude @visual here.
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] }, dependencies: ['setup'], grepInvert: /@visual/ },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] }, dependencies: ['setup'], grepInvert: /@visual/ },
   ],
-  // Reuse the already-running dev server (do not auto-start — the backend must be up too).
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: true,
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      command: 'php artisan serve --no-reload --port=8000',
+      cwd: '../backend',
+      url: 'http://localhost:8000/up',
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      env: { PHP_CLI_SERVER_WORKERS: '4' },
+    },
+    {
+      command: 'npm run dev',
+      url: 'http://localhost:5173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+  ],
 })

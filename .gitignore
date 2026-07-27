@@ -28,3 +28,4 @@ backend/bootstrap/cache/*.php
 .tmp.*
 *.tmp
 *.output
+deliverables/**/browser-downloads/*.pdf

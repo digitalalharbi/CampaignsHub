@@ -7,7 +7,7 @@ import { expect, test } from '@playwright/test'
  */
 const PAGES = ['/login', '/register', '/forgot-password'] as const
 
-test.describe('auth visual regression', () => {
+test.describe('auth visual regression @visual', () => {
   test.skip(({ browserName }) => browserName !== 'chromium', 'baselines are chromium-only')
 
   for (const path of PAGES) {

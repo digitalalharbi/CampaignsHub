@@ -8,11 +8,6 @@ import { AUTH, csrfHeaders, switchToEnglish } from './helpers'
  */
 test.use({ storageState: { cookies: [], origins: [] } }) // the accepting invitee is a guest
 
-// This spec performs a real signup → auto-login → dashboard round-trip. Under the full 3-browser suite the
-// single-threaded dev backend (php artisan serve) can saturate and drop the write; it passes reliably in
-// isolation and in a targeted 3-browser run. Give it extra retry budget so contention doesn't fail the gate.
-test.describe.configure({ retries: 2 })
-
 test('owner invites a member → invitee accepts → joins the workspace', async ({ page, browser }, testInfo) => {
   const tag = `${testInfo.project.name}-${Date.now()}`
   const email = `member.${tag}@example.com`.toLowerCase()
@@ -28,18 +23,20 @@ test('owner invites a member → invitee accepts → joins the workspace', async
   expect(devLink).toContain('/invite/accept?token=')
   await ownerCtx.close()
 
-  // 2) The invitee (guest) opens the accept link and joins.
+  // 2) The invitee (guest) opens the accept link and joins. No locale toggle here — bilingual matchers cover
+  //    both, and toggling would re-render the form mid-interaction.
   await page.goto(devLink)
-  await switchToEnglish(page)
   await expect(page.getByText(email)).toBeVisible()
   await page.getByLabel(/Full name|الاسم الكامل/).fill('Invited Member')
   await page.getByLabel(/Password|كلمة المرور/).fill('secret1234')
-  await page.getByRole('button', { name: /Join workspace|الانضمام/ }).click()
+  // Wait until React has committed both fields (the button enables from the same state the submit uses),
+  // so the click reliably triggers the accept — never a silent no-op.
+  const join = page.getByRole('button', { name: /Join workspace|الانضمام/ })
+  await expect(join).toBeEnabled()
+  await join.click()
 
-  // 3) Joined the existing workspace → dashboard with the personal full menu. The accept round-trip
-  //    (create user + auto-login + first dashboard load) can be slow when the single-threaded dev backend
-  //    is under load from the full 3-browser suite — allow generous time for the redirect to land.
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 20_000 })
+  // 3) Joined the existing workspace → dashboard with the personal full menu.
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 10_000 })
   await switchToEnglish(page)
   await expect(page.getByRole('link', { name: /Campaigns|الحملات/ }).first()).toBeVisible()
 
