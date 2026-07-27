@@ -21,7 +21,9 @@ final class NotificationController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = AppNotification::query()
-            ->where('user_id', $request->user()->id)
+            // The user's own notifications PLUS tenant-wide operational alerts (budget risk, sync failure,
+            // token expiry, …) which are raised with no specific recipient and must reach the whole team.
+            ->where(fn ($q) => $q->where('user_id', $request->user()->id)->orWhereNull('user_id'))
             ->where('type', '!=', 'suppressed') // hide delivery-ledger tombstones
             ->latest('created_at');
 
