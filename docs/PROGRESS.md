@@ -340,3 +340,18 @@ Cross-browser + acceptance work this batch:
 9. `32eca48` test(account): e2e for profile display-name journey + governance docs
 
 (9 commits. `eadce97` — the form-system commit — predates this sequence and is NOT counted.)
+
+## Phase 3 batch — Public homepage (2026-07-27)
+- **المرحلة / Phase:** Public Homepage (`/`) — primary conversion surface
+- **Commit:** `3420b9a` feat(marketing): build complete CampaignsHub public homepage
+- **Tests run:** homepage e2e **9/9** across Chromium+Firefox+WebKit (incl. mobile 375, preview tab switch,
+  language toggle, CTA→/requests/new) · auth/account regression e2e **17/17** · vitest **22/22** ·
+  typecheck/lint/build green
+- **Browsers tested:** Chromium, Firefox, WebKit
+- **Live review:** `/` renders full RTL homepage (Emerald-on-Graphite), official terminology, interactive
+  7-tab product preview tagged "demo data", journeys, honest integration statuses; 16 CTAs → real routes;
+  authed header shows "back to dashboard"; `/requests/new` honest stub; no horizontal overflow; no console errors
+- **المتبقي / Remaining:** external request portal (G-012), homepage visual-regression baseline (G-013)
+- **العوائق / Blockers:** none new (integration keys stay Awaiting Credentials — shown honestly)
+- **Regressions:** none (app moved to /dashboard; all prior auth/account/campaign routes intact; 17/17 e2e)
+- **المرحلة التالية / Next:** External Request Portal → Request Tracking → Requests Dashboard → Clients

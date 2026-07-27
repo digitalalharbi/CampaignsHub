@@ -84,8 +84,12 @@ Two-review gate per phase:
 
 | ID | Requirement | Status | Evidence |
 |----|-------------|--------|----------|
-| R7.1 | Two distinct CTAs: "ابدأ إدارة حملاتك" (register) vs "أرسل طلب إدارة حملة" (service request) | Not Started | `docs/MARKETING_SITE.md` draft only |
-| R7.2 | Marketing identity distinct from reference images | In Progress | palette decided |
+| R7.1 | Distinct CTAs: register/agency vs service request vs login; four user journeys | Completed | `PublicHomePage.tsx`; homepage e2e 9/9 (3 browsers) |
+| R7.2 | Marketing identity distinct from reference images (Emerald-on-Graphite) | Completed | `PublicHomePage.tsx`; live light+dark |
+| R7.3 | Public `/` homepage: header/hero/interactive preview/journeys/features/objectives/reports/integrations/automation/request/audience/CTA/footer | Completed | `PublicHomePage.tsx` + `homeCopy.ts`; live-verified; e2e |
+| R7.4 | Official terminology throughout; ROAS-not-universal note; honest integration statuses; demo data tagged | Completed | `homeCopy.ts` (Paid Advertising Management, objective note, Available/In Development/Awaiting/Coming Soon) |
+| R7.5 | All homepage CTAs open real routes (no dead buttons); /requests/new + /requests/track exist | Completed (portal stubbed) | router.tsx; `RequestsPublicStub.tsx`; e2e asserts CTA→/requests/new |
+| R7.6 | App relocated to /dashboard; `/` public; post-login → /dashboard | Completed | router pathless layout; `safeRedirect` fallback + tests; auth-redirect e2e |
 
 ## R8 — Carry-over (must not regress while building auth/public)
 
