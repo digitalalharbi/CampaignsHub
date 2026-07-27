@@ -87,7 +87,7 @@ export async function submitVerifiedRequest(
   // Verify phone + email (dev auto-verifies via the exposed code). Submit stays disabled until BOTH are
   // verified — wait on that (generous timeout: WebKit is slow to resolve the two async OTP round-trips).
   await page.getByRole('button', { name: /Verify Mobile number|تحقّق رقم الجوال/ }).click()
-  await expect(page.getByText(/Verified|تم التحقق/).first()).toBeVisible()
+  await expect(page.getByText(/Verified|تم التحقق/).first()).toBeVisible({ timeout: 15000 }) // async OTP round-trip
   await page.getByRole('button', { name: /Verify Email|تحقّق البريد الإلكتروني/ }).click()
   const submitBtn = page.getByRole('button', { name: /Submit request|إرسال الطلب/ })
   await expect(submitBtn).toBeEnabled({ timeout: 15000 })
