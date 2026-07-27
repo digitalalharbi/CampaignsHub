@@ -33,11 +33,11 @@ export function TabTeam({ d }: { d: ClientDetail }) {
     <div className="grid gap-4">
       {d.can.manage_team && (
         <form onSubmit={(e) => { e.preventDefault(); if (userId) grant.mutate() }} className="flex flex-wrap items-end gap-2 rounded-xl border border-border bg-surface-secondary p-3">
-          <select className={field} value={userId} onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : '')}>
+          <select aria-label={t('tm_member')} className={field} value={userId} onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : '')}>
             <option value="">{t('tm_member')}…</option>
             {(assignable.data?.assignable ?? []).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
-          <select className={field} value={role} onChange={(e) => setRole(e.target.value)}>
+          <select aria-label={t('tm_role')} className={field} value={role} onChange={(e) => setRole(e.target.value)}>
             {ROLES.map((r) => <option key={r} value={r}>{labelOf(ACCESS_ROLE_LABELS, r, lang)}</option>)}
           </select>
           <button type="submit" disabled={!userId || grant.isPending} className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"><UserPlus size={15} /> {t('tm_add')}</button>
