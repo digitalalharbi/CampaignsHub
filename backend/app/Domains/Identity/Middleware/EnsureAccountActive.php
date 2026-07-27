@@ -6,6 +6,7 @@ namespace App\Domains\Identity\Middleware;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -26,7 +27,7 @@ final class EnsureAccountActive
         // Resolve the user from whichever guard authenticated the request (web session for the SPA, sanctum
         // for token/tests). This middleware is appended to the api group, so the default guard may be unset.
         $user = $request->user() ?? Auth::guard('sanctum')->user() ?? Auth::guard('web')->user();
-        if ($user === null) {
+        if (! $user instanceof User) {
             return $next($request); // guest — nothing to enforce
         }
 
