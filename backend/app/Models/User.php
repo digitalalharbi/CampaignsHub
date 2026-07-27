@@ -30,6 +30,8 @@ class User extends Authenticatable
 
     protected $fillable = [
         'name', 'email', 'password', 'tenant_id', 'is_platform_admin',
+        'first_name', 'last_name', 'job_title', 'phone', 'avatar_path', 'bio',
+        'locale', 'timezone', 'date_format', 'number_format', 'theme',
     ];
 
     protected $hidden = [
