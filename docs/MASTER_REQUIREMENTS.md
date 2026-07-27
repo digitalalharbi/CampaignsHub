@@ -75,9 +75,9 @@ Two-review gate per phase:
 
 | ID | Requirement | Status | Evidence |
 |----|-------------|--------|----------|
-| R6.1 | Client classification (status / service level / industry) | Implemented and Tested | client_workspaces columns; ClientsController; ClientCommandCenterTest |
+| R6.1 | Client classification MANAGEMENT (status/service level/industry/owner/priority/currency/tz/language editable w/ validation+permission+audit) | In Progress | columns exist; editing endpoints being built |
 | R6.2 | Client card (logo, projects, active campaigns, spend, alerts, last report, last sync, owner, status, open requests, sources) | Not Started | — |
-| R6.3 | Client command center (Overview/Projects/Campaigns/Requests live; Analytics/Reports/Team/Files/Activity/Settings pending) | In Progress | `ClientCommandCenterPage`; 4 tabs live + isolated; e2e verifies projects/campaigns/requests |
+| R6.3 | Client command center (all tabs: Overview/Projects/Campaigns/Requests + Analytics/Reports/Team/Files/Activity/Settings, no placeholders) | Partial | 4 tabs live+isolated; 6 tabs pending build |
 | R6.4 | Isolation by org + client + project | Implemented and Tested | BelongsToTenant/Project scopes + CampaignMetricsTest |
 
 ## R7 — Public homepage
