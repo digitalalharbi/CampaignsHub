@@ -14,9 +14,16 @@ test('guest hitting a protected route is redirected to /login with the intended 
   await expect(page.locator('input[type="email"]')).toBeVisible()
 })
 
-test('root is not wrapped in a redirect param (dashboard is the default landing)', async ({ page }) => {
+test('the homepage at / is public (no auth redirect)', async ({ page }) => {
   await page.goto('/')
-  await expect(page).toHaveURL(/\/login$/)
+  await expect(page).toHaveURL(/\/$/)
+  // Marketing hero CTA is present; we are NOT bounced to login.
+  await expect(page.getByRole('link', { name: /ابدأ إدارة حملاتك|Start managing campaigns/ }).first()).toBeVisible()
+})
+
+test('a guest hitting /dashboard is redirected to login with that intended path', async ({ page }) => {
+  await page.goto('/dashboard')
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard/)
 })
 
 test('after login, the user lands on the originally requested page, not the dashboard', async ({ page }) => {

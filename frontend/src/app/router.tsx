@@ -24,23 +24,29 @@ import { ProjectIntegrationsPage } from '@/features/projects/ProjectIntegrations
 import { ProjectsPage } from '@/features/projects/ProjectsPage'
 import { ProjectTeamPage } from '@/features/projects/ProjectTeamPage'
 import { SystemStatusPage } from '@/features/system/SystemStatusPage'
+import { PublicHomePage } from '@/features/marketing/PublicHomePage'
+import { RequestIntakePage, RequestTrackPage } from '@/features/requests/RequestsPublicStub'
 import { AppShell } from '@/layouts/AppShell'
 
 export const router = createBrowserRouter([
+  // Public marketing homepage — the primary conversion surface. The authenticated app lives under
+  // its own paths (/dashboard, /campaigns, …); `/` is public and shows "back to dashboard" when signed in.
+  { path: '/', element: <PublicHomePage /> },
   { path: '/welcome', element: <MarketingPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
+  { path: '/requests/new', element: <RequestIntakePage /> },
+  { path: '/requests/track', element: <RequestTrackPage /> },
   { path: '/reports/share/:token', element: <PublicReport /> },
   { path: '/reports/print/:token', element: <PrintReport /> },
   {
     element: <RequireAuth />,
     children: [
       {
-        path: '/',
         element: <AppShell />,
         children: [
-          { index: true, element: <DashboardPage /> },
+          { path: 'dashboard', element: <DashboardPage /> },
           { path: 'analytics', element: <AnalyticsPage /> },
           { path: 'system', element: <SystemStatusPage /> },
           { path: 'projects', element: <ProjectsPage /> },

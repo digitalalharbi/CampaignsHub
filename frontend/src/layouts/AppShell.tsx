@@ -23,7 +23,7 @@ import type { TranslationKey } from '@/lib/i18n'
 type NavItem = { to: string; key: TranslationKey; icon: typeof LayoutDashboard }
 
 const operationalNav: NavItem[] = [
-  { to: '/', key: 'dashboard', icon: LayoutDashboard },
+  { to: '/dashboard', key: 'dashboard', icon: LayoutDashboard },
   { to: '/campaigns', key: 'campaigns', icon: Megaphone },
   { to: '/analytics', key: 'analytics', icon: TrendingUp },
   { to: '/reports', key: 'reports', icon: BarChart3 },

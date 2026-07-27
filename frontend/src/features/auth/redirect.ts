@@ -5,7 +5,7 @@
  * `//host`, absolute URLs, or a value that doesn't start with a single `/` — falls back to `fallback`.
  * This prevents an attacker from crafting `/login?redirect=https://evil.example` (open-redirect).
  */
-export function safeRedirect(raw: string | null, fallback = '/'): string {
+export function safeRedirect(raw: string | null, fallback = '/dashboard'): string {
   if (!raw) return fallback
   let value = raw
   try {
