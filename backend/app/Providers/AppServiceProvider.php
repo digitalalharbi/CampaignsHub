@@ -72,5 +72,12 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute($perMinute)->by((string) $request->ip());
         });
+
+        // OTP / contact-verification requests: strict in production (per destination + IP), relaxed locally.
+        RateLimiter::for('otp-request', function (Request $request): Limit {
+            $perMinute = $this->app->environment('production') ? 4 : 60;
+
+            return Limit::perMinute($perMinute)->by($request->input('destination', '').'|'.$request->ip());
+        });
     }
 }

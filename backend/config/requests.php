@@ -36,4 +36,20 @@ return [
         // Malware scanning is OFF (no scanner wired) — do not claim it runs. Feature-flag when available.
         'malware_scan' => (bool) env('REQUESTS_UPLOAD_MALWARE_SCAN', false),
     ],
+
+    // Client-portal contact verification (OTP / magic-code). Providers are OFF until real credentials
+    // are wired — delivery is recorded as "awaiting_provider_credentials" and never claimed as sent.
+    'verification' => [
+        'code_ttl_minutes' => (int) env('REQUESTS_OTP_TTL_MINUTES', 10),
+        'max_attempts' => (int) env('REQUESTS_OTP_MAX_ATTEMPTS', 5),
+        'token_ttl_minutes' => (int) env('REQUESTS_VERIFIED_TTL_MINUTES', 30), // verified→submit window
+        'portal_session_days' => (int) env('REQUESTS_PORTAL_SESSION_DAYS', 14),
+        'providers' => [
+            'sms' => (bool) env('REQUESTS_SMS_ENABLED', false),
+            'whatsapp' => (bool) env('REQUESTS_WHATSAPP_ENABLED', false),
+            'email' => (bool) env('REQUESTS_MAIL_ENABLED', false),
+        ],
+        // DEV/TEST ONLY: expose the code so the flow is usable without a provider. NEVER in production.
+        'expose_dev_code' => (bool) env('REQUESTS_OTP_EXPOSE_DEV_CODE', env('APP_ENV', 'production') !== 'production'),
+    ],
 ];

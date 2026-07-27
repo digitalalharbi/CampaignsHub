@@ -11,11 +11,13 @@ use App\Domains\Requests\Models\RequestEvent;
 use App\Domains\Requests\Models\RequestFile;
 use App\Domains\Requests\Models\RequestType;
 use App\Domains\Requests\Models\RequestUploadSession;
+use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestIntake;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -29,6 +31,7 @@ final class PublicRequestController
     public function __construct(
         private readonly RequestIntake $intake,
         private readonly PortalTenantResolver $portal,
+        private readonly ContactVerificationService $verification,
     ) {}
 
     /** GET /api/v1/requests/meta — public catalog for the intake form (active service types). */
@@ -55,8 +58,8 @@ final class PublicRequestController
             'type' => ['required', 'string', Rule::exists('request_types', 'key')->where('is_active', true)],
             'contact_name' => ['required', 'string', 'min:2', 'max:120'],
             'contact_email' => ['required', 'email', 'max:160'],
-            'contact_phone' => ['nullable', 'string', 'max:32', 'regex:/^[0-9+()\-\s]*$/'],
-            'company_name' => ['nullable', 'string', 'max:160'],
+            'contact_phone' => ['required', 'string', 'max:32', 'regex:/^\+[1-9]\d{7,14}$/'], // E.164 with country code
+            'company_name' => ['required', 'string', 'min:2', 'max:160'],
             'objective' => ['nullable', 'string', 'max:2000'],
             'budget' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
             'currency' => ['nullable', 'string', 'size:3'],
@@ -65,7 +68,19 @@ final class PublicRequestController
             'due_date' => ['nullable', 'date', 'after_or_equal:start_date'],
             'metadata' => ['nullable', 'array'],
             'upload_token' => ['nullable', 'string'],
+            // Proof that BOTH the phone and the email were verified (OTP) before submitting.
+            'phone_verification_id' => ['required', 'string'],
+            'email_verification_id' => ['required', 'string'],
         ]);
+
+        // A final request is never accepted without a verified means of contact (phone + email).
+        $phoneOk = $this->verification->consumeVerified($data['phone_verification_id'], $data['contact_phone']);
+        $emailOk = $this->verification->consumeVerified($data['email_verification_id'], Str::lower($data['contact_email']));
+        if (! $phoneOk || ! $emailOk) {
+            throw ValidationException::withMessages([
+                'verification' => 'Please verify your phone and email before submitting.',
+            ]);
+        }
 
         // Resolve the owning tenant from the request host / default portal — fail closed if none.
         $tenant = $this->portal->resolve($request);

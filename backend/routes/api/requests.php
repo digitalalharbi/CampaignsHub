@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Domains\Requests\Http\Controllers\ClientPortalController;
+use App\Domains\Requests\Http\Controllers\ContactVerificationController;
 use App\Domains\Requests\Http\Controllers\Internal\RequestActionsController;
 use App\Domains\Requests\Http\Controllers\Internal\RequestsController;
 use App\Domains\Requests\Http\Controllers\PublicRequestController;
@@ -14,6 +16,13 @@ use Illuminate\Support\Facades\Route;
 */
 Route::prefix('requests')->name('requests.')->group(function (): void {
     Route::get('/meta', [PublicRequestController::class, 'meta'])->name('meta');
+
+    // Contact verification (OTP) — required before a final submit and for portal login.
+    Route::post('/verify/start', [ContactVerificationController::class, 'start'])->name('verify.start')
+        ->middleware('throttle:otp-request');
+    Route::post('/verify/check', [ContactVerificationController::class, 'check'])->name('verify.check')
+        ->middleware('throttle:30,1');
+
     Route::post('/', [PublicRequestController::class, 'store'])->name('store')
         ->middleware('throttle:requests-intake');
     Route::get('/track/{token}', [PublicRequestController::class, 'track'])->name('track')
@@ -29,6 +38,28 @@ Route::prefix('requests')->name('requests.')->group(function (): void {
     Route::post('/uploads', [UploadController::class, 'store'])->name('uploads.store')
         ->middleware('throttle:60,1');
     Route::delete('/uploads/{file}', [UploadController::class, 'destroy'])->name('uploads.destroy')
+        ->middleware('throttle:60,1');
+});
+
+/*
+| External Client Portal — a verified client's dashboard (all their requests, status, messages, files).
+| Auth is an httpOnly-cookie session tied to a verified contact; every payload is client-safe.
+*/
+Route::prefix('client')->name('client.')->group(function (): void {
+    Route::post('/login/start', [ClientPortalController::class, 'loginStart'])->name('login.start')
+        ->middleware('throttle:otp-request');
+    Route::post('/login/verify', [ClientPortalController::class, 'loginVerify'])->name('login.verify')
+        ->middleware('throttle:30,1');
+    Route::post('/logout', [ClientPortalController::class, 'logout'])->name('logout');
+    Route::get('/session', [ClientPortalController::class, 'session'])->name('session');
+
+    Route::get('/requests', [ClientPortalController::class, 'index'])->name('requests.index')
+        ->middleware('throttle:120,1');
+    Route::get('/requests/{reference}', [ClientPortalController::class, 'show'])->name('requests.show')
+        ->middleware('throttle:120,1');
+    Route::post('/requests/{reference}/reply', [ClientPortalController::class, 'reply'])->name('requests.reply')
+        ->middleware('throttle:20,1');
+    Route::get('/requests/{reference}/files/{file}', [ClientPortalController::class, 'download'])->name('requests.file')
         ->middleware('throttle:60,1');
 });
 
