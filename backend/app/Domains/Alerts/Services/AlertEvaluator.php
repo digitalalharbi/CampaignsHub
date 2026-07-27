@@ -120,7 +120,11 @@ final class AlertEvaluator
                 return false;
             }
             // Cooldown elapsed on a still-open problem: refresh the same event + re-notify (not a new alert).
-            $active->forceFill(['last_triggered_at' => $now, 'context' => $b['context'], 'status' => 'open'])->save();
+            $active->forceFill([
+                'last_triggered_at' => $now,
+                'context' => array_merge($b['context'], ['title' => $b['title'], 'message' => $b['message']]),
+                'status' => 'open',
+            ])->save();
             $this->notify($rule, $b);
 
             return false;
@@ -146,7 +150,8 @@ final class AlertEvaluator
             'dedup_key' => $dedupKey,
             'status' => 'open',
             'severity' => $rule->severity,
-            'context' => $b['context'],
+            // Persist the human title/message alongside the measured values so the alerts UI can render them.
+            'context' => array_merge($b['context'], ['title' => $b['title'], 'message' => $b['message']]),
             'notification_id' => $notification,
             'task_id' => $taskId,
             'last_triggered_at' => $now,
@@ -168,6 +173,7 @@ final class AlertEvaluator
             'source' => 'alerts',
             'entity_type' => $b['entity_type'],
             'entity_id' => $b['entity_id'],
+            'action_url' => '/app/alerts', // clicking the bell item lands on the alerts page
         ]);
 
         return $n?->id !== null ? (string) $n->id : null;

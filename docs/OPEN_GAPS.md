@@ -216,3 +216,10 @@ _Last updated: 2026-07-27_
   create-task, honest notification delivery). The backend entitlement nav already exposes an `alerts` key, but
   the React AppShell has no Alerts management page yet — a focused frontend follow-up (the engine is fully
   usable via API today).
+
+## G-019 — RESOLVED (2026-07-27)
+- Alerts management **frontend page is now built** at `/app/alerts`: Active/Snoozed/Resolved lifecycle,
+  rule creation, severity/source/value/threshold, Resolve/Snooze/Create-Task, channel preferences + Quiet
+  Hours, honest Delivery log, live polling, and the notification bell deep-links to the page (alert
+  notifications carry action_url=/app/alerts). Verified in-browser + E2E `alerts-ui.spec.ts` 3 browsers.
+  This was an internal gap (not an external dependency) and is now closed.

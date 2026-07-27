@@ -38,6 +38,7 @@ import { RequestsDashboardPage } from '@/features/requests/RequestsDashboardPage
 import { RequestDetailPage } from '@/features/requests/RequestDetailPage'
 import { ClientsPortfolioPage } from '@/features/clients/ClientsPortfolioPage'
 import { ClientCommandCenterPage } from '@/features/clients/ClientCommandCenterPage'
+import { AlertsPage } from '@/features/alerts/AlertsPage'
 import { AppShell } from '@/layouts/AppShell'
 
 export const router = createBrowserRouter([
@@ -88,6 +89,8 @@ export const router = createBrowserRouter([
           // Client portfolio + command center (converted from requests).
           { path: 'app/clients', element: <ClientsPortfolioPage /> },
           { path: 'app/clients/:clientId', element: <ClientCommandCenterPage /> },
+          // Alerts management (the alerts engine's operator surface).
+          { path: 'app/alerts', element: <AlertsPage /> },
           { path: 'content', element: <PagePlaceholder title="Content" /> },
           { path: 'approvals', element: <PagePlaceholder title="Approvals" /> },
           { path: 'tracking', element: <PagePlaceholder title="Tracking" /> },
