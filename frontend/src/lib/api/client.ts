@@ -51,7 +51,12 @@ export async function putData<T>(url: string, body?: unknown): Promise<T> {
   return response.data.data
 }
 
-export async function deleteData<T>(url: string): Promise<T> {
-  const response = await api.delete<ApiEnvelope<T>>(url)
+export async function patchData<T>(url: string, body?: unknown): Promise<T> {
+  const response = await api.patch<ApiEnvelope<T>>(url, body)
+  return response.data.data
+}
+
+export async function deleteData<T>(url: string, body?: unknown): Promise<T> {
+  const response = await api.delete<ApiEnvelope<T>>(url, body === undefined ? undefined : { data: body })
   return response.data.data
 }

@@ -15,6 +15,25 @@ export interface AuthUser {
   is_platform_admin: boolean
   permissions: string[]
   created_at: string | null
+  // Profile + menu-header fields (from /api/me and /auth/*). Optional so older payloads still type-check.
+  first_name?: string | null
+  last_name?: string | null
+  job_title?: string | null
+  phone?: string | null
+  bio?: string | null
+  avatar_url?: string | null
+  initials?: string
+  workspace_name?: string | null
+  role?: string | null
+  role_slug?: string | null
+  status?: 'active' | 'unverified' | 'suspended'
+  email_verified?: boolean
+  two_factor_enabled?: boolean
+  locale?: 'ar' | 'en'
+  timezone?: string
+  date_format?: string
+  number_format?: 'latin' | 'arabic'
+  theme?: 'light' | 'dark' | 'system'
 }
 
 export interface AuthResult {

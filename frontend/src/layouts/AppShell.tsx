@@ -1,9 +1,8 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom'
 import {
   BarChart3,
   Bell,
   LayoutDashboard,
-  LogOut,
   Megaphone,
   Menu,
   Moon,
@@ -16,9 +15,8 @@ import {
   X,
 } from 'lucide-react'
 import { ProjectSwitcher } from '@/components/ProjectSwitcher'
-import { logout } from '@/features/auth/api'
+import { AccountMenu } from '@/features/account/UserMenu'
 import { useT } from '@/lib/i18n'
-import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import type { TranslationKey } from '@/lib/i18n'
 
@@ -32,16 +30,6 @@ const operationalNav: NavItem[] = [
   { to: '/integrations', key: 'integrations', icon: Plug },
 ]
 const utilityNav: NavItem[] = [{ to: '/settings', key: 'settings', icon: Settings }]
-
-function initials(name?: string | null): string {
-  if (!name) return '؟'
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? '')
-    .join('')
-}
 
 function NavItems({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
   const t = useT()
@@ -98,39 +86,6 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
   )
 }
 
-function UserCard({ collapsed }: { collapsed?: boolean }) {
-  const { user, setUser } = useAuth()
-  const navigate = useNavigate()
-  const t = useT()
-  const handleLogout = async () => {
-    await logout().catch(() => undefined)
-    setUser(null)
-    navigate('/login', { replace: true })
-  }
-  return (
-    <div className={`mt-3 flex items-center gap-2.5 rounded-xl border border-border bg-surface-secondary p-2 ${collapsed ? 'justify-center' : ''}`}>
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-sm font-bold text-brand-700">
-        {initials(user?.name)}
-      </div>
-      {!collapsed && (
-        <>
-          <div className="min-w-0 flex-1 leading-tight">
-            <div className="truncate text-sm font-semibold text-text-primary">{user?.name}</div>
-            <div className="truncate text-xs text-text-muted">{user?.email}</div>
-          </div>
-          <button
-            onClick={handleLogout}
-            aria-label={t('sign_out')}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-danger"
-          >
-            <LogOut size={16} />
-          </button>
-        </>
-      )}
-    </div>
-  )
-}
-
 export function AppShell() {
   const t = useT()
   const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
@@ -168,7 +123,7 @@ export function AppShell() {
           <ProjectSwitcher />
         )}
         <NavItems collapsed={sidebarCollapsed} />
-        <UserCard collapsed={sidebarCollapsed} />
+        <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} />
       </aside>
 
       {/* Mobile drawer. */}
@@ -188,7 +143,7 @@ export function AppShell() {
             </div>
             <ProjectSwitcher />
             <NavItems onNavigate={() => setSidebarOpen(false)} />
-            <UserCard />
+            <AccountMenu variant="sidebar" />
           </aside>
         </div>
       )}
@@ -232,6 +187,7 @@ export function AppShell() {
             >
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
+            <div className="ms-1"><AccountMenu variant="topbar" /></div>
           </div>
         </header>
 

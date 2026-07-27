@@ -14,6 +14,10 @@ import { SettingsPage } from '@/features/settings/SettingsPage'
 import { PublicReport } from '@/features/reports/PublicReport'
 import { PrintReport } from '@/features/reports/PrintReport'
 import { DesignSystemPage } from '@/features/design/DesignSystemPage'
+import { SettingsLayout } from '@/features/account/SettingsLayout'
+import { ProfilePage } from '@/features/account/ProfilePage'
+import { PasswordPage } from '@/features/account/PasswordPage'
+import { SecurityPage } from '@/features/account/SecurityPage'
 import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
 import { MarketingPage } from '@/features/marketing/MarketingPage'
 import { ProjectIntegrationsPage } from '@/features/projects/ProjectIntegrationsPage'
@@ -55,7 +59,21 @@ export const router = createBrowserRouter([
           { path: 'optimization', element: <PagePlaceholder title="Optimization" /> },
           { path: 'tasks', element: <PagePlaceholder title="Tasks" /> },
           { path: 'notifications', element: <PagePlaceholder title="Notifications" /> },
-          { path: 'settings', element: <SettingsPage /> },
+          // User account settings (self). Workspace/org settings live under /settings/workspace.
+          {
+            path: 'settings',
+            element: <SettingsLayout />,
+            children: [
+              { index: true, element: <ProfilePage /> },
+              { path: 'profile', element: <ProfilePage /> },
+              { path: 'password', element: <PasswordPage /> },
+              { path: 'security', element: <SecurityPage /> },
+              { path: 'preferences', element: <PagePlaceholder title="Preferences" /> },
+              { path: 'notifications', element: <PagePlaceholder title="Notifications" /> },
+              { path: 'workspace', element: <SettingsPage /> },
+              { path: 'support', element: <PagePlaceholder title="Support" /> },
+            ],
+          },
           // Sales CRM (behind sales_crm_enabled; routes always exist, nav is gated).
           { path: 'leads', element: <LeadsPage /> },
           { path: 'opportunities', element: <PagePlaceholder title="Opportunities" /> },
