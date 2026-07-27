@@ -120,6 +120,26 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 - **Next action:** switch to the database session driver (or a per-user token registry) to enumerate sessions;
   wire TOTP + recovery codes for 2FA.
 
+## G-010 — Account settings: remaining pages/features
+
+- **Severity:** Medium
+- **Status:** OPEN (phase 2 is NOT fully Completed — these are the open items)
+- Items, each honestly Not Started / partial:
+  - `/settings/preferences` — Not Started (route is a placeholder; overlaps profile locale/theme/number-format).
+  - `/settings/notifications` — Not Started (route is a placeholder; needs channel + per-type prefs backend).
+  - Avatar upload (`POST /api/me/avatar`) — Not Started (UserResource already exposes `avatar_url`).
+  - Workspace-settings entitlement gate — In Progress (`/settings/workspace` renders org settings; owner-only
+    gate not yet enforced on that route).
+- **Next action:** build preferences + notifications pages on the real endpoints; add avatar upload; gate
+  workspace settings by role/permission.
+
+## G-011 — Account E2E only on Chromium
+
+- **Severity:** Low
+- **Status:** OPEN
+- **Detail:** `account-settings.spec.ts` runs on chromium only; auth specs already run on Firefox + WebKit.
+- **Next action:** extend the account journey run to Firefox + WebKit projects.
+
 ---
 
 _Last updated: 2026-07-27_

@@ -314,7 +314,8 @@ Cross-browser + acceptance work this batch:
 
 ## Phase 2 batch — User profile / password / security (2026-07-27)
 - **المرحلة / Phase:** User Profile Core → Password → Sessions → Unified User Menu
-- **Commits:** `f1a69f6` (backend /api/me), `d3eca8a` (frontend menu+settings), + this docs+e2e commit
+- **Commits:** `f1a69f6` (backend /api/me), `d3eca8a` (frontend menu+settings), `32eca48` (account e2e + docs)
+- **Status:** NOT fully Completed — operational core done; open items tracked as G-009/G-010/G-011.
 - **Tests run:** backend `php artisan test` 165/165 · pint + phpstan clean · frontend typecheck/lint clean ·
   vitest 22/22 · build ✓ · e2e `account-settings.spec.ts` 4/4 (chromium)
 - **Browsers tested:** Chromium (account e2e). Firefox/WebKit for account flow: not yet run.
@@ -326,3 +327,16 @@ Cross-browser + acceptance work this batch:
 - **العوائق / Blockers:** multi-session enumeration + 2FA need infra (G-009); mail stays Awaiting Credentials.
 - **Regressions:** none (backend 165/165, frontend 22/22).
 - **المرحلة التالية / Next:** Public Homepage (`/`) — the primary conversion surface.
+
+## Commit ledger — auth+account directive sequence (verified against `git log eadce97..HEAD`)
+1. `454b678` feat(auth): safe post-login redirect + central governance docs
+2. `0313355` fix(auth): env-driven login throttle + permanent redirect E2E (closes G-007)
+3. `1f5e118` fix(auth): unify login visual identity and responsive experience
+4. `8703531` docs: record auth-visual completion + queue user profile/settings phase
+5. `86d3b7f` fix(auth): unify login identity and paid-advertising messaging
+6. `8f89be1` test(auth): cross-browser + visual-regression acceptance for phase-1
+7. `f1a69f6` feat(account): real /api/me profile, password and session endpoints
+8. `d3eca8a` feat(account): unified user menu + operational profile/password/security settings
+9. `32eca48` test(account): e2e for profile display-name journey + governance docs
+
+(9 commits. `eadce97` — the form-system commit — predates this sequence and is NOT counted.)
