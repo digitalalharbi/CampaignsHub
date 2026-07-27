@@ -199,3 +199,20 @@ _Last updated: 2026-07-27_
 - Suspended-account state is exposed (UserResource.status='suspended') but a hard login block for it is not yet
   enforced.
 
+
+## G-018 — RESOLVED (2026-07-27)
+- Workspace invitations: IMPLEMENTED (invite → token → accept → join existing workspace, guarded). Commits
+  `741ec9d`/`f1472c2`.
+- Suspended-account hard login/API block: IMPLEMENTED via EnsureAccountActive middleware + login/token guards.
+  Commit `7ea1dc5`.
+- Still open: Google (social) login = Awaiting Credentials (future).
+
+## G-019 — Delivery providers wired as adapters; alerts engine has no frontend UI yet (2026-07-27)
+- **Providers:** email/whatsapp/sms are now formal MessageProvider adapters resolved from config/providers.php.
+  Defaults are Null* adapters (isConfigured=false → awaiting_provider_credentials). A channel reports `sent`
+  ONLY on a real provider acknowledgement. Wiring a live provider is a config/credentials task, not app change.
+  States: queued/awaiting_credentials/sending/sent/failed/retrying/suppressed.
+- **Alerts:** engine + API + scheduler are complete and tested (rules, cooldown, dedup, snooze, resolve,
+  create-task, honest notification delivery). The backend entitlement nav already exposes an `alerts` key, but
+  the React AppShell has no Alerts management page yet — a focused frontend follow-up (the engine is fully
+  usable via API today).

@@ -530,3 +530,40 @@ Honest per-suite status (do not say "cross-browser ✓" for the visual gates):
 - **Honest gaps:** Google login + workspace invitations = future / Awaiting Credentials (see OPEN_GAPS);
   suspended-account login block is surfaced in status but not yet a hard gate.
 - **Next (mandate):** Scheduled Reports → Email/WhatsApp providers → Alerts → PWA → Production Readiness → Final Audit.
+
+## Phase 9 — Suspended Enforcement, Invitations, Entitlement Audit, Scheduled Reports, Providers & Alerts (2026-07-27)
+- **Commits:** `7ea1dc5` suspended/disabled hard enforcement, `741ec9d`+`f1472c2` workspace invitations,
+  `3a0f1d4` entitlement matrix audit, `db92a83` scheduled report dispatcher, `feb5fc8` provider adapter layer,
+  `d70d091` alerts engine, `bcb920f` full acceptance test + tenant-wide alert inbox fix,
+  `a983c92` E2E milestone acceptance (3 browsers).
+- **Suspended/disabled enforcement (hard gate):** EnsureAccountActive middleware denies EVERY authenticated API
+  request for a disabled user or suspended/inactive tenant; login + token issuance blocked with a generic
+  non-revealing message; current session/token invalidated; audited `auth.blocked_suspended`. Reactivation
+  restores access.
+- **Workspace invitations:** invite → secure expiring token (72h) → public accept → join the EXISTING workspace
+  with role + project access; guards against existing-email, duplicate-pending, expired/reused token,
+  cross-tenant. Honest delivery (awaiting_provider_credentials); non-prod dev link.
+- **Complete entitlement audit:** company (brand/self_serve) fail-closed on client-management APIs; personal
+  personas allowed; shared project-scoped routes intentionally open so a company runs its own campaigns.
+- **Scheduled reports:** `reports:dispatch-scheduled` (every 5 min) resolves due schedules → creates a snapshot
+  Report + queues GenerateReportJob (reuses the engine) → records a per-recipient/format delivery
+  (awaiting_provider_credentials, never 'sent'; internal→external = suppressed) → advances next_run_at
+  (daily/weekly/monthly/custom, timezone-aware).
+- **Provider adapter layer:** MessageProvider (email/whatsapp/sms) via ProviderRegistry from config/providers.php;
+  default Null* adapters report not-configured → 'sent' only ever comes from a real provider acknowledgement.
+  NotificationDispatcher derives its email status from the registry (one-line swap to a real provider).
+- **Alerts engine:** AlertEvaluator turns signals (budget_risk, no_results, roas_drop, sync_failure,
+  token_expiry, …) into alerts with per-(rule,entity) lifecycle: cooldown / snooze / dedup prevent storms;
+  first breach raises a notification (shared dispatcher → quiet-hours/prefs/honest delivery) + optional Task;
+  resolve closes. API alerts/rules + events + resolve/snooze; `alerts:evaluate` every 15 min, tenant-by-tenant.
+- **Fixed a real gap:** the notification inbox filtered strictly to user_id, so tenant-wide operational alerts
+  reached no one — index now returns the user's own + tenant-wide notifications.
+- **Tests:** SuspendedAccountTest 6, WorkspaceInvitationTest 6, EntitlementMatrixTest 4, ScheduledReportsTest 6,
+  ProviderAdaptersTest 3, AlertsEngineTest 5, MilestoneAcceptanceTest 1 (full chain). Backend suite
+  **286 passed (1210 assertions)**, phpstan clean. E2E milestone-acceptance **12/12 on Chromium/Firefox/WebKit**.
+- **Acceptance flow verified (backend + browser):** Suspended Blocked → Session Revoked → Invitation Accepted →
+  Correct Modules Visible → Forbidden Module API Denied → Scheduled Report Created → Report Generated → Delivery
+  Logged Honestly → Alert Triggered → Notification Received → Refresh & Persistence.
+- **Honest status:** Email/WhatsApp = Awaiting Provider Credentials; Google login = Awaiting Credentials.
+  Alerts management UI (frontend page) not yet built — engine + API complete (see OPEN_GAPS G-019).
+- **Next (mandate):** PWA → Production Readiness → Security Audit → Full Regression → Final Delivery Package.
