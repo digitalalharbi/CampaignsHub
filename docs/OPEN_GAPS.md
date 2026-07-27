@@ -187,3 +187,9 @@ _Last updated: 2026-07-27_
   the report stays `processing`. Sharing/export requires a `completed` report (seeded demo reports are used
   to verify the share path).
 
+## G-017 — Messaging providers (SMS / WhatsApp / mail) awaiting credentials (2026-07-27)
+- OTP delivery and client lifecycle notifications are recorded honestly as `awaiting_provider_credentials`
+  and never marked `sent` — no provider is wired. Non-prod exposes the OTP dev code so the flow is usable.
+  Wiring a provider is a config/credentials task, not an app change; the delivery ledger + retry/failed
+  states are already in place.
+

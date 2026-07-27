@@ -479,3 +479,28 @@ Honest per-suite status (do not say "cross-browser ✓" for the visual gates):
 - **Honest gaps:** command-center visual-regression baselines not yet captured (homepage only) → OPEN_GAPS;
   email delivery stays Awaiting Credentials; report generation needs a queue worker to reach 'completed'.
 - **Next:** Registration & Email Verification → Onboarding → Account Type → Module Selection → …
+
+## Phase 7 — External Client Request Portal (2026-07-27)
+- **Commits:** `db5c6db` verification+identity (`git log` for hashes below), `9ba64e5` lifecycle notifications,
+  `ea9d4dd` portal frontend + E2E, `ca5816b` limiter + E2E stabilization.
+- **Mandatory contact verification:** a final submit now requires a VERIFIED phone (E.164) + email via OTP
+  (`request_contact_verifications`, only code hash stored, single-use verified tokens, rate-limited). Honest
+  delivery: no SMS/WhatsApp/mail provider => `awaiting_provider_credentials`, never `sent`; non-prod exposes a
+  dev code so the flow is testable. phone + company mandatory.
+- **Client Portal:** OTP/magic login → httpOnly-cookie session (`client_portal_tokens`), never a localStorage
+  token. `/client/login`, `/client`, `/client/requests/{reference}` — client-safe only (internal notes/SLA/
+  assignee/tenant/audit never exposed), contact-scoped (cross-contact 404), with progress, secure timeline,
+  messages (reply + file upload), secure file download, the resulting project/campaign after conversion, and an
+  honest notification delivery log. Mobile-first, RTL/LTR, light/dark. Built on the existing request models —
+  no parallel system.
+- **Lifecycle notifications:** email + WhatsApp records for received/info-requested/team-reply/approved/
+  in_progress/completed, each with a portal deep link; deduped per (request,event,channel);
+  `awaiting_provider_credentials` until a provider is wired.
+- **Tests:** backend **242 passed (1014 assertions)** (+ ClientPortalTest 8: awaiting-credentials, intake
+  rejected without verification, wrong-destination rejected, full submit→login→view→reply→persist, internal
+  note hidden, contact isolation, requires session, honest+deduped delivery). Existing intake tests updated
+  (VerifiesContact trait). E2E: client-portal acceptance + conversion + vertical + intake + command-center =
+  **27 passed across Chromium/Firefox/WebKit**.
+- **Honest gaps:** SMS/WhatsApp/mail providers are Awaiting Credentials (delivery recorded, never sent);
+  report generation still needs a queue worker to reach 'completed'.
+- **Next (mandate):** Registration & Email Verification → Onboarding → Account Type → Module Selection → …
