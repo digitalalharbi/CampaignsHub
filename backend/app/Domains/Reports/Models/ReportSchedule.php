@@ -17,11 +17,14 @@ final class ReportSchedule extends Model
 
     protected $fillable = [
         'tenant_id', 'project_id', 'report_id', 'name', 'type', 'frequency', 'day', 'time',
+        'timezone', 'audience', 'language', 'formats', 'recipients', 'cron',
         'config', 'active', 'last_run_at', 'next_run_at', 'created_by', 'is_demo',
     ];
 
     protected $casts = [
         'config' => 'array',
+        'formats' => 'array',
+        'recipients' => 'array',
         'active' => 'boolean',
         'last_run_at' => 'datetime',
         'next_run_at' => 'datetime',

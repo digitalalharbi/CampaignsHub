@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Projects\Middleware\ResolveProject;
+use App\Domains\Reports\Console\DispatchScheduledReports;
 use App\Domains\Reports\Console\InvalidateLegacyExportsCommand;
 use App\Domains\Reports\Console\RegenerateDemoExportsCommand;
 use App\Domains\Reports\Console\ReportsHealthCommand;
@@ -45,6 +46,7 @@ return Application::configure(basePath: dirname(__DIR__))
         InvalidateLegacyExportsCommand::class,
         RegenerateDemoExportsCommand::class,
         ReportsHealthCommand::class,
+        DispatchScheduledReports::class,
         PruneUploadSessions::class,
         EvaluateSla::class,
     ])

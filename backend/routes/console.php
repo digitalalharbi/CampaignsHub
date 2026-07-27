@@ -13,3 +13,6 @@ Schedule::command('requests:prune-uploads')->hourly();
 
 // Evaluate request SLA (warnings + breaches) every 10 minutes.
 Schedule::command('requests:evaluate-sla')->everyTenMinutes();
+
+// Dispatch due scheduled reports (snapshot + honest delivery ledger) every 5 minutes.
+Schedule::command('reports:dispatch-scheduled')->everyFiveMinutes();
