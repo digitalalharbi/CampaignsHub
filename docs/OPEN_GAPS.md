@@ -193,3 +193,9 @@ _Last updated: 2026-07-27_
   Wiring a provider is a config/credentials task, not an app change; the delivery ledger + retry/failed
   states are already in place.
 
+## G-018 — Registration/onboarding follow-ons (2026-07-27)
+- Google (social) login and workspace invitations are not implemented — treated as Awaiting Credentials /
+  future work. Email/OTP registration + verification is complete and tested.
+- Suspended-account state is exposed (UserResource.status='suspended') but a hard login block for it is not yet
+  enforced.
+

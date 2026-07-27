@@ -504,3 +504,29 @@ Honest per-suite status (do not say "cross-browser ✓" for the visual gates):
 - **Honest gaps:** SMS/WhatsApp/mail providers are Awaiting Credentials (delivery recorded, never sent);
   report generation still needs a queue worker to reach 'completed'.
 - **Next (mandate):** Registration & Email Verification → Onboarding → Account Type → Module Selection → …
+
+## Phase 8 — Registration, Onboarding & Entitlement-Driven Navigation (2026-07-27)
+- **Commits:** `e3ca998` account model + registration + email verification + onboarding + entitlement guard
+  (backend), `807a748` onboarding wizard + entitlement nav (frontend + E2E).
+- **One account model** on the tenant: account_type (freelancer|agency|in_house_team|brand|self_serve_company),
+  enabled_modules (paid_media|influencer_marketing|combined), subscription_plan, resumable onboarding_step.
+  AccountEntitlements → workspace_kind (personal=full / company=simplified) + nav + module_switcher, surfaced on
+  /auth/me. No parallel personas.
+- **Fixed a real defect:** self-registration created an EMPTY tenant-owner role (new owners were powerless) —
+  now granted the full permission catalogue.
+- **Email verification** (was entirely absent): verify link (public) + resend + expiry + reused-token rejection;
+  advances onboarding verify_email → account_type. Honest delivery: awaiting_provider_credentials, never 'sent';
+  non-prod dev link hard-gated.
+- **Onboarding wizard** (resumable): account type → service → workspace (currency/tz/lang) → first client
+  (personal) / auto-client (company) → first project → dashboard.
+- **Entitlement navigation:** AppShell filters the sidebar by account.nav; EnsureEntitlement middleware enforces
+  the simplified company menu at the API (clients + requests → 403 for company) — not just hidden. No module
+  switcher for single-module accounts.
+- **Tests:** RegistrationOnboardingTest 8/8 (owner permissions, blocked-until-verified, full personal flow +
+  full menu, company simplified menu + skipped client step, API entitlement 403/allow, duplicate email,
+  invalid/reused token). Backend suite **255 passed (1093 assertions)**. E2E registration-onboarding (personal
+  full menu + company simplified + persistence) **passes Chromium/Firefox/WebKit**; command-center + conversion
+  regression green.
+- **Honest gaps:** Google login + workspace invitations = future / Awaiting Credentials (see OPEN_GAPS);
+  suspended-account login block is surfaced in status but not yet a hard gate.
+- **Next (mandate):** Scheduled Reports → Email/WhatsApp providers → Alerts → PWA → Production Readiness → Final Audit.
