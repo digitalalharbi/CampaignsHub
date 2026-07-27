@@ -47,6 +47,21 @@ export interface RequestFilters {
   priority?: string
   q?: string
   page?: number
+  per_page?: number
+}
+
+/** Allowed forward transitions (mirrors the backend RequestStatusMachine) — for Kanban drop validation. */
+export const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  new: ['under_review', 'qualified', 'rejected', 'cancelled'],
+  under_review: ['waiting_client', 'qualified', 'rejected', 'cancelled'],
+  waiting_client: ['under_review', 'qualified', 'cancelled'],
+  qualified: ['approved', 'waiting_client', 'rejected', 'cancelled'],
+  approved: ['in_progress', 'cancelled'],
+  in_progress: ['waiting_client', 'completed', 'cancelled'],
+  completed: ['archived'],
+  rejected: ['archived'],
+  cancelled: ['archived'],
+  archived: [],
 }
 
 /** The list endpoint returns { data, meta }; fetch the full envelope (getData would strip meta). */
@@ -56,6 +71,7 @@ export async function listRequests(filters: RequestFilters): Promise<RequestList
   if (filters.priority) params.set('priority', filters.priority)
   if (filters.q) params.set('q', filters.q)
   if (filters.page) params.set('page', String(filters.page))
+  if (filters.per_page) params.set('per_page', String(filters.per_page))
   const qs = params.toString()
   const res = await api.get<RequestListResult>(`/app/requests${qs ? `?${qs}` : ''}`)
   return res.data
