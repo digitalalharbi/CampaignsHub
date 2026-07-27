@@ -416,3 +416,15 @@ Honest per-suite status (do not say "cross-browser ✓" for the visual gates):
 - **Honest status:** Request Backend (intake+meta+uploads) — Implemented and Tested; **Request Frontend
   (attachments UI + real tracking UI + internal dashboard) — In Progress**; External Request Portal — In Progress
 - **Next:** wire attachments step to upload endpoints; build real /requests/track UI + client reply; then /app/requests
+
+## Phase 4d — Attachments UI + secure tracking + client communication (2026-07-27)
+- **Commits:** `7d18064` connect secure uploads to dynamic intake · `e80d15a` add secure tracking and client communication
+- **Tests run:** backend **180/180** · request-intake e2e **15/15** across Chromium+Firefox+WebKit · pint/phpstan clean
+- **Delivered (EXTERNAL side complete):** 6-step form with attachments UI (progress/retry/remove, block-Next
+  while uploading, token in memory only) → submit associates files → success page → real /requests/track UI
+  (status/timeline/comments/files + secure token download) → client reply (always client-visible; can't create
+  internal notes) → env-driven intake throttle (prod strict, local relaxed).
+- **Honest status:** External request experience — Implemented and Tested (3 browsers). **Internal side
+  (/app/requests dashboard + assignment + status state-machine + SLA + internal notes + notifications) — Not
+  Started.** The full external→internal vertical E2E (owner sees internal note the client cannot) awaits the dashboard.
+- **Next:** `feat(requests): add internal request dashboard and detail workflow`, then `... assignments state machine sla and notifications`.
