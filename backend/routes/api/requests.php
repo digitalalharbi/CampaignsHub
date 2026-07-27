@@ -1,0 +1,17 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Domains\Requests\Http\Controllers\PublicRequestController;
+use Illuminate\Support\Facades\Route;
+
+/*
+| External Request Portal — PUBLIC endpoints (no auth). Internal dashboard/workflow routes (tenant-scoped,
+| permission-gated) are added in the workflow phase.
+*/
+Route::prefix('requests')->name('requests.')->group(function (): void {
+    Route::post('/', [PublicRequestController::class, 'store'])->name('store')
+        ->middleware('throttle:6,1');
+    Route::get('/track/{token}', [PublicRequestController::class, 'track'])->name('track')
+        ->middleware('throttle:30,1');
+});

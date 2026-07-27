@@ -16,6 +16,9 @@ class DatabaseSeeder extends Seeder
         // 1) Global permission catalogue (all environments — structural, safe in production).
         $this->call(PermissionSeeder::class);
 
+        // 1b) Canonical request service types + lifecycle statuses (structural, all environments).
+        $this->call(RequestCatalogSeeder::class);
+
         // 2) Platform super-admin (idempotent).
         User::firstOrCreate(
             ['email' => 'platform@mediabuying.local'],

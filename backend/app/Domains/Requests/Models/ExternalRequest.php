@@ -1,0 +1,91 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domains\Requests\Models;
+
+use App\Models\User;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
+
+/**
+ * A captured external service request. Not globally tenant-scoped (public intake + token tracking must
+ * read it), so internal controllers MUST filter by tenant_id explicitly.
+ *
+ * @property string $id
+ * @property string|null $tenant_id
+ * @property string $reference
+ * @property string $module
+ * @property int $type_id
+ * @property int $status_id
+ * @property string $priority
+ * @property string|null $contact_name
+ * @property string|null $contact_email
+ * @property bool $is_external
+ * @property bool $is_demo
+ * @property array<string,mixed>|null $metadata
+ * @property Carbon|null $submitted_at
+ * @property Carbon|null $sla_due_at
+ * @property Carbon|null $updated_at
+ * @property-read RequestType $type
+ * @property-read RequestStatus $status
+ */
+class ExternalRequest extends Model
+{
+    use HasUlids;
+
+    protected $guarded = ['id'];
+
+    protected $casts = [
+        'budget' => 'decimal:2',
+        'start_date' => 'date',
+        'due_date' => 'date',
+        'sla_due_at' => 'datetime',
+        'submitted_at' => 'datetime',
+        'is_external' => 'bool',
+        'is_demo' => 'bool',
+        'metadata' => 'array',
+    ];
+
+    public function type(): BelongsTo
+    {
+        return $this->belongsTo(RequestType::class, 'type_id');
+    }
+
+    public function status(): BelongsTo
+    {
+        return $this->belongsTo(RequestStatus::class, 'status_id');
+    }
+
+    public function assignee(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    /** @return HasMany<RequestEvent, $this> */
+    public function events(): HasMany
+    {
+        return $this->hasMany(RequestEvent::class, 'request_id');
+    }
+
+    /** @return HasMany<RequestComment, $this> */
+    public function comments(): HasMany
+    {
+        return $this->hasMany(RequestComment::class, 'request_id');
+    }
+
+    /** @return HasMany<RequestFile, $this> */
+    public function files(): HasMany
+    {
+        return $this->hasMany(RequestFile::class, 'request_id');
+    }
+
+    /** @return HasMany<RequestAccessToken, $this> */
+    public function tokens(): HasMany
+    {
+        return $this->hasMany(RequestAccessToken::class, 'request_id');
+    }
+}
