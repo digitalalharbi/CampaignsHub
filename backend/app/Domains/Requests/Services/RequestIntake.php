@@ -8,6 +8,7 @@ use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestStatus;
 use App\Domains\Requests\Models\RequestType;
 use App\Domains\Requests\Models\RequestUploadSession;
+use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -30,7 +31,7 @@ final class RequestIntake
 
             $request = new ExternalRequest;
             $request->fill([
-                'tenant_id' => config('requests.portal_tenant_id'),
+                'tenant_id' => $this->portalTenantId(),
                 'reference' => $this->reference(),
                 'module' => $type->module,
                 'type_id' => $type->id,
@@ -46,8 +47,10 @@ final class RequestIntake
                 'currency' => $data['currency'] ?? 'SAR',
                 'start_date' => $data['start_date'] ?? null,
                 'due_date' => $data['due_date'] ?? null,
+                'sla_started_at' => now(),
                 'sla_due_at' => now()->addHours((int) config('requests.default_sla_hours', 48)),
                 'submitted_at' => now(),
+                'last_activity_at' => now(),
                 'is_external' => true,
                 'is_demo' => false,
                 'metadata' => $data['metadata'] ?? [],
@@ -82,6 +85,21 @@ final class RequestIntake
 
             return ['request' => $request->fresh(['type', 'status']), 'token' => $plain];
         });
+    }
+
+    /**
+     * The tenant that owns public-portal requests. Configurable for a multi-portal deployment; otherwise
+     * a single-portal install belongs to the platform owner's (first) tenant so requests are visible to
+     * that tenant's internal dashboard.
+     */
+    private function portalTenantId(): ?string
+    {
+        $configured = config('requests.portal_tenant_id');
+        if ($configured !== null) {
+            return (string) $configured;
+        }
+
+        return Tenant::query()->orderBy('created_at')->value('id');
     }
 
     private function reference(): string

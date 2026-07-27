@@ -27,11 +27,20 @@ use Illuminate\Support\Carbon;
  * @property bool $is_external
  * @property bool $is_demo
  * @property array<string,mixed>|null $metadata
+ * @property int|null $assigned_to
  * @property Carbon|null $submitted_at
  * @property Carbon|null $sla_due_at
+ * @property Carbon|null $sla_started_at
+ * @property Carbon|null $sla_paused_at
+ * @property Carbon|null $sla_resumed_at
+ * @property Carbon|null $sla_breached_at
+ * @property int $sla_paused_seconds
+ * @property Carbon|null $archived_at
+ * @property Carbon|null $last_activity_at
  * @property Carbon|null $updated_at
  * @property-read RequestType $type
  * @property-read RequestStatus $status
+ * @property-read User|null $assignee
  */
 class ExternalRequest extends Model
 {
@@ -44,6 +53,12 @@ class ExternalRequest extends Model
         'start_date' => 'date',
         'due_date' => 'date',
         'sla_due_at' => 'datetime',
+        'sla_started_at' => 'datetime',
+        'sla_paused_at' => 'datetime',
+        'sla_resumed_at' => 'datetime',
+        'sla_breached_at' => 'datetime',
+        'archived_at' => 'datetime',
+        'last_activity_at' => 'datetime',
         'submitted_at' => 'datetime',
         'is_external' => 'bool',
         'is_demo' => 'bool',

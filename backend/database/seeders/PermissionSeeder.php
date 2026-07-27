@@ -35,6 +35,11 @@ final class PermissionSeeder extends Seeder
         'ai' => ['view', 'manage', 'use'],
         'notifications' => ['view'],
         'tasks' => ['view', 'create', 'update', 'delete'],
+        'requests' => [
+            'view', 'view_all', 'update', 'assign', 'change_status', 'change_priority',
+            'comment_internal', 'comment_client', 'request_information', 'manage_files',
+            'manage_sla', 'archive', 'convert',
+        ],
     ];
 
     public function run(): void
