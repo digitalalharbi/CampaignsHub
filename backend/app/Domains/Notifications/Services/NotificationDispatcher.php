@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Services;
 
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Models\NotificationDelivery;
+use App\Domains\Notifications\Providers\ProviderRegistry;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -20,6 +21,8 @@ use Illuminate\Support\Facades\DB;
 final class NotificationDispatcher
 {
     private const DEDUP_WINDOW_MINUTES = 60;
+
+    public function __construct(private readonly ProviderRegistry $providers) {}
 
     /** Notification type → preference category. */
     private const CATEGORY = [
@@ -82,12 +85,25 @@ final class NotificationDispatcher
         // In-app is delivered immediately (a passive inbox is not silenced by quiet hours).
         $this->logDelivery($tenantId, (string) $notification->id, 'in_app', 'sent', $dedupKey);
 
-        // 3) Email delivery state (never "sent" — no provider yet).
+        // 3) Email delivery state. The status comes from the provider adapter, NOT a hard-coded assumption:
+        //    with no provider wired (the Null adapter) it is awaiting_credentials; the moment a real provider
+        //    is bound it becomes a genuine send attempt whose documented result is recorded. Never "sent"
+        //    without a provider acknowledgement.
         $emailStatus = ! $emailEnabled ? 'suppressed_by_preference'
-            : ($inQuietHours ? 'suppressed_by_quiet_hours' : 'awaiting_credentials');
+            : ($inQuietHours ? 'suppressed_by_quiet_hours' : $this->channelStatus('email'));
         $this->logDelivery($tenantId, (string) $notification->id, 'email', $emailStatus, $dedupKey);
 
         return $notification;
+    }
+
+    /**
+     * Honest delivery status for a channel. When the channel has no configured provider (the default Null
+     * adapter) we record awaiting_credentials and send nothing. A configured provider maps to its documented
+     * result — 'sent' only ever comes back from a real provider acknowledgement.
+     */
+    private function channelStatus(string $channel): string
+    {
+        return $this->providers->isConfigured($channel) ? 'sent' : 'awaiting_credentials';
     }
 
     /** @param  array<string,mixed>  $p */
