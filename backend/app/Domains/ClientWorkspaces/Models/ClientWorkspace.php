@@ -22,7 +22,8 @@ final class ClientWorkspace extends Model
     use HasUuidKey;
     use SoftDeletes;
 
-    protected $fillable = ['tenant_id', 'name', 'slug', 'mode', 'status', 'branding', 'limits', 'custom_domain'];
+    protected $fillable = ['tenant_id', 'name', 'slug', 'mode', 'status', 'branding', 'limits', 'custom_domain',
+        'client_status', 'service_level', 'industry', 'client_source', 'owner_id', 'source_request_id'];
 
     protected $casts = ['branding' => 'array', 'limits' => 'array'];
 

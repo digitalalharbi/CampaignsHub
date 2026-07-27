@@ -7,6 +7,7 @@ namespace App\Domains\Requests\Http\Controllers\Internal;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestStatus;
+use App\Domains\Requests\Services\RequestConversionService;
 use App\Domains\Requests\Services\RequestNotifier;
 use App\Domains\Requests\Services\RequestSla;
 use App\Domains\Requests\Services\RequestStatusMachine;
@@ -149,6 +150,28 @@ final class RequestActionsController
         $this->audit->log('request.client_reply', 'external_request', $req->id);
 
         return response()->json(['data' => ['status' => 'sent']]);
+    }
+
+    /** POST /app/requests/{request}/convert — transactional, idempotent conversion. */
+    public function convert(Request $request, string $id): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('requests.convert'), 403);
+        $req = $this->find($id);
+        abort_if($req->archived_at !== null, 422, 'An archived request cannot be converted.');
+
+        $data = $request->validate([
+            'client_id' => ['nullable', 'string'],
+            'idempotency_key' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $conversion = app(RequestConversionService::class)->convert($req, $data, $request->user());
+
+        return response()->json(['data' => [
+            'status' => $conversion->status,
+            'client_id' => $conversion->client_id,
+            'project_id' => $conversion->project_id,
+            'campaign_id' => $conversion->campaign_id,
+        ]], 201);
     }
 
     /** PATCH /app/requests/{request}/archive */

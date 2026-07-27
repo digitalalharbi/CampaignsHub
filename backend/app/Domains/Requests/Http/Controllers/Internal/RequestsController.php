@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Requests\Http\Controllers\Internal;
 
 use App\Domains\Requests\Models\ExternalRequest;
+use App\Domains\Requests\Models\RequestConversion;
 use App\Domains\Requests\Services\RequestSla;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Contracts\Database\Eloquent\Builder;
@@ -90,7 +91,25 @@ final class RequestsController
             'events' => $events,
             'files' => $files,
             'archived_at' => optional($req->archived_at)->toIso8601String(),
+            'conversion' => $this->conversion($req),
         ])]);
+    }
+
+    /** @return array<string,mixed>|null the completed conversion result (client/project/campaign), if any */
+    private function conversion(ExternalRequest $req): ?array
+    {
+        $c = RequestConversion::where('tenant_id', $req->tenant_id)
+            ->where('external_request_id', $req->id)->where('status', 'completed')->first();
+        if ($c === null) {
+            return null;
+        }
+
+        return [
+            'client_id' => $c->client_id,
+            'project_id' => $c->project_id,
+            'campaign_id' => $c->campaign_id,
+            'completed_at' => optional($c->completed_at)->toIso8601String(),
+        ];
     }
 
     /** @return \Illuminate\Database\Eloquent\Builder<ExternalRequest> */

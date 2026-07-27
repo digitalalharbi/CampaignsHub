@@ -45,4 +45,5 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('app/requests')->name('app
     Route::post('/{id}/internal-note', [RequestActionsController::class, 'addInternalNote'])->name('internal-note');
     Route::post('/{id}/reply', [RequestActionsController::class, 'replyToClient'])->name('reply');
     Route::patch('/{id}/archive', [RequestActionsController::class, 'archive'])->name('archive');
+    Route::post('/{id}/convert', [RequestActionsController::class, 'convert'])->name('convert');
 });
