@@ -33,6 +33,7 @@ import { ClientRequestDetailPage } from '@/features/requests/portal/ClientReques
 import { VerifyEmailPage } from '@/features/onboarding/VerifyEmailPage'
 import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate'
+import { InviteAcceptPage } from '@/features/onboarding/InviteAcceptPage'
 import { RequestsDashboardPage } from '@/features/requests/RequestsDashboardPage'
 import { RequestDetailPage } from '@/features/requests/RequestDetailPage'
 import { ClientsPortfolioPage } from '@/features/clients/ClientsPortfolioPage'
@@ -57,6 +58,8 @@ export const router = createBrowserRouter([
   { path: '/reports/print/:token', element: <PrintReport /> },
   // Email verification is public (the link can be opened on any device; the token verify endpoint is public).
   { path: '/verify-email', element: <VerifyEmailPage /> },
+  // Invitation accept is public (the invitee has no account yet).
+  { path: '/invite/accept', element: <InviteAcceptPage /> },
   {
     element: <RequireAuth />,
     children: [
