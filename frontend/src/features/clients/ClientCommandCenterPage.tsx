@@ -5,13 +5,16 @@ import { ArrowLeft, Pencil } from 'lucide-react'
 import { getClient } from './api'
 import { CLIENT_STATUS_LABELS, INDUSTRY_LABELS, labelOf, PRIORITY_LABELS, SERVICE_LEVEL_LABELS } from './labels'
 import { ClassificationEditor } from './ClassificationEditor'
+import { TabActivity } from './TabActivity'
 import { TabAnalytics } from './TabAnalytics'
+import { TabFiles } from './TabFiles'
 import { TabReports } from './TabReports'
 import { TabSettings } from './TabSettings'
+import { TabTeam } from './TabTeam'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 
-type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'reports' | 'requests' | 'settings'
+type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'reports' | 'requests' | 'team' | 'files' | 'activity' | 'settings'
 
 export function ClientCommandCenterPage() {
   const t = useT()
@@ -32,6 +35,9 @@ export function ClientCommandCenterPage() {
     ...(d.can.view_analytics ? [{ key: 'analytics' as Tab, label: t('tab_analytics') }] : []),
     ...(d.can.view_reports ? [{ key: 'reports' as Tab, label: t('tab_reports') }] : []),
     { key: 'requests', label: t('tab_requests') },
+    ...(d.can.manage_team ? [{ key: 'team' as Tab, label: t('tab_team') }] : []),
+    ...(d.can.manage_files ? [{ key: 'files' as Tab, label: t('tab_files') }] : []),
+    { key: 'activity', label: t('tab_activity') },
     { key: 'settings', label: t('tab_settings') },
   ]
 
@@ -122,6 +128,12 @@ export function ClientCommandCenterPage() {
           {tab === 'analytics' && d.can.view_analytics && <TabAnalytics clientId={d.id} />}
 
           {tab === 'reports' && d.can.view_reports && <TabReports d={d} />}
+
+          {tab === 'team' && d.can.manage_team && <TabTeam d={d} />}
+
+          {tab === 'files' && d.can.manage_files && <TabFiles clientId={d.id} />}
+
+          {tab === 'activity' && <TabActivity clientId={d.id} />}
 
           {tab === 'settings' && <TabSettings d={d} />}
         </div>

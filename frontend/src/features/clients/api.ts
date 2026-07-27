@@ -190,3 +190,47 @@ export async function shareClientReport(id: string, reportId: string, opts: { al
   const res = await api.post<{ data: { id: string; url: string; token: string } }>(`/app/clients/${id}/reports/${reportId}/share`, opts)
   return res.data.data
 }
+
+// ---- Team access ----
+export interface ClientMember {
+  user_id: number
+  name: string
+  email: string
+  access_role: string
+  project_ids: string[] | null
+  granted_at: string | null
+}
+export const listClientTeam = (id: string) => getData<{ members: ClientMember[] }>(`/app/clients/${id}/team`)
+export const listAssignableUsers = (id: string) => getData<{ assignable: { id: number; name: string; email: string }[] }>(`/app/clients/${id}/team/assignable`)
+export const grantClientAccess = (id: string, body: { user_id: number; access_role: string; project_ids?: string[] }) => api.post(`/app/clients/${id}/team`, body)
+export const updateClientAccess = (id: string, userId: number, body: { access_role?: string; project_ids?: string[] | null }) => api.patch(`/app/clients/${id}/team/${userId}`, body)
+export const removeClientAccess = (id: string, userId: number) => api.delete(`/app/clients/${id}/team/${userId}`)
+
+// ---- Files ----
+export interface ClientFile {
+  source: 'request' | 'report'
+  id: string
+  name: string
+  type: string | null
+  size: number | null
+  visibility: 'client_visible' | 'internal'
+  checksum: string | null
+  uploaded_at: string | null
+  uploader: string | null
+  related_entity: { type: string; label: string | null }
+  download_url: string
+}
+export const listClientFiles = (id: string) => getData<{ files: ClientFile[] }>(`/app/clients/${id}/files`)
+
+// ---- Activity ----
+export interface ActivityItem {
+  id: string
+  action: string
+  actor: string | null
+  source: string
+  time: string | null
+  old: Record<string, unknown> | null
+  new: Record<string, unknown> | null
+  related_entity: { type: string | null; id: string | null }
+}
+export const listClientActivity = (id: string) => getData<{ timeline: ActivityItem[] }>(`/app/clients/${id}/activity`)
