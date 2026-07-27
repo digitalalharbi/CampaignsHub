@@ -8,6 +8,7 @@ use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestAccessToken;
 use App\Domains\Requests\Models\RequestComment;
 use App\Domains\Requests\Models\RequestEvent;
+use App\Domains\Requests\Models\RequestType;
 use App\Domains\Requests\Services\RequestIntake;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,18 @@ use Illuminate\Validation\ValidationException;
 final class PublicRequestController
 {
     public function __construct(private readonly RequestIntake $intake) {}
+
+    /** GET /api/v1/requests/meta — public catalog for the intake form (active service types). */
+    public function meta(): JsonResponse
+    {
+        $types = RequestType::where('is_active', true)->orderBy('sort')
+            ->get(['key', 'module', 'name_ar', 'name_en'])
+            ->map(fn (RequestType $t) => [
+                'key' => $t->key, 'module' => $t->module, 'name_ar' => $t->name_ar, 'name_en' => $t->name_en,
+            ]);
+
+        return response()->json(['data' => ['types' => $types]]);
+    }
 
     /** POST /api/v1/requests — public intake. */
     public function store(Request $request): JsonResponse

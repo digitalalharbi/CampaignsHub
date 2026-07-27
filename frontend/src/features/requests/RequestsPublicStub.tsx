@@ -1,12 +1,11 @@
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ClipboardList, Search } from 'lucide-react'
+import { ArrowLeft, Search } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useUi } from '@/stores/ui'
 
 /**
- * Public request routes exist and are reachable from the homepage CTAs (never dead buttons). The full
- * dynamic intake form + secure tracking land in the External Request Portal phase — until then these
- * pages state honestly what they are and link back, rather than faking a submitted request.
+ * Request TRACKING page — honest placeholder until the tracking UI ships (next commit). The intake form
+ * at /requests/new is now the real dynamic experience (RequestIntakePage.tsx).
  */
 function Shell({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
   const { locale } = useUi()
@@ -19,19 +18,6 @@ function Shell({ icon, title, body }: { icon: React.ReactNode; title: string; bo
       <p className="mt-2 max-w-md text-sm text-text-secondary">{body}</p>
       <Link to="/" className="mt-6"><Button variant="secondary"><Arrow size={15} className="me-1.5 rtl:rotate-180" />{locale === 'ar' ? 'العودة للصفحة الرئيسية' : 'Back to home'}</Button></Link>
     </div>
-  )
-}
-
-export function RequestIntakePage() {
-  const { locale } = useUi()
-  return (
-    <Shell
-      icon={<ClipboardList size={26} />}
-      title={locale === 'ar' ? 'بوابة طلب إدارة حملة' : 'Campaign management request'}
-      body={locale === 'ar'
-        ? 'نموذج الطلب الديناميكي والمرفقات وتتبع الحالة عبر رابط آمن قيد الإنشاء ضمن مرحلة بوابة الطلبات الخارجية.'
-        : 'The dynamic intake form, attachments and secure status tracking are being built as part of the External Request Portal phase.'}
-    />
   )
 }
 

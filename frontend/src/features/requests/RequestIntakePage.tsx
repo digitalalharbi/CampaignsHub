@@ -1,0 +1,374 @@
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Copy, Megaphone } from 'lucide-react'
+import { getRequestMeta, submitRequest, type RequestSubmitPayload, type RequestType } from './api'
+import { Button } from '@/components/ui/Button'
+import { EmailInput, FormField, TextInput, TextareaField } from '@/components/ui/form'
+import { controlClass } from '@/components/ui/Field'
+import { toApiError } from '@/lib/api/client'
+import { useUi } from '@/stores/ui'
+
+const DRAFT_KEY = 'ch-request-draft-v1'
+const PLATFORMS = ['Meta', 'Google', 'TikTok', 'Snapchat', 'X', 'LinkedIn']
+
+type Meta = Record<string, unknown>
+interface FormState {
+  type: string
+  contact_name: string
+  contact_email: string
+  contact_phone: string
+  company_name: string
+  objective: string
+  budget: string
+  currency: string
+  priority: 'critical' | 'high' | 'medium' | 'low'
+  start_date: string
+  due_date: string
+  meta: Meta
+}
+
+const EMPTY: FormState = {
+  type: '', contact_name: '', contact_email: '', contact_phone: '', company_name: '',
+  objective: '', budget: '', currency: 'SAR', priority: 'medium', start_date: '', due_date: '', meta: {},
+}
+
+/** Which detail fields to show for a given service module. */
+function detailFields(module: string): { key: string; labelAr: string; labelEn: string; type?: 'textarea' }[] {
+  switch (module) {
+    case 'paid_media':
+      return [
+        { key: 'audience', labelAr: 'الجمهور المستهدف', labelEn: 'Target audience' },
+        { key: 'regions', labelAr: 'المناطق', labelEn: 'Regions' },
+        { key: 'landing_url', labelAr: 'صفحة الهبوط أو المتجر', labelEn: 'Landing page / store' },
+        { key: 'creatives_status', labelAr: 'حالة المحتويات الإعلانية', labelEn: 'Creatives status' },
+        { key: 'tracking_status', labelAr: 'حالة القياس والتتبع', labelEn: 'Tracking status' },
+      ]
+    case 'tracking':
+      return [
+        { key: 'site_or_app', labelAr: 'الموقع أو التطبيق', labelEn: 'Website or app' },
+        { key: 'platform_tech', labelAr: 'المنصة التقنية', labelEn: 'Tech platform' },
+        { key: 'ga4', labelAr: 'GA4', labelEn: 'GA4' },
+        { key: 'gtm', labelAr: 'GTM', labelEn: 'GTM' },
+        { key: 'pixels', labelAr: 'Pixels / CAPI', labelEn: 'Pixels / CAPI' },
+        { key: 'events', labelAr: 'الأحداث المطلوبة', labelEn: 'Required events', type: 'textarea' },
+      ]
+    case 'reporting':
+      return [
+        { key: 'report_period', labelAr: 'الفترة', labelEn: 'Period' },
+        { key: 'report_type', labelAr: 'نوع التقرير', labelEn: 'Report type' },
+        { key: 'report_audience', labelAr: 'جمهور التقرير', labelEn: 'Report audience' },
+        { key: 'report_language', labelAr: 'اللغة', labelEn: 'Language' },
+        { key: 'formats', labelAr: 'الصيغ (PDF/XLSX/CSV)', labelEn: 'Formats (PDF/XLSX/CSV)' },
+      ]
+    case 'analytics':
+      return [
+        { key: 'analysis_period', labelAr: 'الفترة المطلوب تحليلها', labelEn: 'Analysis period' },
+        { key: 'current_kpi', labelAr: 'المؤشر الأساسي الحالي', labelEn: 'Current primary KPI' },
+        { key: 'current_results', labelAr: 'النتائج الحالية (CPA/CPL/ROAS)', labelEn: 'Current results (CPA/CPL/ROAS)' },
+        { key: 'challenge', labelAr: 'المشكلة أو التحدي', labelEn: 'Problem or challenge', type: 'textarea' },
+      ]
+    case 'influencer_marketing':
+      return [
+        { key: 'collaboration_type', labelAr: 'نوع التعاون', labelEn: 'Collaboration type' },
+        { key: 'influencer_tier', labelAr: 'فئة المؤثرين', labelEn: 'Influencer tier' },
+        { key: 'cities', labelAr: 'المدن', labelEn: 'Cities' },
+        { key: 'content_count', labelAr: 'عدد المحتويات', labelEn: 'Content count' },
+      ]
+    default:
+      return []
+  }
+}
+
+export function RequestIntakePage() {
+  const { locale } = useUi()
+  const ar = locale === 'ar'
+  const dir = ar ? 'rtl' : 'ltr'
+  const Arrow = ar ? ArrowLeft : ArrowRight
+
+  const metaQuery = useQuery({ queryKey: ['requests', 'meta'], queryFn: getRequestMeta })
+  const types = metaQuery.data?.types ?? []
+
+  // Restore a non-sensitive text draft if present.
+  const [form, setForm] = useState<FormState>(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY)
+      return raw ? { ...EMPTY, ...(JSON.parse(raw) as Partial<FormState>) } : EMPTY
+    } catch { return EMPTY }
+  })
+  const [step, setStep] = useState(0)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Persist draft (text only — never files/tokens).
+  useEffect(() => {
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(form)) } catch { /* quota */ }
+  }, [form])
+
+  const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }))
+  const setMeta = (k: string, v: unknown) => setForm((f) => ({ ...f, meta: { ...f.meta, [k]: v } }))
+
+  const selectedType: RequestType | undefined = types.find((t) => t.key === form.type)
+  const module = selectedType?.module ?? ''
+  const showBudget = module === 'paid_media' || module === 'influencer_marketing'
+  const showPlatforms = module === 'paid_media' || module === 'influencer_marketing'
+
+  const STEPS = ar
+    ? ['الخدمة', 'مقدّم الطلب', 'التفاصيل', 'الميزانية والمدة', 'المراجعة']
+    : ['Service', 'Applicant', 'Details', 'Budget & timeline', 'Review']
+
+  const mutation = useMutation({
+    mutationFn: submitRequest,
+    onSuccess: () => { try { localStorage.removeItem(DRAFT_KEY) } catch { /* noop */ } },
+  })
+  const apiError = mutation.isError ? toApiError(mutation.error) : null
+
+  function validateStep(s: number): boolean {
+    const e: Record<string, string> = {}
+    if (s === 0 && !form.type) e.type = ar ? 'اختر نوع الخدمة' : 'Select a service'
+    if (s === 1) {
+      if (form.contact_name.trim().length < 2) e.contact_name = ar ? 'الاسم مطلوب' : 'Name is required'
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.contact_email)) e.contact_email = ar ? 'بريد غير صحيح' : 'Invalid email'
+    }
+    if (s === 2 && form.objective.trim().length < 5) e.objective = ar ? 'اذكر هدف الطلب باختصار' : 'Describe the objective'
+    setErrors(e)
+    return Object.keys(e).length === 0
+  }
+
+  const next = () => { if (validateStep(step)) setStep((s) => Math.min(s + 1, STEPS.length - 1)) }
+  const back = () => setStep((s) => Math.max(s - 1, 0))
+
+  const submit = () => {
+    if (mutation.isPending) return // prevent double submit
+    const platforms = (form.meta.platforms as string[] | undefined) ?? []
+    const payload: RequestSubmitPayload = {
+      type: form.type,
+      contact_name: form.contact_name.trim(),
+      contact_email: form.contact_email.trim(),
+      contact_phone: form.contact_phone || undefined,
+      company_name: form.company_name || undefined,
+      objective: form.objective || undefined,
+      budget: showBudget && form.budget ? Number(form.budget) : undefined,
+      currency: form.currency,
+      priority: form.priority,
+      start_date: form.start_date || undefined,
+      due_date: form.due_date || undefined,
+      metadata: { ...form.meta, platforms, locale },
+      website: '', // honeypot stays empty
+    }
+    mutation.mutate(payload)
+  }
+
+  // ---- Success view ----
+  if (mutation.isSuccess && mutation.data) {
+    const r = mutation.data
+    const trackUrl = `${window.location.origin}/requests/track?token=${r.tracking_token}`
+    return <SuccessView reference={r.reference} type={r.type} trackUrl={trackUrl} ar={ar} dir={dir} />
+  }
+
+  const togglePlatform = (p: string) => {
+    const cur = (form.meta.platforms as string[] | undefined) ?? []
+    setMeta('platforms', cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p])
+  }
+
+  return (
+    <div dir={dir} className="min-h-screen bg-background text-text-primary">
+      <header className="border-b border-border bg-surface">
+        <div className="mx-auto flex h-16 max-w-3xl items-center gap-2.5 px-4 sm:px-6">
+          <Link to="/" className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={18} /></span>
+            <span className="font-heading text-lg font-extrabold">CampaignsHub</span>
+          </Link>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+        <h1 className="font-heading text-2xl font-extrabold sm:text-3xl">{ar ? 'طلب إدارة حملة' : 'Campaign management request'}</h1>
+        <p className="mt-1.5 text-sm text-text-secondary">{ar ? 'أكمل الخطوات وسنراجع طلبك ونتواصل معك عبر رابط تتبع آمن.' : 'Complete the steps; we’ll review your request and follow up via a secure tracking link.'}</p>
+
+        {/* Stepper */}
+        <ol className="mt-6 flex flex-wrap gap-x-2 gap-y-1.5 text-xs font-semibold">
+          {STEPS.map((label, i) => (
+            <li key={label} className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 ${i === step ? 'bg-brand-primary-soft text-brand-700' : i < step ? 'text-brand-600' : 'text-text-muted'}`}>
+              <span className={`tnum flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${i <= step ? 'bg-brand-600 text-white' : 'bg-surface-secondary'}`}>{i < step ? <Check size={12} /> : i + 1}</span>
+              {label}
+            </li>
+          ))}
+        </ol>
+
+        <div className="mt-6 rounded-2xl border border-border bg-surface p-5 sm:p-6">
+          {/* Step 0 — Service */}
+          {step === 0 && (
+            <div className="space-y-3">
+              <FieldTitle ar={ar} title={ar ? 'اختر نوع الخدمة' : 'Choose a service'} />
+              {metaQuery.isLoading && <div className="h-24 animate-pulse rounded-xl bg-surface-secondary" />}
+              {metaQuery.isError && <p className="text-sm text-danger">{ar ? 'تعذّر تحميل الخدمات، حدّث الصفحة.' : 'Could not load services, please refresh.'}</p>}
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                {types.map((t) => (
+                  <button
+                    key={t.key} type="button" onClick={() => set('type', t.key)}
+                    className={`min-h-[56px] rounded-xl border px-4 py-3 text-start text-sm font-semibold transition-colors ${form.type === t.key ? 'border-brand-500 bg-brand-primary-soft text-brand-700' : 'border-border bg-surface hover:border-brand-400'}`}
+                  >
+                    {ar ? t.name_ar : t.name_en}
+                  </button>
+                ))}
+              </div>
+              {errors.type && <p className="text-sm text-danger">{errors.type}</p>}
+            </div>
+          )}
+
+          {/* Step 1 — Applicant */}
+          {step === 1 && (
+            <div className="space-y-4">
+              <FieldTitle ar={ar} title={ar ? 'معلومات مقدّم الطلب' : 'Applicant information'} />
+              <TextInput label={ar ? 'الاسم' : 'Name'} value={form.contact_name} onChange={(e) => set('contact_name', e.target.value)} required error={errors.contact_name} />
+              <EmailInput label={ar ? 'البريد الإلكتروني' : 'Email'} value={form.contact_email} onChange={(e) => set('contact_email', e.target.value)} required error={errors.contact_email} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <TextInput label={ar ? 'رقم الجوال' : 'Phone'} value={form.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} inputMode="tel" dir="ltr" />
+                <TextInput label={ar ? 'اسم النشاط أو الشركة' : 'Company'} value={form.company_name} onChange={(e) => set('company_name', e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          {/* Step 2 — Details (service-specific) */}
+          {step === 2 && (
+            <div className="space-y-4">
+              <FieldTitle ar={ar} title={ar ? 'تفاصيل الطلب' : 'Request details'} />
+              <TextareaField label={ar ? 'هدف الطلب' : 'Objective'} value={form.objective} onChange={(e) => set('objective', e.target.value)} maxLength={2000} required error={errors.objective} />
+              {detailFields(module).map((f) => (
+                f.type === 'textarea' ? (
+                  <TextareaField key={f.key} label={ar ? f.labelAr : f.labelEn} value={(form.meta[f.key] as string) ?? ''} onChange={(e) => setMeta(f.key, e.target.value)} maxLength={1000} />
+                ) : (
+                  <TextInput key={f.key} label={ar ? f.labelAr : f.labelEn} value={(form.meta[f.key] as string) ?? ''} onChange={(e) => setMeta(f.key, e.target.value)} />
+                )
+              ))}
+              {showPlatforms && (
+                <FormField label={ar ? 'المنصات' : 'Platforms'}>
+                  <div className="flex flex-wrap gap-2">
+                    {PLATFORMS.map((p) => {
+                      const on = ((form.meta.platforms as string[] | undefined) ?? []).includes(p)
+                      return (
+                        <button key={p} type="button" onClick={() => togglePlatform(p)} className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${on ? 'border-brand-500 bg-brand-primary-soft text-brand-700' : 'border-border text-text-secondary hover:border-brand-400'}`}>{p}</button>
+                      )
+                    })}
+                  </div>
+                </FormField>
+              )}
+            </div>
+          )}
+
+          {/* Step 3 — Budget & timeline */}
+          {step === 3 && (
+            <div className="space-y-4">
+              <FieldTitle ar={ar} title={ar ? 'الميزانية والمدة' : 'Budget & timeline'} />
+              {showBudget ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <TextInput label={ar ? 'الميزانية' : 'Budget'} value={form.budget} onChange={(e) => set('budget', e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" dir="ltr" />
+                  <FormField label={ar ? 'العملة' : 'Currency'}>
+                    <select className={controlClass} value={form.currency} onChange={(e) => set('currency', e.target.value)}>
+                      {['SAR', 'AED', 'USD', 'EGP'].map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </FormField>
+                </div>
+              ) : (
+                <p className="text-sm text-text-muted">{ar ? 'لا تُطلب ميزانية لهذا النوع من الطلبات.' : 'A budget is not required for this request type.'}</p>
+              )}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField label={ar ? 'تاريخ البداية' : 'Start date'}>
+                  <input type="date" className={controlClass} value={form.start_date} onChange={(e) => set('start_date', e.target.value)} />
+                </FormField>
+                <FormField label={ar ? 'التاريخ المطلوب' : 'Needed by'}>
+                  <input type="date" className={controlClass} value={form.due_date} onChange={(e) => set('due_date', e.target.value)} />
+                </FormField>
+              </div>
+              <FormField label={ar ? 'الأولوية' : 'Priority'}>
+                <select className={controlClass} value={form.priority} onChange={(e) => set('priority', e.target.value as FormState['priority'])}>
+                  <option value="low">{ar ? 'منخفضة' : 'Low'}</option>
+                  <option value="medium">{ar ? 'متوسطة' : 'Medium'}</option>
+                  <option value="high">{ar ? 'عالية' : 'High'}</option>
+                  <option value="critical">{ar ? 'حرجة' : 'Critical'}</option>
+                </select>
+              </FormField>
+              <p className="rounded-lg bg-surface-secondary px-3 py-2 text-xs text-text-muted">{ar ? 'رفع المرفقات الآمن يُضاف في الخطوة التالية من التطوير.' : 'Secure file attachments are added in the next development step.'}</p>
+            </div>
+          )}
+
+          {/* Step 4 — Review */}
+          {step === 4 && (
+            <div className="space-y-3">
+              <FieldTitle ar={ar} title={ar ? 'مراجعة الطلب' : 'Review your request'} />
+              <dl className="divide-y divide-border rounded-xl border border-border">
+                <Row k={ar ? 'الخدمة' : 'Service'} v={selectedType ? (ar ? selectedType.name_ar : selectedType.name_en) : '—'} />
+                <Row k={ar ? 'الاسم' : 'Name'} v={form.contact_name} />
+                <Row k={ar ? 'البريد' : 'Email'} v={form.contact_email} />
+                {form.company_name && <Row k={ar ? 'الشركة' : 'Company'} v={form.company_name} />}
+                <Row k={ar ? 'الهدف' : 'Objective'} v={form.objective} />
+                {showBudget && form.budget && <Row k={ar ? 'الميزانية' : 'Budget'} v={`${form.budget} ${form.currency}`} />}
+                <Row k={ar ? 'الأولوية' : 'Priority'} v={form.priority} />
+              </dl>
+              {apiError && <p className="rounded-lg bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{apiError.message}</p>}
+            </div>
+          )}
+
+          {/* Nav */}
+          <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
+            <Button variant="ghost" onClick={back} disabled={step === 0}>{ar ? 'السابق' : 'Back'}</Button>
+            {step < STEPS.length - 1 ? (
+              <Button onClick={next}>{ar ? 'التالي' : 'Next'} <Arrow size={15} className="ms-1.5" /></Button>
+            ) : (
+              <Button onClick={submit} loading={mutation.isPending}>{ar ? 'إرسال الطلب' : 'Submit request'}</Button>
+            )}
+          </div>
+        </div>
+
+        <Link to="/" className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {ar ? 'العودة للصفحة الرئيسية' : 'Back to home'}</Link>
+      </main>
+    </div>
+  )
+}
+
+function FieldTitle({ title }: { title: string; ar: boolean }) {
+  return <h2 className="text-base font-bold text-text-primary">{title}</h2>
+}
+
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex gap-3 px-4 py-2.5 text-sm">
+      <dt className="w-32 shrink-0 text-text-muted">{k}</dt>
+      <dd className="min-w-0 flex-1 break-words font-medium text-text-primary">{v}</dd>
+    </div>
+  )
+}
+
+function SuccessView({ reference, type, trackUrl, ar, dir }: { reference: string; type: string; trackUrl: string; ar: boolean; dir: string }) {
+  const [copied, setCopied] = useState<'ref' | 'url' | null>(null)
+  const copy = (which: 'ref' | 'url', value: string) => {
+    void navigator.clipboard?.writeText(value)
+    setCopied(which)
+    window.setTimeout(() => setCopied((c) => (c === which ? null : c)), 1500)
+  }
+  return (
+    <div dir={dir} className="flex min-h-screen flex-col items-center justify-center bg-background px-5 text-center text-text-primary">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-success/15 text-success"><CheckCircle2 size={28} /></div>
+      <h1 className="mt-5 font-heading text-2xl font-extrabold">{ar ? 'تم استلام طلبك' : 'Request received'}</h1>
+      <p className="mt-2 max-w-md text-sm text-text-secondary">{ar ? 'احتفظ برقم الطلب ورابط التتبع لمتابعة الحالة.' : 'Keep your request number and tracking link to follow the status.'}</p>
+
+      <div className="mt-6 w-full max-w-md space-y-2.5 text-start">
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-surface px-4 py-3">
+          <span><span className="block text-xs text-text-muted">{ar ? 'رقم الطلب' : 'Request number'}</span><span className="font-mono text-sm font-bold" dir="ltr">{reference}</span></span>
+          <button type="button" onClick={() => copy('ref', reference)} className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-brand-600 hover:bg-brand-primary-soft">{copied === 'ref' ? <Check size={13} /> : <Copy size={13} />}{ar ? 'نسخ' : 'Copy'}</button>
+        </div>
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-surface px-4 py-3">
+          <span className="min-w-0"><span className="block text-xs text-text-muted">{ar ? 'رابط التتبع' : 'Tracking link'}</span><span className="block truncate font-mono text-xs" dir="ltr">{trackUrl}</span></span>
+          <button type="button" onClick={() => copy('url', trackUrl)} className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-brand-600 hover:bg-brand-primary-soft">{copied === 'url' ? <Check size={13} /> : <Copy size={13} />}{ar ? 'نسخ' : 'Copy'}</button>
+        </div>
+        <div className="rounded-xl bg-surface-secondary px-4 py-2.5 text-xs text-text-muted">{ar ? 'الخدمة' : 'Service'}: <span className="font-semibold text-text-secondary">{type}</span></div>
+        <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-2.5 text-xs text-text-secondary">{ar ? 'تأكيد البريد الإلكتروني: بانتظار اعتماد خدمة البريد' : 'Email confirmation: Awaiting mail credentials'}</div>
+      </div>
+
+      <div className="mt-6 flex gap-3">
+        <a href={trackUrl}><Button variant="secondary">{ar ? 'تتبع الطلب' : 'Track request'}</Button></a>
+        <Link to="/"><Button variant="ghost">{ar ? 'الصفحة الرئيسية' : 'Home'}</Button></Link>
+      </div>
+    </div>
+  )
+}

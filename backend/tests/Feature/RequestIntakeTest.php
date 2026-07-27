@@ -31,6 +31,15 @@ final class RequestIntakeTest extends TestCase
         ], $overrides);
     }
 
+    public function test_meta_exposes_active_service_types(): void
+    {
+        $this->getJson('/api/v1/requests/meta')
+            ->assertOk()
+            ->assertJsonPath('data.types.0.key', 'paid_campaign_launch')
+            ->assertJsonPath('data.types.0.module', 'paid_media')
+            ->assertJsonCount(11, 'data.types');
+    }
+
     public function test_public_intake_creates_request_reference_token_and_event(): void
     {
         $res = $this->postJson('/api/v1/requests', $this->payload())->assertCreated();
