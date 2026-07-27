@@ -24,6 +24,7 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
 
     // Notification center.
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::get('notifications/deliveries', [NotificationController::class, 'deliveries'])->name('notifications.deliveries');
     Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
 

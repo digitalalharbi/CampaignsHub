@@ -6,6 +6,7 @@ namespace App\Domains\ClientWorkspaces\Services;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 
@@ -16,7 +17,10 @@ use Illuminate\Support\Carbon;
  */
 final class ClientManagementService
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(
+        private readonly AuditLogger $audit,
+        private readonly NotificationDispatcher $notifications,
+    ) {}
 
     /** Editable classification fields (whitelist — nothing else is mass-assignable here). */
     private const CLASSIFICATION = ['client_status', 'service_level', 'industry', 'owner_id', 'priority',
@@ -37,6 +41,25 @@ final class ClientManagementService
                 'client.classification_updated', 'client_workspace', (string) $client->id,
                 array_intersect_key($before, $changed), $client->only(array_keys($changed)),
             );
+        }
+
+        // A client moving INTO "needs attention" notifies its owner (deduped so re-saves don't spam).
+        if (array_key_exists('client_status', $changed)
+            && $client->client_status === 'needs_attention'
+            && $client->owner_id !== null) {
+            $this->notifications->dispatch([
+                'tenant_id' => $client->tenant_id,
+                'user_id' => (int) $client->owner_id,
+                'client_workspace_id' => $client->id,
+                'type' => 'client_needs_attention',
+                'severity' => 'warning',
+                'title' => "Client needs attention: {$client->name}",
+                'source' => 'clients',
+                'entity_type' => 'client_workspace',
+                'entity_id' => $client->id,
+                'action_url' => "/app/clients/{$client->id}",
+                'dedup_extra' => 'needs_attention',
+            ]);
         }
 
         return $client->refresh();
