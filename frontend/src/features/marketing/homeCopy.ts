@@ -10,6 +10,8 @@ export interface HomeCopy {
   nav: { features: string; how: string; analytics: string; reports: string; integrations: string; login: string; start: string; request: string }
   hero: { eyebrow: string; title: string; subtitle: string; ctaStart: string; ctaRequest: string; ctaExplore: string; points: string[]; demoTag: string }
   previewTabs: { key: string; label: string }[]
+  workflow: { title: string; steps: string[] }
+  journeyPanel: { title: string; subtitle: string }
   journeys: { title: string; subtitle: string; items: { title: string; desc: string; cta: string; to: string; soon?: boolean }[] }
   features: { title: string; subtitle: string; items: { title: string; desc: string }[] }
   objectives: { title: string; subtitle: string; note: string; items: string[]; perks: string[] }
@@ -26,12 +28,20 @@ const ar: HomeCopy = {
   dir: 'rtl',
   nav: { features: 'المميزات', how: 'كيف يعمل', analytics: 'التحليلات', reports: 'التقارير', integrations: 'التكاملات', login: 'تسجيل الدخول', start: 'ابدأ الآن', request: 'أرسل طلب خدمة' },
   hero: {
-    eyebrow: 'منصة تشغيل متكاملة لإدارة الحملات الإعلانية المدفوعة',
-    title: 'أدر حملاتك الإعلانية المدفوعة من منصة تشغيل واحدة',
-    subtitle: 'CampaignsHub يجمع العملاء والمشاريع والحملات والمنصات والتحليلات والتقارير والتنبيهات في بيئة واحدة مصممة لإدارة أعمال الميديا باينج باحتراف.',
+    eyebrow: 'منصة إدارة الحملات الإعلانية المدفوعة',
+    title: 'كل حملاتك الإعلانية المدفوعة في مكان واحد',
+    subtitle: 'اربط منصاتك، تابع الميزانيات والنتائج، قارن الأداء، وأنشئ تقارير احترافية دون التنقل بين أدوات متعددة.',
     ctaStart: 'ابدأ إدارة حملاتك', ctaRequest: 'أرسل طلب إدارة حملة', ctaExplore: 'استعرض النظام',
-    points: ['متابعة جميع المنصات من مكان واحد', 'إدارة العملاء والمشاريع والميزانيات', 'تحليلات حسب هدف الحملة', 'تقارير احترافية للعملاء', 'تنبيهات ومتابعة يومية', 'بيانات API فعلية لكل منصة'],
+    points: ['مركز موحّد لجميع الحملات والمنصات', 'عزل مستقل لكل عميل ومشروع', 'متابعة الميزانية والنتائج', 'تحليلات حسب هدف الحملة', 'تقارير احترافية قابلة للمشاركة', 'بيانات فعلية من مصادر الربط'],
     demoTag: 'معاينة توضيحية ببيانات تجريبية',
+  },
+  workflow: {
+    title: 'من الربط إلى التقرير — دورة عمل واحدة',
+    steps: ['ربط المنصات', 'تنظيم العملاء والمشاريع', 'إدارة الحملات', 'متابعة الأداء', 'التحليل والتحسين', 'إعداد التقرير', 'التنبيهات والمتابعة'],
+  },
+  journeyPanel: {
+    title: 'ابدأ مع CampaignsHub',
+    subtitle: 'اختر المسار المناسب لاحتياجك وسنوجّهك مباشرة إلى الخطوة التالية.',
   },
   previewTabs: [
     { key: 'dashboard', label: 'لوحة التحكم' }, { key: 'campaigns', label: 'الحملات' }, { key: 'analytics', label: 'التحليلات' },
@@ -41,11 +51,11 @@ const ar: HomeCopy = {
     title: 'كيف تريد استخدام CampaignsHub؟',
     subtitle: 'اختر المسار الأنسب لك — لكل مسار تجربة مصممة له.',
     items: [
-      { title: 'أدير حملاتي المدفوعة بنفسي', desc: 'أنشئ مساحة عمل لمتابعة الحملات والميزانيات والتحليلات والتقارير.', cta: 'إنشاء حساب', to: '/register' },
-      { title: 'أدير حملات عدة عملاء', desc: 'نظّم العملاء والمشاريع والحملات ومصادر البيانات في مكان واحد.', cta: 'إنشاء مساحة وكالة', to: '/register' },
-      { title: 'أحتاج خدمة إدارة حملات', desc: 'أرسل تفاصيل طلبك دون إنشاء حساب، وتابع حالته عبر رابط آمن.', cta: 'إرسال طلب خدمة', to: '/requests/new' },
-      { title: 'إدارة حملات المؤثرين وUGC', desc: 'إدارة الترشيحات والتعاونات والمحتوى والموافقات وتقارير التعاون.', cta: 'قريبًا', to: '/register', soon: true },
-      { title: 'لدي حساب بالفعل', desc: 'ادخل إلى مساحة عملك وتابع من حيث توقفت.', cta: 'تسجيل الدخول', to: '/login' },
+      { title: 'أدير حملاتي بنفسي', desc: 'للميديا باير والمستقل وفرق التسويق الداخلية.', cta: 'إنشاء حساب', to: '/register' },
+      { title: 'أدير حملات عدة عملاء', desc: 'للوكالات والمستقلين الذين يديرون مشاريع وعملاء متعددين.', cta: 'إنشاء مساحة عمل', to: '/register' },
+      { title: 'أحتاج خدمة إدارة حملات', desc: 'أرسل طلبك دون إنشاء حساب وتابع حالته عبر رابط آمن.', cta: 'إرسال طلب خدمة', to: '/requests/new' },
+      { title: 'إدارة حملات المؤثرين وUGC', desc: 'وحدة مستقلة لإدارة الترشيحات والتعاونات والمحتوى.', cta: 'قريبًا', to: '/register', soon: true },
+      { title: 'لدي حساب', desc: 'ادخل إلى مساحة عملك وتابع من حيث توقفت.', cta: 'تسجيل الدخول', to: '/login' },
     ],
   },
   features: {
@@ -122,12 +132,20 @@ const en: HomeCopy = {
   dir: 'ltr',
   nav: { features: 'Features', how: 'How it works', analytics: 'Analytics', reports: 'Reports', integrations: 'Integrations', login: 'Log in', start: 'Get started', request: 'Request a service' },
   hero: {
-    eyebrow: 'An all-in-one operations platform for Paid Advertising Management',
-    title: 'Run your paid advertising from one operations platform',
-    subtitle: 'CampaignsHub brings clients, projects, campaigns, platforms, analytics, reports and alerts into a single environment built to run media-buying professionally.',
+    eyebrow: 'Paid Advertising Management platform',
+    title: 'All your paid advertising in one place',
+    subtitle: 'Connect your platforms, track budgets and results, compare performance, and build professional reports — without switching between tools.',
     ctaStart: 'Start managing campaigns', ctaRequest: 'Request campaign management', ctaExplore: 'Explore the product',
-    points: ['Track every platform in one place', 'Manage clients, projects and budgets', 'Objective-based analytics', 'Professional client reports', 'Daily alerts and monitoring', 'Real per-platform API data'],
+    points: ['One hub for all campaigns and platforms', 'Isolated per client and project', 'Budget and results tracking', 'Objective-based analytics', 'Shareable professional reports', 'Real data from connected sources'],
     demoTag: 'Illustrative preview with demo data',
+  },
+  workflow: {
+    title: 'From connection to report — one workflow',
+    steps: ['Connect platforms', 'Organize clients & projects', 'Manage campaigns', 'Track performance', 'Analyze & optimize', 'Build the report', 'Alerts & monitoring'],
+  },
+  journeyPanel: {
+    title: 'Get started with CampaignsHub',
+    subtitle: 'Pick the path that fits your need and we’ll take you straight to the next step.',
   },
   previewTabs: [
     { key: 'dashboard', label: 'Dashboard' }, { key: 'campaigns', label: 'Campaigns' }, { key: 'analytics', label: 'Analytics' },
@@ -137,11 +155,11 @@ const en: HomeCopy = {
     title: 'How do you want to use CampaignsHub?',
     subtitle: 'Pick the path that fits you — each one has a tailored experience.',
     items: [
-      { title: 'I manage my own paid campaigns', desc: 'Create a workspace to track campaigns, budgets, analytics and reports.', cta: 'Create account', to: '/register' },
-      { title: 'I manage several clients', desc: 'Organize clients, projects, campaigns and data sources in one place.', cta: 'Create agency workspace', to: '/register' },
-      { title: 'I need campaign management as a service', desc: 'Send your request without an account and track it via a secure link.', cta: 'Request a service', to: '/requests/new' },
-      { title: 'Influencer & UGC campaigns', desc: 'Manage shortlists, collaborations, content, approvals and reports.', cta: 'Coming soon', to: '/register', soon: true },
-      { title: 'I already have an account', desc: 'Sign in to your workspace and pick up where you left off.', cta: 'Log in', to: '/login' },
+      { title: 'I manage campaigns myself', desc: 'For media buyers, freelancers and in-house marketing teams.', cta: 'Create account', to: '/register' },
+      { title: 'I manage several clients', desc: 'For agencies and freelancers running multiple projects and clients.', cta: 'Create workspace', to: '/register' },
+      { title: 'I need campaign management', desc: 'Send your request without an account and track it via a secure link.', cta: 'Request a service', to: '/requests/new' },
+      { title: 'Influencer & UGC campaigns', desc: 'A separate module for shortlists, collaborations and content.', cta: 'Coming soon', to: '/register', soon: true },
+      { title: 'I have an account', desc: 'Sign in to your workspace and pick up where you left off.', cta: 'Log in', to: '/login' },
     ],
   },
   features: {

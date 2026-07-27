@@ -128,75 +128,103 @@ export function PublicHomePage() {
             <button onClick={toggleLocale} aria-label="Toggle language" className="flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover">{locale === 'ar' ? 'EN' : 'ع'}</button>
             <button onClick={toggleTheme} aria-label="Toggle theme" className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button>
             {authed ? (
-              <Link to="/dashboard"><Button size="sm">{locale === 'ar' ? 'العودة إلى لوحة التحكم' : 'Back to dashboard'}</Button></Link>
+              <Link to="/dashboard"><Button size="sm" className="whitespace-nowrap">{locale === 'ar' ? 'لوحة التحكم' : 'Dashboard'}</Button></Link>
             ) : (
               <>
-                <Link to="/login" className="hidden sm:block"><Button variant="ghost" size="sm">{c.nav.login}</Button></Link>
-                <Link to="/register"><Button size="sm">{c.nav.start}</Button></Link>
+                <Link to="/login" className="hidden sm:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.login}</Button></Link>
+                <Link to="/register"><Button size="sm" className="whitespace-nowrap">{c.nav.start}</Button></Link>
               </>
             )}
           </div>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-2 lg:py-20">
-          <div>
-            <p className="inline-flex rounded-full bg-brand-primary-soft px-3 py-1 text-xs font-semibold text-brand-700">{c.hero.eyebrow}</p>
-            <h1 className="mt-5 font-heading text-3xl font-extrabold leading-tight sm:text-4xl xl:text-5xl">{c.hero.title}</h1>
-            <p className="mt-4 max-w-xl text-base leading-relaxed text-text-secondary">{c.hero.subtitle}</p>
+      {/* Hero — wide value + product preview (≈70%) beside a journey card (≈30%), equal height. */}
+      <section className="relative overflow-hidden border-b border-border">
+        <div className="mx-auto grid max-w-6xl items-stretch gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_360px] lg:py-16 xl:grid-cols-[1fr_380px]">
+          {/* Value column */}
+          <div className="flex flex-col">
+            <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[13px] font-semibold text-brand-700">{c.hero.eyebrow}</p>
+            <h1 className="mt-5 font-heading text-[34px] font-extrabold leading-[1.12] sm:text-5xl xl:text-6xl">{c.hero.title}</h1>
+            <p className="mt-5 max-w-2xl text-lg leading-relaxed text-text-secondary">{c.hero.subtitle}</p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link to="/register"><Button size="lg">{c.hero.ctaStart}</Button></Link>
               <Link to="/requests/new"><Button variant="secondary" size="lg">{c.hero.ctaRequest}</Button></Link>
-              <a href="#preview"><Button variant="ghost" size="lg">{c.hero.ctaExplore}</Button></a>
             </div>
-            <ul className="mt-8 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <ul className="mt-6 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
               {c.hero.points.map((p) => (
-                <li key={p} className="flex items-center gap-2 text-sm text-text-secondary"><CheckCircle2 size={16} className="shrink-0 text-brand-500" /> {p}</li>
+                <li key={p} className="flex items-center gap-2 text-[15px] text-text-secondary"><CheckCircle2 size={17} className="shrink-0 text-brand-500" /> {p}</li>
               ))}
             </ul>
-          </div>
 
-          {/* Interactive product preview */}
-          <div id="preview" className="relative">
-            <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-[var(--auth-panel-from)] via-[var(--auth-panel-via)] to-[var(--auth-panel-to)] p-4 shadow-[var(--shadow-large)]">
-              <div className="flex flex-wrap gap-1.5">
-                {c.previewTabs.map((tb) => (
-                  <button
-                    key={tb.key}
-                    onClick={() => setTab(tb.key)}
-                    className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${tab === tb.key ? 'bg-brand-500 text-white' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
-                  >
-                    {tb.label}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-4"><PreviewPanel tab={tab} locale={locale as Locale} /></div>
-              <div className="mt-4 flex items-center gap-1.5 text-[11px] text-white/50">
-                <span className="h-1.5 w-1.5 rounded-full bg-warning" /> {c.hero.demoTag}
+            {/* Large interactive product preview — the primary visual element. */}
+            <div id="preview" className="mt-8 flex-1">
+              <div className="flex h-full flex-col rounded-2xl border border-white/10 bg-gradient-to-br from-[var(--auth-panel-from)] via-[var(--auth-panel-via)] to-[var(--auth-panel-to)] p-5 shadow-[var(--shadow-large)]">
+                <div className="flex flex-wrap gap-1.5">
+                  {c.previewTabs.map((tb) => (
+                    <button
+                      key={tb.key}
+                      onClick={() => setTab(tb.key)}
+                      className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors ${tab === tb.key ? 'bg-brand-500 text-white' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+                    >
+                      {tb.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-5 flex-1"><PreviewPanel tab={tab} locale={locale as Locale} /></div>
+                <div className="mt-5 flex items-center gap-1.5 text-xs text-white/50">
+                  <span className="h-1.5 w-1.5 rounded-full bg-warning" /> {c.hero.demoTag}
+                </div>
               </div>
             </div>
           </div>
+
+          {/* Journey selection card */}
+          <aside className="flex flex-col rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)]">
+            <h2 className="font-heading text-xl font-extrabold text-text-primary">{c.journeyPanel.title}</h2>
+            <p className="mt-1.5 text-sm text-text-secondary">{c.journeyPanel.subtitle}</p>
+            <div className="mt-5 flex flex-1 flex-col gap-2.5">
+              {c.journeys.items.map((j) => {
+                const inner = (
+                  <>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-bold text-text-primary">{j.title}</span>
+                      <span className="mt-0.5 block text-xs leading-snug text-text-secondary">{j.desc}</span>
+                    </span>
+                    {j.soon
+                      ? <span className="shrink-0 rounded-md bg-surface-secondary px-2 py-1 text-[11px] font-semibold text-text-muted">{j.cta}</span>
+                      : <Arrow size={16} className="shrink-0 text-brand-600" />}
+                  </>
+                )
+                const base = 'flex min-h-[68px] items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-start transition-colors'
+                return j.soon ? (
+                  <div key={j.title} className={`${base} opacity-90`}>{inner}</div>
+                ) : (
+                  <Link key={j.title} to={j.to} className={`${base} hover:border-brand-400 hover:bg-brand-primary-soft/40`}>{inner}</Link>
+                )
+              })}
+            </div>
+          </aside>
         </div>
       </section>
 
-      {/* Journey selection */}
-      <Section id="journeys" title={c.journeys.title} subtitle={c.journeys.subtitle}>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {c.journeys.items.map((j) => (
-            <div key={j.title} className="flex flex-col rounded-2xl border border-border bg-surface p-5">
-              <h3 className="text-base font-bold text-text-primary">{j.title}</h3>
-              <p className="mt-1.5 flex-1 text-sm text-text-secondary">{j.desc}</p>
-              {j.soon ? (
-                <span className="mt-4 inline-flex w-fit rounded-lg bg-surface-secondary px-3 py-1.5 text-sm font-semibold text-text-muted">{j.cta}</span>
-              ) : (
-                <Link to={j.to} className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:underline">{j.cta} <Arrow size={15} /></Link>
-              )}
-            </div>
-          ))}
+      {/* Workflow strip */}
+      <section className="bg-surface-secondary">
+        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+          <h2 className="text-center font-heading text-xl font-extrabold text-text-primary sm:text-2xl">{c.workflow.title}</h2>
+          <ol className="mt-7 flex flex-col gap-3 md:flex-row md:flex-wrap md:items-stretch md:justify-center">
+            {c.workflow.steps.map((step, i) => (
+              <li key={step} className="flex items-center gap-3 md:flex-col md:text-center">
+                <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-4 py-3 md:h-full md:w-[150px] md:flex-col md:justify-center">
+                  <span className="tnum flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-primary-soft text-xs font-bold text-brand-700">{i + 1}</span>
+                  <span className="text-[13px] font-semibold text-text-secondary md:mt-1.5">{step}</span>
+                </div>
+                {i < c.workflow.steps.length - 1 && <Arrow size={16} className="shrink-0 text-border-strong md:hidden" />}
+              </li>
+            ))}
+          </ol>
         </div>
-      </Section>
+      </section>
 
       {/* Features */}
       <Section id="features" title={c.features.title} subtitle={c.features.subtitle} tinted>
