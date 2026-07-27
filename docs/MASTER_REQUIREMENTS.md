@@ -69,15 +69,15 @@ Two-review gate per phase:
 | R5.2 | `/requests/track/{token}` (secure, client-safe) + client reply + file download | Implemented and Tested | `RequestTrackPage.tsx` + track/reply/download endpoints; e2e 15/15 (3 browsers); hides internal/tenant |
 | R5.3 | Classification: type(module) / status / priority | Implemented and Tested (schema) | `RequestCatalogSeeder` 11 types + 10 statuses; RequestIntakeTest |
 | R5.4 | Internal dashboard (Table + filters/search/pagination) + assignment + status state-machine + SLA + internal/client comment separation + notifications | Implemented and Tested | `/app/requests` + `Internal\*Controller`; RequestDashboardTest (3) + request-vertical e2e 6/6 (3 browsers). Kanban/Cards views pending |
-| R5.5 | Convert request → client/project/campaign without re-entry | Not Started | — |
+| R5.5 | Convert request → client/project/campaign without re-entry (transactional, idempotent, rollback) | Implemented and Tested | `RequestConversionService`; RequestConversionTest (6) + request-conversion e2e 6/6 (3 browsers) |
 
 ## R6 — Clients
 
 | ID | Requirement | Status | Evidence |
 |----|-------------|--------|----------|
-| R6.1 | Client classification (type / status / service level) | Not Started | — |
+| R6.1 | Client classification (status / service level / industry) | Implemented and Tested | client_workspaces columns; ClientsController; ClientCommandCenterTest |
 | R6.2 | Client card (logo, projects, active campaigns, spend, alerts, last report, last sync, owner, status, open requests, sources) | Not Started | — |
-| R6.3 | Client command center (Overview/Projects/Campaigns/Analytics/Reports/Requests/Team/Files/Activity/Settings) | Not Started | — |
+| R6.3 | Client command center (Overview/Projects/Campaigns/Requests live; Analytics/Reports/Team/Files/Activity/Settings pending) | In Progress | `ClientCommandCenterPage`; 4 tabs live + isolated; e2e verifies projects/campaigns/requests |
 | R6.4 | Isolation by org + client + project | Implemented and Tested | BelongsToTenant/Project scopes + CampaignMetricsTest |
 
 ## R7 — Public homepage

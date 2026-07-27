@@ -51,3 +51,4 @@ npx playwright test --workers=1 --retries=0 --repeat-each=3
 | 2026-07-27 | Homepage+login visual refinement | 1440 balanced, 375 value-first live | vitest 22/22 | RTL, equal-height cols, no overflow | auth+home e2e 50/50 (3 browsers) + fresh baselines | request backend untouched |
 | 2026-07-27 | Dynamic request intake form | /requests/new 5-step live, submit→REQ number | backend RequestIntakeTest 6 | RTL, per-service fields, draft persist | request-intake e2e 9/9 (3 browsers) | files/tracking UI next |
 | 2026-07-27 | Internal requests dashboard + vertical flow | /app/requests live, full flow | backend 183/183 | RTL table, filters | request-vertical 6/6 (3 browsers) + regression 17/17 | internal note hidden from client verified |
+| 2026-07-27 | Transactional conversion + clients command center | convert→command center live | backend 200/200 | isolation, idempotency, rollback | request-conversion e2e 6/6 (3 browsers) | portal resolver de-fragilized |

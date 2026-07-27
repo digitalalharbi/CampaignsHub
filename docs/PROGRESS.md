@@ -441,3 +441,17 @@ Honest per-suite status (do not say "cross-browser ✓" for the visual gates):
   Status State Machine / SLA / Internal Notes / In-App Notifications (row per event) — Implemented; read/dedup/prefs/delivery-log — PARTIAL (G-014).
   **Transactional Conversion — Not Started (next).** Kanban/Cards dashboard views — pending (Table done).
 - **Next:** `feat(requests): transactional conversion → client/project/campaign`, then Clients classification + Client Command Center.
+
+## Phase 5 — Portal resolver + transactional conversion + clients command center (2026-07-27)
+- **Commits:** `d37c06d` portal resolver (no fragile env), `b2b7ed3` transactional conversion, `5558ced` clients API, `14fb88e` conversion UI + portfolio + command center + E2E
+- **Tests run:** backend **200/200** (RequestConversionTest 6, ClientCommandCenterTest 4, RequestPortalResolverTest 4) ·
+  request-conversion e2e **6/6** across Chromium+Firefox+WebKit · regression 14/14 · vitest 22/22 · pint/phpstan clean
+- **Full vertical PROVEN:** guest submits → owner converts → transactional (lockForUpdate) idempotent (no dup
+  client/project/campaign/tasks) rollback-safe conversion → conversion links on the request → Client Command
+  Center shows the project, DRAFT campaign and the originating request → client in /app/clients portfolio.
+- **Also fixed:** the fragile portal-tenant env dependency (host/default-portal resolver, fail-closed in prod);
+  an app-wide pgsql/UTC timezone bug (earlier, c7dad71).
+- **Status:** Transactional Conversion — Implemented and Tested; Client Classification — Implemented and Tested;
+  Client Command Center — Overview/Projects/Campaigns/Requests live+isolated (Analytics/Reports/Team/Files/
+  Activity/Settings tabs pending). Notification hardening still Partial (G-014).
+- **Next:** remaining command-center tabs, then notification hardening → registration/onboarding → the rest.
