@@ -5,11 +5,12 @@ import { ArrowLeft, Pencil } from 'lucide-react'
 import { getClient } from './api'
 import { CLIENT_STATUS_LABELS, INDUSTRY_LABELS, labelOf, PRIORITY_LABELS, SERVICE_LEVEL_LABELS } from './labels'
 import { ClassificationEditor } from './ClassificationEditor'
+import { TabAnalytics } from './TabAnalytics'
 import { TabSettings } from './TabSettings'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 
-type Tab = 'overview' | 'projects' | 'campaigns' | 'requests' | 'settings'
+type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'requests' | 'settings'
 
 export function ClientCommandCenterPage() {
   const t = useT()
@@ -23,10 +24,12 @@ export function ClientCommandCenterPage() {
   if (query.isError) return <div className="mx-auto max-w-5xl rounded-2xl border border-danger/30 bg-[var(--negative-background)] p-6 text-center text-sm text-danger">{t('error_generic')}</div>
   const d = query.data!
 
-  // Only tabs whose backend is live are shown — never a placeholder tab.
+  // Only tabs whose backend is live AND the user is permitted to see are shown — never a placeholder tab.
   const TABS: { key: Tab; label: string }[] = [
     { key: 'overview', label: t('tab_overview') }, { key: 'projects', label: t('tab_projects') },
-    { key: 'campaigns', label: t('tab_campaigns') }, { key: 'requests', label: t('tab_requests') },
+    { key: 'campaigns', label: t('tab_campaigns') },
+    ...(d.can.view_analytics ? [{ key: 'analytics' as Tab, label: t('tab_analytics') }] : []),
+    { key: 'requests', label: t('tab_requests') },
     { key: 'settings', label: t('tab_settings') },
   ]
 
@@ -113,6 +116,8 @@ export function ClientCommandCenterPage() {
               ))}
             </ul>
           )}
+
+          {tab === 'analytics' && d.can.view_analytics && <TabAnalytics clientId={d.id} />}
 
           {tab === 'settings' && <TabSettings d={d} />}
         </div>

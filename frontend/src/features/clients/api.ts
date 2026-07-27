@@ -127,3 +127,32 @@ export async function updateSettings(id: string, patch: ClientSettingsPatch) {
 
 export const archiveClient = (id: string, reason?: string) => api.post(`/app/clients/${id}/archive`, { reason })
 export const restoreClient = (id: string) => api.post(`/app/clients/${id}/restore`, {})
+
+export interface ClientAnalytics {
+  range: { from: string; to: string }
+  source_of_truth: string
+  currency_mode: 'single' | 'mixed' | 'none'
+  currency: string | null
+  money_blended: boolean
+  objective_mix: { objective: string; count: number }[]
+  roas_is_primary: boolean
+  totals: Record<string, number | null> | null
+  previous: Record<string, number | null> | null
+  delta: Record<string, number | null> | null
+  counts?: { impressions: number; clicks: number; conversions: number }
+  platforms: { provider: string; spend: number; spend_share: number; impressions: number; clicks: number; conversions: number; revenue: number; roas: number | null; ctr: number | null; cpc: number | null; cpm: number | null; cpa: number | null }[]
+  projects: { project_id: string; name: string; spend: number; currency: string | null }[]
+  timeseries: { date: string; spend: number; clicks: number; impressions: number; conversions: number; revenue: number }[]
+  best_campaign: Record<string, unknown> | null
+  worst_campaign: Record<string, unknown> | null
+  freshness: { state: 'fresh' | 'partial' | 'stale' | 'sync_failed' | 'no_data'; last_sync_at: string | null; missing_days: number; sync_failed: boolean }
+  attribution: { windows: string[] }
+}
+
+export const getClientAnalytics = (id: string, from?: string, to?: string) => {
+  const p = new URLSearchParams()
+  if (from) p.set('from', from)
+  if (to) p.set('to', to)
+  const qs = p.toString()
+  return getData<ClientAnalytics>(`/app/clients/${id}/analytics${qs ? `?${qs}` : ''}`)
+}

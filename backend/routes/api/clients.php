@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientAnalyticsController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientManagementController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientsController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientTaxonomyController;
@@ -22,4 +23,7 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('app/clients')->name('app.
     Route::patch('/{client}/settings', [ClientManagementController::class, 'updateSettings'])->name('settings');
     Route::post('/{client}/archive', [ClientManagementController::class, 'archive'])->name('archive');
     Route::post('/{client}/restore', [ClientManagementController::class, 'restore'])->name('restore');
+
+    // Command-center tabs backed by existing engines (metrics/reports/…).
+    Route::get('/{client}/analytics', ClientAnalyticsController::class)->name('analytics');
 });

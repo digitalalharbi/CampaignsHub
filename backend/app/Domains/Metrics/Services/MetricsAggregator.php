@@ -71,8 +71,9 @@ final class MetricsAggregator
 
         if ($this->projectIds !== null) {
             // Empty set → match nothing (a client with no projects has no metrics), never "all".
-            // A never-matching UUID keeps the column type valid on Postgres.
-            $query->whereIn('project_id', $this->projectIds ?: ['00000000-0000-0000-0000-000000000000']);
+            // A never-matching UUID keeps the column type valid on Postgres. Column is qualified because
+            // byCampaign() left-joins unified_campaigns (which also has a project_id).
+            $query->whereIn('daily_metrics.project_id', $this->projectIds ?: ['00000000-0000-0000-0000-000000000000']);
         }
 
         return $query->toBase();
