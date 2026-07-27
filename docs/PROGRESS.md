@@ -567,3 +567,14 @@ Honest per-suite status (do not say "cross-browser ✓" for the visual gates):
 - **Honest status:** Email/WhatsApp = Awaiting Provider Credentials; Google login = Awaiting Credentials.
   Alerts management UI (frontend page) not yet built — engine + API complete (see OPEN_GAPS G-019).
 - **Next (mandate):** PWA → Production Readiness → Security Audit → Full Regression → Final Delivery Package.
+
+## Phase 10 — PWA (2026-07-27)
+- **Commit:** `60ad69f` installable PWA + offline shell + honest caching + update flow.
+- Self-contained service worker (no build-time plugin): network-first navigations with cached app-shell
+  fallback (opens offline); stale-while-revalidate for hashed assets; **API/auth (/api,/sanctum) and all
+  non-GET always bypass the cache** — tenant data + honest delivery states are never stale. Registered
+  production-only (dev/HMR untouched). Dismissible AR/EN update banner (user chooses when to reload).
+- Manifest: id/scope/lang=ar/dir=rtl/categories/maskable + iOS/Android install meta.
+- **Verified in-browser (production preview):** SW activated + controlling; shell cache = [/,index.html,
+  manifest,icon]; 0 API entries cached; React mounted; no console errors; RTL login renders.
+- **Next:** Production Readiness → Security Audit → Full Regression → Final Delivery Package.
