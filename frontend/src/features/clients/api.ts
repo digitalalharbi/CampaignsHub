@@ -156,3 +156,37 @@ export const getClientAnalytics = (id: string, from?: string, to?: string) => {
   const qs = p.toString()
   return getData<ClientAnalytics>(`/app/clients/${id}/analytics${qs ? `?${qs}` : ''}`)
 }
+
+export interface ClientReport {
+  id: string
+  project_id: string
+  name: string
+  type: string
+  audience: 'client' | 'internal' | 'executive'
+  status: 'draft' | 'processing' | 'completed' | 'failed'
+  shareable: boolean
+  formats: string[]
+  generated_at: string | null
+  created_at: string | null
+}
+
+export const listClientReports = (id: string) =>
+  getData<{ reports: ClientReport[] }>(`/app/clients/${id}/reports`)
+
+export interface CreateReportInput {
+  project_id: string
+  name: string
+  type: string
+  audience?: 'client' | 'internal' | 'executive'
+  campaign_objective?: string
+}
+
+export async function createClientReport(id: string, input: CreateReportInput): Promise<ClientReport> {
+  const res = await api.post<{ data: ClientReport }>(`/app/clients/${id}/reports`, input)
+  return res.data.data
+}
+
+export async function shareClientReport(id: string, reportId: string, opts: { allow_download?: boolean } = {}) {
+  const res = await api.post<{ data: { id: string; url: string; token: string } }>(`/app/clients/${id}/reports/${reportId}/share`, opts)
+  return res.data.data
+}

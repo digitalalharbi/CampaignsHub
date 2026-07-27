@@ -6,11 +6,12 @@ import { getClient } from './api'
 import { CLIENT_STATUS_LABELS, INDUSTRY_LABELS, labelOf, PRIORITY_LABELS, SERVICE_LEVEL_LABELS } from './labels'
 import { ClassificationEditor } from './ClassificationEditor'
 import { TabAnalytics } from './TabAnalytics'
+import { TabReports } from './TabReports'
 import { TabSettings } from './TabSettings'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 
-type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'requests' | 'settings'
+type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'reports' | 'requests' | 'settings'
 
 export function ClientCommandCenterPage() {
   const t = useT()
@@ -29,6 +30,7 @@ export function ClientCommandCenterPage() {
     { key: 'overview', label: t('tab_overview') }, { key: 'projects', label: t('tab_projects') },
     { key: 'campaigns', label: t('tab_campaigns') },
     ...(d.can.view_analytics ? [{ key: 'analytics' as Tab, label: t('tab_analytics') }] : []),
+    ...(d.can.view_reports ? [{ key: 'reports' as Tab, label: t('tab_reports') }] : []),
     { key: 'requests', label: t('tab_requests') },
     { key: 'settings', label: t('tab_settings') },
   ]
@@ -118,6 +120,8 @@ export function ClientCommandCenterPage() {
           )}
 
           {tab === 'analytics' && d.can.view_analytics && <TabAnalytics clientId={d.id} />}
+
+          {tab === 'reports' && d.can.view_reports && <TabReports d={d} />}
 
           {tab === 'settings' && <TabSettings d={d} />}
         </div>
