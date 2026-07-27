@@ -437,7 +437,7 @@ Honest per-suite status (do not say "cross-browser ✓" for the visual gates):
   /app/requests → open detail → assign to me → change status (state-machine; illegal jumps 422) → request info
   (→ waiting_client + SLA pause) → internal note (owner sees it) → public tracking link does NOT show the internal
   note → client reply resumes SLA → in-app notification created. Live-verified dashboard.
-- **Status:** Dynamic Intake / Secure Uploads / Secure Tracking / Client Reply / Internal Dashboard / Assignments /
-  Status State Machine / SLA / Internal Notes / In-App Notifications — all Implemented and Tested.
+- **Status:** Dynamic Intake / Secure Uploads / Secure Tracking / Client Reply / Internal Dashboard (Table only; Kanban/Cards Not Started) / Assignments /
+  Status State Machine / SLA / Internal Notes / In-App Notifications (row per event) — Implemented; read/dedup/prefs/delivery-log — PARTIAL (G-014).
   **Transactional Conversion — Not Started (next).** Kanban/Cards dashboard views — pending (Table done).
 - **Next:** `feat(requests): transactional conversion → client/project/campaign`, then Clients classification + Client Command Center.

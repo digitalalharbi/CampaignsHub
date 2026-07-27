@@ -158,6 +158,18 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
   (`e2e/homepage.spec.ts-snapshots/home-light-chromium-darwin.png`, `home-dark-...png`); a second run
   re-compares clean (7/7). Reopen only on intended layout change (then `--update-snapshots`).
 
+## G-014 — Requests module: honest partial status (do not mark Completed)
+
+- **Severity:** Medium · **Status:** OPEN (module In Progress)
+- Corrected per directive:
+  - **Internal Requests Table Workflow — Implemented and Tested.** **Kanban View — Not Started. Cards View — Not Started.**
+  - **SLA Breach — PARTIAL.** Present: `sla_paused_at/resumed_at`, pause/resume, `sla_breached_at` column + on-read
+    `evaluate()`. MISSING (this batch): scheduled evaluator command, warning threshold, automatic breach detection,
+    breach notification, idempotency/dedup, feature test.
+  - **In-App Notifications — PARTIAL.** Present: AppNotification rows per event (unread status, action_url deep link).
+    MISSING: read/unread UI, dedup, preferences, delivery log, quiet-hours readiness.
+- **Next:** SLA scheduled evaluator (warning+breach+notify+idempotent+test) → Kanban/Cards → conversion.
+
 ---
 
 _Last updated: 2026-07-27_
