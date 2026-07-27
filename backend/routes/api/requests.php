@@ -66,7 +66,7 @@ Route::prefix('client')->name('client.')->group(function (): void {
 /*
 | Internal requests dashboard (auth + tenant; each controller method enforces its own permission).
 */
-Route::middleware(['auth:sanctum', 'tenant'])->prefix('app/requests')->name('app.requests.')->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'entitlement:requests'])->prefix('app/requests')->name('app.requests.')->group(function (): void {
     Route::get('/', [RequestsController::class, 'index'])->name('index');
     Route::get('/{id}', [RequestsController::class, 'show'])->name('show');
     Route::patch('/{id}/assign', [RequestActionsController::class, 'assign'])->name('assign');

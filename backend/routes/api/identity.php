@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use App\Domains\Identity\Http\Controllers\AuthController;
+use App\Domains\Identity\Http\Controllers\EmailVerificationController;
 use App\Domains\Identity\Http\Controllers\MeController;
+use App\Domains\Identity\Http\Controllers\OnboardingController;
 use App\Domains\Identity\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -22,10 +24,27 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
     Route::post('/tokens', [AuthController::class, 'issueToken'])->name('tokens')
         ->middleware('throttle:6,1');
 
+    // Email verification — verify is public (the link carries the token); resend is authenticated.
+    Route::post('/email/verify', [EmailVerificationController::class, 'verify'])->name('email.verify')
+        ->middleware('throttle:otp-check');
+    Route::post('/email/resend', [EmailVerificationController::class, 'resend'])->name('email.resend')
+        ->middleware(['auth:sanctum', 'throttle:6,1']);
+
     Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
         Route::get('/me', [AuthController::class, 'me'])->name('me');
         Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     });
+});
+
+// Resumable onboarding wizard (authenticated + tenant-scoped).
+Route::middleware(['auth:sanctum', 'tenant'])->prefix('onboarding')->name('onboarding.')->group(function (): void {
+    Route::get('/state', [OnboardingController::class, 'state'])->name('state');
+    Route::post('/account-type', [OnboardingController::class, 'accountType'])->name('account-type');
+    Route::post('/service', [OnboardingController::class, 'service'])->name('service');
+    Route::post('/workspace', [OnboardingController::class, 'workspace'])->name('workspace');
+    Route::post('/first-client', [OnboardingController::class, 'firstClient'])->name('first-client');
+    Route::post('/first-project', [OnboardingController::class, 'firstProject'])->name('first-project');
+    Route::post('/complete', [OnboardingController::class, 'complete'])->name('complete');
 });
 
 // The signed-in user's own account (self-only; no user id is ever accepted from the client).

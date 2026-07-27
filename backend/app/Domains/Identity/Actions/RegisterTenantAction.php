@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Actions;
 
+use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Identity\DTOs\RegisterData;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -29,6 +30,9 @@ final class RegisterTenantAction
                 'name' => $data->tenantName,
                 'slug' => $this->uniqueSlug($data->tenantName),
                 'status' => 'trialing',
+                // Account type + modules are chosen during onboarding; email verification comes first.
+                'onboarding_step' => 'verify_email',
+                'subscription_plan' => 'trial',
             ]);
 
             // Make the new tenant the active scope so nested writes are correctly attributed.
@@ -52,6 +56,9 @@ final class RegisterTenantAction
                 ['tenant_id' => $tenant->id, 'slug' => 'tenant-owner'],
                 ['name' => 'Tenant Owner', 'is_system' => true],
             );
+            // A self-registered owner must actually be able to operate their workspace — grant the full
+            // permission catalogue (previously the role was created empty, leaving new owners powerless).
+            $ownerRole->givePermissionTo(...Permission::pluck('key')->all());
             $user->assignRole($ownerRole);
 
             return $user;

@@ -9,6 +9,7 @@ use App\Domains\Identity\DTOs\RegisterData;
 use App\Domains\Identity\Http\Requests\LoginRequest;
 use App\Domains\Identity\Http\Requests\RegisterRequest;
 use App\Domains\Identity\Resources\UserResource;
+use App\Domains\Identity\Services\EmailVerificationService;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -24,17 +25,20 @@ use Illuminate\Validation\ValidationException;
  */
 final class AuthController extends Controller
 {
-    public function register(RegisterRequest $request, RegisterTenantAction $action): JsonResponse
+    public function register(RegisterRequest $request, RegisterTenantAction $action, EmailVerificationService $verification): JsonResponse
     {
         $user = $action->execute(RegisterData::fromArray($request->validated()));
+
+        // Issue an email-verification challenge (delivery is honest — awaiting provider credentials).
+        $sent = $verification->send($user);
 
         // Establish the SPA session (fires the Login event → audited).
         Auth::guard('web')->login($user);
         $request->session()->regenerate();
 
         return ApiResponse::success(
-            ['user' => new UserResource($user)],
-            'Account created successfully.',
+            ['user' => new UserResource($user), 'email_verification' => $sent],
+            'Account created. Please verify your email to continue.',
             status: 201,
         );
     }

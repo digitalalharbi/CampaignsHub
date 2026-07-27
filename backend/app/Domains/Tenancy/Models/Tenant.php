@@ -17,9 +17,16 @@ final class Tenant extends Model
     use HasUuidKey;
     use SoftDeletes;
 
-    protected $fillable = ['name', 'slug', 'status', 'settings', 'portal_domain', 'is_default_portal', 'portal_enabled'];
+    protected $fillable = ['name', 'slug', 'status', 'settings', 'portal_domain', 'is_default_portal', 'portal_enabled',
+        'account_type', 'enabled_modules', 'subscription_plan', 'onboarding_step', 'onboarding_completed_at'];
 
-    protected $casts = ['settings' => 'array', 'is_default_portal' => 'bool', 'portal_enabled' => 'bool'];
+    protected $casts = [
+        'settings' => 'array',
+        'is_default_portal' => 'bool',
+        'portal_enabled' => 'bool',
+        'enabled_modules' => 'array',
+        'onboarding_completed_at' => 'datetime',
+    ];
 
     public function workspaces(): HasMany
     {
