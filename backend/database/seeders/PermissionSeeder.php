@@ -15,7 +15,11 @@ final class PermissionSeeder extends Seeder
 {
     /** @var array<string, list<string>> */
     private array $catalogue = [
-        'clients' => ['view', 'create', 'update', 'delete'],
+        'clients' => [
+            'view', 'view_all', 'create', 'update', 'delete',
+            'archive', 'restore', 'manage_team', 'manage_files', 'manage_settings',
+            'view_analytics', 'view_reports', 'create_reports', 'share_reports',
+        ],
         'leads' => ['view', 'create', 'update', 'delete', 'convert'],
         'proposals' => ['view', 'create', 'update', 'approve'],
         'campaigns' => ['view', 'create', 'update', 'launch', 'pause', 'link', 'budget.change'],

@@ -28,6 +28,9 @@ final class MetricsAggregator
     /** When set, every aggregation is scoped to this single unified campaign (command center). */
     private ?string $campaignId = null;
 
+    /** When set, every aggregation is scoped to these project ids (a client spans many projects). */
+    private ?array $projectIds = null;
+
     /**
      * Return a campaign-scoped copy of the aggregator — every subsequent totals/byProvider/timeseries/
      * funnel/budget call is filtered to this campaign's metrics (on top of the project/tenant scope).
@@ -41,6 +44,21 @@ final class MetricsAggregator
         return $clone;
     }
 
+    /**
+     * Return a copy scoped to a set of project ids — used by the Client Command Center to aggregate a
+     * single client's metrics across ALL its projects, while the tenant scope still fails closed.
+     * Reuses every derived-KPI formula unchanged (no parallel metrics engine).
+     *
+     * @param  list<string>  $projectIds
+     */
+    public function forProjects(array $projectIds): self
+    {
+        $clone = clone $this;
+        $clone->projectIds = $projectIds;
+
+        return $clone;
+    }
+
     private function base(Carbon $from, Carbon $to): Builder
     {
         // Reuse the model's project/tenant scope, then drop to the query builder for aggregation.
@@ -49,6 +67,12 @@ final class MetricsAggregator
 
         if ($this->campaignId !== null) {
             $query->where('unified_campaign_id', $this->campaignId);
+        }
+
+        if ($this->projectIds !== null) {
+            // Empty set → match nothing (a client with no projects has no metrics), never "all".
+            // A never-matching UUID keeps the column type valid on Postgres.
+            $query->whereIn('project_id', $this->projectIds ?: ['00000000-0000-0000-0000-000000000000']);
         }
 
         return $query->toBase();

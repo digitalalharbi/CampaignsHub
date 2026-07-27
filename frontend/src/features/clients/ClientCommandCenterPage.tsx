@@ -1,40 +1,63 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Pencil } from 'lucide-react'
 import { getClient } from './api'
+import { CLIENT_STATUS_LABELS, INDUSTRY_LABELS, labelOf, PRIORITY_LABELS, SERVICE_LEVEL_LABELS } from './labels'
+import { ClassificationEditor } from './ClassificationEditor'
+import { TabSettings } from './TabSettings'
 import { useT } from '@/lib/i18n'
+import { useUi } from '@/stores/ui'
 
-type Tab = 'overview' | 'projects' | 'campaigns' | 'requests'
+type Tab = 'overview' | 'projects' | 'campaigns' | 'requests' | 'settings'
 
 export function ClientCommandCenterPage() {
   const t = useT()
+  const lang = useUi((s) => s.locale)
   const { clientId = '' } = useParams()
   const [tab, setTab] = useState<Tab>('overview')
+  const [editing, setEditing] = useState(false)
   const query = useQuery({ queryKey: ['app', 'client', clientId], queryFn: () => getClient(clientId) })
 
   if (query.isLoading) return <div className="mx-auto max-w-5xl"><div className="h-64 animate-pulse rounded-2xl bg-surface-secondary" /></div>
   if (query.isError) return <div className="mx-auto max-w-5xl rounded-2xl border border-danger/30 bg-[var(--negative-background)] p-6 text-center text-sm text-danger">{t('error_generic')}</div>
   const d = query.data!
 
+  // Only tabs whose backend is live are shown — never a placeholder tab.
   const TABS: { key: Tab; label: string }[] = [
     { key: 'overview', label: t('tab_overview') }, { key: 'projects', label: t('tab_projects') },
     { key: 'campaigns', label: t('tab_campaigns') }, { key: 'requests', label: t('tab_requests') },
+    { key: 'settings', label: t('tab_settings') },
   ]
 
   return (
     <div className="mx-auto w-full max-w-5xl">
       <Link to="/app/clients" className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {t('clients_portfolio')}</Link>
 
+      {d.is_archived && (
+        <div className="mb-3 rounded-xl border border-warning/40 bg-warning/10 px-4 py-2.5 text-sm text-warning">{t('cc_archived_banner')}</div>
+      )}
+
       <div className="rounded-2xl border border-border bg-surface p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="font-heading text-2xl font-extrabold text-text-primary">{d.name}</h1>
-          <div className="flex items-center gap-2 text-xs">
-            <span className="rounded-full bg-brand-primary-soft px-2.5 py-1 font-semibold text-brand-700">{d.client_status ?? '—'}</span>
-            {d.service_level && <span className="rounded-full bg-surface-secondary px-2.5 py-1 font-semibold text-text-secondary">{d.service_level}</span>}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="font-heading text-2xl font-extrabold text-text-primary">{d.name}</h1>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <span className="rounded-full bg-brand-primary-soft px-2.5 py-1 font-semibold text-brand-700">{labelOf(CLIENT_STATUS_LABELS, d.classification.client_status, lang)}</span>
+              {d.classification.service_level && <span className="rounded-full bg-surface-secondary px-2.5 py-1 font-semibold text-text-secondary">{labelOf(SERVICE_LEVEL_LABELS, d.classification.service_level, lang)}</span>}
+              {d.classification.industry && <span className="rounded-full bg-surface-secondary px-2.5 py-1 font-semibold text-text-secondary">{labelOf(INDUSTRY_LABELS, d.classification.industry, lang)}</span>}
+              {d.classification.priority && d.classification.priority !== 'normal' && <span className="rounded-full bg-warning/15 px-2.5 py-1 font-semibold text-warning">{t('cc_priority')}: {labelOf(PRIORITY_LABELS, d.classification.priority, lang)}</span>}
+              {d.classification.owner_name && <span className="rounded-full bg-surface-secondary px-2.5 py-1 font-semibold text-text-secondary">{t('cc_owner')}: {d.classification.owner_name}</span>}
+            </div>
           </div>
+          {d.can.update && (
+            <button onClick={() => setEditing((v) => !v)} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:text-text-primary"><Pencil size={14} /> {t('cc_edit_classification')}</button>
+          )}
         </div>
-        <div className="mt-4 flex gap-1 border-b border-border">
+
+        {editing && d.can.update && <ClassificationEditor clientId={d.id} current={d.classification} onClose={() => setEditing(false)} />}
+
+        <div className="mt-4 flex flex-wrap gap-1 border-b border-border">
           {TABS.map((tb) => (
             <button key={tb.key} onClick={() => setTab(tb.key)} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === tb.key ? 'border-brand-500 text-brand-700' : 'border-transparent text-text-secondary hover:text-text-primary'}`}>{tb.label}</button>
           ))}
@@ -90,6 +113,8 @@ export function ClientCommandCenterPage() {
               ))}
             </ul>
           )}
+
+          {tab === 'settings' && <TabSettings d={d} />}
         </div>
       </div>
     </div>
