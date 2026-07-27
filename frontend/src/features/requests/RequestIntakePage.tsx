@@ -9,7 +9,8 @@ import { controlClass } from '@/components/ui/Field'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 
-const DRAFT_KEY = 'ch-request-draft-v1'
+const DRAFT_KEY = 'ch-request-draft-v2' // v2: stores only non-sensitive {type, step, ts}
+const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 const PLATFORMS = ['Meta', 'Google', 'TikTok', 'Snapchat', 'X', 'LinkedIn']
 
 type Meta = Record<string, unknown>
@@ -89,20 +90,32 @@ export function RequestIntakePage() {
   const metaQuery = useQuery({ queryKey: ['requests', 'meta'], queryFn: getRequestMeta })
   const types = metaQuery.data?.types ?? []
 
-  // Restore a non-sensitive text draft if present.
-  const [form, setForm] = useState<FormState>(() => {
+  const [form, setForm] = useState<FormState>(EMPTY)
+  const [step, setStep] = useState(0)
+
+  // NON-SENSITIVE draft only: the selected service + current step (never name/email/phone/objective/
+  // ad-account data/files/tokens). Expires after 24h; nothing personally identifying is ever persisted.
+  useEffect(() => {
     try {
       const raw = localStorage.getItem(DRAFT_KEY)
-      return raw ? { ...EMPTY, ...(JSON.parse(raw) as Partial<FormState>) } : EMPTY
-    } catch { return EMPTY }
-  })
-  const [step, setStep] = useState(0)
+      if (!raw) return
+      const d = JSON.parse(raw) as { type?: string; step?: number; ts?: number }
+      if (!d.ts || Date.now() - d.ts > DRAFT_TTL_MS) { localStorage.removeItem(DRAFT_KEY); return }
+      if (d.type) setForm((f) => ({ ...f, type: d.type! }))
+      if (typeof d.step === 'number') setStep(Math.min(Math.max(d.step, 0), 4))
+    } catch { /* ignore malformed draft */ }
+  }, [])
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  // Persist draft (text only — never files/tokens).
+  // Persist ONLY the non-sensitive service + step (+ timestamp for expiry). No PII ever touches storage.
   useEffect(() => {
-    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(form)) } catch { /* quota */ }
-  }, [form])
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ type: form.type, step, ts: Date.now() })) } catch { /* quota */ }
+  }, [form.type, step])
+
+  const clearDraft = () => {
+    try { localStorage.removeItem(DRAFT_KEY) } catch { /* noop */ }
+    setForm(EMPTY); setStep(0); setErrors({})
+  }
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }))
   const setMeta = (k: string, v: unknown) => setForm((f) => ({ ...f, meta: { ...f.meta, [k]: v } }))
@@ -320,7 +333,10 @@ export function RequestIntakePage() {
           </div>
         </div>
 
-        <Link to="/" className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {ar ? 'العودة للصفحة الرئيسية' : 'Back to home'}</Link>
+        <div className="mt-6 flex items-center justify-between">
+          <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {ar ? 'العودة للصفحة الرئيسية' : 'Back to home'}</Link>
+          <button type="button" onClick={clearDraft} className="text-sm text-text-muted hover:text-danger">{ar ? 'حذف المسودة' : 'Clear draft'}</button>
+        </div>
       </main>
     </div>
   )

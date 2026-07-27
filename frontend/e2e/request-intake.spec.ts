@@ -40,13 +40,29 @@ test('homepage → request → dynamic form → submit → success with request 
   await expect(page.getByText(/بانتظار اعتماد خدمة البريد|Awaiting mail credentials/)).toBeVisible()
 })
 
-test('request form draft persists across reload', async ({ page }) => {
+test('draft persists ONLY the non-sensitive service selection — never PII', async ({ page }) => {
   await page.goto('/requests/new')
   await page.getByRole('button', { name: /تحسين الأداء|Performance optimization/ }).click()
   await page.getByRole('button', { name: /التالي|Next/ }).click()
-  await page.getByLabel(/الاسم|Name/).fill('Draft Persists')
+  await page.getByLabel(/الاسم|Name/).fill('Should NOT persist')
+
+  // Only {type, step, ts} may be stored — assert the raw localStorage contains no PII.
+  const draft = await page.evaluate(() => localStorage.getItem('ch-request-draft-v2'))
+  expect(draft).toBeTruthy()
+  expect(draft!).not.toContain('Should NOT persist')
+  const parsed = JSON.parse(draft!)
+  expect(Object.keys(parsed).sort()).toEqual(['step', 'ts', 'type'])
+
   await page.reload()
-  // The non-sensitive text draft is restored.
+  // The service selection is restored (non-sensitive), but the name field is empty.
   await page.getByRole('button', { name: /التالي|Next/ }).click()
-  await expect(page.getByLabel(/الاسم|Name/)).toHaveValue('Draft Persists')
+  await expect(page.getByLabel(/الاسم|Name/)).toHaveValue('')
+})
+
+test('clear-draft button wipes the stored draft', async ({ page }) => {
+  await page.goto('/requests/new')
+  await page.getByRole('button', { name: /استشارة|Consulting/ }).click()
+  await page.getByRole('button', { name: /حذف المسودة|Clear draft/ }).click()
+  const draft = await page.evaluate(() => JSON.parse(localStorage.getItem('ch-request-draft-v2') || '{}'))
+  expect(draft.type).toBeFalsy()
 })
