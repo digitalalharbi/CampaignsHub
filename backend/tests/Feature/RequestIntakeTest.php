@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Requests\Models\ExternalRequest;
+use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -17,6 +18,7 @@ final class RequestIntakeTest extends TestCase
     {
         parent::setUp();
         $this->seed(RequestCatalogSeeder::class);
+        Tenant::create(['name' => 'Portal', 'slug' => 'portal-'.uniqid(), 'status' => 'active', 'is_default_portal' => true, 'portal_enabled' => true]);
     }
 
     private function payload(array $overrides = []): array

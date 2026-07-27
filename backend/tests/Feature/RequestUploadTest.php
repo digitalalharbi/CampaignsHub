@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestFile;
 use App\Domains\Requests\Models\RequestUploadSession;
+use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -22,6 +23,7 @@ final class RequestUploadTest extends TestCase
         parent::setUp();
         $this->seed(RequestCatalogSeeder::class);
         Storage::fake('local');
+        Tenant::create(['name' => 'Portal', 'slug' => 'portal-'.uniqid(), 'status' => 'active', 'is_default_portal' => true, 'portal_enabled' => true]);
     }
 
     private function newUploadSession(): string

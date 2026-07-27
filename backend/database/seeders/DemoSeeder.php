@@ -45,6 +45,9 @@ final class DemoSeeder extends Seeder
             ['slug' => 'demo-agency'],
             ['name' => 'Demo Agency', 'status' => 'active'],
         );
+        // This tenant owns the public request portal in dev/demo — resolved by flag, not a fragile env UUID,
+        // so a fresh `migrate:fresh --seed` keeps the portal working without editing any id.
+        $tenant->forceFill(['is_default_portal' => true, 'portal_enabled' => true])->save();
 
         $context->setTenantId((string) $tenant->id);
 

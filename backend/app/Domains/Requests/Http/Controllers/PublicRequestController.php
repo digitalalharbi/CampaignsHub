@@ -11,6 +11,7 @@ use App\Domains\Requests\Models\RequestEvent;
 use App\Domains\Requests\Models\RequestFile;
 use App\Domains\Requests\Models\RequestType;
 use App\Domains\Requests\Models\RequestUploadSession;
+use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestIntake;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,7 +26,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 final class PublicRequestController
 {
-    public function __construct(private readonly RequestIntake $intake) {}
+    public function __construct(
+        private readonly RequestIntake $intake,
+        private readonly PortalTenantResolver $portal,
+    ) {}
 
     /** GET /api/v1/requests/meta — public catalog for the intake form (active service types). */
     public function meta(): JsonResponse
@@ -63,7 +67,11 @@ final class PublicRequestController
             'upload_token' => ['nullable', 'string'],
         ]);
 
-        ['request' => $req, 'token' => $token] = $this->intake->create($data);
+        // Resolve the owning tenant from the request host / default portal — fail closed if none.
+        $tenant = $this->portal->resolve($request);
+        abort_if($tenant === null, 404, 'This request portal is not available.');
+
+        ['request' => $req, 'token' => $token] = $this->intake->create($data, $tenant);
 
         return response()->json([
             'data' => [

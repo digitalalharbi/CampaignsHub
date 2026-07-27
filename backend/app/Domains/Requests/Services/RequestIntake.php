@@ -12,6 +12,8 @@ use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
+// Portal tenant is resolved by PortalTenantResolver and passed in — no fragile env/Tenant::first().
+
 /**
  * Persists a validated external request atomically: reference + record + timeline event + a secure
  * tracking token (plaintext returned once, only the hash stored). Never trusts the client for status,
@@ -23,15 +25,15 @@ final class RequestIntake
      * @param  array<string,mixed>  $data  validated payload
      * @return array{request: ExternalRequest, token: string}
      */
-    public function create(array $data): array
+    public function create(array $data, Tenant $tenant): array
     {
-        return DB::transaction(function () use ($data) {
+        return DB::transaction(function () use ($data, $tenant) {
             $type = RequestType::where('key', $data['type'])->firstOrFail();
             $status = RequestStatus::where('key', 'new')->firstOrFail();
 
             $request = new ExternalRequest;
             $request->fill([
-                'tenant_id' => $this->portalTenantId(),
+                'tenant_id' => $tenant->id,
                 'reference' => $this->reference(),
                 'module' => $type->module,
                 'type_id' => $type->id,
@@ -85,21 +87,6 @@ final class RequestIntake
 
             return ['request' => $request->fresh(['type', 'status']), 'token' => $plain];
         });
-    }
-
-    /**
-     * The tenant that owns public-portal requests. Configurable for a multi-portal deployment; otherwise
-     * a single-portal install belongs to the platform owner's (first) tenant so requests are visible to
-     * that tenant's internal dashboard.
-     */
-    private function portalTenantId(): ?string
-    {
-        $configured = config('requests.portal_tenant_id');
-        if ($configured !== null) {
-            return (string) $configured;
-        }
-
-        return Tenant::query()->orderBy('created_at')->value('id');
     }
 
     private function reference(): string
