@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\AI\Http\Controllers\AICredentialController;
+use App\Domains\Alerts\Http\Controllers\AlertController;
 use App\Domains\ClientWorkspaces\Http\Controllers\ClientWorkspaceController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\Tasks\Http\Controllers\TaskController;
@@ -27,6 +28,13 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
     Route::get('notifications/deliveries', [NotificationController::class, 'deliveries'])->name('notifications.deliveries');
     Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+
+    // Alerting: rules + firing ledger (resolve / snooze).
+    Route::get('alerts/rules', [AlertController::class, 'rules'])->name('alerts.rules.index');
+    Route::post('alerts/rules', [AlertController::class, 'storeRule'])->name('alerts.rules.store');
+    Route::get('alerts/events', [AlertController::class, 'events'])->name('alerts.events.index');
+    Route::post('alerts/events/{alertEvent}/resolve', [AlertController::class, 'resolve'])->name('alerts.events.resolve');
+    Route::post('alerts/events/{alertEvent}/snooze', [AlertController::class, 'snooze'])->name('alerts.events.snooze');
 
     // Tasks.
     Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');

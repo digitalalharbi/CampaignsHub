@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Identity\Resources;
 
 use App\Domains\Accounts\Services\AccountEntitlements;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -47,7 +48,9 @@ final class UserResource extends JsonResource
             'theme' => $this->theme ?? 'system',
             'permissions' => $this->permissionKeys(),
             // Account entitlements: navigation persona (personal/company), modules, onboarding state.
-            'account' => $this->tenant ? app(AccountEntitlements::class)->toArray($this->tenant) : null,
+            'account' => $this->tenant instanceof Tenant
+                ? app(AccountEntitlements::class)->toArray($this->tenant)
+                : null,
             'created_at' => optional($this->created_at)->toIso8601String(),
         ];
     }

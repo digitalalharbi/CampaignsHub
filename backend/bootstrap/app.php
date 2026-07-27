@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
+use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Reports\Console\DispatchScheduledReports;
@@ -49,6 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
         DispatchScheduledReports::class,
         PruneUploadSessions::class,
         EvaluateSla::class,
+        EvaluateAlerts::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.
