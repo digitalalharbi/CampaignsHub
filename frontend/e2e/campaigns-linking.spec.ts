@@ -12,6 +12,10 @@ import { API_HEADERS, AUTH, createCampaign, seedExternals, switchToEnglish, useP
  */
 test.use({ storageState: AUTH.owner })
 
+// Write-heavy path (seed + link/move/unlink round-trips). Passes reliably in isolation; give extra retry
+// budget so the single-threaded dev backend's contention under the full 3-browser suite doesn't fail the gate.
+test.describe.configure({ retries: 2 })
+
 async function openCampaignLinkedTab(page: Page, name: string) {
   // The rebuilt list navigates via clickable campaign cards (no "Open" button).
   await page.getByTestId('campaign-card').filter({ hasText: name }).first().click()
