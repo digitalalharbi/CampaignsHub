@@ -156,4 +156,26 @@ final class ClientPortalTest extends TestCase
     {
         $this->getJson('/api/v1/client/requests')->assertUnauthorized();
     }
+
+    public function test_lifecycle_notifications_are_recorded_honestly_and_deduped(): void
+    {
+        $email = 'notif@x.test';
+        $phone = '+966500000005';
+        $ref = $this->submit($phone, $email)->json('data.reference');
+
+        // "received" recorded on BOTH channels, honestly awaiting provider credentials (never "sent").
+        $this->assertDatabaseHas('client_notifications', ['event' => 'received', 'channel' => 'email', 'status' => 'awaiting_provider_credentials']);
+        $this->assertDatabaseHas('client_notifications', ['event' => 'received', 'channel' => 'whatsapp', 'status' => 'awaiting_provider_credentials']);
+        $this->assertDatabaseMissing('client_notifications', ['status' => 'sent']);
+
+        // Deduplicated per (request,event,channel) — re-notifying the same event adds nothing.
+        $req = ExternalRequest::where('reference', $ref)->firstOrFail();
+        app(\App\Domains\Requests\Services\ClientNotifier::class)->notify($req, 'received');
+        $this->assertSame(2, (int) \Illuminate\Support\Facades\DB::table('client_notifications')->where('event', 'received')->count());
+
+        // The portal surfaces the delivery log honestly.
+        $cookie = $this->portalLogin($email);
+        $this->withHeaders($this->auth($cookie))->getJson("/api/v1/client/requests/{$ref}")
+            ->assertOk()->assertJsonFragment(['channel' => 'email', 'status' => 'awaiting_provider_credentials']);
+    }
 }

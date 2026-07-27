@@ -11,6 +11,7 @@ use App\Domains\Requests\Models\RequestEvent;
 use App\Domains\Requests\Models\RequestFile;
 use App\Domains\Requests\Models\RequestType;
 use App\Domains\Requests\Models\RequestUploadSession;
+use App\Domains\Requests\Services\ClientNotifier;
 use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestIntake;
@@ -32,6 +33,7 @@ final class PublicRequestController
         private readonly RequestIntake $intake,
         private readonly PortalTenantResolver $portal,
         private readonly ContactVerificationService $verification,
+        private readonly ClientNotifier $notifier,
     ) {}
 
     /** GET /api/v1/requests/meta — public catalog for the intake form (active service types). */
@@ -87,6 +89,9 @@ final class PublicRequestController
         abort_if($tenant === null, 404, 'This request portal is not available.');
 
         ['request' => $req, 'token' => $token] = $this->intake->create($data, $tenant);
+
+        // Record client-facing confirmations (email + WhatsApp) — honest delivery state, AFTER the DB txn.
+        $this->notifier->notify($req, 'received');
 
         return response()->json([
             'data' => [

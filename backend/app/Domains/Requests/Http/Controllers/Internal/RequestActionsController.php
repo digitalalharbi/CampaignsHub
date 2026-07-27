@@ -7,6 +7,7 @@ namespace App\Domains\Requests\Http\Controllers\Internal;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestStatus;
+use App\Domains\Requests\Services\ClientNotifier;
 use App\Domains\Requests\Services\RequestConversionService;
 use App\Domains\Requests\Services\RequestNotifier;
 use App\Domains\Requests\Services\RequestSla;
@@ -31,6 +32,7 @@ final class RequestActionsController
         private readonly RequestNotifier $notifier,
         private readonly RequestSla $sla,
         private readonly RequestStatusMachine $machine,
+        private readonly ClientNotifier $clientNotifier,
     ) {}
 
     /** PATCH /app/requests/{request}/assign */
@@ -87,6 +89,9 @@ final class RequestActionsController
         $this->event($req, 'status_changed', from: $from, to: $to, clientVisible: $toStatus->is_client_visible, message: "Status: {$toStatus->name_en}");
         $this->audit->log('request.status_changed', 'external_request', $req->id, ['status' => $from], ['status' => $to, 'reason' => $data['reason'] ?? null]);
         $this->notifier->notify($req, 'request.status_changed', "Request {$req->reference} → {$toStatus->name_en}");
+        if ($toStatus->is_client_visible && ($clientEvent = $this->clientNotifier->eventForStatus($toStatus->key))) {
+            $this->clientNotifier->notify($req, $clientEvent); // email + WhatsApp (awaiting provider credentials)
+        }
 
         return response()->json(['data' => ['status' => 'updated']]);
     }
@@ -120,6 +125,7 @@ final class RequestActionsController
         $this->event($req, 'info_requested', to: 'waiting_client', clientVisible: true, message: 'Information requested');
         $this->audit->log('request.info_requested', 'external_request', $req->id);
         $this->notifier->notify($req, 'request.info_requested', "Info requested on {$req->reference}");
+        $this->clientNotifier->notify($req, 'info_requested');
 
         return response()->json(['data' => ['status' => 'requested']]);
     }
@@ -148,6 +154,9 @@ final class RequestActionsController
         $req->comments()->create(['visibility' => 'client', 'author_label' => 'Team', 'body' => $data['body']]);
         $this->event($req, 'comment', clientVisible: true, message: 'Team replied');
         $this->audit->log('request.client_reply', 'external_request', $req->id);
+        // team_reply is deduped per (request,event,channel); each staff reply that should re-notify uses a
+        // fresh comment event — the portal shows the message immediately regardless of email/WhatsApp.
+        $this->clientNotifier->notify($req, 'team_reply');
 
         return response()->json(['data' => ['status' => 'sent']]);
     }

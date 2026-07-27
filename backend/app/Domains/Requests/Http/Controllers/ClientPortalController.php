@@ -161,7 +161,26 @@ final class ClientPortalController
             'comments' => $comments,
             'files' => $files,
             'result' => $this->conversionResult($req),
+            'notifications' => $this->notificationLog($req),
         ]]);
+    }
+
+    /**
+     * Client-safe view of the notifications we (attempted to) send for this request — honest delivery state.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function notificationLog(ExternalRequest $req): array
+    {
+        return DB::table('client_notifications')->where('request_id', $req->id)
+            ->orderByDesc('created_at')->limit(50)
+            ->get(['event', 'channel', 'status', 'created_at'])
+            ->map(fn ($n) => [
+                'event' => $n->event,
+                'channel' => $n->channel,
+                'status' => $n->status, // awaiting_provider_credentials until a provider is wired
+                'at' => $n->created_at,
+            ])->all();
     }
 
     /** POST /client/requests/{reference}/reply — client message (+ optional files). Always client-visible. */
