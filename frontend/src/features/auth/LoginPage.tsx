@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
+import { Check, Copy } from 'lucide-react'
 import { login } from './api'
 import { safeRedirect } from './redirect'
 import { AuthShell } from './AuthShell'
@@ -11,6 +12,41 @@ import { useT } from '@/lib/i18n'
 import { useAuth } from '@/stores/auth'
 
 const DEMO = { email: 'owner@demo-agency.local', password: 'password' }
+
+/**
+ * Dev-only demo credentials. Never auto-fills the fields and never renders in production — it just
+ * offers copy buttons so a developer can paste them deliberately.
+ */
+function DemoCredentials() {
+  const [copied, setCopied] = useState<'email' | 'password' | null>(null)
+  const copy = (which: 'email' | 'password') => {
+    void navigator.clipboard?.writeText(DEMO[which])
+    setCopied(which)
+    window.setTimeout(() => setCopied((c) => (c === which ? null : c)), 1500)
+  }
+  const Row = ({ which, value }: { which: 'email' | 'password'; value: string }) => (
+    <div className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
+      <code className="truncate font-mono text-xs text-text-secondary" dir="ltr">{value}</code>
+      <button
+        type="button" onClick={() => copy(which)}
+        className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-brand-600 hover:bg-brand-primary-soft"
+        aria-label={which === 'email' ? 'نسخ البريد' : 'نسخ كلمة المرور'}
+      >
+        {copied === which ? <Check size={13} /> : <Copy size={13} />}
+        {copied === which ? 'تم النسخ' : 'نسخ'}
+      </button>
+    </div>
+  )
+  return (
+    <div className="mt-5 rounded-xl border border-dashed border-border bg-surface-secondary p-3">
+      <p className="mb-2 text-xs font-semibold text-text-muted">بيانات الحساب التجريبي · بيئة التطوير فقط</p>
+      <div className="space-y-1.5">
+        <Row which="email" value={DEMO.email} />
+        <Row which="password" value={DEMO.password} />
+      </div>
+    </div>
+  )
+}
 
 export function LoginPage() {
   const t = useT()
@@ -33,16 +69,8 @@ export function LoginPage() {
       <h2 className="font-[var(--font-heading)] text-2xl font-extrabold text-text-primary">{t('welcome_back')}</h2>
       <p className="mt-1 text-[15px] text-text-secondary">{t('sign_in_subtitle')}</p>
 
-      {/* Demo credentials — dev only, in a separate box, never auto-filled into the fields. */}
-      {import.meta.env.DEV && (
-        <button
-          type="button"
-          onClick={() => { setEmail(DEMO.email); setPassword(DEMO.password) }}
-          className="mt-5 w-full rounded-xl border border-dashed border-border bg-surface-secondary px-4 py-2.5 text-start text-xs text-text-muted hover:border-brand-400"
-        >
-          بيئة تطوير — اضغط لتعبئة بيانات تجريبية: <span className="font-semibold text-text-secondary">{DEMO.email}</span>
-        </button>
-      )}
+      {/* Demo credentials — dev only, separate card with copy buttons, never auto-filled. */}
+      {import.meta.env.DEV && <DemoCredentials />}
 
       <form className="mt-6 space-y-[18px]" onSubmit={(e) => { e.preventDefault(); mutation.mutate({ email, password }) }}>
         <EmailInput label={t('email')} value={email} onChange={(e) => setEmail(e.target.value)} required error={error?.errors?.email?.[0]} />

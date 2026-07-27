@@ -20,10 +20,16 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 - **Leading hypothesis (unconfirmed):** `CampaignDetailPage` now fires many CMC query hooks
   (summary/activity/alerts/…) that are not mocked in the unit test; under parallel workers an unhandled
   rejection or React-Query retry could bleed a timing warning into a sibling file. Not proven.
-- **Mitigation in place:** none yet beyond re-run evidence.
-- **Next action to close:** (a) add explicit MSW/handler mocks for every CMC endpoint the detail page calls so
-  no unmocked request is issued during the unit test; (b) run `vitest run --repeat-each` once available; keep as
-  Watch until 30+ consecutive clean full-suite runs or a captured failure with stack.
+- **Recurrence:** flickered once more on 2026-07-27 (1 failed / 21 passed in a summary-only run; assertion not
+  captured), then 10/10 clean immediately after — reinforcing the unmocked-network hypothesis.
+- **Mitigation APPLIED (2026-07-27):** `CampaignDetailPage.test.tsx` now `vi.mock('./metrics')` — every CMC
+  hook (summary/performance/platforms/budget/funnel/activity/alerts/reports/annotations/creatives + the two
+  annotation mutations) returns a static stub, so the command-center tabs issue **no** network request during
+  the unit test. (Also fixed a vi.mock hoisting bug this introduced: stubs must live inside the factory —
+  caught because the suite dropped 22→18; now back to 22.) The test QueryClient already uses `retry:false`.
+- **Status:** downgraded to low-risk Watch. Full suite now 22/22 across 8 consecutive post-fix runs +
+  CampaignDetailPage 4/4 isolated. Close fully after 30+ clean runs with the mock in place, or reopen on any
+  captured failure with a stack.
 
 ## G-002 — Arabic PDF: English bold-heading text-layer extraction
 

@@ -6,10 +6,24 @@
   --brand-50: #ecfdf5;
   --brand-100: #d1fae5;
   --brand-200: #a7f3d0;
+  --brand-300: #6ee7b7;
   --brand-400: #34d399;
   --brand-500: #10b981;
   --brand-600: #0d8a6f;
   --brand-700: #047857;
+
+  /* Semantic brand + surface aliases — components reference these, never raw brand steps. */
+  --brand-primary: var(--brand-600);
+  --brand-primary-hover: var(--brand-700);
+  --brand-primary-soft: var(--brand-background);
+  --surface-primary: var(--surface);
+  --surface-elevated: #ffffff;
+  --border-default: var(--border);
+
+  /* Auth marketing panel — Deep Graphite with a whisper of teal (no indigo/purple). Theme-invariant. */
+  --auth-panel-from: #0b1116;
+  --auth-panel-via: #0e1a1c;
+  --auth-panel-to: #0b1116;
 
   --success: #16a34a;
   --warning: #d97706;
@@ -88,10 +102,19 @@
   --brand-50: #04201e;
   --brand-100: #063831;
   --brand-200: #0a544a;
+  --brand-300: #6ee7b7;
   --brand-400: #14c39a;
   --brand-500: #14c39a;
   --brand-600: #14c39a;
   --brand-700: #34d4ab;
+
+  /* Semantic brand + surface aliases (dark). */
+  --brand-primary: var(--brand-500);
+  --brand-primary-hover: var(--brand-400);
+  --brand-primary-soft: var(--brand-background);
+  --surface-primary: var(--surface);
+  --surface-elevated: #1b2430;
+  --border-default: var(--border);
 
   --success: #22c55e;
   --warning: #fbbf24;

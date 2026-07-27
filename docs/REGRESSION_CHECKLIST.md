@@ -43,3 +43,4 @@ npx playwright test --workers=1 --retries=0 --repeat-each=3
 |------|-------|---|---|---|---|-------|
 | 2026-07-27 | Governance docs + flake diagnosis | n/a | vitest 13/13, e2e auth-forms 7/7 | RTL/forms verified | vitest+auth e2e green | G-001 logged as Watch |
 | 2026-07-27 | G-005 redirect + throttle fix | login→redirect live | backend 157/157 | RTL/forms | e2e auth 24/24 @repeat-each=3 | G-007 diagnosed+fixed (login throttle) |
+| 2026-07-27 | Auth visual unification | login light+dark+mobile live | metrics-mock: suite 22/22 ×8 | RTL, no overflow 320/375, no console err | vitest 22/22, auth e2e 10/10 | purple removed; G-001 mitigated |

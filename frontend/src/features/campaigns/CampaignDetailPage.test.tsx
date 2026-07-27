@@ -19,6 +19,29 @@ vi.mock('./api', () => ({
 }))
 vi.mock('@/features/projects/api', () => ({ listUsers: vi.fn() }))
 
+// The command-center tabs fire their own metrics/activity/alerts/reports/creatives queries. This unit
+// test only exercises the header + platforms; stub the metrics hooks so no unmocked request is issued
+// (an unhandled fetch from a background tab was the leading suspect behind the G-001 cross-file flake).
+// NOTE: vi.mock is hoisted above module-level consts, so the stubs are defined INSIDE the factory.
+vi.mock('./metrics', () => {
+  const queryStub = () => ({ data: undefined, isLoading: false, isError: false, error: null, refetch: vi.fn() })
+  const mutationStub = () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, isError: false })
+  return {
+    useCampaignSummary: queryStub,
+    useCampaignPerformance: queryStub,
+    useCampaignPlatforms: queryStub,
+    useCampaignBudget: queryStub,
+    useCampaignFunnel: queryStub,
+    useCampaignActivity: queryStub,
+    useCampaignAlerts: queryStub,
+    useCampaignReports: queryStub,
+    useCampaignAnnotations: queryStub,
+    useCampaignCreatives: queryStub,
+    useCreateAnnotation: mutationStub,
+    useUpdateAnnotation: mutationStub,
+  }
+})
+
 import { archiveCampaign, campaignAction, getCampaign, listLinkedExternal, unlinkExternal } from './api'
 
 const DETAIL_ROUTE = { route: '/campaigns/p1/c1', path: '/campaigns/:projectId/:campaignId' }

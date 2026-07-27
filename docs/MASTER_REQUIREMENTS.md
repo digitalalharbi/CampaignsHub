@@ -19,9 +19,9 @@ Two-review gate per phase:
 
 | ID | Requirement | Status | Evidence |
 |----|-------------|--------|----------|
-| R1.1 | Original CampaignsHub palette (Emerald-on-Graphite), NOT InfluencerHub purple/blue | Completed | `docs/DECISIONS.md`, live login screenshot |
+| R1.1 | Original CampaignsHub palette (Emerald-on-Graphite), NOT InfluencerHub purple/blue; purple/green conflict removed from /login | Completed | `docs/DECISIONS.md`, tokens.css (`--auth-panel-*`, semantic aliases), live light+dark screenshots |
 | R1.2 | Central form design system (wide 54px fields, 16px, labels above, not pill, no in-field icons, textarea counter) | Completed | `components/ui/form.tsx`, `e2e/auth-forms.spec.ts` (7 green) |
-| R1.3 | Light + Dark complete, WCAG contrast | Implemented but Untested | needs explicit dark + contrast audit |
+| R1.3 | Light + Dark complete, WCAG contrast | Implemented and Tested | live-verified /login light+dark desktop+mobile; auth-forms e2e; contrast audit of non-auth pages still pending |
 | R1.4 | 3 color directions compared internally, best adopted, documented | Completed | `docs/DECISIONS.md` |
 
 ## R2 — Authentication

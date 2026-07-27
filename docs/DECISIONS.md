@@ -30,13 +30,27 @@ Autonomous decisions taken while executing the platform directives. Each is reve
 The reference screenshots were used only for QUALITY + layout, never colors. CampaignsHub keeps its
 OWN identity — deliberately distinct from InfluencerHub's purple/blue:
 - **Primary: Emerald/Teal green** (existing `--brand`) — reads as performance/analytics, not social.
-- **Marketing / auth panel: Deep Graphite / Midnight** gradient (`#0b1020 → #141a33`) with restrained
-  emerald glow — premium and calm, no heavy glassmorphism.
+- **Marketing / auth panel: Deep Graphite** gradient, now tokenised as `--auth-panel-from/via/to`
+  (`#0b1116 → #0e1a1c`, a whisper of teal, **no indigo/purple**) with two soft glows both in the
+  emerald/teal family — premium and calm, no heavy glassmorphism.
 - **States: fixed** — success=emerald, warning/opportunity=warm amber, danger=red, info=restrained cyan.
 - **Neutral grays** for surfaces/borders; subtle gradients only.
-Three directions were weighed internally (Emerald-on-Graphite / Teal-on-Slate / Cyan-accent); the
-**Emerald-on-Graphite** direction was adopted — best contrast (WCAG AA), clearly non-InfluencerHub, and
-it matches the existing token system so no app-wide recolor churn. Light + dark both first-class.
+
+### Finalised 2026-07-27 — purple/green conflict eliminated on `/login`
+Three directions were weighed internally — **1) Emerald + Graphite**, 2) Teal + Charcoal, 3) Forest
+Green + Slate. **Emerald + Graphite adopted**: best WCAG-AA contrast on the dark panel, clearly
+non-InfluencerHub, and it matches the existing `--brand` tokens so there is no app-wide recolor churn.
+Concrete changes:
+- Removed the purple glow orb from `AuthShell` (the only purple-vs-green clash on the login page);
+  replaced with an emerald + teal glow pair.
+- Purple (`--purple #7c3aed`) is now **data-viz only** (the "conversions" chart series) — a rare
+  functional accent, never part of the brand identity, never on auth surfaces.
+- Added central semantic tokens: `brand-primary/-hover/-soft`, `surface-primary/-elevated`,
+  `border-default`, `brand-300` — components reference these, not raw hex.
+- Login button + focus ring are emerald (`brand-600` / `brand-500`), never purple.
+- Verified live in the Browser pane: light + dark, desktop split-layout + mobile form-first,
+  RTL, no horizontal overflow (320/375), no console errors. Demo credentials moved to a separate
+  dev-only card with copy-email / copy-password buttons (never auto-filled).
 
 ## Form design system (2026-07-27)
 Central `components/ui/form.tsx` (FormField / TextInput / EmailInput / PasswordInput / TextareaField
