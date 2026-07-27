@@ -378,3 +378,16 @@ Cross-browser + acceptance work this batch:
   card below form; light+dark baselines clean.
 - **Remaining:** none for this refinement. **Next:** resume External Request Portal (dynamic form UI + tracking UI).
 - **Regressions:** none (request backend untouched — 16d40f2 intact).
+
+## Correction — precise test-status vocabulary (2026-07-27)
+The "14 passed" figure was the TEST count (behavioral + visual) for that run, not baselines. The actual
+visual baselines are **8 PNG files** (chromium-darwin), regenerated for the new design:
+- auth-visual: login-{light,dark}, register-{light,dark}, forgot-password-{light,dark} (6)
+- homepage: home-{light,dark} (2)
+
+Honest per-suite status (do not say "cross-browser ✓" for the visual gates):
+- **Functional E2E: Chromium + Firefox + WebKit — Passed**
+- **Visual Regression: Chromium — Passed**
+- **Firefox/WebKit Visual Regression — Not Executed** (chromium-only baselines by design)
+- **Request Backend — Implemented and Tested** (commit 16d40f2)
+- **Request Frontend — In Progress** (/requests/new + /requests/track UIs are still stubs)
