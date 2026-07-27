@@ -10,6 +10,7 @@ use App\Domains\Identity\Http\Requests\LoginRequest;
 use App\Domains\Identity\Http\Requests\RegisterRequest;
 use App\Domains\Identity\Resources\UserResource;
 use App\Domains\Identity\Services\EmailVerificationService;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -53,6 +54,7 @@ final class AuthController extends Controller
                 'email' => ['These credentials do not match our records.'],
             ]);
         }
+        $this->assertActive($user);
 
         Auth::guard('web')->login($user, (bool) $request->boolean('remember'));
         $request->session()->regenerate();
@@ -61,6 +63,14 @@ final class AuthController extends Controller
             ['user' => new UserResource($user)],
             'Signed in successfully.',
         );
+    }
+
+    /** A suspended/disabled account (or suspended workspace) can never sign in or mint a token. Generic message. */
+    private function assertActive(User $user): void
+    {
+        $suspended = $user->disabled_at !== null
+            || ($user->tenant_id !== null && in_array(Tenant::whereKey($user->tenant_id)->value('status'), ['suspended', 'inactive'], true));
+        abort_if($suspended, 403, 'Your account is not available. Please contact support.');
     }
 
     /** Current authenticated user — used by the SPA to restore its session on load. */
@@ -113,6 +123,7 @@ final class AuthController extends Controller
                 'email' => ['These credentials do not match our records.'],
             ]);
         }
+        $this->assertActive($user);
 
         $token = $user->createToken((string) $request->input('device_name', 'api'))->plainTextToken;
 

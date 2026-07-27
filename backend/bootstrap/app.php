@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Domains\Accounts\Middleware\EnsureEntitlement;
+use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Reports\Console\InvalidateLegacyExportsCommand;
 use App\Domains\Reports\Console\RegenerateDemoExportsCommand;
@@ -55,11 +57,16 @@ return Application::configure(basePath: dirname(__DIR__))
             AssignRequestId::class,
         ]);
 
+        // Suspended/disabled accounts are denied on EVERY authenticated API request (guests pass through).
+        $middleware->api(append: [
+            EnsureAccountActive::class,
+        ]);
+
         // Route-middleware aliases.
         $middleware->alias([
             'tenant' => ResolveTenant::class,
             'project' => ResolveProject::class,
-            'entitlement' => \App\Domains\Accounts\Middleware\EnsureEntitlement::class,
+            'entitlement' => EnsureEntitlement::class,
         ]);
 
         // Ensure tenant (then project) is resolved BEFORE route-model binding, so the global scopes
