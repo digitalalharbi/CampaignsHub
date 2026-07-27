@@ -31,6 +31,7 @@ final class PermissionSeeder extends Seeder
         'alerts' => ['view', 'manage'],
         'branding' => ['view', 'manage'],
         'billing' => ['view', 'manage', 'refund'],
+        'drive' => ['view', 'manage'],
         'messaging' => ['view', 'manage'],
         'automations' => ['view', 'manage'],
         'users' => ['view', 'invite', 'update', 'remove'],
