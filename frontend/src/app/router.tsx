@@ -26,7 +26,7 @@ import { ProjectTeamPage } from '@/features/projects/ProjectTeamPage'
 import { SystemStatusPage } from '@/features/system/SystemStatusPage'
 import { PublicHomePage } from '@/features/marketing/PublicHomePage'
 import { RequestIntakePage } from '@/features/requests/RequestIntakePage'
-import { RequestTrackPage } from '@/features/requests/RequestsPublicStub'
+import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
 import { AppShell } from '@/layouts/AppShell'
 
 export const router = createBrowserRouter([

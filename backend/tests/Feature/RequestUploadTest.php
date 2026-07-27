@@ -106,6 +106,30 @@ final class RequestUploadTest extends TestCase
         $this->assertDatabaseCount('request_upload_sessions', 0); // retired
     }
 
+    public function test_secure_download_serves_client_visible_files_only(): void
+    {
+        // Upload + submit so the file is associated to a request.
+        $token = $this->newUploadSession();
+        $this->postJson('/api/v1/requests/uploads', [
+            'upload_token' => $token, 'file' => UploadedFile::fake()->create('brief.pdf', 10, 'application/pdf'),
+        ])->assertCreated();
+        $tracking = $this->postJson('/api/v1/requests', [
+            'type' => 'paid_campaign_launch', 'contact_name' => 'Sara', 'contact_email' => 's@ex.com', 'upload_token' => $token,
+        ])->json('data.tracking_token');
+
+        $file = RequestFile::firstOrFail();
+
+        // Client-visible file downloads with the correct tracking token.
+        $this->get("/api/v1/requests/track/{$tracking}/files/{$file->id}")->assertOk();
+
+        // Flip it to internal-only → the same token can no longer fetch it (404, non-revealing).
+        $file->forceFill(['is_client_visible' => false])->save();
+        $this->get("/api/v1/requests/track/{$tracking}/files/{$file->id}")->assertNotFound();
+
+        // A wrong/unknown token never reaches the file.
+        $this->get("/api/v1/requests/track/bad-token/files/{$file->id}")->assertNotFound();
+    }
+
     public function test_prune_command_removes_expired_orphans_but_keeps_submitted_files(): void
     {
         // Expired session with an orphan file.

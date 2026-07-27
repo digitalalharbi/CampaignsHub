@@ -50,6 +50,31 @@ test('homepage → request → dynamic form → submit → success with request 
   await expect(page.getByText(/بانتظار اعتماد خدمة البريد|Awaiting mail credentials/)).toBeVisible()
 })
 
+test('after submit, the tracking link shows status and accepts a client reply', async ({ page }) => {
+  await page.goto('/requests/new')
+  await page.getByRole('button', { name: /استشارة|Consulting/ }).click()
+  await page.getByRole('button', { name: /التالي|Next/ }).click()
+  await page.getByLabel(/الاسم|Name/).fill('Track Tester')
+  await page.getByLabel(/البريد|Email/).fill('track@example.com')
+  await page.getByRole('button', { name: /التالي|Next/ }).click()
+  await page.getByLabel(/هدف الطلب|Objective/).fill('Need advice on scaling our campaigns.')
+  await page.getByRole('button', { name: /التالي|Next/ }).click() // → budget
+  await page.getByRole('button', { name: /التالي|Next/ }).click() // → attachments
+  await page.getByRole('button', { name: /التالي|Next/ }).click() // → review
+  await page.getByRole('button', { name: /إرسال الطلب|Submit request/ }).click()
+
+  await expect(page.getByText(/تم استلام طلبك|Request received/)).toBeVisible()
+  // Follow the tracking link from the success page.
+  await page.getByRole('link', { name: /تتبع الطلب|Track request/ }).click()
+  await expect(page).toHaveURL(/\/requests\/track\?token=/)
+  await expect(page.getByText(/REQ-\d{4}-[A-Z0-9]{6}/)).toBeVisible()
+
+  // Client adds a reply → it appears in the messages list (client-visible).
+  await page.getByLabel(/إضافة رد|Add a reply/).fill('Thanks, here is more context on our goals.')
+  await page.getByRole('button', { name: /إرسال الرد|Send reply/ }).click()
+  await expect(page.getByText('Thanks, here is more context on our goals.')).toBeVisible()
+})
+
 test('draft persists ONLY the non-sensitive service selection — never PII', async ({ page }) => {
   await page.goto('/requests/new')
   await page.getByRole('button', { name: /تحسين الأداء|Performance optimization/ }).click()

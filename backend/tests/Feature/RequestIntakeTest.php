@@ -105,6 +105,29 @@ final class RequestIntakeTest extends TestCase
         $res->assertJsonPath('data.reference', $req->reference);
     }
 
+    public function test_client_reply_creates_a_client_visible_message_and_shows_in_tracking(): void
+    {
+        $token = $this->postJson('/api/v1/requests', $this->payload())->json('data.tracking_token');
+
+        $this->postJson("/api/v1/requests/track/{$token}/reply", ['message' => 'Here is more info about our store.'])
+            ->assertCreated()->assertJsonPath('data.status', 'received');
+
+        $body = $this->getJson("/api/v1/requests/track/{$token}")->assertOk()->getContent();
+        $this->assertStringContainsString('Here is more info about our store.', $body);
+
+        // A client reply is stored as a client-visible comment — never an internal note.
+        $this->assertDatabaseHas('request_comments', ['visibility' => 'client', 'author_label' => 'Client']);
+        $this->assertDatabaseMissing('request_comments', ['visibility' => 'internal', 'body' => 'Here is more info about our store.']);
+    }
+
+    public function test_client_reply_requires_a_message_and_a_valid_token(): void
+    {
+        $token = $this->postJson('/api/v1/requests', $this->payload())->json('data.tracking_token');
+        $this->postJson("/api/v1/requests/track/{$token}/reply", ['message' => ''])
+            ->assertStatus(422)->assertJsonValidationErrors('message');
+        $this->postJson('/api/v1/requests/track/bad-token/reply', ['message' => 'hi there'])->assertNotFound();
+    }
+
     public function test_tracking_rejects_unknown_and_revoked_tokens(): void
     {
         $this->getJson('/api/v1/requests/track/nonexistent-token')->assertNotFound();

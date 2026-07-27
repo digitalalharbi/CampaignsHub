@@ -45,6 +45,7 @@ export interface RequestTrackResult {
   updated_at: string | null
   timeline: { type: string; status: string | null; message: string | null; at: string | null }[]
   comments: { author: string; body: string; at: string | null }[]
+  files: { id: number; name: string; size: number }[]
 }
 
 export interface UploadedFileMeta {
@@ -75,3 +76,10 @@ export const deleteUploadFile = (uploadToken: string, fileId: number) =>
 export const submitRequest = (payload: RequestSubmitPayload) => postData<RequestSubmitResult>('/requests', payload)
 
 export const trackRequest = (token: string) => getData<RequestTrackResult>(`/requests/track/${encodeURIComponent(token)}`)
+
+export const replyToRequest = (token: string, message: string, upload_token?: string) =>
+  postData<{ status: string }>(`/requests/track/${encodeURIComponent(token)}/reply`, { message, upload_token })
+
+/** Secure download URL for a client-visible file (goes through the token route, not storage). */
+export const trackFileUrl = (token: string, fileId: number) =>
+  `/api/v1/requests/track/${encodeURIComponent(token)}/files/${fileId}`

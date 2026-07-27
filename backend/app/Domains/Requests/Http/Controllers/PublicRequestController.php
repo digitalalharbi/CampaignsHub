@@ -8,12 +8,16 @@ use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestAccessToken;
 use App\Domains\Requests\Models\RequestComment;
 use App\Domains\Requests\Models\RequestEvent;
+use App\Domains\Requests\Models\RequestFile;
 use App\Domains\Requests\Models\RequestType;
+use App\Domains\Requests\Models\RequestUploadSession;
 use App\Domains\Requests\Services\RequestIntake;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Public (unauthenticated) request endpoints: intake + secure tracking. The tracking view exposes ONLY
@@ -78,16 +82,7 @@ final class PublicRequestController
     /** GET /api/v1/requests/track/{token} — client-safe status view. */
     public function track(string $token): JsonResponse
     {
-        $record = RequestAccessToken::where('token_hash', hash('sha256', $token))->first();
-
-        abort_if($record === null, 404);
-        abort_if($record->revoked_at !== null, 410, 'This tracking link has been revoked.');
-        abort_if($record->expires_at !== null && $record->expires_at->isPast(), 410, 'This tracking link has expired.');
-
-        $record->forceFill(['last_used_at' => now()])->save();
-
-        /** @var ExternalRequest $req */
-        $req = ExternalRequest::with(['type', 'status'])->findOrFail($record->request_id);
+        $req = $this->resolveByToken($token);
 
         // Only client-visible events; internal notes and metadata are never exposed here.
         $timeline = $req->events()
@@ -107,6 +102,13 @@ final class PublicRequestController
             ->get(['author_label', 'body', 'created_at'])
             ->map(fn (RequestComment $c) => ['author' => $c->author_label ?? 'Team', 'body' => $c->body, 'at' => optional($c->created_at)->toIso8601String()]);
 
+        // Only client-visible files; the storage path is never exposed (download would go via a token route).
+        $files = $req->files()
+            ->where('is_client_visible', true)
+            ->whereNotNull('request_id')
+            ->get(['id', 'original_name', 'size'])
+            ->map(fn (RequestFile $f) => ['id' => $f->id, 'name' => $f->original_name, 'size' => $f->size]);
+
         return response()->json([
             'data' => [
                 'reference' => $req->reference,
@@ -118,7 +120,72 @@ final class PublicRequestController
                 'updated_at' => optional($req->updated_at)->toIso8601String(),
                 'timeline' => $timeline,
                 'comments' => $clientComments,
+                'files' => $files,
             ],
         ]);
+    }
+
+    /** POST /api/v1/requests/track/{token}/reply — the client adds a message (+ optional client files). */
+    public function reply(Request $request, string $token): JsonResponse
+    {
+        $req = $this->resolveByToken($token);
+
+        $data = $request->validate([
+            'message' => ['required', 'string', 'min:2', 'max:2000'],
+            'upload_token' => ['nullable', 'string'],
+        ]);
+
+        // Always CLIENT visibility — a client can never create an internal note or a system event.
+        $req->comments()->create([
+            'visibility' => 'client',
+            'author_label' => 'Client',
+            'body' => $data['message'],
+        ]);
+        $req->events()->create([
+            'type' => 'comment',
+            'is_client_visible' => true,
+            'message' => 'Client added a message',
+            'created_at' => now(),
+        ]);
+
+        if (! empty($data['upload_token'])) {
+            $session = RequestUploadSession::where('token_hash', hash('sha256', $data['upload_token']))->first();
+            if ($session !== null) {
+                $session->files()->whereNull('request_id')->update([
+                    'request_id' => $req->id, 'upload_session_id' => null, 'is_client_visible' => true,
+                ]);
+                $session->delete();
+            }
+        }
+
+        return response()->json(['data' => ['status' => 'received']], 201);
+    }
+
+    /** GET /api/v1/requests/track/{token}/files/{file} — secure download of a CLIENT-VISIBLE file only. */
+    public function downloadFile(string $token, int $file): StreamedResponse
+    {
+        $req = $this->resolveByToken($token);
+
+        /** @var RequestFile|null $record */
+        $record = $req->files()->where('is_client_visible', true)->find($file);
+        abort_if($record === null, 404); // wrong request, internal-only file, or bad id → 404 (non-revealing)
+
+        return Storage::disk($record->disk)
+            ->download($record->path, $record->original_name);
+    }
+
+    /** Resolve a request by a valid (non-revoked, non-expired) tracking token, or abort non-revealingly. */
+    private function resolveByToken(string $token): ExternalRequest
+    {
+        $record = RequestAccessToken::where('token_hash', hash('sha256', $token))->first();
+        abort_if($record === null, 404);
+        abort_if($record->revoked_at !== null, 410, 'This tracking link has been revoked.');
+        abort_if($record->expires_at !== null && $record->expires_at->isPast(), 410, 'This tracking link has expired.');
+        $record->forceFill(['last_used_at' => now()])->save();
+
+        /** @var ExternalRequest $req */
+        $req = ExternalRequest::with(['type', 'status'])->findOrFail($record->request_id);
+
+        return $req;
     }
 }

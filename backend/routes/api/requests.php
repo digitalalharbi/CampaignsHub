@@ -16,6 +16,10 @@ Route::prefix('requests')->name('requests.')->group(function (): void {
         ->middleware('throttle:requests-intake');
     Route::get('/track/{token}', [PublicRequestController::class, 'track'])->name('track')
         ->middleware('throttle:30,1');
+    Route::post('/track/{token}/reply', [PublicRequestController::class, 'reply'])->name('track.reply')
+        ->middleware('throttle:20,1');
+    Route::get('/track/{token}/files/{file}', [PublicRequestController::class, 'downloadFile'])->name('track.file')
+        ->middleware('throttle:60,1');
 
     // Secure temporary uploads (pre-submit). Rate-limited; session-token gated.
     Route::post('/uploads/start', [UploadController::class, 'start'])->name('uploads.start')
