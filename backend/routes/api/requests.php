@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('requests')->name('requests.')->group(function (): void {
     Route::get('/meta', [PublicRequestController::class, 'meta'])->name('meta');
     Route::post('/', [PublicRequestController::class, 'store'])->name('store')
-        ->middleware('throttle:6,1');
+        ->middleware('throttle:requests-intake');
     Route::get('/track/{token}', [PublicRequestController::class, 'track'])->name('track')
         ->middleware('throttle:30,1');
 

@@ -30,8 +30,18 @@ test('homepage → request → dynamic form → submit → success with request 
   // Step 4 — budget & timeline.
   await page.getByRole('button', { name: /التالي|Next/ }).click()
 
-  // Step 5 — review + submit.
+  // Step 5 — attachments: upload a real file to the secure session, wait for it to finish.
+  await page.setInputFiles('input[type="file"]', {
+    name: 'brief.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test brief'),
+  })
+  await expect(page.getByText('brief.pdf')).toBeVisible()
+  // Next is disabled while an upload is in flight — waiting for it to enable proves the upload finished.
+  await expect(page.getByRole('button', { name: /التالي|Next/ })).toBeEnabled()
+  await page.getByRole('button', { name: /التالي|Next/ }).click()
+
+  // Step 6 — review shows the uploaded file, then submit.
   await expect(page.getByText(/مراجعة الطلب|Review your request/)).toBeVisible()
+  await expect(page.getByText('brief.pdf')).toBeVisible()
   await page.getByRole('button', { name: /إرسال الطلب|Submit request/ }).click()
 
   // Success page shows a real REQ-YYYY-XXXXXX number and a tracking link.

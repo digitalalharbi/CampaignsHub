@@ -63,5 +63,14 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute($perMinute)->by((string) $request->ip());
         });
+
+        // Public request intake — strict in production, relaxed for local/CI so repeated E2E runs don't 429.
+        RateLimiter::for('requests-intake', function (Request $request): Limit {
+            $perMinute = $this->app->environment('production')
+                ? (int) config('requests.intake_throttle_per_minute', 6)
+                : 120;
+
+            return Limit::perMinute($perMinute)->by((string) $request->ip());
+        });
     }
 }

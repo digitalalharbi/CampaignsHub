@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Copy, Megaphone } from 'lucide-react'
-import { getRequestMeta, submitRequest, type RequestSubmitPayload, type RequestType } from './api'
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Copy, FileText, Megaphone, Paperclip, RotateCcw, X } from 'lucide-react'
+import {
+  deleteUploadFile, getRequestMeta, startUploadSession, submitRequest, uploadRequestFile,
+  type RequestSubmitPayload, type RequestType,
+} from './api'
 import { Button } from '@/components/ui/Button'
 import { EmailInput, FormField, TextInput, TextareaField } from '@/components/ui/form'
 import { controlClass } from '@/components/ui/Field'
@@ -12,6 +15,17 @@ import { useUi } from '@/stores/ui'
 const DRAFT_KEY = 'ch-request-draft-v2' // v2: stores only non-sensitive {type, step, ts}
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 const PLATFORMS = ['Meta', 'Google', 'TikTok', 'Snapchat', 'X', 'LinkedIn']
+
+interface UploadFile {
+  localId: string
+  name: string
+  size: number
+  status: 'uploading' | 'done' | 'error'
+  pct: number
+  id?: number
+  error?: string
+  file?: File // kept in memory for retry (never persisted)
+}
 
 type Meta = Record<string, unknown>
 interface FormState {
@@ -120,14 +134,62 @@ export function RequestIntakePage() {
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }))
   const setMeta = (k: string, v: unknown) => setForm((f) => ({ ...f, meta: { ...f.meta, [k]: v } }))
 
+  // Attachments — the upload token lives in memory ONLY (a token is sensitive; never localStorage).
+  const [uploadToken, setUploadToken] = useState<string | null>(null)
+  const [files, setFiles] = useState<UploadFile[]>([])
+  const [notes, setNotes] = useState('')
+  const anyUploading = files.some((f) => f.status === 'uploading')
+
+  async function ensureSession(): Promise<string | null> {
+    if (uploadToken) return uploadToken
+    try {
+      const { upload_token } = await startUploadSession()
+      setUploadToken(upload_token)
+      return upload_token
+    } catch { return null }
+  }
+
+  async function uploadOne(token: string, localId: string, file: File) {
+    setFiles((prev) => prev.map((f) => (f.localId === localId ? { ...f, status: 'uploading', pct: 0, error: undefined } : f)))
+    try {
+      const meta = await uploadRequestFile(token, file, (pct) => setFiles((prev) => prev.map((f) => (f.localId === localId ? { ...f, pct } : f))))
+      setFiles((prev) => prev.map((f) => (f.localId === localId ? { ...f, status: 'done', id: meta.id, pct: 100 } : f)))
+    } catch (err) {
+      const msg = toApiError(err).errors?.file?.[0] ?? toApiError(err).message
+      setFiles((prev) => prev.map((f) => (f.localId === localId ? { ...f, status: 'error', error: msg } : f)))
+    }
+  }
+
+  async function addFiles(list: FileList | null) {
+    if (!list || list.length === 0) return
+    const selected = Array.from(list) // snapshot BEFORE any await (the input may be cleared right after)
+    const token = await ensureSession()
+    if (!token) return
+    for (const file of selected) {
+      const localId = crypto.randomUUID()
+      setFiles((prev) => [...prev, { localId, name: file.name, size: file.size, status: 'uploading', pct: 0, file }])
+      await uploadOne(token, localId, file)
+    }
+  }
+
+  async function retryFile(f: UploadFile) {
+    const token = await ensureSession()
+    if (token && f.file) await uploadOne(token, f.localId, f.file)
+  }
+
+  async function removeFile(f: UploadFile) {
+    if (f.id && uploadToken) await deleteUploadFile(uploadToken, f.id).catch(() => undefined)
+    setFiles((prev) => prev.filter((x) => x.localId !== f.localId))
+  }
+
   const selectedType: RequestType | undefined = types.find((t) => t.key === form.type)
   const module = selectedType?.module ?? ''
   const showBudget = module === 'paid_media' || module === 'influencer_marketing'
   const showPlatforms = module === 'paid_media' || module === 'influencer_marketing'
 
   const STEPS = ar
-    ? ['الخدمة', 'مقدّم الطلب', 'التفاصيل', 'الميزانية والمدة', 'المراجعة']
-    : ['Service', 'Applicant', 'Details', 'Budget & timeline', 'Review']
+    ? ['الخدمة', 'مقدّم الطلب والنشاط', 'الهدف والمنصات والتتبع', 'الميزانية والمدة', 'المرفقات والملاحظات', 'المراجعة']
+    : ['Service', 'Applicant & business', 'Objective, platforms & tracking', 'Budget & timeline', 'Attachments & notes', 'Review']
 
   const mutation = useMutation({
     mutationFn: submitRequest,
@@ -143,6 +205,7 @@ export function RequestIntakePage() {
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.contact_email)) e.contact_email = ar ? 'بريد غير صحيح' : 'Invalid email'
     }
     if (s === 2 && form.objective.trim().length < 5) e.objective = ar ? 'اذكر هدف الطلب باختصار' : 'Describe the objective'
+    if (s === 4 && anyUploading) e.files = ar ? 'انتظر اكتمال رفع الملفات قبل المتابعة' : 'Wait for uploads to finish before continuing'
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -151,7 +214,7 @@ export function RequestIntakePage() {
   const back = () => setStep((s) => Math.max(s - 1, 0))
 
   const submit = () => {
-    if (mutation.isPending) return // prevent double submit
+    if (mutation.isPending || anyUploading) return // prevent double submit / submit mid-upload
     const platforms = (form.meta.platforms as string[] | undefined) ?? []
     const payload: RequestSubmitPayload = {
       type: form.type,
@@ -165,7 +228,8 @@ export function RequestIntakePage() {
       priority: form.priority,
       start_date: form.start_date || undefined,
       due_date: form.due_date || undefined,
-      metadata: { ...form.meta, platforms, locale },
+      metadata: { ...form.meta, platforms, notes: notes || undefined, locale },
+      upload_token: uploadToken ?? undefined,
       website: '', // honeypot stays empty
     }
     mutation.mutate(payload)
@@ -305,8 +369,38 @@ export function RequestIntakePage() {
             </div>
           )}
 
-          {/* Step 4 — Review */}
+          {/* Step 4 — Attachments & notes */}
           {step === 4 && (
+            <div className="space-y-4">
+              <FieldTitle ar={ar} title={ar ? 'المرفقات والملاحظات' : 'Attachments & notes'} />
+              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-surface-secondary px-4 py-6 text-center hover:border-brand-400">
+                <Paperclip size={22} className="text-text-muted" />
+                <span className="text-sm font-semibold text-text-secondary">{ar ? 'اختر ملفات للرفع' : 'Choose files to upload'}</span>
+                <span className="text-xs text-text-muted">{ar ? 'PDF، صور، Excel، CSV — حتى 10MB لكل ملف' : 'PDF, images, Excel, CSV — up to 10MB each'}</span>
+                <input type="file" multiple className="hidden" onChange={(e) => { void addFiles(e.target.files); e.target.value = '' }} />
+              </label>
+              {errors.files && <p className="text-sm text-danger">{errors.files}</p>}
+              <ul className="space-y-2">
+                {files.map((f) => (
+                  <li key={f.localId} className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5">
+                    <FileText size={18} className="shrink-0 text-text-muted" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-text-primary">{f.name}</span>
+                      <span className="text-xs text-text-muted">{(f.size / 1024).toFixed(0)} KB{f.status === 'uploading' ? ` · ${f.pct}%` : ''}{f.status === 'error' ? ` · ${f.error ?? (ar ? 'فشل' : 'failed')}` : ''}</span>
+                    </span>
+                    {f.status === 'uploading' && <span className="tnum text-xs font-semibold text-brand-600">{f.pct}%</span>}
+                    {f.status === 'done' && <Check size={16} className="shrink-0 text-success" />}
+                    {f.status === 'error' && <button type="button" onClick={() => void retryFile(f)} className="text-text-muted hover:text-brand-600" aria-label="retry"><RotateCcw size={15} /></button>}
+                    <button type="button" onClick={() => void removeFile(f)} className="shrink-0 text-text-muted hover:text-danger" aria-label="remove"><X size={16} /></button>
+                  </li>
+                ))}
+              </ul>
+              <TextareaField label={ar ? 'ملاحظات إضافية' : 'Additional notes'} value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={1000} />
+            </div>
+          )}
+
+          {/* Step 5 — Review */}
+          {step === 5 && (
             <div className="space-y-3">
               <FieldTitle ar={ar} title={ar ? 'مراجعة الطلب' : 'Review your request'} />
               <dl className="divide-y divide-border rounded-xl border border-border">
@@ -317,6 +411,7 @@ export function RequestIntakePage() {
                 <Row k={ar ? 'الهدف' : 'Objective'} v={form.objective} />
                 {showBudget && form.budget && <Row k={ar ? 'الميزانية' : 'Budget'} v={`${form.budget} ${form.currency}`} />}
                 <Row k={ar ? 'الأولوية' : 'Priority'} v={form.priority} />
+                <Row k={ar ? 'الملفات' : 'Files'} v={files.filter((f) => f.status === 'done').length ? files.filter((f) => f.status === 'done').map((f) => f.name).join('، ') : (ar ? 'لا يوجد' : 'None')} />
               </dl>
               {apiError && <p className="rounded-lg bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{apiError.message}</p>}
             </div>
@@ -326,9 +421,9 @@ export function RequestIntakePage() {
           <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
             <Button variant="ghost" onClick={back} disabled={step === 0}>{ar ? 'السابق' : 'Back'}</Button>
             {step < STEPS.length - 1 ? (
-              <Button onClick={next}>{ar ? 'التالي' : 'Next'} <Arrow size={15} className="ms-1.5" /></Button>
+              <Button onClick={next} disabled={step === 4 && anyUploading}>{ar ? 'التالي' : 'Next'} <Arrow size={15} className="ms-1.5" /></Button>
             ) : (
-              <Button onClick={submit} loading={mutation.isPending}>{ar ? 'إرسال الطلب' : 'Submit request'}</Button>
+              <Button onClick={submit} loading={mutation.isPending} disabled={anyUploading}>{ar ? 'إرسال الطلب' : 'Submit request'}</Button>
             )}
           </div>
         </div>
