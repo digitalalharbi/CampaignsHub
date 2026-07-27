@@ -31,8 +31,10 @@ test('owner invites a member → invitee accepts → joins the workspace', async
   await page.getByLabel(/Password|كلمة المرور/).fill('secret1234')
   await page.getByRole('button', { name: /Join workspace|الانضمام/ }).click()
 
-  // 3) Joined the existing workspace → dashboard with the personal full menu.
-  await expect(page).toHaveURL(/\/dashboard/)
+  // 3) Joined the existing workspace → dashboard with the personal full menu. The accept round-trip
+  //    (create user + auto-login + first dashboard load) can be slow when the single-threaded dev backend
+  //    is under load from the full 3-browser suite — allow generous time for the redirect to land.
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 20_000 })
   await switchToEnglish(page)
   await expect(page.getByRole('link', { name: /Campaigns|الحملات/ }).first()).toBeVisible()
 
