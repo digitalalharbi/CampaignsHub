@@ -36,3 +36,26 @@ Status vocabulary matches MASTER_REQUIREMENTS.md.
 | PWA / a11y / cross-browser | — | — | — | Not Started |
 
 _Last updated: 2026-07-27 · branch `feat/auth-premium`_
+
+---
+## EXPANSION — three experiences (branch feat/three-experiences)
+
+Status legend: Tested = feature tests + phpstan green; Awaiting Ext Dep = adapter/sandbox delivered, real credentials pending.
+
+| Capability | Layer | Status | Evidence |
+|---|---|---|---|
+| Expansion architecture | docs | Tested (doc) | `docs/EXPANSION_ARCHITECTURE.md` |
+| Billing: quotes/invoices/payments + honest verified-webhook settlement | backend | **Tested** | `BillingTest` 9; commit `daf9c8e` |
+| Payment gateway (Stripe/Moyasar/Tap) | provider | Awaiting Ext Dep | `NullPaymentProvider` default; `config/billing.php` |
+| Messaging: client⇄team threads + team notification | backend | **Tested** | `MessagingTest` 6; commit `12d6dbd` |
+| Branding Center: assets/scopes/light-dark/sizes/white-label | backend | **Tested** | `BrandingTest` 7; commit `ee0322c` |
+| Request Journey: full state machine + hierarchical taxonomy | backend | **Tested** | `RequestJourneyTest` 8; commit `fb1547d` |
+| Connection Center: 16 connectors + honest 7-state framework | backend | **Tested** | `ConnectionCenterTest` 9; commit `e4dced5` |
+| Real ad/analytics/store/Drive sync | connector | Awaiting Ext Dep | Sandbox verified; `config/connectors.php` |
+| Backend expansion integrated + regressed | backend | **Tested** | full suite 333 passed; phpstan clean; `38c44b9` |
+| Client portal backend (quotes/invoices/pay/messages/journey) | backend | In Progress | agent building |
+| Google Drive links (tenant/client/project/campaign) | backend | Not Started | — |
+| Operations Console surface | frontend | Not Started | — |
+| SaaS Workspace surface (white-label, billing, usage limits) | frontend | Not Started | — |
+| Client Service Portal surface (dashboard/quotes/invoices/pay/files/messages) | frontend | Not Started | — |
+| Expanded E2E (3 browsers) + expanded clean install + ZIP | delivery | Not Started | — |
