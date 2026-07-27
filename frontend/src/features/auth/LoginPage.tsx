@@ -66,13 +66,10 @@ export function LoginPage() {
 
   return (
     <AuthShell>
-      <h2 className="font-[var(--font-heading)] text-2xl font-extrabold text-text-primary">{t('welcome_back')}</h2>
-      <p className="mt-1 text-[15px] text-text-secondary">{t('sign_in_subtitle')}</p>
+      <h2 className="font-[var(--font-heading)] text-3xl font-extrabold text-text-primary sm:text-[40px] sm:leading-tight">{t('welcome_back')}</h2>
+      <p className="mt-2 text-[17px] text-text-secondary">{t('sign_in_subtitle')}</p>
 
-      {/* Demo credentials — dev only, separate card with copy buttons, never auto-filled. */}
-      {import.meta.env.DEV && <DemoCredentials />}
-
-      <form className="mt-6 space-y-[18px]" onSubmit={(e) => { e.preventDefault(); mutation.mutate({ email, password }) }}>
+      <form className="mt-8 space-y-5" onSubmit={(e) => { e.preventDefault(); mutation.mutate({ email, password }) }}>
         <EmailInput label={t('email')} value={email} onChange={(e) => setEmail(e.target.value)} required error={error?.errors?.email?.[0]} />
         <PasswordInput
           label={t('password')} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required
@@ -95,6 +92,9 @@ export function LoginPage() {
       <p className="mt-6 text-center text-sm text-text-secondary">
         {t('no_account')} <Link to="/register" className="font-semibold text-brand-600 hover:underline">{t('create_account')}</Link>
       </p>
+
+      {/* Demo credentials — dev only, BELOW the form, separate card with copy buttons, never auto-filled. */}
+      {import.meta.env.DEV && <DemoCredentials />}
     </AuthShell>
   )
 }

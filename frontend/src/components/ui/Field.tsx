@@ -39,7 +39,7 @@ export function Field({
 // Professional SaaS control: wide, ~54px tall, 16px text, balanced 11px radius, calm border,
 // clear focus. No pill shapes, no in-field ornamentation. Shared by Input/Select/Textarea.
 export const controlClass =
-  'w-full rounded-[11px] border border-border bg-surface px-4 py-3.5 text-base leading-6 ' +
+  'w-full min-h-[56px] rounded-[11px] border border-border bg-surface px-4 py-3.5 text-base leading-6 ' +
   'text-text-primary outline-none transition-colors placeholder:text-text-muted ' +
   'focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/15 ' +
   'disabled:opacity-60 disabled:cursor-not-allowed aria-[invalid=true]:border-danger'
