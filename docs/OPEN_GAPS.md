@@ -162,13 +162,13 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 
 - **Severity:** Medium · **Status:** OPEN (module In Progress)
 - Corrected per directive:
-  - **Internal Requests Table Workflow — Implemented and Tested.** **Kanban View — Not Started. Cards View — Not Started.**
-  - **SLA Breach — PARTIAL.** Present: `sla_paused_at/resumed_at`, pause/resume, `sla_breached_at` column + on-read
-    `evaluate()`. MISSING (this batch): scheduled evaluator command, warning threshold, automatic breach detection,
-    breach notification, idempotency/dedup, feature test.
-  - **In-App Notifications — PARTIAL.** Present: AppNotification rows per event (unread status, action_url deep link).
-    MISSING: read/unread UI, dedup, preferences, delivery log, quiet-hours readiness.
-- **Next:** SLA scheduled evaluator (warning+breach+notify+idempotent+test) → Kanban/Cards → conversion.
+  - Internal Requests Table Workflow — Implemented and Tested. **Kanban + Cards — Implemented and Tested** (d64d3ad; drag-drop optimistic + rollback, state-machine-guarded).
+  - **SLA Breach — Implemented and Tested** (c7dad71): scheduled `requests:evaluate-sla` (every 10 min), warning
+    threshold, automatic breach detection, `sla_breached_at`/`sla_warned_at` persistence, in-app notification,
+    idempotency markers, RequestSlaTest (3). Also fixed an app-wide pgsql/UTC timezone bug found here.
+  - **In-App Notifications — PARTIAL (still).** Present: AppNotification rows per event (unread status, action_url
+    deep link, tenant-level fallback). MISSING: read/unread UI, dedup, preferences, delivery log, quiet-hours.
+- **Remaining:** notification hardening (read/dedup/prefs/log); Table pagination refinement. **Next major:** transactional conversion → clients.
 
 ---
 
