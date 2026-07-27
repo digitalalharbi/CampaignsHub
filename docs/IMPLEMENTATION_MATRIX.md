@@ -53,9 +53,9 @@ Status legend: Tested = feature tests + phpstan green; Awaiting Ext Dep = adapte
 | Connection Center: 16 connectors + honest 7-state framework | backend | **Tested** | `ConnectionCenterTest` 9; commit `e4dced5` |
 | Real ad/analytics/store/Drive sync | connector | Awaiting Ext Dep | Sandbox verified; `config/connectors.php` |
 | Backend expansion integrated + regressed | backend | **Tested** | full suite 333 passed; phpstan clean; `38c44b9` |
-| Client portal backend (quotes/invoices/pay/messages/journey) | backend | In Progress | agent building |
-| Google Drive links (tenant/client/project/campaign) | backend | Not Started | — |
+| Client portal backend (quotes/invoices/pay/messages/journey) | backend | **Tested** | ClientPortalBillingTest 22; commit 1815dd6 |
+| Google Drive links (tenant/client/project/campaign) | backend | **Tested** | DriveTest 9; commit 00f655c; Sandbox path |
 | Operations Console surface | frontend | Not Started | — |
 | SaaS Workspace surface (white-label, billing, usage limits) | frontend | Not Started | — |
-| Client Service Portal surface (dashboard/quotes/invoices/pay/files/messages) | frontend | Not Started | — |
+| Client Service Portal surface (dashboard/quotes/invoices/pay/files/messages) | frontend | **Tested** | build+37 vitest; commit e20155b; browser-verified |
 | Expanded E2E (3 browsers) + expanded clean install + ZIP | delivery | Not Started | — |
