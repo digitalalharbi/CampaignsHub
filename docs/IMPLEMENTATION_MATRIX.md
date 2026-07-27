@@ -19,7 +19,11 @@ Status vocabulary matches MASTER_REQUIREMENTS.md.
 | Arabic client PDF | `ReportExporter` + ChromiumPdfRenderer + fix-arabic-textlayer.py | export button | `report-pdf-download.spec.ts` | Implemented and Tested (viewer gaps in OPEN_GAPS) |
 | Real analytics data | MetricsAggregator + connectors | analytics tabs | isolation tests | Implemented and Tested |
 | Alerts | CampaignAlertsController | `CampaignAlertsTab` | part of CMC tests | In Progress |
-| Requests portal | — | — | — | Not Started |
+| Public homepage | — (static copy) | `PublicHomePage.tsx` + `homeCopy.ts` | `homepage.spec.ts` 9/9 (3 browsers) + visual light/dark | Completed |
+| Homepage → real routes | router (`/`, `/dashboard`, `/requests/*`) | `router.tsx` pathless app layout | auth-redirect + homepage e2e | Completed |
+| Requests intake `/requests/new` | — | `RequestsPublicStub.tsx` | CTA-reachability e2e | **Route Available — Workflow Not Implemented** |
+| Requests tracking `/requests/track` | — | `RequestsPublicStub.tsx` | — | **Route Available — Workflow Not Implemented** |
+| Requests domain (tables/model) | — | — | — | Not Started (next phase) |
 | Requests dashboard | — | — | — | Not Started |
 | Clients classification | — | — | — | Not Started |
 | Client command center | — | — | — | Not Started |

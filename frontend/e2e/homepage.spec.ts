@@ -45,3 +45,22 @@ test('homepage mobile (375): no horizontal scroll, hero + CTA reachable', async 
   expect(overflow).toBe(false)
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
 })
+
+// Visual-regression baseline for the homepage (chromium only — cross-browser pixel diffs are noisy).
+test.describe('homepage visual regression', () => {
+  test.skip(({ browserName }) => browserName !== 'chromium', 'baselines are chromium-only')
+
+  test('/ light matches baseline', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' })
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await expect(page).toHaveScreenshot('home-light.png', { fullPage: true, maxDiffPixelRatio: 0.02 })
+  })
+
+  test('/ dark matches baseline', async ({ page }) => {
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Toggle theme' }).click()
+    await page.waitForTimeout(250)
+    await expect(page).toHaveScreenshot('home-dark.png', { fullPage: true, maxDiffPixelRatio: 0.02 })
+  })
+})

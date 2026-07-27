@@ -143,19 +143,19 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 ## G-012 — External request portal is stubbed (homepage CTAs live, portal pending)
 
 - **Severity:** Medium
-- **Status:** OPEN (next phase)
+- **Status:** OPEN — Route Available, Workflow Not Implemented (next phase)
 - **Detail:** `/requests/new` and `/requests/track` are real routes with honest placeholder pages so the
   homepage CTAs are never dead. The dynamic intake form, attachments, confirmation, secure token tracking,
   and the requests data model/backend are the next phase (External Request Portal → Tracking → Dashboard).
 - **Next action:** build request tables + intake form + tracking, then the internal requests dashboard.
 
-## G-013 — Homepage visual-regression baseline not yet captured
+## G-013 — Homepage visual-regression baseline — CAPTURED (2026-07-27)
 
 - **Severity:** Low
-- **Status:** OPEN
-- **Detail:** `homepage.spec.ts` covers behaviour + responsiveness + CTAs across 3 browsers, but no
-  `toHaveScreenshot` baseline exists for `/` yet (auth pages have baselines).
-- **Next action:** add light+dark homepage baselines once the layout settles.
+- **Status:** CLOSED
+- **Evidence:** `homepage.spec.ts` now has chromium light+dark baselines
+  (`e2e/homepage.spec.ts-snapshots/home-light-chromium-darwin.png`, `home-dark-...png`); a second run
+  re-compares clean (7/7). Reopen only on intended layout change (then `--update-snapshots`).
 
 ---
 

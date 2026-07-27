@@ -88,7 +88,8 @@ Two-review gate per phase:
 | R7.2 | Marketing identity distinct from reference images (Emerald-on-Graphite) | Completed | `PublicHomePage.tsx`; live light+dark |
 | R7.3 | Public `/` homepage: header/hero/interactive preview/journeys/features/objectives/reports/integrations/automation/request/audience/CTA/footer | Completed | `PublicHomePage.tsx` + `homeCopy.ts`; live-verified; e2e |
 | R7.4 | Official terminology throughout; ROAS-not-universal note; honest integration statuses; demo data tagged | Completed | `homeCopy.ts` (Paid Advertising Management, objective note, Available/In Development/Awaiting/Coming Soon) |
-| R7.5 | All homepage CTAs open real routes (no dead buttons); /requests/new + /requests/track exist | Completed (portal stubbed) | router.tsx; `RequestsPublicStub.tsx`; e2e asserts CTA→/requests/new |
+| R7.5 | Homepage CTAs resolve to real routes (no 404s); /requests/new + /requests/track exist | **Route Available — Workflow Not Implemented** | router.tsx; `RequestsPublicStub.tsx` render honest placeholders — the request WORKFLOW (intake/persist/track) is the next phase (G-012). CTA reachability e2e-verified; not a working submission |
+| R7.7 | Homepage visual-regression baseline (light + dark) | Completed | `homepage.spec.ts` baselines `home-light/dark-chromium-darwin.png`; re-compare clean 7/7 (G-013) |
 | R7.6 | App relocated to /dashboard; `/` public; post-login → /dashboard | Completed | router pathless layout; `safeRedirect` fallback + tests; auth-redirect e2e |
 
 ## R8 — Carry-over (must not regress while building auth/public)
