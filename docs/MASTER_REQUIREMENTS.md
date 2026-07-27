@@ -68,7 +68,7 @@ Two-review gate per phase:
 | R5.1 | External request portal `/requests/new` (dynamic forms + confirmation) | Implemented and Tested (files pending) | `RequestIntakePage.tsx` 5-step form on real `/requests/meta`+intake; `request-intake.spec.ts` 9/9 (3 browsers); success page. Secure FILE UPLOAD is the next commit |
 | R5.2 | `/requests/track/{token}` (secure, client-safe) + client reply + file download | Implemented and Tested | `RequestTrackPage.tsx` + track/reply/download endpoints; e2e 15/15 (3 browsers); hides internal/tenant |
 | R5.3 | Classification: type(module) / status / priority | Implemented and Tested (schema) | `RequestCatalogSeeder` 11 types + 10 statuses; RequestIntakeTest |
-| R5.4 | Internal dashboard: Kanban / Table / Cards + KPIs + SLA + search/filter/sort/pagination | Not Started | — |
+| R5.4 | Internal dashboard (Table + filters/search/pagination) + assignment + status state-machine + SLA + internal/client comment separation + notifications | Implemented and Tested | `/app/requests` + `Internal\*Controller`; RequestDashboardTest (3) + request-vertical e2e 6/6 (3 browsers). Kanban/Cards views pending |
 | R5.5 | Convert request → client/project/campaign without re-entry | Not Started | — |
 
 ## R6 — Clients

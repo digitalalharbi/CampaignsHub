@@ -428,3 +428,16 @@ Honest per-suite status (do not say "cross-browser ✓" for the visual gates):
   (/app/requests dashboard + assignment + status state-machine + SLA + internal notes + notifications) — Not
   Started.** The full external→internal vertical E2E (owner sees internal note the client cannot) awaits the dashboard.
 - **Next:** `feat(requests): add internal request dashboard and detail workflow`, then `... assignments state machine sla and notifications`.
+
+## Phase 4e — Internal requests dashboard + FULL VERTICAL FLOW (2026-07-27)
+- **Commits:** `b23274f` internal dashboard API/state-machine/SLA/notifications · `5c89d9d` dashboard+detail UI + vertical E2E
+- **Tests run:** backend **183/183** (RequestDashboardTest full vertical + isolation + permission) · pint/phpstan clean ·
+  request-vertical e2e **6/6** across Chromium+Firefox+WebKit · broad e2e regression 17/17 · vitest 22/22 · build green
+- **Vertical flow PROVEN (the acceptance path):** guest submits (with file) → owner logs in → request appears in
+  /app/requests → open detail → assign to me → change status (state-machine; illegal jumps 422) → request info
+  (→ waiting_client + SLA pause) → internal note (owner sees it) → public tracking link does NOT show the internal
+  note → client reply resumes SLA → in-app notification created. Live-verified dashboard.
+- **Status:** Dynamic Intake / Secure Uploads / Secure Tracking / Client Reply / Internal Dashboard / Assignments /
+  Status State Machine / SLA / Internal Notes / In-App Notifications — all Implemented and Tested.
+  **Transactional Conversion — Not Started (next).** Kanban/Cards dashboard views — pending (Table done).
+- **Next:** `feat(requests): transactional conversion → client/project/campaign`, then Clients classification + Client Command Center.
