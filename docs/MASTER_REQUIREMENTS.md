@@ -23,6 +23,7 @@ Two-review gate per phase:
 | R1.2 | Central form design system (wide 54px fields, 16px, labels above, not pill, no in-field icons, textarea counter) | Completed | `components/ui/form.tsx`, `e2e/auth-forms.spec.ts` (7 green) |
 | R1.3 | Light + Dark complete, WCAG contrast | Implemented and Tested | live-verified /login light+dark desktop+mobile; auth-forms e2e; contrast audit of non-auth pages still pending |
 | R1.4 | 3 color directions compared internally, best adopted, documented | Completed | `docs/DECISIONS.md` |
+| R1.5 | Official terminology unified — "إدارة الحملات الإعلانية المدفوعة / Paid Advertising Management"; internal enums paid_media/influencer_marketing/combined; no synonym mixing per page | In Progress | glossary in `docs/DECISIONS.md`; applied to auth copy (`i18n.ts`), live-verified; nav/marketing/onboarding still to align |
 
 ## R2 — Authentication
 

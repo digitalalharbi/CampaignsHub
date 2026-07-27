@@ -20,7 +20,8 @@ Autonomous decisions taken while executing the platform directives. Each is reve
 ## Shared-Core readiness (for future InfluencerHub merge)
 - Keep Identity / Organizations / Clients / Projects / Requests / Team / Notifications / Files / Audit
   / Settings as the SHARED CORE; Paid Media is a module. Do not duplicate these per module.
-- Module entitlements via permissions (`paid_media.access`, `influencers.access`, `requests.*`).
+- Module entitlements via permissions (`paid_media.access`, `influencer_marketing.access`, `requests.*`).
+  See the official terminology glossary below — these slugs are canonical.
 
 ## Reports
 - Objective selection is BACKEND-driven (`ReportTemplateEngine::objectiveTemplate`) — the single source
@@ -65,3 +66,19 @@ Demo credentials show in a separate dev-only copyable box, never auto-filled int
   Navigation Resolver over account_type + enabled_modules + role + permissions + subscription_plan.
   A single-module account skips the module switcher and enters CampaignsHub directly. One codebase;
   tenant isolation + module entitlements + feature flags + plan limits — never a forked build.
+
+## Official terminology — adopted 2026-07-27 (binding across UI, docs, forms, DB)
+Single canonical name for the primary module — never mix synonyms on one page.
+- **Primary (official):** `إدارة الحملات الإعلانية المدفوعة` / **Paid Advertising Management**
+- **Short (cards/lists/nav):** `الحملات المدفوعة` / **Paid Advertising**
+- **Marketing-only synonym (supporting copy, sparing):** `الحملات الممولة` — familiar to clients, NOT the module name.
+- **Do NOT scatter** within a single page: الحملات الرقمية / الحملات الممولة / الحملات المدفوعة / الإعلانات الممولة.
+
+Future / second module: `إدارة حملات المؤثرين ومحتوى UGC` / **Influencer & UGC Campaign Management**.
+Combined offering: `إدارة متكاملة للحملات المدفوعة والمؤثرين` / **Integrated Paid Advertising & Influencer Management**.
+
+Internal enum values (DB + entitlements): `paid_media`, `influencer_marketing`, `combined`.
+Permission slugs: `paid_media.access`, `influencer_marketing.access`.
+
+First application: auth marketing copy (`i18n.ts` auth_hero_eyebrow/title/subtitle, sign_in/create_account
+subtitles) now leads with the official term. Nav/marketing/onboarding/requests must reuse these exact strings.
