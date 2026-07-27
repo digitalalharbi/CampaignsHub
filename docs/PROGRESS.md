@@ -403,3 +403,16 @@ Honest per-suite status (do not say "cross-browser ✓" for the visual gates):
   internal dashboard + conversion are the remaining request commits
 - **Regressions:** none
 - **Next:** `feat(requests): add secure files tracking and client communication` (file upload + /requests/track UI)
+
+## Phase 4c — Draft PII fix + secure temporary uploads (2026-07-27)
+- **Commits:** `57af700` fix(requests): store only non-sensitive draft (no PII) · `546a6bc` feat(requests):
+  add secure temporary uploads and file isolation
+- **Security fix (blocker):** intake draft no longer stores any PII in localStorage — only {type, step, ts}
+  with 24h expiry + Clear-draft button; e2e asserts localStorage has no PII (only [step, ts, type]).
+- **Secure uploads:** expiring session → private-disk UUID storage (path never exposed) → MIME allowlist
+  (detected type) + 10MB + per-session cap → associate-on-submit + session retired → hourly prune of
+  orphans. Malware scan config-gated OFF (not claimed).
+- **Tests run:** RequestUploadTest **6** + request-intake e2e 8/8 (chromium) · backend **177/177** · pint/phpstan clean
+- **Honest status:** Request Backend (intake+meta+uploads) — Implemented and Tested; **Request Frontend
+  (attachments UI + real tracking UI + internal dashboard) — In Progress**; External Request Portal — In Progress
+- **Next:** wire attachments step to upload endpoints; build real /requests/track UI + client reply; then /app/requests

@@ -147,7 +147,8 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 - **Detail:** `/requests/new` and `/requests/track` are real routes with honest placeholder pages so the
   homepage CTAs are never dead. The dynamic intake form, attachments, confirmation, secure token tracking,
   and the requests data model/backend are the next phase (External Request Portal → Tracking → Dashboard).
-- **Next action:** build request tables + intake form + tracking, then the internal requests dashboard.
+- **Progress:** intake form (f99a1ca), draft PII fix (57af700), secure uploads backend (546a6bc) done+tested.
+- **Next action:** attachments UI wired to uploads, real tracking UI, internal dashboard, SLA, conversion.
 
 ## G-013 — Homepage visual-regression baseline — CAPTURED (2026-07-27)
 
