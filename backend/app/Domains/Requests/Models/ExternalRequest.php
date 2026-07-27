@@ -19,6 +19,15 @@ use Illuminate\Support\Carbon;
  * @property string|null $tenant_id
  * @property string $reference
  * @property string $module
+ * @property string|null $journey_stage
+ * @property string|null $service
+ * @property string|null $category
+ * @property string|null $request_type
+ * @property string|null $payment_status
+ * @property string|null $on_hold_reason
+ * @property string|null $source
+ * @property string|null $client_id
+ * @property string|null $campaign_id
  * @property int $type_id
  * @property int $status_id
  * @property string $priority

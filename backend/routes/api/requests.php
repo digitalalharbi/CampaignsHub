@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Domains\Requests\Http\Controllers\ClientPortalController;
 use App\Domains\Requests\Http\Controllers\ContactVerificationController;
 use App\Domains\Requests\Http\Controllers\Internal\RequestActionsController;
+use App\Domains\Requests\Http\Controllers\Internal\RequestJourneyController;
 use App\Domains\Requests\Http\Controllers\Internal\RequestsController;
 use App\Domains\Requests\Http\Controllers\PublicRequestController;
 use App\Domains\Requests\Http\Controllers\UploadController;
@@ -71,6 +72,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'entitlement:requests'])->prefix('a
     Route::get('/{id}', [RequestsController::class, 'show'])->name('show');
     Route::patch('/{id}/assign', [RequestActionsController::class, 'assign'])->name('assign');
     Route::patch('/{id}/status', [RequestActionsController::class, 'changeStatus'])->name('status');
+    Route::patch('/{id}/journey', [RequestJourneyController::class, 'transition'])->name('journey');
     Route::patch('/{id}/priority', [RequestActionsController::class, 'changePriority'])->name('priority');
     Route::post('/{id}/request-information', [RequestActionsController::class, 'requestInformation'])->name('request-information');
     Route::post('/{id}/internal-note', [RequestActionsController::class, 'addInternalNote'])->name('internal-note');
