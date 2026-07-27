@@ -30,6 +30,9 @@ import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
 import { ClientPortalLoginPage } from '@/features/requests/portal/ClientPortalLoginPage'
 import { ClientRequestsPage } from '@/features/requests/portal/ClientRequestsPage'
 import { ClientRequestDetailPage } from '@/features/requests/portal/ClientRequestDetailPage'
+import { VerifyEmailPage } from '@/features/onboarding/VerifyEmailPage'
+import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
+import { OnboardingGate } from '@/features/onboarding/OnboardingGate'
 import { RequestsDashboardPage } from '@/features/requests/RequestsDashboardPage'
 import { RequestDetailPage } from '@/features/requests/RequestDetailPage'
 import { ClientsPortfolioPage } from '@/features/clients/ClientsPortfolioPage'
@@ -52,10 +55,16 @@ export const router = createBrowserRouter([
   { path: '/client/requests/:reference', element: <ClientRequestDetailPage /> },
   { path: '/reports/share/:token', element: <PublicReport /> },
   { path: '/reports/print/:token', element: <PrintReport /> },
+  // Email verification is public (the link can be opened on any device; the token verify endpoint is public).
+  { path: '/verify-email', element: <VerifyEmailPage /> },
   {
     element: <RequireAuth />,
     children: [
+      // Onboarding runs authenticated but OUTSIDE the AppShell + entitlement gate (no redirect loop).
+      { path: 'onboarding', element: <OnboardingWizard /> },
       {
+        element: <OnboardingGate />,
+        children: [{
         element: <AppShell />,
         children: [
           { path: 'dashboard', element: <DashboardPage /> },
@@ -102,6 +111,7 @@ export const router = createBrowserRouter([
           { path: 'leads', element: <LeadsPage /> },
           { path: 'opportunities', element: <PagePlaceholder title="Opportunities" /> },
         ],
+      }],
       },
     ],
   },

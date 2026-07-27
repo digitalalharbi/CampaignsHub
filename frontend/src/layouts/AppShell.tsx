@@ -20,25 +20,31 @@ import { AccountMenu } from '@/features/account/UserMenu'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
+import { useAuth } from '@/stores/auth'
 import type { TranslationKey } from '@/lib/i18n'
 
-type NavItem = { to: string; key: TranslationKey; icon: typeof LayoutDashboard }
+// `ent` = the account-entitlement nav key; an item shows only when it's in the workspace's entitled nav.
+type NavItem = { to: string; key: TranslationKey; icon: typeof LayoutDashboard; ent: string }
 
 const operationalNav: NavItem[] = [
-  { to: '/dashboard', key: 'dashboard', icon: LayoutDashboard },
-  { to: '/campaigns', key: 'campaigns', icon: Megaphone },
-  { to: '/app/requests', key: 'requests_inbox', icon: Inbox },
-  { to: '/app/clients', key: 'clients_portfolio', icon: Building2 },
-  { to: '/analytics', key: 'analytics', icon: TrendingUp },
-  { to: '/reports', key: 'reports', icon: BarChart3 },
-  { to: '/integrations', key: 'integrations', icon: Plug },
+  { to: '/dashboard', key: 'dashboard', icon: LayoutDashboard, ent: 'dashboard' },
+  { to: '/campaigns', key: 'campaigns', icon: Megaphone, ent: 'campaigns' },
+  { to: '/app/requests', key: 'requests_inbox', icon: Inbox, ent: 'requests' },
+  { to: '/app/clients', key: 'clients_portfolio', icon: Building2, ent: 'clients' },
+  { to: '/analytics', key: 'analytics', icon: TrendingUp, ent: 'analytics' },
+  { to: '/reports', key: 'reports', icon: BarChart3, ent: 'reports' },
+  { to: '/integrations', key: 'integrations', icon: Plug, ent: 'connections' },
 ]
-const utilityNav: NavItem[] = [{ to: '/settings', key: 'settings', icon: Settings }]
+const utilityNav: NavItem[] = [{ to: '/settings', key: 'settings', icon: Settings, ent: 'settings' }]
 
 function NavItems({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
   const t = useT()
+  // Filter navigation by the workspace's entitlements (personal = full menu; company = simplified).
+  // No entitlements yet (older payload) → show everything, preserving current behavior.
+  const nav = useAuth((s) => s.user?.account?.nav)
+  const allowed = (item: NavItem) => !nav || nav.includes(item.ent)
   const render = (list: NavItem[]) =>
-    list.map(({ to, key, icon: Icon }) => (
+    list.filter(allowed).map(({ to, key, icon: Icon }) => (
       <NavLink
         key={to}
         to={to}

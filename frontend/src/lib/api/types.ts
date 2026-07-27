@@ -34,6 +34,18 @@ export interface AuthUser {
   date_format?: string
   number_format?: 'latin' | 'arabic'
   theme?: 'light' | 'dark' | 'system'
+  // Account entitlements — drives navigation persona (personal full vs company simplified) + onboarding.
+  account?: AccountEntitlements | null
+}
+
+export interface AccountEntitlements {
+  account_type: string | null
+  workspace_kind: 'personal' | 'company'
+  enabled_modules: string[]
+  module_switcher: boolean
+  nav: string[]
+  subscription_plan: string | null
+  onboarding: { completed: boolean; step: string }
 }
 
 export interface AuthResult {

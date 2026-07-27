@@ -20,7 +20,7 @@ export function RegisterPage() {
   const mutation = useMutation({
     // Onboarding (module/account-type selection) lands in Phase 2; go to the app for now.
     mutationFn: register,
-    onSuccess: (user) => { setUser(user); navigate('/dashboard', { replace: true }) },
+    onSuccess: (user) => { setUser(user); navigate('/verify-email', { replace: true }) },
   })
   const error = mutation.isError ? toApiError(mutation.error) : null
   const err = (k: string) => error?.errors?.[k]?.[0]

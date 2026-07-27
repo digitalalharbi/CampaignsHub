@@ -47,7 +47,17 @@ final class DemoSeeder extends Seeder
         );
         // This tenant owns the public request portal in dev/demo — resolved by flag, not a fragile env UUID,
         // so a fresh `migrate:fresh --seed` keeps the portal working without editing any id.
-        $tenant->forceFill(['is_default_portal' => true, 'portal_enabled' => true])->save();
+        // The demo agency is a fully-onboarded PERSONAL (agency) workspace with both modules, so demo users
+        // land straight in the app (past email verification + onboarding gates).
+        $tenant->forceFill([
+            'is_default_portal' => true,
+            'portal_enabled' => true,
+            'account_type' => 'agency',
+            'enabled_modules' => ['paid_media', 'influencer_marketing'],
+            'subscription_plan' => 'trial',
+            'onboarding_step' => 'done',
+            'onboarding_completed_at' => now(),
+        ])->save();
 
         $context->setTenantId((string) $tenant->id);
 
@@ -75,9 +85,11 @@ final class DemoSeeder extends Seeder
 
         $ownerUser = User::firstOrCreate(
             ['email' => 'owner@demo-agency.local'],
-            ['name' => 'Demo Owner', 'password' => Hash::make('password'), 'tenant_id' => $tenant->id],
+            ['name' => 'Demo Owner', 'password' => Hash::make('password'), 'tenant_id' => $tenant->id, 'email_verified_at' => now()],
         );
         $ownerUser->assignRole($owner);
+        // Ensure pre-existing demo users are verified + past onboarding (firstOrCreate won't update).
+        User::where('tenant_id', $tenant->id)->whereNull('email_verified_at')->update(['email_verified_at' => now()]);
 
         // Agency-wide read-only Analyst: projects.view.all → sees every project, but cannot create/edit.
         $analyst = Role::firstOrCreate(
@@ -87,7 +99,7 @@ final class DemoSeeder extends Seeder
         $analyst->givePermissionTo('campaigns.view', 'projects.view', 'projects.view.all', 'integrations.view', 'reports.view');
         User::firstOrCreate(
             ['email' => 'analyst@demo-agency.local'],
-            ['name' => 'Demo Analyst', 'password' => Hash::make('password'), 'tenant_id' => $tenant->id],
+            ['name' => 'Demo Analyst', 'password' => Hash::make('password'), 'tenant_id' => $tenant->id, 'email_verified_at' => now()],
         )->assignRole($analyst);
 
         // Project-scoped Client Viewer: projects.view + campaigns.view but NOT projects.view.all →
@@ -99,7 +111,7 @@ final class DemoSeeder extends Seeder
         $clientViewer->givePermissionTo('projects.view', 'campaigns.view', 'reports.view');
         $viewerUser = User::firstOrCreate(
             ['email' => 'viewer@demo-agency.local'],
-            ['name' => 'Demo Viewer', 'password' => Hash::make('password'), 'tenant_id' => $tenant->id],
+            ['name' => 'Demo Viewer', 'password' => Hash::make('password'), 'tenant_id' => $tenant->id, 'email_verified_at' => now()],
         );
         $viewerUser->assignRole($clientViewer);
 
