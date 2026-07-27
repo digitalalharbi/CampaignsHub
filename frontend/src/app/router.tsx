@@ -30,6 +30,15 @@ import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
 import { ClientPortalLoginPage } from '@/features/requests/portal/ClientPortalLoginPage'
 import { ClientRequestsPage } from '@/features/requests/portal/ClientRequestsPage'
 import { ClientRequestDetailPage } from '@/features/requests/portal/ClientRequestDetailPage'
+import { ClientDashboardPage } from '@/features/requests/portal/ClientDashboardPage'
+import { ClientQuotesPage } from '@/features/requests/portal/ClientQuotesPage'
+import { ClientQuoteDetailPage } from '@/features/requests/portal/ClientQuoteDetailPage'
+import { ClientInvoicesPage } from '@/features/requests/portal/ClientInvoicesPage'
+import { ClientInvoiceDetailPage } from '@/features/requests/portal/ClientInvoiceDetailPage'
+import { ClientMessagesPage } from '@/features/requests/portal/ClientMessagesPage'
+import { ClientThreadPage } from '@/features/requests/portal/ClientThreadPage'
+import { ClientProfilePage } from '@/features/requests/portal/ClientProfilePage'
+import { ClientComingSoonPage } from '@/features/requests/portal/ClientComingSoonPage'
 import { VerifyEmailPage } from '@/features/onboarding/VerifyEmailPage'
 import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate'
@@ -51,10 +60,23 @@ export const router = createBrowserRouter([
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/requests/new', element: <RequestIntakePage /> },
   { path: '/requests/track', element: <RequestTrackPage /> },
-  // External Client Portal (own cookie session; not the staff app).
+  // External Client Portal (own cookie session; not the staff app). Each page guards itself: a 401 from the
+  // portal endpoints redirects to /client/login. The section nav lives in PortalShell.
   { path: '/client/login', element: <ClientPortalLoginPage /> },
-  { path: '/client', element: <ClientRequestsPage /> },
+  { path: '/client', element: <ClientDashboardPage /> },
+  { path: '/client/requests', element: <ClientRequestsPage /> },
   { path: '/client/requests/:reference', element: <ClientRequestDetailPage /> },
+  { path: '/client/quotes', element: <ClientQuotesPage /> },
+  { path: '/client/quotes/:id', element: <ClientQuoteDetailPage /> },
+  { path: '/client/invoices', element: <ClientInvoicesPage /> },
+  { path: '/client/invoices/:id', element: <ClientInvoiceDetailPage /> },
+  { path: '/client/messages', element: <ClientMessagesPage /> },
+  { path: '/client/messages/:id', element: <ClientThreadPage /> },
+  { path: '/client/profile', element: <ClientProfilePage /> },
+  // Sections without a backend endpoint yet — honest "not yet available", no fabricated data.
+  { path: '/client/files', element: <ClientComingSoonPage section="files" /> },
+  { path: '/client/campaigns', element: <ClientComingSoonPage section="campaigns" /> },
+  { path: '/client/reports', element: <ClientComingSoonPage section="reports" /> },
   { path: '/reports/share/:token', element: <PublicReport /> },
   { path: '/reports/print/:token', element: <PrintReport /> },
   // Email verification is public (the link can be opened on any device; the token verify endpoint is public).

@@ -1,10 +1,10 @@
-import { useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, FileText, LogOut, Plus } from 'lucide-react'
-import { listPortalRequests, portalLogout, type PortalRequestCard } from '../clientPortalApi'
+import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { ArrowRight, FileText, Plus } from 'lucide-react'
+import { listPortalRequests, type PortalRequestCard } from '../clientPortalApi'
 import { PortalShell } from './PortalShell'
-import { toApiError } from '@/lib/api/client'
+import { usePortalGuard } from './usePortalGuard'
+import { formatDate } from './portalAccountApi'
 import { useUi } from '@/stores/ui'
 
 function statusTone(s: string): string {
@@ -16,26 +16,13 @@ function statusTone(s: string): string {
 
 export function ClientRequestsPage() {
   const ar = useUi((s) => s.locale) === 'ar'
-  const navigate = useNavigate()
-  const qc = useQueryClient()
   const q = useQuery({ queryKey: ['client', 'requests'], queryFn: listPortalRequests, retry: false })
-
-  useEffect(() => {
-    if (q.isError && toApiError(q.error).status === 401) navigate('/client/login', { replace: true })
-  }, [q.isError, q.error, navigate])
-
-  const logout = useMutation({
-    mutationFn: portalLogout,
-    onSuccess: () => { qc.clear(); navigate('/client/login', { replace: true }) },
-  })
+  usePortalGuard(q.isError, q.error)
 
   const rows = q.data?.requests ?? []
 
   return (
-    <PortalShell
-      title={ar ? 'طلباتي' : 'My requests'}
-      action={<button onClick={() => logout.mutate()} className="flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm font-semibold text-text-secondary hover:bg-surface-hover"><LogOut size={15} /> {ar ? 'خروج' : 'Sign out'}</button>}
-    >
+    <PortalShell title={ar ? 'طلباتي' : 'My requests'} nav showLogout>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl font-extrabold text-text-primary">{ar ? 'طلباتي' : 'My requests'}</h1>
@@ -69,7 +56,7 @@ function RequestCard({ r, ar }: { r: PortalRequestCard; ar: boolean }) {
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-surface-secondary"><div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${r.progress}%` }} /></div>
       <div className="flex items-center justify-between text-[11px] text-text-muted">
-        <span>{r.updated_at ? new Date(r.updated_at).toLocaleDateString('en-CA') : ''}</span>
+        <span className="tnum">{formatDate(r.updated_at)}</span>
         <span className="flex items-center gap-1 font-semibold text-brand-600">{ar ? 'التفاصيل' : 'Details'} <ArrowRight size={13} className="rtl:rotate-180" /></span>
       </div>
     </Link>
