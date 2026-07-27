@@ -34,7 +34,9 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'php artisan serve --no-reload --port=8000',
+      // Serve + a queue worker: report generation (GenerateReportJob) is queued, so the PDF/XLSX export E2E
+      // needs a worker draining it. The worker runs as a background child; serve owns the health URL.
+      command: 'sh -c "php artisan queue:work --queue=reports,default --tries=3 --sleep=1 --quiet & php artisan serve --no-reload --port=8000"',
       cwd: '../backend',
       url: 'http://localhost:8000/up',
       reuseExistingServer: !process.env.CI,

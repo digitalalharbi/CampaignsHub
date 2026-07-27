@@ -1,0 +1,6906 @@
+{
+  "info": {
+    "name": "CampaignsHub API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Auto-generated from artisan route:list. Prime /sanctum/csrf-cookie then set {{xsrf}}."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "xsrf",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "api.v1.ai.credentials.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/ai/credentials",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "ai",
+            "credentials"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.ai.credentials.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/ai/credentials",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "ai",
+            "credentials"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.ai.credentials.health",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/ai/credentials/{credential}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "ai",
+            "credentials",
+            "{credential}",
+            "health"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.alerts.events.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/alerts/events",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "alerts",
+            "events"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.alerts.events.resolve",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/alerts/events/{alertEvent}/resolve",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "alerts",
+            "events",
+            "{alertEvent}",
+            "resolve"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.alerts.events.snooze",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/alerts/events/{alertEvent}/snooze",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "alerts",
+            "events",
+            "{alertEvent}",
+            "snooze"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.alerts.rules.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/alerts/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "alerts",
+            "rules"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.alerts.rules.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/alerts/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "alerts",
+            "rules"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.activity",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/activity",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "activity"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.analytics",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/analytics",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "analytics"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.archive",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/archive",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "archive"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.classification",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/classification",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "classification"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.files.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/files",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "files"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.files.download",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/files/{source}/{id}/download",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "files",
+            "{source}",
+            "{id}",
+            "download"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.reports.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/reports",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "reports"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.reports.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/reports",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "reports"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.reports.share",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/reports/{report}/share",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "reports",
+            "{report}",
+            "share"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.reports.revoke",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/reports/{report}/shares/{share}/revoke",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "reports",
+            "{report}",
+            "shares",
+            "{share}",
+            "revoke"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.restore",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/restore",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "restore"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.settings",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/settings",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "settings"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.team.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/team",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "team"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.team.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/team",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "team"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.team.update",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/team/{user}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "team",
+            "{user}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.team.destroy",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/team/{user}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "team",
+            "{user}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.team.assignable",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/{client}/team/assignable",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "{client}",
+            "team",
+            "assignable"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.clients.taxonomy",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/clients/meta/taxonomy",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "clients",
+            "meta",
+            "taxonomy"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.requests.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/requests",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "requests"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.requests.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/requests/{id}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "requests",
+            "{id}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.requests.archive",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/requests/{id}/archive",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "requests",
+            "{id}",
+            "archive"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.requests.assign",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/requests/{id}/assign",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "requests",
+            "{id}",
+            "assign"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.requests.convert",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/requests/{id}/convert",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "requests",
+            "{id}",
+            "convert"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.requests.internal-note",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/requests/{id}/internal-note",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "requests",
+            "{id}",
+            "internal-note"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.requests.priority",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/requests/{id}/priority",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "requests",
+            "{id}",
+            "priority"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.requests.reply",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/requests/{id}/reply",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "requests",
+            "{id}",
+            "reply"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.requests.request-information",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/requests/{id}/request-information",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "requests",
+            "{id}",
+            "request-information"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.requests.status",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/requests/{id}/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "requests",
+            "{id}",
+            "status"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.team.invitations.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/team/invitations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "team",
+            "invitations"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.app.team.invitations.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/team/invitations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "team",
+            "invitations"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.auth.email.resend",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/email/resend",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "email",
+            "resend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.auth.email.verify",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/email/verify",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "email",
+            "verify"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.auth.forgot-password",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "forgot-password"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.auth.login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.auth.logout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/logout",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "logout"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.auth.me",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "me"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.auth.register",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "register"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.auth.tokens",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/tokens",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "tokens"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.brand",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/brand",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "brand"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.client-workspaces.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/client-workspaces",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "client-workspaces"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.client-workspaces.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/client-workspaces",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "client-workspaces"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.client-workspaces.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/client-workspaces/{clientWorkspace}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "client-workspaces",
+            "{clientWorkspace}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.client-workspaces.update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/client-workspaces/{clientWorkspace}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "client-workspaces",
+            "{clientWorkspace}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.client-workspaces.archive",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/client-workspaces/{clientWorkspace}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "client-workspaces",
+            "{clientWorkspace}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.client-workspaces.restore",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/client-workspaces/{clientWorkspace}/restore",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "client-workspaces",
+            "{clientWorkspace}",
+            "restore"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.client.login.start",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/client/login/start",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "client",
+            "login",
+            "start"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.client.login.verify",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/client/login/verify",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "client",
+            "login",
+            "verify"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.client.logout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/client/logout",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "client",
+            "logout"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.client.requests.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/client/requests",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "client",
+            "requests"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.client.requests.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/client/requests/{reference}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "client",
+            "requests",
+            "{reference}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.client.requests.file",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/client/requests/{reference}/files/{file}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "client",
+            "requests",
+            "{reference}",
+            "files",
+            "{file}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.client.requests.reply",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/client/requests/{reference}/reply",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "client",
+            "requests",
+            "{reference}",
+            "reply"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.client.session",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/client/session",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "client",
+            "session"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.connections.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/connections",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "connections"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.connections.revoke",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/connections/{connection}/revoke",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "connections",
+            "{connection}",
+            "revoke"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.health",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "health"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.integrations.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/integrations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "integrations"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.integrations.connect",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/integrations/{key}/connect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "integrations",
+            "{key}",
+            "connect"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.integrations.health",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/integrations/{key}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "integrations",
+            "{key}",
+            "health"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.integrations.sync",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/integrations/{key}/sync",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "integrations",
+            "{key}",
+            "sync"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.invitations.preview",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/invitations/{token}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "invitations",
+            "{token}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.invitations.accept",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/invitations/accept",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "invitations",
+            "accept"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.leads.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/leads",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.leads.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/leads",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.leads.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/leads/{lead}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{lead}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.leads.update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/leads/{lead}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{lead}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.leads.destroy",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/leads/{lead}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{lead}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.leads.convert",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/leads/{lead}/convert",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{lead}",
+            "convert"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.me.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "me"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.me.password.update",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/me/password",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "me",
+            "password"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.me.profile.update",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/me/profile",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "me",
+            "profile"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.me.sessions",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/me/sessions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "me",
+            "sessions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.me.sessions.others",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/me/sessions/others",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "me",
+            "sessions",
+            "others"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.notifications.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/notifications",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "notifications"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.notifications.read",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/notifications/{notification}/read",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "notifications",
+            "{notification}",
+            "read"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.notifications.deliveries",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/notifications/deliveries",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "notifications",
+            "deliveries"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.notifications.read-all",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/notifications/read-all",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "notifications",
+            "read-all"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.onboarding.account-type",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/onboarding/account-type",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "onboarding",
+            "account-type"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.onboarding.complete",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/onboarding/complete",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "onboarding",
+            "complete"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.onboarding.first-client",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/onboarding/first-client",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "onboarding",
+            "first-client"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.onboarding.first-project",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/onboarding/first-project",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "onboarding",
+            "first-project"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.onboarding.service",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/onboarding/service",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "onboarding",
+            "service"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.onboarding.state",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/onboarding/state",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "onboarding",
+            "state"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.onboarding.workspace",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/onboarding/workspace",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "onboarding",
+            "workspace"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.opportunities.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/opportunities",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "opportunities"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.opportunities.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/opportunities/{opportunity}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "opportunities",
+            "{opportunity}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.opportunities.stage",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/opportunities/{opportunity}/stage",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "opportunities",
+            "{opportunity}",
+            "stage"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.archive",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/archive",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "archive"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.destroy",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.activate",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/activate",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "activate"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.activity",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/activity",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "activity"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.alerts",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/alerts",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "alerts"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.annotations.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/annotations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "annotations"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.annotations.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/annotations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "annotations"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.annotations.update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/annotations/{annotation}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "annotations",
+            "{annotation}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.budget",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/budget",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "budget"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.creatives",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/creatives",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "creatives"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.external.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/external",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "external"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.external.link",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/external",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "external"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.external.unlink",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/external/{external}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "external",
+            "{external}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.funnel",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/funnel",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "funnel"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.pause",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/pause",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "pause"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.performance",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/performance",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "performance"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.platforms",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/platforms",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "platforms"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.reports",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/reports",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "reports"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.suggestions",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/suggestions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "suggestions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.summary",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/campaigns/{campaign}/summary",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "campaigns",
+            "{campaign}",
+            "summary"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.clone",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/clone",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "clone"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.disclaimer.resolve",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/disclaimer",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "disclaimer"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.campaigns.external-campaigns.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/external-campaigns",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "external-campaigns"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.integrations.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/integrations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "integrations"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.integrations.bind",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/integrations/bindings",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "integrations",
+            "bindings"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.integrations.detach",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/integrations/bindings/{binding}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "integrations",
+            "bindings",
+            "{binding}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.integrations.sync",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/integrations/bindings/{binding}/sync",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "integrations",
+            "bindings",
+            "{binding}",
+            "sync"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.integrations.connect",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/integrations/connect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "integrations",
+            "connect"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.metrics.budget",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/metrics/budget",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "metrics",
+            "budget"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.metrics.campaigns",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/metrics/campaigns",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "metrics",
+            "campaigns"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.metrics.freshness",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/metrics/freshness",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "metrics",
+            "freshness"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.metrics.funnel",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/metrics/funnel",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "metrics",
+            "funnel"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.metrics.platforms",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/metrics/platforms",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "metrics",
+            "platforms"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.metrics.summary",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/metrics/summary",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "metrics",
+            "summary"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.metrics.timeseries",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/metrics/timeseries",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "metrics",
+            "timeseries"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.notifications.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/notifications",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "notifications"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.overview",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/overview",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "overview"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.pause",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/pause",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "pause"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/{report}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "{report}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/{report}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "{report}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.destroy",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/{report}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "{report}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.annotations.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/{report}/annotations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "{report}",
+            "annotations"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.annotations.status",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/{report}/annotations/{annotation}/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "{report}",
+            "annotations",
+            "{annotation}",
+            "status"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.export",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/{report}/export",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "{report}",
+            "export"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.print-token",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/{report}/print-token",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "{report}",
+            "print-token"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.regenerate",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/{report}/regenerate",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "{report}",
+            "regenerate"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.send",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/{report}/send",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "{report}",
+            "send"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.shares.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/{report}/shares",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "{report}",
+            "shares"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.shares.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/{report}/shares",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "{report}",
+            "shares"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.shares.logs",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/{report}/shares/{share}/logs",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "{report}",
+            "shares",
+            "{share}",
+            "logs"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.shares.revoke",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/{report}/shares/{share}/revoke",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "{report}",
+            "shares",
+            "{share}",
+            "revoke"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.validation",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/{report}/validation",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "{report}",
+            "validation"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.reports.template",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/reports/template",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "reports",
+            "template"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.restore",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/restore",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "restore"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.resume",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/resume",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "resume"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.tasks.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/tasks",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "tasks"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.team.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/team",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "team"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.team.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/team",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "team"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.team.update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/team/{membership}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "team",
+            "{membership}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.projects.scoped.team.destroy",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/projects/{project}/team/{membership}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "projects",
+            "{project}",
+            "team",
+            "{membership}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.ready",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/ready",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "ready"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.reports.download",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/reports/download/{token}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "reports",
+            "download",
+            "{token}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.reports.print.data",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/reports/print/{token}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "reports",
+            "print",
+            "{token}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.reports.shared.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/reports/shared/{token}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "reports",
+            "shared",
+            "{token}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.reports.shared.download",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/reports/shared/{token}/download/{format}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "reports",
+            "shared",
+            "{token}",
+            "download",
+            "{format}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.requests.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/requests",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requests"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.requests.meta",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/requests/meta",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requests",
+            "meta"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.requests.track",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/requests/track/{token}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requests",
+            "track",
+            "{token}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.requests.track.file",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/requests/track/{token}/files/{file}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requests",
+            "track",
+            "{token}",
+            "files",
+            "{file}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.requests.track.reply",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/requests/track/{token}/reply",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requests",
+            "track",
+            "{token}",
+            "reply"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.requests.uploads.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/requests/uploads",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requests",
+            "uploads"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.requests.uploads.destroy",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/requests/uploads/{file}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requests",
+            "uploads",
+            "{file}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.requests.uploads.start",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/requests/uploads/start",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requests",
+            "uploads",
+            "start"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.requests.verify.check",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/requests/verify/check",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requests",
+            "verify",
+            "check"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.requests.verify.start",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/requests/verify/start",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requests",
+            "verify",
+            "start"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.branding.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/branding",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "branding"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.branding.update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/branding",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "branding"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.disclaimers.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/disclaimers",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "disclaimers"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.disclaimers.update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/disclaimers",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "disclaimers"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.disclaimers.destroy",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/disclaimers/{scope}/{scopeId?}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "disclaimers",
+            "{scope}",
+            "{scopeId?}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.notifications.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/notifications",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "notifications"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.notifications.update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/notifications",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "notifications"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.organization.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/organization",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "organization"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.organization.update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/organization",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "organization"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.security.activity",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/security/activity",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "security",
+            "activity"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.security.mfa.confirm",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/security/mfa/confirm",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "security",
+            "mfa",
+            "confirm"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.security.mfa.disable",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/security/mfa/disable",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "security",
+            "mfa",
+            "disable"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.security.mfa.setup",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/security/mfa/setup",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "security",
+            "mfa",
+            "setup"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.security.password",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/security/password",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "security",
+            "password"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.security.policy.show",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/security/policy",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "security",
+            "policy"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.security.policy.update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/security/policy",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "security",
+            "policy"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.team.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/team",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "team"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.team.invite",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/team",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "team"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.team.destroy",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/team/{user}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "team",
+            "{user}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.team.role",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/team/{user}/role",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "team",
+            "{user}",
+            "role"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.settings.team.toggle",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/team/{user}/toggle",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "team",
+            "{user}",
+            "toggle"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.tasks.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/tasks",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "tasks"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.tasks.store",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/tasks",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "tasks"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.tasks.update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/tasks/{task}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "tasks",
+            "{task}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api.v1.users.index",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{baseUrl}}"
+          },
+          {
+            "key": "X-XSRF-TOKEN",
+            "value": "{{xsrf}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/users",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "users"
+          ]
+        }
+      }
+    }
+  ]
+}
