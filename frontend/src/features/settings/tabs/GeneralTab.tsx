@@ -7,7 +7,11 @@ import { Switch } from '@/components/ui/Switch'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/States'
 import { Alert } from '@/components/ui/Alert'
+import { ErrorSummary, type FieldError } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
+
+/** Server error key → input id, so the ErrorSummary can focus the offending control. */
+const GENERAL_FIELD_IDS: Record<string, string> = { name: 'org-name', 'general.logo_url': 'logo', 'general.contact_email': 'cemail' }
 
 const ACCOUNT_LABELS: Record<string, string> = { agency: 'وكالة', freelancer: 'مستقل', in_house: 'فريق داخلي', brand: 'علامة تجارية' }
 const NUMBER_LABELS: Record<string, string> = { latin: 'أرقام لاتينية (123)', grouped: 'أرقام مفصولة (1,234)' }
@@ -56,6 +60,14 @@ export function GeneralTab() {
       </div>
 
       {save.isError && !Object.keys(errors).length && <div className="mb-4"><Alert severity="danger" title="تعذّر الحفظ">تأكد من الصلاحية (settings.manage).</Alert></div>}
+      {Object.keys(errors).length > 0 && (
+        <div className="mb-4">
+          <ErrorSummary
+            title="يرجى تصحيح الأخطاء التالية"
+            errors={Object.entries(errors).map<FieldError>(([k, message]) => ({ field: GENERAL_FIELD_IDS[k] ?? k, message }))}
+          />
+        </div>
+      )}
       {saved && <div className="mb-4"><Alert severity="positive" title="تم حفظ الإعدادات" /></div>}
 
       <div className="grid gap-4 sm:grid-cols-2">

@@ -7,6 +7,7 @@ import { AuthShell } from './AuthShell'
 import { Button } from '@/components/ui/Button'
 import { EmailInput, FormField, PasswordInput, TextInput } from '@/components/ui/form'
 import { controlClass } from '@/components/ui/Field'
+import { ErrorSummary, useFormDraft, type FieldError } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
 import { useAuth } from '@/stores/auth'
@@ -50,21 +51,36 @@ const JOURNEY_COPY = {
   },
 } as const
 
+/** Error-summary title + module read-out copy — kept local so the shared i18n dictionary is untouched. */
+const REG_COPY = {
+  ar: { errTitle: 'يرجى تصحيح الأخطاء التالية', moduleLabel: 'الوحدة المطلوبة' },
+  en: { errTitle: 'Please fix the following errors', moduleLabel: 'Requested module' },
+} as const
+
 /** Real sign-up — provisions a tenant + owner via POST /auth/register, then drops into the app. */
 export function RegisterPage() {
   const t = useT()
   const { locale } = useUi()
   const ar = locale === 'ar'
   const jc = JOURNEY_COPY[ar ? 'ar' : 'en']
+  const rc = REG_COPY[ar ? 'ar' : 'en']
   const navigate = useNavigate()
   const setUser = useAuth((s) => s.setUser)
   const [params, setParams] = useSearchParams()
 
   const journey = parseJourney(params.get('journey'))
+  // Carried through unchanged from the decision-section handoff; surfaced read-only, never a forced re-pick.
+  const moduleParam = params.get('module')
   const [selfType, setSelfType] = useState<SelfAccountType>('freelancer')
 
-  const [form, setForm] = useState({ tenant_name: '', name: '', email: '', password: '', password_confirmation: '' })
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value })
+  // Non-secret fields autosave as a draft (survives refresh); passwords are kept in memory only, never persisted.
+  const draft = useFormDraft('register', { tenant_name: '', name: '', email: '' })
+  const [secret, setSecret] = useState({ password: '', password_confirmation: '' })
+  const form = { ...draft.value, ...secret }
+  const setDraft = (k: 'tenant_name' | 'name' | 'email') => (e: React.ChangeEvent<HTMLInputElement>) =>
+    draft.setValue((f) => ({ ...f, [k]: e.target.value }))
+  const setSecretField = (k: keyof typeof secret) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setSecret((s) => ({ ...s, [k]: e.target.value }))
 
   // The onboarding intent presets carried into the app so the user never re-selects their path.
   const onboarding = useMemo(() => {
@@ -83,10 +99,14 @@ export function RegisterPage() {
   const mutation = useMutation({
     // Onboarding (module/account-type selection) lands in Phase 2; carry the preset via router state for now.
     mutationFn: register,
-    onSuccess: (user) => { setUser(user); navigate('/verify-email', { replace: true, state: onboarding ? { onboarding } : undefined }) },
+    onSuccess: (user) => { draft.clear(); setUser(user); navigate('/verify-email', { replace: true, state: onboarding ? { onboarding } : undefined }) },
   })
   const error = mutation.isError ? toApiError(mutation.error) : null
   const err = (k: string) => error?.errors?.[k]?.[0]
+  // Field ids match the input ids below so the summary's click-to-focus lands on the right control.
+  const summaryErrors: FieldError[] = error?.errors
+    ? Object.entries(error.errors).flatMap(([field, msgs]) => (msgs?.length ? [{ field, message: msgs[0] }] : []))
+    : []
 
   return (
     <AuthShell>
@@ -135,15 +155,22 @@ export function RegisterPage() {
               <span className="text-text-muted">— {jc.agencySummary}</span>
             </div>
           )}
+
+          {moduleParam && (
+            <p className="mt-2 text-xs text-text-muted">
+              {rc.moduleLabel}: <span className="font-semibold text-text-secondary">{moduleParam}</span>
+            </p>
+          )}
         </section>
       )}
 
       <form className="mt-6 space-y-[18px]" onSubmit={(e) => { e.preventDefault(); mutation.mutate(form) }}>
-        <TextInput label={t('org_name')} value={form.tenant_name} onChange={set('tenant_name')} required error={err('tenant_name')} />
-        <TextInput label={t('full_name')} value={form.name} onChange={set('name')} autoComplete="name" required error={err('name')} />
-        <EmailInput label={t('email')} value={form.email} onChange={set('email')} required error={err('email')} />
-        <PasswordInput label={t('password')} value={form.password} onChange={set('password')} autoComplete="new-password" required error={err('password')} showLabel={t('show_password')} hideLabel={t('hide_password')} />
-        <PasswordInput label={t('confirm_password')} value={form.password_confirmation} onChange={set('password_confirmation')} autoComplete="new-password" required showLabel={t('show_password')} hideLabel={t('hide_password')} />
+        {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={rc.errTitle} />}
+        <TextInput id="tenant_name" label={t('org_name')} value={form.tenant_name} onChange={setDraft('tenant_name')} required error={err('tenant_name')} />
+        <TextInput id="name" label={t('full_name')} value={form.name} onChange={setDraft('name')} autoComplete="name" required error={err('name')} />
+        <EmailInput id="email" label={t('email')} value={form.email} onChange={setDraft('email')} required error={err('email')} />
+        <PasswordInput id="password" label={t('password')} value={form.password} onChange={setSecretField('password')} autoComplete="new-password" required error={err('password')} showLabel={t('show_password')} hideLabel={t('hide_password')} />
+        <PasswordInput id="password_confirmation" label={t('confirm_password')} value={form.password_confirmation} onChange={setSecretField('password_confirmation')} autoComplete="new-password" required showLabel={t('show_password')} hideLabel={t('hide_password')} />
 
         {error && !error.errors && <p className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{error.message}</p>}
 

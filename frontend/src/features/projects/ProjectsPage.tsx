@@ -20,12 +20,22 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
+import { ErrorSummary, type FieldError } from '@/components/forms'
+import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
+import { useUi } from '@/stores/ui'
 
 const STATUSES = ['draft', 'onboarding', 'active', 'paused', 'completed', 'archived']
 
+/** Error-summary title — local bilingual copy (shared i18n dictionary is untouched). */
+const PROJ_ERR_TITLE = { ar: 'يرجى تصحيح الأخطاء التالية', en: 'Please fix the following errors' } as const
+const PROJ_CREATE_IDS: Record<string, string> = { name: 'proj-name', client_workspace_id: 'proj-workspace' }
+const PROJ_EDIT_IDS: Record<string, string> = { name: 'proj-edit-name', status: 'proj-edit-status' }
+
 export function ProjectsPage() {
   const t = useT()
+  const locale = useUi((s) => s.locale)
+  const errTitle = PROJ_ERR_TITLE[locale]
   const queryClient = useQueryClient()
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Project | null>(null)
@@ -70,6 +80,13 @@ export function ProjectsPage() {
     setName(p.name)
     setStatus(p.status)
   }
+
+  const toSummary = (err: unknown, ids: Record<string, string>): FieldError[] => {
+    const api = toApiError(err)
+    return api.errors ? Object.entries(api.errors).flatMap(([f, m]) => (m?.length ? [{ field: ids[f] ?? f, message: m[0] }] : [])) : []
+  }
+  const createErrors = createMutation.isError ? toSummary(createMutation.error, PROJ_CREATE_IDS) : []
+  const editErrors = updateMutation.isError ? toSummary(updateMutation.error, PROJ_EDIT_IDS) : []
 
   return (
     <section className="space-y-5">
@@ -175,11 +192,12 @@ export function ProjectsPage() {
         }
       >
         <div className="space-y-3">
-          <Field label={t('client_workspace')} required>
-            <Select value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)} placeholder="—" options={(workspaces.data ?? []).map((w) => ({ value: w.id, label: w.name }))} />
+          {createErrors.length > 0 && <ErrorSummary errors={createErrors} title={errTitle} />}
+          <Field label={t('client_workspace')} htmlFor="proj-workspace" required>
+            <Select id="proj-workspace" value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)} placeholder="—" options={(workspaces.data ?? []).map((w) => ({ value: w.id, label: w.name }))} />
           </Field>
-          <Field label={t('name')} required>
-            <Input value={name} onChange={(e) => setName(e.target.value)} data-autofocus />
+          <Field label={t('name')} htmlFor="proj-name" required>
+            <Input id="proj-name" value={name} onChange={(e) => setName(e.target.value)} data-autofocus />
           </Field>
         </div>
       </Modal>
@@ -199,11 +217,12 @@ export function ProjectsPage() {
         }
       >
         <div className="space-y-3">
-          <Field label={t('name')} required>
-            <Input value={name} onChange={(e) => setName(e.target.value)} data-autofocus />
+          {editErrors.length > 0 && <ErrorSummary errors={editErrors} title={errTitle} />}
+          <Field label={t('name')} htmlFor="proj-edit-name" required>
+            <Input id="proj-edit-name" value={name} onChange={(e) => setName(e.target.value)} data-autofocus />
           </Field>
-          <Field label={t('status_label')}>
-            <Select value={status} onChange={(e) => setStatus(e.target.value)} options={STATUSES.map((s) => ({ value: s, label: s }))} />
+          <Field label={t('status_label')} htmlFor="proj-edit-status">
+            <Select id="proj-edit-status" value={status} onChange={(e) => setStatus(e.target.value)} options={STATUSES.map((s) => ({ value: s, label: s }))} />
           </Field>
         </div>
       </Modal>

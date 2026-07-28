@@ -8,8 +8,9 @@ import {
 } from './api'
 import { listDeliveries, type NotificationDeliveryRow } from '@/features/notifications/api'
 import { getData, putData } from '@/lib/api/client'
-import { MultiSelectField, SelectField } from '@/components/forms'
+import { ErrorSummary, MultiSelectField, SelectField, type FieldError } from '@/components/forms'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
+import { toApiError } from '@/lib/api/client'
 
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 const COPY = {
@@ -21,7 +22,7 @@ const COPY = {
     severity: 'الخطورة', source: 'المصدر', value: 'القيمة', threshold: 'الحد', triggered: 'أُطلق',
     sev_info: 'معلومة', sev_warning: 'تحذير', sev_critical: 'حرِج',
     new_rule: 'قاعدة جديدة', rule_name: 'اسم القاعدة', rule_type: 'النوع', cooldown: 'فترة التهدئة (دقائق)',
-    channels: 'القنوات', create_task_toggle: 'إنشاء مهمة تلقائيًا', active_toggle: 'مُفعّلة', save: 'حفظ', load_error: 'تعذّر تحميل الخيارات',
+    channels: 'القنوات', create_task_toggle: 'إنشاء مهمة تلقائيًا', active_toggle: 'مُفعّلة', save: 'حفظ', load_error: 'تعذّر تحميل الخيارات', err_title: 'يرجى تصحيح الأخطاء التالية',
     threshold_hint: 'الحد (اختياري): نسبة/أيام/قيمة حسب النوع.',
     prefs_title: 'قنوات الإشعار وساعات الهدوء', ch_in_app: 'داخل التطبيق', ch_email: 'البريد', ch_whatsapp: 'واتساب',
     quiet: 'ساعات الهدوء', quiet_enabled: 'تفعيل ساعات الهدوء', from: 'من', to: 'إلى', saved: 'تم الحفظ',
@@ -39,7 +40,7 @@ const COPY = {
     severity: 'Severity', source: 'Source', value: 'Value', threshold: 'Threshold', triggered: 'Triggered',
     sev_info: 'Info', sev_warning: 'Warning', sev_critical: 'Critical',
     new_rule: 'New rule', rule_name: 'Rule name', rule_type: 'Type', cooldown: 'Cooldown (minutes)',
-    channels: 'Channels', create_task_toggle: 'Auto-create a task', active_toggle: 'Active', save: 'Save', load_error: 'Could not load options',
+    channels: 'Channels', create_task_toggle: 'Auto-create a task', active_toggle: 'Active', save: 'Save', load_error: 'Could not load options', err_title: 'Please fix the following errors',
     threshold_hint: 'Threshold (optional): pct / days / value depending on type.',
     prefs_title: 'Notification channels & quiet hours', ch_in_app: 'In-app', ch_email: 'Email', ch_whatsapp: 'WhatsApp',
     quiet: 'Quiet hours', quiet_enabled: 'Enable quiet hours', from: 'From', to: 'To', saved: 'Saved',
@@ -266,6 +267,9 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['alert-rules'] }); setForm((f) => ({ ...f, name: '' })); setThresholdRaw('') },
   })
   const rules = q.data ?? []
+  const summaryErrors: FieldError[] = createM.isError
+    ? (() => { const api = toApiError(createM.error); return api.errors ? Object.entries(api.errors).flatMap(([f, m]) => (m?.length ? [{ field: f === 'name' ? 'rule-name' : f, message: m[0] }] : [])) : [] })()
+    : []
 
   return (
     <div className="grid gap-4 md:grid-cols-[1fr_320px]">
@@ -294,9 +298,10 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
         className="flex h-fit flex-col gap-3 rounded-2xl border border-border bg-surface p-4"
       >
         <h3 className="flex items-center gap-2 text-sm font-bold text-text-primary"><Plus size={15} /> {c.new_rule}</h3>
-        <label className="flex flex-col gap-1 text-xs font-semibold text-text-secondary">
+        {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={c.err_title} />}
+        <label className="flex flex-col gap-1 text-xs font-semibold text-text-secondary" htmlFor="rule-name">
           {c.rule_name}
-          <input required minLength={2} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          <input id="rule-name" required minLength={2} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary" />
         </label>
         <SelectField

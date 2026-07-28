@@ -75,4 +75,18 @@ describe('ReportsPage — engine-fed builder', () => {
       ),
     )
   })
+
+  it('surfaces a server validation error in the builder ErrorSummary', async () => {
+    vi.mocked(createReport).mockRejectedValue({
+      response: { status: 422, data: { message: 'Validation failed', errors: { period_end: ['The end date is invalid.'] } } },
+    })
+    renderWithProviders(<ReportsPage />, { locale: 'en' })
+
+    fireEvent.click(screen.getByText('تقرير جديد'))
+    await screen.findByRole('combobox', { name: 'نوع التقرير' })
+    fireEvent.click(screen.getByText('إنشاء وتوليد'))
+
+    const summary = await screen.findByTestId('error-summary')
+    expect(summary).toHaveTextContent('The end date is invalid.')
+  })
 })

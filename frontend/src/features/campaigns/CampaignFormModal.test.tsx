@@ -20,9 +20,10 @@ const created: UnifiedCampaign = {
 describe('CampaignFormModal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
     vi.mocked(listUsers).mockResolvedValue([])
   })
-  afterEach(() => signOut())
+  afterEach(() => { signOut(); localStorage.clear() })
 
   it('blocks submit with an empty name (client-side zod)', async () => {
     signInWith(['campaigns.create'])
@@ -30,8 +31,8 @@ describe('CampaignFormModal', () => {
 
     fireEvent.click(screen.getByText('Save'))
     await waitFor(() => expect(createCampaign).not.toHaveBeenCalled())
-    // A field-level error is shown.
-    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    // The shared ErrorSummary surfaces the validation failure at the top of the form.
+    expect(await screen.findByTestId('error-summary')).toBeInTheDocument()
   })
 
   it('submits a valid campaign and calls createCampaign', async () => {
@@ -57,7 +58,22 @@ describe('CampaignFormModal', () => {
     fireEvent.change(screen.getByLabelText(/Campaign name/i), { target: { value: 'Dup' } })
     fireEvent.click(screen.getByText('Save'))
 
-    expect(await screen.findByText('The name has already been taken.')).toBeInTheDocument()
+    // Surfaced both inline (on the field) and in the shared ErrorSummary.
+    expect(await screen.findByTestId('error-summary')).toHaveTextContent('The name has already been taken.')
+  })
+
+  it('restores an autosaved draft in create mode and still submits the engine keys', async () => {
+    localStorage.setItem(
+      'chub:draft:campaign:new:p1',
+      JSON.stringify({ name: 'Restored', total_budget: '', budget_currency: 'SAR', starts_on: '', ends_on: '', audience: '', owner_id: '' }),
+    )
+    vi.mocked(createCampaign).mockResolvedValue(created)
+    signInWith(['campaigns.create'])
+    renderWithProviders(<CampaignFormModal open onClose={() => {}} projectId="p1" />)
+
+    expect((screen.getByLabelText(/Campaign name/i) as HTMLInputElement).value).toBe('Restored')
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(createCampaign).toHaveBeenCalledWith('p1', expect.objectContaining({ name: 'Restored' })))
   })
 
   it('edit mode pre-fills and calls updateCampaign', async () => {

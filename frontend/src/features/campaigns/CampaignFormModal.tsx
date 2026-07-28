@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { Textarea } from '@/components/ui/Textarea'
-import { CreatableSelect, MultiSelectField, SelectField } from '@/components/forms'
+import { CreatableSelect, ErrorSummary, MultiSelectField, SelectField, useFormDraft, type FieldError } from '@/components/forms'
 import { createOptionFromDraft, flattenOptions, useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
@@ -29,14 +29,22 @@ const CF_COPY = {
     creativeTypes: 'أنواع المحتوى الإبداعي', tags: 'الوسوم',
     derivedTitle: 'مؤشرات مشتقة من الهدف', primaryKpi: 'المؤشر الأساسي', secondaryKpi: 'مؤشرات ثانوية',
     funnel: 'مرحلة المسار', template: 'قالب التقرير', alerts: 'تنبيهات مقترحة',
+    errTitle: 'يرجى تصحيح الأخطاء التالية',
   },
   en: {
     platforms: 'Platforms', regions: 'Regions', audiences: 'Audiences', conversionEvents: 'Conversion events',
     creativeTypes: 'Creative types', tags: 'Tags',
     derivedTitle: 'KPIs derived from the objective', primaryKpi: 'Primary KPI', secondaryKpi: 'Secondary KPIs',
     funnel: 'Funnel stage', template: 'Report template', alerts: 'Suggested alerts',
+    errTitle: 'Please fix the following errors',
   },
 } as const
+
+/** RHF field name → input id, so the ErrorSummary's click-to-focus lands on the right control. */
+const FIELD_IDS: Record<string, string> = {
+  name: 'campaign-name', total_budget: 'campaign-budget', budget_currency: 'campaign-currency',
+  starts_on: 'campaign-start', ends_on: 'campaign-end', owner_id: 'campaign-owner', audience: 'campaign-audience',
+}
 
 interface Props {
   open: boolean
@@ -95,8 +103,12 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
     handleSubmit,
     reset,
     setError,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: defaults })
+
+  // Draft autosave for the new-campaign flow (create only) — survives an accidental close/refresh.
+  const draft = useFormDraft<FormValues>(`campaign:new:${projectId}`, defaults)
 
   // Taxonomy-driven controlled fields (kept out of RHF; they submit arrays / keys).
   const [objective, setObjective] = useState<string | null>(null)
@@ -119,7 +131,8 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
   // API (the read resource does not expose the other arrays yet), so the rest reset to empty.
   useEffect(() => {
     if (!open) return
-    reset(defaults)
+    // Create mode restores any autosaved draft; edit mode always mirrors the persisted campaign.
+    reset(isEdit ? defaults : { ...defaults, ...draft.value })
     setObjective(campaign?.objective ?? 'other')
     setRegions(campaign?.regions ?? [])
     setPlatforms([])
@@ -127,7 +140,16 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
     setConversionEvents([])
     setCreativeTypes([])
     setTags([])
-  }, [open, defaults, reset, campaign])
+    // draft.value is intentionally read once on open, not tracked, to avoid clobbering live edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaults, reset, campaign, isEdit])
+
+  // Persist new-campaign field changes to the draft (create only); cleared on a successful submit.
+  useEffect(() => {
+    if (!open || isEdit) return
+    const sub = watch((values) => draft.setValue(values as FormValues))
+    return () => sub.unsubscribe()
+  }, [open, isEdit, watch, draft])
 
   const users = useQuery({ queryKey: ['users'], queryFn: () => listUsers(), enabled: open })
 
@@ -163,6 +185,7 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'campaigns'] })
+      if (!isEdit) draft.clear()
       reset(defaults)
       onClose()
     },
@@ -177,6 +200,9 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
   })
 
   const apiError = mutation.isError ? toApiError(mutation.error) : null
+  const summaryErrors: FieldError[] = Object.entries(errors).flatMap(([field, e]) =>
+    e?.message ? [{ field: FIELD_IDS[field] ?? field, message: String(e.message) }] : [],
+  )
 
   return (
     <Modal
@@ -196,6 +222,7 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
       }
     >
       <form className="space-y-3" onSubmit={handleSubmit((v) => mutation.mutate(v))}>
+        {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={c.errTitle} />}
         {apiError && !apiError.errors && <Alert severity="danger" title={apiError.message} />}
 
         <Field label={t('campaign_name')} htmlFor="campaign-name" required error={errors.name?.message}>

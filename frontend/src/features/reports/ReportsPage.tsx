@@ -19,8 +19,9 @@ import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/States'
-import { SelectField } from '@/components/forms'
+import { ErrorSummary, SelectField, type FieldError } from '@/components/forms'
 import { optionLabel } from '@/components/forms/types'
+import { toApiError } from '@/lib/api/client'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { DemoBadge } from '@/features/analytics/components'
 import { InteractiveReport } from './InteractiveReport'
@@ -309,11 +310,16 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
       }),
     onSuccess: onCreated,
   })
+  const RB_FIELD_IDS: Record<string, string> = { name: 'rb-name', period_start: 'rb-from', period_end: 'rb-to' }
+  const summaryErrors: FieldError[] = create.isError
+    ? (() => { const api = toApiError(create.error); return api.errors ? Object.entries(api.errors).flatMap(([f, m]) => (m?.length ? [{ field: RB_FIELD_IDS[f] ?? f, message: m[0] }] : [])) : [] })()
+    : []
   return (
     <Modal open onClose={onClose} title="منشئ التقرير">
       <div className="space-y-4">
-        <Field label="اسم التقرير">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: التقرير الشهري — يوليو" className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
+        {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title="يرجى تصحيح الأخطاء التالية" />}
+        <Field label="اسم التقرير" htmlFor="rb-name">
+          <input id="rb-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: التقرير الشهري — يوليو" className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
         </Field>
         <SelectField
           label="نوع التقرير"
@@ -336,8 +342,8 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
           clearable={false}
         />
         <div className="grid grid-cols-2 gap-3">
-          <Field label="من"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>
-          <Field label="إلى"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>
+          <Field label="من" htmlFor="rb-from"><input id="rb-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>
+          <Field label="إلى" htmlFor="rb-to"><input id="rb-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" onClick={onClose}>إلغاء</Button>

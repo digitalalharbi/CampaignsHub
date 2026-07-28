@@ -84,4 +84,20 @@ describe('AlertsPage — engine-fed rule form', () => {
       ),
     )
   })
+
+  it('surfaces a server validation error in the ErrorSummary and focuses the field', async () => {
+    vi.mocked(createAlertRule).mockRejectedValue({
+      response: { status: 422, data: { message: 'Validation failed', errors: { name: ['The name has already been taken.'] } } },
+    })
+    renderWithProviders(<AlertsPage />, { locale: 'en' })
+    await openRulesTab()
+
+    fireEvent.change(screen.getByLabelText('Rule name'), { target: { value: 'Dup' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    const summary = await screen.findByTestId('error-summary')
+    expect(summary).toHaveTextContent('The name has already been taken.')
+    fireEvent.click(screen.getByRole('button', { name: 'The name has already been taken.' }))
+    expect(screen.getByLabelText('Rule name')).toHaveFocus()
+  })
 })

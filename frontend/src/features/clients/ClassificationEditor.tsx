@@ -4,14 +4,18 @@ import { getTaxonomy, updateClassification, type ClientClassification } from './
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
-import { CreatableSelect, MultiSelectField, SearchableSelect, SelectField } from '@/components/forms'
+import { CreatableSelect, ErrorSummary, MultiSelectField, SearchableSelect, SelectField, type FieldError } from '@/components/forms'
 import { createOptionFromDraft, useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
+import { toApiError } from '@/lib/api/client'
 
 /** Bilingual copy kept local to the feature (never in the global i18n dictionary). */
 const CE_COPY = {
-  ar: { tags: 'الوسوم', enabledServices: 'الخدمات المفعّلة', tagsHint: 'ابحث أو أضف وسمًا', servicesHint: 'اختر الخدمات المقدَّمة لهذا العميل' },
-  en: { tags: 'Tags', enabledServices: 'Enabled services', tagsHint: 'Search or add a tag', servicesHint: 'Services provided to this client' },
+  ar: { tags: 'الوسوم', enabledServices: 'الخدمات المفعّلة', tagsHint: 'ابحث أو أضف وسمًا', servicesHint: 'اختر الخدمات المقدَّمة لهذا العميل', errTitle: 'يرجى تصحيح الأخطاء التالية' },
+  en: { tags: 'Tags', enabledServices: 'Enabled services', tagsHint: 'Search or add a tag', servicesHint: 'Services provided to this client', errTitle: 'Please fix the following errors' },
 } as const
+
+/** Server field name → input id, so the ErrorSummary can focus the offending control. */
+const CE_FIELD_IDS: Record<string, string> = { default_currency: 'ce-currency', timezone: 'ce-timezone', language: 'ce-language' }
 
 /** Inline classification editor — every field is a real, validated, persisted mutation (not display-only). */
 export function ClassificationEditor({ clientId, current, onClose }: { clientId: string; current: ClientClassification; onClose: () => void }) {
@@ -62,9 +66,14 @@ export function ClassificationEditor({ clientId, current, onClose }: { clientId:
   const set = (p: Partial<ClientClassification>) => setForm((f) => ({ ...f, ...p }))
   const ownerOptions = (taxonomy.data?.assignable_users ?? []).map((u) => ({ value: String(u.id), label: u.name }))
   const field = 'h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-brand-500'
+  const apiErr = mutation.isError ? toApiError(mutation.error) : null
+  const summaryErrors: FieldError[] = apiErr?.errors
+    ? Object.entries(apiErr.errors).flatMap(([f, m]) => (m?.length ? [{ field: CE_FIELD_IDS[f] ?? f, message: m[0] }] : []))
+    : []
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); mutation.mutate() }} className="mt-4 grid gap-3 rounded-xl border border-border bg-surface-secondary p-4 sm:grid-cols-2" aria-label={t('cc_classification')}>
+      {summaryErrors.length > 0 && <div className="sm:col-span-2"><ErrorSummary errors={summaryErrors} title={c.errTitle} /></div>}
       <SearchableSelect
         label={t('cc_filter_status')}
         value={form.client_status}
@@ -110,14 +119,14 @@ export function ClassificationEditor({ clientId, current, onClose }: { clientId:
         onRetry={() => priorityTax.refetch()}
         clearable={false}
       />
-      <label className="text-xs font-semibold text-text-secondary">{t('cc_currency')}
-        <input className={field} value={form.default_currency ?? ''} maxLength={3} placeholder="SAR" onChange={(e) => set({ default_currency: e.target.value.toUpperCase() })} />
+      <label className="text-xs font-semibold text-text-secondary" htmlFor="ce-currency">{t('cc_currency')}
+        <input id="ce-currency" className={field} value={form.default_currency ?? ''} maxLength={3} placeholder="SAR" onChange={(e) => set({ default_currency: e.target.value.toUpperCase() })} />
       </label>
-      <label className="text-xs font-semibold text-text-secondary">{t('cc_timezone')}
-        <input className={field} value={form.timezone ?? ''} placeholder="Asia/Riyadh" onChange={(e) => set({ timezone: e.target.value })} />
+      <label className="text-xs font-semibold text-text-secondary" htmlFor="ce-timezone">{t('cc_timezone')}
+        <input id="ce-timezone" className={field} value={form.timezone ?? ''} placeholder="Asia/Riyadh" onChange={(e) => set({ timezone: e.target.value })} />
       </label>
-      <label className="text-xs font-semibold text-text-secondary">{t('cc_language')}
-        <select className={field} value={form.language ?? 'ar'} onChange={(e) => set({ language: e.target.value })}>
+      <label className="text-xs font-semibold text-text-secondary" htmlFor="ce-language">{t('cc_language')}
+        <select id="ce-language" className={field} value={form.language ?? 'ar'} onChange={(e) => set({ language: e.target.value })}>
           <option value="ar">العربية</option>
           <option value="en">English</option>
         </select>
@@ -164,7 +173,7 @@ export function ClassificationEditor({ clientId, current, onClose }: { clientId:
         />
       </div>
 
-      {mutation.isError && <p className="text-xs text-danger sm:col-span-2">{t('error_generic')}</p>}
+      {mutation.isError && summaryErrors.length === 0 && <p className="text-xs text-danger sm:col-span-2">{t('error_generic')}</p>}
       <div className="flex items-center gap-2 sm:col-span-2">
         <button type="submit" disabled={mutation.isPending} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60">{t('cc_save')}</button>
         <button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text-secondary">{t('cc_cancel')}</button>
