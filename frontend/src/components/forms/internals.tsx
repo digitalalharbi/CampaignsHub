@@ -138,35 +138,52 @@ export function Chip({
       )}
       <span className="truncate">{children}</span>
       {onRemove && !disabled && (
-        <button
-          type="button"
+        // role="button" span (not a <button>) so the chip control is valid HTML inside the trigger <button>.
+        <span
+          role="button"
+          tabIndex={0}
           onClick={(e) => {
             e.stopPropagation()
             onRemove()
           }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              e.stopPropagation()
+              onRemove()
+            }
+          }}
           aria-label={removeLabel}
-          className="rounded-full p-0.5 text-text-muted hover:bg-surface-secondary hover:text-text-primary"
+          className="inline-flex cursor-pointer rounded-full p-0.5 text-text-muted hover:bg-surface-secondary hover:text-text-primary"
         >
           <X size={12} aria-hidden />
-        </button>
+        </span>
       )}
     </span>
   )
 }
 
-/** Inline clear (×) button for a select trigger. */
+/** Inline clear (×) control for a select trigger. role="button" span (valid inside the trigger <button>). */
 export function ClearButton({ onClear, label }: { onClear: () => void; label: string }) {
   return (
-    <button
-      type="button"
+    <span
+      role="button"
+      tabIndex={0}
       onClick={(e) => {
         e.stopPropagation()
         onClear()
       }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          e.stopPropagation()
+          onClear()
+        }
+      }}
       aria-label={label}
-      className="rounded-full p-0.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"
+      className="inline-flex cursor-pointer rounded-full p-0.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"
     >
       <X size={15} aria-hidden />
-    </button>
+    </span>
   )
 }
