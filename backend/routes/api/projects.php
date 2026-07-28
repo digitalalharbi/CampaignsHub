@@ -12,13 +12,15 @@ use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
 use App\Domains\Reports\Http\Controllers\ReportController;
 use App\Domains\Reports\Http\Controllers\ReportPrintController;
 use App\Domains\Reports\Http\Controllers\ReportShareController;
+use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
 
 // Project management (tenant-scoped; not project-context-bound).
 Route::middleware(['auth:sanctum', 'tenant'])->prefix('projects')->name('projects.')->group(function (): void {
     Route::get('/', [ProjectController::class, 'index'])->name('index');
-    Route::post('/', [ProjectController::class, 'store'])->name('store');
+    Route::post('/', [ProjectController::class, 'store'])->name('store')
+        ->middleware(EnsureWithinPlanLimit::class.':projects');
     Route::get('{project}', [ProjectController::class, 'show'])->name('show');
     Route::match(['put', 'patch'], '{project}', [ProjectController::class, 'update'])->name('update');
     Route::post('{project}/clone', [ProjectController::class, 'clone'])->name('clone');

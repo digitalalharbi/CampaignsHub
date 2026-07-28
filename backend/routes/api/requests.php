@@ -67,6 +67,14 @@ Route::prefix('client')->name('client.')->group(function (): void {
     Route::get('/requests/{reference}/journey', [ClientPortalController::class, 'journey'])->name('requests.journey')
         ->middleware('throttle:120,1');
 
+    // Client-facing content (read-only, client-safe, workspace-scoped to this client): files, campaigns, reports.
+    Route::get('/files', [ClientPortalController::class, 'files'])->name('files.index')
+        ->middleware('throttle:120,1');
+    Route::get('/campaigns', [ClientPortalController::class, 'campaigns'])->name('campaigns.index')
+        ->middleware('throttle:120,1');
+    Route::get('/reports', [ClientPortalController::class, 'reports'])->name('reports.index')
+        ->middleware('throttle:120,1');
+
     // Client-facing Billing (reuses the Billing domain; every read/write is workspace-scoped to this client).
     Route::get('/quotes', [ClientPortalController::class, 'quotes'])->name('quotes.index')
         ->middleware('throttle:120,1');

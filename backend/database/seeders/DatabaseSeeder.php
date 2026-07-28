@@ -19,6 +19,9 @@ class DatabaseSeeder extends Seeder
         // 1b) Canonical request service types + lifecycle statuses (structural, all environments).
         $this->call(RequestCatalogSeeder::class);
 
+        // 1c) Global subscription plan catalogue (starter/growth/scale) — structural, safe in production.
+        $this->call(SubscriptionPlanSeeder::class);
+
         // 2) Platform super-admin (idempotent).
         User::firstOrCreate(
             ['email' => 'platform@mediabuying.local'],

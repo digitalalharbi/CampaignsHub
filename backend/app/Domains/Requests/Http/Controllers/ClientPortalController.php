@@ -9,9 +9,16 @@ use App\Domains\Billing\Models\Payment;
 use App\Domains\Billing\Models\Quote;
 use App\Domains\Billing\Providers\PaymentProviderRegistry;
 use App\Domains\Billing\Services\BillingService;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Drive\Models\DriveFile;
+use App\Domains\Drive\Models\DriveLink;
 use App\Domains\Messaging\Models\Message;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Messaging\Services\MessagingService;
+use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Requests\Journey\RequestStage;
 use App\Domains\Requests\Models\ClientPortalToken;
 use App\Domains\Requests\Models\ExternalRequest;
@@ -27,6 +34,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -53,6 +61,7 @@ final class ClientPortalController
         private readonly RequestJourneyService $journey,
         private readonly PaymentProviderRegistry $providers,
         private readonly TenantContext $tenant,
+        private readonly MetricsAggregator $metrics,
     ) {}
 
     /** POST /client/login/start — send an OTP to the client's phone or email (portal login). */
@@ -436,7 +445,222 @@ final class ClientPortalController
         ]]);
     }
 
+    // ============================================================================================
+    // Client-facing Files / Campaigns / Reports — read-only, client-safe, and scoped EXACTLY like the
+    // other /client endpoints: to the workspaces this verified client owns (derived from their own
+    // requests) AND to the token's tenant. Fail-closed: a client with no owned workspace sees nothing,
+    // and cross-client resources are never returned (empty, never another client's data).
+    // ============================================================================================
+
+    /**
+     * GET /client/files — every file the client is allowed to see: client-visible files uploaded on their OWN
+     * requests, plus read-only Drive file METADATA for folders linked to their workspaces / their projects /
+     * their campaigns. Client-safe shapes only — the storage disk/path and Drive link ids are never exposed.
+     */
+    public function files(Request $request): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+
+        // 1) Client-visible uploads on the client's own requests.
+        $requests = (clone $this->contactScope($token))->get(['id', 'reference']);
+        $referenceById = $requests->pluck('reference', 'id');
+        $requestIds = $requests->pluck('id')->all();
+
+        $requestFiles = $requestIds === [] ? collect() : RequestFile::query()
+            ->whereIn('request_id', $requestIds)
+            ->where('is_client_visible', true)
+            ->orderByDesc('created_at')->get(['id', 'request_id', 'original_name', 'mime', 'size', 'created_at'])
+            ->map(fn (RequestFile $f) => [
+                'id' => (string) $f->id,
+                'source' => 'request',
+                'name' => $f->original_name,
+                'mime' => $f->mime,
+                'size' => $f->size,
+                'request_reference' => $referenceById[$f->request_id] ?? null,
+                'created_at' => optional($f->created_at)->toIso8601String(),
+            ]);
+
+        // 2) Read-only Drive file metadata linked to the client's workspaces/projects/campaigns.
+        $driveFiles = $this->clientDriveFiles($token);
+
+        return response()->json(['data' => [
+            'files' => $requestFiles->values()->concat($driveFiles->values())->all(),
+        ]]);
+    }
+
+    /**
+     * GET /client/campaigns — the campaigns in the client's own workspace projects (read-only, client-safe).
+     * NO internal cost fields (budget/spend/revenue/roas/cpa/cpc/cpm) — only high-level delivery metrics.
+     */
+    public function campaigns(Request $request): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        $ids = $this->ownedWorkspaceIds($token);
+
+        $campaigns = $ids === [] ? collect() : UnifiedCampaign::query()
+            ->whereIn('client_workspace_id', $ids)
+            ->orderByDesc('created_at')->limit(200)->get()
+            ->map(fn (UnifiedCampaign $c) => $this->campaignShape($c));
+
+        return response()->json(['data' => ['campaigns' => $campaigns->values()->all()]]);
+    }
+
+    /**
+     * GET /client/reports — reports permitted to the client: only CLIENT-audience reports that belong to the
+     * client's own projects AND have an ACTIVE secure share. Internal/executive reports are NEVER returned.
+     */
+    public function reports(Request $request): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        $projectIds = $this->ownedProjectIds($token);
+        if ($projectIds === []) {
+            return response()->json(['data' => ['reports' => []]]);
+        }
+
+        // Reports that currently have at least one active (non-revoked, non-expired) secure share.
+        $sharedReportIds = $this->activeShareQuery()->pluck('report_id')
+            ->map(fn ($id): string => (string) $id)->unique()->all();
+        if ($sharedReportIds === []) {
+            return response()->json(['data' => ['reports' => []]]);
+        }
+
+        $reports = Report::query()
+            ->whereIn('project_id', $projectIds)
+            ->where('audience', 'client') // internal/executive reports are never client-facing
+            ->whereIn('id', $sharedReportIds)
+            ->orderByDesc('created_at')->limit(200)->get()
+            ->map(fn (Report $r) => $this->reportShape($r));
+
+        return response()->json(['data' => ['reports' => $reports->values()->all()]]);
+    }
+
     // ---- client-facing scoping + shapes ----
+
+    /**
+     * The project ids belonging to the workspaces this verified client owns. Fail-closed: no owned workspace
+     * → no projects → no reports/drive scope.
+     *
+     * @return list<string>
+     */
+    private function ownedProjectIds(ClientPortalToken $token): array
+    {
+        $workspaceIds = $this->ownedWorkspaceIds($token);
+        if ($workspaceIds === []) {
+            return [];
+        }
+
+        return Project::query()->whereIn('client_workspace_id', $workspaceIds)
+            ->pluck('id')->map(fn ($id): string => (string) $id)->all();
+    }
+
+    /** Active (non-revoked, non-expired) report shares for the bound tenant. */
+    private function activeShareQuery(): Builder
+    {
+        return ReportShare::query()
+            ->whereNull('revoked_at')
+            ->where(fn (Builder $q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', Carbon::now()));
+    }
+
+    /**
+     * Read-only Drive file metadata for links scoped to the client's workspaces / projects / campaigns.
+     *
+     * @return Collection<int, array<string,mixed>>
+     */
+    private function clientDriveFiles(ClientPortalToken $token): Collection
+    {
+        $workspaceIds = $this->ownedWorkspaceIds($token);
+        if ($workspaceIds === []) {
+            return collect();
+        }
+
+        $projectIds = $this->ownedProjectIds($token);
+        $campaignIds = UnifiedCampaign::query()->whereIn('client_workspace_id', $workspaceIds)
+            ->pluck('id')->map(fn ($id): string => (string) $id)->all();
+
+        $linkIds = DriveLink::query()->where(function (Builder $q) use ($workspaceIds, $projectIds, $campaignIds): void {
+            $q->where(fn (Builder $w) => $w->where('scope', 'client')->whereIn('scope_id', $workspaceIds));
+            if ($projectIds !== []) {
+                $q->orWhere(fn (Builder $w) => $w->where('scope', 'project')->whereIn('scope_id', $projectIds));
+            }
+            if ($campaignIds !== []) {
+                $q->orWhere(fn (Builder $w) => $w->where('scope', 'campaign')->whereIn('scope_id', $campaignIds));
+            }
+        })->pluck('id')->all();
+
+        if ($linkIds === []) {
+            return collect();
+        }
+
+        return DriveFile::query()->whereIn('drive_link_id', $linkIds)
+            ->orderByDesc('modified_time')
+            ->get(['id', 'name', 'mime', 'size', 'web_view_link', 'thumbnail_link', 'modified_time'])
+            ->map(function (DriveFile $f): array {
+                /** @var array<string,mixed> $row */
+                $row = [
+                    'id' => (string) $f->getKey(),
+                    'source' => 'drive',
+                    'name' => $f->name,
+                    'mime' => $f->mime,
+                    'size' => $f->size,
+                    'web_view_link' => $f->web_view_link,
+                    'thumbnail_link' => $f->thumbnail_link,
+                    'modified_time' => optional($f->modified_time)->toIso8601String(),
+                ];
+
+                return $row;
+            });
+    }
+
+    /** @return array<string,mixed> client-safe campaign: high-level fields + delivery metrics, NO cost fields. */
+    private function campaignShape(UnifiedCampaign $c): array
+    {
+        // Reuse the SAME metrics engine (MetricsAggregator) the internal surfaces use, scoped to this campaign.
+        $totals = $this->metrics->forCampaign((string) $c->getKey())
+            ->totals(Carbon::now()->subDays(30), Carbon::now());
+
+        return [
+            'id' => (string) $c->getKey(),
+            'name' => $c->client_display_name ?: $c->name,
+            'status' => $c->status,
+            'objective' => $c->objective,
+            'starts_on' => optional($c->starts_on)->toDateString(),
+            'ends_on' => optional($c->ends_on)->toDateString(),
+            // High-level, client-safe metrics ONLY — spend/revenue/roas/cpa/cpc/cpm are deliberately omitted.
+            'metrics' => [
+                'impressions' => $totals['impressions'] ?? 0,
+                'clicks' => $totals['clicks'] ?? 0,
+                'conversions' => $totals['conversions'] ?? 0,
+                'ctr' => $totals['ctr'] ?? null,
+            ],
+        ];
+    }
+
+    /** @return array<string,mixed> client-safe report + its active-share descriptor (never the raw token). */
+    private function reportShape(Report $r): array
+    {
+        /** @var ReportShare|null $share */
+        $share = (clone $this->activeShareQuery())->where('report_id', $r->id)->latest('created_at')->first();
+
+        return [
+            'id' => (string) $r->getKey(),
+            'name' => $r->name,
+            'type' => $r->type,
+            'audience' => $r->audience,
+            'status' => $r->status,
+            'period_start' => optional($r->period_start)->toDateString(),
+            'period_end' => optional($r->period_end)->toDateString(),
+            'generated_at' => optional($r->generated_at)->toIso8601String(),
+            'share' => $share === null ? null : [
+                'shared' => true,
+                'allow_download' => (bool) $share->allow_download,
+                'watermark' => (bool) $share->watermark,
+                'expires_at' => optional($share->expires_at)->toIso8601String(),
+            ],
+        ];
+    }
 
     /** Bind the request-scoped tenant to the token's tenant so tenant-global-scoped models resolve correctly. */
     private function bindTenant(ClientPortalToken $token): void

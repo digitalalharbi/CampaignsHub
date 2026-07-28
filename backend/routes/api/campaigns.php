@@ -10,6 +10,7 @@ use App\Domains\Campaigns\Http\Controllers\CampaignMetricsController;
 use App\Domains\Campaigns\Http\Controllers\CampaignReportsController;
 use App\Domains\Campaigns\Http\Controllers\ExternalCampaignController;
 use App\Domains\Campaigns\Http\Controllers\UnifiedCampaignController;
+use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use Illuminate\Support\Facades\Route;
 
 // Project-scoped campaigns (ResolveProject enforces tenant + project isolation; fail-closed 404).
@@ -18,7 +19,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])
     ->name('projects.campaigns.')
     ->group(function (): void {
         Route::get('campaigns', [UnifiedCampaignController::class, 'index'])->name('index');
-        Route::post('campaigns', [UnifiedCampaignController::class, 'store'])->name('store');
+        Route::post('campaigns', [UnifiedCampaignController::class, 'store'])->name('store')
+            ->middleware(EnsureWithinPlanLimit::class.':campaigns');
         Route::get('campaigns/{campaign}', [UnifiedCampaignController::class, 'show'])->name('show');
         Route::match(['put', 'patch'], 'campaigns/{campaign}', [UnifiedCampaignController::class, 'update'])->name('update');
         Route::post('campaigns/{campaign}/pause', [UnifiedCampaignController::class, 'pause'])->name('pause');
