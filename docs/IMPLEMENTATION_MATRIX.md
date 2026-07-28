@@ -77,14 +77,14 @@ Status legend: Tested = feature tests + phpstan green; Awaiting Ext Dep = adapte
 | 1 | Taxonomy & Option Management backend | **Implemented & Tested** (4f4a42e; 388 backend, 23 defs/123 opts) |
 | 2 | Settings Taxonomy Manager UI | In Progress |
 | 3 | Searchable/Creatable/Multi-select controls | **Implemented & Tested** (cebbbb8; 143 vitest) — adoption pending |
-| 4 | Requests classification adoption (Service→Category→Type→Objective→Priority→Status→SLA→Payment→Source, dynamic per service) | Not Started |
-| 5 | Clients classification adoption (status/service_level/industry/business_type/owner/priority/tags/modules/source; multi-select) | Not Started |
-| 6 | Campaigns objective-based (objective→KPIs/funnel/creative-ranking/report-template/alerts; multi-select platforms/regions/audiences/events/creatives/tags) | Not Started |
+| 4 | Requests classification adoption (dashboard filters engine-fed; dependent Service→Category→Type primitive shipped; public intake stays enum by design) | **Implemented & Tested** (96d65b2) |
+| 5 | Clients classification adoption (status/level/industry/priority/source engine-fed; tags + enabled_services multi-select) | **Implemented & Tested** (96d65b2) |
+| 6 | Campaigns objective-based (objective→KPIs/funnel/template from metadata; 6 multi-selects → jsonb; round-trip resource) | **Implemented & Tested** (96d65b2, 3836d88) |
 | 7 | Reports/Alerts/Integrations option adoption (types/audiences/severities/categories/provider-states/file-categories → engine; keep system keys) | Not Started |
-| 8 | Integrations page redesign (Summary→Category Tabs→Search/Status→Compact Grid→Details Drawer; 4–6/row; full width) | Not Started |
-| 9 | Marketing homepage redesign (shorten/rebalance; hero+preview+CTA first viewport) | Not Started |
+| 8 | Integrations page redesign (Summary→Tabs→Search/Status→Compact Grid→Drawer; Drive under Files) | **Implemented & Tested** (2be3a2c; browser-verified) |
+| 9 | Marketing homepage redesign (shorter/balanced; hero+CTA+preview first viewport) | **Implemented & Tested** (db64503; browser-verified) |
 | 10 | All forms UX overhaul (wide fields/sections/stepper/validation/error-summary/searchable/create/dependent/review) | Not Started |
-| 11 | Safe legacy data migration (map→preserve→legacy-map→verify→switch reads→switch writes; no loss) | Not Started |
+| 11 | Safe legacy data migration (re-alignment converged: drifted keys deactivated not deleted; tenant options untouched) | **Implemented & Tested** (5181773) |
 | 12 | Permissions/Audit/Tenant isolation (taxonomies.*/options.*) | **Implemented & Tested** (backend) — UI gating pending |
 | 13 | Three-app regression (Operations/SaaS/Client on one engine, scoped by permission/plan) | Not Started |
 | 14 | Cross-browser/mobile/RTL-LTR/light-dark E2E | Not Started |
