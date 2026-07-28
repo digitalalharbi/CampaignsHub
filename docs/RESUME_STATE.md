@@ -25,12 +25,41 @@ Backend 411 tests, frontend 183 vitest, build+tsc clean, fresh reseed clean. Pub
 ## ✅ DONE — v4 homepage-audience + auth-nav correction (committed `e7dc807`, 47 vitest + tsc + browser verified)
 Public homepage = external users only. Header: ابدأ الآن/تسجيل الدخول/اطلب خدمة/متابعة طلباتي (+auth→لوحة التحكم); NO «تسجيل دخول النظام»/admin wording on any public surface. Journey routes: self-managed/agency `+&module=paid-media`, #3 reveals inline services (CTA `/requests/new?module=paid-media&services=<keys>`), #4 `/requests/new?module=influencer-marketing`. Below-card «لديك حساب بالفعل؟»: دخول مساحة العمل /login + متابعة طلباتي /client/login. Business-model copy + two separated commercial tracks. Intake accepts `?module=influencer-marketing`. **No `/operations/login`, no parallel admin auth** (reuse role-routed `/login` — per user's final correction). Browser-confirmed at localhost:5173.
 
-## ⛔ PAUSED by account session/usage limit (resets ~7:20pm Asia/Riyadh) — resume after reset
-All 4 agents below were KILLED mid-edit by the session limit (API error, not completion). Their partial, UNVERIFIED, likely-broken edits (14 files, incl. an errant `frontend/src/lib/i18n.ts` change an agent made against its brief) were saved to **`git stash@{0}`** and the tree was returned to the last GREEN committed state.
-- **Tree CLEAN at `91901c1`** = green committed work only: paid-media vertical `bc61402` (411 backend / 183 vitest, browser-verified), v4 homepage `e7dc807` (47 vitest, browser-verified), form-UX primitives `1fa99d4` (8 vitest). Nothing broken is committed.
-- **RESUME on reset:** prefer to DROP `stash@{0}` and REDO the forms overhaul + v5 homepage cleanly from spec (primitives already exist at `@/components/forms`: FormStepper/ErrorSummary/ReviewList/useFormDraft; spec §"⚑⚑⚑⚑ v5" is the homepage authority) — the stash is messy half-edits across 4 areas. Only cherry-pick from the stash if a file is clearly complete. `git stash show -p stash@{0}` to inspect; `git stash drop stash@{0}` to discard.
-- **Remaining work (unchanged):** (a) v5 homepage rebuild (customer language, zero jargon, 65/35 hero, realistic preview, shortened page) — spec §v5; (b) forms overhaul adoption (ErrorSummary/useFormDraft/ReviewList/FormStepper) across Register/Onboarding/Clients/Projects/Campaigns/Reports/Alerts/Integrations/Subscriptions/Settings — additive, keep suites green; (c) safe-migration re-confirm (backend suite covers); (d) T13/T14 full three-app E2E regression (Chromium/Firefox/WebKit + RTL/LTR + light/dark + mobile; 0 failed/0 flaky). Then final report.
-- Do NOT re-spawn the 4 dead agents; start fresh after the limit resets.
+## ⛔ PAUSED by account session/usage limit (reset ~19:20 Asia/Riyadh) — AUTO-RESUME (do not wait for the user)
+All 4 parallel agents (forms overhaul ×3 + v5 homepage ×1) were KILLED mid-edit by the session limit. Their partial, UNVERIFIED edits are saved to `git stash@{0}`; tree returned to green.
+
+### EXACT git state (verified `git branch/rev-parse/status/stash`, 2026-07-28 ~19:25 Riyadh)
+- branch = **`feat/taxonomy-ux`**
+- HEAD   = **`e1003eaf3635f7792098723cb307fb6dbd3b4ec6`** (`e1003ea`)
+- `git status --short` = **empty (tree CLEAN)**
+- stash  = **`stash@{0}`** "partial forms-overhaul + v5-homepage agent WIP (UNVERIFIED/likely-broken)"
+- **No contradiction:** `e1003ea` is a DOCS-ONLY commit (RESUME_STATE.md, 1 file) on top of the green code state `91901c1`. Code is green at HEAD; only documentation changed after `91901c1`. Green committed work: paid-media `bc61402` (411 backend / 183 vitest, browser-verified) · v4 homepage `e7dc807` (47 vitest) · form-UX primitives `1fa99d4` (8 vitest).
+
+### AUTO-RESUME RULES (when capability is restored — do NOT ask the user to type "resume")
+Read this file + spec §v5, then continue straight through to phase completion. Do NOT redo committed/green work.
+**Stash recovery protocol (do NOT `git stash pop`, do NOT `git stash drop` directly):**
+1. `git branch recovery/taxonomy-ux-partial-wip` (safety branch for the WIP) and `git stash show -p stash@{0} > /tmp/taxonomy-ux-wip.patch`.
+2. Inspect the stash file-by-file (`git stash show --stat stash@{0}`).
+3. EXCLUDE the unauthorized `frontend/src/lib/i18n.ts` change if invalid/out-of-scope.
+4. Restore ONLY parts that are complete AND spec-matching.
+5. Rebuild partial parts fresh from the clean green state.
+6. Drop `stash@{0}` ONLY after all tests pass and the replacement is committed.
+**Execution model:** finish everything **SEQUENTIALLY via a single orchestrator — NO parallel agents** (parallelism caused the cross-file conflicts, the stray i18n edit, and fast limit/context burn). One task at a time; commit each green increment.
+
+### BINDING remaining (in order)
+1. Rebuild homepage **v5** in customer language (spec §"⚑⚑⚑⚑ v5").
+2. Keep the usage journeys + dynamic paid-media services working.
+3. Remove ALL internal jargon from the public page (SaaS/Tenant/Workspace/مساحة العمل/للمشتركين/للوكالات/…).
+4. APPLY the Form-UX primitives to ALL target forms (not just create the components): Register/Onboarding/Clients/Projects/Campaigns/Reports/Alerts/Integrations/Subscriptions/Settings — additive, keep suites green.
+5. Re-confirm safe legacy-value migration (deactivate-not-delete; no data loss).
+6. Test Operations Console + SaaS Workspace + Client Portal (the three apps).
+7. Run Backend + Frontend + E2E on Chromium + Firefox + WebKit.
+8. Fix ALL failures + flaky.
+9. Leave the preview running.
+10. Document the result + one clean final commit.
+**v5 homepage must satisfy:** customer-direct language; no SaaS/Tenant/Workspace in public copy; تسجيل الدخول / إنشاء حساب / اطلب خدمة / متابعة طلباتي; clear usage-journey choice; paid services visible from the start; service catalog from the Taxonomy public API only (no hardcoded lists); balanced 65/35 hero; preview platforms Snapchat/TikTok/Meta/Google Ads/X/LinkedIn; shorter page, balanced equal-height cards.
+**Phase closes (send the SINGLE final report) only when ALL true:** Backend Failed=0 · Frontend Failed=0 · E2E Failed=0 · Flaky=0 · Chromium/Firefox/WebKit passed · no data loss · no unmanaged options · homepage v5 done · forms adoption done · working tree clean · preview running. **No interim updates in between.**
+- Do NOT re-spawn the 4 dead agents.
 
 ## (historical) ⏳ IN FLIGHT — Forms overhaul (T10) + v5 homepage rebuild — 4 agents off `05726a0`
 - Shared form-UX primitives DONE+committed `1fa99d4`: `src/components/forms/{formFlow.tsx(FormStepper,ErrorSummary,ReviewList),useFormDraft.ts}` (+tests, 8 green), exported from forms/index.ts.
