@@ -51,7 +51,10 @@ Read this file + spec §v5, then continue straight through to phase completion. 
 - ✅ **v5 homepage DONE + committed `510918a`** (15 vitest, tsc clean, forbidden-terms grep empty, browser-verified 1440×900 + mobile + console/network clean). HEAD is now `510918a`.
 - ✅ Forms-UX adoption DONE + committed `b2cb214` (ErrorSummary/ReviewList/FormStepper/useFormDraft across Register/Onboarding/Campaigns/Clients/Projects/Reports/Alerts/Settings; Integrations/Subscriptions honestly skipped — no validated form). Full FE **209 vitest / 45 files**, tsc clean, build ok. `stash@{0}` DROPPED (superseded; archive kept: branch `recovery/taxonomy-ux-partial-wip` + `/tmp/taxonomy-ux-wip.patch`).
 - ✅ Safe-migration re-confirm: `migrate:fresh --seed` clean + backend **411 tests** green.
-- ⏳ NEXT (running): full cross-browser E2E (`npx playwright test`, chromium+firefox+webkit, retries 0) → out `scratchpad/e2e1.txt`. EXPECT chromium @visual snapshot mismatches on homepage/auth (v5 redesign is intentional) → refresh those baselines with `npx playwright test --update-snapshots <spec>`; fix any real functional failures to 0 failed/0 flaky. Then final report.
+- ✅ Three-app E2E regression GREEN + committed `b2d7278`: **188 passed / 0 failed / 0 flaky** (chromium+firefox+webkit). Stale specs updated to v5; client-command-center drives taxonomy comboboxes; report-pdf dead audience-step removed; homepage chromium baselines refreshed (manual-reviewed). No masking.
+- ⏳ NEXT (running, agent `a4ff401e87acf2223`): login page `/login` customer-language redesign (no internal wording, coherent green palette, responsive, RTL/LTR, light/dark) + refresh login auth-visual baselines + re-green auth e2e.
+- ⏳ AFTER login: integrations + taxonomy/classification duplication review (unify names, one Integrations page, remove dupes), then any remaining polish, then final full regression + report.
+- Reply format the user wants: DONE/COMMIT/PREVIEW/NEXT or BLOCKED/REASON/…; final message only after homepage+login+integrations review all green with preview up.
 
 ### BINDING remaining (in order)
 1. ✅ homepage **v5** DONE (`510918a`).
