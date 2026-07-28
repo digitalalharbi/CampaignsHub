@@ -81,3 +81,15 @@ Next after both land: wire routes/api/taxonomy.php; build Settings→Taxonomies&
 route; adopt controls in requests/clients/campaigns/projects/onboarding/alerts (replace ~19 hardcoded lists) with
 dependent selects + objective-driven KPIs; Integrations redesign; homepage redesign; safe value migration; full
 regression (backend/frontend/E2E) + clean tree. Preview stays running (scripts/dev-up.sh).
+
+## TAX blocker + fix (important)
+Adoption agent found the seeded taxonomy keys DIVERGED from live enums (CampaignObjective, Industry,
+ServiceLevel, ClientStatus/Priority, request statuses) → adopting as-was would 422 / break filters (data loss).
+FIX in flight: re-align TaxonomyEngineSeeder so each enum-backed definition's option keys == the LIVE enum
+values (superset, no missing value); wire request Service→Category→Type from RequestTaxonomy::TREE with real
+parent links (category had no service link, type had 0 options); add safe nullable jsonb columns for additive
+multi-selects (unified_campaigns: platforms/regions/audiences/conversion_events/creative_types/tags;
+client_workspaces: tags/enabled_services) + accept them in validators; alignment test asserts engine keys ⊇ every
+live enum value. THEN re-run the frontend adoption (Requests/Clients/Campaigns) as a safe drop-in (same keys),
+objective→KPI from option metadata, multi-selects → the new jsonb columns. Option Manager UI (Settings→Taxonomies)
+also in flight (router+i18n+TaxonomyManagerPage). Do NOT re-run adoption until re-alignment lands.
