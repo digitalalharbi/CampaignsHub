@@ -22,6 +22,9 @@ class DatabaseSeeder extends Seeder
         // 1c) Global subscription plan catalogue (starter/growth/scale) — structural, safe in production.
         $this->call(SubscriptionPlanSeeder::class);
 
+        // 1d) Canonical platform taxonomy (definitions + options) — structural, idempotent, all environments.
+        $this->call(TaxonomyEngineSeeder::class);
+
         // 2) Platform super-admin (idempotent).
         User::firstOrCreate(
             ['email' => 'platform@mediabuying.local'],

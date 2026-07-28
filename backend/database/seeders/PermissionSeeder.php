@@ -48,6 +48,9 @@ final class PermissionSeeder extends Seeder
             'comment_internal', 'comment_client', 'request_information', 'manage_files',
             'manage_sla', 'archive', 'convert',
         ],
+        // Central Taxonomy & Option engine.
+        'taxonomies' => ['view', 'manage'],
+        'options' => ['create', 'update', 'reorder', 'merge', 'deactivate', 'manage_system_labels'],
     ];
 
     public function run(): void
