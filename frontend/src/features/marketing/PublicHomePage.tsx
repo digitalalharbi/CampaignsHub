@@ -110,6 +110,10 @@ export function PublicHomePage() {
               <Link to="/dashboard"><Button size="sm" className="whitespace-nowrap">{locale === 'ar' ? 'لوحة التحكم' : 'Dashboard'}</Button></Link>
             ) : (
               <>
+                {/* External-user actions only — the SAME `/login` is used internally, role-routed after
+                    sign-in; no separate admin/system login is ever exposed. Collapse gracefully on mobile. */}
+                <Link to="/client/login" className="hidden lg:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.clientLogin}</Button></Link>
+                <Link to="/requests/new" className="hidden md:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.request}</Button></Link>
                 <Link to="/login" className="hidden sm:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.login}</Button></Link>
                 <Link to="/register"><Button size="sm" className="whitespace-nowrap">{c.nav.start}</Button></Link>
               </>
@@ -182,14 +186,18 @@ export function PublicHomePage() {
               {/* Inline paid-media services — engine-fed, revealed within this same card. */}
               {showServices && <PaidServicesPanel locale={locale as Locale} copy={c.services} />}
 
-              {/* Accounts bar — thin row for returning users. */}
-              <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <span className="text-[13px] font-semibold text-text-secondary">{c.decision.accounts.label}</span>
-                <div className="flex flex-col gap-2 sm:flex-row">
+              {/* Returning users — «لديك حساب بالفعل؟». Two external entries: workspace login (SaaS) and
+                  client request-tracking. No internal/admin login is ever exposed here. */}
+              <div className="mt-4 border-t border-border pt-4">
+                <span className="text-[13px] font-bold text-text-primary">{c.decision.accounts.label}</span>
+                <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
                   {c.decision.accounts.actions.map((a, i) => {
                     const Icon = ACCOUNT_ICONS[i] ?? LogIn
                     return (
-                      <Link key={a.to} to={a.to}><Button variant={a.variant} size="sm" className="w-full sm:w-auto"><Icon size={15} /> {a.label}</Button></Link>
+                      <div key={a.to} className="flex flex-col gap-1">
+                        <Link to={a.to}><Button variant={a.variant} size="sm" className="w-full"><Icon size={15} /> {a.label}</Button></Link>
+                        <p className="text-[11px] leading-snug text-text-muted">{a.desc}</p>
+                      </div>
                     )
                   })}
                 </div>
@@ -215,6 +223,49 @@ export function PublicHomePage() {
               ))}
             </div>
             <div className="mt-4"><PreviewPanel tab={tab} locale={locale as Locale} /></div>
+          </div>
+        </div>
+      </section>
+
+      {/* Two commercial tracks — SaaS subscription vs one-off service request. Clearly separated, never
+          mixed: the left column is the subscription flow, the right column the service-request flow. */}
+      <section className="border-b border-border">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.tracks.title}</h2>
+          <p className="mt-2 max-w-2xl text-text-secondary">{c.tracks.subtitle}</p>
+          <div className="mt-7 grid auto-rows-fr gap-4 lg:grid-cols-2">
+            {/* Track 1 — SaaS subscription */}
+            <div className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6">
+              <div className="flex items-center gap-2.5 text-sm font-bold text-text-primary">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><LayoutDashboard size={18} /></span>
+                {c.tracks.saas.label}
+              </div>
+              <ol className="mt-4 flex flex-1 flex-wrap items-center gap-x-1.5 gap-y-2 pt-1">
+                {c.tracks.saas.steps.map((s, i) => (
+                  <li key={s} className="flex items-center gap-1.5">
+                    <span className="rounded-lg bg-surface-secondary px-3 py-1.5 text-[13px] font-semibold text-text-secondary">{s}</span>
+                    {i < c.tracks.saas.steps.length - 1 && <Arrow size={14} className="shrink-0 text-text-muted" />}
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-5"><Link to="/register"><Button size="sm">{c.hero.ctaStart}</Button></Link></div>
+            </div>
+            {/* Track 2 — Service request */}
+            <div className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6">
+              <div className="flex items-center gap-2.5 text-sm font-bold text-text-primary">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Megaphone size={18} /></span>
+                {c.tracks.service.label}
+              </div>
+              <ol className="mt-4 flex flex-1 flex-wrap items-center gap-x-1.5 gap-y-2 pt-1">
+                {c.tracks.service.steps.map((s, i) => (
+                  <li key={s} className="flex items-center gap-1.5">
+                    <span className="rounded-lg bg-surface-secondary px-3 py-1.5 text-[13px] font-semibold text-text-secondary">{s}</span>
+                    {i < c.tracks.service.steps.length - 1 && <Arrow size={14} className="shrink-0 text-text-muted" />}
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-5"><Link to="/requests/new"><Button size="sm" variant="secondary">{c.hero.ctaRequest}</Button></Link></div>
+            </div>
           </div>
         </div>
       </section>

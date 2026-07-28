@@ -12,8 +12,10 @@ export type Locale = 'ar' | 'en'
 
 export interface HomeCopy {
   dir: 'rtl' | 'ltr'
-  nav: { features: string; how: string; usage: string; integrations: string; login: string; start: string }
-  hero: { eyebrow: string; title: string; subtitle: string; ctaStart: string; ctaRequest: string; points: string[]; demoTag: string }
+  nav: { features: string; how: string; usage: string; integrations: string; login: string; start: string; request: string; clientLogin: string }
+  hero: { eyebrow: string; title: string; subtitle: string; support: string; ctaStart: string; ctaRequest: string; points: string[]; demoTag: string }
+  /** Two clearly-separated commercial tracks — SaaS subscription vs one-off service request. Never mixed. */
+  tracks: { title: string; subtitle: string; saas: { label: string; steps: string[] }; service: { label: string; steps: string[] } }
   previewTabs: { key: string; label: string }[]
   coreValue: { title: string; subtitle: string; pillars: { title: string; desc: string }[] }
   steps: { title: string; subtitle: string; items: { title: string; desc: string }[] }
@@ -23,7 +25,7 @@ export interface HomeCopy {
     subtitle: string
     /** A journey either navigates (`to`) or reveals the inline paid-services selector (`action`). */
     cards: { title: string; desc: string; cta: string; to?: string; action?: 'reveal-services' }[]
-    accounts: { label: string; actions: { label: string; to: string; variant: 'primary' | 'secondary' }[] }
+    accounts: { label: string; actions: { label: string; to: string; variant: 'primary' | 'secondary'; desc: string }[] }
   }
   /** Strings for the inline paid-media services selector revealed inside the hero side card. */
   services: {
@@ -62,15 +64,22 @@ export interface HomeCopy {
 
 const ar: HomeCopy = {
   dir: 'rtl',
-  nav: { features: 'المميزات', how: 'كيف يعمل', usage: 'المسارات', integrations: 'التكاملات والتقارير', login: 'تسجيل الدخول', start: 'ابدأ الآن' },
+  nav: { features: 'المميزات', how: 'كيف يعمل', usage: 'المسارات', integrations: 'التكاملات والتقارير', login: 'تسجيل الدخول', start: 'ابدأ الآن', request: 'اطلب خدمة', clientLogin: 'متابعة طلباتي' },
   hero: {
     eyebrow: 'منصة إدارة الحملات الإعلانية المدفوعة',
     title: 'كل حملاتك الإعلانية المدفوعة في مكان واحد',
-    subtitle: 'أدر حملاتك بنفسك، أو اختر خدمة متخصصة في الإدارة والتحسين والتتبع والتحليل والتقارير، وتابع طلبك وتنفيذه من منصة واحدة.',
+    subtitle: 'أدر حملاتك بنفسك عبر مساحة عمل احترافية، أو اختر خدمات متخصصة في الإدارة والتحسين والتتبع والتحليل والتقارير وتابع تنفيذها من بوابة العميل.',
+    support: 'اشتراك لإدارة حملاتك، وبوابة متكاملة لطلب الخدمات ومتابعة التنفيذ.',
     ctaStart: 'ابدأ إدارة حملاتك',
     ctaRequest: 'أرسل طلب خدمة',
-    points: ['مركز موحّد لكل الحملات', 'عزل مستقل لكل عميل', 'مؤشرات حسب هدف الحملة', 'بيانات فعلية من الربط'],
+    points: ['إدارة موحدة لجميع المنصات والحملات', 'تحليلات وتقارير حسب هدف الحملة', 'بيانات من مصادر الربط المعتمدة', 'طلبات وعروض وفواتير ومتابعة في مكان واحد'],
     demoTag: 'معاينة توضيحية ببيانات تجريبية',
+  },
+  tracks: {
+    title: 'مساران للعمل مع CampaignsHub',
+    subtitle: 'اشتراك لإدارة حملاتك، وبوابة متكاملة لطلب الخدمات ومتابعة التنفيذ.',
+    saas: { label: 'اشتراك SaaS', steps: ['أنشئ مساحة عمل', 'اربط منصاتك', 'أدر الحملات', 'تابع التحليلات', 'أنشئ التقارير', 'استقبل التنبيهات'] },
+    service: { label: 'طلب خدمة', steps: ['اختر الخدمات', 'أرسل الطلب', 'استلم عرض السعر', 'وافق وادفع', 'تابع التنفيذ', 'استلم التقارير'] },
   },
   previewTabs: [
     { key: 'dashboard', label: 'لوحة التحكم' },
@@ -112,18 +121,18 @@ const ar: HomeCopy = {
   },
   decision: {
     title: 'كيف تريد استخدام CampaignsHub؟',
-    subtitle: 'اختر المسار الأنسب لك، وسننقلك مباشرة إلى الخطوة التالية — دون إعادة الاختيار.',
+    subtitle: 'اختر المسار المناسب لاحتياجك، وسنهيئ لك التسجيل أو الطلب تلقائيًا.',
     cards: [
-      { title: 'أدير حملاتي بنفسي', desc: 'للميديا باير، المستقل، العلامة التجارية، وفريق التسويق الداخلي.', cta: 'ابدأ إدارة حملاتك', to: '/register?journey=self-managed' },
-      { title: 'أدير حملات عدة عملاء', desc: 'للوكالات والمستقلين الذين يديرون عملاء ومشاريع متعددة.', cta: 'أنشئ مساحة وكالة', to: '/register?journey=agency' },
-      { title: 'أحتاج خدمات إعلانية', desc: 'اختر من خدمات الإدارة، التحسين، التحليل، التتبع، التكاملات، التقارير والاستشارات.', cta: 'استعرض الخدمات', action: 'reveal-services' },
-      { title: 'أحتاج حملة مؤثرين أو UGC', desc: 'أرسل طلب حملة مؤثرين أو إنتاج محتوى UGC ومتابعة تفاصيلها.', cta: 'طلب مؤثرين وUGC', to: '/requests/new?service=influencer-marketing' },
+      { title: 'أدير حملاتي بنفسي', desc: 'للميديا باير والمستقل والعلامة التجارية وفريق التسويق الداخلي.', cta: 'أنشئ مساحة عمل', to: '/register?journey=self-managed&module=paid-media' },
+      { title: 'أدير حملات عدة عملاء', desc: 'للوكالات والمستقلين الذين يديرون عملاء ومشاريع متعددة.', cta: 'ابدأ كوكالة', to: '/register?journey=agency&module=paid-media' },
+      { title: 'أحتاج خدمات إعلانية', desc: 'اختر خدمات الإدارة والتحسين والتحليل والتتبع والتقارير والاستشارات.', cta: 'استعرض الخدمات', action: 'reveal-services' },
+      { title: 'أحتاج حملة مؤثرين أو UGC', desc: 'لطلب حملة مؤثرين أو محتوى UGC ومتابعة التنفيذ والتسليمات.', cta: 'أرسل طلب مؤثرين', to: '/requests/new?module=influencer-marketing' },
     ],
     accounts: {
-      label: 'أملك حسابًا بالفعل',
+      label: 'لديك حساب بالفعل؟',
       actions: [
-        { label: 'تسجيل دخول النظام', to: '/login', variant: 'secondary' },
-        { label: 'دخول العميل', to: '/client/login', variant: 'secondary' },
+        { label: 'دخول مساحة العمل', to: '/login', variant: 'secondary', desc: 'دخول مساحة العمل: للمشتركين والوكالات والشركات والمستقلين.' },
+        { label: 'متابعة طلباتي', to: '/client/login', variant: 'secondary', desc: 'متابعة طلباتي: للعملاء الذين أرسلوا طلب خدمة ويريدون متابعة العرض والفاتورة والتنفيذ.' },
       ],
     },
   },
@@ -186,15 +195,22 @@ const ar: HomeCopy = {
 
 const en: HomeCopy = {
   dir: 'ltr',
-  nav: { features: 'Features', how: 'How it works', usage: 'Paths', integrations: 'Integrations & reports', login: 'Log in', start: 'Get started' },
+  nav: { features: 'Features', how: 'How it works', usage: 'Paths', integrations: 'Integrations & reports', login: 'Log in', start: 'Get started', request: 'Request a service', clientLogin: 'Track my requests' },
   hero: {
     eyebrow: 'Paid Advertising Management platform',
     title: 'All your paid ad campaigns in one place',
-    subtitle: 'Run your campaigns yourself, or pick a specialist service for management, optimization, tracking, analysis and reporting — and follow your request end to end from one platform.',
+    subtitle: 'Run your campaigns yourself in a professional workspace, or choose specialist services for management, optimization, tracking, analysis and reporting — and follow their execution from the client portal.',
+    support: 'A subscription to run your campaigns, and an integrated portal to request services and follow execution.',
     ctaStart: 'Start managing campaigns',
     ctaRequest: 'Request a service',
-    points: ['One hub for every campaign', 'Isolated per client', 'Objective-based KPIs', 'Real data from connections'],
+    points: ['Unified management across all platforms and campaigns', 'Analytics and reports by campaign objective', 'Data from approved connection sources', 'Requests, quotes, invoices and tracking in one place'],
     demoTag: 'Illustrative preview with demo data',
+  },
+  tracks: {
+    title: 'Two ways to work with CampaignsHub',
+    subtitle: 'A subscription to run your campaigns, and an integrated portal to request services and follow execution.',
+    saas: { label: 'SaaS subscription', steps: ['Create a workspace', 'Connect your platforms', 'Run campaigns', 'Track analytics', 'Build reports', 'Receive alerts'] },
+    service: { label: 'Service request', steps: ['Pick services', 'Send the request', 'Receive a quote', 'Approve & pay', 'Follow execution', 'Receive reports'] },
   },
   previewTabs: [
     { key: 'dashboard', label: 'Dashboard' },
@@ -236,18 +252,18 @@ const en: HomeCopy = {
   },
   decision: {
     title: 'How do you want to use CampaignsHub?',
-    subtitle: 'Pick the path that fits you and we’ll take you straight to the next step — no re-picking.',
+    subtitle: 'Pick the path that fits your need, and we’ll set up your registration or request automatically.',
     cards: [
-      { title: 'I run my own campaigns', desc: 'For media buyers, freelancers, brands, and in-house marketing teams.', cta: 'Start managing campaigns', to: '/register?journey=self-managed' },
-      { title: "I manage several clients' campaigns", desc: 'For agencies and freelancers running multiple clients and projects.', cta: 'Create an agency workspace', to: '/register?journey=agency' },
-      { title: 'I need paid-media services', desc: 'Pick from management, optimization, analysis, tracking, integrations, reporting and consulting services.', cta: 'Browse services', action: 'reveal-services' },
-      { title: 'I need an influencer or UGC campaign', desc: 'Submit an influencer campaign or UGC content-production request and track its details.', cta: 'Request influencers & UGC', to: '/requests/new?service=influencer-marketing' },
+      { title: 'I run my own campaigns', desc: 'For media buyers, freelancers, brands, and in-house marketing teams.', cta: 'Create a workspace', to: '/register?journey=self-managed&module=paid-media' },
+      { title: "I manage several clients' campaigns", desc: 'For agencies and freelancers running multiple clients and projects.', cta: 'Start as an agency', to: '/register?journey=agency&module=paid-media' },
+      { title: 'I need paid-media services', desc: 'Pick management, optimization, analysis, tracking, reporting and consulting services.', cta: 'Browse services', action: 'reveal-services' },
+      { title: 'I need an influencer or UGC campaign', desc: 'To request an influencer or UGC campaign and follow execution and deliverables.', cta: 'Send an influencer request', to: '/requests/new?module=influencer-marketing' },
     ],
     accounts: {
-      label: 'I already have an account',
+      label: 'Do you already have an account?',
       actions: [
-        { label: 'System login', to: '/login', variant: 'secondary' },
-        { label: 'Client login', to: '/client/login', variant: 'secondary' },
+        { label: 'Workspace login', to: '/login', variant: 'secondary', desc: 'Workspace login: for subscribers, agencies, companies and freelancers.' },
+        { label: 'Track my requests', to: '/client/login', variant: 'secondary', desc: 'Track my requests: for clients who sent a service request and want to follow the quote, invoice and execution.' },
       ],
     },
   },

@@ -18,8 +18,10 @@ const DRAFT_KEY = 'ch-request-draft-v2' // v2: stores only non-sensitive {type, 
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 const PLATFORMS = ['Meta', 'Google', 'TikTok', 'Snapchat', 'X', 'LinkedIn']
 
-// Maps the homepage decision-section `?service=` value to a request module, so a journey card lands the
+// Maps a homepage decision-section handoff value to a request module, so a journey card lands the
 // visitor on the right service (dynamic paid-advertising form vs influencer/UGC form), skipping step 0.
+// Both the legacy `?service=` param and the v4 `?module=` param feed this same map. `module=paid-media`
+// is intercepted earlier (renders PaidMediaIntake), so here it only matters for `module=influencer-marketing`.
 const SERVICE_TO_MODULE: Record<string, string> = {
   'paid-media': 'paid_media',
   'influencer-marketing': 'influencer_marketing',
@@ -123,9 +125,11 @@ function DefaultIntake() {
   const metaQuery = useQuery({ queryKey: ['requests', 'meta'], queryFn: getRequestMeta })
   const types = metaQuery.data?.types ?? []
 
-  // Journey handoff from the homepage decision cards: `?service=` presets the module and skips step 0.
+  // Journey handoff from the homepage decision cards: `?service=` or `?module=` presets the module and
+  // skips step 0. (`module=paid-media` never reaches here — RequestIntakePage renders PaidMediaIntake for it.)
   const [searchParams] = useSearchParams()
-  const serviceModule = SERVICE_TO_MODULE[searchParams.get('service') ?? '']
+  const serviceModule =
+    SERVICE_TO_MODULE[searchParams.get('service') ?? ''] ?? SERVICE_TO_MODULE[searchParams.get('module') ?? '']
   const servicePresetApplied = useRef(false)
 
   const [form, setForm] = useState<FormState>(EMPTY)

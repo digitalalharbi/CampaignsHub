@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { PublicHomePage } from './PublicHomePage'
-import { renderWithProviders, signOut } from '@/test/utils'
+import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 
 /** Toggled by the error-state test; the mock reads it so we can simulate a catalog load failure. */
 const catalogState = vi.hoisted(() => ({ isError: false }))
@@ -58,38 +58,84 @@ describe('PublicHomePage — journeys', () => {
     signOut()
   })
 
-  it('the 3 navigating journeys go to their exact routes; the services journey does not navigate', () => {
+  it('the 3 navigating journeys go to their exact v4 routes; the services journey does not navigate', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
     const hrefs = linkHrefs()
-    expect(hrefs).toContain('/register?journey=self-managed')
-    expect(hrefs).toContain('/register?journey=agency')
-    expect(hrefs).toContain('/requests/new?service=influencer-marketing')
-    // The paid-media journey now reveals services inline instead of navigating.
+    expect(hrefs).toContain('/register?journey=self-managed&module=paid-media')
+    expect(hrefs).toContain('/register?journey=agency&module=paid-media')
+    expect(hrefs).toContain('/requests/new?module=influencer-marketing')
+    // The paid-media journey reveals services inline; no bare navigate to the paid-media intake exists.
+    expect(hrefs).not.toContain('/requests/new?module=paid-media')
     expect(hrefs).not.toContain('/requests/new?service=paid-media')
   })
 
-  it('renders the accounts bar with system + client login', () => {
+  it('the anonymous header exposes external actions with correct hrefs and NO internal/admin login', () => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { locale: 'ar' })
+    const header = screen.getByRole('banner')
+    const link = (name: RegExp) => within(header).getByRole('link', { name })
+    expect(link(/ابدأ الآن/)).toHaveAttribute('href', '/register')
+    expect(link(/تسجيل الدخول/)).toHaveAttribute('href', '/login')
+    expect(link(/اطلب خدمة/)).toHaveAttribute('href', '/requests/new')
+    expect(link(/متابعة طلباتي/)).toHaveAttribute('href', '/client/login')
+    // No internal/admin login is ever exposed on public surfaces (internal admin reuses the same /login).
+    expect(within(header).queryByText(/تسجيل دخول النظام/)).not.toBeInTheDocument()
+    expect(within(header).queryByText(/دخول العميل/)).not.toBeInTheDocument()
+  })
+
+  it('the authenticated header replaces sign-up actions with a Dashboard link', () => {
+    signInWith([])
+    renderWithProviders(<PublicHomePage />, { locale: 'en' })
+    const header = screen.getByRole('banner')
+    expect(within(header).getByRole('link', { name: /Dashboard/i })).toHaveAttribute('href', '/dashboard')
+    expect(within(header).queryByRole('link', { name: /Get started/i })).not.toBeInTheDocument()
+  })
+
+  it('renders the "already have an account" block with workspace + client-tracking login (not system login)', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
     const hrefs = linkHrefs()
     expect(hrefs).toContain('/login')
     expect(hrefs).toContain('/client/login')
-    expect(screen.getByText('I already have an account')).toBeInTheDocument()
+    expect(screen.getByText('Do you already have an account?')).toBeInTheDocument()
+    // «Workspace login» is unique to this block; it must point at the standard /login.
+    expect(screen.getByRole('link', { name: /Workspace login/i })).toHaveAttribute('href', '/login')
+    // «Track my requests» appears in both the header and this block; every instance targets /client/login.
+    const trackLinks = screen.getAllByRole('link', { name: /Track my requests/i })
+    expect(trackLinks.length).toBeGreaterThanOrEqual(1)
+    trackLinks.forEach((l) => expect(l).toHaveAttribute('href', '/client/login'))
+  })
+
+  it('renders the two clearly-separated commercial tracks (SaaS subscription + service request)', () => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { locale: 'en' })
+    expect(screen.getByText('SaaS subscription')).toBeInTheDocument()
+    expect(screen.getByText('Service request')).toBeInTheDocument()
+    // A representative step from each track, in the right column.
+    expect(screen.getByText('Connect your platforms')).toBeInTheDocument()
+    expect(screen.getByText('Receive a quote')).toBeInTheDocument()
+  })
+
+  it('never renders the removed «تسجيل دخول النظام» wording anywhere on the page', () => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { locale: 'ar' })
+    expect(screen.queryByText(/تسجيل دخول النظام/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/دخول الإدارة/)).not.toBeInTheDocument()
   })
 
   it('keeps the headline and shows the new hero subtext', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
     expect(screen.getByRole('heading', { name: /All your paid ad campaigns in one place/i })).toBeInTheDocument()
-    expect(screen.getByText(/Run your campaigns yourself, or pick a specialist service/i)).toBeInTheDocument()
+    expect(screen.getByText(/Run your campaigns yourself in a professional workspace/i)).toBeInTheDocument()
   })
 
   it('does not duplicate the journey options — each navigating journey route appears exactly once', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
     const hrefs = linkHrefs()
-    for (const route of ['/register?journey=self-managed', '/register?journey=agency', '/requests/new?service=influencer-marketing']) {
+    for (const route of ['/register?journey=self-managed&module=paid-media', '/register?journey=agency&module=paid-media', '/requests/new?module=influencer-marketing']) {
       expect(hrefs.filter((h) => h === route)).toHaveLength(1)
     }
   })
@@ -98,7 +144,7 @@ describe('PublicHomePage — journeys', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'ar' })
     expect(screen.getByText('كيف تريد استخدام CampaignsHub؟')).toBeInTheDocument()
-    expect(linkHrefs()).toContain('/register?journey=agency')
+    expect(linkHrefs()).toContain('/register?journey=agency&module=paid-media')
     expect(document.querySelector('[dir="rtl"]')).not.toBeNull()
   })
 })

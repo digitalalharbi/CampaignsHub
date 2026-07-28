@@ -80,6 +80,15 @@ describe('RequestIntakePage — service handoff (default flow, unchanged)', () =
     expect(screen.getByRole('button', { name: /Paid advertising management/i })).toHaveAttribute('aria-pressed', 'false')
   })
 
+  it('preselects the influencer service from ?module=influencer-marketing and skips the service step', async () => {
+    renderWithProviders(<RequestIntakePage />, { route: '/requests/new?module=influencer-marketing', locale: 'en' })
+    expect(await screen.findByText('Applicant information')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Back/i }))
+    expect(await screen.findByText('Choose a service')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Influencers & UGC/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /Paid advertising management/i })).toHaveAttribute('aria-pressed', 'false')
+  })
+
   it('preselects the paid-media service from ?service=paid-media and skips the service step', async () => {
     renderWithProviders(<RequestIntakePage />, { route: '/requests/new?service=paid-media', locale: 'en' })
     expect(await screen.findByText('Applicant information')).toBeInTheDocument()
