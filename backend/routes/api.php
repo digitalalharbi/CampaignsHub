@@ -68,4 +68,5 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     require __DIR__.'/api/connections.php';
     require __DIR__.'/api/drive.php';
     require __DIR__.'/api/subscriptions.php';
+    require __DIR__.'/api/taxonomy.php';
 });
