@@ -36,6 +36,10 @@ class DatabaseSeeder extends Seeder
         // 3) Demo tenant + demo users + Sandbox data — DEV/LOCAL/DEMO only, NEVER in production.
         if (App::environment(['local', 'testing', 'demo'])) {
             $this->call(DemoSeeder::class);
+
+            // 3a) Deterministic demo accounts for the THREE experiences (Operations Console / SaaS Workspace /
+            //     Client Portal). Idempotent; must run AFTER DemoSeeder (it ensures the demo-agency logins).
+            $this->call(DemoAccountsSeeder::class);
         }
 
         // 3b) Heavy demo data (metrics/reports/creatives) — local/demo ONLY, never in `testing`
