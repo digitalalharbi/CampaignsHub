@@ -17,5 +17,12 @@ Schedule::command('requests:evaluate-sla')->everyTenMinutes();
 // Dispatch due scheduled reports (snapshot + honest delivery ledger) every 5 minutes.
 Schedule::command('reports:dispatch-scheduled')->everyFiveMinutes();
 
+// DEV-only: scheduler liveness heartbeat consumed by /dev/status (never scheduled in production).
+if (! app()->environment('production')) {
+    Schedule::call(function (): void {
+        \Illuminate\Support\Facades\Cache::put('dev:scheduler:heartbeat', now(), now()->addMinutes(10));
+    })->everyMinute()->name('dev-scheduler-heartbeat');
+}
+
 // Evaluate alert rules (budget risk, no results, ROAS drop, sync failure, token expiry) every 15 minutes.
 Schedule::command('alerts:evaluate')->everyFifteenMinutes();

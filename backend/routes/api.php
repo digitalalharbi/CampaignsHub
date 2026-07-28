@@ -21,6 +21,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     Route::get('/health', [HealthController::class, 'health'])->name('health');
     Route::get('/ready', [HealthController::class, 'ready'])->name('ready');
 
+    // DEV-only live environment status (hard-blocked in production; no secrets exposed).
+    if (! app()->environment('production')) {
+        Route::get('/dev/status', [\App\Http\Controllers\Dev\DevStatusController::class, 'show'])->name('dev.status');
+    }
+
     // Public, token-gated, expiring report download (the shareable secure link).
     Route::get('/reports/download/{token}', ReportDownloadController::class)->name('reports.download');
 

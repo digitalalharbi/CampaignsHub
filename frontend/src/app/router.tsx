@@ -48,6 +48,7 @@ import { RequestDetailPage } from '@/features/requests/RequestDetailPage'
 import { ClientsPortfolioPage } from '@/features/clients/ClientsPortfolioPage'
 import { ClientCommandCenterPage } from '@/features/clients/ClientCommandCenterPage'
 import { AlertsPage } from '@/features/alerts/AlertsPage'
+import { DevStatusPage } from '@/features/dev/DevStatusPage'
 import { AppShell } from '@/layouts/AppShell'
 
 export const router = createBrowserRouter([
@@ -83,6 +84,8 @@ export const router = createBrowserRouter([
   { path: '/verify-email', element: <VerifyEmailPage /> },
   // Invitation accept is public (the invitee has no account yet).
   { path: '/invite/accept', element: <InviteAcceptPage /> },
+  // Development-only environment status (backend hard-blocks it in production).
+  { path: '/dev/status', element: <DevStatusPage /> },
   {
     element: <RequireAuth />,
     children: [
