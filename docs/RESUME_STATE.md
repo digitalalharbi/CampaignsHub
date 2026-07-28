@@ -46,8 +46,13 @@ Read this file + spec §v5, then continue straight through to phase completion. 
 6. Drop `stash@{0}` ONLY after all tests pass and the replacement is committed.
 **Execution model:** finish everything **SEQUENTIALLY via a single orchestrator — NO parallel agents** (parallelism caused the cross-file conflicts, the stray i18n edit, and fast limit/context burn). One task at a time; commit each green increment.
 
+### PROGRESS since resume
+- Preview environment FIXED (dev-up: FE :5173, BE :8000, queue+scheduler+redis, /dev/status all 200). Leave running.
+- ✅ **v5 homepage DONE + committed `510918a`** (15 vitest, tsc clean, forbidden-terms grep empty, browser-verified 1440×900 + mobile + console/network clean). HEAD is now `510918a`.
+- ⏳ NEXT (running, single sequential agent `addba2f7da17527dd`): forms-UX adoption across Register/Onboarding/Clients/Projects/Campaigns/Reports/Alerts/Integrations/Subscriptions/Settings. After it: drop `stash@{0}` (superseded — was messy partials + a stray i18n edit), re-confirm safe migration, run three-app E2E regression.
+
 ### BINDING remaining (in order)
-1. Rebuild homepage **v5** in customer language (spec §"⚑⚑⚑⚑ v5").
+1. ✅ homepage **v5** DONE (`510918a`).
 2. Keep the usage journeys + dynamic paid-media services working.
 3. Remove ALL internal jargon from the public page (SaaS/Tenant/Workspace/مساحة العمل/للمشتركين/للوكالات/…).
 4. APPLY the Form-UX primitives to ALL target forms (not just create the components): Register/Onboarding/Clients/Projects/Campaigns/Reports/Alerts/Integrations/Subscriptions/Settings — additive, keep suites green.
