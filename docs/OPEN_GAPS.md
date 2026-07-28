@@ -223,3 +223,9 @@ _Last updated: 2026-07-27_
   Hours, honest Delivery log, live polling, and the notification bell deep-links to the page (alert
   notifications carry action_url=/app/alerts). Verified in-browser + E2E `alerts-ui.spec.ts` 3 browsers.
   This was an internal gap (not an external dependency) and is now closed.
+
+## G-020 (low, internal) — Integrations connector-resolver name overlap
+Two classes named `ConnectorRegistry` in `app/Domains/Integrations` (legacy `Registry\` sync engine vs new
+`Connectors\` honest-state framework). Complementary layers over one data source — NOT a duplicate engine
+(see DUPLICATION_AUDIT). Future refactor: rename `Connectors\ConnectorRegistry` → `ConnectorStateRegistry`
+to remove the naming ambiguity. No functional/data duplication; deferred to avoid risk to the working sync.
