@@ -70,3 +70,21 @@ Status legend: Tested = feature tests + phpstan green; Awaiting Ext Dep = adapte
 | Dev environment (scripts/dev-*.sh + /dev/status) | **Tested** | all services Running; commit 6c834dd |
 | Expanded E2E (3 browsers) | In Progress | e2e/expansion-surfaces + full suite running |
 | Expanded clean install + ZIP + SHA-256 | Pending | scratchpad/clean_install_rehearsal + package_expanded |
+
+## PHASE: Taxonomy & UX (feat/taxonomy-ux) — binding tracks (close only when ALL "Implemented & Tested")
+| # | Track | Status |
+|---|---|---|
+| 1 | Taxonomy & Option Management backend | **Implemented & Tested** (4f4a42e; 388 backend, 23 defs/123 opts) |
+| 2 | Settings Taxonomy Manager UI | In Progress |
+| 3 | Searchable/Creatable/Multi-select controls | **Implemented & Tested** (cebbbb8; 143 vitest) — adoption pending |
+| 4 | Requests classification adoption (Service→Category→Type→Objective→Priority→Status→SLA→Payment→Source, dynamic per service) | Not Started |
+| 5 | Clients classification adoption (status/service_level/industry/business_type/owner/priority/tags/modules/source; multi-select) | Not Started |
+| 6 | Campaigns objective-based (objective→KPIs/funnel/creative-ranking/report-template/alerts; multi-select platforms/regions/audiences/events/creatives/tags) | Not Started |
+| 7 | Reports/Alerts/Integrations option adoption (types/audiences/severities/categories/provider-states/file-categories → engine; keep system keys) | Not Started |
+| 8 | Integrations page redesign (Summary→Category Tabs→Search/Status→Compact Grid→Details Drawer; 4–6/row; full width) | Not Started |
+| 9 | Marketing homepage redesign (shorten/rebalance; hero+preview+CTA first viewport) | Not Started |
+| 10 | All forms UX overhaul (wide fields/sections/stepper/validation/error-summary/searchable/create/dependent/review) | Not Started |
+| 11 | Safe legacy data migration (map→preserve→legacy-map→verify→switch reads→switch writes; no loss) | Not Started |
+| 12 | Permissions/Audit/Tenant isolation (taxonomies.*/options.*) | **Implemented & Tested** (backend) — UI gating pending |
+| 13 | Three-app regression (Operations/SaaS/Client on one engine, scoped by permission/plan) | Not Started |
+| 14 | Cross-browser/mobile/RTL-LTR/light-dark E2E | Not Started |
