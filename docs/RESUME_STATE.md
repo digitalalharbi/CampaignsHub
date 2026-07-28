@@ -1,107 +1,74 @@
-# RESUME STATE — CampaignsHub (silent autonomous execution)
+# RESUME STATE — CampaignsHub (authoritative handoff)
 
-Precise state for automatic continuation. Update after each merge.
+> New session: read this file first, then CLAUDE.md, MASTER_REQUIREMENTS, IMPLEMENTATION_MATRIX, OPEN_GAPS.
+> Resume from **Exact Next Task**. Do NOT redo completed/committed work. Do NOT ask the user. No interim updates.
 
-## Repo
-- Branch: `feat/three-experiences` (expansion). Baseline tag: `v1.0.0-baseline` (stable, delivered).
-- Stable ZIP: `~/Desktop/CampaignsHub-Final-Delivery.zip` (6,240,127 bytes) SHA-256
-  `b8329cf4d6ba63ab77a571e75c2305f1e1e764921be5667f3149dbb42bdd708b`.
-- Scripts (scratchpad): `clean_install_rehearsal.sh`, `smoke.mjs`, `package.sh`, `package_expanded.sh`.
+## Repo / branch / commit
+- Repo: `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`.
+- **Current branch: `feat/taxonomy-ux`** · **Current HEAD: `aaa79da`** (a WIP snapshot — see below).
+- Frozen delivery (DO NOT touch tag or packages): tag `v1.1.0-expanded-final` = `e9b99f2`.
+  Stable ZIP `~/Desktop/CampaignsHub-Final-Delivery.zip` sha256 `b8329cf4d6ba63ab77a571e75c2305f1e1e764921be5667f3149dbb42bdd708b`;
+  Expanded ZIP `~/Desktop/CampaignsHub-Expanded-Delivery.zip` sha256 `e9db7fcd2ab9708118c6c0a9448c31416f4751c0ab295cfe9608c60bd322c259`.
+  Baseline tag `v1.0.0-baseline` = `47ce364`.
+- Other worktrees (unrelated, leave alone): `CampaignsHub-C3` (feat/metrics-c3), `CampaignsHub-Preview` (detached), `MediaBying System` (main).
 
-## Delivered stable baseline (do NOT redo)
-Backend 294, frontend 22 vitest, E2E 152/0/0/0 (Chromium/Firefox/WebKit), clean-install verified, packaged+SHA-256, tagged.
+## Working tree status
+Clean at `aaa79da`, which contains an **UNVERIFIED agent WIP snapshot** (captured so nothing is lost):
+- Reports/Alerts option adoption (T7): `backend/database/seeders/TaxonomyEngineSeeder.php`, `backend/tests/Feature/TaxonomyAlignmentTest.php`, `frontend/src/features/alerts/AlertsPage.tsx` (+`.test.tsx`), `frontend/src/features/reports/ReportsPage.tsx` (+`.test.tsx`), `frontend/src/features/reports/api.ts`.
+- Homepage journey-decision section + handoff: `frontend/src/features/marketing/PublicHomePage.tsx`, `homeCopy.ts`, `frontend/src/features/auth/RegisterPage.tsx`, `frontend/src/features/requests/RequestIntakePage.tsx`.
+**NOT built/tested.** Two background agents (`a5fde925…` journey, `ad6b006f…` reports/alerts) were running when snapshotted; they may have finished after — reconcile before trusting.
 
-## Expansion — committed & tested
-- Backend domains (all phpstan clean, integrated; full backend suite 351 passed at commit 22b8835):
-  Billing daf9c8e · Messaging 12d6dbd · Branding ee0322c · Request Journey fb1547d · Connection Center e4dced5 ·
-  Client-portal endpoints 1815dd6 · Drive 00f655c. Route wiring in routes/api.php: billing, messaging, branding,
-  connections, drive.
-- Frontend: Client Service Portal e20155b (dashboard/quotes/invoices/messages/profile/journey; files/campaigns/
-  reports are honest "not yet available" pending backend). Build clean, 37 vitest, browser-verified.
+## PHASE = Taxonomy & UX (feat/taxonomy-ux, off v1.1.0-expanded-final). Close only when ALL tracks Implemented & Tested.
+### Completed & committed (verified before the WIP snapshot)
+- T1 engine backend `4f4a42e`+wired `56a1a9d`; re-aligned to LIVE enums `5181773` (23 defs / 215 opts).
+- T2 Settings→Taxonomies manager `16a9ba2` (`/settings/taxonomies`).
+- T3 unified form controls + taxonomy API `cebbbb8` (`src/components/forms/**`, `src/features/taxonomy/taxonomyApi.ts`).
+- T4/5/6 adopt engine in Requests filters / Clients / Campaigns (objective→KPIs, multi-selects→jsonb) `96d65b2` + resource round-trip `3836d88`.
+- T8 Integrations redesign `2be3a2c` (browser-verified). T9 homepage redesign `db64503` (browser-verified).
+- T11 safe migration via `5181773` (drifted keys DEACTIVATED not deleted; tenant options untouched; no data loss).
+- T12 permissions/audit/tenant isolation (taxonomies.*/options.*) backend done; owner granted.
+Backend was **397 passing**, frontend **156 vitest**, build clean, login 200, before the WIP.
+### In WIP (unverified): T7 (reports/alerts adoption) + homepage journey-decision section.
 
-## In-flight (3 agents; integrate their commits when they land)
-1. Backend: Subscriptions+Plans+UsageLimits (app/Domains/Subscriptions, routes/api/subscriptions.php UNWIRED) +
-   Client-portal Files/Campaigns/Reports endpoints (ClientPortalController + routes/api/requests.php).
-2. Frontend internal UIs: src/features/billing, messaging, requestJourney — each exports `<feature>Routes.tsx`
-   (UNWIRED into router).
-3. Frontend internal UIs: src/features/branding, connections, drive — each exports `<feature>Routes.tsx` (UNWIRED).
+## Exact Next Task (in order)
+1. **Verify + finalize the WIP** (`aaa79da`): `cd frontend && npm run build && npx vitest run`; `cd ../backend && php artisan test`; `php artisan db:seed --class=Database\\Seeders\\TaxonomyEngineSeeder`. Fix failures; commit a clean verified commit. Browser-verify: homepage journey section routes + `/app/alerts` rule form + report builder selects load from the engine (login owner@demo-agency.local/password).
+2. **T15 Paid-media service vertical** (spec `docs/PAID_MEDIA_SERVICES_SPEC.md`, task #43) — implement FULLY, not spec-only:
+   - Backend: seed `request.paid_service` hierarchical taxonomy (10 categories × ~90 services with `metadata.needs`) in `TaxonomyEngineSeeder`; add `services` jsonb to `external_requests`; carry selected services into quote + invoice line items; surface in client-portal request detail + internal requests dashboard + client record + project + quote + invoice + activity log; accept multiple services; do NOT change existing enums; tests (isolation, legacy preservation, no loss).
+   - Frontend: homepage journey #3 → «أحتاج خدمات إعلانية»/«استعرض الخدمات» → `/requests/new?module=paid-media`; selector «ما الخدمة التي تحتاجها؟» (category tabs + search + multi-select + chips + clear-all + custom + create-when-permitted; engine-fed; not 90 in a list); dynamic form whose steps adapt to selected services via `metadata.needs` (merge shared questions once, per-service fields, no lost answers); review & submit. Managed under Settings→Taxonomies (existing manager covers request.paid_service). Keep service ≠ objective ≠ platform ≠ status.
+3. **T10 Forms UX overhaul** — steppers/draft/validation/error-summary/searchable/create/dependent/review across Register/Onboarding/Requests/Clients/Projects/Campaigns/Reports/Integrations/Alerts/Billing/Settings.
+4. **T13/T14 Regression** — full E2E Chromium/Firefox/WebKit + RTL/LTR + light/dark + mobile; three apps on one engine scoped by permission/plan; **0 failed/0 flaky/0 skipped**, retries=0; matrix updated; tree clean.
 
-## Integration steps remaining (do in order; regress after each)
-1. Wire `routes/api/subscriptions.php` into routes/api.php; migrate; seed plans; `php artisan test` (expect ≥351+new, 0 fail).
-2. Import each frontend `<feature>Routes.tsx` into `src/app/router.tsx` under the authed AppShell children; add
-   nav entries in `src/layouts/AppShell.tsx` (Operations Console = full menu; SaaS Workspace = simplified,
-   entitlement-gated by account workspace_kind/plan). `npm run build` (0 TS errors) + `npx vitest run`.
-3. Operations Console surface: internal full menu — Tenants, Clients, Requests, Projects, Campaigns, Analytics,
-   Reports, Payments, Subscriptions, Integrations/Connections, Branding, Messages, Alerts, Team, Audit, Platform Settings.
-4. SaaS Workspace surface: subscriber simplified menu — Dashboard, Projects, Campaigns, Analytics, Reports,
-   Connections, Alerts, Team(by plan), Billing, Branding, Settings — with tenant isolation, plan limits, module
-   entitlements, white-label, usage tracking, subscription status.
-5. Client portal Files/Campaigns/Reports pages → real data from the new client endpoints (replace ComingSoon).
-6. Expanded E2E specs (billing/messaging/journey/branding/connections/drive/subscriptions/portal) → run 3 browsers
-   (CI=1), retries=0, target 0 failed/0 flaky/0 skipped. Backend runs via playwright webServer (workers=4 +
-   queue:work --queue=reports,default); E2E_RELAX_RATE_LIMITS=true in local .env only.
-7. Full backend + frontend regression.
-8. Expanded clean install: `bash scratchpad/clean_install_rehearsal.sh` (fresh worktree, dedicated DB, seed,
-   build, backend tests, smoke, E2E) → 0 failed.
-9. `bash scratchpad/package_expanded.sh` → CampaignsHub-Expanded-Delivery.zip + extract-verify + SHA-256.
-10. Final audit: no placeholders/dead buttons; permissions + tenant/client/project isolation; console/network clean;
-    RTL/LTR + light/dark + mobile; update MASTER_REQUIREMENTS/IMPLEMENTATION_MATRIX/OPEN_GAPS; tree clean.
+## Database / migrations
+Postgres `mediabuying` (dev), all migrations applied, reseeded aligned via `migrate:fresh --seed --force`. Reset: `cd backend && php artisan migrate:fresh --seed --force`.
 
-## Run / demo
-Backend `:8000` (E2E_RELAX_RATE_LIMITS=true local), queue worker `--queue=reports,default`, scheduler; frontend `:5173`.
-Demo: owner@demo-agency.local / analyst@… / viewer@… — password `password`.
+## Running services / ports / preview
+`bash scripts/dev-up.sh` (backend :8000 workers=4, queue:work --queue=reports,default, scheduler, Vite :5173, Postgres/Redis). `dev-status.sh` / `dev-down.sh`. Preview: http://localhost:5173 · /dev/status · http://127.0.0.1:8000. `.env` local `E2E_RELAX_RATE_LIMITS=true` (local only). E2E: `cd frontend && CI=1 npx playwright test`.
 
-## Honest external deps (Awaiting External Dependency; never claim real)
-Email/WhatsApp/SMS/Google OAuth/Payment gateway/Ad platforms + Google Drive — Null/Sandbox adapters delivered.
+## Test results (last verified, pre-WIP)
+Backend 397; frontend 156 vitest; build clean; login 200. Expanded E2E was 188/0/0/0 before this phase (re-run after WIP verify + T15). WIP `aaa79da` UNVERIFIED.
 
-## CONSOLIDATION PASS (after in-flight completion agent commits) — per docs/CANONICAL_MODULES.md
-1. AppShell operationalNav → canonical only: dashboard, requests, clients, projects, campaigns, analytics,
-   reports, alerts, messaging, billing(المالية), integrations(→/app/integrations); add subscriptions(الاشتراك)
-   for SaaS via ent. Remove nav items: connections_center, drive, branding (dupes). Relabel billing=المالية,
-   subscriptions=الاشتراك.
-2. Router: /app/integrations = ConnectionCenterPage (canonical). Add <Navigate> redirects: /integrations,
-   /app/connections, /app/drive → /app/integrations; /app/branding → /settings/branding. Add /settings/branding
-   = BrandingCenterPage under SettingsLayout children.
-3. Entitlements (AccountEntitlements): PERSONAL_NAV = dashboard,requests,clients,projects,campaigns,analytics,
-   reports,alerts,messaging,billing,connections,team,settings (drop subscriptions,branding,drive,messaging?keep).
-   COMPANY_NAV = dashboard,projects,campaigns,analytics,reports,connections,alerts,team,subscriptions,settings
-   (drop billing,branding). Update RegistrationOnboardingTest accordingly.
-4. Rebuild + vitest + backend test; browser-verify the 3 menus; then expanded E2E, clean install, ZIP, audit.
+## Known failures / caveats (not defects)
+- Agent curl `/auth/login` 500 "Session store not set" = Sanctum needs `Origin: http://localhost:5173`; browser login works.
+- Public request intake stays on request-types enum for anonymous submit (taxonomy endpoint is auth-gated) — correct.
+- G-020 resolved (registries renamed AdvertisingConnectorRegistry / ConnectorCapabilityRegistry).
 
-## PHASE: Taxonomy & UX (branch feat/taxonomy-ux, off v1.1.0-expanded-final — do NOT touch tag/packages)
-Goal: central Taxonomy & Option engine + unified searchable/manageable form controls + adopt across
-requests/clients/campaigns (dependent selects) + Integrations redesign (tabs/grid/drawer, full width, Drive under
-Files) + homepage shorten/rebalance + forms (steppers/draft/validation) + safe migration (no data loss) + E2E 3
-browsers/RTL/LTR/light/dark/mobile. Specs: docs/OPTION_MANAGEMENT_SPEC, CLASSIFICATION_MATRIX, FORM_CONTROLS_AUDIT,
-UX_SYSTEM_AUDIT (committed 1980ee2). Tasks #39–#42.
-In flight: (a) backend Taxonomy engine — app/Domains/Taxonomy/**, migration, routes/api/taxonomy.php (UNWIRED),
-taxonomies.*/options.* perms, TaxonomyEngineSeeder, tests. (b) frontend form controls — src/components/forms/** +
-src/features/taxonomy/taxonomyApi.ts (UNWIRED into pages/router).
-Next after both land: wire routes/api/taxonomy.php; build Settings→Taxonomies&Options page (Option Manager) +
-route; adopt controls in requests/clients/campaigns/projects/onboarding/alerts (replace ~19 hardcoded lists) with
-dependent selects + objective-driven KPIs; Integrations redesign; homepage redesign; safe value migration; full
-regression (backend/frontend/E2E) + clean tree. Preview stays running (scripts/dev-up.sh).
+## Open external dependencies (Awaiting Credentials — never claim connected)
+Email · WhatsApp · SMS · Google OAuth · Payment gateway · Ad-platform/GA4/store/CRM/Google-Drive live sync. Null/Sandbox adapters deliver flows; nothing logged sent/connected/paid without a verified provider.
 
-## TAX blocker + fix (important)
-Adoption agent found the seeded taxonomy keys DIVERGED from live enums (CampaignObjective, Industry,
-ServiceLevel, ClientStatus/Priority, request statuses) → adopting as-was would 422 / break filters (data loss).
-FIX in flight: re-align TaxonomyEngineSeeder so each enum-backed definition's option keys == the LIVE enum
-values (superset, no missing value); wire request Service→Category→Type from RequestTaxonomy::TREE with real
-parent links (category had no service link, type had 0 options); add safe nullable jsonb columns for additive
-multi-selects (unified_campaigns: platforms/regions/audiences/conversion_events/creative_types/tags;
-client_workspaces: tags/enabled_services) + accept them in validators; alignment test asserts engine keys ⊇ every
-live enum value. THEN re-run the frontend adoption (Requests/Clients/Campaigns) as a safe drop-in (same keys),
-objective→KPI from option metadata, multi-selects → the new jsonb columns. Option Manager UI (Settings→Taxonomies)
-also in flight (router+i18n+TaxonomyManagerPage). Do NOT re-run adoption until re-alignment lands.
+## Commands to resume
+```
+cd /Users/mohammedalharbimacbook/Developer/CampaignsHub-UI
+git status && git log --oneline -8
+bash scripts/dev-up.sh
+cd frontend && npm run build && npx vitest run
+cd ../backend && php artisan test && php artisan db:seed --class=Database\\Seeders\\TaxonomyEngineSeeder
+```
 
-## TAX progress (feat/taxonomy-ux, HEAD ~4a58b1a)
-Done+committed: engine 4f4a42e/56a1a9d; controls cebbbb8; manager UI 16a9ba2; RE-ALIGNMENT 5181773 (engine==live
-enums, request tree, additive jsonb cols, no data loss); adoption 96d65b2 (Requests filters/Clients/Campaigns
-objective-KPIs+multi-selects); campaign resource round-trip 3836d88; Integrations redesign 2be3a2c; homepage
-redesign db64503. Dev DB reseeded+aligned (migrate:fresh --seed); owner has taxonomies/options perms; login 200;
-backend 397, frontend 156 vitest, build clean. Homepage + Integrations browser-verified.
-In flight: track 7 (Reports/Alerts/file-category option adoption → engine, keep system keys).
-Remaining: track 10 (forms UX: steppers/draft/validation/error-summary on long forms — new controls already
-adopted in client/campaign forms); tracks 13/14 (full E2E 3 browsers + RTL/LTR + light/dark + mobile regression;
-target 0 failed/flaky/skipped). Notes: public request intake stays enum (auth-gated taxonomy endpoint, correct);
-agents' login-500 were curl-without-SPA-origin (browser login works). Preview: scripts/dev-up.sh (:5173/:8000).
+## Acceptance criteria (phase closes only when)
+No hardcoded unmanaged options · no multi-select without option management · no duplicated classifications · no data loss · no placeholders/dead buttons · permissions enforced · tenant isolation passed · Operations/SaaS/Client passed · Chromium/Firefox/WebKit + mobile + RTL/LTR + light/dark passed · backend/frontend/E2E failed=0, flaky=0, skipped=external-only · tree clean. Paid-media vertical proven end-to-end: category→multi-service→search→custom→dynamic fields→submit→request+portal+dashboard→quote→invoice→no loss after refresh.
+
+## Do-not-repeat decisions
+- Keep `v1.1.0-expanded-final` tag + both ZIPs UNTOUCHED; new work only on `feat/taxonomy-ux`.
+- Engine option keys for enum-backed fields MUST equal LIVE enum values (source of truth) — do NOT reintroduce aspirational keys (that was the blocker; fixed `5181773`).
+- Integrations canonical `/app/integrations` (absorbs Connection Center + Drive-under-Files); Branding under Settings; Finance one backend surfaced as المالية/الاشتراك/الفواتير. Do NOT re-split.
+- Migration policy: DEACTIVATE/merge, never delete used options.
