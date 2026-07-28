@@ -15,6 +15,7 @@ import { PublicReport } from '@/features/reports/PublicReport'
 import { PrintReport } from '@/features/reports/PrintReport'
 import { DesignSystemPage } from '@/features/design/DesignSystemPage'
 import { SettingsLayout } from '@/features/account/SettingsLayout'
+import { TaxonomyManagerPage } from '@/features/taxonomy/TaxonomyManagerPage'
 import { ProfilePage } from '@/features/account/ProfilePage'
 import { PasswordPage } from '@/features/account/PasswordPage'
 import { SecurityPage } from '@/features/account/SecurityPage'
@@ -158,6 +159,7 @@ export const router = createBrowserRouter([
               { path: 'preferences', element: <PagePlaceholder title="Preferences" /> },
               { path: 'notifications', element: <PagePlaceholder title="Notifications" /> },
               { path: 'workspace', element: <SettingsPage /> },
+              { path: 'taxonomies', element: <TaxonomyManagerPage /> },
               { path: 'support', element: <PagePlaceholder title="Support" /> },
             ],
           },

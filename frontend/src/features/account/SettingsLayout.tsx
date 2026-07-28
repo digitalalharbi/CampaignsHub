@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Bell, Building2, Palette, Shield, SlidersHorizontal, User as UserIcon } from 'lucide-react'
+import { Bell, Building2, Palette, Shield, SlidersHorizontal, Tags, User as UserIcon } from 'lucide-react'
 import { useT } from '@/lib/i18n'
 
 const SECTIONS = [
@@ -10,6 +10,7 @@ const SECTIONS = [
   { key: 'menu_preferences', to: '/settings/preferences', icon: SlidersHorizontal },
   { key: 'menu_appearance', to: '/settings/preferences', icon: Palette },
   { key: 'menu_workspace', to: '/settings/workspace', icon: Building2 },
+  { key: 'menu_taxonomies', to: '/settings/taxonomies', icon: Tags },
 ] as const
 
 /** Two-column settings shell: section nav + the active section (Outlet). */
