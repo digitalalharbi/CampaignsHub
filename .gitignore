@@ -29,3 +29,4 @@ backend/bootstrap/cache/*.php
 *.tmp
 *.output
 deliverables/**/browser-downloads/*.pdf
+frontend/.claude/

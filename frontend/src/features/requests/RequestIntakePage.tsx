@@ -17,6 +17,13 @@ const DRAFT_KEY = 'ch-request-draft-v2' // v2: stores only non-sensitive {type, 
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 const PLATFORMS = ['Meta', 'Google', 'TikTok', 'Snapchat', 'X', 'LinkedIn']
 
+// Maps the homepage decision-section `?service=` value to a request module, so a journey card lands the
+// visitor on the right service (dynamic paid-advertising form vs influencer/UGC form), skipping step 0.
+const SERVICE_TO_MODULE: Record<string, string> = {
+  'paid-media': 'paid_media',
+  'influencer-marketing': 'influencer_marketing',
+}
+
 interface UploadFile {
   localId: string
   name: string
