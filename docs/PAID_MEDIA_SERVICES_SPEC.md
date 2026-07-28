@@ -1,5 +1,25 @@
 # Paid-Media Services — selector + dynamic request form (engine-driven)
 
+## ⚑⚑⚑⚑ v5 BINDING — Homepage rebuilt in CUSTOMER language (supersedes v4 wording/sections)
+Rebuild the homepage with direct, persuasive customer language — NOT internal jargon. **FORBIDDEN anywhere on public surfaces:** «SaaS», «اشتراك SaaS», «المشتركين»/«للمشتركين»، «للوكالات»/«حساب وكالة»/«مساحة وكالة»، «مساحة العمل»/«Workspace»، «Tenant»/«Company Tenant»/«Personal Workspace»، «Operations Console»، «Module Entitlements»، «واجهة المشترك»، «تجربة الشركة»، «دخول مساحة العمل». Also drop the two-"commercial tracks (اشتراك SaaS)" band from v4. Rebalance & shorten — don't just swap words.
+- **Hero copy:** eyebrow «إدارة الحملات الإعلانية المدفوعة»; headline «كل حملاتك الإعلانية المدفوعة في مكان واحد»; desc «تابع حملاتك وميزانياتك ونتائجك عبر المنصات، قارن الأداء، واكتشف فرص التحسين من لوحة واحدة واضحة.»; support «أدر حملاتك بنفسك، أو اختر الخدمة التي تحتاجها ودعنا نساعدك في تنفيذها.»; value points: متابعة موحدة لجميع المنصات · مقارنة واضحة بين الحملات · بيانات من الحسابات المرتبطة · تقارير وتنبيهات تساعدك على اتخاذ القرار.
+- **Layout:** two columns — RIGHT (65%) title+value+system preview, LEFT (35%) options card. Whole hero fits within the first screen at 1440×900, no vertical overflow / big gaps.
+- **Options card** «كيف تريد البدء؟» (desc «اختر ما يناسب احتياجك وسنأخذك مباشرة إلى الخطوة التالية.»), 4 options (icon + title + one-line desc + arrow + clear hover/selected; NO user-category words like مستقل/وكالة/علامة تجارية/فريق داخلي):
+  1. أدير حملاتي بنفسي — «اجمع حملاتك ومنصاتك وميزانياتك وتقاريرك في مكان واحد.» → «إنشاء حساب» → `/register?journey=self-managed&module=paid-media`
+  2. أدير حملات لعدة عملاء — «نظّم عملاءك ومشاريعك وحملاتك وتابع أداء كل عميل بشكل مستقل.» → «إنشاء حساب» → `/register?journey=agency&module=paid-media`
+  3. أحتاج خدمات إعلانية — «اختر خدمات الإدارة أو التحسين أو التتبع أو التحليل أو التقارير.» → «اختيار الخدمات» → reveal inline services; CTA «أكمل طلبك» → `/requests/new?module=paid-media&services=<keys>`
+  4. أحتاج مؤثرين أو محتوى UGC — «أرسل تفاصيل حملتك وتابع المحتوى والتنفيذ والتسليمات من حسابك.» → «إرسال الطلب» → `/requests/new?module=influencer-marketing`
+- **Login (below options):** ONLY «تسجيل الدخول»→`/login` + «متابعة طلباتي»→`/client/login`; helper line «سجّل الدخول لإدارة حملاتك، أو تابع طلباتك وعروض الأسعار والفواتير والتنفيذ.» (no «دخول مساحة العمل»).
+- **Header:** المميزات · كيف يعمل · الخدمات · التكاملات والتقارير · تسجيل الدخول · إنشاء حساب · اطلب خدمة · متابعة طلباتي (+lang/theme). Authenticated → «تسجيل الدخول» becomes «لوحة التحكم»→`/dashboard`. No internal-admin link anywhere.
+- **Inline services** (option 3): category chips (إدارة الحملات · تحسين الأداء · التدقيق والتحليل · التتبع والقياس · التكاملات · التقارير · التخطيط · الاستشارات) + popular services + search + multi-select + selected chips + remove + عرض جميع الخدمات + طلب مخصص; CTA «أكمل طلبك» carries `services=<canonical keys>`; catalog from the public endpoint only (no static fallback).
+- **Dark preview** = realistic CampaignsHub: platforms Snapchat/TikTok/Meta/Google Ads/X/LinkedIn; per-platform spend/results/active campaigns/avg cost-per-result/return-when-goal-fits/last-sync; sections platform-comparison / spend-distribution / top-creatives / top-campaigns; **SAR in the AR build**; tag «معاينة توضيحية ببيانات تجريبية». No technical terms (Source of Truth / Attribution Model / Tenant Isolation / Module Entitlements) on the marketing page.
+- **Shorten rest of page** to: كيف يعمل · الخدمات · أهم المميزات · المنصات المدعومة · التقارير والتنبيهات · final CTA · Footer. Remove repeated/long/technical sections, empty space, Hero↔body duplication. Equal-height balanced cards.
+- **Mobile order:** title+value → options card → services (when chosen) → register/request buttons → compact preview (h-scroll platforms, 4 KPIs, one chart, top-2 campaigns) → كيف يعمل → المميزات → Footer. Don't shrink a full dashboard illegibly.
+- **Acceptance:** customer-facing copy; zero forbidden terms; تسجيل الدخول/إنشاء حساب/اطلب خدمة/متابعة طلباتي clear; balanced options; services visible from start; preview tied to CampaignsHub; page shorter/balanced; no dead buttons; no duplication; Responsive; RTL/LTR; light/dark; Chromium/Firefox/WebKit; console clean; network clean.
+
+---
+
+
 ## ⚑⚑⚑ v4 BINDING — Public homepage is for EXTERNAL users (SaaS + service clients), NOT platform admins
 The public homepage/header/footer must never expose an internal-admin/system login. Internal admin stays on a hidden, non-indexed path (`/operations/login`, or the existing protected internal path) — never in public Header/Hero/Footer. Keep the current visual design/balance; this changes wording, nav, routes, and copy only.
 - **Remove wording** «تسجيل دخول النظام» / «دخول الإدارة» / «Operations Console» / «Admin Login» from all public surfaces.
