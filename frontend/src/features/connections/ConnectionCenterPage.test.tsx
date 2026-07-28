@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { ConnectionCenterPage } from './ConnectionCenterPage'
+import { ConnectionCenterPage, providerCategory } from './ConnectionCenterPage'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
 import type { Connector } from './api'
@@ -21,6 +21,21 @@ function connector(overrides: Partial<Connector> = {}): Connector {
     connection: null, ...overrides,
   }
 }
+
+describe('providerCategory mapping', () => {
+  it('maps the 16 providers into their category buckets, Google Drive → files', () => {
+    expect(providerCategory('meta_ads')).toBe('ads')
+    expect(providerCategory('google_ads')).toBe('ads')
+    expect(providerCategory('ga4')).toBe('analytics')
+    expect(providerCategory('google_tag_manager')).toBe('analytics')
+    expect(providerCategory('salla')).toBe('stores')
+    expect(providerCategory('shopify')).toBe('stores')
+    expect(providerCategory('google_drive')).toBe('files')
+    expect(providerCategory('crm')).toBe('other')
+    // Unknown providers fall to "other" (honest default).
+    expect(providerCategory('mystery_provider')).toBe('other')
+  })
+})
 
 describe('ConnectionCenterPage', () => {
   beforeEach(() => {
@@ -47,26 +62,46 @@ describe('ConnectionCenterPage', () => {
     expect(screen.getByText('Select a project')).toBeInTheDocument()
   })
 
-  it('lists connectors with capabilities and the honest state badge', async () => {
+  it('renders category tabs, a grid of cards, and honest state badges', async () => {
     signInWith(['integrations.view'])
     renderWithProviders(<ConnectionCenterPage />)
+    // Grid cards
     expect(await screen.findByText('Sandbox (demo data)')).toBeInTheDocument()
+    expect(screen.getByText('Meta Ads')).toBeInTheDocument()
+    // Honest badges — never a bare "Connected".
     expect(screen.getByText('Sandbox Verified')).toBeInTheDocument()
-    // The real provider without credentials is honestly Awaiting — never "Connected".
     expect(screen.getByText('Awaiting Credentials')).toBeInTheDocument()
-    // No badge ever reads a bare "Connected" — only the honest states are rendered.
     expect(screen.queryByText('Connected')).not.toBeInTheDocument()
-    expect(screen.getAllByText('metrics_sync').length).toBeGreaterThan(0)
+    // Category tabs are derived from the present connectors (Ads + Other, plus All).
+    const tabs = screen.getAllByRole('tab')
+    const tabNames = tabs.map((t) => t.textContent?.trim())
+    expect(tabNames).toContain('All')
+    expect(tabNames).toContain('Ads')
+    expect(tabNames).toContain('Other')
   })
 
-  it('opens the sync history panel for a connector', async () => {
+  it('filters the grid by category tab', async () => {
     signInWith(['integrations.view'])
     renderWithProviders(<ConnectionCenterPage />)
     await screen.findByText('Sandbox (demo data)')
-    fireEvent.click(screen.getAllByText('Sync history')[0])
+    // Switch to the Ads tab — only Meta Ads remains, Sandbox (Other) is filtered out.
+    fireEvent.click(screen.getByRole('tab', { name: /Ads/ }))
+    expect(screen.getByText('Meta Ads')).toBeInTheDocument()
+    expect(screen.queryByText('Sandbox (demo data)')).not.toBeInTheDocument()
+  })
+
+  it('opens the details drawer with account, capabilities and sync history', async () => {
+    signInWith(['integrations.view'])
+    renderWithProviders(<ConnectionCenterPage />)
+    fireEvent.click(await screen.findByText('Sandbox (demo data)'))
+    // Drawer dialog opens with detail sections.
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText('Permissions & capabilities')).toBeInTheDocument()
+    expect(screen.getAllByText('metrics_sync').length).toBeGreaterThan(0)
+    // History loads for the opened provider.
     await waitFor(() => expect(getConnectionHistory).toHaveBeenCalledWith('p1', 'sandbox'))
-    expect(await screen.findByText('Data freshness')).toBeInTheDocument()
-    expect(screen.getByText('Last run')).toBeInTheDocument()
+    expect(screen.getByText('Sync history')).toBeInTheDocument()
+    expect(await screen.findByText('Last run')).toBeInTheDocument()
   })
 
   it('does not call sync on initial render (only on demand)', async () => {
