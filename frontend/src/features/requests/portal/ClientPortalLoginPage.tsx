@@ -16,10 +16,13 @@ export function ClientPortalLoginPage() {
   const [vid, setVid] = useState<string | null>(null)
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // Dev-only: the backend returns dev_code ONLY in non-production (hard-gated server-side), so this affordance
+  // can never appear in production. It lets a local reviewer copy the OTP without touching the API by hand.
+  const [devCode, setDevCode] = useState<string | null>(null)
 
   const start = useMutation({
     mutationFn: () => portalLoginStart(channel, destination.trim()),
-    onSuccess: (r) => { setVid(r.verification_id); setError(null); if (r.dev_code) setCode(r.dev_code) },
+    onSuccess: (r) => { setVid(r.verification_id); setError(null); if (r.dev_code) { setCode(r.dev_code); setDevCode(r.dev_code) } },
     onError: (e) => setError(toApiError(e).message),
   })
   const verify = useMutation({
@@ -56,6 +59,13 @@ export function ClientPortalLoginPage() {
                 <input className={`${field} tnum text-center tracking-[0.5em]`} dir="ltr" inputMode="numeric" maxLength={6}
                   value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} aria-label={ar ? 'الرمز' : 'Code'} />
               </label>
+              {devCode && (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs" dir="ltr">
+                  <span className="font-semibold text-warning">DEV OTP (local only): <span className="tnum tracking-widest">{devCode}</span></span>
+                  <button type="button" onClick={() => { void navigator.clipboard?.writeText(devCode); setCode(devCode) }}
+                    className="rounded-lg border border-warning/50 px-2 py-1 font-semibold text-warning hover:bg-warning/15">{ar ? 'نسخ' : 'Copy'}</button>
+                </div>
+              )}
               <button type="submit" disabled={code.length !== 6 || verify.isPending} className="flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60">
                 {verify.isPending ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />} {ar ? 'دخول' : 'Sign in'}
               </button>
