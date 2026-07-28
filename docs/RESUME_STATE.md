@@ -67,3 +67,17 @@ Email/WhatsApp/SMS/Google OAuth/Payment gateway/Ad platforms + Google Drive — 
    COMPANY_NAV = dashboard,projects,campaigns,analytics,reports,connections,alerts,team,subscriptions,settings
    (drop billing,branding). Update RegistrationOnboardingTest accordingly.
 4. Rebuild + vitest + backend test; browser-verify the 3 menus; then expanded E2E, clean install, ZIP, audit.
+
+## PHASE: Taxonomy & UX (branch feat/taxonomy-ux, off v1.1.0-expanded-final — do NOT touch tag/packages)
+Goal: central Taxonomy & Option engine + unified searchable/manageable form controls + adopt across
+requests/clients/campaigns (dependent selects) + Integrations redesign (tabs/grid/drawer, full width, Drive under
+Files) + homepage shorten/rebalance + forms (steppers/draft/validation) + safe migration (no data loss) + E2E 3
+browsers/RTL/LTR/light/dark/mobile. Specs: docs/OPTION_MANAGEMENT_SPEC, CLASSIFICATION_MATRIX, FORM_CONTROLS_AUDIT,
+UX_SYSTEM_AUDIT (committed 1980ee2). Tasks #39–#42.
+In flight: (a) backend Taxonomy engine — app/Domains/Taxonomy/**, migration, routes/api/taxonomy.php (UNWIRED),
+taxonomies.*/options.* perms, TaxonomyEngineSeeder, tests. (b) frontend form controls — src/components/forms/** +
+src/features/taxonomy/taxonomyApi.ts (UNWIRED into pages/router).
+Next after both land: wire routes/api/taxonomy.php; build Settings→Taxonomies&Options page (Option Manager) +
+route; adopt controls in requests/clients/campaigns/projects/onboarding/alerts (replace ~19 hardcoded lists) with
+dependent selects + objective-driven KPIs; Integrations redesign; homepage redesign; safe value migration; full
+regression (backend/frontend/E2E) + clean tree. Preview stays running (scripts/dev-up.sh).
