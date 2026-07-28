@@ -28,6 +28,11 @@ use Illuminate\Database\Seeder;
  *   request.payment_status  = App\Domains\Requests\Journey\RequestStage::paymentStatus (+ none)
  *   request.service/category/type = App\Domains\Requests\Journey\RequestTaxonomy::tree() (parent-linked)
  *   project.status          = ProjectController::STATUSES
+ *   report.type             = ReportController::TYPES (Rule::in)
+ *   report.audience         = ReportController store Rule::in(client, internal, executive)
+ *   alert.type              = AlertController::TYPES (in:)
+ *   alert.severity          = AlertController store Rule::in(info, warning, critical)
+ *   alert.channel           = AlertController store channels.* Rule::in(in_app, email, whatsapp)
  *
  * Idempotent (updateOrCreate by key). Runs in platform scope (tenant_id null) so it seeds shared
  * definitions/options visible to every tenant. is_system follows the matrix; a system definition's canonical
@@ -276,6 +281,84 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'paused', 'label_ar' => 'متوقف', 'label_en' => 'Paused', 'color' => '#f59e0b'],
                     ['key' => 'completed', 'label_ar' => 'مكتمل', 'label_en' => 'Completed', 'color' => '#14b8a6'],
                     ['key' => 'archived', 'label_ar' => 'مؤرشف', 'label_en' => 'Archived', 'color' => '#6b7280'],
+                ],
+            ],
+            [
+                'key' => 'report.type', 'module' => 'reports', 'field_type' => 'single', 'is_system' => true,
+                'label_ar' => 'نوع التقرير', 'label_en' => 'Report type',
+                'description' => 'ReportController::TYPES (Rule::in) — the report builder type select.',
+                'options' => [
+                    ['key' => 'executive', 'label_ar' => 'تقرير تنفيذي', 'label_en' => 'Executive', 'icon' => 'briefcase', 'is_default' => true],
+                    ['key' => 'project', 'label_ar' => 'تقرير مشروع', 'label_en' => 'Project', 'icon' => 'folder'],
+                    ['key' => 'campaign', 'label_ar' => 'تقرير حملة', 'label_en' => 'Campaign', 'icon' => 'megaphone'],
+                    ['key' => 'platform', 'label_ar' => 'تقرير منصة', 'label_en' => 'Platform', 'icon' => 'layout-grid'],
+                    ['key' => 'platform_comparison', 'label_ar' => 'مقارنة منصات', 'label_en' => 'Platform comparison', 'icon' => 'columns'],
+                    ['key' => 'weekly', 'label_ar' => 'تقرير أسبوعي', 'label_en' => 'Weekly', 'icon' => 'calendar-days'],
+                    ['key' => 'monthly', 'label_ar' => 'تقرير شهري', 'label_en' => 'Monthly', 'icon' => 'calendar'],
+                    ['key' => 'custom', 'label_ar' => 'تقرير مخصص', 'label_en' => 'Custom', 'icon' => 'sliders-horizontal'],
+                ],
+            ],
+            [
+                'key' => 'report.audience', 'module' => 'reports', 'field_type' => 'single', 'is_system' => true,
+                'label_ar' => 'جمهور التقرير', 'label_en' => 'Report audience',
+                'description' => 'ReportController store — Rule::in(client, internal, executive).',
+                'options' => [
+                    ['key' => 'client', 'label_ar' => 'العميل', 'label_en' => 'Client', 'icon' => 'user', 'is_default' => true,
+                        'description' => 'رسوم أكثر ونصوص أقل، توصيات معتمدة فقط، بلا تفاصيل تقنية.'],
+                    ['key' => 'internal', 'label_ar' => 'فريق الأداء', 'label_en' => 'Internal', 'icon' => 'users',
+                        'description' => 'كل المقاييس والحسابات والتشخيص وتوصيات Draft — لا يُشارك مع العميل.'],
+                    ['key' => 'executive', 'label_ar' => 'الإدارة التنفيذية', 'label_en' => 'Executive', 'icon' => 'briefcase',
+                        'description' => 'ملخص شديد الاختصار: الميزانية والنتائج والعائد والقرارات.'],
+                ],
+            ],
+            [
+                'key' => 'alert.type', 'module' => 'alerts', 'field_type' => 'single', 'is_system' => true,
+                'label_ar' => 'نوع التنبيه', 'label_en' => 'Alert type',
+                'description' => 'AlertController::TYPES (in:) — the alert rule type select.',
+                'options' => [
+                    ['key' => 'budget_risk', 'label_ar' => 'خطر الميزانية', 'label_en' => 'Budget risk', 'color' => '#f59e0b', 'icon' => 'wallet', 'is_default' => true],
+                    ['key' => 'cpa_increase', 'label_ar' => 'ارتفاع CPA', 'label_en' => 'CPA increase', 'color' => '#ef4444', 'icon' => 'trending-up'],
+                    ['key' => 'cpl_increase', 'label_ar' => 'ارتفاع CPL', 'label_en' => 'CPL increase', 'color' => '#ef4444', 'icon' => 'trending-up'],
+                    ['key' => 'roas_drop', 'label_ar' => 'انخفاض ROAS', 'label_en' => 'ROAS drop', 'color' => '#ef4444', 'icon' => 'trending-down'],
+                    ['key' => 'no_results', 'label_ar' => 'إنفاق بلا نتائج', 'label_en' => 'No results', 'color' => '#f59e0b', 'icon' => 'circle-slash'],
+                    ['key' => 'sync_failure', 'label_ar' => 'فشل المزامنة', 'label_en' => 'Sync failure', 'color' => '#dc2626', 'icon' => 'refresh-cw-off'],
+                    ['key' => 'token_expiry', 'label_ar' => 'انتهاء التوكن', 'label_en' => 'Token expiry', 'color' => '#f59e0b', 'icon' => 'key-round'],
+                    ['key' => 'report_failed', 'label_ar' => 'فشل التقرير', 'label_en' => 'Report failed', 'color' => '#dc2626', 'icon' => 'file-x'],
+                    ['key' => 'sla_warning', 'label_ar' => 'تحذير SLA', 'label_en' => 'SLA warning', 'color' => '#f59e0b', 'icon' => 'clock-alert'],
+                ],
+            ],
+            [
+                'key' => 'alert.severity', 'module' => 'alerts', 'field_type' => 'single', 'is_system' => true,
+                'label_ar' => 'الخطورة', 'label_en' => 'Severity',
+                'description' => 'AlertController store — Rule::in(info, warning, critical).',
+                'options' => [
+                    ['key' => 'info', 'label_ar' => 'معلومة', 'label_en' => 'Info', 'color' => '#3b82f6', 'icon' => 'info'],
+                    ['key' => 'warning', 'label_ar' => 'تحذير', 'label_en' => 'Warning', 'color' => '#f59e0b', 'icon' => 'alert-triangle', 'is_default' => true],
+                    ['key' => 'critical', 'label_ar' => 'حرِج', 'label_en' => 'Critical', 'color' => '#dc2626', 'icon' => 'alert-octagon'],
+                ],
+            ],
+            [
+                'key' => 'alert.channel', 'module' => 'alerts', 'field_type' => 'multi', 'is_system' => true,
+                'label_ar' => 'القنوات', 'label_en' => 'Channels',
+                'description' => 'AlertController store — channels.* Rule::in(in_app, email, whatsapp).',
+                'options' => [
+                    ['key' => 'in_app', 'label_ar' => 'داخل التطبيق', 'label_en' => 'In-app', 'icon' => 'bell', 'is_default' => true],
+                    ['key' => 'email', 'label_ar' => 'البريد', 'label_en' => 'Email', 'icon' => 'mail'],
+                    ['key' => 'whatsapp', 'label_ar' => 'واتساب', 'label_en' => 'WhatsApp', 'icon' => 'message-circle'],
+                ],
+            ],
+            [
+                'key' => 'file.category', 'module' => 'files', 'field_type' => 'single', 'is_system' => false,
+                'label_ar' => 'فئة الملف', 'label_en' => 'File category',
+                'description' => 'Tenant-manageable file/attachment classification (no backend hard-validation).',
+                'options' => [
+                    ['key' => 'creative', 'label_ar' => 'تصميم', 'label_en' => 'Creative', 'icon' => 'image'],
+                    ['key' => 'report', 'label_ar' => 'تقرير', 'label_en' => 'Report', 'icon' => 'file-text'],
+                    ['key' => 'contract', 'label_ar' => 'عقد', 'label_en' => 'Contract', 'icon' => 'file-signature'],
+                    ['key' => 'invoice', 'label_ar' => 'فاتورة', 'label_en' => 'Invoice', 'icon' => 'receipt'],
+                    ['key' => 'brief', 'label_ar' => 'موجز', 'label_en' => 'Brief', 'icon' => 'clipboard-list'],
+                    ['key' => 'asset', 'label_ar' => 'أصل', 'label_en' => 'Asset', 'icon' => 'package'],
+                    ['key' => 'other', 'label_ar' => 'أخرى', 'label_en' => 'Other', 'icon' => 'file', 'is_default' => true],
                 ],
             ],
         ];

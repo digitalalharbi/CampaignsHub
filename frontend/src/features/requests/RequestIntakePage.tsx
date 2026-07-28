@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Copy, FileText, Megaphone, Paperclip, RotateCcw, X } from 'lucide-react'
 import {
@@ -105,6 +105,11 @@ export function RequestIntakePage() {
   const metaQuery = useQuery({ queryKey: ['requests', 'meta'], queryFn: getRequestMeta })
   const types = metaQuery.data?.types ?? []
 
+  // Journey handoff from the homepage decision cards: `?service=` presets the module and skips step 0.
+  const [searchParams] = useSearchParams()
+  const serviceModule = SERVICE_TO_MODULE[searchParams.get('service') ?? '']
+  const servicePresetApplied = useRef(false)
+
   const [form, setForm] = useState<FormState>(EMPTY)
   const [step, setStep] = useState(0)
 
@@ -126,6 +131,18 @@ export function RequestIntakePage() {
   useEffect(() => {
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ type: form.type, step, ts: Date.now() })) } catch { /* quota */ }
   }, [form.type, step])
+
+  // Preselect the service that matches `?service=` once the meta list loads, then jump past the service
+  // step (step 0). Applied once and takes precedence over any restored draft; the choice stays editable
+  // (the user can go Back to step 0). No param → unchanged behaviour.
+  useEffect(() => {
+    if (servicePresetApplied.current || !serviceModule || types.length === 0) return
+    const match = types.find((t) => t.module === serviceModule)
+    if (!match) return
+    servicePresetApplied.current = true
+    setForm((f) => ({ ...f, type: match.key }))
+    setStep((s) => (s < 1 ? 1 : s))
+  }, [serviceModule, types])
 
   const clearDraft = () => {
     try { localStorage.removeItem(DRAFT_KEY) } catch { /* noop */ }
@@ -290,7 +307,7 @@ export function RequestIntakePage() {
               <div className="grid gap-2.5 sm:grid-cols-2">
                 {types.map((t) => (
                   <button
-                    key={t.key} type="button" onClick={() => set('type', t.key)}
+                    key={t.key} type="button" onClick={() => set('type', t.key)} aria-pressed={form.type === t.key}
                     className={`min-h-[56px] rounded-xl border px-4 py-3 text-start text-sm font-semibold transition-colors ${form.type === t.key ? 'border-brand-500 bg-brand-primary-soft text-brand-700' : 'border-border bg-surface hover:border-brand-400'}`}
                   >
                     {ar ? t.name_ar : t.name_en}

@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Copy, Download, FileText, Link2, Loader2, Plus, RefreshCw, Send, Share2, Trash2 } from 'lucide-react'
 import {
-  REPORT_TYPES,
   createReport,
   createShare,
   deleteReport,
@@ -20,10 +19,14 @@ import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/States'
+import { SelectField } from '@/components/forms'
+import { optionLabel } from '@/components/forms/types'
+import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { DemoBadge } from '@/features/analytics/components'
 import { InteractiveReport } from './InteractiveReport'
 import { AnnotationsPanel } from './AnnotationsPanel'
 import { useProject } from '@/stores/project'
+import { useUi } from '@/stores/ui'
 
 const STATUS_STYLE: Record<string, string> = {
   completed: 'bg-[var(--positive-background)] text-success',
@@ -42,7 +45,14 @@ const daysAgo = (n: number) => {
 
 export function ReportsPage() {
   const { currentProjectId } = useProject()
+  const locale = useUi((s) => s.locale)
   const qc = useQueryClient()
+  // Report-type labels come from the taxonomy engine (report.type) — no hardcoded type array.
+  const reportTypes = useTaxonomyOptions('report.type')
+  const typeLabel = (value: string) => {
+    const opt = reportTypes.options.find((o) => o.value === value)
+    return opt ? optionLabel(opt, locale) : value
+  }
   const [status, setStatus] = useState('')
   const [search, setSearch] = useState('')
   const [builderOpen, setBuilderOpen] = useState(false)
@@ -153,6 +163,7 @@ export function ReportsPage() {
                   <ReportRowView
                     key={r.id}
                     report={r}
+                    typeLabel={typeLabel(r.type)}
                     onPreview={() => setPreviewId(r.id)}
                     onShare={() => setShareId(r.id)}
                     onRegenerate={() => regen.mutate(r.id)}
@@ -188,6 +199,7 @@ export function ReportsPage() {
 
 function ReportRowView({
   report,
+  typeLabel,
   onPreview,
   onShare,
   onRegenerate,
@@ -196,6 +208,7 @@ function ReportRowView({
   onDelete,
 }: {
   report: ReportRow
+  typeLabel: string
   onPreview: () => void
   onShare: () => void
   onRegenerate: () => void
@@ -203,7 +216,6 @@ function ReportRowView({
   onSend: () => void
   onDelete: () => void
 }) {
-  const typeLabel = REPORT_TYPES.find((t) => t.value === report.type)?.label ?? report.type
   return (
     <tr className="border-b border-border last:border-0 hover:bg-surface-secondary">
       <td className="p-3">
@@ -277,43 +289,52 @@ function IconBtn({ children, title, onClick, danger }: { children: React.ReactNo
 
 function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState('')
-  const [type, setType] = useState('executive')
-  const [audience, setAudience] = useState('client')
+  const [type, setType] = useState<string | null>('executive')
+  const [audience, setAudience] = useState<string | null>('client')
   const [from, setFrom] = useState(daysAgo(29))
   const [to, setTo] = useState(today())
+  // Type & audience are fed by the taxonomy engine (report.type / report.audience) — system definitions, so
+  // the option keys are exactly the values ReportController::TYPES / the audience Rule::in already accept.
+  const types = useTaxonomyOptions('report.type')
+  const audiences = useTaxonomyOptions('report.audience')
   const create = useMutation({
-    mutationFn: () => createReport(projectId, { name: name || 'تقرير', type, audience, period_start: from, period_end: to, currency: 'SAR' }),
+    mutationFn: () =>
+      createReport(projectId, {
+        name: name || 'تقرير',
+        type: type ?? 'executive',
+        audience: audience ?? 'client',
+        period_start: from,
+        period_end: to,
+        currency: 'SAR',
+      }),
     onSuccess: onCreated,
   })
-  const AUDIENCES = [
-    { value: 'client', label: 'العميل', hint: 'رسوم أكثر ونصوص أقل، توصيات معتمدة فقط، بلا تفاصيل تقنية.' },
-    { value: 'internal', label: 'فريق الأداء', hint: 'كل المقاييس والحسابات والتشخيص وتوصيات Draft — لا يُشارك مع العميل.' },
-    { value: 'executive', label: 'الإدارة التنفيذية', hint: 'ملخص شديد الاختصار: الميزانية والنتائج والعائد والقرارات.' },
-  ]
   return (
     <Modal open onClose={onClose} title="منشئ التقرير">
       <div className="space-y-4">
         <Field label="اسم التقرير">
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: التقرير الشهري — يوليو" className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
         </Field>
-        <Field label="نوع التقرير">
-          <select value={type} onChange={(e) => setType(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base font-semibold">
-            {REPORT_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="هذا التقرير موجّه إلى">
-          <div className="grid gap-2 sm:grid-cols-3">
-            {AUDIENCES.map((a) => (
-              <button key={a.value} type="button" onClick={() => setAudience(a.value)} title={a.hint}
-                className={`rounded-xl border p-3 text-start transition-colors ${audience === a.value ? 'border-brand-600 bg-[var(--brand-background)]' : 'border-border hover:bg-surface-hover'}`}>
-                <div className="text-sm font-bold text-text-primary">{a.label}</div>
-                <div className="mt-0.5 text-[11px] leading-snug text-text-muted">{a.hint}</div>
-              </button>
-            ))}
-          </div>
-        </Field>
+        <SelectField
+          label="نوع التقرير"
+          value={type}
+          onChange={setType}
+          options={types.options}
+          loading={types.isPending}
+          optionsError={types.isError ? 'تعذّر تحميل الخيارات' : null}
+          onRetry={() => types.refetch()}
+          clearable={false}
+        />
+        <SelectField
+          label="هذا التقرير موجّه إلى"
+          value={audience}
+          onChange={setAudience}
+          options={audiences.options}
+          loading={audiences.isPending}
+          optionsError={audiences.isError ? 'تعذّر تحميل الخيارات' : null}
+          onRetry={() => audiences.refetch()}
+          clearable={false}
+        />
         <div className="grid grid-cols-2 gap-3">
           <Field label="من"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>
           <Field label="إلى"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>

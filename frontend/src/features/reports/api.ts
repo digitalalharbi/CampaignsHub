@@ -43,16 +43,10 @@ export interface ReportDetail extends ReportRow {
   } | null
 }
 
-export const REPORT_TYPES = [
-  { value: 'executive', label: 'تقرير تنفيذي' },
-  { value: 'project', label: 'تقرير مشروع' },
-  { value: 'campaign', label: 'تقرير حملة' },
-  { value: 'platform', label: 'تقرير منصة' },
-  { value: 'platform_comparison', label: 'مقارنة منصات' },
-  { value: 'weekly', label: 'تقرير أسبوعي' },
-  { value: 'monthly', label: 'تقرير شهري' },
-  { value: 'custom', label: 'تقرير مخصص' },
-]
+/**
+ * Report type labels are no longer hardcoded here — they are served by the central taxonomy engine
+ * (definition `report.type`, is_system) and consumed via `useTaxonomyOptions('report.type')`.
+ */
 
 const base = (p: string) => `/projects/${p}/reports`
 

@@ -110,6 +110,34 @@ final class TaxonomyAlignmentTest extends TestCase
         }
     }
 
+    public function test_reports_and_alerts_definitions_are_supersets_of_live_controller_values(): void
+    {
+        // Track 7: definition key => the live controller const / Rule::in values it MUST contain verbatim, so the
+        // report builder & alert rule form can never submit a value the API rejects (422).
+        $live = [
+            // ReportController::TYPES + audience Rule::in
+            'report.type' => ['executive', 'project', 'campaign', 'platform', 'platform_comparison', 'weekly', 'monthly', 'custom'],
+            'report.audience' => ['client', 'internal', 'executive'],
+            // AlertController::TYPES + severity + channels Rule::in
+            'alert.type' => ['budget_risk', 'cpa_increase', 'cpl_increase', 'roas_drop', 'no_results', 'sync_failure', 'token_expiry', 'report_failed', 'sla_warning'],
+            'alert.severity' => ['info', 'warning', 'critical'],
+            'alert.channel' => ['in_app', 'email', 'whatsapp'],
+        ];
+
+        foreach ($live as $definitionKey => $values) {
+            $engineKeys = $this->engineKeys($definitionKey);
+            // These are system, closed enums — the engine set is EXACTLY the live values (no drift, no extras).
+            sort($engineKeys);
+            $sorted = $values;
+            sort($sorted);
+            $this->assertSame(
+                $sorted,
+                $engineKeys,
+                "Engine definition [{$definitionKey}] active keys diverge from the live controller enum → the SPA would 422.",
+            );
+        }
+    }
+
     public function test_enumerated_definitions_have_no_divergent_active_keys(): void
     {
         // The critical fix: these closed sets must be EXACTLY the live enum — no aspirational extras left active.

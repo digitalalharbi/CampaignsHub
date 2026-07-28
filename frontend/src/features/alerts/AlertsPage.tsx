@@ -3,11 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, BellRing, CheckCircle2, Clock, ListChecks, Plus, Settings2, Truck } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import {
-  ALERT_TYPES, createAlertRule, createTaskFromAlert, listAlertEvents, listAlertRules,
+  createAlertRule, createTaskFromAlert, listAlertEvents, listAlertRules,
   resolveAlert, snoozeAlert, type AlertEvent, type AlertRule, type AlertType, type NewAlertRule,
 } from './api'
 import { listDeliveries, type NotificationDeliveryRow } from '@/features/notifications/api'
 import { getData, putData } from '@/lib/api/client'
+import { MultiSelectField, SelectField } from '@/components/forms'
+import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 const COPY = {
@@ -19,7 +21,7 @@ const COPY = {
     severity: 'الخطورة', source: 'المصدر', value: 'القيمة', threshold: 'الحد', triggered: 'أُطلق',
     sev_info: 'معلومة', sev_warning: 'تحذير', sev_critical: 'حرِج',
     new_rule: 'قاعدة جديدة', rule_name: 'اسم القاعدة', rule_type: 'النوع', cooldown: 'فترة التهدئة (دقائق)',
-    channels: 'القنوات', create_task_toggle: 'إنشاء مهمة تلقائيًا', active_toggle: 'مُفعّلة', save: 'حفظ',
+    channels: 'القنوات', create_task_toggle: 'إنشاء مهمة تلقائيًا', active_toggle: 'مُفعّلة', save: 'حفظ', load_error: 'تعذّر تحميل الخيارات',
     threshold_hint: 'الحد (اختياري): نسبة/أيام/قيمة حسب النوع.',
     prefs_title: 'قنوات الإشعار وساعات الهدوء', ch_in_app: 'داخل التطبيق', ch_email: 'البريد', ch_whatsapp: 'واتساب',
     quiet: 'ساعات الهدوء', quiet_enabled: 'تفعيل ساعات الهدوء', from: 'من', to: 'إلى', saved: 'تم الحفظ',
@@ -37,7 +39,7 @@ const COPY = {
     severity: 'Severity', source: 'Source', value: 'Value', threshold: 'Threshold', triggered: 'Triggered',
     sev_info: 'Info', sev_warning: 'Warning', sev_critical: 'Critical',
     new_rule: 'New rule', rule_name: 'Rule name', rule_type: 'Type', cooldown: 'Cooldown (minutes)',
-    channels: 'Channels', create_task_toggle: 'Auto-create a task', active_toggle: 'Active', save: 'Save',
+    channels: 'Channels', create_task_toggle: 'Auto-create a task', active_toggle: 'Active', save: 'Save', load_error: 'Could not load options',
     threshold_hint: 'Threshold (optional): pct / days / value depending on type.',
     prefs_title: 'Notification channels & quiet hours', ch_in_app: 'In-app', ch_email: 'Email', ch_whatsapp: 'WhatsApp',
     quiet: 'Quiet hours', quiet_enabled: 'Enable quiet hours', from: 'From', to: 'To', saved: 'Saved',
@@ -251,6 +253,11 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   const q = useQuery({ queryKey: ['alert-rules'], queryFn: listAlertRules })
   const [form, setForm] = useState<NewAlertRule>({ type: 'budget_risk', name: '', severity: 'warning', cooldown_minutes: 720, channels: ['in_app', 'email'], create_task: false, active: true })
   const [thresholdRaw, setThresholdRaw] = useState('')
+  // Type / severity / channels are fed by the taxonomy engine (alert.type / alert.severity / alert.channel).
+  // These are system definitions, so their option keys are exactly the AlertController Rule::in values.
+  const typeTax = useTaxonomyOptions('alert.type')
+  const severityTax = useTaxonomyOptions('alert.severity')
+  const channelTax = useTaxonomyOptions('alert.channel')
   const createM = useMutation({
     mutationFn: () => {
       const threshold = parseThreshold(thresholdRaw, form.type)
@@ -259,8 +266,6 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['alert-rules'] }); setForm((f) => ({ ...f, name: '' })); setThresholdRaw('') },
   })
   const rules = q.data ?? []
-  const toggleChannel = (ch: string) =>
-    setForm((f) => ({ ...f, channels: f.channels?.includes(ch) ? f.channels.filter((x) => x !== ch) : [...(f.channels ?? []), ch] }))
 
   return (
     <div className="grid gap-4 md:grid-cols-[1fr_320px]">
@@ -294,13 +299,16 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           <input required minLength={2} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary" />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-semibold text-text-secondary">
-          {c.rule_type}
-          <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as AlertType }))}
-            className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary">
-            {ALERT_TYPES.map((tp) => <option key={tp} value={tp}>{TYPE_LABEL[tp][locale]}</option>)}
-          </select>
-        </label>
+        <SelectField
+          label={c.rule_type}
+          value={form.type}
+          onChange={(v) => v && setForm((f) => ({ ...f, type: v as AlertType }))}
+          options={typeTax.options}
+          loading={typeTax.isPending}
+          optionsError={typeTax.isError ? c.load_error : null}
+          onRetry={() => typeTax.refetch()}
+          clearable={false}
+        />
         <label className="flex flex-col gap-1 text-xs font-semibold text-text-secondary">
           {c.threshold}
           <input value={thresholdRaw} onChange={(e) => setThresholdRaw(e.target.value)} placeholder="0.9"
@@ -313,22 +321,25 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
             onChange={(e) => setForm((f) => ({ ...f, cooldown_minutes: Number(e.target.value) }))}
             className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary" />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-semibold text-text-secondary">
-          {c.severity}
-          <select value={form.severity} onChange={(e) => setForm((f) => ({ ...f, severity: e.target.value as 'info' | 'warning' | 'critical' }))}
-            className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary">
-            <option value="info">{c.sev_info}</option><option value="warning">{c.sev_warning}</option><option value="critical">{c.sev_critical}</option>
-          </select>
-        </label>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-semibold text-text-secondary">{c.channels}</span>
-          {['in_app', 'email', 'whatsapp'].map((ch) => (
-            <label key={ch} className="flex items-center gap-2 text-xs text-text-secondary">
-              <input type="checkbox" checked={form.channels?.includes(ch) ?? false} onChange={() => toggleChannel(ch)} />
-              {ch === 'in_app' ? c.ch_in_app : ch === 'email' ? c.ch_email : c.ch_whatsapp}
-            </label>
-          ))}
-        </div>
+        <SelectField
+          label={c.severity}
+          value={form.severity ?? 'warning'}
+          onChange={(v) => v && setForm((f) => ({ ...f, severity: v as 'info' | 'warning' | 'critical' }))}
+          options={severityTax.options}
+          loading={severityTax.isPending}
+          optionsError={severityTax.isError ? c.load_error : null}
+          onRetry={() => severityTax.refetch()}
+          clearable={false}
+        />
+        <MultiSelectField
+          label={c.channels}
+          value={form.channels ?? []}
+          onChange={(v) => setForm((f) => ({ ...f, channels: v }))}
+          options={channelTax.options}
+          loading={channelTax.isPending}
+          optionsError={channelTax.isError ? c.load_error : null}
+          onRetry={() => channelTax.refetch()}
+        />
         <label className="flex items-center gap-2 text-xs font-semibold text-text-secondary">
           <input type="checkbox" checked={form.create_task} onChange={(e) => setForm((f) => ({ ...f, create_task: e.target.checked }))} />
           {c.create_task_toggle}

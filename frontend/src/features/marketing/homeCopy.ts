@@ -3,9 +3,10 @@
  * official terminology ("إدارة الحملات الإعلانية المدفوعة / Paid Advertising Management") is used
  * consistently — never the loose synonyms "الحملات الرقمية / الممولة" as the module name.
  *
- * Structure is intentionally lean: one hero, one value band, one steps band, one features grid,
- * one usage-selection grid, one combined integrations+reports band, one final CTA. No duplicated
- * or repeated-style card sections.
+ * Structure is intentionally lean: one hero, one decision section (the "How do you want to use
+ * CampaignsHub?" journey chooser), one value band, one steps band, one features grid, one combined
+ * integrations+reports band, one final CTA. The journeys live ONLY in the decision section — they
+ * are never duplicated as another card grid elsewhere on the page.
  */
 export type Locale = 'ar' | 'en'
 
@@ -17,7 +18,12 @@ export interface HomeCopy {
   coreValue: { title: string; subtitle: string; pillars: { title: string; desc: string }[] }
   steps: { title: string; subtitle: string; items: { title: string; desc: string }[] }
   features: { title: string; subtitle: string; items: { title: string; desc: string }[] }
-  usage: { title: string; subtitle: string; cards: { title: string; desc: string; cta: string; to: string }[] }
+  decision: {
+    title: string
+    subtitle: string
+    cards: { title: string; desc: string; cta: string; to: string }[]
+    accounts: { label: string; actions: { label: string; to: string; variant: 'primary' | 'secondary' }[] }
+  }
   combined: {
     title: string
     subtitle: string
@@ -39,7 +45,7 @@ const ar: HomeCopy = {
   hero: {
     eyebrow: 'منصة إدارة الحملات الإعلانية المدفوعة',
     title: 'كل حملاتك الإعلانية المدفوعة في مكان واحد',
-    subtitle: 'اربط منصاتك، تابع الميزانيات والنتائج، وأنشئ تقارير احترافية دون التنقل بين أدوات متعددة.',
+    subtitle: 'أدر حملاتك بنفسك، نظّم حملات عملائك، أو أرسل طلب خدمة وتابع تنفيذه من منصة واحدة.',
     ctaStart: 'ابدأ إدارة حملاتك',
     ctaRequest: 'أرسل طلب خدمة',
     points: ['مركز موحّد لكل الحملات', 'عزل مستقل لكل عميل', 'مؤشرات حسب هدف الحملة', 'بيانات فعلية من الربط'],
@@ -83,14 +89,22 @@ const ar: HomeCopy = {
       { title: 'التنبيهات', desc: 'تنبيه عند ارتفاع التكلفة أو فشل المزامنة.' },
     ],
   },
-  usage: {
+  decision: {
     title: 'كيف تريد استخدام CampaignsHub؟',
-    subtitle: 'اختر المسار الأنسب لك، وسنأخذك مباشرة إلى الخطوة التالية.',
+    subtitle: 'اختر المسار الأنسب لك، وسننقلك مباشرة إلى الخطوة التالية — دون إعادة الاختيار.',
     cards: [
-      { title: 'أدير حملاتي بنفسي', desc: 'للميديا باير وفرق التسويق الداخلية داخل الشركة.', cta: 'إنشاء حساب', to: '/register' },
-      { title: 'أدير حملات عدة عملاء', desc: 'للوكالات التي تدير مشاريع وعملاء متعددين بعزل كامل.', cta: 'إنشاء مساحة عمل', to: '/register' },
-      { title: 'أحتاج خدمة إدارة حملات', desc: 'أرسل طلبك وتابعه عبر رابط آمن دون إنشاء حساب.', cta: 'إرسال طلب', to: '/requests/new' },
+      { title: 'أدير حملاتي بنفسي', desc: 'للميديا باير، المستقل، العلامة التجارية، وفريق التسويق الداخلي.', cta: 'ابدأ إدارة حملاتك', to: '/register?journey=self-managed' },
+      { title: 'أدير حملات عدة عملاء', desc: 'للوكالات والمستقلين الذين يديرون عملاء ومشاريع متعددة.', cta: 'أنشئ مساحة وكالة', to: '/register?journey=agency' },
+      { title: 'أحتاج خدمة إدارة حملات', desc: 'أرسل طلبك دون إنشاء حساب، وتابع العرض والدفع والتنفيذ من بوابة العميل.', cta: 'أرسل طلب خدمة', to: '/requests/new?service=paid-media' },
+      { title: 'أحتاج حملة مؤثرين أو UGC', desc: 'أرسل طلب حملة مؤثرين أو إنتاج محتوى UGC ومتابعة تفاصيلها.', cta: 'طلب مؤثرين وUGC', to: '/requests/new?service=influencer-marketing' },
     ],
+    accounts: {
+      label: 'أملك حسابًا بالفعل',
+      actions: [
+        { label: 'تسجيل دخول النظام', to: '/login', variant: 'secondary' },
+        { label: 'دخول العميل', to: '/client/login', variant: 'secondary' },
+      ],
+    },
   },
   combined: {
     title: 'التكاملات والتقارير',
@@ -136,7 +150,7 @@ const en: HomeCopy = {
   hero: {
     eyebrow: 'Paid Advertising Management platform',
     title: 'All your paid ad campaigns in one place',
-    subtitle: 'Connect your platforms, track budgets and results, and build professional reports — without switching between tools.',
+    subtitle: "Run your own campaigns, manage your clients' campaigns, or submit a service request and track it — all from one platform.",
     ctaStart: 'Start managing campaigns',
     ctaRequest: 'Request a service',
     points: ['One hub for every campaign', 'Isolated per client', 'Objective-based KPIs', 'Real data from connections'],
@@ -180,14 +194,22 @@ const en: HomeCopy = {
       { title: 'Alerts', desc: 'Get alerted on rising costs or sync failures.' },
     ],
   },
-  usage: {
+  decision: {
     title: 'How do you want to use CampaignsHub?',
-    subtitle: 'Pick the path that fits you and we’ll take you straight to the next step.',
+    subtitle: 'Pick the path that fits you and we’ll take you straight to the next step — no re-picking.',
     cards: [
-      { title: 'I manage campaigns myself', desc: 'For media buyers and in-house marketing teams.', cta: 'Create account', to: '/register' },
-      { title: 'I manage several clients', desc: 'For agencies running multiple projects and clients, fully isolated.', cta: 'Create workspace', to: '/register' },
-      { title: 'I need campaign management', desc: 'Send your request and track it via a secure link — no account.', cta: 'Send a request', to: '/requests/new' },
+      { title: 'I run my own campaigns', desc: 'For media buyers, freelancers, brands, and in-house marketing teams.', cta: 'Start managing campaigns', to: '/register?journey=self-managed' },
+      { title: "I manage several clients' campaigns", desc: 'For agencies and freelancers running multiple clients and projects.', cta: 'Create an agency workspace', to: '/register?journey=agency' },
+      { title: 'I need campaign management as a service', desc: 'Submit your request without an account, and track the quote, payment and delivery from the client portal.', cta: 'Submit a service request', to: '/requests/new?service=paid-media' },
+      { title: 'I need an influencer or UGC campaign', desc: 'Submit an influencer campaign or UGC content-production request and track its details.', cta: 'Request influencers & UGC', to: '/requests/new?service=influencer-marketing' },
     ],
+    accounts: {
+      label: 'I already have an account',
+      actions: [
+        { label: 'System login', to: '/login', variant: 'secondary' },
+        { label: 'Client login', to: '/client/login', variant: 'secondary' },
+      ],
+    },
   },
   combined: {
     title: 'Integrations & reports',

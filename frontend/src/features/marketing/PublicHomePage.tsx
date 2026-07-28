@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Activity, ArrowLeft, ArrowRight, BarChart3, Bell, CheckCircle2, LayoutDashboard, Megaphone,
-  Moon, Plug, Sun, Target, Users, Wallet,
+  Activity, ArrowLeft, ArrowRight, BarChart3, Bell, CheckCircle2, LayoutDashboard, LogIn, Megaphone,
+  Moon, Plug, Sparkles, Sun, Target, UserCircle, Users, Wallet,
 } from 'lucide-react'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { Button } from '@/components/ui/Button'
@@ -17,6 +17,10 @@ const STATUS_TONE: Record<string, string> = {
 }
 
 const FEATURE_ICONS = [LayoutDashboard, BarChart3, Target, Wallet, Megaphone, Bell]
+
+/** One icon per decision-journey card, in the same order as `decision.cards`. */
+const DECISION_ICONS = [LayoutDashboard, Users, Megaphone, Sparkles]
+const ACCOUNT_ICONS = [LogIn, UserCircle]
 
 /** Faux mini bar chart for the preview — pure presentation, no data claims. */
 function MiniBars({ values }: { values: number[] }) {
@@ -153,6 +157,42 @@ export function PublicHomePage() {
         </div>
       </section>
 
+      {/* Decision — "How do you want to use CampaignsHub?" journey chooser. Placed immediately after the
+          hero (within the first two screens). 4 balanced primary cards, each a direct navigation; a thin
+          accounts bar below. These journeys live here ONLY — never duplicated as another card grid. */}
+      <section id="usage" className="border-b border-border bg-surface-secondary">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.decision.title}</h2>
+          <p className="mt-2 max-w-2xl text-text-secondary">{c.decision.subtitle}</p>
+          <div className="mt-7 grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {c.decision.cards.map((card, i) => {
+              const Icon = DECISION_ICONS[i] ?? LayoutDashboard
+              return (
+                <div key={card.title} className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Icon size={20} /></span>
+                  <h3 className="mt-4 text-base font-bold text-text-primary">{card.title}</h3>
+                  <p className="mt-1.5 flex-1 text-sm leading-relaxed text-text-secondary">{card.desc}</p>
+                  <Link to={card.to} className="mt-5"><Button size="sm" className="w-full justify-between">{card.cta}<Arrow size={16} /></Button></Link>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Accounts bar — thin row for returning users; secondary weight so it never competes with the cards. */}
+          <div className="mt-4 flex flex-col items-stretch gap-3 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm font-semibold text-text-secondary">{c.decision.accounts.label}</span>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {c.decision.accounts.actions.map((a, i) => {
+                const Icon = ACCOUNT_ICONS[i] ?? LogIn
+                return (
+                  <Link key={a.to} to={a.to}><Button variant={a.variant} size="sm" className="w-full sm:w-auto"><Icon size={15} /> {a.label}</Button></Link>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Core value — one concise band */}
       <section className="border-b border-border bg-surface-secondary">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
@@ -206,27 +246,6 @@ export function PublicHomePage() {
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Icon size={18} /></span>
                   <h3 className="mt-3 text-base font-bold text-text-primary">{f.title}</h3>
                   <p className="mt-1 text-sm leading-relaxed text-text-secondary">{f.desc}</p>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* Usage selection — 3 concise cards, equal height */}
-      <section id="usage" className="border-b border-border">
-        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.usage.title}</h2>
-          <p className="mt-2 max-w-2xl text-text-secondary">{c.usage.subtitle}</p>
-          <div className="mt-7 grid auto-rows-fr gap-4 md:grid-cols-3">
-            {c.usage.cards.map((card, i) => {
-              const Icon = [LayoutDashboard, Users, Megaphone][i] ?? LayoutDashboard
-              return (
-                <div key={card.title} className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Icon size={20} /></span>
-                  <h3 className="mt-4 text-lg font-bold text-text-primary">{card.title}</h3>
-                  <p className="mt-1.5 flex-1 text-sm leading-relaxed text-text-secondary">{card.desc}</p>
-                  <Link to={card.to} className="mt-5"><Button size="sm" variant="secondary" className="w-full justify-between">{card.cta}<Arrow size={16} /></Button></Link>
                 </div>
               )
             })}
