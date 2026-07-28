@@ -13,7 +13,7 @@ Commit = short hash. Test = suite that covers it. Review = route reviewed live.
 |---|---|---|---|---|---|---|---|---|
 | UNIFIED-001 | C DASH | Shared UnifiedCampaignOverview component (KPIs + 6-platform comparison + spend dist + top campaigns + needs-attention + alerts + data-status) | n/a | ✓ | 11 chromium E2E + 209 vitest | **VERIFIED** | 2a2d4b5 | — |
 | UNIFIED-002 | C DASH | Dashboard leads with the shared overview (live analytics→VM), trend+funnel below | uses analytics API | ✓ | E2E dashboard/campaigns | **VERIFIED** | 2a2d4b5 | — |
-| HOME-010 | A HOME | Marketing homepage preview uses the SAME UnifiedCampaignOverview (labeled demo data) — parity | n/a | — | — | **NOT_STARTED** | — | swap bespoke PreviewPanel → UnifiedCampaignOverview(demo VM) |
+| HOME-010 | A HOME | Marketing homepage preview uses the SAME UnifiedCampaignOverview (labeled demo data) — parity | n/a | ✓ | 13 chromium E2E + 15 vitest | **VERIFIED** | 34aa1e1 | (minor) preview section labels are AR-only on the EN homepage — localize later |
 | HOME-001 | A HOME | v5 customer-language homepage, zero internal jargon, 65/35 hero, 4 journeys, login | n/a | ✓ | 15 vitest + homepage E2E | VERIFIED | 510918a | — |
 | AUTH-001 | B AUTH | /login customer redesign (two-pane, green palette, responsive) | Sanctum | ✓ | auth e2e 51 | VERIFIED | 2382177 | — |
 | DASH-010 | C DASH | Unified filter bar (period/client/project/campaign/platform/objective/status/ad-account/region) affecting all tiles + saved views + compare-period | needs API params | — | — | **NOT_STARTED** | — | build filter context + API filters |
@@ -53,5 +53,9 @@ SYNC-001, NORM-001, XREL-001, DEMO-001, DEVSTATUS-001, ADAUDIT-001, + 6 INTEGRAT
 Verified: UNIFIED-001/002, HOME-001, AUTH-001, TAX-001, FORMS-001, PAIDMEDIA-001, REGRESS-001.
 
 ## Exact Next Requirement
-**HOME-010** — swap the homepage bespoke `PreviewPanel` for `UnifiedCampaignOverview` fed a labeled demo VM
-(parity with the dashboard). Then **ALERT-001** (Alerts command center). Keep preview up; commit per unit.
+**DASH-010** — Dashboard command center: one unified filter bar (period/client/project/campaign/platform/
+objective/status/ad-account/region) affecting all tiles + `DASH-011` objective-specific KPI switching + saved
+views + compare-period + data-freshness. Backend: add filter params to the analytics API; Frontend: a filter
+context feeding `UnifiedCampaignOverview` + the trend/funnel. Then CAMPAIGN-010 (view modes + taxonomy chips +
+comparison), CAMPDET-010, CREATIVE-001, ALERT-001 … per the contract order. Keep preview up; one tested unit
+per commit; update this matrix after each.

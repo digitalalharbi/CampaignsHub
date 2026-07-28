@@ -2,7 +2,7 @@
 
 ## ▶ RESUME HERE (permanent trackers now govern): read `docs/MASTER_EXECUTION_CONTRACT.md` + `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` first
 - ✅ Shipped this session: **UNIFIED-001/002 VERIFIED** — shared `frontend/src/features/campaigns/overview/UnifiedCampaignOverview.tsx` + dashboard wired to it (commit `2a2d4b5`; tsc/build/209 vitest/11 chromium E2E green). Permanent contract+matrix committed `9a64e96`.
-- **EXACT NEXT REQUIREMENT = HOME-010:** swap the homepage bespoke dark `PreviewPanel` (in `PublicHomePage.tsx`, uses `PREVIEW_PLATFORMS`) for the shared `UnifiedCampaignOverview` fed a labeled demo VM (parity: pre-login preview == post-login dashboard). **Design note to resolve:** the overview uses LIGHT surface tokens; the hero preview is DARK — either render the overview on a light preview surface, or add a `variant="dark"`/theme-adaptive mode to `UnifiedCampaignOverview` so it sits in the dark hero. Keep «معاينة توضيحية ببيانات تجريبية». Then **ALERT-001** (Alerts command center — `/app/alerts` redesign: categories/severity/status-workflow/filters/rich card/working actions; Alerts≠Notifications; taxonomy-fed).
+- **EXACT NEXT REQUIREMENT = DASH-010 (dashboard command center: unified filter bar + objective-specific KPIs + saved views + compare-period). HOME-010 VERIFIED (34aa1e1). See REQUIREMENTS_TRACEABILITY_MATRIX.md.
 - Work order + all open requirement IDs live in the matrix (UNIMPLEMENTED REQUIREMENTS CHECK). Do NOT re-audit; implement in code, one functional+tested+committed unit at a time. Delivery stays HALTED until all requirements VERIFIED. Preview up (5173/8000/dev-status).
 
 ## 🚧 ACTIVE PHASE (2026-07-28): CORE CAMPAIGN-MANAGEMENT DEEPENING — delivery packaging HALTED
