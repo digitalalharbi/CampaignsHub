@@ -1,28 +1,81 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
-import { Check, Copy } from 'lucide-react'
+import { BarChart3, Check, Copy, LayoutGrid, Megaphone, Moon, ShieldCheck, Sun } from 'lucide-react'
 import { login } from './api'
 import { safeRedirect } from './redirect'
-import { AuthShell } from './AuthShell'
 import { Button } from '@/components/ui/Button'
 import { EmailInput, PasswordInput } from '@/components/ui/form'
 import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
 import { useAuth } from '@/stores/auth'
+import { useUi } from '@/stores/ui'
 
 const DEMO = { email: 'owner@demo-agency.local', password: 'password' }
+
+/**
+ * Customer-facing sign-in copy, kept local to the auth feature (not in the shared i18n dictionary).
+ * Plain customer-facing product language only — no internal or admin phrasing.
+ */
+const COPY = {
+  ar: {
+    app: 'CampaignsHub',
+    eyebrow: 'منصة إدارة الحملات الإعلانية',
+    heroTitle: 'أدِر حملاتك الإعلانية وتابع نتائجك في مكان واحد',
+    heroValue:
+      'تابع الأداء والميزانيات والنتائج عبر جميع المنصات، ونظّم عملاءك ومشاريعك، وأنشئ تقارير احترافية بسهولة.',
+    formTitle: 'مرحباً بعودتك',
+    formValue: 'سجّل دخولك لمتابعة حملاتك ونتائجك.',
+    noAccount: 'ليس لديك حساب؟',
+    register: 'تسجيل حساب',
+    clientPrompt: 'هل أنت عميل؟',
+    clientLogin: 'متابعة طلباتي',
+    demo: 'بيانات حساب تجريبي · بيئة التطوير فقط',
+    copyEmail: 'نسخ البريد',
+    copyPassword: 'نسخ كلمة المرور',
+    copy: 'نسخ',
+    copied: 'تم النسخ',
+    benefits: [
+      { icon: LayoutGrid, title: 'متابعة موحّدة لكل المنصات', desc: 'شاهد الإنفاق والنتائج والمؤشرات دون التنقل بين الحسابات.' },
+      { icon: BarChart3, title: 'تقارير احترافية جاهزة للمشاركة', desc: 'قدّم نتائج واضحة لعملائك في دقائق معدودة.' },
+      { icon: ShieldCheck, title: 'تنبيهات ومتابعة لحظية', desc: 'ابقَ على اطلاع بالميزانيات وتغيّرات الأداء أولاً بأول.' },
+    ],
+  },
+  en: {
+    app: 'CampaignsHub',
+    eyebrow: 'Ad campaign management platform',
+    heroTitle: 'Run your ad campaigns and track results in one place',
+    heroValue:
+      'Track performance, budgets and results across every platform, organize your clients and projects, and build professional reports with ease.',
+    formTitle: 'Welcome back',
+    formValue: 'Sign in to keep track of your campaigns and results.',
+    noAccount: "Don't have an account?",
+    register: 'Create an account',
+    clientPrompt: 'Are you a client?',
+    clientLogin: 'Track my requests',
+    demo: 'Demo account · development only',
+    copyEmail: 'Copy email',
+    copyPassword: 'Copy password',
+    copy: 'Copy',
+    copied: 'Copied',
+    benefits: [
+      { icon: LayoutGrid, title: 'Unified tracking across platforms', desc: 'See spend and results without switching between accounts.' },
+      { icon: BarChart3, title: 'Shareable professional reports', desc: 'Present clear results to your clients in minutes.' },
+      { icon: ShieldCheck, title: 'Real-time alerts and monitoring', desc: 'Stay ahead of budgets and performance shifts.' },
+    ],
+  },
+} as const
 
 /**
  * Dev-only demo credentials. Never auto-fills the fields and never renders in production — it just
  * offers copy buttons so a developer can paste them deliberately.
  */
-function DemoCredentials() {
+function DemoCredentials({ c }: { c: (typeof COPY)[keyof typeof COPY] }) {
   const [copied, setCopied] = useState<'email' | 'password' | null>(null)
   const copy = (which: 'email' | 'password') => {
     void navigator.clipboard?.writeText(DEMO[which])
     setCopied(which)
-    window.setTimeout(() => setCopied((c) => (c === which ? null : c)), 1500)
+    window.setTimeout(() => setCopied((v) => (v === which ? null : v)), 1500)
   }
   const Row = ({ which, value }: { which: 'email' | 'password'; value: string }) => (
     <div className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
@@ -30,16 +83,16 @@ function DemoCredentials() {
       <button
         type="button" onClick={() => copy(which)}
         className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-brand-600 hover:bg-brand-primary-soft"
-        aria-label={which === 'email' ? 'نسخ البريد' : 'نسخ كلمة المرور'}
+        aria-label={which === 'email' ? c.copyEmail : c.copyPassword}
       >
         {copied === which ? <Check size={13} /> : <Copy size={13} />}
-        {copied === which ? 'تم النسخ' : 'نسخ'}
+        {copied === which ? c.copied : c.copy}
       </button>
     </div>
   )
   return (
-    <div className="mt-5 rounded-xl border border-dashed border-border bg-surface-secondary p-3">
-      <p className="mb-2 text-xs font-semibold text-text-muted">بيانات الحساب التجريبي · بيئة التطوير فقط</p>
+    <div className="mt-6 rounded-xl border border-dashed border-border bg-surface-secondary p-3">
+      <p className="mb-2 text-xs font-semibold text-text-muted">{c.demo}</p>
       <div className="space-y-1.5">
         <Row which="email" value={DEMO.email} />
         <Row which="password" value={DEMO.password} />
@@ -53,6 +106,8 @@ export function LoginPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const setUser = useAuth((s) => s.setUser)
+  const { theme, locale, toggleTheme, toggleLocale } = useUi()
+  const c = COPY[locale]
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -64,37 +119,101 @@ export function LoginPage() {
   })
   const error = mutation.isError ? toApiError(mutation.error) : null
 
+  const Logo = ({ size = 20, className = '' }: { size?: number; className?: string }) => (
+    <div className={`flex items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-lg ${className}`}>
+      <Megaphone size={size} />
+    </div>
+  )
+
   return (
-    <AuthShell>
-      <h2 className="font-[var(--font-heading)] text-3xl font-extrabold text-text-primary sm:text-[40px] sm:leading-tight">{t('welcome_back')}</h2>
-      <p className="mt-2 text-[17px] text-text-secondary">{t('sign_in_subtitle')}</p>
+    <div className="grid min-h-screen grid-cols-1 bg-background lg:grid-cols-[1.05fr_1fr]">
+      {/* Brand / value panel — desktop only, single coherent emerald accent on a deep neutral. */}
+      <aside className="relative hidden overflow-hidden bg-gradient-to-br from-[var(--auth-panel-from)] via-[var(--auth-panel-via)] to-[var(--auth-panel-to)] p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
+        <div className="pointer-events-none absolute -end-24 -top-24 h-72 w-72 rounded-full bg-brand-500/15 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-28 -start-20 h-80 w-80 rounded-full bg-[var(--teal)]/10 blur-3xl" />
 
-      <form className="mt-8 space-y-5" onSubmit={(e) => { e.preventDefault(); mutation.mutate({ email, password }) }}>
-        <EmailInput label={t('email')} value={email} onChange={(e) => setEmail(e.target.value)} required error={error?.errors?.email?.[0]} />
-        <PasswordInput
-          label={t('password')} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required
-          error={error?.errors?.password?.[0]} showLabel={t('show_password')} hideLabel={t('hide_password')}
-        />
-
-        <div className="flex items-center justify-between">
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-text-secondary">
-            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 rounded border-border accent-brand-600" />
-            {t('remember_me')}
-          </label>
-          <Link to="/forgot-password" className="text-sm font-semibold text-brand-600 hover:underline">{t('forgot_password')}</Link>
+        <div className="relative flex items-center gap-2.5">
+          <Logo className="h-10 w-10" />
+          <span className="text-xl font-extrabold tracking-tight">{c.app}</span>
         </div>
 
-        {error && !error.errors && <p className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{error.message}</p>}
+        <div className="relative max-w-xl">
+          <p className="text-[13px] font-semibold text-brand-300">{c.eyebrow}</p>
+          <h1 className="mt-3 font-[var(--font-heading)] text-4xl font-extrabold leading-[1.15] xl:text-[44px]">{c.heroTitle}</h1>
+          <p className="mt-4 text-lg leading-relaxed text-white/75">{c.heroValue}</p>
+          <ul className="mt-9 space-y-3.5">
+            {c.benefits.map(({ icon: Icon, title, desc }) => (
+              <li key={title} className="flex items-start gap-3.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 backdrop-blur-sm">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-500/15 text-brand-300"><Icon size={18} /></span>
+                <span className="min-w-0">
+                  <span className="block text-[15px] font-bold">{title}</span>
+                  <span className="mt-0.5 block text-[13px] leading-snug text-white/60">{desc}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
 
-        <Button type="submit" loading={mutation.isPending} className="w-full" size="lg">{t('sign_in')}</Button>
-      </form>
+        <div className="relative text-xs text-white/40">© {new Date().getFullYear()} {c.app}</div>
+      </aside>
 
-      <p className="mt-6 text-center text-sm text-text-secondary">
-        {t('no_account')} <Link to="/register" className="font-semibold text-brand-600 hover:underline">{t('create_account')}</Link>
-      </p>
+      {/* Sign-in form column. */}
+      <main className="flex flex-col px-5 py-6 sm:px-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 lg:invisible">
+            <Logo size={16} className="h-8 w-8 rounded-lg" />
+            <span className="font-extrabold text-text-primary">{c.app}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button onClick={toggleLocale} aria-label="Toggle language" className="flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover">{locale === 'ar' ? 'EN' : 'ع'}</button>
+            <button onClick={toggleTheme} aria-label="Toggle theme" className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button>
+          </div>
+        </div>
 
-      {/* Demo credentials — dev only, BELOW the form, separate card with copy buttons, never auto-filled. */}
-      {import.meta.env.DEV && <DemoCredentials />}
-    </AuthShell>
+        <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col justify-center py-8">
+          <h2 className="font-[var(--font-heading)] text-3xl font-extrabold text-text-primary sm:text-[40px] sm:leading-tight">{c.formTitle}</h2>
+          <p className="mt-2 text-[17px] text-text-secondary">{c.formValue}</p>
+
+          <form className="mt-8 space-y-5" onSubmit={(e) => { e.preventDefault(); mutation.mutate({ email, password }) }}>
+            <EmailInput label={t('email')} value={email} onChange={(e) => setEmail(e.target.value)} required error={error?.errors?.email?.[0]} />
+            <PasswordInput
+              label={t('password')} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required
+              error={error?.errors?.password?.[0]} showLabel={t('show_password')} hideLabel={t('hide_password')}
+            />
+
+            <div className="flex items-center justify-between">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-text-secondary">
+                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 rounded border-border accent-brand-600" />
+                {t('remember_me')}
+              </label>
+              <Link to="/forgot-password" className="text-sm font-semibold text-brand-600 hover:underline">{t('forgot_password')}</Link>
+            </div>
+
+            {error && !error.errors && <p className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{error.message}</p>}
+
+            <Button type="submit" loading={mutation.isPending} className="w-full" size="lg">{t('sign_in')}</Button>
+          </form>
+
+          <p className="mt-6 text-center text-sm text-text-secondary">
+            {c.noAccount} <Link to="/register" className="font-semibold text-brand-600 hover:underline">{c.register}</Link>
+          </p>
+
+          <div className="mt-6 flex items-center gap-3 text-xs text-text-muted">
+            <span className="h-px flex-1 bg-border" />
+            <span>{c.clientPrompt}</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <Link
+            to="/client/login"
+            className="mt-4 flex h-11 w-full items-center justify-center rounded-xl border border-border-strong bg-surface text-sm font-semibold text-text-primary transition-colors hover:bg-surface-hover"
+          >
+            {c.clientLogin}
+          </Link>
+
+          {/* Demo credentials — dev only, BELOW the form, separate card with copy buttons, never auto-filled. */}
+          {import.meta.env.DEV && <DemoCredentials c={c} />}
+        </div>
+      </main>
+    </div>
   )
 }
