@@ -1,5 +1,23 @@
 # Paid-Media Services — selector + dynamic request form (engine-driven)
 
+## ⚑⚑⚑ v4 BINDING — Public homepage is for EXTERNAL users (SaaS + service clients), NOT platform admins
+The public homepage/header/footer must never expose an internal-admin/system login. Internal admin stays on a hidden, non-indexed path (`/operations/login`, or the existing protected internal path) — never in public Header/Hero/Footer. Keep the current visual design/balance; this changes wording, nav, routes, and copy only.
+- **Remove wording** «تسجيل دخول النظام» / «دخول الإدارة» / «Operations Console» / «Admin Login» from all public surfaces.
+- **Public header (anonymous):** «ابدأ الآن»→`/register` · «تسجيل الدخول»→`/login` · «اطلب خدمة»→`/requests/new` · «دخول العميل»→`/client/login`; plus العربية/English + Light/Dark. **Authenticated SaaS session** → replace with «لوحة التحكم»→`/dashboard` (dashboard type auto-resolved by account_type/workspace_kind/enabled_modules/role/permissions/subscription_plan — existing behavior).
+- **Journey card «كيف تريد استخدام CampaignsHub؟»** (desc «اختر المسار المناسب لاحتياجك، وسنهيئ لك التسجيل أو الطلب تلقائيًا.»):
+  1. أدير حملاتي بنفسي → «أنشئ مساحة عمل» → `/register?journey=self-managed&module=paid-media`
+  2. أدير حملات عدة عملاء → «ابدأ كوكالة» → `/register?journey=agency&module=paid-media`
+  3. أحتاج خدمات إعلانية → «استعرض الخدمات» → reveals inline services in the card; CTA → `/requests/new?module=paid-media&services=<canonical-keys>`
+  4. أحتاج حملة مؤثرين أو UGC → «أرسل طلب مؤثرين» → `/requests/new?module=influencer-marketing`
+- **Below the card:** heading «لديك حساب بالفعل؟» + «دخول مساحة العمل»→`/login` (subs/agencies/companies/freelancers) + «متابعة طلباتي»→`/client/login` (service clients tracking quote/invoice/execution). NOT «تسجيل دخول النظام».
+- **Business-model copy:** headline «كل حملاتك الإعلانية المدفوعة في مكان واحد»; desc «أدر حملاتك بنفسك عبر مساحة عمل احترافية، أو اطلب خدمات متخصصة في الإدارة والتحسين والتتبع والتحليل والتقارير.»; supporting «اشتراك لإدارة حملاتك، وبوابة متكاملة لطلب الخدمات ومتابعة التنفيذ.»; value points: إدارة موحدة لجميع المنصات والحملات · تحليلات وتقارير حسب هدف الحملة · بيانات من مصادر الربط المعتمدة · طلبات وعروض وفواتير ومتابعة في مكان واحد. Show TWO clearly-separated commercial tracks (do not mix): **اشتراك SaaS** (أنشئ مساحة عمل→اربط منصاتك→أدر الحملات→تابع التحليلات→أنشئ التقارير→استقبل التنبيهات) and **طلب خدمة** (اختر الخدمات→أرسل الطلب→استلم عرض السعر→وافق وادفع→تابع التنفيذ→استلم التقارير).
+- **Journey handoff:** journey/module params flow into register/onboarding as review-and-edit (never re-pick): journey=self-managed→personal/in-house + paid_media; journey=agency→agency + Clients+Requests; module=paid-media→paid catalog; module=influencer-marketing→influencer/UGC form. Intake must accept `?module=influencer-marketing` (equiv to the existing influencer service).
+- **Auth route map:** SaaS `/register`,`/login`,`/dashboard`. Clients `/client/login`,`/client`,`/client/requests|quotes|invoices|payments|messages|files|campaigns|reports`. Internal `/operations/login`,`/operations` (hidden, noindex, admin-permission-gated, not in public nav/footer).
+- **Acceptance:** homepage targets external users; SaaS register/login clear; client login clear; internal admin login hidden; NO «تسجيل دخول النظام» wording; all 4 journeys work; selected journey+services persist; correct dashboard after login; no dead buttons/placeholder routes; RTL/LTR, light/dark, mobile, Chromium/Firefox/WebKit.
+
+---
+
+
 ## ⚑⚑ v3 BINDING — Public read-only catalog contract (single source of truth for services)
 This supersedes any conflicting field names/paths above. Every service-showing surface (homepage selector, dynamic intake, request review, client portal, internal request dashboard, quote items, invoice items) uses THIS one endpoint + THESE canonical keys. No hardcoded fallback arrays, no duplicated lists, no differing keys between page and form, no demo data on API failure — on failure show a clear Error State + Retry (never a static list).
 
