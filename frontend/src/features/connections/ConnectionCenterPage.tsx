@@ -19,9 +19,9 @@ import {
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 const COPY = {
   ar: {
-    title: 'مركز الاتصالات', subtitle: 'سطح كثيف: ملخّص، فئات، بحث، وشبكة موصّلات بحالات صادقة لكل مزوّد ضمن المشروع الحالي.',
+    title: 'التكاملات', subtitle: 'اربط منصاتك ومصادر بياناتك من مكان واحد — ملخّص وفئات وبحث وشبكة موصّلات بحالة صادقة لكل مزوّد ضمن المشروع الحالي.',
     pick_project: 'اختر مشروعًا', pick_project_hint: 'الاتصالات مرتبطة بالمشروع — اختر مشروعًا من المبدّل لعرض موصّلاته.',
-    no_permission: 'لا تملك صلاحية عرض مركز الاتصالات.', loading: 'جارٍ التحميل…',
+    no_permission: 'لا تملك صلاحية عرض التكاملات.', loading: 'جارٍ التحميل…',
     capabilities: 'القدرات', sync_now: 'مزامنة الآن', syncing: 'جارٍ المزامنة…', history: 'سجل المزامنة',
     last_sync: 'آخر مزامنة', last_error: 'آخر خطأ', token_expires: 'انتهاء التوكن', never: 'لا يوجد', freshness: 'حداثة البيانات',
     honest_note: 'الحالات صادقة: لا يظهر «متصل/إنتاجي» إلا بعد مزامنة حقيقية ناجحة. المزوّدات بلا اعتماد تبقى «بانتظار اعتماد».',
@@ -46,9 +46,9 @@ const COPY = {
     no_account: 'لا يوجد حساب متصل بعد.',
   },
   en: {
-    title: 'Connection Center', subtitle: 'A dense surface: summary, categories, search, and a grid of connectors with an honest state per provider in the current project.',
+    title: 'Integrations', subtitle: 'Connect your platforms and data sources in one place — summary, categories, search, and a grid of connectors with an honest state per provider in the current project.',
     pick_project: 'Select a project', pick_project_hint: 'Connections are project-scoped — pick a project from the switcher to see its connectors.',
-    no_permission: 'You do not have permission to view the Connection Center.', loading: 'Loading…',
+    no_permission: 'You do not have permission to view Integrations.', loading: 'Loading…',
     capabilities: 'Capabilities', sync_now: 'Sync now', syncing: 'Syncing…', history: 'Sync history',
     last_sync: 'Last sync', last_error: 'Last error', token_expires: 'Token expires', never: 'None', freshness: 'Data freshness',
     honest_note: 'States are honest: nothing shows "Connected/Production" without a real successful sync. Providers without credentials stay "Awaiting Credentials".',
