@@ -603,3 +603,11 @@ Backend 351 passed, phpstan clean; frontend build clean, 37 vitest. Underway: su
 client-portal files/campaigns/reports (backend); internal UIs (billing/messaging/journey, branding/connections/drive);
 then Operations Console + SaaS Workspace surfaces, white-label, module entitlements, expanded E2E, expanded clean
 install, expanded ZIP + SHA-256, final audit.
+
+## Expansion integration (dbcc347) — internal surfaces live
+Dev environment up (scripts/dev-up.sh): backend :8000 (workers=4) + queue:work reports,default + scheduler +
+Vite HMR + Postgres + Redis; /dev/status all Running; Chromium renderer Running. Full Operations Console nav
+renders (Billing/Messages/Connection Center/Google Drive/Branding surfaces live, console clean). Backend 367
+passed; frontend build clean + 98 vitest. Entitlement nav: personal=Operations Console (full), company=SaaS
+Workspace (simplified subscriber). Remaining: client-portal files/campaigns/reports real pages + Subscriptions
+UI (in progress), expanded E2E (e2e/expansion-surfaces.spec.ts added), expanded clean install, expanded ZIP+SHA.
