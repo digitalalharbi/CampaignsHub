@@ -59,3 +59,14 @@ Status legend: Tested = feature tests + phpstan green; Awaiting Ext Dep = adapte
 | SaaS Workspace surface (white-label, billing, usage limits) | frontend | Not Started | — |
 | Client Service Portal surface (dashboard/quotes/invoices/pay/files/messages) | frontend | **Tested** | build+37 vitest; commit e20155b; browser-verified |
 | Expanded E2E (3 browsers) + expanded clean install + ZIP | delivery | Not Started | — |
+
+## Consolidation (1251a39) + internal UIs integrated
+| Item | Status | Evidence |
+|---|---|---|
+| Internal UIs (Billing/Finance, Messaging, Request Journey, Branding, Connections, Drive, Subscriptions) | **Tested** | build clean, 112 vitest; commits 896bae6/0ecb7ec/6de34e0 |
+| Client portal Files/Campaigns/Reports (real data) | **Tested** | commit 6de34e0; no ComingSoon remains |
+| Canonical consolidation (one module/name/route/engine) | **Tested** | commit 1251a39; DUPLICATION_AUDIT/CANONICAL_MODULES/NAVIGATION_MATRIX/ROUTE_REDIRECT_MAP; redirects for /integrations,/app/connections,/app/drive,/app/branding |
+| Operations Console vs SaaS Workspace nav | **Tested** | AccountEntitlements PERSONAL_NAV/COMPANY_NAV; RegistrationOnboardingTest; browser-verified |
+| Dev environment (scripts/dev-*.sh + /dev/status) | **Tested** | all services Running; commit 6c834dd |
+| Expanded E2E (3 browsers) | In Progress | e2e/expansion-surfaces + full suite running |
+| Expanded clean install + ZIP + SHA-256 | Pending | scratchpad/clean_install_rehearsal + package_expanded |
