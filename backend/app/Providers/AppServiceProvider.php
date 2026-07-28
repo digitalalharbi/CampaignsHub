@@ -8,7 +8,7 @@ use App\Domains\Audit\Listeners\RecordAuthAudit;
 use App\Domains\CRM\Models\Company;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Models\Opportunity;
-use App\Domains\Integrations\Registry\ConnectorRegistry;
+use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Auth\Events\Login;
@@ -32,8 +32,8 @@ class AppServiceProvider extends ServiceProvider
 
         // Advertising connector registry; Sandbox is excluded in production.
         $this->app->singleton(
-            ConnectorRegistry::class,
-            fn () => new ConnectorRegistry(
+            AdvertisingConnectorRegistry::class,
+            fn () => new AdvertisingConnectorRegistry(
                 includeSandbox: ! $this->app->environment('production'),
             ),
         );

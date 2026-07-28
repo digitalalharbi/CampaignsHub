@@ -224,8 +224,7 @@ _Last updated: 2026-07-27_
   notifications carry action_url=/app/alerts). Verified in-browser + E2E `alerts-ui.spec.ts` 3 browsers.
   This was an internal gap (not an external dependency) and is now closed.
 
-## G-020 (low, internal) — Integrations connector-resolver name overlap
-Two classes named `ConnectorRegistry` in `app/Domains/Integrations` (legacy `Registry\` sync engine vs new
-`Connectors\` honest-state framework). Complementary layers over one data source — NOT a duplicate engine
-(see DUPLICATION_AUDIT). Future refactor: rename `Connectors\ConnectorRegistry` → `ConnectorStateRegistry`
-to remove the naming ambiguity. No functional/data duplication; deferred to avoid risk to the working sync.
+## G-020 (RESOLVED) — Integrations connector-resolver names disambiguated
+Renamed Registry\ConnectorRegistry → AdvertisingConnectorRegistry (sync engine) and Connectors\ConnectorRegistry
+→ ConnectorCapabilityRegistry (honest-state framework). Behavior unchanged; one data source; 55 integration/sync
+ tests pass. No ambiguous internal names remain.

@@ -30,7 +30,7 @@ use Ramsey\Uuid\Uuid;
 final class ConnectionCenterService
 {
     public function __construct(
-        private readonly ConnectorRegistry $registry,
+        private readonly ConnectorCapabilityRegistry $registry,
         private readonly UpsertDailyMetrics $upsert,
         private readonly ProjectContext $project,
         private readonly TenantContext $tenant,

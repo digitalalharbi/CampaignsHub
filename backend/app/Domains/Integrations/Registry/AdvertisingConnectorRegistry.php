@@ -17,7 +17,7 @@ use App\Domains\Integrations\Sandbox\SandboxAdvertisingConnector;
  * Registry of available advertising connectors. The Sandbox connector is only registered outside
  * production so fake data can never appear on a live deployment.
  */
-final class ConnectorRegistry
+final class AdvertisingConnectorRegistry
 {
     /** @var array<string, AdvertisingConnector> */
     private array $connectors = [];

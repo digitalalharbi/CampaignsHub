@@ -6,7 +6,7 @@ namespace Tests\Unit;
 
 use App\Domains\Integrations\Contracts\AdvertisingConnector;
 use App\Domains\Integrations\Enums\ConnectorStatus;
-use App\Domains\Integrations\Registry\ConnectorRegistry;
+use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Sandbox\SandboxAdvertisingConnector;
 use App\Domains\Integrations\ValueObjects\HealthResult;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -21,7 +21,7 @@ final class ConnectorContractTest extends TestCase
     /** @return array<string, array{0: AdvertisingConnector}> */
     public static function connectors(): array
     {
-        $registry = new ConnectorRegistry(includeSandbox: true);
+        $registry = new AdvertisingConnectorRegistry(includeSandbox: true);
 
         return array_map(fn (AdvertisingConnector $c) => [$c], $registry->all());
     }

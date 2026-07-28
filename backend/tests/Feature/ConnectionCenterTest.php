@@ -8,7 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Connectors\ConnectionCenterService;
-use App\Domains\Integrations\Connectors\ConnectorRegistry;
+use App\Domains\Integrations\Connectors\ConnectorCapabilityRegistry;
 use App\Domains\Integrations\Connectors\Contracts\Connector;
 use App\Domains\Integrations\Connectors\Enums\Capability;
 use App\Domains\Integrations\Connectors\Enums\ConnectionState;
@@ -117,7 +117,7 @@ final class ConnectionCenterTest extends TestCase
 
     public function test_every_registered_provider_resolves_to_a_connector_with_declared_capabilities(): void
     {
-        $registry = app(ConnectorRegistry::class);
+        $registry = app(ConnectorCapabilityRegistry::class);
 
         // The full provider set required for the Connection Center.
         $expected = [

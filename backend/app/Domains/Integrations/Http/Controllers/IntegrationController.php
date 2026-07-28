@@ -7,7 +7,7 @@ namespace App\Domains\Integrations\Http\Controllers;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\Integration;
-use App\Domains\Integrations\Registry\ConnectorRegistry;
+use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -15,7 +15,7 @@ use Illuminate\Http\Request;
 
 final class IntegrationController extends Controller
 {
-    public function __construct(private readonly ConnectorRegistry $registry) {}
+    public function __construct(private readonly AdvertisingConnectorRegistry $registry) {}
 
     /** List every advertising connector with its live status and this tenant's connection (if any). */
     public function index(Request $request): JsonResponse

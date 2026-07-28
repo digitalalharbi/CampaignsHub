@@ -13,10 +13,10 @@ use InvalidArgumentException;
  * dedicated connector class (e.g. the Sandbox) or defaults to a config-driven {@see NullConnector}
  * carrying that provider's declared label + capabilities. Instances are built once and cached.
  *
- * This is additive to (and namespaced apart from) the legacy advertising ConnectorRegistry — it does
+ * This is additive to (and namespaced apart from) the legacy AdvertisingConnectorRegistry — it does
  * not replace it.
  */
-final class ConnectorRegistry
+final class ConnectorCapabilityRegistry
 {
     /** @var array<string, Connector>|null */
     private ?array $connectors = null;
