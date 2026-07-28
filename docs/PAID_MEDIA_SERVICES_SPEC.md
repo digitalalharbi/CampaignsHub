@@ -1,5 +1,19 @@
 # Paid-Media Services — selector + dynamic request form (engine-driven)
 
+## ⚑ v2 (SUPERSEDES the "click استعرض الخدمات first" flow below) — services visible in the FIRST viewport
+The visitor must understand and pick services **without first clicking away**. Redesign the homepage Hero as **two columns** (do NOT regress the existing visual polish, reference-inspired, RTL/LTR, light/dark, mobile-balanced, page not made longer):
+- **Main column**: value proposition + Product Preview. Headline stays «كل حملاتك الإعلانية المدفوعة في مكان واحد». New sub-desc: «أدر حملاتك بنفسك، أو اختر خدمة متخصصة في الإدارة والتحسين والتتبع والتحليل والتقارير، وتابع طلبك وتنفيذه من منصة واحدة.»
+- **Side card «كيف تريد استخدام CampaignsHub؟»** with 4 usage options: أدير حملاتي بنفسي · أدير حملات عدة عملاء · أحتاج خدمات إعلانية · أحتاج حملة مؤثرين أو UGC. Selecting **«أحتاج خدمات إعلانية»** reveals the services **inline inside the same card** (no navigation yet).
+- **Inline services (in first viewport)**: 8 category chips / compact tabs — إدارة الحملات · التحسين والأداء · التدقيق والتحليل · التتبع والقياس · التكاملات · التقارير · الاستراتيجية · الاستشارات. Under them **6–8 popular services only** (e.g. إطلاق حملة جديدة، إدارة حملات قائمة، تحسين الأداء، تدقيق الحساب الإعلاني، ربط البكسل والتتبع، إعداد GA4 وGTM، تحليل الحملات، إنشاء تقرير احترافي) as small cards (icon + name + very short desc + select). Clicking a category swaps the shown services live. Multi-select with selected chips + remove + clear-all; show «الخدمات المختارة: N»; primary button «أكمل تفاصيل طلبك» → `/requests/new?module=paid-media&services=<selected-keys>` (all selections carried, never re-picked).
+- **«عرض جميع الخدمات»** opens an in-page **Drawer/Modal** (not a long page, not dozens dumped in the hero): search + category filter + multi-select + service description + custom request.
+- **Categories & services come from the Taxonomy engine** (`request.paid_service`), never hardcoded React arrays; authorized users manage (add/edit/translate/reorder/enable-disable/move-category/custom-fields/price) via Settings→Taxonomies, and new services appear on the homepage + intake with **no code change / no rebuild**.
+- Acceptance (v2): paid-media services visible immediately · categories clear · 6–8 popular in first viewport · multi-select works · selections persist to intake (no duplicate selection step) · dynamic fields work · all taxonomy-managed · no hardcoded arrays · no dead buttons · desktop/mobile balanced · RTL/LTR · light/dark · Chromium/Firefox/WebKit.
+
+The category→service key lists, `metadata.needs`, persistence, and dynamic-field rules below still apply unchanged.
+
+---
+
+
 Homepage journey #3 = «أحتاج خدمات إعلانية» / "I need paid-media services", desc «اختر من خدمات الإدارة،
 التحسين، التحليل، التتبع، التكاملات، التقارير والاستشارات.», button «استعرض الخدمات» → `/requests/new?module=paid-media`.
 It opens a structured selector ("ما الخدمة التي تحتاجها؟"), NOT a generic form. All services come from the central
