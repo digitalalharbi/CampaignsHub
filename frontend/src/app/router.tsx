@@ -49,6 +49,12 @@ import { ClientsPortfolioPage } from '@/features/clients/ClientsPortfolioPage'
 import { ClientCommandCenterPage } from '@/features/clients/ClientCommandCenterPage'
 import { AlertsPage } from '@/features/alerts/AlertsPage'
 import { DevStatusPage } from '@/features/dev/DevStatusPage'
+import { billingRoutes } from '@/features/billing/billingRoutes'
+import { messagingRoutes } from '@/features/messaging/messagingRoutes'
+import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRoutes'
+import { brandingRoutes } from '@/features/branding/brandingRoutes'
+import { connectionsRoutes } from '@/features/connections/connectionsRoutes'
+import { driveRoutes } from '@/features/drive/driveRoutes'
 import { AppShell } from '@/layouts/AppShell'
 
 export const router = createBrowserRouter([
@@ -116,6 +122,13 @@ export const router = createBrowserRouter([
           { path: 'app/clients/:clientId', element: <ClientCommandCenterPage /> },
           // Alerts management (the alerts engine's operator surface).
           { path: 'app/alerts', element: <AlertsPage /> },
+          // Expansion internal surfaces (Billing, Messaging, Request Journey, Branding, Connections, Drive).
+          ...billingRoutes,
+          ...messagingRoutes,
+          ...requestJourneyRoutes,
+          ...brandingRoutes,
+          ...connectionsRoutes,
+          ...driveRoutes,
           { path: 'content', element: <PagePlaceholder title="Content" /> },
           { path: 'approvals', element: <PagePlaceholder title="Approvals" /> },
           { path: 'tracking', element: <PagePlaceholder title="Tracking" /> },

@@ -13,11 +13,12 @@ use App\Domains\Tenancy\Models\Tenant;
  */
 final class AccountEntitlements
 {
-    // Full operator (personal) menu.
-    private const PERSONAL_NAV = ['dashboard', 'clients', 'projects', 'requests', 'campaigns', 'analytics', 'reports', 'connections', 'alerts', 'team', 'settings'];
+    // Full operator (personal) menu = the internal Operations Console.
+    private const PERSONAL_NAV = ['dashboard', 'clients', 'projects', 'requests', 'campaigns', 'analytics', 'reports', 'connections', 'alerts', 'billing', 'messaging', 'branding', 'drive', 'subscriptions', 'team', 'settings'];
 
-    // Simplified self-serve (company) menu — no agency tools, other clients, public requests or platform settings.
-    private const COMPANY_NAV = ['dashboard', 'campaigns', 'analytics', 'reports', 'connections', 'alerts', 'settings'];
+    // Simplified self-serve (company) menu = the SaaS Workspace — no agency tools, other clients, public
+    // requests, messaging inbox, Drive, subscriptions admin, or platform settings.
+    private const COMPANY_NAV = ['dashboard', 'projects', 'campaigns', 'analytics', 'reports', 'connections', 'alerts', 'billing', 'branding', 'team', 'settings'];
 
     public function workspaceKind(Tenant $tenant): string
     {
