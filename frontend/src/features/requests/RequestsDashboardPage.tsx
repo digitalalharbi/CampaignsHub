@@ -4,10 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Columns3, Inbox, LayoutGrid, Search, Table as TableIcon } from 'lucide-react'
 import { ALLOWED_TRANSITIONS, changeRequestStatus, listRequests, type RequestFilters, type RequestRow } from './internalApi'
 import { STATUS_LABELS, priorityTone, statusTone } from './labels'
+import { SearchableSelect } from '@/components/forms'
+import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { useT, type TranslationKey } from '@/lib/i18n'
 
-const STATUSES = ['', 'new', 'under_review', 'waiting_client', 'qualified', 'approved', 'in_progress', 'completed', 'archived']
-const PRIORITIES = ['', 'critical', 'high', 'medium', 'low']
+// Board-column layout order (a request-workflow layout constant, not a select's option source — those now come
+// from the taxonomy engine). Terminal states (rejected/cancelled/archived) are intentionally not columns.
 const KANBAN_COLUMNS = ['new', 'under_review', 'waiting_client', 'qualified', 'approved', 'in_progress', 'completed']
 const VIEW_KEY = 'ch-requests-view'
 type View = 'table' | 'kanban' | 'cards'
@@ -19,6 +21,10 @@ export function RequestsDashboardPage() {
   const [search, setSearch] = useState('')
   const [view, setView] = useState<View>(() => (localStorage.getItem(VIEW_KEY) as View) || 'table')
   const query = useQuery({ queryKey: ['app', 'requests', filters], queryFn: () => listRequests(filters) })
+
+  // Filter option sets from the central engine — keys match the request state machine / priority validator.
+  const statusTax = useTaxonomyOptions('request.status')
+  const priorityTax = useTaxonomyOptions('request.priority')
 
   const set = (patch: Partial<RequestFilters>) => setFilters((f) => ({ ...f, ...patch, page: 1 }))
   const setViewPref = (v: View) => { setView(v); localStorage.setItem(VIEW_KEY, v) }
@@ -51,12 +57,28 @@ export function RequestsDashboardPage() {
           <Search size={16} className="pointer-events-none absolute inset-y-0 my-auto ms-3 text-text-muted" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('search')} className="h-10 w-56 rounded-lg border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500" />
         </form>
-        <select value={filters.status ?? ''} onChange={(e) => set({ status: e.target.value || undefined })} className="h-10 rounded-lg border border-border bg-surface px-3 text-sm">
-          {STATUSES.map((s) => <option key={s} value={s}>{s ? STATUS_LABELS[s] ?? s : t('all_statuses')}</option>)}
-        </select>
-        <select value={filters.priority ?? ''} onChange={(e) => set({ priority: e.target.value || undefined })} className="h-10 rounded-lg border border-border bg-surface px-3 text-sm">
-          {PRIORITIES.map((p) => <option key={p} value={p}>{p || t('all_priorities')}</option>)}
-        </select>
+        <div className="w-48">
+          <SearchableSelect
+            value={filters.status ?? null}
+            onChange={(v) => set({ status: v ?? undefined })}
+            options={statusTax.options}
+            loading={statusTax.isPending}
+            optionsError={statusTax.isError ? t('error_generic') : null}
+            onRetry={() => statusTax.refetch()}
+            placeholder={t('all_statuses')}
+          />
+        </div>
+        <div className="w-48">
+          <SearchableSelect
+            value={filters.priority ?? null}
+            onChange={(v) => set({ priority: v ?? undefined })}
+            options={priorityTax.options}
+            loading={priorityTax.isPending}
+            optionsError={priorityTax.isError ? t('error_generic') : null}
+            onRetry={() => priorityTax.refetch()}
+            placeholder={t('all_priorities')}
+          />
+        </div>
       </div>
 
       {query.isLoading ? (

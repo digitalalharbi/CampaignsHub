@@ -1,11 +1,11 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createCampaign, updateCampaign, type CampaignInput } from './api'
-import { objectiveLabel } from './labels'
-import { CAMPAIGN_OBJECTIVES, type UnifiedCampaign } from './types'
+import type { UnifiedCampaign } from './types'
+import { alertLabel, deriveKpi, funnelLabel, kpiLabel, templateLabel } from './objectiveKpi'
 import { listUsers } from '@/features/projects/api'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
@@ -14,11 +14,29 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { Textarea } from '@/components/ui/Textarea'
+import { CreatableSelect, MultiSelectField, SelectField } from '@/components/forms'
+import { createOptionFromDraft, flattenOptions, useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
+import { useAuth } from '@/stores/auth'
 
 const CURRENCIES = ['SAR', 'USD', 'AED', 'EGP', 'KWD', 'BHD', 'QAR']
+
+const CF_COPY = {
+  ar: {
+    platforms: 'المنصات', regions: 'المناطق', audiences: 'الجماهير', conversionEvents: 'أحداث التحويل',
+    creativeTypes: 'أنواع المحتوى الإبداعي', tags: 'الوسوم',
+    derivedTitle: 'مؤشرات مشتقة من الهدف', primaryKpi: 'المؤشر الأساسي', secondaryKpi: 'مؤشرات ثانوية',
+    funnel: 'مرحلة المسار', template: 'قالب التقرير', alerts: 'تنبيهات مقترحة',
+  },
+  en: {
+    platforms: 'Platforms', regions: 'Regions', audiences: 'Audiences', conversionEvents: 'Conversion events',
+    creativeTypes: 'Creative types', tags: 'Tags',
+    derivedTitle: 'KPIs derived from the objective', primaryKpi: 'Primary KPI', secondaryKpi: 'Secondary KPIs',
+    funnel: 'Funnel stage', template: 'Report template', alerts: 'Suggested alerts',
+  },
+} as const
 
 interface Props {
   open: boolean
@@ -30,7 +48,10 @@ interface Props {
 export function CampaignFormModal({ open, onClose, projectId, campaign }: Props) {
   const t = useT()
   const locale = useUi((s) => s.locale)
+  const c = CF_COPY[locale]
   const queryClient = useQueryClient()
+  const hasPermission = useAuth((s) => s.hasPermission)
+  const canCreate = hasPermission('options.create')
   const isEdit = Boolean(campaign)
 
   const schema = useMemo(
@@ -38,7 +59,6 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
       z
         .object({
           name: z.string().trim().min(1, t('error')).max(160),
-          objective: z.string(),
           total_budget: z
             .string()
             .refine((v) => v === '' || (!Number.isNaN(Number(v)) && Number(v) >= 0), t('error')),
@@ -60,7 +80,6 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
   const defaults: FormValues = useMemo(
     () => ({
       name: campaign?.name ?? '',
-      objective: campaign?.objective ?? 'other',
       total_budget: campaign?.total_budget != null ? String(campaign.total_budget) : '',
       budget_currency: campaign?.budget_currency ?? 'SAR',
       starts_on: campaign?.starts_on ?? '',
@@ -79,25 +98,67 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: defaults })
 
-  // Reset the form whenever the modal opens or the edited campaign changes.
+  // Taxonomy-driven controlled fields (kept out of RHF; they submit arrays / keys).
+  const [objective, setObjective] = useState<string | null>(null)
+  const [platforms, setPlatforms] = useState<string[]>([])
+  const [regions, setRegions] = useState<string[]>([])
+  const [audiences, setAudiences] = useState<string[]>([])
+  const [conversionEvents, setConversionEvents] = useState<string[]>([])
+  const [creativeTypes, setCreativeTypes] = useState<string[]>([])
+  const [tags, setTags] = useState<string[]>([])
+
+  const objectiveTax = useTaxonomyOptions('campaign.objective')
+  const platformsTax = useTaxonomyOptions('campaign.platforms')
+  const regionsTax = useTaxonomyOptions('campaign.regions')
+  const audiencesTax = useTaxonomyOptions('campaign.audiences')
+  const conversionEventsTax = useTaxonomyOptions('campaign.conversion_events')
+  const creativeTypesTax = useTaxonomyOptions('campaign.creative_types')
+  const tagsTax = useTaxonomyOptions('campaign.tags')
+
+  // Reset every field when the modal opens or the edited campaign changes. Only `regions` round-trips from the
+  // API (the read resource does not expose the other arrays yet), so the rest reset to empty.
   useEffect(() => {
-    if (open) reset(defaults)
-  }, [open, defaults, reset])
+    if (!open) return
+    reset(defaults)
+    setObjective(campaign?.objective ?? 'other')
+    setRegions(campaign?.regions ?? [])
+    setPlatforms([])
+    setAudiences([])
+    setConversionEvents([])
+    setCreativeTypes([])
+    setTags([])
+  }, [open, defaults, reset, campaign])
 
   const users = useQuery({ queryKey: ['users'], queryFn: () => listUsers(), enabled: open })
+
+  // Derive the KPI set / funnel / template / alerts from the selected objective's engine metadata.
+  const derived = useMemo(() => {
+    const row = flattenOptions(objectiveTax.data ?? []).find((o) => o.key === objective)
+    return deriveKpi(row?.metadata)
+  }, [objectiveTax.data, objective])
 
   const mutation = useMutation({
     mutationFn: (values: FormValues) => {
       const payload: CampaignInput = {
         name: values.name,
-        objective: values.objective,
+        objective: objective ?? undefined,
         total_budget: values.total_budget === '' ? null : Number(values.total_budget),
         budget_currency: values.budget_currency,
         starts_on: values.starts_on || null,
         ends_on: values.ends_on || null,
         audience: values.audience || null,
         owner_id: values.owner_id === '' ? null : Number(values.owner_id),
+        target_kpi: derived.primary
+          ? { primary: derived.primary, secondary: derived.secondary, funnel: derived.funnel, template: derived.template }
+          : null,
+        regions, // regions round-trips, so send it always (incl. empty to clear)
       }
+      // The read resource does not echo these arrays, so only send them when set — never clobber existing values.
+      if (platforms.length > 0) payload.platforms = platforms
+      if (audiences.length > 0) payload.audiences = audiences
+      if (conversionEvents.length > 0) payload.conversion_events = conversionEvents
+      if (creativeTypes.length > 0) payload.creative_types = creativeTypes
+      if (tags.length > 0) payload.tags = tags
       return isEdit ? updateCampaign(projectId, campaign!.id, payload) : createCampaign(projectId, payload)
     },
     onSuccess: () => {
@@ -106,7 +167,6 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
       onClose()
     },
     onError: (err) => {
-      // Surface server-side (422) validation errors on the matching fields.
       const apiError = toApiError(err)
       if (apiError.errors) {
         for (const [field, messages] of Object.entries(apiError.errors)) {
@@ -142,14 +202,56 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
           <Input id="campaign-name" {...register('name')} data-autofocus />
         </Field>
 
+        <SelectField
+          label={t('objective_field')}
+          value={objective}
+          onChange={setObjective}
+          options={objectiveTax.options}
+          loading={objectiveTax.isPending}
+          optionsError={objectiveTax.isError ? t('error') : null}
+          onRetry={() => objectiveTax.refetch()}
+          clearable={false}
+        />
+
+        {derived.primary && (
+          <div className="rounded-xl border border-border bg-surface-secondary p-3 text-xs">
+            <div className="mb-2 font-semibold text-text-secondary">{c.derivedTitle}</div>
+            <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div>
+                <dt className="text-text-muted">{c.primaryKpi}</dt>
+                <dd className="font-semibold text-brand-700">{kpiLabel(derived.primary, locale)}</dd>
+              </div>
+              {derived.secondary.length > 0 && (
+                <div>
+                  <dt className="text-text-muted">{c.secondaryKpi}</dt>
+                  <dd className="font-medium text-text-primary">{derived.secondary.map((k) => kpiLabel(k, locale)).join('، ')}</dd>
+                </div>
+              )}
+              {derived.funnel && (
+                <div>
+                  <dt className="text-text-muted">{c.funnel}</dt>
+                  <dd className="font-medium text-text-primary">{funnelLabel(derived.funnel, locale)}</dd>
+                </div>
+              )}
+              {derived.template && (
+                <div>
+                  <dt className="text-text-muted">{c.template}</dt>
+                  <dd className="font-medium text-text-primary">{templateLabel(derived.template, locale)}</dd>
+                </div>
+              )}
+            </dl>
+            {derived.alerts.length > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-text-muted">{c.alerts}:</span>
+                {derived.alerts.map((a) => (
+                  <span key={a} className="rounded-full bg-warning/15 px-2 py-0.5 font-medium text-warning">{alertLabel(a, locale)}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label={t('objective_field')} htmlFor="campaign-objective" error={errors.objective?.message}>
-            <Select
-              id="campaign-objective"
-              {...register('objective')}
-              options={CAMPAIGN_OBJECTIVES.map((o) => ({ value: o, label: objectiveLabel(o, locale) }))}
-            />
-          </Field>
           <Field label={t('owner_label')} htmlFor="campaign-owner">
             <Select
               id="campaign-owner"
@@ -158,30 +260,63 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
               options={(users.data ?? []).map((u) => ({ value: String(u.id), label: u.name }))}
             />
           </Field>
+          <Field label={t('currency_label')} htmlFor="campaign-currency" error={errors.budget_currency?.message}>
+            <Select id="campaign-currency" {...register('budget_currency')} options={CURRENCIES.map((cur) => ({ value: cur, label: cur }))} />
+          </Field>
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label={t('budget_label')} htmlFor="campaign-budget" error={errors.total_budget?.message}>
             <Input id="campaign-budget" type="number" min="0" step="0.01" {...register('total_budget')} />
           </Field>
-          <Field label={t('currency_label')} htmlFor="campaign-currency" error={errors.budget_currency?.message}>
-            <Select id="campaign-currency" {...register('budget_currency')} options={CURRENCIES.map((c) => ({ value: c, label: c }))} />
-          </Field>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label={t('start_date')} htmlFor="campaign-start" error={errors.starts_on?.message}>
             <Input id="campaign-start" type="date" {...register('starts_on')} />
           </Field>
-          <Field label={t('end_date')} htmlFor="campaign-end" error={errors.ends_on?.message}>
-            <Input id="campaign-end" type="date" {...register('ends_on')} />
-          </Field>
         </div>
+
+        <Field label={t('end_date')} htmlFor="campaign-end" error={errors.ends_on?.message}>
+          <Input id="campaign-end" type="date" {...register('ends_on')} />
+        </Field>
+
+        <TaxonomyMultiSelect label={c.platforms} defKey="campaign.platforms" value={platforms} onChange={setPlatforms} tax={platformsTax} canCreate={canCreate} errText={t('error')} />
+        <TaxonomyMultiSelect label={c.creativeTypes} defKey="campaign.creative_types" value={creativeTypes} onChange={setCreativeTypes} tax={creativeTypesTax} canCreate={canCreate} errText={t('error')} />
+        <TaxonomyMultiSelect label={c.regions} defKey="campaign.regions" value={regions} onChange={setRegions} tax={regionsTax} canCreate={canCreate} errText={t('error')} />
+        <TaxonomyMultiSelect label={c.audiences} defKey="campaign.audiences" value={audiences} onChange={setAudiences} tax={audiencesTax} canCreate={canCreate} errText={t('error')} />
+        <TaxonomyMultiSelect label={c.conversionEvents} defKey="campaign.conversion_events" value={conversionEvents} onChange={setConversionEvents} tax={conversionEventsTax} canCreate={canCreate} errText={t('error')} />
+        <TaxonomyMultiSelect label={c.tags} defKey="campaign.tags" value={tags} onChange={setTags} tax={tagsTax} canCreate={canCreate} errText={t('error')} />
 
         <Field label={t('audience_label')} htmlFor="campaign-audience">
           <Textarea id="campaign-audience" rows={3} {...register('audience')} />
         </Field>
       </form>
     </Modal>
+  )
+}
+
+/** A taxonomy-backed multi-select: creatable (drawer → createOption) when permitted, plain otherwise. */
+function TaxonomyMultiSelect({
+  label, defKey, value, onChange, tax, canCreate, errText,
+}: {
+  label: string
+  defKey: string
+  value: string[]
+  onChange: (v: string[]) => void
+  tax: ReturnType<typeof useTaxonomyOptions>
+  canCreate: boolean
+  errText: string
+}) {
+  const shared = {
+    label,
+    value,
+    onChange,
+    options: tax.options,
+    loading: tax.isPending,
+    optionsError: tax.isError ? errText : null,
+    onRetry: () => tax.refetch(),
+  }
+  return canCreate ? (
+    <CreatableSelect mode="multi" {...shared} onCreate={(draft) => createOptionFromDraft(defKey, draft)} />
+  ) : (
+    <MultiSelectField {...shared} />
   )
 }

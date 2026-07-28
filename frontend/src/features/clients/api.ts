@@ -37,6 +37,12 @@ export interface ClientClassification {
   timezone: string | null
   language: string | null
   week_start: string | null
+  /**
+   * Additive taxonomy-driven multi-selects. The classification PATCH accepts these arrays, but the read-back
+   * response does not echo them yet, so they are write-forward (optional on read).
+   */
+  tags?: string[] | null
+  enabled_services?: string[] | null
 }
 
 export interface ClientDetail {

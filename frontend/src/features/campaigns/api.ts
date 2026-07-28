@@ -34,6 +34,15 @@ export interface CampaignInput {
   ends_on?: string | null
   audience?: string | null
   owner_id?: number | null
+  /** Derived from the selected objective's metadata (primary/secondary KPIs, funnel, report template). */
+  target_kpi?: Record<string, unknown> | null
+  // Additive taxonomy-driven multi-selects (nullable jsonb columns; the backend validates these keys).
+  platforms?: string[]
+  regions?: string[]
+  audiences?: string[]
+  conversion_events?: string[]
+  creative_types?: string[]
+  tags?: string[]
 }
 
 export async function createCampaign(projectId: string, input: CampaignInput): Promise<UnifiedCampaign> {

@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Building2, LayoutGrid, Search, Table2, Users } from 'lucide-react'
 import { getTaxonomy, listClients, type ClientCard, type ClientFilters } from './api'
-import { CLIENT_STATUS_LABELS, INDUSTRY_LABELS, labelOf, SERVICE_LEVEL_LABELS } from './labels'
+import { CLIENT_STATUS_LABELS, INDUSTRY_LABELS, labelOf } from './labels'
+import { SearchableSelect } from '@/components/forms'
+import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 
@@ -38,8 +40,12 @@ export function ClientsPortfolioPage() {
   useEffect(() => { localStorage.setItem('clients_view', view) }, [view])
 
   const taxonomy = useQuery({ queryKey: ['app', 'clients', 'taxonomy'], queryFn: getTaxonomy, staleTime: 300_000 })
+  const statusTax = useTaxonomyOptions('client.status')
+  const serviceLevelTax = useTaxonomyOptions('client.service_level')
+  const industryTax = useTaxonomyOptions('client.industry')
   const query = useQuery({ queryKey: ['app', 'clients', filters], queryFn: () => listClients(filters) })
   const rows = query.data?.data ?? []
+  const ownerOptions = (taxonomy.data?.assignable_users ?? []).map((u) => ({ value: String(u.id), label: u.name }))
 
   const patch = (p: Partial<ClientFilters>) => setFilters((f) => ({ ...f, ...p, page: 1 }))
 
@@ -63,22 +69,48 @@ export function ClientsPortfolioPage() {
           <Search size={16} className="pointer-events-none absolute inset-y-0 my-auto ms-3 text-text-muted" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('search')} className="h-10 w-56 rounded-lg border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500" />
         </form>
-        <select aria-label={t('cc_filter_status')} onChange={(e) => patch({ status: e.target.value || undefined })} className="h-10 rounded-lg border border-border bg-surface px-3 text-sm">
-          <option value="">{t('cc_filter_status')}: {t('cc_filter_all')}</option>
-          {(taxonomy.data?.client_statuses ?? []).map((s) => <option key={s} value={s}>{labelOf(CLIENT_STATUS_LABELS, s, lang)}</option>)}
-        </select>
-        <select aria-label={t('cc_filter_service')} onChange={(e) => patch({ service_level: e.target.value || undefined })} className="h-10 rounded-lg border border-border bg-surface px-3 text-sm">
-          <option value="">{t('cc_filter_service')}: {t('cc_filter_all')}</option>
-          {(taxonomy.data?.service_levels ?? []).map((s) => <option key={s} value={s}>{labelOf(SERVICE_LEVEL_LABELS, s, lang)}</option>)}
-        </select>
-        <select aria-label={t('cc_filter_industry')} onChange={(e) => patch({ industry: e.target.value || undefined })} className="h-10 rounded-lg border border-border bg-surface px-3 text-sm">
-          <option value="">{t('cc_filter_industry')}: {t('cc_filter_all')}</option>
-          {(taxonomy.data?.industries ?? []).map((s) => <option key={s} value={s}>{labelOf(INDUSTRY_LABELS, s, lang)}</option>)}
-        </select>
-        <select aria-label={t('cc_filter_owner')} onChange={(e) => patch({ owner_id: e.target.value ? Number(e.target.value) : undefined })} className="h-10 rounded-lg border border-border bg-surface px-3 text-sm">
-          <option value="">{t('cc_filter_owner')}: {t('cc_filter_all')}</option>
-          {(taxonomy.data?.assignable_users ?? []).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
+        <div className="w-52">
+          <SearchableSelect
+            value={filters.status ?? null}
+            onChange={(v) => patch({ status: v ?? undefined })}
+            options={statusTax.options}
+            loading={statusTax.isPending}
+            optionsError={statusTax.isError ? t('error_generic') : null}
+            onRetry={() => statusTax.refetch()}
+            placeholder={`${t('cc_filter_status')}: ${t('cc_filter_all')}`}
+          />
+        </div>
+        <div className="w-52">
+          <SearchableSelect
+            value={filters.service_level ?? null}
+            onChange={(v) => patch({ service_level: v ?? undefined })}
+            options={serviceLevelTax.options}
+            loading={serviceLevelTax.isPending}
+            optionsError={serviceLevelTax.isError ? t('error_generic') : null}
+            onRetry={() => serviceLevelTax.refetch()}
+            placeholder={`${t('cc_filter_service')}: ${t('cc_filter_all')}`}
+          />
+        </div>
+        <div className="w-52">
+          <SearchableSelect
+            value={filters.industry ?? null}
+            onChange={(v) => patch({ industry: v ?? undefined })}
+            options={industryTax.options}
+            loading={industryTax.isPending}
+            optionsError={industryTax.isError ? t('error_generic') : null}
+            onRetry={() => industryTax.refetch()}
+            placeholder={`${t('cc_filter_industry')}: ${t('cc_filter_all')}`}
+          />
+        </div>
+        <div className="w-52">
+          <SearchableSelect
+            value={filters.owner_id != null ? String(filters.owner_id) : null}
+            onChange={(v) => patch({ owner_id: v ? Number(v) : undefined })}
+            options={ownerOptions}
+            loading={taxonomy.isPending}
+            placeholder={`${t('cc_filter_owner')}: ${t('cc_filter_all')}`}
+          />
+        </div>
         <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ needs_attention: e.target.checked || undefined })} /> {t('cc_needs_attention')}</label>
         <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ has_open_requests: e.target.checked || undefined })} /> {t('cc_has_open_requests')}</label>
         <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ has_active_campaigns: e.target.checked || undefined })} /> {t('cc_has_active_campaigns')}</label>
