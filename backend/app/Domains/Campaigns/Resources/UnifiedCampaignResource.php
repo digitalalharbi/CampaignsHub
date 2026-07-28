@@ -36,7 +36,13 @@ final class UnifiedCampaignResource extends JsonResource
             'owner_id' => $this->owner_id,
             'target_kpi' => $this->target_kpi,
             'audience' => $this->audience,
+            // Taxonomy-backed multi-select vocabularies (nullable jsonb) — exposed so the edit form round-trips.
             'regions' => $this->regions,
+            'platforms' => $this->platforms,
+            'audiences' => $this->audiences,
+            'conversion_events' => $this->conversion_events,
+            'creative_types' => $this->creative_types,
+            'tags' => $this->tags,
             'external_campaigns_count' => $this->whenCounted('externalCampaigns'),
             'created_at' => optional($this->created_at)->toIso8601String(),
         ];
