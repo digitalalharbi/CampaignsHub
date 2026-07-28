@@ -93,3 +93,15 @@ client_workspaces: tags/enabled_services) + accept them in validators; alignment
 live enum value. THEN re-run the frontend adoption (Requests/Clients/Campaigns) as a safe drop-in (same keys),
 objective→KPI from option metadata, multi-selects → the new jsonb columns. Option Manager UI (Settings→Taxonomies)
 also in flight (router+i18n+TaxonomyManagerPage). Do NOT re-run adoption until re-alignment lands.
+
+## TAX progress (feat/taxonomy-ux, HEAD ~4a58b1a)
+Done+committed: engine 4f4a42e/56a1a9d; controls cebbbb8; manager UI 16a9ba2; RE-ALIGNMENT 5181773 (engine==live
+enums, request tree, additive jsonb cols, no data loss); adoption 96d65b2 (Requests filters/Clients/Campaigns
+objective-KPIs+multi-selects); campaign resource round-trip 3836d88; Integrations redesign 2be3a2c; homepage
+redesign db64503. Dev DB reseeded+aligned (migrate:fresh --seed); owner has taxonomies/options perms; login 200;
+backend 397, frontend 156 vitest, build clean. Homepage + Integrations browser-verified.
+In flight: track 7 (Reports/Alerts/file-category option adoption → engine, keep system keys).
+Remaining: track 10 (forms UX: steppers/draft/validation/error-summary on long forms — new controls already
+adopted in client/campaign forms); tracks 13/14 (full E2E 3 browsers + RTL/LTR + light/dark + mobile regression;
+target 0 failed/flaky/skipped). Notes: public request intake stays enum (auth-gated taxonomy endpoint, correct);
+agents' login-500 were curl-without-SPA-origin (browser login works). Preview: scripts/dev-up.sh (:5173/:8000).
