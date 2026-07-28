@@ -5,7 +5,7 @@
 
 ## Repo / branch / commit
 - Repo: `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`.
-- **Current branch: `feat/taxonomy-ux`** · **Current HEAD: `a5d24e2` (unverified WIP spans aaa79da..a5d24e2)** (a WIP snapshot — see below).
+- **Current branch: `feat/taxonomy-ux`** · **Current HEAD: `d9e230d`** (T7 finalized & agent-verified; tree CLEAN). WIP that was snapshotted at `aaa79da` is now completed by both agents across `aaa79da..d9e230d`.
 - Frozen delivery (DO NOT touch tag or packages): tag `v1.1.0-expanded-final` = `e9b99f2`.
   Stable ZIP `~/Desktop/CampaignsHub-Final-Delivery.zip` sha256 `b8329cf4d6ba63ab77a571e75c2305f1e1e764921be5667f3149dbb42bdd708b`;
   Expanded ZIP `~/Desktop/CampaignsHub-Expanded-Delivery.zip` sha256 `e9db7fcd2ab9708118c6c0a9448c31416f4751c0ab295cfe9608c60bd322c259`.
@@ -13,12 +13,11 @@
 - Other worktrees (unrelated, leave alone): `CampaignsHub-C3` (feat/metrics-c3), `CampaignsHub-Preview` (detached), `MediaBying System` (main).
 
 ## Working tree status
-Clean at `aaa79da`, which contains an **UNVERIFIED agent WIP snapshot** (captured so nothing is lost):
-- Reports/Alerts option adoption (T7): `backend/database/seeders/TaxonomyEngineSeeder.php`, `backend/tests/Feature/TaxonomyAlignmentTest.php`, `frontend/src/features/alerts/AlertsPage.tsx` (+`.test.tsx`), `frontend/src/features/reports/ReportsPage.tsx` (+`.test.tsx`), `frontend/src/features/reports/api.ts`.
-- Homepage journey-decision section + handoff: `frontend/src/features/marketing/PublicHomePage.tsx`, `homeCopy.ts`, `frontend/src/features/auth/RegisterPage.tsx`, `frontend/src/features/requests/RequestIntakePage.tsx`.
-**Partly verified now:**
-- Homepage journey-decision section + register/request handoff (`a5fde925…`) — **agent finished & self-verified**: `npm run build` clean, `npx vitest run` **171/171 (39 files)**, +11 new tests (journey routes incl. query params, agency/self-managed register preset, `?service` request preselect). Browser-verified section placement + all 5 journey routes. Treat this slice as VERIFIED at HEAD, but re-confirm its 7 files weren't re-touched by a later concurrent commit.
-- Reports/Alerts option adoption (`ad6b006f…`) — **agent still running at handoff**; this slice remains UNVERIFIED. Reconcile its working-tree output and run build+vitest+`php artisan test` before trusting. Note: journey agent observed nested-button hydration console warnings originating from `AlertsPage`/`MultiSelectField` — fix during T7 verification.
+**Tree CLEAN at `d9e230d`.** Both background agents that were mid-flight during the handoff have finished and committed. Their combined WIP (once "unverified snapshot" at `aaa79da`) is now completed and agent-verified:
+- **Homepage journey-decision section + register/request handoff** (`a5fde925…`, in `aaa79da`+`a5d24e2`) — self-verified: `npm run build` clean, `npx vitest run` **171/171 (39 files)**, +11 new tests (journey routes incl. query params, agency/self-managed register preset, `?service` request preselect). Browser-verified: section placement + all 5 journey routes.
+- **Reports/Alerts/file-category option adoption — Track 7** (`ad6b006f…`, finalized in `d9e230d`) — self-verified: `pint` clean, `phpstan app/Domains/Taxonomy` no errors, **`php artisan test` → 398 passed** (+1 alignment test asserting engine keys == live `ReportController`/`AlertController` values), `npm run build` clean, `npx vitest run` **171 passed**. Live (owner@demo-agency.local): report builder type/audience + `/app/alerts` rule type/severity/channels all load from the engine; report POST 201 + alert-rule POST 201 (no 422). Added defs: `report.type`, `report.audience`, `alert.type`, `alert.severity`, `alert.channel` (all is_system, keys==live enums) + `file.category` (tenant-manageable, allows_custom). The nested-`<button>` hydration bug the journey agent flagged was **fixed** here (`forms/internals.tsx` chip-remove/clear are now `role="button"` spans; live DOM `hasNestedButtonInButton:false`).
+
+⚠️ Independent re-confirm still advisable on resume (fast): the "398/171 passed + build clean" figures are the **agents' own** runs. Before starting T15, run `cd frontend && npm run build && npx vitest run` and `cd ../backend && php artisan test` once yourself to certify at `d9e230d`. Expected: green. If green, mark T7 + journey CLOSED and skip straight to T15.
 
 ## PHASE = Taxonomy & UX (feat/taxonomy-ux, off v1.1.0-expanded-final). Close only when ALL tracks Implemented & Tested.
 ### Completed & committed (verified before the WIP snapshot)
@@ -29,11 +28,11 @@ Clean at `aaa79da`, which contains an **UNVERIFIED agent WIP snapshot** (capture
 - T8 Integrations redesign `2be3a2c` (browser-verified). T9 homepage redesign `db64503` (browser-verified).
 - T11 safe migration via `5181773` (drifted keys DEACTIVATED not deleted; tenant options untouched; no data loss).
 - T12 permissions/audit/tenant isolation (taxonomies.*/options.*) backend done; owner granted.
-Backend was **397 passing**, frontend **156 vitest**, build clean, login 200, before the WIP.
-### In WIP (unverified): T7 (reports/alerts adoption) + homepage journey-decision section.
+- T7 reports/alerts/file-category adoption `d9e230d` (agent-verified — see Working tree status). Journey-decision homepage section `aaa79da`+`a5d24e2` (agent-verified).
+Backend now **398 passing**, frontend **171 vitest**, build clean, live POST 201s (per agent runs at `d9e230d`).
 
 ## Exact Next Task (in order)
-1. **Verify + finalize the WIP** (`aaa79da`): `cd frontend && npm run build && npx vitest run`; `cd ../backend && php artisan test`; `php artisan db:seed --class=Database\\Seeders\\TaxonomyEngineSeeder`. Fix failures; commit a clean verified commit. Browser-verify: homepage journey section routes + `/app/alerts` rule form + report builder selects load from the engine (login owner@demo-agency.local/password).
+1. **Certify `d9e230d` (one fast independent pass), then close T7 + journey.** Run `cd frontend && npm run build && npx vitest run` and `cd ../backend && php artisan test` yourself. Expected all green (agents reported 398 backend / 171 vitest). If any fail, fix + commit. No re-implementation needed — both slices are DONE and committed. Then proceed directly to T15.
 2. **T15 Paid-media service vertical** (spec `docs/PAID_MEDIA_SERVICES_SPEC.md`, task #43) — implement FULLY, not spec-only:
    - Backend: seed `request.paid_service` hierarchical taxonomy (10 categories × ~90 services with `metadata.needs`) in `TaxonomyEngineSeeder`; add `services` jsonb to `external_requests`; carry selected services into quote + invoice line items; surface in client-portal request detail + internal requests dashboard + client record + project + quote + invoice + activity log; accept multiple services; do NOT change existing enums; tests (isolation, legacy preservation, no loss).
    - Frontend: homepage journey #3 → «أحتاج خدمات إعلانية»/«استعرض الخدمات» → `/requests/new?module=paid-media`; selector «ما الخدمة التي تحتاجها؟» (category tabs + search + multi-select + chips + clear-all + custom + create-when-permitted; engine-fed; not 90 in a list); dynamic form whose steps adapt to selected services via `metadata.needs` (merge shared questions once, per-service fields, no lost answers); review & submit. Managed under Settings→Taxonomies (existing manager covers request.paid_service). Keep service ≠ objective ≠ platform ≠ status.
