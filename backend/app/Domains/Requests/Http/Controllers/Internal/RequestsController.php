@@ -7,6 +7,7 @@ namespace App\Domains\Requests\Http\Controllers\Internal;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestConversion;
 use App\Domains\Requests\Services\RequestSla;
+use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -19,7 +20,11 @@ use Illuminate\Http\Request;
  */
 final class RequestsController
 {
-    public function __construct(private readonly TenantContext $tenant, private readonly RequestSla $sla) {}
+    public function __construct(
+        private readonly TenantContext $tenant,
+        private readonly RequestSla $sla,
+        private readonly PaidServiceCatalog $paidServices,
+    ) {}
 
     /** GET /api/v1/app/requests — filtered, sorted, paginated list for the current tenant. */
     public function index(Request $request): JsonResponse
@@ -72,8 +77,17 @@ final class RequestsController
         $files = $req->files()->whereNotNull('request_id')->get()
             ->map(fn ($f) => ['id' => $f->id, 'name' => $f->original_name, 'size' => $f->size, 'client_visible' => $f->is_client_visible]);
 
+        // Canonical selected services (request_services), resolved to display labels; fall back to the jsonb.
+        $serviceKeys = $req->requestServices()->orderBy('position')->pluck('service_key')->all();
+        if ($serviceKeys === []) {
+            $serviceKeys = array_values(array_filter((array) ($req->services ?? []), 'is_string'));
+        }
+
         return response()->json(['data' => array_merge($this->row($req), [
             'objective' => $req->objective,
+            'services' => $serviceKeys,
+            'services_resolved' => $this->paidServices->resolve($serviceKeys),
+            'service_details' => $req->service_details,
             'contact_email' => $req->contact_email,
             'contact_phone' => $req->contact_phone,
             'company_name' => $req->company_name,
@@ -133,6 +147,7 @@ final class RequestsController
             'service' => $r->type->name_en,
             'service_ar' => $r->type->name_ar,
             'module' => $r->module,
+            'services' => $r->services ?? [],
             'status' => $r->status->key,
             'status_label' => $r->status->name_en,
             'priority' => $r->priority,

@@ -21,8 +21,29 @@ export interface HomeCopy {
   decision: {
     title: string
     subtitle: string
-    cards: { title: string; desc: string; cta: string; to: string }[]
+    /** A journey either navigates (`to`) or reveals the inline paid-services selector (`action`). */
+    cards: { title: string; desc: string; cta: string; to?: string; action?: 'reveal-services' }[]
     accounts: { label: string; actions: { label: string; to: string; variant: 'primary' | 'secondary' }[] }
+  }
+  /** Strings for the inline paid-media services selector revealed inside the hero side card. */
+  services: {
+    hint: string
+    popular: string
+    selected: string
+    clearAll: string
+    continueCta: string
+    viewAll: string
+    drawerTitle: string
+    drawerSubtitle: string
+    search: string
+    allCategories: string
+    custom: string
+    customDesc: string
+    empty: string
+    close: string
+    errorTitle: string
+    errorDesc: string
+    retry: string
   }
   combined: {
     title: string
@@ -45,7 +66,7 @@ const ar: HomeCopy = {
   hero: {
     eyebrow: 'منصة إدارة الحملات الإعلانية المدفوعة',
     title: 'كل حملاتك الإعلانية المدفوعة في مكان واحد',
-    subtitle: 'أدر حملاتك بنفسك، نظّم حملات عملائك، أو أرسل طلب خدمة وتابع تنفيذه من منصة واحدة.',
+    subtitle: 'أدر حملاتك بنفسك، أو اختر خدمة متخصصة في الإدارة والتحسين والتتبع والتحليل والتقارير، وتابع طلبك وتنفيذه من منصة واحدة.',
     ctaStart: 'ابدأ إدارة حملاتك',
     ctaRequest: 'أرسل طلب خدمة',
     points: ['مركز موحّد لكل الحملات', 'عزل مستقل لكل عميل', 'مؤشرات حسب هدف الحملة', 'بيانات فعلية من الربط'],
@@ -95,7 +116,7 @@ const ar: HomeCopy = {
     cards: [
       { title: 'أدير حملاتي بنفسي', desc: 'للميديا باير، المستقل، العلامة التجارية، وفريق التسويق الداخلي.', cta: 'ابدأ إدارة حملاتك', to: '/register?journey=self-managed' },
       { title: 'أدير حملات عدة عملاء', desc: 'للوكالات والمستقلين الذين يديرون عملاء ومشاريع متعددة.', cta: 'أنشئ مساحة وكالة', to: '/register?journey=agency' },
-      { title: 'أحتاج خدمة إدارة حملات', desc: 'أرسل طلبك دون إنشاء حساب، وتابع العرض والدفع والتنفيذ من بوابة العميل.', cta: 'أرسل طلب خدمة', to: '/requests/new?service=paid-media' },
+      { title: 'أحتاج خدمات إعلانية', desc: 'اختر من خدمات الإدارة، التحسين، التحليل، التتبع، التكاملات، التقارير والاستشارات.', cta: 'استعرض الخدمات', action: 'reveal-services' },
       { title: 'أحتاج حملة مؤثرين أو UGC', desc: 'أرسل طلب حملة مؤثرين أو إنتاج محتوى UGC ومتابعة تفاصيلها.', cta: 'طلب مؤثرين وUGC', to: '/requests/new?service=influencer-marketing' },
     ],
     accounts: {
@@ -105,6 +126,25 @@ const ar: HomeCopy = {
         { label: 'دخول العميل', to: '/client/login', variant: 'secondary' },
       ],
     },
+  },
+  services: {
+    hint: 'اختر خدمة أو أكثر ثم أكمل تفاصيل طلبك.',
+    popular: 'الأكثر طلبًا',
+    selected: 'الخدمات المختارة',
+    clearAll: 'مسح الكل',
+    continueCta: 'أكمل تفاصيل طلبك',
+    viewAll: 'عرض جميع الخدمات',
+    drawerTitle: 'جميع الخدمات الإعلانية',
+    drawerSubtitle: 'ابحث أو صفِّ حسب الفئة، واختر ما يناسب طلبك.',
+    search: 'ابحث عن خدمة…',
+    allCategories: 'كل الفئات',
+    custom: 'طلب مخصص',
+    customDesc: 'لم تجد ما تبحث عنه؟ أرسل طلبًا مخصصًا وسنتواصل معك.',
+    empty: 'لا توجد خدمات متاحة حاليًا.',
+    close: 'تم',
+    errorTitle: 'تعذّر تحميل الخدمات',
+    errorDesc: 'حدث خطأ أثناء جلب قائمة الخدمات. أعد المحاولة.',
+    retry: 'إعادة المحاولة',
   },
   combined: {
     title: 'التكاملات والتقارير',
@@ -150,7 +190,7 @@ const en: HomeCopy = {
   hero: {
     eyebrow: 'Paid Advertising Management platform',
     title: 'All your paid ad campaigns in one place',
-    subtitle: "Run your own campaigns, manage your clients' campaigns, or submit a service request and track it — all from one platform.",
+    subtitle: 'Run your campaigns yourself, or pick a specialist service for management, optimization, tracking, analysis and reporting — and follow your request end to end from one platform.',
     ctaStart: 'Start managing campaigns',
     ctaRequest: 'Request a service',
     points: ['One hub for every campaign', 'Isolated per client', 'Objective-based KPIs', 'Real data from connections'],
@@ -200,7 +240,7 @@ const en: HomeCopy = {
     cards: [
       { title: 'I run my own campaigns', desc: 'For media buyers, freelancers, brands, and in-house marketing teams.', cta: 'Start managing campaigns', to: '/register?journey=self-managed' },
       { title: "I manage several clients' campaigns", desc: 'For agencies and freelancers running multiple clients and projects.', cta: 'Create an agency workspace', to: '/register?journey=agency' },
-      { title: 'I need campaign management as a service', desc: 'Submit your request without an account, and track the quote, payment and delivery from the client portal.', cta: 'Submit a service request', to: '/requests/new?service=paid-media' },
+      { title: 'I need paid-media services', desc: 'Pick from management, optimization, analysis, tracking, integrations, reporting and consulting services.', cta: 'Browse services', action: 'reveal-services' },
       { title: 'I need an influencer or UGC campaign', desc: 'Submit an influencer campaign or UGC content-production request and track its details.', cta: 'Request influencers & UGC', to: '/requests/new?service=influencer-marketing' },
     ],
     accounts: {
@@ -210,6 +250,25 @@ const en: HomeCopy = {
         { label: 'Client login', to: '/client/login', variant: 'secondary' },
       ],
     },
+  },
+  services: {
+    hint: 'Select one or more services, then continue your request.',
+    popular: 'Popular',
+    selected: 'Selected services',
+    clearAll: 'Clear all',
+    continueCta: 'Continue your request',
+    viewAll: 'View all services',
+    drawerTitle: 'All paid-media services',
+    drawerSubtitle: 'Search or filter by category, and pick what fits your request.',
+    search: 'Search services…',
+    allCategories: 'All categories',
+    custom: 'Custom request',
+    customDesc: "Didn't find what you need? Send a custom request and we'll reach out.",
+    empty: 'No services available right now.',
+    close: 'Done',
+    errorTitle: "Couldn't load services",
+    errorDesc: 'Something went wrong fetching the service list. Please try again.',
+    retry: 'Retry',
   },
   combined: {
     title: 'Integrations & reports',

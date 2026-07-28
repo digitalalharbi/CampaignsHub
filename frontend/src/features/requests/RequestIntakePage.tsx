@@ -7,6 +7,7 @@ import {
   type RequestSubmitPayload, type RequestType,
 } from './api'
 import { ContactVerification } from './ContactVerification'
+import { PaidMediaIntake } from './PaidMediaIntake'
 import { Button } from '@/components/ui/Button'
 import { EmailInput, FormField, TextInput, TextareaField } from '@/components/ui/form'
 import { controlClass } from '@/components/ui/Field'
@@ -103,7 +104,17 @@ function detailFields(module: string): { key: string; labelAr: string; labelEn: 
   }
 }
 
+/**
+ * Intake entry point. `?module=paid-media` activates the dynamic, service-driven paid-media intake;
+ * every other entry keeps the original anonymous flow unchanged.
+ */
 export function RequestIntakePage() {
+  const [params] = useSearchParams()
+  if (params.get('module') === 'paid-media') return <PaidMediaIntake />
+  return <DefaultIntake />
+}
+
+function DefaultIntake() {
   const { locale } = useUi()
   const ar = locale === 'ar'
   const dir = ar ? 'rtl' : 'ltr'

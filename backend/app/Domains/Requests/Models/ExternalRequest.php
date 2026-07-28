@@ -36,6 +36,8 @@ use Illuminate\Support\Carbon;
  * @property bool $is_external
  * @property bool $is_demo
  * @property array<string,mixed>|null $metadata
+ * @property list<string>|null $services
+ * @property array<string,mixed>|null $service_details
  * @property int|null $assigned_to
  * @property Carbon|null $submitted_at
  * @property Carbon|null $sla_due_at
@@ -74,6 +76,8 @@ class ExternalRequest extends Model
         'is_external' => 'bool',
         'is_demo' => 'bool',
         'metadata' => 'array',
+        'services' => 'array',
+        'service_details' => 'array',
     ];
 
     public function type(): BelongsTo
@@ -113,5 +117,16 @@ class ExternalRequest extends Model
     public function tokens(): HasMany
     {
         return $this->hasMany(RequestAccessToken::class, 'request_id');
+    }
+
+    /**
+     * The canonical selected paid-media services (source of truth for quote/invoice line items). The `services`
+     * jsonb column is a denormalized mirror of these rows' service_key values.
+     *
+     * @return HasMany<RequestService, $this>
+     */
+    public function requestServices(): HasMany
+    {
+        return $this->hasMany(RequestService::class, 'request_id')->orderBy('position');
     }
 }

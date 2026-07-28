@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Domains\Reports\Http\Controllers\PublicReportController;
 use App\Domains\Reports\Http\Controllers\ReportDownloadController;
 use App\Domains\Reports\Http\Controllers\ReportPrintController;
+use App\Domains\Taxonomy\Http\Controllers\PublicPaidServiceController;
+use App\Http\Controllers\Dev\DevStatusController;
 use App\Http\Controllers\HealthController;
 use App\Support\ApiResponse;
 use Illuminate\Support\Facades\Route;
@@ -23,7 +25,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
 
     // DEV-only live environment status (hard-blocked in production; no secrets exposed).
     if (! app()->environment('production')) {
-        Route::get('/dev/status', [\App\Http\Controllers\Dev\DevStatusController::class, 'show'])->name('dev.status');
+        Route::get('/dev/status', [DevStatusController::class, 'show'])->name('dev.status');
     }
 
     // Public, token-gated, expiring report download (the shareable secure link).
@@ -51,6 +53,12 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         'support_email' => config('brand.support_email'),
         'features' => config('brand.features'),
     ], 'Brand identity.'))->name('brand');
+
+    // PUBLIC, unauthenticated paid-media service catalog for the anonymous marketing homepage + intake.
+    // Serves ONLY platform-scope, active, is_public `request.paid_service` options (no tenant data, fail-closed).
+    // Rate-limited; ETag + Cache-Control set inside the controller.
+    Route::get('/public/catalog/paid-media-services', [PublicPaidServiceController::class, 'index'])
+        ->name('public.catalog.paid-media-services')->middleware('throttle:60,1');
 
     // Domain route files are included here as the platform grows.
     require __DIR__.'/api/identity.php';

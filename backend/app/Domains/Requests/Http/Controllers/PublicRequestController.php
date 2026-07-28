@@ -15,6 +15,7 @@ use App\Domains\Requests\Services\ClientNotifier;
 use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestIntake;
+use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -34,6 +35,7 @@ final class PublicRequestController
         private readonly PortalTenantResolver $portal,
         private readonly ContactVerificationService $verification,
         private readonly ClientNotifier $notifier,
+        private readonly PaidServiceCatalog $paidServices,
     ) {}
 
     /** GET /api/v1/requests/meta — public catalog for the intake form (active service types). */
@@ -68,12 +70,30 @@ final class PublicRequestController
             'priority' => ['nullable', Rule::in(['critical', 'high', 'medium', 'low'])],
             'start_date' => ['nullable', 'date'],
             'due_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            // Selected paid-media services (request.paid_service option keys). Optional: legacy/simple requests
+            // carry none. Custom keys are allowed because the definition allows_custom_options — so we validate
+            // shape only (array of non-empty strings), never a hard whitelist that would 422 a valid custom key.
+            'services' => ['nullable', 'array'],
+            'services.*' => ['string', 'max:128'],
+            'service_details' => ['nullable', 'array'], // optional per-service answers, keyed by service
             'metadata' => ['nullable', 'array'],
             'upload_token' => ['nullable', 'string'],
             // Proof that BOTH the phone and the email were verified (OTP) before submitting.
             'phone_verification_id' => ['required', 'string'],
             'email_verification_id' => ['required', 'string'],
         ]);
+
+        // Server-side re-validation of the selected services — NEVER trust the browser's query params. Every
+        // submitted key must be an active, PUBLIC option of request.paid_service; forged/unknown/inactive/
+        // private keys are rejected (422). An empty selection is allowed (legacy/simple requests).
+        $serviceMap = $this->paidServices->publicServiceMap();
+        foreach (($data['services'] ?? []) as $i => $key) {
+            if (! is_string($key) || ! array_key_exists($key, $serviceMap)) {
+                throw ValidationException::withMessages([
+                    "services.{$i}" => 'Unknown or unavailable service.',
+                ]);
+            }
+        }
 
         // A final request is never accepted without a verified means of contact (phone + email).
         $phoneOk = $this->verification->consumeVerified($data['phone_verification_id'], $data['contact_phone']);
@@ -142,6 +162,7 @@ final class PublicRequestController
                 'reference' => $req->reference,
                 'type' => $req->type->name_en,
                 'type_ar' => $req->type->name_ar,
+                'services' => $this->paidServices->resolve($this->selectedServiceKeys($req)),
                 'status' => $req->status->is_client_visible ? $req->status->key : 'in_progress',
                 'status_label' => $req->status->is_client_visible ? $req->status->name_en : 'In progress',
                 'submitted_at' => optional($req->submitted_at)->toIso8601String(),
@@ -200,6 +221,21 @@ final class PublicRequestController
 
         return Storage::disk($record->disk)
             ->download($record->path, $record->original_name);
+    }
+
+    /**
+     * The request's selected paid-media service keys — canonical request_services first, jsonb mirror fallback.
+     *
+     * @return list<string>
+     */
+    private function selectedServiceKeys(ExternalRequest $req): array
+    {
+        $keys = $req->requestServices()->orderBy('position')->pluck('service_key')->all();
+        if ($keys === []) {
+            $keys = array_values(array_filter((array) ($req->services ?? []), 'is_string'));
+        }
+
+        return $keys;
     }
 
     /** Resolve a request by a valid (non-revoked, non-expired) tracking token, or abort non-revealingly. */

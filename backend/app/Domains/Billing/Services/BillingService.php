@@ -10,6 +10,8 @@ use App\Domains\Billing\Models\PaymentAttempt;
 use App\Domains\Billing\Models\PaymentWebhookEvent;
 use App\Domains\Billing\Models\Quote;
 use App\Domains\Billing\Providers\PaymentProviderRegistry;
+use App\Domains\Requests\Models\ExternalRequest;
+use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Scopes\TenantScope;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -32,7 +34,10 @@ use RuntimeException;
  */
 final class BillingService
 {
-    public function __construct(private readonly PaymentProviderRegistry $providers) {}
+    public function __construct(
+        private readonly PaymentProviderRegistry $providers,
+        private readonly PaidServiceCatalog $paidServices,
+    ) {}
 
     /**
      * Create a draft quote. Totals are trusted from the caller (already validated at the boundary); the number
@@ -53,6 +58,7 @@ final class BillingService
             'tenant_id' => $data['tenant_id'] ?? null,
             'client_workspace_id' => $data['client_workspace_id'] ?? null,
             'request_id' => $data['request_id'] ?? null,
+            'external_request_id' => $data['external_request_id'] ?? null,
             'project_id' => $data['project_id'] ?? null,
             'number' => $data['number'] ?? $this->generateNumber('QUO'),
             'currency' => $data['currency'] ?? config('billing.currency', 'SAR'),
@@ -60,11 +66,63 @@ final class BillingService
             'tax' => $tax,
             'discount' => $discount,
             'total' => $total,
+            'line_items' => $this->normalizeLineItems($data['line_items'] ?? null),
             'status' => $data['status'] ?? 'draft',
             'valid_until' => $data['valid_until'] ?? null,
             'notes' => $data['notes'] ?? null,
             'created_by' => $data['created_by'] ?? null,
         ]);
+    }
+
+    /**
+     * Build a draft quote FROM an external request, carrying its selected paid-media services onto the quote as
+     * stable line items (key = request.paid_service option key, label from the taxonomy option, amount null so a
+     * human prices it later). Tenant + request linkage are taken from the request; other quote fields (totals,
+     * currency, client_workspace_id, notes, valid_until, created_by) may be supplied via $overrides.
+     *
+     * @param  array<string,mixed>  $overrides
+     */
+    public function quoteFromRequest(ExternalRequest $request, array $overrides = []): Quote
+    {
+        // Canonical source: the request_services rows. Fall back to the denormalized `services` jsonb mirror.
+        $serviceKeys = $request->requestServices()->orderBy('position')->pluck('service_key')->all();
+        if ($serviceKeys === []) {
+            $serviceKeys = array_values(array_filter((array) ($request->services ?? []), 'is_string'));
+        }
+
+        $lineItems = $this->lineItemsForServices($serviceKeys);
+
+        return $this->createQuote(array_merge([
+            'tenant_id' => $request->tenant_id,
+            'client_workspace_id' => $request->client_id,
+            'external_request_id' => $request->id, // ULID linkage (request_id column is uuid-typed)
+            'currency' => $request->currency ?? config('billing.currency', 'SAR'),
+            'line_items' => $lineItems,
+        ], $overrides));
+    }
+
+    /**
+     * Turn a list of request.paid_service option keys into stable quote/invoice line items. Amount is null
+     * (priced later); the key is preserved verbatim so pricing stays attached to a stable service key.
+     *
+     * @param  list<string>  $serviceKeys
+     * @return list<array{key:string, label:string, label_ar:string|null, amount:float|null}>
+     */
+    public function lineItemsForServices(array $serviceKeys): array
+    {
+        $resolved = $this->paidServices->resolve(array_values(array_filter($serviceKeys, 'is_string')));
+
+        $items = [];
+        foreach ($resolved as $service) {
+            $items[] = [
+                'key' => (string) $service['key'],
+                'label' => (string) ($service['label_en'] ?? $service['key']),
+                'label_ar' => isset($service['label_ar']) ? (string) $service['label_ar'] : null,
+                'amount' => null,
+            ];
+        }
+
+        return $items;
     }
 
     /**
@@ -95,6 +153,7 @@ final class BillingService
                 'tax' => $quote->tax,
                 'discount' => $quote->discount,
                 'total' => $quote->total,
+                'line_items' => $quote->line_items, // services carry from the quote onto the issued invoice
                 'amount_paid' => 0,
                 'status' => 'draft',
             ]);
@@ -346,6 +405,28 @@ final class BillingService
         $decoded = json_decode($rawBody, true);
 
         return is_array($decoded) ? $decoded : ['raw' => $rawBody];
+    }
+
+    /**
+     * Normalize a caller-supplied line_items value to a clean list of associative arrays, or null when none.
+     * Keeps the caller's shape (key/label/amount…) verbatim — this is display/pricing data, not validated here.
+     *
+     * @return list<array<string,mixed>>|null
+     */
+    private function normalizeLineItems(mixed $lineItems): ?array
+    {
+        if (! is_array($lineItems) || $lineItems === []) {
+            return null;
+        }
+
+        $items = [];
+        foreach ($lineItems as $item) {
+            if (is_array($item)) {
+                $items[] = $item;
+            }
+        }
+
+        return $items === [] ? null : $items;
     }
 
     private function generateNumber(string $prefix): string

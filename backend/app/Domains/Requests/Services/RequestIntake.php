@@ -8,6 +8,7 @@ use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestStatus;
 use App\Domains\Requests\Models\RequestType;
 use App\Domains\Requests\Models\RequestUploadSession;
+use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -21,6 +22,8 @@ use Illuminate\Support\Str;
  */
 final class RequestIntake
 {
+    public function __construct(private readonly PaidServiceCatalog $paidServices) {}
+
     /**
      * @param  array<string,mixed>  $data  validated payload
      * @return array{request: ExternalRequest, token: string}
@@ -49,6 +52,8 @@ final class RequestIntake
                 'currency' => $data['currency'] ?? 'SAR',
                 'start_date' => $data['start_date'] ?? null,
                 'due_date' => $data['due_date'] ?? null,
+                'services' => $this->normalizeServices($data['services'] ?? null),
+                'service_details' => $data['service_details'] ?? null,
                 'sla_started_at' => now(),
                 'sla_due_at' => now()->addHours((int) config('requests.default_sla_hours', 48)),
                 'submitted_at' => now(),
@@ -59,11 +64,17 @@ final class RequestIntake
             ]);
             $request->save();
 
+            // Canonical per-service rows (source of truth for quote/invoice line items). Keys were already
+            // server-validated in the controller against the public catalog; category_key + optional per-service
+            // details are attached here. The `services` jsonb column stays as a denormalized mirror.
+            $this->persistServices($request, $request->services ?? [], $data['service_details'] ?? []);
+
             $request->events()->create([
                 'type' => 'created',
                 'to_status' => 'new',
                 'is_client_visible' => true,
                 'message' => 'Request submitted',
+                'meta' => $request->services ? ['services' => $request->services] : null,
                 'created_at' => now(),
             ]);
 
@@ -87,6 +98,56 @@ final class RequestIntake
 
             return ['request' => $request->fresh(['type', 'status']), 'token' => $plain];
         });
+    }
+
+    /**
+     * Write the canonical request_services rows for the accepted service keys. category_key is resolved from the
+     * public catalog map (keys were validated upstream); per-service details come from service_details[key].
+     *
+     * @param  list<string>  $serviceKeys
+     * @param  array<string,mixed>  $serviceDetails
+     */
+    private function persistServices(ExternalRequest $request, array $serviceKeys, array $serviceDetails): void
+    {
+        if ($serviceKeys === []) {
+            return;
+        }
+
+        $categoryByKey = $this->paidServices->publicServiceMap();
+
+        $position = 0;
+        foreach ($serviceKeys as $key) {
+            $details = $serviceDetails[$key] ?? null;
+
+            $request->requestServices()->create([
+                'service_key' => $key,
+                'category_key' => $categoryByKey[$key] ?? null,
+                'details' => is_array($details) ? $details : null,
+                'position' => $position++,
+            ]);
+        }
+    }
+
+    /**
+     * Normalize submitted services to a de-duplicated list of non-empty string keys, or null when none. Never
+     * throws — an empty/invalid selection simply persists as null (legacy path stays valid).
+     *
+     * @return list<string>|null
+     */
+    private function normalizeServices(mixed $services): ?array
+    {
+        if (! is_array($services)) {
+            return null;
+        }
+
+        $keys = [];
+        foreach ($services as $service) {
+            if (is_string($service) && $service !== '') {
+                $keys[$service] = $service;
+            }
+        }
+
+        return $keys === [] ? null : array_values($keys);
     }
 
     private function reference(): string

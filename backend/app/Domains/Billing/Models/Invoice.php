@@ -19,7 +19,7 @@ final class Invoice extends Model
 
     protected $fillable = [
         'tenant_id', 'client_workspace_id', 'quote_id', 'number', 'currency',
-        'subtotal', 'tax', 'discount', 'total', 'amount_paid', 'status',
+        'subtotal', 'tax', 'discount', 'total', 'line_items', 'amount_paid', 'status',
         'due_date', 'issued_at', 'paid_at',
     ];
 
@@ -28,6 +28,7 @@ final class Invoice extends Model
         'tax' => 'decimal:2',
         'discount' => 'decimal:2',
         'total' => 'decimal:2',
+        'line_items' => 'array',
         'amount_paid' => 'decimal:2',
         'due_date' => 'date',
         'issued_at' => 'datetime',

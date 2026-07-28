@@ -199,6 +199,26 @@ final class TaxonomyAlignmentTest extends TestCase
             ->assertJsonPath('data.0.parent_key', fn ($v) => is_string($v) && $v !== '');
     }
 
+    public function test_paid_service_catalog_is_seeded_and_tenant_manageable(): void
+    {
+        $definition = TaxonomyDefinition::withoutGlobalScope(TenantScope::class)
+            ->where('key', 'request.paid_service')->whereNull('tenant_id')->firstOrFail();
+
+        // Hierarchical, multi-select, tenant-manageable (non-system + custom options allowed).
+        $this->assertFalse($definition->is_system);
+        $this->assertTrue($definition->allows_custom_options);
+        $this->assertSame('multi', $definition->field_type);
+
+        $options = TaxonomyOption::withoutGlobalScope(TenantScope::class)
+            ->where('taxonomy_definition_id', $definition->getKey())
+            ->whereNull('tenant_id')->where('is_active', true)->get();
+
+        // 10 categories (roots) + ~90 services (children), all published (is_public).
+        $this->assertSame(10, $options->whereNull('parent_option_id')->count());
+        $this->assertGreaterThanOrEqual(90, $options->whereNotNull('parent_option_id')->count());
+        $this->assertSame($options->count(), $options->where('is_public', true)->count());
+    }
+
     public function test_new_multiselect_columns_exist(): void
     {
         foreach (['platforms', 'audiences', 'conversion_events', 'creative_types', 'tags'] as $column) {

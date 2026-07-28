@@ -5,6 +5,7 @@ import {
   Moon, Plug, Sparkles, Sun, Target, UserCircle, Users, Wallet,
 } from 'lucide-react'
 import { HOME_COPY, type Locale } from './homeCopy'
+import { PaidServicesPanel } from './PaidServicesPanel'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
@@ -76,6 +77,7 @@ export function PublicHomePage() {
   const { status } = useAuth()
   const c = HOME_COPY[locale as Locale]
   const [tab, setTab] = useState('dashboard')
+  const [showServices, setShowServices] = useState(false)
   const authed = status === 'authenticated'
 
   // Marketing page owns its direction regardless of app chrome.
@@ -116,27 +118,87 @@ export function PublicHomePage() {
         </div>
       </header>
 
-      {/* Hero — headline + subtext + CTA beside a large product preview; all above the fold on 1440×900. */}
-      <section className="relative overflow-hidden border-b border-border">
-        <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:py-12">
-          {/* Value column */}
-          <div className="flex flex-col">
+      {/* Hero — two columns. MAIN (col 1): value proposition + the product preview. SIDE (col 2): the
+          «كيف تريد استخدام CampaignsHub؟» journey chooser, where «أحتاج خدمات إعلانية» reveals the paid-media
+          services inline. The journeys live ONLY here — never duplicated as another card grid below. On
+          mobile the side card stacks between the value text and the preview so services stay near the top. */}
+      <section id="usage" className="relative overflow-hidden border-b border-border">
+        <div className="mx-auto grid max-w-6xl items-start gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:py-12">
+          {/* Value proposition — col 1 / row 1 */}
+          <div className="order-1 flex flex-col lg:col-start-1 lg:row-start-1">
             <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[13px] font-semibold text-brand-700">{c.hero.eyebrow}</p>
-            <h1 className="mt-5 font-heading text-[32px] font-extrabold leading-[1.12] sm:text-5xl">{c.hero.title}</h1>
-            <p className="mt-4 max-w-xl text-lg leading-relaxed text-text-secondary">{c.hero.subtitle}</p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link to="/register"><Button size="lg">{c.hero.ctaStart}</Button></Link>
-              <Link to="/requests/new"><Button variant="secondary" size="lg">{c.hero.ctaRequest}</Button></Link>
-            </div>
-            <ul className="mt-6 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+            <h1 className="mt-5 font-heading text-[30px] font-extrabold leading-[1.12] sm:text-[44px]">{c.hero.title}</h1>
+            <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-text-secondary">{c.hero.subtitle}</p>
+            <ul className="mt-5 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
               {c.hero.points.map((p) => (
                 <li key={p} className="flex items-center gap-2 text-[15px] text-text-secondary"><CheckCircle2 size={17} className="shrink-0 text-brand-500" /> {p}</li>
               ))}
             </ul>
           </div>
 
-          {/* Large interactive product preview — the dominant visual. */}
-          <div id="preview" className="rounded-2xl border border-white/10 bg-gradient-to-br from-[var(--auth-panel-from)] via-[var(--auth-panel-via)] to-[var(--auth-panel-to)] p-5 shadow-[var(--shadow-large)]">
+          {/* Journey chooser side card — col 2, spanning both rows on desktop. */}
+          <div className="order-2 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+            <div className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)]">
+              <h2 className="font-heading text-lg font-extrabold text-text-primary">{c.decision.title}</h2>
+              <p className="mt-1 text-[13px] text-text-secondary">{c.decision.subtitle}</p>
+
+              <div className="mt-4 flex flex-col gap-2.5">
+                {c.decision.cards.map((card, i) => {
+                  const Icon = DECISION_ICONS[i] ?? LayoutDashboard
+                  const inner = (
+                    <>
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Icon size={18} /></span>
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="text-sm font-bold text-text-primary">{card.title}</span>
+                        <span className="mt-0.5 text-[12px] leading-snug text-text-secondary">{card.desc}</span>
+                      </span>
+                      <Arrow size={16} className="mt-0.5 shrink-0 text-text-muted" />
+                    </>
+                  )
+                  const rowBase =
+                    'flex w-full items-start gap-3 rounded-xl border p-3 text-start transition-colors'
+                  if (card.action === 'reveal-services') {
+                    const active = showServices
+                    return (
+                      <button
+                        key={card.title}
+                        type="button"
+                        onClick={() => setShowServices((v) => !v)}
+                        aria-expanded={active}
+                        className={`${rowBase} ${active ? 'border-brand-500 bg-brand-primary-soft' : 'border-border bg-surface hover:border-border-strong hover:bg-surface-hover'}`}
+                      >
+                        {inner}
+                      </button>
+                    )
+                  }
+                  return (
+                    <Link key={card.title} to={card.to!} className={`${rowBase} border-border bg-surface hover:border-border-strong hover:bg-surface-hover`}>
+                      {inner}
+                    </Link>
+                  )
+                })}
+              </div>
+
+              {/* Inline paid-media services — engine-fed, revealed within this same card. */}
+              {showServices && <PaidServicesPanel locale={locale as Locale} copy={c.services} />}
+
+              {/* Accounts bar — thin row for returning users. */}
+              <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-[13px] font-semibold text-text-secondary">{c.decision.accounts.label}</span>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  {c.decision.accounts.actions.map((a, i) => {
+                    const Icon = ACCOUNT_ICONS[i] ?? LogIn
+                    return (
+                      <Link key={a.to} to={a.to}><Button variant={a.variant} size="sm" className="w-full sm:w-auto"><Icon size={15} /> {a.label}</Button></Link>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Large interactive product preview — col 1 / row 2 (below the value text). */}
+          <div id="preview" className="order-3 rounded-2xl border border-white/10 bg-gradient-to-br from-[var(--auth-panel-from)] via-[var(--auth-panel-via)] to-[var(--auth-panel-to)] p-5 shadow-[var(--shadow-large)] lg:col-start-1 lg:row-start-2">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-bold text-white"><LayoutDashboard size={15} className="text-brand-300" /> CampaignsHub</span>
               <span className="flex items-center gap-1.5 text-[11px] text-white/50"><span className="h-1.5 w-1.5 rounded-full bg-warning" /> {c.hero.demoTag}</span>
@@ -153,42 +215,6 @@ export function PublicHomePage() {
               ))}
             </div>
             <div className="mt-4"><PreviewPanel tab={tab} locale={locale as Locale} /></div>
-          </div>
-        </div>
-      </section>
-
-      {/* Decision — "How do you want to use CampaignsHub?" journey chooser. Placed immediately after the
-          hero (within the first two screens). 4 balanced primary cards, each a direct navigation; a thin
-          accounts bar below. These journeys live here ONLY — never duplicated as another card grid. */}
-      <section id="usage" className="border-b border-border bg-surface-secondary">
-        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.decision.title}</h2>
-          <p className="mt-2 max-w-2xl text-text-secondary">{c.decision.subtitle}</p>
-          <div className="mt-7 grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {c.decision.cards.map((card, i) => {
-              const Icon = DECISION_ICONS[i] ?? LayoutDashboard
-              return (
-                <div key={card.title} className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Icon size={20} /></span>
-                  <h3 className="mt-4 text-base font-bold text-text-primary">{card.title}</h3>
-                  <p className="mt-1.5 flex-1 text-sm leading-relaxed text-text-secondary">{card.desc}</p>
-                  <Link to={card.to} className="mt-5"><Button size="sm" className="w-full justify-between">{card.cta}<Arrow size={16} /></Button></Link>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Accounts bar — thin row for returning users; secondary weight so it never competes with the cards. */}
-          <div className="mt-4 flex flex-col items-stretch gap-3 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm font-semibold text-text-secondary">{c.decision.accounts.label}</span>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              {c.decision.accounts.actions.map((a, i) => {
-                const Icon = ACCOUNT_ICONS[i] ?? LogIn
-                return (
-                  <Link key={a.to} to={a.to}><Button variant={a.variant} size="sm" className="w-full sm:w-auto"><Icon size={15} /> {a.label}</Button></Link>
-                )
-              })}
-            </div>
           </div>
         </div>
       </section>

@@ -29,6 +29,7 @@ use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestJourneyService;
 use App\Domains\Requests\Services\RequestUploadAttacher;
+use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -62,6 +63,7 @@ final class ClientPortalController
         private readonly PaymentProviderRegistry $providers,
         private readonly TenantContext $tenant,
         private readonly MetricsAggregator $metrics,
+        private readonly PaidServiceCatalog $paidServices,
     ) {}
 
     /** POST /client/login/start — send an OTP to the client's phone or email (portal login). */
@@ -179,6 +181,7 @@ final class ClientPortalController
             'reference' => $req->reference,
             'type' => $req->type->name_en,
             'type_ar' => $req->type->name_ar,
+            'services' => $this->paidServices->resolve($this->selectedServiceKeys($req)),
             'status' => $req->status->is_client_visible ? $req->status->key : 'in_progress',
             'status_label' => $req->status->is_client_visible ? $req->status->name_en : 'In progress',
             'progress' => $this->progress($req->status->key),
@@ -714,6 +717,22 @@ final class ClientPortalController
     }
 
     /** @return array<string,mixed> client-safe quote (no tenant/workspace/creator/internal notes). */
+    /**
+     * The request's selected paid-media service keys — canonical request_services first, jsonb mirror as a
+     * fallback.
+     *
+     * @return list<string>
+     */
+    private function selectedServiceKeys(ExternalRequest $req): array
+    {
+        $keys = $req->requestServices()->orderBy('position')->pluck('service_key')->all();
+        if ($keys === []) {
+            $keys = array_values(array_filter((array) ($req->services ?? []), 'is_string'));
+        }
+
+        return $keys;
+    }
+
     private function quoteShape(Quote $q): array
     {
         return [
@@ -724,6 +743,7 @@ final class ClientPortalController
             'tax' => (string) $q->tax,
             'discount' => (string) $q->discount,
             'total' => (string) $q->total,
+            'line_items' => $q->line_items ?? [],
             'status' => $q->status,
             'valid_until' => optional($q->valid_until)->toDateString(),
             'created_at' => optional($q->created_at)->toIso8601String(),
@@ -741,6 +761,7 @@ final class ClientPortalController
             'tax' => (string) $i->tax,
             'discount' => (string) $i->discount,
             'total' => (string) $i->total,
+            'line_items' => $i->line_items ?? [],
             'amount_paid' => (string) $i->amount_paid,
             'status' => $i->status,
             'payment_status' => $this->invoicePaymentStatus($i),

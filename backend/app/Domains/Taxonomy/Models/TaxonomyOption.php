@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $sort_order
  * @property bool $is_default
  * @property bool $is_active
+ * @property bool $is_public
  * @property bool $is_system
  * @property string|null $tenant_id
  * @property array<string,mixed>|null $metadata
@@ -33,13 +34,14 @@ final class TaxonomyOption extends Model
 
     protected $fillable = [
         'key', 'taxonomy_definition_id', 'label_ar', 'label_en', 'description', 'color', 'icon',
-        'parent_option_id', 'sort_order', 'is_default', 'is_active', 'is_system', 'tenant_id', 'metadata',
+        'parent_option_id', 'sort_order', 'is_default', 'is_active', 'is_public', 'is_system', 'tenant_id', 'metadata',
     ];
 
     protected $casts = [
         'sort_order' => 'int',
         'is_default' => 'bool',
         'is_active' => 'bool',
+        'is_public' => 'bool',
         'is_system' => 'bool',
         'metadata' => 'array',
     ];

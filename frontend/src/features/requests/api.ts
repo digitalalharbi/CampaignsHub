@@ -20,6 +20,10 @@ export interface RequestSubmitPayload {
   start_date?: string | null
   due_date?: string | null
   metadata?: Record<string, unknown>
+  /** Selected paid-media service keys (engine taxonomy keys) — dynamic intake only. */
+  services?: string[]
+  /** Dynamic paid-media answers keyed by field token (e.g. budget, site_url, events). */
+  service_details?: Record<string, unknown>
   upload_token?: string
   website?: string // honeypot — always empty
   phone_verification_id?: string

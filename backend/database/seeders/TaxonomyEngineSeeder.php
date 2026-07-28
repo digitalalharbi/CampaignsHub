@@ -66,6 +66,265 @@ final class TaxonomyEngineSeeder extends Seeder
         // The hierarchical Service → Category → Type tree (parent-linked), seeded from the canonical
         // RequestTaxonomy so the dependent selects have real data.
         $this->seedRequestTree($sortDefinition);
+
+        // The paid-media service vertical: the tenant-manageable `request.paid_service` hierarchical
+        // multi-select (10 categories → ~90 services) that the homepage + intake bind to.
+        $this->seedPaidServices($sortDefinition);
+    }
+
+    /**
+     * Seed `request.paid_service` — the hierarchical, multi-select, tenant-manageable (is_system=false,
+     * allows_custom_options=true) catalog the paid-media homepage/selector reads. Category options are roots;
+     * each service is a child (parent_option_id → its category). Every option is stamped is_public=true (the ONLY
+     * publicly-served set). Every service carries `metadata.required_field_rules` (the dynamic intake fields it
+     * requires) + `metadata.description_en`; the 8 homepage-popular services also carry `metadata.popular=true`
+     * (kept internal — never exposed publicly). Idempotent (updateOrCreate); re-running adds/removes nothing.
+     */
+    private function seedPaidServices(int &$sortDefinition): void
+    {
+        $definition = $this->upsertDefinition([
+            'key' => 'request.paid_service', 'module' => 'requests', 'field_type' => 'multi', 'is_system' => false,
+            'label_ar' => 'الخدمات الإعلانية المدفوعة', 'label_en' => 'Paid-media services',
+            'description' => 'Hierarchical, multi-select, tenant-manageable catalog (categories → services). '
+                .'Each service metadata carries `needs` (dynamic intake fields) and optional `popular`.',
+        ], $sortDefinition++);
+
+        $sort = 0;
+        $canonicalKeys = [];
+
+        foreach ($this->paidServiceCategories() as $category) {
+            $categoryOption = $this->upsertOption($definition, [
+                'key' => $category['key'],
+                'label_ar' => $category['label_ar'],
+                'label_en' => $category['label_en'],
+                'description' => $category['description'] ?? null,
+                'icon' => $category['icon'],
+                'color' => $category['color'],
+                'is_public' => true,
+                'metadata' => ['is_category' => true, 'required_field_rules' => $category['required_field_rules']],
+            ], $sort++, parentId: null, isSystem: false);
+            $canonicalKeys[] = $category['key'];
+
+            foreach ($category['services'] as $service) {
+                // `required_field_rules` drives the dynamic intake fields; `description_en` supplies the EN copy
+                // the public catalog needs alongside the Arabic `description` column. `popular` is kept internal
+                // (never exposed publicly — the homepage's featured strip is derived from sort_order).
+                $metadata = [
+                    'required_field_rules' => $category['required_field_rules'],
+                    'description_en' => $service['description_en'],
+                ];
+                if (in_array($service['key'], self::PAID_SERVICE_POPULAR, true)) {
+                    $metadata['popular'] = true;
+                }
+
+                // The single `custom_request` key is a protected SYSTEM option (its key is immutable) that the
+                // intake maps to a free-text field — it is not anonymous taxonomy creation.
+                $isSystem = $service['key'] === 'custom_request';
+
+                $this->upsertOption($definition, [
+                    'key' => $service['key'],
+                    'label_ar' => $service['label_ar'],
+                    'label_en' => $service['label_en'],
+                    'description' => $service['description'],
+                    'icon' => $service['icon'],
+                    'color' => $category['color'],
+                    'is_public' => true,
+                    'metadata' => $metadata,
+                ], $sort++, parentId: $categoryOption->getKey(), isSystem: $isSystem);
+                $canonicalKeys[] = $service['key'];
+            }
+        }
+
+        $this->reconcilePlatformOptions($definition, $canonicalKeys);
+    }
+
+    /**
+     * The 8 homepage-popular service keys (surfaced in the first viewport): new campaign, existing management,
+     * improve performance, ad-account audit, pixel/tracking, GA4, campaign analysis, professional report.
+     *
+     * @var list<string>
+     */
+    private const PAID_SERVICE_POPULAR = [
+        'new_campaign', 'existing_management', 'improve_performance', 'ad_account_audit',
+        'meta_pixel', 'ga4', 'campaign_performance_analysis', 'weekly_report',
+    ];
+
+    /**
+     * The 10 paid-media categories and their ~90 services (keys EXACTLY per PAID_MEDIA_SERVICES_SPEC.md).
+     * `required_field_rules` is defined once per category (the dynamic intake fields every service under it
+     * requires) and copied onto each service's metadata by seedPaidServices(). Each service carries both a
+     * Arabic `description` (column) and an English `description_en` (metadata) for the bilingual public catalog.
+     *
+     * @return list<array{key:string, label_ar:string, label_en:string, icon:string, color:string, description?:string, required_field_rules:list<string>, services:list<array{key:string, label_ar:string, label_en:string, description:string, description_en:string, icon:string}>}>
+     */
+    private function paidServiceCategories(): array
+    {
+        return [
+            [
+                'key' => 'launch_manage', 'label_ar' => 'إدارة وإطلاق الحملات', 'label_en' => 'Launch & Management',
+                'icon' => 'rocket', 'color' => '#0ea5e9',
+                'required_field_rules' => ['budget', 'objective', 'platforms', 'regions', 'creatives'],
+                'services' => [
+                    ['key' => 'new_campaign', 'label_ar' => 'إطلاق حملة جديدة', 'label_en' => 'Launch a new campaign', 'description' => 'إطلاق حملة إعلانية مدفوعة جديدة من التخطيط حتى التشغيل.', 'description_en' => 'Launch a new paid campaign from planning to go-live.', 'icon' => 'rocket'],
+                    ['key' => 'existing_management', 'label_ar' => 'إدارة حملات قائمة', 'label_en' => 'Manage existing campaigns', 'description' => 'تولّي إدارة حملات إعلانية قائمة وتشغيلها ومتابعتها.', 'description_en' => 'Take over and run your existing live campaigns.', 'icon' => 'settings'],
+                    ['key' => 'full_monthly_management', 'label_ar' => 'الإدارة الشهرية الكاملة', 'label_en' => 'Full monthly management', 'description' => 'إدارة شهرية شاملة لجميع الحملات والمنصات.', 'description_en' => 'Full monthly management across all campaigns and platforms.', 'icon' => 'calendar-check'],
+                    ['key' => 'multi_platform_management', 'label_ar' => 'إدارة متعددة المنصات', 'label_en' => 'Multi-platform management', 'description' => 'إدارة موحّدة للحملات عبر عدة منصات إعلانية.', 'description_en' => 'Unified campaign management across several ad platforms.', 'icon' => 'layers'],
+                    ['key' => 'ad_account_restructure', 'label_ar' => 'إعادة هيكلة الحساب الإعلاني', 'label_en' => 'Ad account restructure', 'description' => 'إعادة تنظيم بنية الحساب والحملات والمجموعات الإعلانية.', 'description_en' => 'Reorganize account, campaign and ad-set structure.', 'icon' => 'network'],
+                    ['key' => 'budget_pacing', 'label_ar' => 'ضبط وتيرة الإنفاق', 'label_en' => 'Budget pacing', 'description' => 'ضبط توزيع الميزانية ووتيرة الإنفاق خلال فترة الحملة.', 'description_en' => 'Control budget distribution and spend pacing over time.', 'icon' => 'gauge'],
+                    ['key' => 'seasonal_campaigns', 'label_ar' => 'الحملات الموسمية', 'label_en' => 'Seasonal campaigns', 'description' => 'تجهيز وإدارة حملات المواسم والعروض والمناسبات.', 'description_en' => 'Prepare and run seasonal, sale and event campaigns.', 'icon' => 'calendar-heart'],
+                    ['key' => 'product_launch_campaigns', 'label_ar' => 'حملات إطلاق المنتجات', 'label_en' => 'Product launch campaigns', 'description' => 'حملات مخصصة لإطلاق منتج أو خدمة جديدة.', 'description_en' => 'Dedicated campaigns for launching a new product.', 'icon' => 'package-plus'],
+                ],
+            ],
+            [
+                'key' => 'optimization', 'label_ar' => 'التحسين والأداء', 'label_en' => 'Optimization',
+                'icon' => 'trending-up', 'color' => '#16a34a',
+                'required_field_rules' => ['objective', 'platforms', 'current_performance'],
+                'services' => [
+                    ['key' => 'improve_performance', 'label_ar' => 'تحسين الأداء', 'label_en' => 'Improve performance', 'description' => 'تحسين أداء الحملات القائمة ورفع كفاءتها.', 'description_en' => 'Improve and raise the efficiency of live campaigns.', 'icon' => 'trending-up'],
+                    ['key' => 'reduce_cpa_cpl', 'label_ar' => 'خفض تكلفة الاكتساب/العميل', 'label_en' => 'Reduce CPA / CPL', 'description' => 'خفض تكلفة التحويل أو العميل المحتمل.', 'description_en' => 'Lower your cost per acquisition or per lead.', 'icon' => 'trending-down'],
+                    ['key' => 'improve_roas', 'label_ar' => 'تحسين العائد على الإنفاق', 'label_en' => 'Improve ROAS', 'description' => 'رفع العائد على الإنفاق الإعلاني.', 'description_en' => 'Increase return on ad spend.', 'icon' => 'badge-dollar-sign'],
+                    ['key' => 'raise_conversion_rate', 'label_ar' => 'رفع معدل التحويل', 'label_en' => 'Raise conversion rate', 'description' => 'تحسين معدل التحويل عبر الحملات والصفحات.', 'description_en' => 'Improve conversion rate across campaigns and pages.', 'icon' => 'percent'],
+                    ['key' => 'audience_targeting', 'label_ar' => 'تحسين استهداف الجمهور', 'label_en' => 'Audience targeting', 'description' => 'تحسين شرائح الجمهور والاستهداف.', 'description_en' => 'Refine audience segments and targeting.', 'icon' => 'users'],
+                    ['key' => 'budget_allocation', 'label_ar' => 'توزيع الميزانية', 'label_en' => 'Budget allocation', 'description' => 'إعادة توزيع الميزانية على الحملات الأعلى أداءً.', 'description_en' => 'Reallocate budget to the best-performing campaigns.', 'icon' => 'wallet'],
+                    ['key' => 'ad_creative_testing', 'label_ar' => 'اختبار الإبداعات', 'label_en' => 'Ad creative testing', 'description' => 'اختبار وتجربة الإبداعات الإعلانية.', 'description_en' => 'Test and experiment with ad creatives.', 'icon' => 'flask-conical'],
+                    ['key' => 'weak_results_analysis', 'label_ar' => 'تحليل النتائج الضعيفة', 'label_en' => 'Weak results analysis', 'description' => 'تشخيص أسباب ضعف نتائج الحملات ومعالجتها.', 'description_en' => 'Diagnose and fix underperforming campaigns.', 'icon' => 'search-x'],
+                    ['key' => 'sales_drop_recovery', 'label_ar' => 'معالجة تراجع المبيعات', 'label_en' => 'Sales drop recovery', 'description' => 'استعادة الأداء بعد تراجع المبيعات.', 'description_en' => 'Recover performance after a sales drop.', 'icon' => 'life-buoy'],
+                ],
+            ],
+            [
+                'key' => 'audit_analysis', 'label_ar' => 'التدقيق والتحليل', 'label_en' => 'Audit & Analysis',
+                'icon' => 'search-check', 'color' => '#6366f1',
+                'required_field_rules' => ['period', 'platforms', 'kpis', 'previous_reports'],
+                'services' => [
+                    ['key' => 'ad_account_audit', 'label_ar' => 'تدقيق الحساب الإعلاني', 'label_en' => 'Ad account audit', 'description' => 'تدقيق شامل للحساب الإعلاني وبنيته وأدائه.', 'description_en' => 'Full audit of the ad account, structure and performance.', 'icon' => 'search-check'],
+                    ['key' => 'campaign_performance_analysis', 'label_ar' => 'تحليل أداء الحملات', 'label_en' => 'Campaign performance analysis', 'description' => 'تحليل معمّق لأداء الحملات ومؤشراتها.', 'description_en' => 'In-depth analysis of campaign performance and KPIs.', 'icon' => 'bar-chart-4'],
+                    ['key' => 'customer_journey_analysis', 'label_ar' => 'تحليل رحلة العميل', 'label_en' => 'Customer journey analysis', 'description' => 'تحليل رحلة العميل عبر نقاط التواصل.', 'description_en' => 'Analyze the customer journey across touchpoints.', 'icon' => 'route'],
+                    ['key' => 'funnel_analysis', 'label_ar' => 'تحليل القمع', 'label_en' => 'Funnel analysis', 'description' => 'تحليل قمع التحويل واكتشاف نقاط التسرّب.', 'description_en' => 'Analyze the conversion funnel and find drop-offs.', 'icon' => 'filter'],
+                    ['key' => 'creative_analysis', 'label_ar' => 'تحليل الإبداعات', 'label_en' => 'Creative analysis', 'description' => 'تحليل أداء الإبداعات الإعلانية.', 'description_en' => 'Analyze ad creative performance.', 'icon' => 'image'],
+                    ['key' => 'platform_comparison', 'label_ar' => 'مقارنة المنصات', 'label_en' => 'Platform comparison', 'description' => 'مقارنة أداء المنصات الإعلانية.', 'description_en' => 'Compare performance across ad platforms.', 'icon' => 'git-compare'],
+                    ['key' => 'budget_spend_analysis', 'label_ar' => 'تحليل الإنفاق والميزانية', 'label_en' => 'Budget & spend analysis', 'description' => 'تحليل الإنفاق وكفاءة الميزانية.', 'description_en' => 'Analyze spend and budget efficiency.', 'icon' => 'coins'],
+                    ['key' => 'tracking_attribution_analysis', 'label_ar' => 'تحليل التتبع والإسناد', 'label_en' => 'Tracking & attribution analysis', 'description' => 'تحليل دقة التتبع ونماذج الإسناد.', 'description_en' => 'Analyze tracking accuracy and attribution models.', 'icon' => 'crosshair'],
+                    ['key' => 'paid_plan_review', 'label_ar' => 'مراجعة الخطة الإعلانية', 'label_en' => 'Paid plan review', 'description' => 'مراجعة الخطة الإعلانية المدفوعة وتوصياتها.', 'description_en' => 'Review the paid media plan and its recommendations.', 'icon' => 'clipboard-check'],
+                ],
+            ],
+            [
+                'key' => 'measurement_tracking', 'label_ar' => 'القياس والتتبع', 'label_en' => 'Measurement & Tracking',
+                'icon' => 'activity', 'color' => '#f59e0b',
+                'required_field_rules' => ['site_url', 'platform', 'gtm', 'events', 'store_or_app'],
+                'services' => [
+                    ['key' => 'meta_pixel', 'label_ar' => 'ربط بكسل ميتا', 'label_en' => 'Meta pixel', 'description' => 'إعداد وربط بكسل ميتا وأحداثه.', 'description_en' => 'Set up and connect the Meta pixel and its events.', 'icon' => 'circle-dot'],
+                    ['key' => 'tiktok_pixel', 'label_ar' => 'ربط بكسل تيك توك', 'label_en' => 'TikTok pixel', 'description' => 'إعداد وربط بكسل تيك توك وأحداثه.', 'description_en' => 'Set up and connect the TikTok pixel and its events.', 'icon' => 'circle-dot'],
+                    ['key' => 'snapchat_pixel', 'label_ar' => 'ربط بكسل سناب شات', 'label_en' => 'Snapchat pixel', 'description' => 'إعداد وربط بكسل سناب شات وأحداثه.', 'description_en' => 'Set up and connect the Snapchat pixel and its events.', 'icon' => 'circle-dot'],
+                    ['key' => 'google_ads_conversions', 'label_ar' => 'تحويلات إعلانات جوجل', 'label_en' => 'Google Ads conversions', 'description' => 'إعداد تتبع تحويلات إعلانات جوجل.', 'description_en' => 'Set up Google Ads conversion tracking.', 'icon' => 'goal'],
+                    ['key' => 'ga4', 'label_ar' => 'إعداد GA4', 'label_en' => 'GA4 setup', 'description' => 'إعداد Google Analytics 4 والأحداث.', 'description_en' => 'Set up Google Analytics 4 and events.', 'icon' => 'line-chart'],
+                    ['key' => 'gtm', 'label_ar' => 'إعداد Google Tag Manager', 'label_en' => 'GTM setup', 'description' => 'إعداد Google Tag Manager والوسوم.', 'description_en' => 'Set up Google Tag Manager and tags.', 'icon' => 'tags'],
+                    ['key' => 'conversion_api', 'label_ar' => 'واجهة التحويلات API', 'label_en' => 'Conversion API', 'description' => 'إعداد واجهة التحويلات من جهة الخادم (CAPI).', 'description_en' => 'Set up the server-side Conversions API (CAPI).', 'icon' => 'webhook'],
+                    ['key' => 'server_side_tracking', 'label_ar' => 'التتبع من جهة الخادم', 'label_en' => 'Server-side tracking', 'description' => 'تفعيل التتبع من جهة الخادم لدقة أعلى.', 'description_en' => 'Enable server-side tracking for higher accuracy.', 'icon' => 'server'],
+                    ['key' => 'store_events', 'label_ar' => 'أحداث المتجر', 'label_en' => 'Store events', 'description' => 'إعداد أحداث المتجر الإلكتروني (شراء، إضافة للسلة…).', 'description_en' => 'Set up e-commerce store events (purchase, add-to-cart…).', 'icon' => 'shopping-cart'],
+                    ['key' => 'app_events', 'label_ar' => 'أحداث التطبيق', 'label_en' => 'App events', 'description' => 'إعداد أحداث تطبيق الجوال وتتبعها.', 'description_en' => 'Set up and track mobile app events.', 'icon' => 'smartphone'],
+                    ['key' => 'event_quality_testing', 'label_ar' => 'اختبار جودة الأحداث', 'label_en' => 'Event quality testing', 'description' => 'اختبار جودة الأحداث ومطابقتها.', 'description_en' => 'Test event quality and matching.', 'icon' => 'shield-check'],
+                    ['key' => 'tracking_troubleshoot', 'label_ar' => 'إصلاح مشاكل التتبع', 'label_en' => 'Tracking troubleshoot', 'description' => 'تشخيص وإصلاح مشاكل التتبع والأحداث.', 'description_en' => 'Diagnose and fix tracking and event issues.', 'icon' => 'wrench'],
+                    ['key' => 'utm_setup', 'label_ar' => 'إعداد وسوم UTM', 'label_en' => 'UTM setup', 'description' => 'توحيد وإعداد وسوم UTM للحملات.', 'description_en' => 'Standardize and set up UTM tags for campaigns.', 'icon' => 'link'],
+                    ['key' => 'attribution_setup', 'label_ar' => 'إعداد الإسناد', 'label_en' => 'Attribution setup', 'description' => 'إعداد نموذج الإسناد ونوافذ التحويل.', 'description_en' => 'Set up the attribution model and conversion windows.', 'icon' => 'git-merge'],
+                ],
+            ],
+            [
+                'key' => 'integrations', 'label_ar' => 'التكاملات', 'label_en' => 'Integrations',
+                'icon' => 'plug', 'color' => '#14b8a6',
+                'required_field_rules' => ['platform', 'accounts', 'data_sources'],
+                'services' => [
+                    ['key' => 'ad_accounts', 'label_ar' => 'ربط الحسابات الإعلانية', 'label_en' => 'Ad accounts', 'description' => 'ربط الحسابات الإعلانية بالمنصة.', 'description_en' => 'Connect your ad accounts to the platform.', 'icon' => 'plug'],
+                    ['key' => 'ecommerce_store', 'label_ar' => 'ربط المتجر الإلكتروني', 'label_en' => 'E-commerce store', 'description' => 'ربط المتجر الإلكتروني ومزامنة بياناته.', 'description_en' => 'Connect your e-commerce store and sync its data.', 'icon' => 'store'],
+                    ['key' => 'salla', 'label_ar' => 'ربط سلة', 'label_en' => 'Salla', 'description' => 'ربط متجر سلة ومزامنة الطلبات والأحداث.', 'description_en' => 'Connect a Salla store and sync orders and events.', 'icon' => 'shopping-bag'],
+                    ['key' => 'zid', 'label_ar' => 'ربط زد', 'label_en' => 'Zid', 'description' => 'ربط متجر زد ومزامنة الطلبات والأحداث.', 'description_en' => 'Connect a Zid store and sync orders and events.', 'icon' => 'shopping-bag'],
+                    ['key' => 'shopify', 'label_ar' => 'ربط Shopify', 'label_en' => 'Shopify', 'description' => 'ربط متجر Shopify ومزامنة بياناته.', 'description_en' => 'Connect a Shopify store and sync its data.', 'icon' => 'shopping-bag'],
+                    ['key' => 'woocommerce', 'label_ar' => 'ربط WooCommerce', 'label_en' => 'WooCommerce', 'description' => 'ربط متجر WooCommerce ومزامنة بياناته.', 'description_en' => 'Connect a WooCommerce store and sync its data.', 'icon' => 'shopping-bag'],
+                    ['key' => 'crm', 'label_ar' => 'ربط نظام CRM', 'label_en' => 'CRM', 'description' => 'ربط نظام إدارة العملاء (CRM).', 'description_en' => 'Connect your CRM system.', 'icon' => 'contact'],
+                    ['key' => 'google_analytics', 'label_ar' => 'ربط Google Analytics', 'label_en' => 'Google Analytics', 'description' => 'ربط Google Analytics بمصادر البيانات.', 'description_en' => 'Connect Google Analytics to your data sources.', 'icon' => 'line-chart'],
+                    ['key' => 'google_drive', 'label_ar' => 'ربط Google Drive', 'label_en' => 'Google Drive', 'description' => 'ربط Google Drive للملفات والتقارير.', 'description_en' => 'Connect Google Drive for files and reports.', 'icon' => 'hard-drive'],
+                    ['key' => 'data_sources', 'label_ar' => 'ربط مصادر البيانات', 'label_en' => 'Data sources', 'description' => 'ربط مصادر بيانات إضافية للمنصة.', 'description_en' => 'Connect additional data sources to the platform.', 'icon' => 'database'],
+                    ['key' => 'unified_dashboard', 'label_ar' => 'لوحة موحدة', 'label_en' => 'Unified dashboard', 'description' => 'توحيد البيانات في لوحة واحدة.', 'description_en' => 'Unify your data into a single dashboard.', 'icon' => 'layout-dashboard'],
+                    ['key' => 'sync_error_handling', 'label_ar' => 'معالجة أخطاء المزامنة', 'label_en' => 'Sync error handling', 'description' => 'معالجة أخطاء المزامنة والتكاملات.', 'description_en' => 'Handle sync and integration errors.', 'icon' => 'refresh-cw-off'],
+                ],
+            ],
+            [
+                'key' => 'strategy_planning', 'label_ar' => 'الاستراتيجية والتخطيط', 'label_en' => 'Strategy & Planning',
+                'icon' => 'map', 'color' => '#8b5cf6',
+                'required_field_rules' => ['objective', 'budget', 'platforms', 'funnel'],
+                'services' => [
+                    ['key' => 'ad_strategy', 'label_ar' => 'استراتيجية إعلانية', 'label_en' => 'Ad strategy', 'description' => 'بناء استراتيجية إعلانية متكاملة.', 'description_en' => 'Build an integrated advertising strategy.', 'icon' => 'map'],
+                    ['key' => 'media_plan', 'label_ar' => 'خطة إعلامية', 'label_en' => 'Media plan', 'description' => 'إعداد خطة إعلامية وتوزيع القنوات.', 'description_en' => 'Prepare a media plan and channel mix.', 'icon' => 'calendar-range'],
+                    ['key' => 'budget_sizing', 'label_ar' => 'تحديد حجم الميزانية', 'label_en' => 'Budget sizing', 'description' => 'تحديد حجم الميزانية المناسب للأهداف.', 'description_en' => 'Size the right budget for your goals.', 'icon' => 'calculator'],
+                    ['key' => 'platform_selection', 'label_ar' => 'اختيار المنصات', 'label_en' => 'Platform selection', 'description' => 'اختيار المنصات الأنسب للأهداف والجمهور.', 'description_en' => 'Choose the best platforms for goals and audience.', 'icon' => 'list-checks'],
+                    ['key' => 'campaign_objectives', 'label_ar' => 'تحديد أهداف الحملات', 'label_en' => 'Campaign objectives', 'description' => 'تحديد أهداف الحملات ومواءمتها مع القمع.', 'description_en' => 'Define campaign objectives aligned to the funnel.', 'icon' => 'target'],
+                    ['key' => 'kpi_definition', 'label_ar' => 'تحديد مؤشرات الأداء', 'label_en' => 'KPI definition', 'description' => 'تحديد مؤشرات الأداء الرئيسية للقياس.', 'description_en' => 'Define the key performance indicators to measure.', 'icon' => 'gauge-circle'],
+                    ['key' => 'marketing_funnel', 'label_ar' => 'بناء القمع التسويقي', 'label_en' => 'Marketing funnel', 'description' => 'تصميم القمع التسويقي ومراحله.', 'description_en' => 'Design the marketing funnel and its stages.', 'icon' => 'filter'],
+                    ['key' => 'retargeting_plan', 'label_ar' => 'خطة إعادة الاستهداف', 'label_en' => 'Retargeting plan', 'description' => 'وضع خطة إعادة استهداف الجمهور.', 'description_en' => 'Build an audience retargeting plan.', 'icon' => 'repeat'],
+                    ['key' => 'acquisition_plan', 'label_ar' => 'خطة الاكتساب', 'label_en' => 'Acquisition plan', 'description' => 'وضع خطة اكتساب عملاء جدد.', 'description_en' => 'Build a new-customer acquisition plan.', 'icon' => 'user-plus'],
+                    ['key' => 'product_launch_plan', 'label_ar' => 'خطة إطلاق منتج', 'label_en' => 'Product launch plan', 'description' => 'خطة تسويقية لإطلاق منتج جديد.', 'description_en' => 'Marketing plan for a new product launch.', 'icon' => 'party-popper'],
+                ],
+            ],
+            [
+                'key' => 'reporting_dashboards', 'label_ar' => 'التقارير ولوحات البيانات', 'label_en' => 'Reporting & Dashboards',
+                'icon' => 'bar-chart-3', 'color' => '#3b82f6',
+                'required_field_rules' => ['period', 'audience', 'language', 'format', 'data_sources'],
+                'services' => [
+                    ['key' => 'weekly_report', 'label_ar' => 'تقرير أسبوعي', 'label_en' => 'Weekly report', 'description' => 'إعداد تقرير أداء أسبوعي احترافي.', 'description_en' => 'Produce a professional weekly performance report.', 'icon' => 'file-text'],
+                    ['key' => 'monthly_report', 'label_ar' => 'تقرير شهري', 'label_en' => 'Monthly report', 'description' => 'إعداد تقرير أداء شهري شامل.', 'description_en' => 'Produce a comprehensive monthly report.', 'icon' => 'file-text'],
+                    ['key' => 'executive_report', 'label_ar' => 'تقرير تنفيذي', 'label_en' => 'Executive report', 'description' => 'تقرير تنفيذي مختصر للإدارة.', 'description_en' => 'A concise executive report for leadership.', 'icon' => 'briefcase'],
+                    ['key' => 'live_dashboard', 'label_ar' => 'لوحة مباشرة', 'label_en' => 'Live dashboard', 'description' => 'لوحة بيانات مباشرة ومحدّثة.', 'description_en' => 'A live, continuously updated dashboard.', 'icon' => 'layout-dashboard'],
+                    ['key' => 'custom_report', 'label_ar' => 'تقرير مخصص', 'label_en' => 'Custom report', 'description' => 'تقرير مخصص حسب المتطلبات.', 'description_en' => 'A custom report tailored to requirements.', 'icon' => 'file-cog'],
+                    ['key' => 'platform_comparison_report', 'label_ar' => 'تقرير مقارنة المنصات', 'label_en' => 'Platform comparison report', 'description' => 'تقرير يقارن أداء المنصات.', 'description_en' => 'A report comparing platform performance.', 'icon' => 'git-compare'],
+                    ['key' => 'client_reports', 'label_ar' => 'تقارير العملاء', 'label_en' => 'Client reports', 'description' => 'تقارير دورية موجّهة للعملاء.', 'description_en' => 'Recurring client-facing reports.', 'icon' => 'users'],
+                    ['key' => 'report_scheduling', 'label_ar' => 'جدولة التقارير', 'label_en' => 'Report scheduling', 'description' => 'جدولة إرسال التقارير تلقائياً.', 'description_en' => 'Schedule automated report delivery.', 'icon' => 'calendar-clock'],
+                ],
+            ],
+            [
+                'key' => 'creatives', 'label_ar' => 'الإبداعات', 'label_en' => 'Creatives',
+                'icon' => 'palette', 'color' => '#ec4899',
+                'required_field_rules' => ['platforms', 'assets', 'period'],
+                'services' => [
+                    ['key' => 'creative_audit', 'label_ar' => 'تدقيق الإبداعات', 'label_en' => 'Creative audit', 'description' => 'تدقيق الإبداعات الإعلانية وجودتها.', 'description_en' => 'Audit ad creatives and their quality.', 'icon' => 'palette'],
+                    ['key' => 'ad_performance_analysis', 'label_ar' => 'تحليل أداء الإعلانات', 'label_en' => 'Ad performance analysis', 'description' => 'تحليل أداء الإعلانات على مستوى الإبداع.', 'description_en' => 'Analyze ad performance at the creative level.', 'icon' => 'bar-chart-4'],
+                    ['key' => 'top_creatives', 'label_ar' => 'أفضل الإبداعات', 'label_en' => 'Top creatives', 'description' => 'تحديد أفضل الإبداعات أداءً.', 'description_en' => 'Identify the best-performing creatives.', 'icon' => 'award'],
+                    ['key' => 'angles_hooks', 'label_ar' => 'الزوايا والخطافات', 'label_en' => 'Angles & hooks', 'description' => 'اقتراح زوايا وخطافات إعلانية.', 'description_en' => 'Suggest ad angles and hooks.', 'icon' => 'sparkles'],
+                    ['key' => 'creative_testing_plan', 'label_ar' => 'خطة اختبار الإبداعات', 'label_en' => 'Creative testing plan', 'description' => 'وضع خطة اختبار للإبداعات.', 'description_en' => 'Build a creative testing plan.', 'icon' => 'flask-conical'],
+                    ['key' => 'ugc_suggestions', 'label_ar' => 'اقتراحات محتوى UGC', 'label_en' => 'UGC suggestions', 'description' => 'اقتراح أفكار محتوى من صناعة المستخدم.', 'description_en' => 'Suggest user-generated content ideas.', 'icon' => 'video'],
+                    ['key' => 'creative_performance_link', 'label_ar' => 'ربط أداء الإبداع', 'label_en' => 'Creative performance link', 'description' => 'ربط أداء الحملة بالإبداعات المستخدمة.', 'description_en' => 'Link campaign performance to the creatives used.', 'icon' => 'link-2'],
+                    ['key' => 'creative_fatigue', 'label_ar' => 'إجهاد الإبداع', 'label_en' => 'Creative fatigue', 'description' => 'رصد إجهاد الإبداعات واقتراح التجديد.', 'description_en' => 'Detect creative fatigue and suggest refreshes.', 'icon' => 'battery-low'],
+                ],
+            ],
+            [
+                'key' => 'objective_services', 'label_ar' => 'خدمات حسب الهدف', 'label_en' => 'Objective services',
+                'icon' => 'target', 'color' => '#ef4444',
+                'required_field_rules' => ['objective', 'budget', 'platforms'],
+                'services' => [
+                    ['key' => 'sales', 'label_ar' => 'المبيعات', 'label_en' => 'Sales', 'description' => 'حملات موجّهة لزيادة المبيعات.', 'description_en' => 'Campaigns aimed at increasing sales.', 'icon' => 'shopping-bag'],
+                    ['key' => 'leads', 'label_ar' => 'العملاء المحتملون', 'label_en' => 'Leads', 'description' => 'حملات لجذب العملاء المحتملين.', 'description_en' => 'Campaigns to generate leads.', 'icon' => 'user-plus'],
+                    ['key' => 'awareness_reach', 'label_ar' => 'الوعي والوصول', 'label_en' => 'Awareness & reach', 'description' => 'حملات لزيادة الوعي والوصول.', 'description_en' => 'Campaigns to grow awareness and reach.', 'icon' => 'megaphone'],
+                    ['key' => 'traffic', 'label_ar' => 'الزيارات', 'label_en' => 'Traffic', 'description' => 'حملات لزيادة الزيارات للموقع أو المتجر.', 'description_en' => 'Campaigns to drive site or store traffic.', 'icon' => 'mouse-pointer-click'],
+                    ['key' => 'engagement', 'label_ar' => 'التفاعل', 'label_en' => 'Engagement', 'description' => 'حملات لزيادة التفاعل مع المحتوى.', 'description_en' => 'Campaigns to increase content engagement.', 'icon' => 'heart'],
+                    ['key' => 'app_installs', 'label_ar' => 'تثبيت التطبيق', 'label_en' => 'App installs', 'description' => 'حملات لزيادة تثبيت التطبيق.', 'description_en' => 'Campaigns to increase app installs.', 'icon' => 'smartphone'],
+                    ['key' => 'video_views', 'label_ar' => 'مشاهدات الفيديو', 'label_en' => 'Video views', 'description' => 'حملات لزيادة مشاهدات الفيديو.', 'description_en' => 'Campaigns to increase video views.', 'icon' => 'play'],
+                    ['key' => 'store_visits_events', 'label_ar' => 'زيارات المتجر والأحداث', 'label_en' => 'Store visits & events', 'description' => 'حملات لزيارات المتجر والفعاليات.', 'description_en' => 'Campaigns for store visits and events.', 'icon' => 'map-pin'],
+                    ['key' => 'retargeting', 'label_ar' => 'إعادة الاستهداف', 'label_en' => 'Retargeting', 'description' => 'حملات إعادة استهداف الزوّار والعملاء.', 'description_en' => 'Campaigns to retarget visitors and customers.', 'icon' => 'repeat'],
+                ],
+            ],
+            [
+                'key' => 'consulting_training', 'label_ar' => 'الاستشارات والتدريب', 'label_en' => 'Consulting & Training',
+                'icon' => 'graduation-cap', 'color' => '#f97316',
+                'required_field_rules' => ['topic', 'challenges', 'schedule', 'files'],
+                'services' => [
+                    ['key' => 'media_buying_consult', 'label_ar' => 'استشارة شراء إعلامي', 'label_en' => 'Media buying consult', 'description' => 'جلسة استشارية في الشراء الإعلامي.', 'description_en' => 'A consulting session on media buying.', 'icon' => 'message-circle'],
+                    ['key' => 'performance_review_session', 'label_ar' => 'جلسة مراجعة الأداء', 'label_en' => 'Performance review session', 'description' => 'جلسة لمراجعة الأداء ووضع التوصيات.', 'description_en' => 'A session to review performance and recommend actions.', 'icon' => 'clipboard-check'],
+                    ['key' => 'platform_selection_consult', 'label_ar' => 'استشارة اختيار المنصات', 'label_en' => 'Platform selection consult', 'description' => 'استشارة لاختيار المنصات المناسبة.', 'description_en' => 'Consulting on choosing the right platforms.', 'icon' => 'list-checks'],
+                    ['key' => 'tracking_consult', 'label_ar' => 'استشارة التتبع', 'label_en' => 'Tracking consult', 'description' => 'استشارة في إعداد التتبع والقياس.', 'description_en' => 'Consulting on tracking and measurement setup.', 'icon' => 'crosshair'],
+                    ['key' => 'team_training', 'label_ar' => 'تدريب الفريق', 'label_en' => 'Team training', 'description' => 'تدريب الفريق على إدارة الحملات المدفوعة.', 'description_en' => 'Train your team on paid campaign management.', 'icon' => 'graduation-cap'],
+                    ['key' => 'pre_launch_review', 'label_ar' => 'مراجعة ما قبل الإطلاق', 'label_en' => 'Pre-launch review', 'description' => 'مراجعة الجاهزية قبل إطلاق الحملة.', 'description_en' => 'Review readiness before launching a campaign.', 'icon' => 'shield-check'],
+                    ['key' => 'custom_request', 'label_ar' => 'طلب مخصص', 'label_en' => 'Custom request', 'description' => 'طلب خدمة مخصصة غير مدرجة.', 'description_en' => 'Request a custom service not listed here.', 'icon' => 'plus'],
+                ],
+            ],
+        ];
     }
 
     /**
@@ -478,6 +737,9 @@ final class TaxonomyEngineSeeder extends Seeder
                 'sort_order' => $sortOrder,
                 'is_default' => $option['is_default'] ?? false,
                 'is_active' => true,
+                // Fail-closed: every option is explicitly stamped, so only the paid-media catalog (which passes
+                // is_public=true) is ever publicly served; re-runs keep non-public options non-public.
+                'is_public' => $option['is_public'] ?? false,
                 'is_system' => $isSystem,
                 'metadata' => $option['metadata'] ?? null,
             ],

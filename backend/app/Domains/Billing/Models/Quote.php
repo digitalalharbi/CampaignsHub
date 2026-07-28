@@ -17,8 +17,8 @@ final class Quote extends Model
     use BelongsToTenant;
 
     protected $fillable = [
-        'tenant_id', 'client_workspace_id', 'request_id', 'project_id', 'number', 'currency',
-        'subtotal', 'tax', 'discount', 'total', 'status', 'valid_until', 'notes', 'created_by',
+        'tenant_id', 'client_workspace_id', 'request_id', 'external_request_id', 'project_id', 'number', 'currency',
+        'subtotal', 'tax', 'discount', 'total', 'line_items', 'status', 'valid_until', 'notes', 'created_by',
     ];
 
     protected $casts = [
@@ -26,6 +26,7 @@ final class Quote extends Model
         'tax' => 'decimal:2',
         'discount' => 'decimal:2',
         'total' => 'decimal:2',
+        'line_items' => 'array',
         'valid_until' => 'date',
     ];
 
