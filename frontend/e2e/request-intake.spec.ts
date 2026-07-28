@@ -8,8 +8,8 @@ test.use({ storageState: { cookies: [], origins: [] } })
 
 test('homepage → request → dynamic form → submit → success with request number', async ({ page }) => {
   await page.goto('/')
-  // Service-request CTA opens the real intake route.
-  await page.getByRole('link', { name: /أرسل طلب إدارة حملة|Request campaign management/ }).first().click()
+  // v5 header service-request action «اطلب خدمة» opens the real generic intake route (bare /requests/new).
+  await page.getByRole('banner').getByRole('link', { name: /اطلب خدمة|Request a service/ }).click()
   await expect(page).toHaveURL(/\/requests\/new$/)
 
   // Step 1 — service (loaded from /requests/meta).

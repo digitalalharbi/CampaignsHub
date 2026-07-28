@@ -10,6 +10,16 @@ import { submitVerifiedRequest, switchToEnglish } from './helpers'
  */
 test.use({ storageState: { cookies: [], origins: [] } })
 
+/**
+ * Pick a value from a taxonomy-fed custom combobox (SelectField/SearchableSelect): open it via its label,
+ * then click the option by its visible name. These are no longer native <select>s (forms adoption), so they
+ * are driven the way a user does — click to open, click the option.
+ */
+async function pickCombobox(page: import('@playwright/test').Page, labelRe: RegExp, optionRe: RegExp) {
+  await page.getByLabel(labelRe).click()
+  await page.getByRole('option', { name: optionRe }).click()
+}
+
 test('owner drives a converted client through every command-center tab', async ({ page }, testInfo) => {
   const company = `CC Co ${testInfo.project.name}-${Date.now()}`
 
@@ -38,8 +48,8 @@ test('owner drives a converted client through every command-center tab', async (
 
   // 2) Update classification → Save.
   await page.getByRole('button', { name: /Edit classification|تعديل التصنيف/ }).click()
-  await page.getByLabel(/^Status$|^الحالة$/).selectOption('needs_attention')
-  await page.getByLabel(/Industry|النشاط/).selectOption('e_commerce')
+  await pickCombobox(page, /^Status$|^الحالة$/, /Needs attention|يحتاج انتباه/i)
+  await pickCombobox(page, /Industry|النشاط/, /E-?commerce|التجارة الإلكترونية/i)
   await page.getByRole('button', { name: /^Save$|^حفظ$/ }).click()
   // Badge reflects the new status.
   await expect(page.getByText(/Needs Attention|يحتاج متابعة/).first()).toBeVisible()

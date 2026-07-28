@@ -38,10 +38,11 @@ test('export button → queue → download → the downloaded Arabic PDF is a va
   await page.goto('/reports')
 
   // 1. Create a fresh CLIENT report via the builder (a new report has no exports → export button shows).
+  //    Report type & audience are now taxonomy-fed SelectField comboboxes; the builder already defaults the
+  //    audience to «العميل» (client), so no explicit audience selection is needed for a client report.
   const name = `E2E PDF ${Date.now()}`
   await page.getByRole('button', { name: 'تقرير جديد' }).click()
   await page.getByPlaceholder(/التقرير الشهري/).fill(name)
-  await page.getByRole('button', { name: 'العميل', exact: false }).first().click()
   const [createRes] = await Promise.all([
     page.waitForResponse((r) => r.url().endsWith('/reports') && r.request().method() === 'POST'),
     page.getByRole('button', { name: 'إنشاء وتوليد' }).click(),
