@@ -16,7 +16,9 @@
 Clean at `aaa79da`, which contains an **UNVERIFIED agent WIP snapshot** (captured so nothing is lost):
 - Reports/Alerts option adoption (T7): `backend/database/seeders/TaxonomyEngineSeeder.php`, `backend/tests/Feature/TaxonomyAlignmentTest.php`, `frontend/src/features/alerts/AlertsPage.tsx` (+`.test.tsx`), `frontend/src/features/reports/ReportsPage.tsx` (+`.test.tsx`), `frontend/src/features/reports/api.ts`.
 - Homepage journey-decision section + handoff: `frontend/src/features/marketing/PublicHomePage.tsx`, `homeCopy.ts`, `frontend/src/features/auth/RegisterPage.tsx`, `frontend/src/features/requests/RequestIntakePage.tsx`.
-**NOT built/tested.** Two background agents (`a5fde925…` journey, `ad6b006f…` reports/alerts) were running when snapshotted; they may have finished after — reconcile before trusting.
+**Partly verified now:**
+- Homepage journey-decision section + register/request handoff (`a5fde925…`) — **agent finished & self-verified**: `npm run build` clean, `npx vitest run` **171/171 (39 files)**, +11 new tests (journey routes incl. query params, agency/self-managed register preset, `?service` request preselect). Browser-verified section placement + all 5 journey routes. Treat this slice as VERIFIED at HEAD, but re-confirm its 7 files weren't re-touched by a later concurrent commit.
+- Reports/Alerts option adoption (`ad6b006f…`) — **agent still running at handoff**; this slice remains UNVERIFIED. Reconcile its working-tree output and run build+vitest+`php artisan test` before trusting. Note: journey agent observed nested-button hydration console warnings originating from `AlertsPage`/`MultiSelectField` — fix during T7 verification.
 
 ## PHASE = Taxonomy & UX (feat/taxonomy-ux, off v1.1.0-expanded-final). Close only when ALL tracks Implemented & Tested.
 ### Completed & committed (verified before the WIP snapshot)
