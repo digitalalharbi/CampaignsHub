@@ -41,3 +41,7 @@ Backend 294, Vitest 22, E2E 152/0/0/0; tagged `v1.0.0-baseline`; ZIP SHA-256
 Integrations canonical at `/app/integrations` (absorbs Connection Center + Drive connector); Branding inside
 Settings; Finance one backend surfaced as المالية / الاشتراك / الفواتير; legacy routes redirect; connector
 registries disambiguated (AdvertisingConnectorRegistry vs ConnectorCapabilityRegistry) — see DUPLICATION_AUDIT.
+
+## Delivery reference
+The Expanded ZIP, the live preview, and this documentation are unified on the single final HEAD of
+`feat/three-experiences`. Includes the client-login DEV OTP display + copy (local-only; production-gated).

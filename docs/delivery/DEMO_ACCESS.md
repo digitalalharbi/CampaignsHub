@@ -29,3 +29,8 @@ file reference, a linked campaign with metrics, and a client-audience report wit
 ## Honest states
 Email/WhatsApp/SMS, Google OAuth, payment gateway, and ad-platform/Drive live sync are **Awaiting External
 Dependency** — Null/Sandbox adapters deliver the flows without claiming real delivery.
+
+## Client Portal OTP (local review)
+On `/client/login`, after "Send code", a **DEV OTP** banner + **Copy** button appears in local/dev only — the
+backend returns `dev_code` exclusively in non-production (`ContactVerificationService::exposeDevSecrets()` returns
+false in production), so the OTP and dev token are fully hidden in Production. No manual `X-Client-Token` needed.
