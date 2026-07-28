@@ -49,7 +49,9 @@ Read this file + spec §v5, then continue straight through to phase completion. 
 ### PROGRESS since resume
 - Preview environment FIXED (dev-up: FE :5173, BE :8000, queue+scheduler+redis, /dev/status all 200). Leave running.
 - ✅ **v5 homepage DONE + committed `510918a`** (15 vitest, tsc clean, forbidden-terms grep empty, browser-verified 1440×900 + mobile + console/network clean). HEAD is now `510918a`.
-- ⏳ NEXT (running, single sequential agent `addba2f7da17527dd`): forms-UX adoption across Register/Onboarding/Clients/Projects/Campaigns/Reports/Alerts/Integrations/Subscriptions/Settings. After it: drop `stash@{0}` (superseded — was messy partials + a stray i18n edit), re-confirm safe migration, run three-app E2E regression.
+- ✅ Forms-UX adoption DONE + committed `b2cb214` (ErrorSummary/ReviewList/FormStepper/useFormDraft across Register/Onboarding/Campaigns/Clients/Projects/Reports/Alerts/Settings; Integrations/Subscriptions honestly skipped — no validated form). Full FE **209 vitest / 45 files**, tsc clean, build ok. `stash@{0}` DROPPED (superseded; archive kept: branch `recovery/taxonomy-ux-partial-wip` + `/tmp/taxonomy-ux-wip.patch`).
+- ✅ Safe-migration re-confirm: `migrate:fresh --seed` clean + backend **411 tests** green.
+- ⏳ NEXT (running): full cross-browser E2E (`npx playwright test`, chromium+firefox+webkit, retries 0) → out `scratchpad/e2e1.txt`. EXPECT chromium @visual snapshot mismatches on homepage/auth (v5 redesign is intentional) → refresh those baselines with `npx playwright test --update-snapshots <spec>`; fix any real functional failures to 0 failed/0 flaky. Then final report.
 
 ### BINDING remaining (in order)
 1. ✅ homepage **v5** DONE (`510918a`).
