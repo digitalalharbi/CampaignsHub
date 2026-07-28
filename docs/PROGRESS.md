@@ -594,3 +594,12 @@ Honest per-suite status (do not say "cross-browser ✓" for the visual gates):
   `docs/PRODUCTION_RUNBOOK.md`, `docs/SECURITY_AUDIT.md`.
 - **Honest status unchanged:** Email/WhatsApp = Awaiting Provider Credentials; Google login = Awaiting
   Credentials; alerts management UI (React page) is a documented follow-up (engine + API complete).
+
+## Expansion — feat/three-experiences (in progress)
+Baseline v1.0.0-baseline delivered (stable ZIP sha256 b8329cf4…). Expansion increments committed:
+daf9c8e Billing · 12d6dbd Messaging · ee0322c Branding · fb1547d Request Journey · e4dced5 Connection Center ·
+1815dd6 Client-portal endpoints · 00f655c Drive · e20155b Client Service Portal FE · wiring a862b6d/38c44b9/22b8835.
+Backend 351 passed, phpstan clean; frontend build clean, 37 vitest. Underway: subscriptions/usage-limits +
+client-portal files/campaigns/reports (backend); internal UIs (billing/messaging/journey, branding/connections/drive);
+then Operations Console + SaaS Workspace surfaces, white-label, module entitlements, expanded E2E, expanded clean
+install, expanded ZIP + SHA-256, final audit.
