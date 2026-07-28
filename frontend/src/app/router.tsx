@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { PagePlaceholder } from '@/components/PagePlaceholder'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RegisterPage } from '@/features/auth/RegisterPage'
@@ -18,7 +18,6 @@ import { SettingsLayout } from '@/features/account/SettingsLayout'
 import { ProfilePage } from '@/features/account/ProfilePage'
 import { PasswordPage } from '@/features/account/PasswordPage'
 import { SecurityPage } from '@/features/account/SecurityPage'
-import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
 import { MarketingPage } from '@/features/marketing/MarketingPage'
 import { ProjectIntegrationsPage } from '@/features/projects/ProjectIntegrationsPage'
 import { ProjectsPage } from '@/features/projects/ProjectsPage'
@@ -54,10 +53,11 @@ import { DevStatusPage } from '@/features/dev/DevStatusPage'
 import { billingRoutes } from '@/features/billing/billingRoutes'
 import { messagingRoutes } from '@/features/messaging/messagingRoutes'
 import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRoutes'
-import { brandingRoutes } from '@/features/branding/brandingRoutes'
-import { connectionsRoutes } from '@/features/connections/connectionsRoutes'
-import { driveRoutes } from '@/features/drive/driveRoutes'
 import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
+// Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
+import { ConnectionCenterPage } from '@/features/connections/ConnectionCenterPage'
+import { DrivePage } from '@/features/drive/DrivePage'
+import { BrandingCenterPage } from '@/features/branding/BrandingCenterPage'
 import { AppShell } from '@/layouts/AppShell'
 
 export const router = createBrowserRouter([
@@ -111,7 +111,7 @@ export const router = createBrowserRouter([
           { path: 'projects', element: <ProjectsPage /> },
           { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
           { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
-          { path: 'integrations', element: <IntegrationsPage /> },
+          { path: 'integrations', element: <Navigate to="/app/integrations" replace /> },
           { path: 'design', element: <DesignSystemPage /> },
           // Media-buying operational sections (built incrementally; honest placeholders for now).
           { path: 'clients', element: <PagePlaceholder title="Clients" /> },
@@ -125,14 +125,18 @@ export const router = createBrowserRouter([
           { path: 'app/clients/:clientId', element: <ClientCommandCenterPage /> },
           // Alerts management (the alerts engine's operator surface).
           { path: 'app/alerts', element: <AlertsPage /> },
-          // Expansion internal surfaces (Billing, Messaging, Request Journey, Branding, Connections, Drive).
+          // Expansion internal surfaces. Integrations is CANONICAL at /app/integrations and absorbs the
+          // Connection Center + the Google Drive connector; Branding lives under Settings. Legacy/duplicate
+          // routes redirect (see docs/ROUTE_REDIRECT_MAP.md) — no dead links, one engine per function.
           ...billingRoutes,
           ...messagingRoutes,
           ...requestJourneyRoutes,
-          ...brandingRoutes,
-          ...connectionsRoutes,
-          ...driveRoutes,
           ...subscriptionsRoutes,
+          { path: 'app/integrations', element: <ConnectionCenterPage /> },
+          { path: 'app/integrations/drive', element: <DrivePage /> },
+          { path: 'app/connections', element: <Navigate to="/app/integrations" replace /> },
+          { path: 'app/drive', element: <Navigate to="/app/integrations/drive" replace /> },
+          { path: 'app/branding', element: <Navigate to="/settings/branding" replace /> },
           { path: 'content', element: <PagePlaceholder title="Content" /> },
           { path: 'approvals', element: <PagePlaceholder title="Approvals" /> },
           { path: 'tracking', element: <PagePlaceholder title="Tracking" /> },
@@ -149,6 +153,8 @@ export const router = createBrowserRouter([
               { path: 'profile', element: <ProfilePage /> },
               { path: 'password', element: <PasswordPage /> },
               { path: 'security', element: <SecurityPage /> },
+              // Identity/Branding lives INSIDE Settings (canonical — not a standalone nav section).
+              { path: 'branding', element: <BrandingCenterPage /> },
               { path: 'preferences', element: <PagePlaceholder title="Preferences" /> },
               { path: 'notifications', element: <PagePlaceholder title="Notifications" /> },
               { path: 'workspace', element: <SettingsPage /> },

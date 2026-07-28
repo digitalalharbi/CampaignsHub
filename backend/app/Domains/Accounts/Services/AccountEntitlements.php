@@ -13,12 +13,13 @@ use App\Domains\Tenancy\Models\Tenant;
  */
 final class AccountEntitlements
 {
-    // Full operator (personal) menu = the internal Operations Console.
-    private const PERSONAL_NAV = ['dashboard', 'clients', 'projects', 'requests', 'campaigns', 'analytics', 'reports', 'connections', 'alerts', 'billing', 'messaging', 'branding', 'drive', 'subscriptions', 'team', 'settings'];
+    // Operations Console (personal) menu. Canonical modules only — Integrations (connections) absorbs the
+    // Connection Center + Drive connector; Branding lives inside Settings; Finance = 'billing' (المالية).
+    private const PERSONAL_NAV = ['dashboard', 'requests', 'clients', 'projects', 'campaigns', 'analytics', 'reports', 'connections', 'alerts', 'messaging', 'billing', 'team', 'settings'];
 
-    // Simplified self-serve (company) menu = the SaaS Workspace — no agency tools, other clients, public
-    // requests, messaging inbox, Drive, subscriptions admin, or platform settings.
-    private const COMPANY_NAV = ['dashboard', 'projects', 'campaigns', 'analytics', 'reports', 'connections', 'alerts', 'billing', 'branding', 'team', 'settings'];
+    // SaaS Workspace (company) menu — subscriber surfaces only. Finance surfaces as 'subscriptions' (الاشتراك);
+    // no agency tools (clients/requests), no internal messaging inbox, no platform settings.
+    private const COMPANY_NAV = ['dashboard', 'projects', 'campaigns', 'analytics', 'reports', 'connections', 'alerts', 'subscriptions', 'team', 'settings'];
 
     public function workspaceKind(Tenant $tenant): string
     {

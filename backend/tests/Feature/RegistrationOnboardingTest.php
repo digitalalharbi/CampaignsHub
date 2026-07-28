@@ -119,13 +119,13 @@ final class RegistrationOnboardingTest extends TestCase
         $this->actingAs($user, 'sanctum')->postJson('/api/v1/onboarding/workspace', ['name' => 'BrandCo'])
             ->assertOk()->assertJsonPath('data.account.onboarding.step', 'first_project');
 
-        // SaaS Workspace (subscriber) menu: its own projects/team/billing/branding, but NO agency tools
-        // (other clients, the public-requests inbox) and no platform-level surfaces.
+        // SaaS Workspace (subscriber) menu: its own projects/team/subscription, but NO agency tools
+        // (other clients, the public-requests inbox) and no Ops-only surfaces (billing/messaging).
         $nav = $this->actingAs($user, 'sanctum')->getJson('/api/v1/auth/me')->json('data.user.account.nav');
-        foreach (['dashboard', 'campaigns', 'projects', 'team', 'billing', 'branding'] as $shown) {
+        foreach (['dashboard', 'campaigns', 'projects', 'team', 'subscriptions'] as $shown) {
             $this->assertContains($shown, $nav);
         }
-        foreach (['clients', 'requests'] as $hidden) {
+        foreach (['clients', 'requests', 'billing', 'messaging'] as $hidden) {
             $this->assertNotContains($hidden, $nav);
         }
     }

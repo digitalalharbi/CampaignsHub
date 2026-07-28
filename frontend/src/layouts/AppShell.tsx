@@ -4,7 +4,7 @@ import {
   BellRing,
   Building2,
   CreditCard,
-  HardDrive,
+  FolderKanban,
   Inbox,
   LayoutDashboard,
   MessageSquare,
@@ -12,7 +12,6 @@ import {
   Menu,
   Moon,
   PanelLeft,
-  Palette,
   Plug,
   Receipt,
   Search,
@@ -32,21 +31,22 @@ import type { TranslationKey } from '@/lib/i18n'
 // `ent` = the account-entitlement nav key; an item shows only when it's in the workspace's entitled nav.
 type NavItem = { to: string; key: TranslationKey; icon: typeof LayoutDashboard; ent: string }
 
+// Canonical navigation — ONE entry per module (see docs/CANONICAL_MODULES.md). Integrations absorbs the
+// Connection Center + the Google Drive connector; Branding lives under Settings; Finance is one backend
+// surfaced as المالية (Ops, ent:billing) or الاشتراك (SaaS, ent:subscriptions) via entitlements.
 const operationalNav: NavItem[] = [
   { to: '/dashboard', key: 'dashboard', icon: LayoutDashboard, ent: 'dashboard' },
-  { to: '/campaigns', key: 'campaigns', icon: Megaphone, ent: 'campaigns' },
   { to: '/app/requests', key: 'requests_inbox', icon: Inbox, ent: 'requests' },
   { to: '/app/clients', key: 'clients_portfolio', icon: Building2, ent: 'clients' },
+  { to: '/projects', key: 'projects', icon: FolderKanban, ent: 'projects' },
+  { to: '/campaigns', key: 'campaigns', icon: Megaphone, ent: 'campaigns' },
   { to: '/analytics', key: 'analytics', icon: TrendingUp, ent: 'analytics' },
   { to: '/reports', key: 'reports', icon: BarChart3, ent: 'reports' },
+  { to: '/app/integrations', key: 'integrations', icon: Plug, ent: 'connections' },
   { to: '/app/alerts', key: 'alerts', icon: BellRing, ent: 'alerts' },
+  { to: '/app/messages', key: 'messages', icon: MessageSquare, ent: 'messaging' },
   { to: '/app/billing', key: 'billing', icon: Receipt, ent: 'billing' },
   { to: '/app/subscriptions', key: 'subscriptions', icon: CreditCard, ent: 'subscriptions' },
-  { to: '/app/messages', key: 'messages', icon: MessageSquare, ent: 'messaging' },
-  { to: '/app/connections', key: 'connections_center', icon: Plug, ent: 'connections' },
-  { to: '/app/drive', key: 'drive', icon: HardDrive, ent: 'drive' },
-  { to: '/app/branding', key: 'branding', icon: Palette, ent: 'branding' },
-  { to: '/integrations', key: 'integrations', icon: Plug, ent: 'connections' },
 ]
 const utilityNav: NavItem[] = [{ to: '/settings', key: 'settings', icon: Settings, ent: 'settings' }]
 
