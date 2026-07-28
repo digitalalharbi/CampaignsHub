@@ -3,20 +3,14 @@ import { Link } from 'react-router-dom'
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
-  Cell,
   Legend,
-  Line,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
-import { AlertTriangle, ArrowUpRight, Plug } from 'lucide-react'
+import { ArrowUpRight } from 'lucide-react'
 import {
   useBudget,
   useCampaigns,
@@ -27,16 +21,9 @@ import {
   useSummary,
   useTimeseries,
 } from '../analytics/hooks'
-import {
-  DemoBadge,
-  KpiCard,
-  Panel,
-  RangeTabs,
-  SERIES,
-  platformColor,
-  tooltipProps,
-} from '../analytics/components'
+import { DemoBadge, Panel, RangeTabs, SERIES, tooltipProps } from '../analytics/components'
 import { compact, money, num, percent, ratio } from '../analytics/format'
+import { UnifiedCampaignOverview, type OverviewVM } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
@@ -56,10 +43,7 @@ export function DashboardPage() {
   const freshness = useFreshness(currentProjectId, range)
 
   const cur = summary.data?.current
-  const delta = summary.data?.delta ?? {}
   const points = series.data ?? []
-  const spark = (k: 'spend' | 'revenue' | 'conversions' | 'roas' | 'ctr' | 'cpa') =>
-    points.map((p) => Number(p[k] ?? 0))
 
   const alerts = useMemo(() => {
     const out: { kind: 'sync' | 'budget' | 'performance'; text: string }[] = []
@@ -76,8 +60,47 @@ export function DashboardPage() {
   }, [freshness.data, budget.data, campaigns.data])
 
   const lastSync = freshness.data?.map((f) => f.last_sync_at).filter(Boolean).sort().at(-1)
-  const donut = (platforms.data ?? []).map((p) => ({ name: p.provider, value: p.spend }))
-  const loadingAny = summary.isLoading
+
+  // Map the real analytics data to the shared command-center view-model — the SAME component the marketing
+  // homepage preview uses (there fed labeled demo data). Data is currently seeded/demo → dataStatus 'demo'.
+  const vm: OverviewVM = useMemo(
+    () => ({
+      currency: 'SAR',
+      dataStatus: 'demo',
+      lastSyncAt: lastSync ?? null,
+      kpis: [
+        { key: 'spend', label: 'الإنفاق', value: money(cur?.spend), hint: 'إجمالي الإنفاق المعياري بعملة المشروع' },
+        { key: 'results', label: 'النتائج', value: num(cur?.conversions) },
+        { key: 'roas', label: 'ROAS', value: ratio(cur?.roas ?? null), hint: 'الإيرادات ÷ الإنفاق' },
+        { key: 'cpa', label: 'تكلفة النتيجة', value: money(cur?.cpa), hint: 'الإنفاق ÷ النتائج' },
+        { key: 'revenue', label: 'الإيرادات', value: money(cur?.revenue) },
+        { key: 'active', label: 'حملات نشطة', value: num(campaigns.data?.length ?? 0) },
+      ],
+      platforms: (platforms.data ?? []).map((p) => ({
+        key: p.provider,
+        name: p.provider,
+        spend: p.spend,
+        results: 0,
+        roas: p.roas ?? null,
+      })),
+      spend: (platforms.data ?? []).map((p) => ({ name: p.provider, value: p.spend })),
+      topCampaigns: (campaigns.data ?? []).slice(0, 6).map((c) => ({
+        id: String(c.campaign_id),
+        name: c.campaign_name ?? '—',
+        provider: c.provider,
+        spend: c.spend,
+        results: c.conversions,
+        cpa: c.cpa ?? null,
+        roas: c.roas ?? null,
+      })),
+      needsAttention: (campaigns.data ?? [])
+        .filter((c) => c.spend > 3000 && c.conversions < 2)
+        .slice(0, 4)
+        .map((c) => ({ id: String(c.campaign_id), name: c.campaign_name ?? '—', reason: 'إنفاق مرتفع دون تحويلات' })),
+      alerts: alerts.map((a) => ({ severity: a.kind === 'budget' ? ('medium' as const) : ('high' as const), text: a.text })),
+    }),
+    [cur, campaigns.data, platforms.data, alerts, lastSync],
+  )
 
   return (
     <div className="space-y-6">
@@ -88,47 +111,30 @@ export function DashboardPage() {
             <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">لوحة التحكم</h1>
             <DemoBadge />
           </div>
-          <p className="mt-1 text-sm text-text-secondary">
-            ملخص تنفيذي للأداء · آخر مزامنة {lastSync ? new Date(lastSync).toLocaleString('en-GB') : '—'}
-          </p>
+          <p className="mt-1 text-sm text-text-secondary">مركز قيادة موحّد لكل حملاتك الإعلانية المدفوعة عبر المنصات.</p>
         </div>
         <div className="flex items-center gap-2">
           <RangeTabs value={days} onChange={setDays} />
           <Link
-            to="/analytics"
+            to="/campaigns"
             className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border-strong bg-surface px-3 text-sm font-semibold text-text-primary hover:bg-surface-hover"
           >
-            التحليلات <ArrowUpRight size={16} />
+            الحملات <ArrowUpRight size={16} />
           </Link>
         </div>
       </div>
 
-      {/* Alerts */}
-      {alerts.length > 0 && (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {alerts.map((a, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-2 rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-sm text-text-primary"
-            >
-              <AlertTriangle size={16} className="shrink-0 text-warning" />
-              <span className="truncate">{a.text}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Unified command center (shared with the marketing preview) */}
+      <UnifiedCampaignOverview
+        vm={vm}
+        headerRight={
+          <Link to="/analytics" className="inline-flex items-center gap-1 font-semibold text-text-secondary hover:text-text-primary">
+            التحليلات <ArrowUpRight size={14} />
+          </Link>
+        }
+      />
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KpiCard label="الإنفاق" value={money(cur?.spend)} delta={delta.spend} invertGood spark={spark('spend')} accent={SERIES.spend} hint="إجمالي الإنفاق المعياري بعملة المشروع" />
-        <KpiCard label="الإيرادات" value={money(cur?.revenue)} delta={delta.revenue} spark={spark('revenue')} accent={SERIES.revenue} />
-        <KpiCard label="ROAS" value={ratio(cur?.roas ?? null)} delta={delta.roas} spark={spark('roas')} accent={SERIES.revenue} hint="الإيرادات ÷ الإنفاق" />
-        <KpiCard label="النتائج" value={num(cur?.conversions)} delta={delta.conversions} spark={spark('conversions')} accent={SERIES.conversions} />
-        <KpiCard label="CPA" value={money(cur?.cpa)} delta={delta.cpa} invertGood spark={spark('cpa')} accent={SERIES.conversions} hint="تكلفة النتيجة = الإنفاق ÷ النتائج" />
-        <KpiCard label="CTR" value={percent(cur?.ctr, 2)} delta={delta.ctr} spark={spark('ctr')} accent={SERIES.clicks} hint="النقر ÷ الظهور" />
-      </div>
-
-      {/* Performance + spend distribution */}
+      {/* Deeper detail: daily trend + conversion funnel */}
       <div className="grid gap-4 lg:grid-cols-3">
         <Panel title="الإنفاق مقابل الإيرادات" description="الاتجاه اليومي خلال الفترة" className="lg:col-span-2" loading={series.isLoading} error={series.isError} empty={!series.isLoading && points.length === 0}>
           <div className="h-72">
@@ -156,42 +162,6 @@ export function DashboardPage() {
           </div>
         </Panel>
 
-        <Panel title="توزيع الإنفاق" description="حسب المنصة" loading={platforms.isLoading} error={platforms.isError} empty={!platforms.isLoading && donut.length === 0}>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={donut} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={2}>
-                  {donut.map((d) => (
-                    <Cell key={d.name} fill={platformColor(d.name)} stroke="var(--surface)" strokeWidth={2} />
-                  ))}
-                </Pie>
-                <Tooltip {...tooltipProps} formatter={(v: number) => money(v)} />
-                <Legend wrapperStyle={{ fontSize: 13 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </Panel>
-      </div>
-
-      {/* Platform comparison + funnel */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="مقارنة المنصات" description="الإنفاق و ROAS" loading={platforms.isLoading} error={platforms.isError} empty={!platforms.isLoading && (platforms.data?.length ?? 0) === 0}>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={platforms.data ?? []} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="provider" tick={axis} />
-                <YAxis yAxisId="l" tick={axis} tickFormatter={(v) => compact(Number(v))} width={44} />
-                <YAxis yAxisId="r" orientation="right" tick={axis} width={32} />
-                <Tooltip {...tooltipProps} />
-                <Legend wrapperStyle={{ fontSize: 13 }} />
-                <Bar yAxisId="l" name="الإنفاق" dataKey="spend" radius={[6, 6, 0, 0]} fill={SERIES.spend} />
-                <Line yAxisId="r" name="ROAS" type="monotone" dataKey="roas" stroke={SERIES.revenue} strokeWidth={2} dot={false} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Panel>
-
         <Panel title="قمع التحويل" description="من الظهور إلى الشراء" loading={funnel.isLoading} error={funnel.isError} empty={!funnel.isLoading && (funnel.data?.length ?? 0) === 0}>
           <div className="space-y-2">
             {(funnel.data ?? []).map((s, i) => {
@@ -212,68 +182,6 @@ export function DashboardPage() {
                 </div>
               )
             })}
-          </div>
-        </Panel>
-      </div>
-
-      {/* Top campaigns + freshness */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Panel title="أفضل الحملات" description="حسب الإيرادات و ROAS" className="lg:col-span-2" loading={campaigns.isLoading} error={campaigns.isError} empty={!campaigns.isLoading && (campaigns.data?.length ?? 0) === 0}>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-sm">
-              <thead>
-                <tr className="border-b border-border text-start text-text-muted">
-                  <th className="py-2 text-start font-semibold">الحملة</th>
-                  <th className="py-2 text-start font-semibold">المنصة</th>
-                  <th className="py-2 text-end font-semibold">الإنفاق</th>
-                  <th className="py-2 text-end font-semibold">الإيرادات</th>
-                  <th className="py-2 text-end font-semibold">ROAS</th>
-                  <th className="py-2 text-end font-semibold">CPA</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(campaigns.data ?? []).slice(0, 6).map((c) => (
-                  <tr key={c.campaign_id} className="border-b border-border last:border-0">
-                    <td className="py-2.5 pe-2 font-semibold text-text-primary">{c.campaign_name ?? '—'}</td>
-                    <td className="py-2.5">
-                      <span className="inline-flex items-center gap-1.5 text-text-secondary">
-                        <span className="h-2 w-2 rounded-full" style={{ background: platformColor(c.provider) }} />
-                        {c.provider}
-                      </span>
-                    </td>
-                    <td className="tnum py-2.5 text-end">{money(c.spend)}</td>
-                    <td className="tnum py-2.5 text-end">{money(c.revenue)}</td>
-                    <td className="tnum py-2.5 text-end font-semibold">{ratio(c.roas)}</td>
-                    <td className="tnum py-2.5 text-end">{money(c.cpa)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
-
-        <Panel title="حالة المصادر" description="آخر مزامنة وحداثة البيانات" loading={freshness.isLoading} error={freshness.isError} empty={!freshness.isLoading && (freshness.data?.length ?? 0) === 0}>
-          <div className="space-y-2">
-            {(freshness.data ?? []).map((f) => (
-              <div key={f.provider} className="flex items-center justify-between rounded-xl border border-border bg-surface-secondary px-3 py-2">
-                <span className="flex items-center gap-2 text-sm font-semibold">
-                  <Plug size={15} style={{ color: platformColor(f.provider) }} />
-                  {f.provider}
-                </span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    f.last_sync_status === 'failed'
-                      ? 'bg-[var(--negative-background)] text-danger'
-                      : f.last_sync_status === 'partial'
-                        ? 'bg-[var(--warning-background)] text-warning'
-                        : 'bg-[var(--positive-background)] text-success'
-                  }`}
-                >
-                  {f.last_sync_status ?? '—'}
-                </span>
-              </div>
-            ))}
-            {loadingAny && null}
           </div>
         </Panel>
       </div>
