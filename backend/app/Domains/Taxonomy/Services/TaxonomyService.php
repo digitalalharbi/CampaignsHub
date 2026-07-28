@@ -123,7 +123,36 @@ final class TaxonomyService
             ->orderBy('key')
             ->get();
 
+        $this->attachParentKeys($all);
+
         return $this->tree($all);
+    }
+
+    /**
+     * The flat set of active option keys visible for a definition (roots + one level of children), for
+     * validating a submitted multi-select against the engine. Unknown definition → empty (caller falls back).
+     *
+     * @return list<string>
+     */
+    public function activeOptionKeys(string $key): array
+    {
+        try {
+            $tree = $this->options($key);
+        } catch (TaxonomyException) {
+            return [];
+        }
+
+        $keys = [];
+        foreach ($tree as $option) {
+            $keys[] = $option->key;
+            /** @var Collection<int, TaxonomyOption> $children */
+            $children = $option->getRelation('children');
+            foreach ($children as $child) {
+                $keys[] = $child->key;
+            }
+        }
+
+        return array_values(array_unique($keys));
     }
 
     /** Resolve a visible option by id (fails closed on another tenant's option). */
@@ -488,11 +517,20 @@ final class TaxonomyService
      */
     private function tree(Collection $all): Collection
     {
-        $byParent = $all->groupBy(fn (TaxonomyOption $o) => $o->parent_option_id ?? '__root__');
+        $present = $all->keyBy(fn (TaxonomyOption $o): string => (string) $o->getKey());
+
+        // An option is a root when it has no parent OR its parent is not in the current set (e.g. a dependent
+        // definition like request.category whose parent lives in request.service). Such options are returned
+        // flat with their parent_option_id/parent_key intact so the SPA can still build the dependent select.
+        $byParent = $all->groupBy(function (TaxonomyOption $o) use ($present): string {
+            $parentId = $o->parent_option_id;
+
+            return ($parentId !== null && $present->has((string) $parentId)) ? (string) $parentId : '__root__';
+        });
 
         foreach ($all as $option) {
             /** @var Collection<int, TaxonomyOption> $children */
-            $children = $byParent->get($option->getKey(), new Collection);
+            $children = $byParent->get((string) $option->getKey(), new Collection);
             $option->setRelation('children', $children->values());
         }
 
@@ -500,6 +538,30 @@ final class TaxonomyService
         $roots = $byParent->get('__root__', new Collection);
 
         return $roots->values();
+    }
+
+    /**
+     * Attach a non-persisted `parent_key` to each option so the SPA can resolve dependent selects across
+     * definitions (request.category → request.service, request.type → request.category) without an extra
+     * round-trip. Parents may live in another definition, so they are looked up in one query.
+     *
+     * @param  Collection<int, TaxonomyOption>  $all
+     */
+    private function attachParentKeys(Collection $all): void
+    {
+        /** @var list<string> $parentIds */
+        $parentIds = $all->pluck('parent_option_id')->filter()->unique()->values()->all();
+
+        $keyById = $parentIds === []
+            ? collect()
+            : TaxonomyOption::withoutGlobalScope(TenantScope::class)
+                ->whereKey($parentIds)
+                ->pluck('key', 'id');
+
+        foreach ($all as $option) {
+            $parentId = $option->parent_option_id;
+            $option->setAttribute('parent_key', $parentId !== null ? ($keyById[$parentId] ?? null) : null);
+        }
     }
 
     private function definitionKeyOf(TaxonomyOption $option): string

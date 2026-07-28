@@ -25,12 +25,15 @@ final class ClientWorkspace extends Model
 
     protected $fillable = ['tenant_id', 'name', 'slug', 'mode', 'status', 'branding', 'limits', 'custom_domain',
         'client_status', 'service_level', 'industry', 'client_source', 'owner_id', 'source_request_id',
-        'priority', 'default_currency', 'timezone', 'language', 'week_start', 'settings', 'archived_at', 'archived_by'];
+        'priority', 'default_currency', 'timezone', 'language', 'week_start', 'settings', 'archived_at', 'archived_by',
+        'tags', 'enabled_services'];
 
     protected $casts = [
         'branding' => 'array',
         'limits' => 'array',
         'settings' => 'array',
+        'tags' => 'array',
+        'enabled_services' => 'array',
         'archived_at' => 'datetime',
     ];
 

@@ -16,6 +16,7 @@ use App\Domains\Campaigns\Resources\ExternalCampaignResource;
 use App\Domains\Campaigns\Resources\UnifiedCampaignResource;
 use App\Domains\Campaigns\Services\CampaignLinker;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Taxonomy\Services\TaxonomyService;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -224,8 +225,37 @@ final class UnifiedCampaignController extends Controller
             'owner_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
             'target_kpi' => ['nullable', 'array'],
             'audience' => ['nullable', 'string'],
-            'regions' => ['nullable', 'array'],
+            // Additive taxonomy-driven multi-selects. Keys with a canonical option set are validated against the
+            // engine; tenant-managed vocabularies (regions/audiences/conversion_events/tags) accept free strings.
+            'regions' => ['sometimes', 'nullable', 'array'],
+            'regions.*' => ['string', 'max:64'],
+            'platforms' => ['sometimes', 'nullable', 'array'],
+            'platforms.*' => [$this->taxonomyOptionRule('campaign.platforms')],
+            'audiences' => ['sometimes', 'nullable', 'array'],
+            'audiences.*' => ['string', 'max:120'],
+            'conversion_events' => ['sometimes', 'nullable', 'array'],
+            'conversion_events.*' => ['string', 'max:120'],
+            'creative_types' => ['sometimes', 'nullable', 'array'],
+            'creative_types.*' => [$this->taxonomyOptionRule('campaign.creative_types')],
+            'tags' => ['sometimes', 'nullable', 'array'],
+            'tags.*' => ['string', 'max:64'],
         ]);
+    }
+
+    /**
+     * A per-element rule that validates a submitted value against a taxonomy definition's active option keys
+     * (platform ∪ tenant). Runs only for values that are actually present, so campaigns that never send the
+     * field pay no taxonomy query. An unknown/unseeded definition yields no keys → the value is left to the
+     * array rule (fail-open on infrastructure, not on a real unknown key).
+     */
+    private function taxonomyOptionRule(string $definitionKey): callable
+    {
+        return function (string $attribute, mixed $value, callable $fail) use ($definitionKey): void {
+            $allowed = app(TaxonomyService::class)->activeOptionKeys($definitionKey);
+            if ($allowed !== [] && ! in_array($value, $allowed, true)) {
+                $fail("The selected {$attribute} is not a valid {$definitionKey} option.");
+            }
+        };
     }
 
     /** Project-scoped lookup (global scopes make cross-project/tenant fail-closed → 404). */

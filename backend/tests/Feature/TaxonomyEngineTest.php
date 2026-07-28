@@ -108,11 +108,11 @@ final class TaxonomyEngineTest extends TestCase
             $this->assertNotNull($this->definition($key), "missing definition {$key}");
         }
 
-        // request.status keeps its 20 canonical keys verbatim.
+        // request.status keys are EXACTLY the live state machine (RequestStatusMachine) — 10 states.
         $statuses = $this->service()->options('request.status');
         $this->assertContains('under_review', $statuses->pluck('key')->all());
-        $this->assertContains('payment_failed', $statuses->pluck('key')->all());
-        $this->assertCount(20, $statuses);
+        $this->assertContains('waiting_client', $statuses->pluck('key')->all());
+        $this->assertCount(10, $statuses);
 
         // campaign.objective carries dependent config in metadata.
         $sales = $this->platformOption('campaign.objective', 'sales');
@@ -122,7 +122,7 @@ final class TaxonomyEngineTest extends TestCase
 
         // System definitions do not accept custom options; their options are system-locked.
         $this->assertFalse($this->definition('request.status')->allows_custom_options);
-        $this->assertTrue($this->platformOption('request.status', 'draft')->is_system);
+        $this->assertTrue($this->platformOption('request.status', 'new')->is_system);
         // Non-system definitions accept custom options.
         $this->assertTrue($this->definition('client.industry')->allows_custom_options);
     }
@@ -146,7 +146,7 @@ final class TaxonomyEngineTest extends TestCase
 
         $keys = $this->service()->options('client.industry')->pluck('key')->all();
 
-        $this->assertContains('ecommerce', $keys); // platform
+        $this->assertContains('e_commerce', $keys); // platform
         $this->assertContains('gaming', $keys);     // tenant
         $this->assertSame($this->tenant->id, $custom->tenant_id);
     }
@@ -162,7 +162,7 @@ final class TaxonomyEngineTest extends TestCase
         $this->context()->setTenantId($this->tenant->id);
         $keys = $this->service()->options('client.industry')->pluck('key')->all();
         $this->assertNotContains('bsecret', $keys);
-        $this->assertContains('ecommerce', $keys); // but still sees platform options
+        $this->assertContains('e_commerce', $keys); // but still sees platform options
     }
 
     public function test_create_option_respects_allows_custom_options(): void
@@ -187,31 +187,31 @@ final class TaxonomyEngineTest extends TestCase
 
     public function test_updating_a_system_option_cannot_change_key_or_system_flag_but_can_change_labels(): void
     {
-        $draft = $this->platformOption('request.status', 'draft');
+        $new = $this->platformOption('request.status', 'new');
 
-        $updated = $this->service()->updateOption($draft, [
+        $updated = $this->service()->updateOption($new, [
             'key' => 'hacked',          // ignored (immutable)
             'is_system' => false,        // ignored (immutable)
-            'label_ar' => 'مسودة معدلة', // allowed
-            'label_en' => 'Draft edited', // allowed
+            'label_ar' => 'جديد معدل',   // allowed
+            'label_en' => 'New edited',  // allowed
             'color' => '#123456',        // allowed
         ]);
 
-        $this->assertSame('draft', $updated->key);
+        $this->assertSame('new', $updated->key);
         $this->assertTrue($updated->is_system);
-        $this->assertSame('Draft edited', $updated->label_en);
+        $this->assertSame('New edited', $updated->label_en);
         $this->assertSame('#123456', $updated->color);
     }
 
     public function test_deactivate_hides_an_option_from_the_effective_set(): void
     {
         $before = $this->service()->options('client.industry')->pluck('key')->all();
-        $this->assertContains('travel', $before);
+        $this->assertContains('events', $before);
 
-        $this->service()->deactivate($this->platformOption('client.industry', 'travel'));
+        $this->service()->deactivate($this->platformOption('client.industry', 'events'));
 
         $after = $this->service()->options('client.industry')->pluck('key')->all();
-        $this->assertNotContains('travel', $after);
+        $this->assertNotContains('events', $after);
     }
 
     public function test_a_used_option_cannot_be_hard_deleted(): void
@@ -251,7 +251,7 @@ final class TaxonomyEngineTest extends TestCase
     public function test_a_system_option_cannot_be_deleted(): void
     {
         $this->expectException(TaxonomyException::class);
-        $this->service()->deleteOption($this->platformOption('request.status', 'draft'));
+        $this->service()->deleteOption($this->platformOption('request.status', 'new'));
     }
 
     public function test_reorder_persists_sort_order(): void

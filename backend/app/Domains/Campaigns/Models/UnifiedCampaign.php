@@ -27,6 +27,7 @@ final class UnifiedCampaign extends Model
         'stage', 'performance_label', 'priority',
         'total_budget', 'budget_currency', 'starts_on', 'ends_on', 'primary_conversion_purpose',
         'attribution_model', 'attribution_window', 'owner_id', 'target_kpi', 'audience', 'regions',
+        'platforms', 'audiences', 'conversion_events', 'creative_types', 'tags',
         'meta', 'created_by',
     ];
 
@@ -36,6 +37,11 @@ final class UnifiedCampaign extends Model
         'ends_on' => 'date',
         'target_kpi' => 'array',
         'regions' => 'array',
+        'platforms' => 'array',
+        'audiences' => 'array',
+        'conversion_events' => 'array',
+        'creative_types' => 'array',
+        'tags' => 'array',
         'meta' => 'array',
     ];
 

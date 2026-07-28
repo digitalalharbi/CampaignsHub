@@ -43,6 +43,11 @@ final class ClientManagementController
             'default_currency' => ['sometimes', 'nullable', 'string', 'size:3'],
             'timezone' => ['sometimes', 'nullable', 'timezone'],
             'language' => ['sometimes', 'nullable', 'string', 'in:ar,en'],
+            // Additive taxonomy-driven multi-selects (tenant-managed vocabularies → free strings).
+            'tags' => ['sometimes', 'nullable', 'array'],
+            'tags.*' => ['string', 'max:64'],
+            'enabled_services' => ['sometimes', 'nullable', 'array'],
+            'enabled_services.*' => ['string', 'max:64'],
         ]);
 
         if (array_key_exists('owner_id', $data) && $data['owner_id'] !== null) {

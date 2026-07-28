@@ -24,7 +24,7 @@ final class ClientManagementService
 
     /** Editable classification fields (whitelist — nothing else is mass-assignable here). */
     private const CLASSIFICATION = ['client_status', 'service_level', 'industry', 'owner_id', 'priority',
-        'default_currency', 'timezone', 'language'];
+        'default_currency', 'timezone', 'language', 'tags', 'enabled_services'];
 
     /**
      * @param  array<string,mixed>  $data  already-validated subset of CLASSIFICATION
