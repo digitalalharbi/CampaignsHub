@@ -50,6 +50,8 @@ test('link → 409 move-confirmation → confirm move → unlink (full path)', a
   await openCampaignLinkedTab(page, campA)
   await page.getByRole('button', { name: /Link external campaign|ربط حملة خارجية/ }).click()
   await expect(page.getByText(/Sandbox data is demo|بيانات Sandbox تجريبية/)).toBeVisible()
+  // Wait for the async external list to render THIS row before acting (avoids a race under heavy load).
+  await expect(modalRow(targetName)).toBeVisible({ timeout: 15000 })
   await modalRow(targetName).getByRole('button', linkBtn).click()
   await page.getByRole('button', { name: 'Close' }).click()
   // Campaign A's Linked tab now lists it.
@@ -60,6 +62,7 @@ test('link → 409 move-confirmation → confirm move → unlink (full path)', a
   await openCampaignLinkedTab(page, campB)
   await page.getByRole('button', { name: /Link external campaign|ربط حملة خارجية/ }).click()
   await page.getByRole('checkbox').click() // show linked-elsewhere too ("Unlinked only" off)
+  await expect(modalRow(targetName)).toBeVisible({ timeout: 15000 })
   await modalRow(targetName).getByRole('button', linkBtn).click()
 
   // The backend replied 409 requires_confirmation → the UI shows the move confirmation.
