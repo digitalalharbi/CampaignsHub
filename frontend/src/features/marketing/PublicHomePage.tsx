@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Activity, ArrowLeft, ArrowRight, BarChart3, Bell, CheckCircle2, LayoutDashboard, Megaphone,
-  Moon, Plug, Sun, Target, Zap,
+  Moon, Plug, Sun, Target, Users, Wallet,
 } from 'lucide-react'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { Button } from '@/components/ui/Button'
@@ -16,81 +16,55 @@ const STATUS_TONE: Record<string, string> = {
   soon: 'bg-surface-secondary text-text-muted',
 }
 
-const FEATURE_ICONS = [LayoutDashboard, BarChart3, BarChart3, Target, Megaphone, Bell, Activity, Plug]
+const FEATURE_ICONS = [LayoutDashboard, BarChart3, Target, Wallet, Megaphone, Bell]
 
-/** Small, honest demo panel used inside the interactive product preview. */
+/** Faux mini bar chart for the preview — pure presentation, no data claims. */
+function MiniBars({ values }: { values: number[] }) {
+  const max = Math.max(...values)
+  return (
+    <div className="flex h-24 items-end gap-1.5">
+      {values.map((v, i) => (
+        <div key={i} className="flex-1 rounded-t bg-gradient-to-t from-brand-500/40 to-brand-400" style={{ height: `${(v / max) * 100}%` }} />
+      ))}
+    </div>
+  )
+}
+
+/** Large dashboard-style demo panel — the primary product visual. Honest, illustrative only. */
 function PreviewPanel({ tab, locale }: { tab: string; locale: Locale }) {
   const ar = locale === 'ar'
   const stat = (label: string, value: string, sub?: string) => (
-    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-      <div className="text-xs text-white/60">{label}</div>
+    <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-3">
+      <div className="text-[11px] text-white/60">{label}</div>
       <div className="tnum mt-1 text-lg font-bold text-white">{value}</div>
       {sub && <div className="mt-0.5 text-[11px] text-brand-300">{sub}</div>}
     </div>
   )
-  const rows: Record<string, React.ReactNode> = {
-    dashboard: (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {stat(ar ? 'حملات نشطة' : 'Active campaigns', '12')}
-        {stat(ar ? 'الإنفاق' : 'Spend', '48,900')}
-        {stat(ar ? 'النتائج' : 'Results', '1,158')}
-        {stat(ar ? 'أفضل منصة' : 'Top platform', 'Meta', ar ? 'ROAS 3.4' : 'ROAS 3.4')}
-      </div>
-    ),
-    campaigns: (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {stat(ar ? 'الميزانية' : 'Budget', '60,000')}
-        {stat(ar ? 'المصروف' : 'Spent', '48,900', ar ? '81%' : '81%')}
-        {stat('CPA', '42.2')}
-        {stat('ROAS', '3.4')}
-      </div>
-    ),
-    analytics: (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {stat('CTR', '2.1%')}
-        {stat('CPC', '1.8')}
-        {stat(ar ? 'التحويل' : 'Conv. rate', '4.6%')}
-        {stat(ar ? 'الوصول' : 'Reach', '312K')}
-      </div>
-    ),
-    reports: (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {stat(ar ? 'تقرير شهري' : 'Monthly report', 'PDF')}
-        {stat(ar ? 'الفترة' : 'Range', '30d')}
-        {stat(ar ? 'الهدف' : 'Objective', ar ? 'المبيعات' : 'Sales')}
-        {stat(ar ? 'الحالة' : 'Status', ar ? 'جاهز' : 'Ready')}
-      </div>
-    ),
-    connections: (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {stat('Meta', ar ? 'بانتظار مفاتيح' : 'Awaiting keys')}
-        {stat('Google', ar ? 'بانتظار مفاتيح' : 'Awaiting keys')}
-        {stat('Sandbox', ar ? 'متصل' : 'Connected')}
-        {stat(ar ? 'آخر مزامنة' : 'Last sync', ar ? 'قبل 5د' : '5m ago')}
-      </div>
-    ),
-    alerts: (
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {stat(ar ? 'تجاوز ميزانية' : 'Budget pace', ar ? 'مرتفع' : 'High')}
-        {stat('CPA', ar ? 'ارتفاع' : 'Rising')}
-        {stat(ar ? 'المزامنة' : 'Sync', 'OK')}
-      </div>
-    ),
-    requests: (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {stat(ar ? 'جديدة' : 'New', '3')}
-        {stat(ar ? 'قيد التنفيذ' : 'In progress', '5')}
-        {stat(ar ? 'بانتظار العميل' : 'Waiting client', '2')}
-        {stat('SLA', '92%')}
-      </div>
-    ),
+  const kpis: Record<string, [string, string, string?][]> = {
+    dashboard: [[ar ? 'حملات نشطة' : 'Active', '12'], [ar ? 'الإنفاق' : 'Spend', '48,900'], [ar ? 'النتائج' : 'Results', '1,158'], [ar ? 'أفضل منصة' : 'Top', 'Meta', 'ROAS 3.4']],
+    campaigns: [[ar ? 'الميزانية' : 'Budget', '60,000'], [ar ? 'المصروف' : 'Spent', '48,900', '81%'], ['CPA', '42.2'], ['ROAS', '3.4']],
+    analytics: [['CTR', '2.1%'], ['CPC', '1.8'], [ar ? 'التحويل' : 'Conv.', '4.6%'], [ar ? 'الوصول' : 'Reach', '312K']],
+    reports: [[ar ? 'الصيغة' : 'Format', 'PDF'], [ar ? 'الفترة' : 'Range', '30d'], [ar ? 'الهدف' : 'Objective', ar ? 'المبيعات' : 'Sales'], [ar ? 'الحالة' : 'Status', ar ? 'جاهز' : 'Ready']],
+    connections: [['Meta', ar ? 'بانتظار' : 'Awaiting'], ['Google', ar ? 'بانتظار' : 'Awaiting'], ['Sandbox', ar ? 'متصل' : 'Connected'], [ar ? 'المزامنة' : 'Sync', ar ? 'قبل 5د' : '5m']],
   }
-  return <div>{rows[tab] ?? rows.dashboard}</div>
+  const rows = kpis[tab] ?? kpis.dashboard
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{rows.map((r) => stat(r[0], r[1], r[2]))}</div>
+      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-[11px] font-semibold text-white/70">{ar ? 'الأداء عبر الفترة' : 'Performance over time'}</span>
+          <span className="text-[11px] text-brand-300">{ar ? '30 يومًا' : '30 days'}</span>
+        </div>
+        <MiniBars values={tab === 'analytics' ? [5, 7, 6, 9, 8, 11, 10, 13, 12] : [4, 6, 8, 7, 10, 9, 12, 11, 14]} />
+      </div>
+    </div>
+  )
 }
 
 /**
- * Public marketing homepage at `/`. Serves four journeys (self-serve, agency, service request, future
- * influencer) plus login. Authenticated visitors get a "back to dashboard" action instead of sign-up CTAs.
+ * Public marketing homepage at `/`. Serves the self-serve, agency and service-request journeys plus
+ * login. Authenticated visitors get a "back to dashboard" action instead of sign-up CTAs.
  * Uses the adopted Emerald-on-Graphite identity — never InfluencerHub purple.
  */
 export function PublicHomePage() {
@@ -120,8 +94,7 @@ export function PublicHomePage() {
           <nav className="ms-6 hidden items-center gap-5 text-sm font-medium text-text-secondary lg:flex">
             <a href="#features" className="hover:text-text-primary">{c.nav.features}</a>
             <a href="#how" className="hover:text-text-primary">{c.nav.how}</a>
-            <a href="#analytics" className="hover:text-text-primary">{c.nav.analytics}</a>
-            <a href="#reports" className="hover:text-text-primary">{c.nav.reports}</a>
+            <a href="#usage" className="hover:text-text-primary">{c.nav.usage}</a>
             <a href="#integrations" className="hover:text-text-primary">{c.nav.integrations}</a>
           </nav>
           <div className="ms-auto flex items-center gap-1.5">
@@ -139,15 +112,15 @@ export function PublicHomePage() {
         </div>
       </header>
 
-      {/* Hero — wide value + product preview (≈70%) beside a journey card (≈30%), equal height. */}
+      {/* Hero — headline + subtext + CTA beside a large product preview; all above the fold on 1440×900. */}
       <section className="relative overflow-hidden border-b border-border">
-        <div className="mx-auto grid max-w-6xl items-stretch gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_360px] lg:py-16 xl:grid-cols-[1fr_380px]">
+        <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:py-12">
           {/* Value column */}
           <div className="flex flex-col">
             <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[13px] font-semibold text-brand-700">{c.hero.eyebrow}</p>
-            <h1 className="mt-5 font-heading text-[34px] font-extrabold leading-[1.12] sm:text-5xl xl:text-6xl">{c.hero.title}</h1>
-            <p className="mt-5 max-w-2xl text-lg leading-relaxed text-text-secondary">{c.hero.subtitle}</p>
-            <div className="mt-7 flex flex-wrap gap-3">
+            <h1 className="mt-5 font-heading text-[32px] font-extrabold leading-[1.12] sm:text-5xl">{c.hero.title}</h1>
+            <p className="mt-4 max-w-xl text-lg leading-relaxed text-text-secondary">{c.hero.subtitle}</p>
+            <div className="mt-6 flex flex-wrap gap-3">
               <Link to="/register"><Button size="lg">{c.hero.ctaStart}</Button></Link>
               <Link to="/requests/new"><Button variant="secondary" size="lg">{c.hero.ctaRequest}</Button></Link>
             </div>
@@ -156,161 +129,151 @@ export function PublicHomePage() {
                 <li key={p} className="flex items-center gap-2 text-[15px] text-text-secondary"><CheckCircle2 size={17} className="shrink-0 text-brand-500" /> {p}</li>
               ))}
             </ul>
-
-            {/* Large interactive product preview — the primary visual element. */}
-            <div id="preview" className="mt-8 flex-1">
-              <div className="flex h-full flex-col rounded-2xl border border-white/10 bg-gradient-to-br from-[var(--auth-panel-from)] via-[var(--auth-panel-via)] to-[var(--auth-panel-to)] p-5 shadow-[var(--shadow-large)]">
-                <div className="flex flex-wrap gap-1.5">
-                  {c.previewTabs.map((tb) => (
-                    <button
-                      key={tb.key}
-                      onClick={() => setTab(tb.key)}
-                      className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors ${tab === tb.key ? 'bg-brand-500 text-white' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
-                    >
-                      {tb.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-5 flex-1"><PreviewPanel tab={tab} locale={locale as Locale} /></div>
-                <div className="mt-5 flex items-center gap-1.5 text-xs text-white/50">
-                  <span className="h-1.5 w-1.5 rounded-full bg-warning" /> {c.hero.demoTag}
-                </div>
-              </div>
-            </div>
           </div>
 
-          {/* Journey selection card */}
-          <aside className="flex flex-col rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)]">
-            <h2 className="font-heading text-xl font-extrabold text-text-primary">{c.journeyPanel.title}</h2>
-            <p className="mt-1.5 text-sm text-text-secondary">{c.journeyPanel.subtitle}</p>
-            <div className="mt-5 flex flex-1 flex-col gap-2.5">
-              {c.journeys.items.map((j) => {
-                const inner = (
-                  <>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-bold text-text-primary">{j.title}</span>
-                      <span className="mt-0.5 block text-xs leading-snug text-text-secondary">{j.desc}</span>
-                    </span>
-                    {j.soon
-                      ? <span className="shrink-0 rounded-md bg-surface-secondary px-2 py-1 text-[11px] font-semibold text-text-muted">{j.cta}</span>
-                      : <Arrow size={16} className="shrink-0 text-brand-600" />}
-                  </>
-                )
-                const base = 'flex min-h-[68px] items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-start transition-colors'
-                return j.soon ? (
-                  <div key={j.title} className={`${base} opacity-90`}>{inner}</div>
-                ) : (
-                  <Link key={j.title} to={j.to} className={`${base} hover:border-brand-400 hover:bg-brand-primary-soft/40`}>{inner}</Link>
-                )
-              })}
+          {/* Large interactive product preview — the dominant visual. */}
+          <div id="preview" className="rounded-2xl border border-white/10 bg-gradient-to-br from-[var(--auth-panel-from)] via-[var(--auth-panel-via)] to-[var(--auth-panel-to)] p-5 shadow-[var(--shadow-large)]">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-sm font-bold text-white"><LayoutDashboard size={15} className="text-brand-300" /> CampaignsHub</span>
+              <span className="flex items-center gap-1.5 text-[11px] text-white/50"><span className="h-1.5 w-1.5 rounded-full bg-warning" /> {c.hero.demoTag}</span>
             </div>
-          </aside>
+            <div className="mt-4 flex flex-wrap gap-1.5">
+              {c.previewTabs.map((tb) => (
+                <button
+                  key={tb.key}
+                  onClick={() => setTab(tb.key)}
+                  className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors ${tab === tb.key ? 'bg-brand-500 text-white' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+                >
+                  {tb.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4"><PreviewPanel tab={tab} locale={locale as Locale} /></div>
+          </div>
         </div>
       </section>
 
-      {/* Workflow strip */}
-      <section className="bg-surface-secondary">
-        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-          <h2 className="text-center font-heading text-xl font-extrabold text-text-primary sm:text-2xl">{c.workflow.title}</h2>
-          <ol className="mt-7 flex flex-col gap-3 md:flex-row md:flex-wrap md:items-stretch md:justify-center">
-            {c.workflow.steps.map((step, i) => (
-              <li key={step} className="flex items-center gap-3 md:flex-col md:text-center">
-                <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-4 py-3 md:h-full md:w-[150px] md:flex-col md:justify-center">
-                  <span className="tnum flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-primary-soft text-xs font-bold text-brand-700">{i + 1}</span>
-                  <span className="text-[13px] font-semibold text-text-secondary md:mt-1.5">{step}</span>
+      {/* Core value — one concise band */}
+      <section className="border-b border-border bg-surface-secondary">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.coreValue.title}</h2>
+          <p className="mt-2 max-w-2xl text-text-secondary">{c.coreValue.subtitle}</p>
+          <div className="mt-7 grid auto-rows-fr gap-4 md:grid-cols-3">
+            {c.coreValue.pillars.map((p, i) => {
+              const Icon = [LayoutDashboard, Activity, Target][i] ?? LayoutDashboard
+              return (
+                <div key={p.title} className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Icon size={18} /></span>
+                  <h3 className="mt-3 text-base font-bold text-text-primary">{p.title}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">{p.desc}</p>
                 </div>
-                {i < c.workflow.steps.length - 1 && <Arrow size={16} className="shrink-0 text-border-strong md:hidden" />}
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* How it works — 4 steps */}
+      <section id="how" className="border-b border-border">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.steps.title}</h2>
+          <p className="mt-2 max-w-2xl text-text-secondary">{c.steps.subtitle}</p>
+          <ol className="mt-7 grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {c.steps.items.map((step, i) => (
+              <li key={step.title} className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5">
+                <div className="flex items-center gap-2.5">
+                  <span className="tnum flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-primary-soft text-sm font-bold text-brand-700">{i + 1}</span>
+                  <Arrow size={16} className="text-border-strong" />
+                </div>
+                <h3 className="mt-3 text-base font-bold text-text-primary">{step.title}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-text-secondary">{step.desc}</p>
               </li>
             ))}
           </ol>
         </div>
       </section>
 
-      {/* Features */}
-      <Section id="features" title={c.features.title} subtitle={c.features.subtitle} tinted>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {c.features.items.map((f, i) => {
-            const Icon = FEATURE_ICONS[i] ?? LayoutDashboard
-            return (
-              <div key={f.title} className="rounded-2xl border border-border bg-surface p-5">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Icon size={18} /></span>
-                <h3 className="mt-3 text-sm font-bold text-text-primary">{f.title}</h3>
-                <p className="mt-1 text-sm text-text-secondary">{f.desc}</p>
+      {/* Key features — one balanced grid */}
+      <section id="features" className="border-b border-border bg-surface-secondary">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.features.title}</h2>
+          <p className="mt-2 max-w-2xl text-text-secondary">{c.features.subtitle}</p>
+          <div className="mt-7 grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {c.features.items.map((f, i) => {
+              const Icon = FEATURE_ICONS[i] ?? LayoutDashboard
+              return (
+                <div key={f.title} className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Icon size={18} /></span>
+                  <h3 className="mt-3 text-base font-bold text-text-primary">{f.title}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-text-secondary">{f.desc}</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Usage selection — 3 concise cards, equal height */}
+      <section id="usage" className="border-b border-border">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.usage.title}</h2>
+          <p className="mt-2 max-w-2xl text-text-secondary">{c.usage.subtitle}</p>
+          <div className="mt-7 grid auto-rows-fr gap-4 md:grid-cols-3">
+            {c.usage.cards.map((card, i) => {
+              const Icon = [LayoutDashboard, Users, Megaphone][i] ?? LayoutDashboard
+              return (
+                <div key={card.title} className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Icon size={20} /></span>
+                  <h3 className="mt-4 text-lg font-bold text-text-primary">{card.title}</h3>
+                  <p className="mt-1.5 flex-1 text-sm leading-relaxed text-text-secondary">{card.desc}</p>
+                  <Link to={card.to} className="mt-5"><Button size="sm" variant="secondary" className="w-full justify-between">{card.cta}<Arrow size={16} /></Button></Link>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Integrations & reports — one combined band */}
+      <section id="integrations" className="border-b border-border bg-surface-secondary">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.combined.title}</h2>
+          <p className="mt-2 max-w-2xl text-text-secondary">{c.combined.subtitle}</p>
+          <div className="mt-7 grid auto-rows-fr gap-4 lg:grid-cols-2">
+            {/* Integrations */}
+            <div className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6">
+              <div className="flex items-center gap-2 text-sm font-bold text-text-primary"><Plug size={16} className="text-brand-600" /> {c.combined.integLabel}</div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {c.combined.statuses.map((s) => <span key={s.label} className={`rounded-full px-3 py-1.5 text-[13px] font-semibold ${STATUS_TONE[s.tone]}`}>{s.label}</span>)}
               </div>
-            )
-          })}
-        </div>
-      </Section>
-
-      {/* Objectives */}
-      <Section id="objectives" title={c.objectives.title} subtitle={c.objectives.subtitle}>
-        <div className="flex flex-wrap gap-2">
-          {c.objectives.items.map((o) => <span key={o} className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-sm font-medium text-text-secondary">{o}</span>)}
-        </div>
-        <div className="mt-5 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-text-secondary"><Target size={15} className="me-1.5 inline text-warning" /> {c.objectives.note}</div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {c.objectives.perks.map((p) => <div key={p} className="rounded-xl bg-surface-secondary px-3 py-2.5 text-center text-sm font-medium text-text-secondary">{p}</div>)}
-        </div>
-      </Section>
-
-      {/* Analytics & reports */}
-      <Section id="reports" title={c.reports.title} subtitle={c.reports.subtitle} tinted>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="flex flex-wrap gap-2">
-            {c.reports.formats.map((f) => <span key={f} className="rounded-lg bg-surface px-3 py-1.5 text-sm font-medium text-text-secondary shadow-[var(--shadow-small)]">{f}</span>)}
-          </div>
-          <div className="rounded-2xl border border-border bg-surface p-5">
-            <div className="text-sm font-bold text-text-primary">{c.reports.basis.label}</div>
-            <ul className="mt-3 grid grid-cols-2 gap-2">
-              {c.reports.basis.items.map((i) => <li key={i} className="flex items-center gap-1.5 text-sm text-text-secondary"><CheckCircle2 size={14} className="shrink-0 text-brand-500" /> {i}</li>)}
-            </ul>
+              <ol className="mt-5 flex flex-1 flex-col justify-end gap-2 pt-2">
+                {c.combined.flow.map((step, i) => (
+                  <li key={step} className="flex items-center gap-2.5 text-sm text-text-secondary">
+                    <span className="tnum flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-primary-soft text-xs font-bold text-brand-700">{i + 1}</span>
+                    {step}
+                  </li>
+                ))}
+              </ol>
+            </div>
+            {/* Reports */}
+            <div className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6">
+              <div className="flex items-center gap-2 text-sm font-bold text-text-primary"><BarChart3 size={16} className="text-brand-600" /> {c.combined.reportsLabel}</div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {c.combined.formats.map((f) => <span key={f} className="rounded-lg bg-surface-secondary px-3 py-1.5 text-[13px] font-medium text-text-secondary">{f}</span>)}
+              </div>
+              <div className="mt-5 flex flex-1 flex-col justify-end">
+                <div className="text-xs font-semibold uppercase tracking-wide text-text-muted">{c.combined.basisLabel}</div>
+                <ul className="mt-2.5 grid grid-cols-2 gap-2">
+                  {c.combined.basis.map((b) => <li key={b} className="flex items-center gap-1.5 text-sm text-text-secondary"><CheckCircle2 size={14} className="shrink-0 text-brand-500" /> {b}</li>)}
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
-      </Section>
-
-      {/* Integrations */}
-      <Section id="integrations" title={c.integrations.title} subtitle={c.integrations.subtitle}>
-        <div className="flex flex-wrap gap-2.5">
-          {c.integrations.statuses.map((s) => (
-            <span key={s.label} className={`rounded-full px-3.5 py-1.5 text-sm font-semibold ${STATUS_TONE[s.tone]}`}>{s.label}</span>
-          ))}
-        </div>
-        <ol className="mt-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {c.integrations.flow.map((step, i) => (
-            <li key={step} className="flex items-start gap-2.5 rounded-xl border border-border bg-surface p-3.5 text-sm text-text-secondary">
-              <span className="tnum flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-primary-soft text-xs font-bold text-brand-700">{i + 1}</span>
-              {step}
-            </li>
-          ))}
-        </ol>
-      </Section>
-
-      {/* Automation */}
-      <Section id="how" title={c.automation.title} subtitle={c.automation.subtitle} tinted>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {c.automation.items.map((a) => (
-            <div key={a} className="flex items-center gap-2.5 rounded-xl border border-border bg-surface p-4 text-sm text-text-secondary"><Zap size={16} className="shrink-0 text-brand-500" /> {a}</div>
-          ))}
-        </div>
-      </Section>
-
-      {/* Service request */}
-      <Section id="request" title={c.request.title} subtitle={c.request.subtitle}>
-        <div className="flex flex-wrap gap-2">
-          {c.request.types.map((t) => <span key={t} className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-sm text-text-secondary">{t}</span>)}
-        </div>
-        <div className="mt-6"><Link to="/requests/new"><Button size="lg">{c.request.cta}</Button></Link></div>
-      </Section>
-
-      {/* Audience */}
-      <Section id="audience" title={c.audience.title}>
-        <div className="flex flex-wrap gap-2.5">
-          {c.audience.items.map((a) => <span key={a} className="rounded-xl bg-surface-secondary px-4 py-2 text-sm font-medium text-text-secondary">{a}</span>)}
-        </div>
-      </Section>
+      </section>
 
       {/* Final CTA */}
-      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+      <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
         <div className="rounded-3xl bg-gradient-to-br from-[var(--auth-panel-from)] via-[var(--auth-panel-via)] to-[var(--auth-panel-to)] p-10 text-center text-white">
           <h2 className="font-heading text-2xl font-extrabold sm:text-3xl">{c.finalCta.title}</h2>
           <p className="mx-auto mt-3 max-w-xl text-sm text-white/70">{c.finalCta.subtitle}</p>
@@ -344,17 +307,5 @@ export function PublicHomePage() {
         <div className="border-t border-border py-4 text-center text-xs text-text-muted">© {new Date().getFullYear()} CampaignsHub — {c.footer.rights}</div>
       </footer>
     </div>
-  )
-}
-
-function Section({ id, title, subtitle, children, tinted }: { id?: string; title: string; subtitle?: string; children: React.ReactNode; tinted?: boolean }) {
-  return (
-    <section id={id} className={tinted ? 'bg-surface-secondary' : ''}>
-      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
-        <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-3xl">{title}</h2>
-        {subtitle && <p className="mt-2 max-w-2xl text-sm text-text-secondary sm:text-base">{subtitle}</p>}
-        <div className="mt-8">{children}</div>
-      </div>
-    </section>
   )
 }

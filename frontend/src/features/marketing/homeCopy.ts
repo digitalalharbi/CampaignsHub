@@ -2,126 +2,128 @@
  * Public homepage copy (ar + en). Kept as data so the marketing page stays declarative and the
  * official terminology ("إدارة الحملات الإعلانية المدفوعة / Paid Advertising Management") is used
  * consistently — never the loose synonyms "الحملات الرقمية / الممولة" as the module name.
+ *
+ * Structure is intentionally lean: one hero, one value band, one steps band, one features grid,
+ * one usage-selection grid, one combined integrations+reports band, one final CTA. No duplicated
+ * or repeated-style card sections.
  */
 export type Locale = 'ar' | 'en'
 
 export interface HomeCopy {
   dir: 'rtl' | 'ltr'
-  nav: { features: string; how: string; analytics: string; reports: string; integrations: string; login: string; start: string; request: string }
-  hero: { eyebrow: string; title: string; subtitle: string; ctaStart: string; ctaRequest: string; ctaExplore: string; points: string[]; demoTag: string }
+  nav: { features: string; how: string; usage: string; integrations: string; login: string; start: string }
+  hero: { eyebrow: string; title: string; subtitle: string; ctaStart: string; ctaRequest: string; points: string[]; demoTag: string }
   previewTabs: { key: string; label: string }[]
-  workflow: { title: string; steps: string[] }
-  journeyPanel: { title: string; subtitle: string }
-  journeys: { title: string; subtitle: string; items: { title: string; desc: string; cta: string; to: string; soon?: boolean }[] }
+  coreValue: { title: string; subtitle: string; pillars: { title: string; desc: string }[] }
+  steps: { title: string; subtitle: string; items: { title: string; desc: string }[] }
   features: { title: string; subtitle: string; items: { title: string; desc: string }[] }
-  objectives: { title: string; subtitle: string; note: string; items: string[]; perks: string[] }
-  reports: { title: string; subtitle: string; formats: string[]; basis: { label: string; items: string[] } }
-  integrations: { title: string; subtitle: string; statuses: { label: string; tone: 'ok' | 'dev' | 'await' | 'soon' }[]; flow: string[] }
-  automation: { title: string; subtitle: string; items: string[] }
-  request: { title: string; subtitle: string; types: string[]; cta: string }
-  audience: { title: string; items: string[] }
+  usage: { title: string; subtitle: string; cards: { title: string; desc: string; cta: string; to: string }[] }
+  combined: {
+    title: string
+    subtitle: string
+    integLabel: string
+    statuses: { label: string; tone: 'ok' | 'dev' | 'await' | 'soon' }[]
+    flow: string[]
+    reportsLabel: string
+    formats: string[]
+    basisLabel: string
+    basis: string[]
+  }
   finalCta: { title: string; subtitle: string; start: string; request: string }
   footer: { tagline: string; product: string; links: { label: string; to: string }[]; legal: string[]; rights: string }
 }
 
 const ar: HomeCopy = {
   dir: 'rtl',
-  nav: { features: 'المميزات', how: 'كيف يعمل', analytics: 'التحليلات', reports: 'التقارير', integrations: 'التكاملات', login: 'تسجيل الدخول', start: 'ابدأ الآن', request: 'أرسل طلب خدمة' },
+  nav: { features: 'المميزات', how: 'كيف يعمل', usage: 'المسارات', integrations: 'التكاملات والتقارير', login: 'تسجيل الدخول', start: 'ابدأ الآن' },
   hero: {
     eyebrow: 'منصة إدارة الحملات الإعلانية المدفوعة',
     title: 'كل حملاتك الإعلانية المدفوعة في مكان واحد',
-    subtitle: 'اربط منصاتك، تابع الميزانيات والنتائج، قارن الأداء، وأنشئ تقارير احترافية دون التنقل بين أدوات متعددة.',
-    ctaStart: 'ابدأ إدارة حملاتك', ctaRequest: 'أرسل طلب إدارة حملة', ctaExplore: 'استعرض النظام',
-    points: ['مركز موحّد لجميع الحملات والمنصات', 'عزل مستقل لكل عميل ومشروع', 'متابعة الميزانية والنتائج', 'تحليلات حسب هدف الحملة', 'تقارير احترافية قابلة للمشاركة', 'بيانات فعلية من مصادر الربط'],
+    subtitle: 'اربط منصاتك، تابع الميزانيات والنتائج، وأنشئ تقارير احترافية دون التنقل بين أدوات متعددة.',
+    ctaStart: 'ابدأ إدارة حملاتك',
+    ctaRequest: 'أرسل طلب خدمة',
+    points: ['مركز موحّد لكل الحملات', 'عزل مستقل لكل عميل', 'مؤشرات حسب هدف الحملة', 'بيانات فعلية من الربط'],
     demoTag: 'معاينة توضيحية ببيانات تجريبية',
   },
-  workflow: {
-    title: 'من الربط إلى التقرير — دورة عمل واحدة',
-    steps: ['ربط المنصات', 'تنظيم العملاء والمشاريع', 'إدارة الحملات', 'متابعة الأداء', 'التحليل والتحسين', 'إعداد التقرير', 'التنبيهات والمتابعة'],
-  },
-  journeyPanel: {
-    title: 'ابدأ مع CampaignsHub',
-    subtitle: 'اختر المسار المناسب لاحتياجك وسنوجّهك مباشرة إلى الخطوة التالية.',
-  },
   previewTabs: [
-    { key: 'dashboard', label: 'لوحة التحكم' }, { key: 'campaigns', label: 'الحملات' }, { key: 'analytics', label: 'التحليلات' },
-    { key: 'reports', label: 'التقارير' }, { key: 'connections', label: 'الربط' }, { key: 'alerts', label: 'التنبيهات' }, { key: 'requests', label: 'الطلبات' },
+    { key: 'dashboard', label: 'لوحة التحكم' },
+    { key: 'campaigns', label: 'الحملات' },
+    { key: 'analytics', label: 'التحليلات' },
+    { key: 'reports', label: 'التقارير' },
+    { key: 'connections', label: 'الربط' },
   ],
-  journeys: {
-    title: 'كيف تريد استخدام CampaignsHub؟',
-    subtitle: 'اختر المسار الأنسب لك — لكل مسار تجربة مصممة له.',
+  coreValue: {
+    title: 'لماذا CampaignsHub',
+    subtitle: 'قيمة واحدة واضحة: كل ما تحتاجه لإدارة الإعلانات المدفوعة باحتراف، دون فوضى الأدوات.',
+    pillars: [
+      { title: 'مركز موحّد', desc: 'الحملات والمنصات والعملاء في مكان واحد بعزل كامل لكل مشروع.' },
+      { title: 'بيانات فعلية', desc: 'مقاييس من API المنصات مع مصدر واضح لكل رقم — لا شاشات تعريفية.' },
+      { title: 'تقارير حسب الهدف', desc: 'مؤشرات وتقارير تتغيّر بحسب هدف كل حملة، لا مقياس موحّد للجميع.' },
+    ],
+  },
+  steps: {
+    title: 'كيف يعمل',
+    subtitle: 'من الربط إلى التقرير في أربع خطوات.',
     items: [
-      { title: 'أدير حملاتي بنفسي', desc: 'للميديا باير والمستقل وفرق التسويق الداخلية.', cta: 'إنشاء حساب', to: '/register' },
-      { title: 'أدير حملات عدة عملاء', desc: 'للوكالات والمستقلين الذين يديرون مشاريع وعملاء متعددين.', cta: 'إنشاء مساحة عمل', to: '/register' },
-      { title: 'أحتاج خدمة إدارة حملات', desc: 'أرسل طلبك دون إنشاء حساب وتابع حالته عبر رابط آمن.', cta: 'إرسال طلب خدمة', to: '/requests/new' },
-      { title: 'إدارة حملات المؤثرين وUGC', desc: 'وحدة مستقلة لإدارة الترشيحات والتعاونات والمحتوى.', cta: 'قريبًا', to: '/register', soon: true },
-      { title: 'لدي حساب', desc: 'ادخل إلى مساحة عملك وتابع من حيث توقفت.', cta: 'تسجيل الدخول', to: '/login' },
+      { title: 'اربط منصاتك', desc: 'ربط آمن عبر OAuth لحسابات الإعلانات.' },
+      { title: 'نظّم عملاءك', desc: 'عملاء ومشاريع وحملات بعزل كامل.' },
+      { title: 'تابع الأداء', desc: 'ميزانيات ونتائج ومؤشرات حسب الهدف.' },
+      { title: 'أنشئ التقارير', desc: 'تقارير احترافية وتنبيهات تلقائية.' },
     ],
   },
   features: {
-    title: 'كل ما تحتاجه لإدارة الحملات باحتراف',
-    subtitle: 'أدوات فعلية مبنية على بيانات المنصات، وليست شاشات تعريفية.',
+    title: 'كل ما تحتاجه لإدارة الحملات',
+    subtitle: 'أدوات فعلية مبنية على بيانات المنصات.',
     items: [
-      { title: 'إدارة الحملات', desc: 'تابع حملاتك ومنصاتك من مكان واحد مع عزل كامل لكل مشروع وعميل.' },
-      { title: 'التحليلات', desc: 'حوّل بيانات الأداء إلى مؤشرات واضحة تكشف الفرص والمخاطر بسرعة.' },
-      { title: 'التقارير', desc: 'تقارير مخصصة حسب هدف الحملة مع فصل تقارير العميل عن التحليلات الداخلية.' },
-      { title: 'الميزانيات', desc: 'راقب سرعة الصرف والمتبقي وتوقع نهاية الميزانية قبل التجاوز.' },
-      { title: 'المحتويات الإعلانية', desc: 'قارن أداء الإعلانات باستخدام بيانات API الفعلية لكل منصة.' },
-      { title: 'التنبيهات', desc: 'تنبيهات عند ارتفاع التكلفة أو انخفاض الأداء أو فشل المزامنة.' },
-      { title: 'العملاء والمشاريع', desc: 'نظّم العملاء والمشاريع والطلبات والملفات والمهام في مساحة واحدة.' },
-      { title: 'مصادر البيانات', desc: 'اربط المنصات واحتفظ بمصدر كل رقم بوضوح.' },
+      { title: 'إدارة الحملات', desc: 'تابع حملاتك ومنصاتك من مكان واحد.' },
+      { title: 'التحليلات', desc: 'مؤشرات واضحة تكشف الفرص والمخاطر.' },
+      { title: 'التقارير', desc: 'تقارير حسب الهدف تفصل العميل عن الداخلي.' },
+      { title: 'الميزانيات', desc: 'راقب سرعة الصرف وتوقّع التجاوز مبكرًا.' },
+      { title: 'المحتويات الإعلانية', desc: 'قارن أداء الإعلانات ببيانات فعلية.' },
+      { title: 'التنبيهات', desc: 'تنبيه عند ارتفاع التكلفة أو فشل المزامنة.' },
     ],
   },
-  objectives: {
-    title: 'مؤشرات وتقارير حسب هدف الحملة',
-    subtitle: 'النظام لا يستخدم مقاييس موحدة لكل الأهداف — لكل هدف مؤشراته ومساره وتقاريره.',
-    note: 'ROAS ليس المؤشر الرئيسي لكل الحملات؛ يتغير المقياس بحسب الهدف.',
-    items: ['المبيعات والتحويلات', 'العملاء المحتملون', 'الوعي والوصول', 'الزيارات', 'التفاعل والاهتمام', 'تحميلات التطبيقات', 'مشاهدات الفيديو', 'زيارات المتجر والفعاليات', 'أهداف مخصصة'],
-    perks: ['KPIs مناسبة للهدف', 'Funnel مختلف', 'تقارير متخصصة', 'تحليل محتويات مختلف', 'توصيات مرتبطة بالهدف'],
+  usage: {
+    title: 'كيف تريد استخدام CampaignsHub؟',
+    subtitle: 'اختر المسار الأنسب لك، وسنأخذك مباشرة إلى الخطوة التالية.',
+    cards: [
+      { title: 'أدير حملاتي بنفسي', desc: 'للميديا باير وفرق التسويق الداخلية داخل الشركة.', cta: 'إنشاء حساب', to: '/register' },
+      { title: 'أدير حملات عدة عملاء', desc: 'للوكالات التي تدير مشاريع وعملاء متعددين بعزل كامل.', cta: 'إنشاء مساحة عمل', to: '/register' },
+      { title: 'أحتاج خدمة إدارة حملات', desc: 'أرسل طلبك وتابعه عبر رابط آمن دون إنشاء حساب.', cta: 'إرسال طلب', to: '/requests/new' },
+    ],
   },
-  reports: {
-    title: 'تقارير احترافية تعتمد على بيانات فعلية',
-    subtitle: 'من التحليلات الداخلية إلى تقارير العميل التنفيذية.',
-    formats: ['أسبوعية', 'شهرية', 'تنفيذية', 'تقارير عميل', 'تحليلات داخلية', 'PDF', 'XLSX', 'CSV', 'روابط آمنة', 'إرسال مجدول بالبريد'],
-    basis: { label: 'كل تقرير يعتمد على', items: ['هدف الحملة', 'المنصات المرتبطة', 'بيانات API', 'الفترة', 'مصدر الحقيقة', 'الإسناد', 'العملة والمنطقة الزمنية', 'الملاحظات والتوصيات المعتمدة'] },
-  },
-  integrations: {
-    title: 'تكاملات ومصادر بيانات بوضع صادق',
-    subtitle: 'لا نعرض أي تكامل كفعلي قبل نجاح OAuth والمزامنة.',
+  combined: {
+    title: 'التكاملات والتقارير',
+    subtitle: 'ربط صادق بمصادر فعلية، وتقارير جاهزة للمشاركة — بوضع معلن لكل مصدر.',
+    integLabel: 'حالة المصادر',
     statuses: [
-      { label: 'Meta Ads · Awaiting Credentials', tone: 'await' }, { label: 'Google Ads · Awaiting Credentials', tone: 'await' },
-      { label: 'TikTok Ads · In Development', tone: 'dev' }, { label: 'Snapchat Ads · In Development', tone: 'dev' },
-      { label: 'GA4 · Coming Soon', tone: 'soon' }, { label: 'Sandbox · Available', tone: 'ok' },
+      { label: 'Meta Ads · Awaiting Credentials', tone: 'await' },
+      { label: 'Google Ads · Awaiting Credentials', tone: 'await' },
+      { label: 'TikTok Ads · In Development', tone: 'dev' },
+      { label: 'Snapchat Ads · In Development', tone: 'dev' },
+      { label: 'GA4 · Coming Soon', tone: 'soon' },
+      { label: 'Sandbox · Available', tone: 'ok' },
     ],
-    flow: ['ربط الحساب', 'اختيار الحساب الإعلاني', 'مزامنة الحملات', 'مزامنة الإعلانات والمحتويات', 'توحيد المقاييس', 'ظهور البيانات في الحملات والتحليلات والتقارير والتنبيهات'],
-  },
-  automation: {
-    title: 'الأتمتة والتنبيهات',
-    subtitle: 'حوّل المتابعة اليومية إلى تدفقات عمل منظمة.',
-    items: ['تنبيهات الميزانية وسرعة الصرف', 'ارتفاع CPA أو CPL', 'انخفاض ROAS', 'فشل المزامنة أو انتهاء Token', 'جاهزية التقرير أو فشله', 'ملخصات يومية وأسبوعية'],
-  },
-  request: {
-    title: 'تحتاج إلى إدارة حملة بدل استخدام النظام؟',
-    subtitle: 'أرسل تفاصيل احتياجك، وتابع طلبك ضمن مسار واضح يبدأ بالمراجعة والتأهيل وينتقل إلى التنفيذ والتقارير.',
-    types: ['إطلاق حملة إعلانية مدفوعة', 'إدارة حملة قائمة', 'تحسين الأداء', 'تدقيق حساب إعلاني', 'إعداد التتبع والتحويلات', 'ربط منصة أو مصدر بيانات', 'إنشاء تقرير', 'تحليل بيانات', 'استشارة', 'طلب مخصص', 'حملة مؤثرين أو UGC مستقبلًا'],
-    cta: 'أرسل طلبك الآن',
-  },
-  audience: {
-    title: 'لمن يناسب CampaignsHub؟',
-    items: ['الميديا باير المستقل', 'وكالات التسويق الرقمي', 'فرق التسويق الداخلية', 'العلامات التجارية', 'الشركات التي تدير حملاتها ذاتيًا'],
+    flow: ['اربط الحساب', 'اختر الحساب الإعلاني', 'زامن الحملات', 'تظهر البيانات في كل مكان'],
+    reportsLabel: 'صيغ ومخرجات التقارير',
+    formats: ['PDF', 'XLSX', 'CSV', 'أسبوعية', 'شهرية', 'تنفيذية', 'روابط آمنة', 'إرسال مجدول'],
+    basisLabel: 'كل تقرير يعتمد على',
+    basis: ['هدف الحملة', 'المنصات المرتبطة', 'بيانات API', 'الفترة والعملة'],
   },
   finalCta: {
     title: 'ابدأ إدارة حملاتك الإعلانية المدفوعة اليوم',
     subtitle: 'أنشئ حسابك خلال دقائق، أو أرسل طلب خدمة وتابعه عبر رابط آمن.',
-    start: 'ابدأ إدارة حملاتك', request: 'أرسل طلب خدمة',
+    start: 'ابدأ إدارة حملاتك',
+    request: 'أرسل طلب خدمة',
   },
   footer: {
     tagline: 'منصة إدارة الحملات الإعلانية المدفوعة — العملاء والمشاريع والحملات والتحليلات والتقارير في مكان واحد.',
     product: 'المنتج',
     links: [
-      { label: 'إدارة الحملات المدفوعة', to: '/register' }, { label: 'المؤثرون وUGC (قريبًا)', to: '/register' },
-      { label: 'تسجيل الدخول', to: '/login' }, { label: 'إنشاء حساب', to: '/register' },
-      { label: 'إرسال طلب', to: '/requests/new' }, { label: 'تتبع طلب', to: '/requests/track' },
+      { label: 'إنشاء حساب', to: '/register' },
+      { label: 'تسجيل الدخول', to: '/login' },
+      { label: 'إرسال طلب', to: '/requests/new' },
+      { label: 'تتبع طلب', to: '/requests/track' },
     ],
     legal: ['الخصوصية', 'الشروط', 'الدعم'],
     rights: 'جميع الحقوق محفوظة',
@@ -130,102 +132,95 @@ const ar: HomeCopy = {
 
 const en: HomeCopy = {
   dir: 'ltr',
-  nav: { features: 'Features', how: 'How it works', analytics: 'Analytics', reports: 'Reports', integrations: 'Integrations', login: 'Log in', start: 'Get started', request: 'Request a service' },
+  nav: { features: 'Features', how: 'How it works', usage: 'Paths', integrations: 'Integrations & reports', login: 'Log in', start: 'Get started' },
   hero: {
     eyebrow: 'Paid Advertising Management platform',
-    title: 'All your paid advertising in one place',
-    subtitle: 'Connect your platforms, track budgets and results, compare performance, and build professional reports — without switching between tools.',
-    ctaStart: 'Start managing campaigns', ctaRequest: 'Request campaign management', ctaExplore: 'Explore the product',
-    points: ['One hub for all campaigns and platforms', 'Isolated per client and project', 'Budget and results tracking', 'Objective-based analytics', 'Shareable professional reports', 'Real data from connected sources'],
+    title: 'All your paid ad campaigns in one place',
+    subtitle: 'Connect your platforms, track budgets and results, and build professional reports — without switching between tools.',
+    ctaStart: 'Start managing campaigns',
+    ctaRequest: 'Request a service',
+    points: ['One hub for every campaign', 'Isolated per client', 'Objective-based KPIs', 'Real data from connections'],
     demoTag: 'Illustrative preview with demo data',
   },
-  workflow: {
-    title: 'From connection to report — one workflow',
-    steps: ['Connect platforms', 'Organize clients & projects', 'Manage campaigns', 'Track performance', 'Analyze & optimize', 'Build the report', 'Alerts & monitoring'],
-  },
-  journeyPanel: {
-    title: 'Get started with CampaignsHub',
-    subtitle: 'Pick the path that fits your need and we’ll take you straight to the next step.',
-  },
   previewTabs: [
-    { key: 'dashboard', label: 'Dashboard' }, { key: 'campaigns', label: 'Campaigns' }, { key: 'analytics', label: 'Analytics' },
-    { key: 'reports', label: 'Reports' }, { key: 'connections', label: 'Connections' }, { key: 'alerts', label: 'Alerts' }, { key: 'requests', label: 'Requests' },
+    { key: 'dashboard', label: 'Dashboard' },
+    { key: 'campaigns', label: 'Campaigns' },
+    { key: 'analytics', label: 'Analytics' },
+    { key: 'reports', label: 'Reports' },
+    { key: 'connections', label: 'Connections' },
   ],
-  journeys: {
-    title: 'How do you want to use CampaignsHub?',
-    subtitle: 'Pick the path that fits you — each one has a tailored experience.',
+  coreValue: {
+    title: 'Why CampaignsHub',
+    subtitle: 'One clear promise: everything you need to run paid advertising professionally, without tool sprawl.',
+    pillars: [
+      { title: 'One unified hub', desc: 'Campaigns, platforms and clients in one place, fully isolated per project.' },
+      { title: 'Real data', desc: 'Metrics from platform APIs with a clear source for every number — not brochure screens.' },
+      { title: 'Objective-based reports', desc: 'KPIs and reports that change with each objective — no single metric for all.' },
+    ],
+  },
+  steps: {
+    title: 'How it works',
+    subtitle: 'From connection to report in four steps.',
     items: [
-      { title: 'I manage campaigns myself', desc: 'For media buyers, freelancers and in-house marketing teams.', cta: 'Create account', to: '/register' },
-      { title: 'I manage several clients', desc: 'For agencies and freelancers running multiple projects and clients.', cta: 'Create workspace', to: '/register' },
-      { title: 'I need campaign management', desc: 'Send your request without an account and track it via a secure link.', cta: 'Request a service', to: '/requests/new' },
-      { title: 'Influencer & UGC campaigns', desc: 'A separate module for shortlists, collaborations and content.', cta: 'Coming soon', to: '/register', soon: true },
-      { title: 'I have an account', desc: 'Sign in to your workspace and pick up where you left off.', cta: 'Log in', to: '/login' },
+      { title: 'Connect platforms', desc: 'Secure OAuth for your ad accounts.' },
+      { title: 'Organize clients', desc: 'Clients, projects and campaigns, fully isolated.' },
+      { title: 'Track performance', desc: 'Budgets, results and objective-based KPIs.' },
+      { title: 'Build reports', desc: 'Professional reports and automatic alerts.' },
     ],
   },
   features: {
-    title: 'Everything you need to run campaigns professionally',
-    subtitle: 'Real tools built on platform data — not brochure screens.',
+    title: 'Everything you need to run campaigns',
+    subtitle: 'Real tools built on platform data.',
     items: [
-      { title: 'Campaign management', desc: 'Track campaigns and platforms in one place with full per-project and per-client isolation.' },
-      { title: 'Analytics', desc: 'Turn performance data into clear signals that surface opportunities and risks fast.' },
-      { title: 'Reports', desc: 'Objective-based reports that separate client reporting from internal analytics.' },
-      { title: 'Budgets', desc: 'Monitor spend pace and forecast budget exhaustion before it happens.' },
-      { title: 'Creatives', desc: 'Compare ad performance using each platform’s real API data.' },
-      { title: 'Alerts', desc: 'Get alerted on rising costs, dropping performance or sync failures.' },
-      { title: 'Clients & projects', desc: 'Organize clients, projects, requests, files and tasks in one workspace.' },
-      { title: 'Data sources', desc: 'Connect platforms and keep the source of every number explicit.' },
+      { title: 'Campaign management', desc: 'Track campaigns and platforms in one place.' },
+      { title: 'Analytics', desc: 'Clear signals that surface opportunities and risks.' },
+      { title: 'Reports', desc: 'Objective-based reports separating client from internal.' },
+      { title: 'Budgets', desc: 'Monitor spend pace and forecast overruns early.' },
+      { title: 'Creatives', desc: 'Compare ad performance on real API data.' },
+      { title: 'Alerts', desc: 'Get alerted on rising costs or sync failures.' },
     ],
   },
-  objectives: {
-    title: 'KPIs and reports by campaign objective',
-    subtitle: 'The system doesn’t use one metric for every objective — each gets its own KPIs, funnel and reports.',
-    note: 'ROAS is not the primary metric for every campaign; the metric changes with the objective.',
-    items: ['Sales & conversions', 'Lead generation', 'Awareness & reach', 'Traffic', 'Engagement', 'App installs', 'Video views', 'Store visits & events', 'Custom objectives'],
-    perks: ['Objective-fit KPIs', 'A different funnel', 'Specialized reports', 'Different creative analysis', 'Objective-linked recommendations'],
+  usage: {
+    title: 'How do you want to use CampaignsHub?',
+    subtitle: 'Pick the path that fits you and we’ll take you straight to the next step.',
+    cards: [
+      { title: 'I manage campaigns myself', desc: 'For media buyers and in-house marketing teams.', cta: 'Create account', to: '/register' },
+      { title: 'I manage several clients', desc: 'For agencies running multiple projects and clients, fully isolated.', cta: 'Create workspace', to: '/register' },
+      { title: 'I need campaign management', desc: 'Send your request and track it via a secure link — no account.', cta: 'Send a request', to: '/requests/new' },
+    ],
   },
-  reports: {
-    title: 'Professional reports built on real data',
-    subtitle: 'From internal analytics to executive client reports.',
-    formats: ['Weekly', 'Monthly', 'Executive', 'Client reports', 'Internal analytics', 'PDF', 'XLSX', 'CSV', 'Secure links', 'Scheduled email'],
-    basis: { label: 'Every report is based on', items: ['Campaign objective', 'Connected platforms', 'API data', 'Date range', 'Source of truth', 'Attribution', 'Currency & time zone', 'Approved notes & recommendations'] },
-  },
-  integrations: {
-    title: 'Integrations and data sources, stated honestly',
-    subtitle: 'No integration is shown as live before OAuth and sync succeed.',
+  combined: {
+    title: 'Integrations & reports',
+    subtitle: 'Honest connections to real sources, and share-ready reports — with an explicit status for each.',
+    integLabel: 'Source status',
     statuses: [
-      { label: 'Meta Ads · Awaiting Credentials', tone: 'await' }, { label: 'Google Ads · Awaiting Credentials', tone: 'await' },
-      { label: 'TikTok Ads · In Development', tone: 'dev' }, { label: 'Snapchat Ads · In Development', tone: 'dev' },
-      { label: 'GA4 · Coming Soon', tone: 'soon' }, { label: 'Sandbox · Available', tone: 'ok' },
+      { label: 'Meta Ads · Awaiting Credentials', tone: 'await' },
+      { label: 'Google Ads · Awaiting Credentials', tone: 'await' },
+      { label: 'TikTok Ads · In Development', tone: 'dev' },
+      { label: 'Snapchat Ads · In Development', tone: 'dev' },
+      { label: 'GA4 · Coming Soon', tone: 'soon' },
+      { label: 'Sandbox · Available', tone: 'ok' },
     ],
-    flow: ['Connect the account', 'Pick the ad account', 'Sync campaigns', 'Sync ads & creatives', 'Unify metrics', 'Data appears in campaigns, analytics, reports and alerts'],
-  },
-  automation: {
-    title: 'Automation & alerts',
-    subtitle: 'Turn daily monitoring into organized workflows.',
-    items: ['Budget & spend-pace alerts', 'Rising CPA or CPL', 'Dropping ROAS', 'Sync failure or token expiry', 'Report ready or failed', 'Daily and weekly summaries'],
-  },
-  request: {
-    title: 'Need campaign management instead of using the system?',
-    subtitle: 'Send your requirements and track your request through a clear path from review and qualification to execution and reports.',
-    types: ['Launch a paid campaign', 'Manage an existing campaign', 'Performance optimization', 'Ad-account audit', 'Tracking & conversions setup', 'Connect a platform or data source', 'Build a report', 'Data analysis', 'Consulting', 'Custom request', 'Influencer/UGC (future)'],
-    cta: 'Send your request now',
-  },
-  audience: {
-    title: 'Who is CampaignsHub for?',
-    items: ['Freelance media buyers', 'Digital marketing agencies', 'In-house marketing teams', 'Brands', 'Companies running their own campaigns'],
+    flow: ['Connect account', 'Pick ad account', 'Sync campaigns', 'Data appears everywhere'],
+    reportsLabel: 'Report formats & outputs',
+    formats: ['PDF', 'XLSX', 'CSV', 'Weekly', 'Monthly', 'Executive', 'Secure links', 'Scheduled email'],
+    basisLabel: 'Every report is based on',
+    basis: ['Campaign objective', 'Connected platforms', 'API data', 'Range & currency'],
   },
   finalCta: {
     title: 'Start managing your paid advertising today',
     subtitle: 'Create your account in minutes, or send a service request and track it via a secure link.',
-    start: 'Start managing campaigns', request: 'Request a service',
+    start: 'Start managing campaigns',
+    request: 'Request a service',
   },
   footer: {
     tagline: 'Paid Advertising Management platform — clients, projects, campaigns, analytics and reports in one place.',
     product: 'Product',
     links: [
-      { label: 'Paid Advertising', to: '/register' }, { label: 'Influencer & UGC (soon)', to: '/register' },
-      { label: 'Log in', to: '/login' }, { label: 'Create account', to: '/register' },
-      { label: 'Send a request', to: '/requests/new' }, { label: 'Track a request', to: '/requests/track' },
+      { label: 'Create account', to: '/register' },
+      { label: 'Log in', to: '/login' },
+      { label: 'Send a request', to: '/requests/new' },
+      { label: 'Track a request', to: '/requests/track' },
     ],
     legal: ['Privacy', 'Terms', 'Support'],
     rights: 'All rights reserved',
