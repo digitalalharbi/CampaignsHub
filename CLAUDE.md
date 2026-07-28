@@ -109,7 +109,7 @@ On starting ANY new session in this repo, do this BEFORE anything else, then res
 
 ## Hard rules
 - The delivered release is FROZEN: tag `v1.1.0-expanded-final` (`e9b99f2`) + `~/Desktop/CampaignsHub-*-Delivery.zip` are UNTOUCHABLE. Active dev is on branch `feat/taxonomy-ux`.
-- **HEAD `aaa79da` holds an UNVERIFIED agent WIP snapshot** — verify (frontend `npm run build && npx vitest run`; backend `php artisan test`; re-seed taxonomy) and commit a clean commit BEFORE building on it. Never claim untested work complete.
+- **HEAD `a5d24e2` (WIP aaa79da..a5d24e2) holds an UNVERIFIED agent WIP snapshot** — verify (frontend `npm run build && npx vitest run`; backend `php artisan test`; re-seed taxonomy) and commit a clean commit BEFORE building on it. Never claim untested work complete.
 - Taxonomy engine option keys for enum-backed fields MUST equal the LIVE backend enum values (source of truth). Never reintroduce aspirational keys. Used options are DEACTIVATED/merged, never deleted. No data loss.
 - Honest states: nothing logged sent/connected/paid without a real verified provider (Email/WhatsApp/SMS/Payment/Ad-platforms/Drive = Awaiting Credentials).
 - Dev-only secrets (OTP dev_code, portal dev token, /dev/status) are hard-gated off in production.

@@ -5,7 +5,7 @@
 
 ## Repo / branch / commit
 - Repo: `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`.
-- **Current branch: `feat/taxonomy-ux`** · **Current HEAD: `aaa79da`** (a WIP snapshot — see below).
+- **Current branch: `feat/taxonomy-ux`** · **Current HEAD: `a5d24e2` (unverified WIP spans aaa79da..a5d24e2)** (a WIP snapshot — see below).
 - Frozen delivery (DO NOT touch tag or packages): tag `v1.1.0-expanded-final` = `e9b99f2`.
   Stable ZIP `~/Desktop/CampaignsHub-Final-Delivery.zip` sha256 `b8329cf4d6ba63ab77a571e75c2305f1e1e764921be5667f3149dbb42bdd708b`;
   Expanded ZIP `~/Desktop/CampaignsHub-Expanded-Delivery.zip` sha256 `e9db7fcd2ab9708118c6c0a9448c31416f4751c0ab295cfe9608c60bd322c259`.
