@@ -7,8 +7,9 @@ vi.mock('@/lib/api/client', () => ({
 
 import { getData, postData } from '@/lib/api/client'
 import {
-  approvePortalQuote, formatDate, formatMoney, getPortalQuote, isOfframpStage,
-  journeySteps, JOURNEY_MAIN_LINE, listPortalInvoices, listPortalQuotes, listPortalThreads,
+  approvePortalQuote, fileModifiedAt, formatDate, formatMoney, formatNumber, getPortalQuote, isOfframpStage,
+  journeySteps, JOURNEY_MAIN_LINE, listClientCampaigns, listClientFiles, listClientReports,
+  listPortalInvoices, listPortalQuotes, listPortalThreads,
   openPortalThread, payPortalInvoice, postPortalThreadMessage, rejectPortalQuote,
 } from './portalAccountApi'
 
@@ -72,6 +73,35 @@ describe('portalAccountApi — response mapping', () => {
   })
 })
 
+describe('portalAccountApi — client content (files / campaigns / reports)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('unwraps the files list from the data.files envelope key', async () => {
+    mockGet.mockResolvedValue({ files: [{ id: 'f1', source: 'drive', name: 'deck.pdf' }] })
+    const out = await listClientFiles()
+    expect(getData).toHaveBeenCalledWith('/client/files')
+    expect(out).toEqual([{ id: 'f1', source: 'drive', name: 'deck.pdf' }])
+  })
+
+  it('unwraps the campaigns list', async () => {
+    mockGet.mockResolvedValue({ campaigns: [{ id: 'c1', name: 'Launch' }] })
+    expect(await listClientCampaigns()).toEqual([{ id: 'c1', name: 'Launch' }])
+    expect(getData).toHaveBeenCalledWith('/client/campaigns')
+  })
+
+  it('unwraps the reports list', async () => {
+    mockGet.mockResolvedValue({ reports: [{ id: 'r1', name: 'Monthly' }] })
+    expect(await listClientReports()).toEqual([{ id: 'r1', name: 'Monthly' }])
+    expect(getData).toHaveBeenCalledWith('/client/reports')
+  })
+
+  it('picks the most relevant file timestamp (drive→modified, request→created)', () => {
+    expect(fileModifiedAt({ id: 'a', source: 'drive', name: 'x', mime: null, size: null, modified_time: '2026-01-02T00:00:00Z' })).toBe('2026-01-02T00:00:00Z')
+    expect(fileModifiedAt({ id: 'b', source: 'request', name: 'y', mime: null, size: null, created_at: '2026-03-04T00:00:00Z' })).toBe('2026-03-04T00:00:00Z')
+    expect(fileModifiedAt({ id: 'c', source: 'request', name: 'z', mime: null, size: null })).toBeNull()
+  })
+})
+
 describe('portalAccountApi — journey helpers', () => {
   it('marks stages before the current one done and the current one current', () => {
     const steps = journeySteps('proposal_sent')
@@ -109,5 +139,11 @@ describe('portalAccountApi — formatting (Latin digits)', () => {
   it('formats dates and null safely', () => {
     expect(formatDate(null)).toBe('—')
     expect(formatDate('2026-03-15T00:00:00Z')).toBe('2026-03-15')
+  })
+
+  it('formats grouped Latin-digit numbers and null safely', () => {
+    expect(formatNumber(12430)).toBe('12,430')
+    expect(formatNumber(0)).toBe('0')
+    expect(formatNumber(null)).toBe('—')
   })
 })

@@ -38,7 +38,9 @@ import { ClientInvoiceDetailPage } from '@/features/requests/portal/ClientInvoic
 import { ClientMessagesPage } from '@/features/requests/portal/ClientMessagesPage'
 import { ClientThreadPage } from '@/features/requests/portal/ClientThreadPage'
 import { ClientProfilePage } from '@/features/requests/portal/ClientProfilePage'
-import { ClientComingSoonPage } from '@/features/requests/portal/ClientComingSoonPage'
+import { ClientFilesPage } from '@/features/requests/portal/ClientFilesPage'
+import { ClientCampaignsPage } from '@/features/requests/portal/ClientCampaignsPage'
+import { ClientReportsPage } from '@/features/requests/portal/ClientReportsPage'
 import { VerifyEmailPage } from '@/features/onboarding/VerifyEmailPage'
 import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate'
@@ -55,6 +57,7 @@ import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRo
 import { brandingRoutes } from '@/features/branding/brandingRoutes'
 import { connectionsRoutes } from '@/features/connections/connectionsRoutes'
 import { driveRoutes } from '@/features/drive/driveRoutes'
+import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
 import { AppShell } from '@/layouts/AppShell'
 
 export const router = createBrowserRouter([
@@ -80,10 +83,10 @@ export const router = createBrowserRouter([
   { path: '/client/messages', element: <ClientMessagesPage /> },
   { path: '/client/messages/:id', element: <ClientThreadPage /> },
   { path: '/client/profile', element: <ClientProfilePage /> },
-  // Sections without a backend endpoint yet — honest "not yet available", no fabricated data.
-  { path: '/client/files', element: <ClientComingSoonPage section="files" /> },
-  { path: '/client/campaigns', element: <ClientComingSoonPage section="campaigns" /> },
-  { path: '/client/reports', element: <ClientComingSoonPage section="reports" /> },
+  // Client-facing content backed by real endpoints (files / campaigns / reports), each self-guarding on 401.
+  { path: '/client/files', element: <ClientFilesPage /> },
+  { path: '/client/campaigns', element: <ClientCampaignsPage /> },
+  { path: '/client/reports', element: <ClientReportsPage /> },
   { path: '/reports/share/:token', element: <PublicReport /> },
   { path: '/reports/print/:token', element: <PrintReport /> },
   // Email verification is public (the link can be opened on any device; the token verify endpoint is public).
@@ -129,6 +132,7 @@ export const router = createBrowserRouter([
           ...brandingRoutes,
           ...connectionsRoutes,
           ...driveRoutes,
+          ...subscriptionsRoutes,
           { path: 'content', element: <PagePlaceholder title="Content" /> },
           { path: 'approvals', element: <PagePlaceholder title="Approvals" /> },
           { path: 'tracking', element: <PagePlaceholder title="Tracking" /> },

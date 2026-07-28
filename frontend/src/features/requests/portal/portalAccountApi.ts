@@ -178,6 +178,93 @@ export const postPortalThreadMessage = async (id: string, body: string): Promise
   (await postData<{ message: PortalMessage }>(`/client/messages/${encodeURIComponent(id)}`, { body })).message
 
 // ---------------------------------------------------------------------------
+// Client-facing content — files
+// ---------------------------------------------------------------------------
+
+/**
+ * A client-visible file. Two honest sources with slightly different metadata:
+ *  - `request`: an upload attached to one of the client's own requests (has `request_reference` + `created_at`,
+ *     but NO direct web link — it is fetched through the request download endpoint, not exposed here).
+ *  - `drive`: read-only Drive file metadata scoped to the client's workspace/project/campaign (has a
+ *     `web_view_link` when the provider supplies one, plus `modified_time`).
+ */
+export interface PortalFile {
+  id: string
+  source: 'request' | 'drive'
+  name: string
+  mime: string | null
+  size: number | null
+  request_reference?: string | null
+  web_view_link?: string | null
+  thumbnail_link?: string | null
+  created_at?: string | null
+  modified_time?: string | null
+}
+
+export const listClientFiles = async (): Promise<PortalFile[]> =>
+  (await getData<{ files: PortalFile[] }>('/client/files')).files
+
+/** The most relevant timestamp for a file, regardless of source (drive → modified, request → created). */
+export function fileModifiedAt(f: PortalFile): string | null {
+  return f.modified_time ?? f.created_at ?? null
+}
+
+// ---------------------------------------------------------------------------
+// Client-facing content — campaigns (client-safe: NO cost fields, only delivery)
+// ---------------------------------------------------------------------------
+
+export interface PortalCampaignMetrics {
+  impressions: number
+  clicks: number
+  conversions: number
+  ctr: number | null
+}
+
+export interface PortalCampaign {
+  id: string
+  name: string
+  status: string
+  objective: string | null
+  starts_on: string | null
+  ends_on: string | null
+  metrics: PortalCampaignMetrics
+}
+
+export const listClientCampaigns = async (): Promise<PortalCampaign[]> =>
+  (await getData<{ campaigns: PortalCampaign[] }>('/client/campaigns')).campaigns
+
+// ---------------------------------------------------------------------------
+// Client-facing content — reports (only client-audience reports with an active share)
+// ---------------------------------------------------------------------------
+
+/**
+ * The active-share descriptor for a report. `shared` is always true here (the backend only returns reports
+ * that currently have an active share). `allow_download` says whether download is permitted — but the backend
+ * deliberately never hands the SPA a raw share token/link, so there is no fabricated URL to click.
+ */
+export interface PortalReportShare {
+  shared: boolean
+  allow_download: boolean
+  watermark: boolean
+  expires_at: string | null
+}
+
+export interface PortalReport {
+  id: string
+  name: string
+  type: string
+  audience: string
+  status: string
+  period_start: string | null
+  period_end: string | null
+  generated_at: string | null
+  share: PortalReportShare | null
+}
+
+export const listClientReports = async (): Promise<PortalReport[]> =>
+  (await getData<{ reports: PortalReport[] }>('/client/reports')).reports
+
+// ---------------------------------------------------------------------------
 // Formatting helpers (Latin digits everywhere — 'en-US' keeps figures Latin).
 // ---------------------------------------------------------------------------
 
@@ -186,6 +273,12 @@ export function formatMoney(amount: string | number, currency: string): string {
   const n = typeof amount === 'number' ? amount : Number(amount)
   if (!Number.isFinite(n)) return `${amount} ${currency}`
   return `${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
+}
+
+/** Integer/decimal as a Latin-digit grouped string, e.g. "12,430". Null/NaN → em dash. */
+export function formatNumber(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—'
+  return value.toLocaleString('en-US')
 }
 
 /** ISO date/datetime → Latin-digit short date, or an em dash when null. */
