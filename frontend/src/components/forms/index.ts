@@ -18,3 +18,7 @@ export { TagInput, type TagInputProps } from './TagInput'
 export { RadioCardGroup, type RadioCardGroupProps, type RadioCardOption } from './RadioCardGroup'
 export { CheckboxGroup, type CheckboxGroupProps } from './CheckboxGroup'
 export { OptionDrawer, type OptionDrawerProps } from './OptionDrawer'
+
+// Multi-step form UX primitives (T10 forms overhaul)
+export { FormStepper, ErrorSummary, ReviewList, type FormStep, type FieldError, type ReviewItem } from './formFlow'
+export { useFormDraft, type FormDraft } from './useFormDraft'
