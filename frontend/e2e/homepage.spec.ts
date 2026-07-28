@@ -29,9 +29,10 @@ test('homepage: hero, language/theme, preview, journeys and CTAs into real route
   await page.getByRole('button', { name: 'Toggle theme' }).click()
   await expect(page).toHaveURL(/\/$/)
 
-  // Interactive demo preview: switching a section tab changes the shown content.
-  await page.getByRole('button', { name: 'Top campaigns' }).click()
-  await expect(page.getByText(/Sales campaign/).first()).toBeVisible()
+  // The demo preview uses the SAME UnifiedCampaignOverview component as the dashboard, fed labeled demo data.
+  const preview = page.getByTestId('campaign-overview')
+  await expect(preview).toBeVisible()
+  await expect(preview.getByText('Meta').first()).toBeVisible()
 
   // No horizontal overflow.
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)

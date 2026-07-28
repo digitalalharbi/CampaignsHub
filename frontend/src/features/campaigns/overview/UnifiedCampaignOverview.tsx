@@ -5,15 +5,14 @@ import { money, num, ratio } from '@/features/analytics/format'
 
 /**
  * UnifiedCampaignOverview — the ONE campaign command-center view, rendered from a props view-model so the
- * SAME component (design + metrics + classification) is used by BOTH the marketing homepage preview (fed
- * labeled DEMO data) and the authenticated dashboard (fed real API data). This guarantees "what you see
- * before login is an honest preview of what you get after login" — no divergent pretty mock.
- *
- * It is pure/presentational: the caller maps its data source to `OverviewVM`. Platforms are the six paid
- * channels CampaignsHub unifies: Snapchat, TikTok, Meta, Google Ads, X, LinkedIn.
+ * SAME component (design + metrics + classification + view-model) is used by BOTH the marketing homepage
+ * preview (variant="marketing", labeled DEMO data) and the authenticated dashboard (variant="dashboard",
+ * real API data). One component + one logic, differing only in styling/density — never two divergent designs.
+ * Platforms are the six paid channels CampaignsHub unifies: Snapchat, TikTok, Meta, Google Ads, X, LinkedIn.
  */
 
 export type DataStatus = 'demo' | 'live' | 'stale'
+export type OverviewVariant = 'dashboard' | 'marketing'
 
 export interface OverviewKpi {
   key: string
@@ -47,6 +46,14 @@ export interface OverviewAlert {
   severity: 'critical' | 'high' | 'medium' | 'low' | 'info'
   text: string
 }
+export interface OverviewCreative {
+  id: string
+  name: string
+  provider: string
+  kind: string
+  results: number
+  cpa: number | null
+}
 export interface OverviewVM {
   currency?: string
   dataStatus: DataStatus
@@ -57,16 +64,17 @@ export interface OverviewVM {
   topCampaigns: OverviewCampaign[]
   needsAttention: OverviewAttention[]
   alerts: OverviewAlert[]
+  topCreatives?: OverviewCreative[]
 }
 
 /** Canonical display name + a theme-safe accent per provider key. */
 const PROVIDERS: Record<string, { name: string; color: string }> = {
   snapchat: { name: 'Snapchat', color: '#F4C000' },
   tiktok: { name: 'TikTok', color: '#14B8A6' },
-  meta: { name: 'Meta', color: '#2563EB' },
+  meta: { name: 'Meta', color: '#3B82F6' },
   google_ads: { name: 'Google Ads', color: '#EA4335' },
   google: { name: 'Google Ads', color: '#EA4335' },
-  x: { name: 'X', color: '#64748B' },
+  x: { name: 'X', color: '#94A3B8' },
   linkedin: { name: 'LinkedIn', color: '#0A66C2' },
 }
 export function providerName(key: string): string {
@@ -74,6 +82,31 @@ export function providerName(key: string): string {
 }
 export function providerColor(key: string): string {
   return PROVIDERS[key]?.color ?? 'var(--brand-500)'
+}
+
+/** Variant-derived class tokens: dashboard = light surfaces; marketing = dark hero surfaces. */
+function palette(variant: OverviewVariant) {
+  return variant === 'marketing'
+    ? {
+        card: 'border-white/10 bg-white/5',
+        title: 'text-white',
+        label: 'text-white/55',
+        value: 'text-white',
+        muted: 'text-white/45',
+        sub: 'text-white/70',
+        track: 'bg-white/10',
+        rowBorder: 'border-white/10',
+      }
+    : {
+        card: 'border-border bg-surface',
+        title: 'text-text-primary',
+        label: 'text-text-muted',
+        value: 'text-text-primary',
+        muted: 'text-text-muted',
+        sub: 'text-text-secondary',
+        track: 'bg-surface-secondary',
+        rowBorder: 'border-border',
+      }
 }
 
 const tooltip = {
@@ -86,13 +119,16 @@ const tooltip = {
   },
 }
 
-function StatusBadge({ status }: { status: DataStatus }) {
-  const map = {
-    demo: { text: 'معاينة توضيحية ببيانات تجريبية', cls: 'bg-[var(--warning-background)] text-warning' },
-    live: { text: 'بيانات فعلية', cls: 'bg-[var(--positive-background)] text-success' },
-    stale: { text: 'بيانات قديمة', cls: 'bg-[var(--warning-background)] text-warning' },
-  }[status]
-  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${map.cls}`}>{map.text}</span>
+function StatusBadge({ status, variant }: { status: DataStatus; variant: OverviewVariant }) {
+  const label =
+    status === 'demo' ? 'معاينة توضيحية ببيانات تجريبية' : status === 'stale' ? 'بيانات قديمة' : 'بيانات فعلية'
+  const cls =
+    variant === 'marketing'
+      ? 'bg-white/10 text-white/80'
+      : status === 'live'
+        ? 'bg-[var(--positive-background)] text-success'
+        : 'bg-[var(--warning-background)] text-warning'
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}>{label}</span>
 }
 
 const SEV: Record<OverviewAlert['severity'], string> = {
@@ -104,44 +140,54 @@ const SEV: Record<OverviewAlert['severity'], string> = {
 }
 
 /**
- * @param vm         the view-model (demo or live)
- * @param title      optional heading (dashboard passes its own; marketing omits)
- * @param onOpenAll  optional CTA (e.g. link to /campaigns) rendered in the header
+ * @param vm       the view-model (demo or live)
+ * @param variant  'dashboard' (light) | 'marketing' (dark hero)
+ * @param compact  tighter density (mobile / marketing hero)
+ * @param title    optional heading
+ * @param headerRight optional CTA node in the header
  */
 export function UnifiedCampaignOverview({
   vm,
+  variant = 'dashboard',
+  compact = false,
   title,
   headerRight,
 }: {
   vm: OverviewVM
+  variant?: OverviewVariant
+  compact?: boolean
   title?: string
   headerRight?: ReactNode
 }) {
   const currency = vm.currency ?? 'SAR'
+  const c = palette(variant)
   const maxSpend = Math.max(1, ...vm.platforms.map((p) => p.spend))
+  const topN = compact ? 4 : 6
+  const donutH = compact ? 168 : 208
+  const sevDot = variant === 'marketing' ? 'bg-white/40' : 'bg-border-strong'
 
   return (
-    <div className="space-y-4" data-testid="campaign-overview">
+    <div className="space-y-3" data-testid="campaign-overview" data-variant={variant}>
       {/* Header: data status + last sync */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          {title && <h2 className="text-lg font-extrabold tracking-tight text-text-primary">{title}</h2>}
-          <StatusBadge status={vm.dataStatus} />
+          {title && <h2 className={`text-base font-extrabold tracking-tight ${c.title}`}>{title}</h2>}
+          <StatusBadge status={vm.dataStatus} variant={variant} />
         </div>
-        <div className="flex items-center gap-3 text-xs text-text-muted">
+        <div className={`flex items-center gap-3 text-xs ${c.muted}`}>
           <span>آخر مزامنة: {vm.lastSyncAt ? new Date(vm.lastSyncAt).toLocaleString('en-GB') : '—'}</span>
           {headerRight}
         </div>
       </div>
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className={`grid grid-cols-2 gap-2 ${compact ? 'sm:grid-cols-3' : 'md:grid-cols-3 xl:grid-cols-6'}`}>
         {vm.kpis.map((k) => (
-          <div key={k.key} className="rounded-2xl border border-border bg-surface p-3">
-            <div className="text-xs font-medium text-text-muted" title={k.hint}>{k.label}</div>
+          <div key={k.key} className={`rounded-xl border p-2.5 ${c.card}`}>
+            <div className={`text-[11px] font-medium ${c.label}`} title={k.hint}>{k.label}</div>
             <div
-              className={`mt-1 text-xl font-extrabold tracking-tight tnum ${
-                k.tone === 'good' ? 'text-success' : k.tone === 'bad' ? 'text-danger' : 'text-text-primary'
+              className={`mt-0.5 text-lg font-extrabold tracking-tight tnum ${
+                k.tone === 'good' ? 'text-success' : k.tone === 'bad' ? 'text-danger' : c.value
               }`}
             >
               {k.value}
@@ -150,41 +196,36 @@ export function UnifiedCampaignOverview({
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className={`grid gap-3 ${compact ? '' : 'lg:grid-cols-3'}`}>
         {/* Platform comparison (spend bars + ROAS) */}
-        <div className="rounded-2xl border border-border bg-surface p-4 lg:col-span-2">
-          <div className="mb-3 text-sm font-bold text-text-primary">مقارنة أداء المنصات</div>
-          <div className="space-y-2.5">
+        <div className={`rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:col-span-2'}`}>
+          <div className={`mb-2 text-sm font-bold ${c.title}`}>مقارنة أداء المنصات</div>
+          <div className="space-y-2">
             {vm.platforms.map((p) => (
-              <div key={p.key} className="flex items-center gap-3">
-                <span className="flex w-24 shrink-0 items-center gap-1.5 text-sm text-text-secondary">
+              <div key={p.key} className="flex items-center gap-2">
+                <span className={`flex w-20 shrink-0 items-center gap-1.5 text-xs ${c.sub}`}>
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: providerColor(p.key) }} />
                   {providerName(p.key)}
                 </span>
-                <div className="h-6 flex-1 overflow-hidden rounded-lg bg-surface-secondary">
-                  <div
-                    className="h-full rounded-lg"
-                    style={{ width: `${Math.max(4, (p.spend / maxSpend) * 100)}%`, background: providerColor(p.key) }}
-                  />
+                <div className={`h-5 flex-1 overflow-hidden rounded-md ${c.track}`}>
+                  <div className="h-full rounded-md" style={{ width: `${Math.max(4, (p.spend / maxSpend) * 100)}%`, background: providerColor(p.key) }} />
                 </div>
-                <span className="tnum w-24 text-end text-xs text-text-secondary">{money(p.spend, currency)}</span>
-                <span className="tnum w-16 text-end text-xs font-semibold text-text-primary">
-                  ROAS {p.roas === null ? '—' : ratio(p.roas)}
-                </span>
+                <span className={`tnum w-20 text-end text-xs ${c.sub}`}>{money(p.spend, currency)}</span>
+                <span className={`tnum w-14 text-end text-xs font-semibold ${c.value}`}>{p.roas === null ? '—' : `${ratio(p.roas)}`}</span>
               </div>
             ))}
           </div>
         </div>
 
         {/* Spend distribution donut */}
-        <div className="rounded-2xl border border-border bg-surface p-4">
-          <div className="mb-2 text-sm font-bold text-text-primary">توزيع الإنفاق</div>
-          <div className="h-52">
+        <div className={`rounded-xl border p-3 ${c.card}`}>
+          <div className={`mb-1 text-sm font-bold ${c.title}`}>توزيع الإنفاق</div>
+          <div style={{ height: donutH }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={vm.spend} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80} paddingAngle={2}>
+                <Pie data={vm.spend} dataKey="value" nameKey="name" innerRadius={compact ? 40 : 50} outerRadius={compact ? 64 : 80} paddingAngle={2}>
                   {vm.spend.map((d) => (
-                    <Cell key={d.name} fill={providerColor(d.name)} stroke="var(--surface)" strokeWidth={2} />
+                    <Cell key={d.name} fill={providerColor(d.name)} stroke={variant === 'marketing' ? 'transparent' : 'var(--surface)'} strokeWidth={2} />
                   ))}
                 </Pie>
                 <Tooltip {...tooltip} formatter={(v: number) => money(v, currency)} />
@@ -194,36 +235,36 @@ export function UnifiedCampaignOverview({
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className={`grid gap-3 ${compact ? '' : 'lg:grid-cols-3'}`}>
         {/* Top campaigns */}
-        <div className="rounded-2xl border border-border bg-surface p-4 lg:col-span-2">
-          <div className="mb-2 text-sm font-bold text-text-primary">أفضل الحملات</div>
+        <div className={`rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:col-span-2'}`}>
+          <div className={`mb-1 text-sm font-bold ${c.title}`}>أفضل الحملات</div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[480px] text-sm">
+            <table className="w-full min-w-[420px] text-xs">
               <thead>
-                <tr className="border-b border-border text-text-muted">
-                  <th className="py-2 text-start font-semibold">الحملة</th>
-                  <th className="py-2 text-start font-semibold">المنصة</th>
-                  <th className="py-2 text-end font-semibold">الإنفاق</th>
-                  <th className="py-2 text-end font-semibold">النتائج</th>
-                  <th className="py-2 text-end font-semibold">تكلفة النتيجة</th>
-                  <th className="py-2 text-end font-semibold">ROAS</th>
+                <tr className={`border-b ${c.rowBorder} ${c.muted}`}>
+                  <th className="py-1.5 text-start font-semibold">الحملة</th>
+                  <th className="py-1.5 text-start font-semibold">المنصة</th>
+                  <th className="py-1.5 text-end font-semibold">الإنفاق</th>
+                  <th className="py-1.5 text-end font-semibold">النتائج</th>
+                  <th className="py-1.5 text-end font-semibold">التكلفة</th>
+                  <th className="py-1.5 text-end font-semibold">ROAS</th>
                 </tr>
               </thead>
               <tbody>
-                {vm.topCampaigns.slice(0, 6).map((c) => (
-                  <tr key={c.id} className="border-b border-border last:border-0">
-                    <td className="py-2.5 pe-2 font-semibold text-text-primary">{c.name}</td>
-                    <td className="py-2.5">
-                      <span className="inline-flex items-center gap-1.5 text-text-secondary">
-                        <span className="h-2 w-2 rounded-full" style={{ background: providerColor(c.provider) }} />
-                        {providerName(c.provider)}
+                {vm.topCampaigns.slice(0, topN).map((cp) => (
+                  <tr key={cp.id} className={`border-b last:border-0 ${c.rowBorder}`}>
+                    <td className={`py-1.5 pe-2 font-semibold ${c.value}`}>{cp.name}</td>
+                    <td className="py-1.5">
+                      <span className={`inline-flex items-center gap-1.5 ${c.sub}`}>
+                        <span className="h-2 w-2 rounded-full" style={{ background: providerColor(cp.provider) }} />
+                        {providerName(cp.provider)}
                       </span>
                     </td>
-                    <td className="tnum py-2.5 text-end">{money(c.spend, currency)}</td>
-                    <td className="tnum py-2.5 text-end">{num(c.results)}</td>
-                    <td className="tnum py-2.5 text-end">{c.cpa === null ? '—' : money(c.cpa, currency)}</td>
-                    <td className="tnum py-2.5 text-end font-semibold">{c.roas === null ? '—' : ratio(c.roas)}</td>
+                    <td className={`tnum py-1.5 text-end ${c.sub}`}>{money(cp.spend, currency)}</td>
+                    <td className={`tnum py-1.5 text-end ${c.sub}`}>{num(cp.results)}</td>
+                    <td className={`tnum py-1.5 text-end ${c.sub}`}>{cp.cpa === null ? '—' : money(cp.cpa, currency)}</td>
+                    <td className={`tnum py-1.5 text-end font-semibold ${c.value}`}>{cp.roas === null ? '—' : ratio(cp.roas)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -231,38 +272,55 @@ export function UnifiedCampaignOverview({
           </div>
         </div>
 
-        {/* Needs attention + key alerts */}
+        {/* Needs attention + key alerts + top creatives */}
         <div className="space-y-3">
-          <div className="rounded-2xl border border-border bg-surface p-4">
-            <div className="mb-2 text-sm font-bold text-text-primary">حملات تحتاج تدخلًا</div>
+          <div className={`rounded-xl border p-3 ${c.card}`}>
+            <div className={`mb-1.5 text-sm font-bold ${c.title}`}>حملات تحتاج تدخلًا</div>
             {vm.needsAttention.length === 0 ? (
-              <p className="text-sm text-text-muted">لا شيء يحتاج تدخلًا الآن.</p>
+              <p className={`text-xs ${c.muted}`}>لا شيء يحتاج تدخلًا الآن.</p>
             ) : (
-              <ul className="space-y-2">
-                {vm.needsAttention.slice(0, 4).map((n) => (
-                  <li key={n.id} className="flex items-start gap-2 text-sm">
-                    <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning" />
-                    <span><span className="font-semibold text-text-primary">{n.name}</span> — <span className="text-text-secondary">{n.reason}</span></span>
+              <ul className="space-y-1.5">
+                {vm.needsAttention.slice(0, 3).map((n) => (
+                  <li key={n.id} className="flex items-start gap-2 text-xs">
+                    <AlertTriangle size={13} className="mt-0.5 shrink-0 text-warning" />
+                    <span><span className={`font-semibold ${c.value}`}>{n.name}</span> — <span className={c.sub}>{n.reason}</span></span>
                   </li>
                 ))}
               </ul>
             )}
           </div>
-          <div className="rounded-2xl border border-border bg-surface p-4">
-            <div className="mb-2 text-sm font-bold text-text-primary">التنبيهات المهمة</div>
+          <div className={`rounded-xl border p-3 ${c.card}`}>
+            <div className={`mb-1.5 text-sm font-bold ${c.title}`}>أهم التنبيهات</div>
             {vm.alerts.length === 0 ? (
-              <p className="text-sm text-text-muted">لا تنبيهات حرجة.</p>
+              <p className={`text-xs ${c.muted}`}>لا تنبيهات حرجة.</p>
             ) : (
-              <ul className="space-y-2">
-                {vm.alerts.slice(0, 4).map((a, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm">
-                    <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${a.severity === 'critical' || a.severity === 'high' ? 'bg-danger' : a.severity === 'medium' ? 'bg-warning' : 'bg-border-strong'}`} />
-                    <span className={SEV[a.severity]}>{a.text}</span>
+              <ul className="space-y-1.5">
+                {vm.alerts.slice(0, 3).map((a, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs">
+                    <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${a.severity === 'critical' || a.severity === 'high' ? 'bg-danger' : a.severity === 'medium' ? 'bg-warning' : sevDot}`} />
+                    <span className={variant === 'marketing' ? c.sub : SEV[a.severity]}>{a.text}</span>
                   </li>
                 ))}
               </ul>
             )}
           </div>
+          {vm.topCreatives && vm.topCreatives.length > 0 && (
+            <div className={`rounded-xl border p-3 ${c.card}`}>
+              <div className={`mb-1.5 text-sm font-bold ${c.title}`}>أفضل المحتويات الإعلانية</div>
+              <ul className="space-y-1.5">
+                {vm.topCreatives.slice(0, 3).map((cr) => (
+                  <li key={cr.id} className="flex items-center justify-between gap-2 text-xs">
+                    <span className={`flex items-center gap-1.5 ${c.value}`}>
+                      <span className="h-2 w-2 rounded-full" style={{ background: providerColor(cr.provider) }} />
+                      <span className="font-semibold">{cr.name}</span>
+                      <span className={c.muted}>· {cr.kind}</span>
+                    </span>
+                    <span className={`tnum ${c.sub}`}>{num(cr.results)} نتيجة</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     </div>

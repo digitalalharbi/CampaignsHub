@@ -6,6 +6,8 @@ import {
 } from 'lucide-react'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { PaidServicesPanel } from './PaidServicesPanel'
+import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
+import { DEMO_OVERVIEW_VM } from '@/features/campaigns/overview/demoOverview'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
@@ -23,140 +25,7 @@ const SERVICE_AREA_ICONS = [Megaphone, Target, Activity, BarChart3, FileText, Me
 const OPTION_ICONS = [LayoutDashboard, Users, Megaphone, Sparkles]
 const ACCOUNT_ICONS = [LogIn, UserCircle]
 
-/** Demo platform rows for the dark preview — illustrative only, tagged as demo data on screen. */
-const PREVIEW_PLATFORMS = [
-  { name: 'Meta', spend: 18400, results: 512, active: 5, cpr: '35.9', roas: '3.6', sync: 5 },
-  { name: 'Google Ads', spend: 12100, results: 318, active: 3, cpr: '38.1', roas: '3.1', sync: 8 },
-  { name: 'TikTok', spend: 9600, results: 402, active: 4, cpr: '23.9', roas: '2.8', sync: 12 },
-  { name: 'Snapchat', spend: 5200, results: 228, active: 2, cpr: '22.8', roas: '2.4', sync: 15 },
-  { name: 'X', spend: 2400, results: 74, active: 1, cpr: '32.4', roas: '1.9', sync: 21 },
-  { name: 'LinkedIn', spend: 1200, results: 22, active: 1, cpr: '54.5', roas: '1.6', sync: 33 },
-]
-const PREVIEW_TOTAL_SPEND = PREVIEW_PLATFORMS.reduce((s, p) => s + p.spend, 0)
-const num = (n: number) => n.toLocaleString('en-US')
 
-type PreviewCopy = HomeCopy['preview']
-type HomeCopy = (typeof HOME_COPY)[Locale]
-
-/** Dark, realistic CampaignsHub demo panel: aggregate KPIs + a tabbed platform/spend/creative/campaign
- *  view. Pure presentation on demo data — no technical jargon, currency localised (ر.س / SAR). */
-function PreviewPanel({ p, currency }: { p: PreviewCopy; currency: string }) {
-  const [tab, setTab] = useState<'comparison' | 'distribution' | 'creatives' | 'campaigns'>('comparison')
-  const money = (n: number | string) => `${num(typeof n === 'number' ? n : Number(n))} ${currency}`
-  const syncLabel = (m: number) => (p.syncPrefix ? `${p.syncPrefix} ${m} ${p.syncUnit}` : `${m}${p.syncUnit}`)
-
-  const kpi = (label: string, value: string) => (
-    <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-3">
-      <div className="text-[11px] text-white/60">{label}</div>
-      <div className="tnum mt-1 text-[15px] font-bold text-white">{value}</div>
-    </div>
-  )
-
-  return (
-    <div className="flex min-w-0 flex-col gap-3">
-      {/* Aggregate KPIs */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-        {kpi(p.kpis.spend, money(PREVIEW_TOTAL_SPEND))}
-        {kpi(p.kpis.results, num(1556))}
-        {kpi(p.kpis.active, '16')}
-        {kpi(p.kpis.cpr, `31.4 ${currency}`)}
-      </div>
-
-      {/* Section tabs */}
-      <div className="flex flex-wrap gap-1.5">
-        {(['comparison', 'distribution', 'creatives', 'campaigns'] as const).map((k) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => setTab(k)}
-            className={`rounded-lg px-2.5 py-1 text-[12px] font-semibold transition-colors ${tab === k ? 'bg-brand-500 text-white' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
-          >
-            {p.tabs[k]}
-          </button>
-        ))}
-      </div>
-
-      <div className="min-w-0 rounded-xl border border-white/10 bg-white/5 p-3">
-        {tab === 'comparison' && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[460px] text-start text-[12px] text-white/80">
-              <thead>
-                <tr className="text-[11px] text-white/50">
-                  <th className="pb-2 text-start font-medium">{p.cols.platform}</th>
-                  <th className="pb-2 text-start font-medium">{p.cols.spend}</th>
-                  <th className="pb-2 text-start font-medium">{p.cols.results}</th>
-                  <th className="pb-2 text-start font-medium">{p.cols.active}</th>
-                  <th className="pb-2 text-start font-medium">{p.cols.cpr}</th>
-                  <th className="pb-2 text-start font-medium">{p.cols.roas}</th>
-                  <th className="pb-2 text-start font-medium">{p.cols.sync}</th>
-                </tr>
-              </thead>
-              <tbody className="tnum">
-                {PREVIEW_PLATFORMS.map((row) => (
-                  <tr key={row.name} className="border-t border-white/5">
-                    <td className="py-1.5 font-semibold text-white">{row.name}</td>
-                    <td className="py-1.5">{num(row.spend)}</td>
-                    <td className="py-1.5">{num(row.results)}</td>
-                    <td className="py-1.5">{row.active}</td>
-                    <td className="py-1.5">{row.cpr}</td>
-                    <td className="py-1.5 text-brand-300">{row.roas}</td>
-                    <td className="py-1.5 text-white/50">{syncLabel(row.sync)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="mt-2 text-[10px] text-white/40">{p.roasNote}</p>
-          </div>
-        )}
-
-        {tab === 'distribution' && (
-          <div className="flex flex-col gap-2">
-            {PREVIEW_PLATFORMS.map((row) => {
-              const pct = Math.round((row.spend / PREVIEW_TOTAL_SPEND) * 100)
-              return (
-                <div key={row.name} className="flex items-center gap-2 text-[12px]">
-                  <span className="w-20 shrink-0 truncate font-semibold text-white">{row.name}</span>
-                  <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/10">
-                    <span className="block h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-400" style={{ width: `${pct}%` }} />
-                  </span>
-                  <span className="tnum w-16 shrink-0 text-end text-white/70">{money(row.spend)}</span>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {tab === 'creatives' && (
-          <ul className="flex flex-col gap-2">
-            {p.creatives.map((cr, i) => (
-              <li key={cr.name} className="flex items-center gap-2.5">
-                <span className="tnum flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[12px] font-bold text-brand-300">{i + 1}</span>
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-[13px] font-semibold text-white">{cr.name}</span>
-                  <span className="tnum text-[11px] text-white/55">{cr.metric}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {tab === 'campaigns' && (
-          <ul className="flex flex-col gap-2">
-            {p.campaigns.map((cm, i) => (
-              <li key={cm.name} className="flex items-center gap-2.5">
-                <span className="tnum flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[12px] font-bold text-brand-300">{i + 1}</span>
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-[13px] font-semibold text-white">{cm.name}</span>
-                  <span className="tnum text-[11px] text-white/55">{cm.metric}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  )
-}
 
 /**
  * Public marketing homepage at `/`, written entirely in CUSTOMER language (v5). Serves the self-serve,
@@ -294,7 +163,7 @@ export function PublicHomePage() {
               <span className="flex items-center gap-2 text-sm font-bold text-white"><LayoutDashboard size={15} className="text-brand-300" /> CampaignsHub</span>
               <span className="flex items-center gap-1.5 text-[11px] text-white/50"><span className="h-1.5 w-1.5 rounded-full bg-warning" /> {c.hero.demoTag}</span>
             </div>
-            <PreviewPanel p={c.preview} currency={c.hero.currency} />
+            <UnifiedCampaignOverview variant="marketing" compact vm={DEMO_OVERVIEW_VM} />
           </div>
         </div>
       </section>
