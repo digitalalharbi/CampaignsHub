@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Activity, ArrowLeft, ArrowRight, BarChart3, Bell, CheckCircle2, LayoutDashboard, LogIn, Megaphone,
-  Moon, Plug, Sparkles, Sun, Target, UserCircle, Users, Wallet,
+  Activity, ArrowLeft, ArrowRight, BarChart3, Bell, CheckCircle2, FileText, LayoutDashboard, LogIn,
+  Megaphone, MessageSquare, Moon, Sparkles, Sun, Target, UserCircle, Users, Wallet,
 } from 'lucide-react'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { PaidServicesPanel } from './PaidServicesPanel'
@@ -17,66 +17,156 @@ const STATUS_TONE: Record<string, string> = {
   soon: 'bg-surface-secondary text-text-muted',
 }
 
-const FEATURE_ICONS = [LayoutDashboard, BarChart3, Target, Wallet, Megaphone, Bell]
-
-/** One icon per decision-journey card, in the same order as `decision.cards`. */
-const DECISION_ICONS = [LayoutDashboard, Users, Megaphone, Sparkles]
+const FEATURE_ICONS = [LayoutDashboard, BarChart3, FileText, Wallet, Megaphone, Bell]
+const SERVICE_AREA_ICONS = [Megaphone, Target, Activity, BarChart3, FileText, MessageSquare]
+/** One icon per start-option card, in the same order as `options.cards`. */
+const OPTION_ICONS = [LayoutDashboard, Users, Megaphone, Sparkles]
 const ACCOUNT_ICONS = [LogIn, UserCircle]
 
-/** Faux mini bar chart for the preview — pure presentation, no data claims. */
-function MiniBars({ values }: { values: number[] }) {
-  const max = Math.max(...values)
-  return (
-    <div className="flex h-24 items-end gap-1.5">
-      {values.map((v, i) => (
-        <div key={i} className="flex-1 rounded-t bg-gradient-to-t from-brand-500/40 to-brand-400" style={{ height: `${(v / max) * 100}%` }} />
-      ))}
-    </div>
-  )
-}
+/** Demo platform rows for the dark preview — illustrative only, tagged as demo data on screen. */
+const PREVIEW_PLATFORMS = [
+  { name: 'Meta', spend: 18400, results: 512, active: 5, cpr: '35.9', roas: '3.6', sync: 5 },
+  { name: 'Google Ads', spend: 12100, results: 318, active: 3, cpr: '38.1', roas: '3.1', sync: 8 },
+  { name: 'TikTok', spend: 9600, results: 402, active: 4, cpr: '23.9', roas: '2.8', sync: 12 },
+  { name: 'Snapchat', spend: 5200, results: 228, active: 2, cpr: '22.8', roas: '2.4', sync: 15 },
+  { name: 'X', spend: 2400, results: 74, active: 1, cpr: '32.4', roas: '1.9', sync: 21 },
+  { name: 'LinkedIn', spend: 1200, results: 22, active: 1, cpr: '54.5', roas: '1.6', sync: 33 },
+]
+const PREVIEW_TOTAL_SPEND = PREVIEW_PLATFORMS.reduce((s, p) => s + p.spend, 0)
+const num = (n: number) => n.toLocaleString('en-US')
 
-/** Large dashboard-style demo panel — the primary product visual. Honest, illustrative only. */
-function PreviewPanel({ tab, locale }: { tab: string; locale: Locale }) {
-  const ar = locale === 'ar'
-  const stat = (label: string, value: string, sub?: string) => (
+type PreviewCopy = HomeCopy['preview']
+type HomeCopy = (typeof HOME_COPY)[Locale]
+
+/** Dark, realistic CampaignsHub demo panel: aggregate KPIs + a tabbed platform/spend/creative/campaign
+ *  view. Pure presentation on demo data — no technical jargon, currency localised (ر.س / SAR). */
+function PreviewPanel({ p, currency }: { p: PreviewCopy; currency: string }) {
+  const [tab, setTab] = useState<'comparison' | 'distribution' | 'creatives' | 'campaigns'>('comparison')
+  const money = (n: number | string) => `${num(typeof n === 'number' ? n : Number(n))} ${currency}`
+  const syncLabel = (m: number) => (p.syncPrefix ? `${p.syncPrefix} ${m} ${p.syncUnit}` : `${m}${p.syncUnit}`)
+
+  const kpi = (label: string, value: string) => (
     <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-3">
       <div className="text-[11px] text-white/60">{label}</div>
-      <div className="tnum mt-1 text-lg font-bold text-white">{value}</div>
-      {sub && <div className="mt-0.5 text-[11px] text-brand-300">{sub}</div>}
+      <div className="tnum mt-1 text-[15px] font-bold text-white">{value}</div>
     </div>
   )
-  const kpis: Record<string, [string, string, string?][]> = {
-    dashboard: [[ar ? 'حملات نشطة' : 'Active', '12'], [ar ? 'الإنفاق' : 'Spend', '48,900'], [ar ? 'النتائج' : 'Results', '1,158'], [ar ? 'أفضل منصة' : 'Top', 'Meta', 'ROAS 3.4']],
-    campaigns: [[ar ? 'الميزانية' : 'Budget', '60,000'], [ar ? 'المصروف' : 'Spent', '48,900', '81%'], ['CPA', '42.2'], ['ROAS', '3.4']],
-    analytics: [['CTR', '2.1%'], ['CPC', '1.8'], [ar ? 'التحويل' : 'Conv.', '4.6%'], [ar ? 'الوصول' : 'Reach', '312K']],
-    reports: [[ar ? 'الصيغة' : 'Format', 'PDF'], [ar ? 'الفترة' : 'Range', '30d'], [ar ? 'الهدف' : 'Objective', ar ? 'المبيعات' : 'Sales'], [ar ? 'الحالة' : 'Status', ar ? 'جاهز' : 'Ready']],
-    connections: [['Meta', ar ? 'بانتظار' : 'Awaiting'], ['Google', ar ? 'بانتظار' : 'Awaiting'], ['Sandbox', ar ? 'متصل' : 'Connected'], [ar ? 'المزامنة' : 'Sync', ar ? 'قبل 5د' : '5m']],
-  }
-  const rows = kpis[tab] ?? kpis.dashboard
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{rows.map((r) => stat(r[0], r[1], r[2]))}</div>
-      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-white/70">{ar ? 'الأداء عبر الفترة' : 'Performance over time'}</span>
-          <span className="text-[11px] text-brand-300">{ar ? '30 يومًا' : '30 days'}</span>
-        </div>
-        <MiniBars values={tab === 'analytics' ? [5, 7, 6, 9, 8, 11, 10, 13, 12] : [4, 6, 8, 7, 10, 9, 12, 11, 14]} />
+    <div className="flex min-w-0 flex-col gap-3">
+      {/* Aggregate KPIs */}
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        {kpi(p.kpis.spend, money(PREVIEW_TOTAL_SPEND))}
+        {kpi(p.kpis.results, num(1556))}
+        {kpi(p.kpis.active, '16')}
+        {kpi(p.kpis.cpr, `31.4 ${currency}`)}
+      </div>
+
+      {/* Section tabs */}
+      <div className="flex flex-wrap gap-1.5">
+        {(['comparison', 'distribution', 'creatives', 'campaigns'] as const).map((k) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setTab(k)}
+            className={`rounded-lg px-2.5 py-1 text-[12px] font-semibold transition-colors ${tab === k ? 'bg-brand-500 text-white' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+          >
+            {p.tabs[k]}
+          </button>
+        ))}
+      </div>
+
+      <div className="min-w-0 rounded-xl border border-white/10 bg-white/5 p-3">
+        {tab === 'comparison' && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[460px] text-start text-[12px] text-white/80">
+              <thead>
+                <tr className="text-[11px] text-white/50">
+                  <th className="pb-2 text-start font-medium">{p.cols.platform}</th>
+                  <th className="pb-2 text-start font-medium">{p.cols.spend}</th>
+                  <th className="pb-2 text-start font-medium">{p.cols.results}</th>
+                  <th className="pb-2 text-start font-medium">{p.cols.active}</th>
+                  <th className="pb-2 text-start font-medium">{p.cols.cpr}</th>
+                  <th className="pb-2 text-start font-medium">{p.cols.roas}</th>
+                  <th className="pb-2 text-start font-medium">{p.cols.sync}</th>
+                </tr>
+              </thead>
+              <tbody className="tnum">
+                {PREVIEW_PLATFORMS.map((row) => (
+                  <tr key={row.name} className="border-t border-white/5">
+                    <td className="py-1.5 font-semibold text-white">{row.name}</td>
+                    <td className="py-1.5">{num(row.spend)}</td>
+                    <td className="py-1.5">{num(row.results)}</td>
+                    <td className="py-1.5">{row.active}</td>
+                    <td className="py-1.5">{row.cpr}</td>
+                    <td className="py-1.5 text-brand-300">{row.roas}</td>
+                    <td className="py-1.5 text-white/50">{syncLabel(row.sync)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-2 text-[10px] text-white/40">{p.roasNote}</p>
+          </div>
+        )}
+
+        {tab === 'distribution' && (
+          <div className="flex flex-col gap-2">
+            {PREVIEW_PLATFORMS.map((row) => {
+              const pct = Math.round((row.spend / PREVIEW_TOTAL_SPEND) * 100)
+              return (
+                <div key={row.name} className="flex items-center gap-2 text-[12px]">
+                  <span className="w-20 shrink-0 truncate font-semibold text-white">{row.name}</span>
+                  <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/10">
+                    <span className="block h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-400" style={{ width: `${pct}%` }} />
+                  </span>
+                  <span className="tnum w-16 shrink-0 text-end text-white/70">{money(row.spend)}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {tab === 'creatives' && (
+          <ul className="flex flex-col gap-2">
+            {p.creatives.map((cr, i) => (
+              <li key={cr.name} className="flex items-center gap-2.5">
+                <span className="tnum flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[12px] font-bold text-brand-300">{i + 1}</span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-[13px] font-semibold text-white">{cr.name}</span>
+                  <span className="tnum text-[11px] text-white/55">{cr.metric}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {tab === 'campaigns' && (
+          <ul className="flex flex-col gap-2">
+            {p.campaigns.map((cm, i) => (
+              <li key={cm.name} className="flex items-center gap-2.5">
+                <span className="tnum flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[12px] font-bold text-brand-300">{i + 1}</span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-[13px] font-semibold text-white">{cm.name}</span>
+                  <span className="tnum text-[11px] text-white/55">{cm.metric}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )
 }
 
 /**
- * Public marketing homepage at `/`. Serves the self-serve, agency and service-request journeys plus
- * login. Authenticated visitors get a "back to dashboard" action instead of sign-up CTAs.
- * Uses the adopted Emerald-on-Graphite identity — never InfluencerHub purple.
+ * Public marketing homepage at `/`, written entirely in CUSTOMER language (v5). Serves the self-serve,
+ * agency, paid-media-services and influencer/UGC journeys plus login — never an internal-admin login.
+ * Authenticated visitors get a dashboard action instead of the sign-up CTA.
  */
 export function PublicHomePage() {
   const { locale, theme, toggleLocale, toggleTheme } = useUi()
   const { status } = useAuth()
   const c = HOME_COPY[locale as Locale]
-  const [tab, setTab] = useState('dashboard')
   const [showServices, setShowServices] = useState(false)
   const authed = status === 'authenticated'
 
@@ -90,28 +180,26 @@ export function PublicHomePage() {
 
   return (
     <div className="min-h-screen bg-background text-text-primary" dir={c.dir}>
-      {/* Header */}
+      {/* Header — external actions only: log in · create account · request a service · track my requests. */}
       <header className="sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-4 sm:px-6">
-          <Link to="/" className="flex items-center gap-2.5">
+          <Link to="/" className="flex shrink-0 items-center gap-2 sm:gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={18} /></span>
-            <span className="font-heading text-lg font-extrabold tracking-tight">CampaignsHub</span>
+            <span className="font-heading text-base font-extrabold tracking-tight sm:text-lg">CampaignsHub</span>
           </Link>
           <nav className="ms-6 hidden items-center gap-5 text-sm font-medium text-text-secondary lg:flex">
             <a href="#features" className="hover:text-text-primary">{c.nav.features}</a>
             <a href="#how" className="hover:text-text-primary">{c.nav.how}</a>
-            <a href="#usage" className="hover:text-text-primary">{c.nav.usage}</a>
+            <a href="#services" className="hover:text-text-primary">{c.nav.services}</a>
             <a href="#integrations" className="hover:text-text-primary">{c.nav.integrations}</a>
           </nav>
           <div className="ms-auto flex items-center gap-1.5">
             <button onClick={toggleLocale} aria-label="Toggle language" className="flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover">{locale === 'ar' ? 'EN' : 'ع'}</button>
             <button onClick={toggleTheme} aria-label="Toggle theme" className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button>
             {authed ? (
-              <Link to="/dashboard"><Button size="sm" className="whitespace-nowrap">{locale === 'ar' ? 'لوحة التحكم' : 'Dashboard'}</Button></Link>
+              <Link to="/dashboard"><Button size="sm" className="whitespace-nowrap">{c.nav.dashboard}</Button></Link>
             ) : (
               <>
-                {/* External-user actions only — the SAME `/login` is used internally, role-routed after
-                    sign-in; no separate admin/system login is ever exposed. Collapse gracefully on mobile. */}
                 <Link to="/client/login" className="hidden lg:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.clientLogin}</Button></Link>
                 <Link to="/requests/new" className="hidden md:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.request}</Button></Link>
                 <Link to="/login" className="hidden sm:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.login}</Button></Link>
@@ -122,33 +210,34 @@ export function PublicHomePage() {
         </div>
       </header>
 
-      {/* Hero — two columns. MAIN (col 1): value proposition + the product preview. SIDE (col 2): the
-          «كيف تريد استخدام CampaignsHub؟» journey chooser, where «أحتاج خدمات إعلانية» reveals the paid-media
-          services inline. The journeys live ONLY here — never duplicated as another card grid below. On
-          mobile the side card stacks between the value text and the preview so services stay near the top. */}
+      {/* Hero — two columns. RIGHT (~65%): value proposition + the CampaignsHub demo preview. LEFT (~35%):
+          the «كيف تريد البدء؟» options card, where «أحتاج خدمات إعلانية» reveals the paid-media services
+          inline. On mobile: value → options card (with services + login) → preview. The whole hero is
+          sized to fit one 1440×900 screen. */}
       <section id="usage" className="relative overflow-hidden border-b border-border">
-        <div className="mx-auto grid max-w-6xl items-start gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:py-12">
-          {/* Value proposition — col 1 / row 1 */}
+        <div className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)] lg:py-10">
+          {/* Value proposition — right column, row 1 */}
           <div className="order-1 flex flex-col lg:col-start-1 lg:row-start-1">
             <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[13px] font-semibold text-brand-700">{c.hero.eyebrow}</p>
-            <h1 className="mt-5 font-heading text-[30px] font-extrabold leading-[1.12] sm:text-[44px]">{c.hero.title}</h1>
-            <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-text-secondary">{c.hero.subtitle}</p>
-            <ul className="mt-5 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-              {c.hero.points.map((p) => (
-                <li key={p} className="flex items-center gap-2 text-[15px] text-text-secondary"><CheckCircle2 size={17} className="shrink-0 text-brand-500" /> {p}</li>
+            <h1 className="mt-4 font-heading text-[28px] font-extrabold leading-[1.14] sm:text-[40px]">{c.hero.title}</h1>
+            <p className="mt-3 max-w-xl text-[16px] leading-relaxed text-text-secondary">{c.hero.desc}</p>
+            <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-text-muted">{c.hero.support}</p>
+            <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+              {c.hero.points.map((pt) => (
+                <li key={pt} className="flex items-center gap-2 text-[14px] text-text-secondary"><CheckCircle2 size={16} className="shrink-0 text-brand-500" /> {pt}</li>
               ))}
             </ul>
           </div>
 
-          {/* Journey chooser side card — col 2, spanning both rows on desktop. */}
+          {/* Options card — left column, spanning both rows on desktop. */}
           <div className="order-2 lg:col-start-2 lg:row-span-2 lg:row-start-1">
             <div className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)]">
-              <h2 className="font-heading text-lg font-extrabold text-text-primary">{c.decision.title}</h2>
-              <p className="mt-1 text-[13px] text-text-secondary">{c.decision.subtitle}</p>
+              <h2 className="font-heading text-lg font-extrabold text-text-primary">{c.options.title}</h2>
+              <p className="mt-1 text-[13px] text-text-secondary">{c.options.subtitle}</p>
 
               <div className="mt-4 flex flex-col gap-2.5">
-                {c.decision.cards.map((card, i) => {
-                  const Icon = DECISION_ICONS[i] ?? LayoutDashboard
+                {c.options.cards.map((card, i) => {
+                  const Icon = OPTION_ICONS[i] ?? LayoutDashboard
                   const inner = (
                     <>
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Icon size={18} /></span>
@@ -159,17 +248,15 @@ export function PublicHomePage() {
                       <Arrow size={16} className="mt-0.5 shrink-0 text-text-muted" />
                     </>
                   )
-                  const rowBase =
-                    'flex w-full items-start gap-3 rounded-xl border p-3 text-start transition-colors'
+                  const rowBase = 'flex w-full items-start gap-3 rounded-xl border p-3 text-start transition-colors'
                   if (card.action === 'reveal-services') {
-                    const active = showServices
                     return (
                       <button
                         key={card.title}
                         type="button"
                         onClick={() => setShowServices((v) => !v)}
-                        aria-expanded={active}
-                        className={`${rowBase} ${active ? 'border-brand-500 bg-brand-primary-soft' : 'border-border bg-surface hover:border-border-strong hover:bg-surface-hover'}`}
+                        aria-expanded={showServices}
+                        className={`${rowBase} ${showServices ? 'border-brand-500 bg-brand-primary-soft' : 'border-border bg-surface hover:border-border-strong hover:bg-surface-hover'}`}
                       >
                         {inner}
                       </button>
@@ -183,109 +270,31 @@ export function PublicHomePage() {
                 })}
               </div>
 
-              {/* Inline paid-media services — engine-fed, revealed within this same card. */}
+              {/* Inline paid-media services — engine-fed, revealed within this same card (option 3). */}
               {showServices && <PaidServicesPanel locale={locale as Locale} copy={c.services} />}
 
-              {/* Returning users — «لديك حساب بالفعل؟». Two external entries: workspace login (SaaS) and
-                  client request-tracking. No internal/admin login is ever exposed here. */}
+              {/* Returning users — ONLY log in + track my requests. No internal/admin login is ever exposed. */}
               <div className="mt-4 border-t border-border pt-4">
-                <span className="text-[13px] font-bold text-text-primary">{c.decision.accounts.label}</span>
-                <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
-                  {c.decision.accounts.actions.map((a, i) => {
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  {c.options.login.actions.map((a, i) => {
                     const Icon = ACCOUNT_ICONS[i] ?? LogIn
                     return (
-                      <div key={a.to} className="flex flex-col gap-1">
-                        <Link to={a.to}><Button variant={a.variant} size="sm" className="w-full"><Icon size={15} /> {a.label}</Button></Link>
-                        <p className="text-[11px] leading-snug text-text-muted">{a.desc}</p>
-                      </div>
+                      <Link key={a.to} to={a.to}><Button variant="secondary" size="sm" className="w-full"><Icon size={15} /> {a.label}</Button></Link>
                     )
                   })}
                 </div>
+                <p className="mt-2.5 text-[11px] leading-snug text-text-muted">{c.options.login.helper}</p>
               </div>
             </div>
           </div>
 
-          {/* Large interactive product preview — col 1 / row 2 (below the value text). */}
-          <div id="preview" className="order-3 rounded-2xl border border-white/10 bg-gradient-to-br from-[var(--auth-panel-from)] via-[var(--auth-panel-via)] to-[var(--auth-panel-to)] p-5 shadow-[var(--shadow-large)] lg:col-start-1 lg:row-start-2">
-            <div className="flex items-center justify-between">
+          {/* CampaignsHub demo preview — right column, row 2 (below the value text). */}
+          <div id="preview" className="order-3 rounded-2xl border border-white/10 bg-gradient-to-br from-[var(--auth-panel-from)] via-[var(--auth-panel-via)] to-[var(--auth-panel-to)] p-4 shadow-[var(--shadow-large)] lg:col-start-1 lg:row-start-2">
+            <div className="mb-3 flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-bold text-white"><LayoutDashboard size={15} className="text-brand-300" /> CampaignsHub</span>
               <span className="flex items-center gap-1.5 text-[11px] text-white/50"><span className="h-1.5 w-1.5 rounded-full bg-warning" /> {c.hero.demoTag}</span>
             </div>
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              {c.previewTabs.map((tb) => (
-                <button
-                  key={tb.key}
-                  onClick={() => setTab(tb.key)}
-                  className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors ${tab === tb.key ? 'bg-brand-500 text-white' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
-                >
-                  {tb.label}
-                </button>
-              ))}
-            </div>
-            <div className="mt-4"><PreviewPanel tab={tab} locale={locale as Locale} /></div>
-          </div>
-        </div>
-      </section>
-
-      {/* Two commercial tracks — SaaS subscription vs one-off service request. Clearly separated, never
-          mixed: the left column is the subscription flow, the right column the service-request flow. */}
-      <section className="border-b border-border">
-        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.tracks.title}</h2>
-          <p className="mt-2 max-w-2xl text-text-secondary">{c.tracks.subtitle}</p>
-          <div className="mt-7 grid auto-rows-fr gap-4 lg:grid-cols-2">
-            {/* Track 1 — SaaS subscription */}
-            <div className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6">
-              <div className="flex items-center gap-2.5 text-sm font-bold text-text-primary">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><LayoutDashboard size={18} /></span>
-                {c.tracks.saas.label}
-              </div>
-              <ol className="mt-4 flex flex-1 flex-wrap items-center gap-x-1.5 gap-y-2 pt-1">
-                {c.tracks.saas.steps.map((s, i) => (
-                  <li key={s} className="flex items-center gap-1.5">
-                    <span className="rounded-lg bg-surface-secondary px-3 py-1.5 text-[13px] font-semibold text-text-secondary">{s}</span>
-                    {i < c.tracks.saas.steps.length - 1 && <Arrow size={14} className="shrink-0 text-text-muted" />}
-                  </li>
-                ))}
-              </ol>
-              <div className="mt-5"><Link to="/register"><Button size="sm">{c.hero.ctaStart}</Button></Link></div>
-            </div>
-            {/* Track 2 — Service request */}
-            <div className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6">
-              <div className="flex items-center gap-2.5 text-sm font-bold text-text-primary">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Megaphone size={18} /></span>
-                {c.tracks.service.label}
-              </div>
-              <ol className="mt-4 flex flex-1 flex-wrap items-center gap-x-1.5 gap-y-2 pt-1">
-                {c.tracks.service.steps.map((s, i) => (
-                  <li key={s} className="flex items-center gap-1.5">
-                    <span className="rounded-lg bg-surface-secondary px-3 py-1.5 text-[13px] font-semibold text-text-secondary">{s}</span>
-                    {i < c.tracks.service.steps.length - 1 && <Arrow size={14} className="shrink-0 text-text-muted" />}
-                  </li>
-                ))}
-              </ol>
-              <div className="mt-5"><Link to="/requests/new"><Button size="sm" variant="secondary">{c.hero.ctaRequest}</Button></Link></div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Core value — one concise band */}
-      <section className="border-b border-border bg-surface-secondary">
-        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.coreValue.title}</h2>
-          <p className="mt-2 max-w-2xl text-text-secondary">{c.coreValue.subtitle}</p>
-          <div className="mt-7 grid auto-rows-fr gap-4 md:grid-cols-3">
-            {c.coreValue.pillars.map((p, i) => {
-              const Icon = [LayoutDashboard, Activity, Target][i] ?? LayoutDashboard
-              return (
-                <div key={p.title} className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Icon size={18} /></span>
-                  <h3 className="mt-3 text-base font-bold text-text-primary">{p.title}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">{p.desc}</p>
-                </div>
-              )
-            })}
+            <PreviewPanel p={c.preview} currency={c.hero.currency} />
           </div>
         </div>
       </section>
@@ -310,8 +319,33 @@ export function PublicHomePage() {
         </div>
       </section>
 
+      {/* Services — customer-facing service areas + a single request CTA */}
+      <section id="services" className="border-b border-border bg-surface-secondary">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.serviceAreas.title}</h2>
+              <p className="mt-2 max-w-2xl text-text-secondary">{c.serviceAreas.subtitle}</p>
+            </div>
+            <Link to="/requests/new"><Button variant="secondary" size="sm">{c.serviceAreas.cta}</Button></Link>
+          </div>
+          <div className="mt-7 grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {c.serviceAreas.items.map((s, i) => {
+              const Icon = SERVICE_AREA_ICONS[i] ?? Megaphone
+              return (
+                <div key={s.title} className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Icon size={18} /></span>
+                  <h3 className="mt-3 text-base font-bold text-text-primary">{s.title}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">{s.desc}</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
       {/* Key features — one balanced grid */}
-      <section id="features" className="border-b border-border bg-surface-secondary">
+      <section id="features" className="border-b border-border">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
           <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.features.title}</h2>
           <p className="mt-2 max-w-2xl text-text-secondary">{c.features.subtitle}</p>
@@ -330,39 +364,36 @@ export function PublicHomePage() {
         </div>
       </section>
 
-      {/* Integrations & reports — one combined band */}
+      {/* Supported platforms + reports & alerts — one combined band (التكاملات والتقارير) */}
       <section id="integrations" className="border-b border-border bg-surface-secondary">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.combined.title}</h2>
-          <p className="mt-2 max-w-2xl text-text-secondary">{c.combined.subtitle}</p>
-          <div className="mt-7 grid auto-rows-fr gap-4 lg:grid-cols-2">
-            {/* Integrations */}
+          <div className="grid auto-rows-fr gap-4 lg:grid-cols-2">
+            {/* Supported platforms */}
             <div className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6">
-              <div className="flex items-center gap-2 text-sm font-bold text-text-primary"><Plug size={16} className="text-brand-600" /> {c.combined.integLabel}</div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {c.combined.statuses.map((s) => <span key={s.label} className={`rounded-full px-3 py-1.5 text-[13px] font-semibold ${STATUS_TONE[s.tone]}`}>{s.label}</span>)}
-              </div>
-              <ol className="mt-5 flex flex-1 flex-col justify-end gap-2 pt-2">
-                {c.combined.flow.map((step, i) => (
-                  <li key={step} className="flex items-center gap-2.5 text-sm text-text-secondary">
-                    <span className="tnum flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-primary-soft text-xs font-bold text-brand-700">{i + 1}</span>
-                    {step}
-                  </li>
+              <h2 className="font-heading text-xl font-extrabold text-text-primary">{c.platforms.title}</h2>
+              <p className="mt-2 text-sm text-text-secondary">{c.platforms.subtitle}</p>
+              <div className="mt-4 flex flex-1 flex-col justify-center gap-2">
+                {c.platforms.items.map((it) => (
+                  <div key={it.label} className="flex items-center justify-between gap-3 rounded-xl bg-surface-secondary px-3.5 py-2.5">
+                    <span className="text-sm font-semibold text-text-primary">{it.label}</span>
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[12px] font-semibold ${STATUS_TONE[it.tone]}`}>{it.status}</span>
+                  </div>
                 ))}
-              </ol>
+              </div>
+              <p className="mt-3 text-xs text-text-muted">{c.platforms.note}</p>
             </div>
-            {/* Reports */}
+            {/* Reports & alerts */}
             <div className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6">
-              <div className="flex items-center gap-2 text-sm font-bold text-text-primary"><BarChart3 size={16} className="text-brand-600" /> {c.combined.reportsLabel}</div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {c.combined.formats.map((f) => <span key={f} className="rounded-lg bg-surface-secondary px-3 py-1.5 text-[13px] font-medium text-text-secondary">{f}</span>)}
+              <h2 className="font-heading text-xl font-extrabold text-text-primary">{c.reports.title}</h2>
+              <p className="mt-2 text-sm text-text-secondary">{c.reports.subtitle}</p>
+              <div className="mt-4 flex items-center gap-2 text-sm font-bold text-text-primary"><BarChart3 size={16} className="text-brand-600" /> {c.reports.formatsLabel}</div>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {c.reports.formats.map((f) => <span key={f} className="rounded-lg bg-surface-secondary px-3 py-1.5 text-[13px] font-medium text-text-secondary">{f}</span>)}
               </div>
-              <div className="mt-5 flex flex-1 flex-col justify-end">
-                <div className="text-xs font-semibold uppercase tracking-wide text-text-muted">{c.combined.basisLabel}</div>
-                <ul className="mt-2.5 grid grid-cols-2 gap-2">
-                  {c.combined.basis.map((b) => <li key={b} className="flex items-center gap-1.5 text-sm text-text-secondary"><CheckCircle2 size={14} className="shrink-0 text-brand-500" /> {b}</li>)}
-                </ul>
-              </div>
+              <div className="mt-5 flex items-center gap-2 text-sm font-bold text-text-primary"><Bell size={16} className="text-brand-600" /> {c.reports.alertsLabel}</div>
+              <ul className="mt-2.5 grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
+                {c.reports.alerts.map((a) => <li key={a} className="flex items-center gap-1.5 text-sm text-text-secondary"><CheckCircle2 size={14} className="shrink-0 text-brand-500" /> {a}</li>)}
+              </ul>
             </div>
           </div>
         </div>

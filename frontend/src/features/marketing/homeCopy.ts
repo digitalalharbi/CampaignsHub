@@ -1,147 +1,113 @@
 /**
- * Public homepage copy (ar + en). Kept as data so the marketing page stays declarative and the
- * official terminology ("إدارة الحملات الإعلانية المدفوعة / Paid Advertising Management") is used
- * consistently — never the loose synonyms "الحملات الرقمية / الممولة" as the module name.
+ * Public homepage copy (ar + en) — v5 CUSTOMER-facing rebuild.
  *
- * Structure is intentionally lean: one hero, one decision section (the "How do you want to use
- * CampaignsHub?" journey chooser), one value band, one steps band, one features grid, one combined
- * integrations+reports band, one final CTA. The journeys live ONLY in the decision section — they
- * are never duplicated as another card grid elsewhere on the page.
+ * Kept as data so the marketing page stays declarative. All wording here is written for an EXTERNAL
+ * visitor (an advertiser or a service client). Internal/system vocabulary is deliberately absent —
+ * no subscription-model, multi-tenant, back-office or entitlement jargon (see the forbidden-terms
+ * guard in the test). The homepage never exposes an internal-admin login.
+ *
+ * Structure (lean, balanced): one hero (value + demo preview + a "how do you want to start?" options
+ * card with an inline services selector), then كيف يعمل · الخدمات · أهم المميزات · المنصات المدعومة ·
+ * التقارير والتنبيهات · final CTA · Footer. The 4 start-options live ONLY in the hero card.
  */
 export type Locale = 'ar' | 'en'
 
 export interface HomeCopy {
   dir: 'rtl' | 'ltr'
-  nav: { features: string; how: string; usage: string; integrations: string; login: string; start: string; request: string; clientLogin: string }
-  hero: { eyebrow: string; title: string; subtitle: string; support: string; ctaStart: string; ctaRequest: string; points: string[]; demoTag: string }
-  /** Two clearly-separated commercial tracks — SaaS subscription vs one-off service request. Never mixed. */
-  tracks: { title: string; subtitle: string; saas: { label: string; steps: string[] }; service: { label: string; steps: string[] } }
-  previewTabs: { key: string; label: string }[]
-  coreValue: { title: string; subtitle: string; pillars: { title: string; desc: string }[] }
-  steps: { title: string; subtitle: string; items: { title: string; desc: string }[] }
-  features: { title: string; subtitle: string; items: { title: string; desc: string }[] }
-  decision: {
+  nav: {
+    features: string; how: string; services: string; integrations: string
+    login: string; start: string; request: string; clientLogin: string; dashboard: string
+  }
+  hero: { eyebrow: string; title: string; desc: string; support: string; points: string[]; demoTag: string; currency: string }
+  /** Localised labels for the dark CampaignsHub demo preview (numbers/platform names live in the component). */
+  preview: {
+    kpis: { spend: string; results: string; active: string; cpr: string }
+    tabs: { comparison: string; distribution: string; creatives: string; campaigns: string }
+    cols: { platform: string; spend: string; results: string; active: string; cpr: string; roas: string; sync: string }
+    roasNote: string
+    syncPrefix: string
+    syncUnit: string
+    creatives: { name: string; metric: string }[]
+    campaigns: { name: string; metric: string }[]
+  }
+  /** The hero "كيف تريد البدء؟" options card. Options either navigate (`to`) or reveal the inline selector. */
+  options: {
     title: string
     subtitle: string
-    /** A journey either navigates (`to`) or reveals the inline paid-services selector (`action`). */
-    cards: { title: string; desc: string; cta: string; to?: string; action?: 'reveal-services' }[]
-    accounts: { label: string; actions: { label: string; to: string; variant: 'primary' | 'secondary'; desc: string }[] }
+    cards: { title: string; desc: string; to?: string; action?: 'reveal-services' }[]
+    login: { helper: string; actions: { label: string; to: string }[] }
   }
-  /** Strings for the inline paid-media services selector revealed inside the hero side card. */
+  /** Strings for the inline paid-media services selector revealed inside the options card (option 3). */
   services: {
-    hint: string
-    popular: string
-    selected: string
-    clearAll: string
-    continueCta: string
-    viewAll: string
-    drawerTitle: string
-    drawerSubtitle: string
-    search: string
-    allCategories: string
-    custom: string
-    customDesc: string
-    empty: string
-    close: string
-    errorTitle: string
-    errorDesc: string
-    retry: string
+    hint: string; popular: string; selected: string; clearAll: string; continueCta: string
+    viewAll: string; drawerTitle: string; drawerSubtitle: string; search: string; allCategories: string
+    custom: string; customDesc: string; empty: string; close: string; errorTitle: string; errorDesc: string; retry: string
   }
-  combined: {
-    title: string
-    subtitle: string
-    integLabel: string
-    statuses: { label: string; tone: 'ok' | 'dev' | 'await' | 'soon' }[]
-    flow: string[]
-    reportsLabel: string
-    formats: string[]
-    basisLabel: string
-    basis: string[]
-  }
+  steps: { title: string; subtitle: string; items: { title: string; desc: string }[] }
+  serviceAreas: { title: string; subtitle: string; cta: string; items: { title: string; desc: string }[] }
+  features: { title: string; subtitle: string; items: { title: string; desc: string }[] }
+  platforms: { title: string; subtitle: string; note: string; items: { label: string; status: string; tone: 'ok' | 'dev' | 'await' | 'soon' }[] }
+  reports: { title: string; subtitle: string; formatsLabel: string; formats: string[]; alertsLabel: string; alerts: string[] }
   finalCta: { title: string; subtitle: string; start: string; request: string }
   footer: { tagline: string; product: string; links: { label: string; to: string }[]; legal: string[]; rights: string }
 }
 
 const ar: HomeCopy = {
   dir: 'rtl',
-  nav: { features: 'المميزات', how: 'كيف يعمل', usage: 'المسارات', integrations: 'التكاملات والتقارير', login: 'تسجيل الدخول', start: 'ابدأ الآن', request: 'اطلب خدمة', clientLogin: 'متابعة طلباتي' },
+  nav: {
+    features: 'المميزات', how: 'كيف يعمل', services: 'الخدمات', integrations: 'التكاملات والتقارير',
+    login: 'تسجيل الدخول', start: 'إنشاء حساب', request: 'اطلب خدمة', clientLogin: 'متابعة طلباتي', dashboard: 'لوحة التحكم',
+  },
   hero: {
-    eyebrow: 'منصة إدارة الحملات الإعلانية المدفوعة',
+    eyebrow: 'إدارة الحملات الإعلانية المدفوعة',
     title: 'كل حملاتك الإعلانية المدفوعة في مكان واحد',
-    subtitle: 'أدر حملاتك بنفسك عبر مساحة عمل احترافية، أو اختر خدمات متخصصة في الإدارة والتحسين والتتبع والتحليل والتقارير وتابع تنفيذها من بوابة العميل.',
-    support: 'اشتراك لإدارة حملاتك، وبوابة متكاملة لطلب الخدمات ومتابعة التنفيذ.',
-    ctaStart: 'ابدأ إدارة حملاتك',
-    ctaRequest: 'أرسل طلب خدمة',
-    points: ['إدارة موحدة لجميع المنصات والحملات', 'تحليلات وتقارير حسب هدف الحملة', 'بيانات من مصادر الربط المعتمدة', 'طلبات وعروض وفواتير ومتابعة في مكان واحد'],
+    desc: 'تابع حملاتك وميزانياتك ونتائجك عبر المنصات، قارن الأداء، واكتشف فرص التحسين من لوحة واحدة واضحة.',
+    support: 'أدر حملاتك بنفسك، أو اختر الخدمة التي تحتاجها ودعنا نساعدك في تنفيذها.',
+    points: ['متابعة موحدة لجميع المنصات', 'مقارنة واضحة بين الحملات', 'بيانات من الحسابات المرتبطة', 'تقارير وتنبيهات تساعدك على اتخاذ القرار'],
     demoTag: 'معاينة توضيحية ببيانات تجريبية',
+    currency: 'ر.س',
   },
-  tracks: {
-    title: 'مساران للعمل مع CampaignsHub',
-    subtitle: 'اشتراك لإدارة حملاتك، وبوابة متكاملة لطلب الخدمات ومتابعة التنفيذ.',
-    saas: { label: 'اشتراك SaaS', steps: ['أنشئ مساحة عمل', 'اربط منصاتك', 'أدر الحملات', 'تابع التحليلات', 'أنشئ التقارير', 'استقبل التنبيهات'] },
-    service: { label: 'طلب خدمة', steps: ['اختر الخدمات', 'أرسل الطلب', 'استلم عرض السعر', 'وافق وادفع', 'تابع التنفيذ', 'استلم التقارير'] },
-  },
-  previewTabs: [
-    { key: 'dashboard', label: 'لوحة التحكم' },
-    { key: 'campaigns', label: 'الحملات' },
-    { key: 'analytics', label: 'التحليلات' },
-    { key: 'reports', label: 'التقارير' },
-    { key: 'connections', label: 'الربط' },
-  ],
-  coreValue: {
-    title: 'لماذا CampaignsHub',
-    subtitle: 'قيمة واحدة واضحة: كل ما تحتاجه لإدارة الإعلانات المدفوعة باحتراف، دون فوضى الأدوات.',
-    pillars: [
-      { title: 'مركز موحّد', desc: 'الحملات والمنصات والعملاء في مكان واحد بعزل كامل لكل مشروع.' },
-      { title: 'بيانات فعلية', desc: 'مقاييس من API المنصات مع مصدر واضح لكل رقم — لا شاشات تعريفية.' },
-      { title: 'تقارير حسب الهدف', desc: 'مؤشرات وتقارير تتغيّر بحسب هدف كل حملة، لا مقياس موحّد للجميع.' },
+  preview: {
+    kpis: { spend: 'إجمالي الإنفاق', results: 'النتائج', active: 'الحملات النشطة', cpr: 'متوسط تكلفة النتيجة' },
+    tabs: { comparison: 'مقارنة أداء المنصات', distribution: 'توزيع الإنفاق', creatives: 'أفضل المحتويات الإعلانية', campaigns: 'أعلى الحملات أداءً' },
+    cols: { platform: 'المنصة', spend: 'الإنفاق', results: 'النتائج', active: 'نشطة', cpr: 'التكلفة', roas: 'العائد', sync: 'آخر مزامنة' },
+    roasNote: '* العائد يظهر عند ملاءمة هدف الحملة.',
+    syncPrefix: 'قبل',
+    syncUnit: 'د',
+    creatives: [
+      { name: 'فيديو UGC — تخفيضات الصيف', metric: 'نقر 3.2% · نتائج 214' },
+      { name: 'كاروسيل — المجموعة الجديدة', metric: 'نقر 2.6% · نتائج 168' },
+      { name: 'فيديو قصير — عرض محدود', metric: 'نقر 2.1% · نتائج 129' },
+    ],
+    campaigns: [
+      { name: 'حملة المبيعات — الرياض', metric: 'إنفاق 14,200 ر.س · عائد 3.8' },
+      { name: 'تحويلات المتجر — الخليج', metric: 'إنفاق 11,600 ر.س · عائد 3.2' },
+      { name: 'إعادة استهداف — السلة المتروكة', metric: 'إنفاق 6,400 ر.س · عائد 4.1' },
     ],
   },
-  steps: {
-    title: 'كيف يعمل',
-    subtitle: 'من الربط إلى التقرير في أربع خطوات.',
-    items: [
-      { title: 'اربط منصاتك', desc: 'ربط آمن عبر OAuth لحسابات الإعلانات.' },
-      { title: 'نظّم عملاءك', desc: 'عملاء ومشاريع وحملات بعزل كامل.' },
-      { title: 'تابع الأداء', desc: 'ميزانيات ونتائج ومؤشرات حسب الهدف.' },
-      { title: 'أنشئ التقارير', desc: 'تقارير احترافية وتنبيهات تلقائية.' },
-    ],
-  },
-  features: {
-    title: 'كل ما تحتاجه لإدارة الحملات',
-    subtitle: 'أدوات فعلية مبنية على بيانات المنصات.',
-    items: [
-      { title: 'إدارة الحملات', desc: 'تابع حملاتك ومنصاتك من مكان واحد.' },
-      { title: 'التحليلات', desc: 'مؤشرات واضحة تكشف الفرص والمخاطر.' },
-      { title: 'التقارير', desc: 'تقارير حسب الهدف تفصل العميل عن الداخلي.' },
-      { title: 'الميزانيات', desc: 'راقب سرعة الصرف وتوقّع التجاوز مبكرًا.' },
-      { title: 'المحتويات الإعلانية', desc: 'قارن أداء الإعلانات ببيانات فعلية.' },
-      { title: 'التنبيهات', desc: 'تنبيه عند ارتفاع التكلفة أو فشل المزامنة.' },
-    ],
-  },
-  decision: {
-    title: 'كيف تريد استخدام CampaignsHub؟',
-    subtitle: 'اختر المسار المناسب لاحتياجك، وسنهيئ لك التسجيل أو الطلب تلقائيًا.',
+  options: {
+    title: 'كيف تريد البدء؟',
+    subtitle: 'اختر ما يناسب احتياجك وسنأخذك مباشرة إلى الخطوة التالية.',
     cards: [
-      { title: 'أدير حملاتي بنفسي', desc: 'للميديا باير والمستقل والعلامة التجارية وفريق التسويق الداخلي.', cta: 'أنشئ مساحة عمل', to: '/register?journey=self-managed&module=paid-media' },
-      { title: 'أدير حملات عدة عملاء', desc: 'للوكالات والمستقلين الذين يديرون عملاء ومشاريع متعددة.', cta: 'ابدأ كوكالة', to: '/register?journey=agency&module=paid-media' },
-      { title: 'أحتاج خدمات إعلانية', desc: 'اختر خدمات الإدارة والتحسين والتحليل والتتبع والتقارير والاستشارات.', cta: 'استعرض الخدمات', action: 'reveal-services' },
-      { title: 'أحتاج حملة مؤثرين أو UGC', desc: 'لطلب حملة مؤثرين أو محتوى UGC ومتابعة التنفيذ والتسليمات.', cta: 'أرسل طلب مؤثرين', to: '/requests/new?module=influencer-marketing' },
+      { title: 'أدير حملاتي بنفسي', desc: 'اجمع حملاتك ومنصاتك وميزانياتك وتقاريرك في مكان واحد.', to: '/register?journey=self-managed&module=paid-media' },
+      { title: 'أدير حملات لعدة عملاء', desc: 'نظّم عملاءك ومشاريعك وحملاتك وتابع أداء كل عميل بشكل مستقل.', to: '/register?journey=agency&module=paid-media' },
+      { title: 'أحتاج خدمات إعلانية', desc: 'اختر خدمات الإدارة أو التحسين أو التتبع أو التحليل أو التقارير.', action: 'reveal-services' },
+      { title: 'أحتاج مؤثرين أو محتوى UGC', desc: 'أرسل تفاصيل حملتك وتابع المحتوى والتنفيذ والتسليمات من حسابك.', to: '/requests/new?module=influencer-marketing' },
     ],
-    accounts: {
-      label: 'لديك حساب بالفعل؟',
+    login: {
+      helper: 'سجّل الدخول لإدارة حملاتك، أو تابع طلباتك وعروض الأسعار والفواتير والتنفيذ.',
       actions: [
-        { label: 'دخول مساحة العمل', to: '/login', variant: 'secondary', desc: 'دخول مساحة العمل: للمشتركين والوكالات والشركات والمستقلين.' },
-        { label: 'متابعة طلباتي', to: '/client/login', variant: 'secondary', desc: 'متابعة طلباتي: للعملاء الذين أرسلوا طلب خدمة ويريدون متابعة العرض والفاتورة والتنفيذ.' },
+        { label: 'تسجيل الدخول', to: '/login' },
+        { label: 'متابعة طلباتي', to: '/client/login' },
       ],
     },
   },
   services: {
-    hint: 'اختر خدمة أو أكثر ثم أكمل تفاصيل طلبك.',
+    hint: 'اختر خدمة أو أكثر ثم أكمل طلبك.',
     popular: 'الأكثر طلبًا',
     selected: 'الخدمات المختارة',
     clearAll: 'مسح الكل',
-    continueCta: 'أكمل تفاصيل طلبك',
+    continueCta: 'أكمل طلبك',
     viewAll: 'عرض جميع الخدمات',
     drawerTitle: 'جميع الخدمات الإعلانية',
     drawerSubtitle: 'ابحث أو صفِّ حسب الفئة، واختر ما يناسب طلبك.',
@@ -155,38 +121,76 @@ const ar: HomeCopy = {
     errorDesc: 'حدث خطأ أثناء جلب قائمة الخدمات. أعد المحاولة.',
     retry: 'إعادة المحاولة',
   },
-  combined: {
-    title: 'التكاملات والتقارير',
-    subtitle: 'ربط صادق بمصادر فعلية، وتقارير جاهزة للمشاركة — بوضع معلن لكل مصدر.',
-    integLabel: 'حالة المصادر',
-    statuses: [
-      { label: 'Meta Ads · Awaiting Credentials', tone: 'await' },
-      { label: 'Google Ads · Awaiting Credentials', tone: 'await' },
-      { label: 'TikTok Ads · In Development', tone: 'dev' },
-      { label: 'Snapchat Ads · In Development', tone: 'dev' },
-      { label: 'GA4 · Coming Soon', tone: 'soon' },
-      { label: 'Sandbox · Available', tone: 'ok' },
+  steps: {
+    title: 'كيف يعمل',
+    subtitle: 'من الربط إلى التقرير في أربع خطوات.',
+    items: [
+      { title: 'اربط حساباتك', desc: 'ربط آمن لحسابات الإعلانات عبر المنصات.' },
+      { title: 'نظّم حملاتك', desc: 'عملاء ومشاريع وحملات، كل مشروع مستقل.' },
+      { title: 'تابع الأداء', desc: 'ميزانيات ونتائج ومؤشرات حسب هدف الحملة.' },
+      { title: 'استلم التقارير', desc: 'تقارير واضحة وتنبيهات تلقائية للقرار.' },
     ],
-    flow: ['اربط الحساب', 'اختر الحساب الإعلاني', 'زامن الحملات', 'تظهر البيانات في كل مكان'],
-    reportsLabel: 'صيغ ومخرجات التقارير',
+  },
+  serviceAreas: {
+    title: 'الخدمات',
+    subtitle: 'إن لم ترغب في الإدارة بنفسك، اطلب الخدمة التي تحتاجها ونساعدك في تنفيذها.',
+    cta: 'اطلب خدمة',
+    items: [
+      { title: 'إدارة الحملات', desc: 'إطلاق وإدارة حملاتك المدفوعة عبر المنصات.' },
+      { title: 'تحسين الأداء', desc: 'خفض تكلفة النتيجة ورفع العائد من حملاتك.' },
+      { title: 'التتبع والقياس', desc: 'إعداد البكسل والأحداث والتحويلات لقياس دقيق.' },
+      { title: 'التحليل والتدقيق', desc: 'تدقيق حساباتك وتحليل الأداء واكتشاف الفرص.' },
+      { title: 'التقارير', desc: 'تقارير واضحة حسب هدف الحملة، جاهزة للمشاركة.' },
+      { title: 'الاستشارات', desc: 'جلسات ومراجعات لخطة الإعلان واختيار المنصات.' },
+    ],
+  },
+  features: {
+    title: 'أهم المميزات',
+    subtitle: 'أدوات واضحة مبنية على بيانات حساباتك الفعلية.',
+    items: [
+      { title: 'متابعة موحدة', desc: 'حملاتك ومنصاتك ونتائجك في لوحة واحدة.' },
+      { title: 'مقارنة الأداء', desc: 'قارن الحملات والمنصات واكتشف الأفضل بسرعة.' },
+      { title: 'التقارير', desc: 'تقارير حسب الهدف، جاهزة للعميل أو للفريق.' },
+      { title: 'الميزانيات', desc: 'راقب سرعة الصرف وتوقّع التجاوز مبكرًا.' },
+      { title: 'المحتويات الإعلانية', desc: 'قارن أداء الإعلانات واعرف الأفضل تأثيرًا.' },
+      { title: 'التنبيهات', desc: 'تنبيه عند ارتفاع التكلفة أو توقف المزامنة.' },
+    ],
+  },
+  platforms: {
+    title: 'المنصات المدعومة',
+    subtitle: 'اجمع بيانات حملاتك من المنصات الرئيسية في مكان واحد.',
+    note: 'نعرض حالة كل منصة بصدق — بعضها متاح، وبعضها قيد التطوير أو بانتظار بيانات الربط.',
+    items: [
+      { label: 'Meta (Facebook · Instagram)', status: 'بانتظار بيانات الربط', tone: 'await' },
+      { label: 'Google Ads', status: 'بانتظار بيانات الربط', tone: 'await' },
+      { label: 'TikTok Ads', status: 'قيد التطوير', tone: 'dev' },
+      { label: 'Snapchat Ads', status: 'قيد التطوير', tone: 'dev' },
+      { label: 'X (Twitter) Ads', status: 'قريبًا', tone: 'soon' },
+      { label: 'LinkedIn Ads', status: 'قريبًا', tone: 'soon' },
+    ],
+  },
+  reports: {
+    title: 'التقارير والتنبيهات',
+    subtitle: 'تقارير جاهزة للمشاركة، وتنبيهات تصلك في الوقت المناسب.',
+    formatsLabel: 'صيغ ومخرجات التقارير',
     formats: ['PDF', 'XLSX', 'CSV', 'أسبوعية', 'شهرية', 'تنفيذية', 'روابط آمنة', 'إرسال مجدول'],
-    basisLabel: 'كل تقرير يعتمد على',
-    basis: ['هدف الحملة', 'المنصات المرتبطة', 'بيانات API', 'الفترة والعملة'],
+    alertsLabel: 'تنبيهات ذكية',
+    alerts: ['ارتفاع تكلفة النتيجة', 'اقتراب تجاوز الميزانية', 'توقف المزامنة', 'توقف حملة نشطة'],
   },
   finalCta: {
     title: 'ابدأ إدارة حملاتك الإعلانية المدفوعة اليوم',
     subtitle: 'أنشئ حسابك خلال دقائق، أو أرسل طلب خدمة وتابعه عبر رابط آمن.',
-    start: 'ابدأ إدارة حملاتك',
-    request: 'أرسل طلب خدمة',
+    start: 'إنشاء حساب',
+    request: 'اطلب خدمة',
   },
   footer: {
-    tagline: 'منصة إدارة الحملات الإعلانية المدفوعة — العملاء والمشاريع والحملات والتحليلات والتقارير في مكان واحد.',
+    tagline: 'إدارة الحملات الإعلانية المدفوعة — العملاء والمشاريع والحملات والتحليلات والتقارير في مكان واحد.',
     product: 'المنتج',
     links: [
       { label: 'إنشاء حساب', to: '/register' },
       { label: 'تسجيل الدخول', to: '/login' },
-      { label: 'إرسال طلب', to: '/requests/new' },
-      { label: 'تتبع طلب', to: '/requests/track' },
+      { label: 'اطلب خدمة', to: '/requests/new' },
+      { label: 'متابعة طلباتي', to: '/client/login' },
     ],
     legal: ['الخصوصية', 'الشروط', 'الدعم'],
     rights: 'جميع الحقوق محفوظة',
@@ -195,75 +199,51 @@ const ar: HomeCopy = {
 
 const en: HomeCopy = {
   dir: 'ltr',
-  nav: { features: 'Features', how: 'How it works', usage: 'Paths', integrations: 'Integrations & reports', login: 'Log in', start: 'Get started', request: 'Request a service', clientLogin: 'Track my requests' },
+  nav: {
+    features: 'Features', how: 'How it works', services: 'Services', integrations: 'Integrations & reports',
+    login: 'Log in', start: 'Create account', request: 'Request a service', clientLogin: 'Track my requests', dashboard: 'Dashboard',
+  },
   hero: {
-    eyebrow: 'Paid Advertising Management platform',
+    eyebrow: 'Paid advertising management',
     title: 'All your paid ad campaigns in one place',
-    subtitle: 'Run your campaigns yourself in a professional workspace, or choose specialist services for management, optimization, tracking, analysis and reporting — and follow their execution from the client portal.',
-    support: 'A subscription to run your campaigns, and an integrated portal to request services and follow execution.',
-    ctaStart: 'Start managing campaigns',
-    ctaRequest: 'Request a service',
-    points: ['Unified management across all platforms and campaigns', 'Analytics and reports by campaign objective', 'Data from approved connection sources', 'Requests, quotes, invoices and tracking in one place'],
+    desc: 'Track your campaigns, budgets and results across platforms, compare performance, and spot optimization opportunities from one clear dashboard.',
+    support: 'Run your campaigns yourself, or pick the service you need and let us help you deliver it.',
+    points: ['Unified tracking across all platforms', 'Clear comparison between campaigns', 'Data from your connected accounts', 'Reports and alerts that help you decide'],
     demoTag: 'Illustrative preview with demo data',
+    currency: 'SAR',
   },
-  tracks: {
-    title: 'Two ways to work with CampaignsHub',
-    subtitle: 'A subscription to run your campaigns, and an integrated portal to request services and follow execution.',
-    saas: { label: 'SaaS subscription', steps: ['Create a workspace', 'Connect your platforms', 'Run campaigns', 'Track analytics', 'Build reports', 'Receive alerts'] },
-    service: { label: 'Service request', steps: ['Pick services', 'Send the request', 'Receive a quote', 'Approve & pay', 'Follow execution', 'Receive reports'] },
-  },
-  previewTabs: [
-    { key: 'dashboard', label: 'Dashboard' },
-    { key: 'campaigns', label: 'Campaigns' },
-    { key: 'analytics', label: 'Analytics' },
-    { key: 'reports', label: 'Reports' },
-    { key: 'connections', label: 'Connections' },
-  ],
-  coreValue: {
-    title: 'Why CampaignsHub',
-    subtitle: 'One clear promise: everything you need to run paid advertising professionally, without tool sprawl.',
-    pillars: [
-      { title: 'One unified hub', desc: 'Campaigns, platforms and clients in one place, fully isolated per project.' },
-      { title: 'Real data', desc: 'Metrics from platform APIs with a clear source for every number — not brochure screens.' },
-      { title: 'Objective-based reports', desc: 'KPIs and reports that change with each objective — no single metric for all.' },
+  preview: {
+    kpis: { spend: 'Total spend', results: 'Results', active: 'Active campaigns', cpr: 'Avg cost per result' },
+    tabs: { comparison: 'Platform performance', distribution: 'Spend distribution', creatives: 'Top creatives', campaigns: 'Top campaigns' },
+    cols: { platform: 'Platform', spend: 'Spend', results: 'Results', active: 'Active', cpr: 'Cost', roas: 'Return', sync: 'Last sync' },
+    roasNote: '* Return is shown when it fits the campaign objective.',
+    syncPrefix: '',
+    syncUnit: 'm ago',
+    creatives: [
+      { name: 'UGC video — Summer sale', metric: 'CTR 3.2% · 214 results' },
+      { name: 'Carousel — New collection', metric: 'CTR 2.6% · 168 results' },
+      { name: 'Short video — Limited offer', metric: 'CTR 2.1% · 129 results' },
+    ],
+    campaigns: [
+      { name: 'Sales campaign — Riyadh', metric: 'Spend 14,200 SAR · ROAS 3.8' },
+      { name: 'Store conversions — Gulf', metric: 'Spend 11,600 SAR · ROAS 3.2' },
+      { name: 'Retargeting — Abandoned cart', metric: 'Spend 6,400 SAR · ROAS 4.1' },
     ],
   },
-  steps: {
-    title: 'How it works',
-    subtitle: 'From connection to report in four steps.',
-    items: [
-      { title: 'Connect platforms', desc: 'Secure OAuth for your ad accounts.' },
-      { title: 'Organize clients', desc: 'Clients, projects and campaigns, fully isolated.' },
-      { title: 'Track performance', desc: 'Budgets, results and objective-based KPIs.' },
-      { title: 'Build reports', desc: 'Professional reports and automatic alerts.' },
-    ],
-  },
-  features: {
-    title: 'Everything you need to run campaigns',
-    subtitle: 'Real tools built on platform data.',
-    items: [
-      { title: 'Campaign management', desc: 'Track campaigns and platforms in one place.' },
-      { title: 'Analytics', desc: 'Clear signals that surface opportunities and risks.' },
-      { title: 'Reports', desc: 'Objective-based reports separating client from internal.' },
-      { title: 'Budgets', desc: 'Monitor spend pace and forecast overruns early.' },
-      { title: 'Creatives', desc: 'Compare ad performance on real API data.' },
-      { title: 'Alerts', desc: 'Get alerted on rising costs or sync failures.' },
-    ],
-  },
-  decision: {
-    title: 'How do you want to use CampaignsHub?',
-    subtitle: 'Pick the path that fits your need, and we’ll set up your registration or request automatically.',
+  options: {
+    title: 'How do you want to start?',
+    subtitle: 'Pick what fits your need and we’ll take you straight to the next step.',
     cards: [
-      { title: 'I run my own campaigns', desc: 'For media buyers, freelancers, brands, and in-house marketing teams.', cta: 'Create a workspace', to: '/register?journey=self-managed&module=paid-media' },
-      { title: "I manage several clients' campaigns", desc: 'For agencies and freelancers running multiple clients and projects.', cta: 'Start as an agency', to: '/register?journey=agency&module=paid-media' },
-      { title: 'I need paid-media services', desc: 'Pick management, optimization, analysis, tracking, reporting and consulting services.', cta: 'Browse services', action: 'reveal-services' },
-      { title: 'I need an influencer or UGC campaign', desc: 'To request an influencer or UGC campaign and follow execution and deliverables.', cta: 'Send an influencer request', to: '/requests/new?module=influencer-marketing' },
+      { title: 'I run my own campaigns', desc: 'Bring your campaigns, platforms, budgets and reports into one place.', to: '/register?journey=self-managed&module=paid-media' },
+      { title: 'I manage campaigns for several clients', desc: 'Organize your clients, projects and campaigns, and track each client independently.', to: '/register?journey=agency&module=paid-media' },
+      { title: 'I need paid-media services', desc: 'Pick management, optimization, tracking, analysis or reporting services.', action: 'reveal-services' },
+      { title: 'I need influencers or UGC content', desc: 'Send your campaign details and track content, execution and deliverables from your account.', to: '/requests/new?module=influencer-marketing' },
     ],
-    accounts: {
-      label: 'Do you already have an account?',
+    login: {
+      helper: 'Log in to manage your campaigns, or follow your requests, quotes, invoices and execution.',
       actions: [
-        { label: 'Workspace login', to: '/login', variant: 'secondary', desc: 'Workspace login: for subscribers, agencies, companies and freelancers.' },
-        { label: 'Track my requests', to: '/client/login', variant: 'secondary', desc: 'Track my requests: for clients who sent a service request and want to follow the quote, invoice and execution.' },
+        { label: 'Log in', to: '/login' },
+        { label: 'Track my requests', to: '/client/login' },
       ],
     },
   },
@@ -286,38 +266,76 @@ const en: HomeCopy = {
     errorDesc: 'Something went wrong fetching the service list. Please try again.',
     retry: 'Retry',
   },
-  combined: {
-    title: 'Integrations & reports',
-    subtitle: 'Honest connections to real sources, and share-ready reports — with an explicit status for each.',
-    integLabel: 'Source status',
-    statuses: [
-      { label: 'Meta Ads · Awaiting Credentials', tone: 'await' },
-      { label: 'Google Ads · Awaiting Credentials', tone: 'await' },
-      { label: 'TikTok Ads · In Development', tone: 'dev' },
-      { label: 'Snapchat Ads · In Development', tone: 'dev' },
-      { label: 'GA4 · Coming Soon', tone: 'soon' },
-      { label: 'Sandbox · Available', tone: 'ok' },
+  steps: {
+    title: 'How it works',
+    subtitle: 'From connection to report in four steps.',
+    items: [
+      { title: 'Connect accounts', desc: 'Secure connection for your ad accounts across platforms.' },
+      { title: 'Organize campaigns', desc: 'Clients, projects and campaigns — each project independent.' },
+      { title: 'Track performance', desc: 'Budgets, results and KPIs by campaign objective.' },
+      { title: 'Get reports', desc: 'Clear reports and automatic alerts for decisions.' },
     ],
-    flow: ['Connect account', 'Pick ad account', 'Sync campaigns', 'Data appears everywhere'],
-    reportsLabel: 'Report formats & outputs',
+  },
+  serviceAreas: {
+    title: 'Services',
+    subtitle: "If you'd rather not manage it yourself, request the service you need and we'll help deliver it.",
+    cta: 'Request a service',
+    items: [
+      { title: 'Campaign management', desc: 'Launch and run your paid campaigns across platforms.' },
+      { title: 'Performance optimization', desc: 'Lower cost per result and raise return from your campaigns.' },
+      { title: 'Tracking & measurement', desc: 'Set up pixels, events and conversions for accurate results.' },
+      { title: 'Analysis & audit', desc: 'Audit your accounts, analyze performance and find opportunities.' },
+      { title: 'Reporting', desc: 'Clear reports by campaign objective, ready to share.' },
+      { title: 'Consulting', desc: 'Sessions and reviews for ad strategy and platform selection.' },
+    ],
+  },
+  features: {
+    title: 'Key features',
+    subtitle: 'Clear tools built on your real account data.',
+    items: [
+      { title: 'Unified tracking', desc: 'Your campaigns, platforms and results in one dashboard.' },
+      { title: 'Performance comparison', desc: 'Compare campaigns and platforms, and spot the best fast.' },
+      { title: 'Reports', desc: 'Objective-based reports, ready for a client or a team.' },
+      { title: 'Budgets', desc: 'Monitor spend pace and forecast overruns early.' },
+      { title: 'Creatives', desc: 'Compare ad performance and see what works best.' },
+      { title: 'Alerts', desc: 'Get alerted on rising costs or a stalled sync.' },
+    ],
+  },
+  platforms: {
+    title: 'Supported platforms',
+    subtitle: 'Bring your campaign data from the main platforms into one place.',
+    note: 'We show each platform’s status honestly — some available, some in development or awaiting connection credentials.',
+    items: [
+      { label: 'Meta (Facebook · Instagram)', status: 'Awaiting credentials', tone: 'await' },
+      { label: 'Google Ads', status: 'Awaiting credentials', tone: 'await' },
+      { label: 'TikTok Ads', status: 'In development', tone: 'dev' },
+      { label: 'Snapchat Ads', status: 'In development', tone: 'dev' },
+      { label: 'X (Twitter) Ads', status: 'Coming soon', tone: 'soon' },
+      { label: 'LinkedIn Ads', status: 'Coming soon', tone: 'soon' },
+    ],
+  },
+  reports: {
+    title: 'Reports & alerts',
+    subtitle: 'Share-ready reports, and alerts that reach you at the right time.',
+    formatsLabel: 'Report formats & outputs',
     formats: ['PDF', 'XLSX', 'CSV', 'Weekly', 'Monthly', 'Executive', 'Secure links', 'Scheduled email'],
-    basisLabel: 'Every report is based on',
-    basis: ['Campaign objective', 'Connected platforms', 'API data', 'Range & currency'],
+    alertsLabel: 'Smart alerts',
+    alerts: ['Rising cost per result', 'Approaching budget overrun', 'Sync stopped', 'Active campaign stopped'],
   },
   finalCta: {
     title: 'Start managing your paid advertising today',
     subtitle: 'Create your account in minutes, or send a service request and track it via a secure link.',
-    start: 'Start managing campaigns',
+    start: 'Create account',
     request: 'Request a service',
   },
   footer: {
-    tagline: 'Paid Advertising Management platform — clients, projects, campaigns, analytics and reports in one place.',
+    tagline: 'Paid advertising management — clients, projects, campaigns, analytics and reports in one place.',
     product: 'Product',
     links: [
       { label: 'Create account', to: '/register' },
       { label: 'Log in', to: '/login' },
-      { label: 'Send a request', to: '/requests/new' },
-      { label: 'Track a request', to: '/requests/track' },
+      { label: 'Request a service', to: '/requests/new' },
+      { label: 'Track my requests', to: '/client/login' },
     ],
     legal: ['Privacy', 'Terms', 'Support'],
     rights: 'All rights reserved',

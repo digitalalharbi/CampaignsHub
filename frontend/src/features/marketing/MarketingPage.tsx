@@ -148,7 +148,7 @@ export function MarketingPage() {
         <div className="mt-4 grid grid-cols-1 gap-2 text-base text-text-secondary md:grid-cols-2">
           {(ar
             ? ['عزل بيانات المؤسسات والمشاريع', 'صلاحيات دقيقة خادمية', 'تشفير البيانات الحساسة', 'سجل تدقيق', 'مصادقة آمنة بالجلسة', 'علامات مائية للمحتوى الحساس']
-            : ['Tenant + project data isolation', 'Fine-grained server-side permissions', 'Encryption of sensitive data', 'Audit log', 'Secure session auth', 'Watermarks on sensitive content']
+            : ['Client + project data isolation', 'Fine-grained server-side permissions', 'Encryption of sensitive data', 'Audit log', 'Secure session auth', 'Watermarks on sensitive content']
           ).map((s) => (
             <div key={s} className="flex items-center gap-2"><CheckCircle2 size={16} className="text-success" />{s}</div>
           ))}

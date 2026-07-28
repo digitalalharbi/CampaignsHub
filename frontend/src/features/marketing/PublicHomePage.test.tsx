@@ -47,35 +47,36 @@ function linkHrefs(): (string | null)[] {
   return screen.getAllByRole('link').map((l) => l.getAttribute('href'))
 }
 
-/** Reveal the inline paid-media services by clicking the «I need paid-media services» journey. */
+/** Reveal the inline paid-media services by clicking the services option (locale-agnostic — it is the
+ *  only control carrying `aria-expanded`). */
 function revealServices(): void {
-  fireEvent.click(screen.getByText('I need paid-media services'))
+  const btn = screen.getAllByRole('button').find((b) => b.hasAttribute('aria-expanded'))
+  if (!btn) throw new Error('services reveal option not found')
+  fireEvent.click(btn)
 }
 
-describe('PublicHomePage — journeys', () => {
+/**
+ * Internal/system vocabulary that must NEVER appear on the public homepage (v5). These are the
+ * forbidden terms; the page must read entirely in customer-facing language.
+ */
+const FORBIDDEN = [
+  /SaaS/, /اشتراك SaaS/, /المشتركين/, /للمشتركين/, /للوكالات/, /حساب وكالة/, /مساحة وكالة/,
+  /مساحة العمل/, /Workspace/, /Tenant/, /Company Tenant/, /Personal Workspace/, /Operations Console/,
+  /Module Entitlements/, /واجهة المشترك/, /تجربة الشركة/, /دخول مساحة العمل/, /تسجيل دخول النظام/,
+]
+
+describe('PublicHomePage — v5 journeys & header', () => {
   afterEach(() => {
     catalogState.isError = false
     signOut()
   })
 
-  it('the 3 navigating journeys go to their exact v4 routes; the services journey does not navigate', () => {
-    signOut()
-    renderWithProviders(<PublicHomePage />, { locale: 'en' })
-    const hrefs = linkHrefs()
-    expect(hrefs).toContain('/register?journey=self-managed&module=paid-media')
-    expect(hrefs).toContain('/register?journey=agency&module=paid-media')
-    expect(hrefs).toContain('/requests/new?module=influencer-marketing')
-    // The paid-media journey reveals services inline; no bare navigate to the paid-media intake exists.
-    expect(hrefs).not.toContain('/requests/new?module=paid-media')
-    expect(hrefs).not.toContain('/requests/new?service=paid-media')
-  })
-
-  it('the anonymous header exposes external actions with correct hrefs and NO internal/admin login', () => {
+  it('the anonymous header exposes the 4 external actions with correct hrefs and NO internal/admin login', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'ar' })
     const header = screen.getByRole('banner')
     const link = (name: RegExp) => within(header).getByRole('link', { name })
-    expect(link(/ابدأ الآن/)).toHaveAttribute('href', '/register')
+    expect(link(/إنشاء حساب/)).toHaveAttribute('href', '/register')
     expect(link(/تسجيل الدخول/)).toHaveAttribute('href', '/login')
     expect(link(/اطلب خدمة/)).toHaveAttribute('href', '/requests/new')
     expect(link(/متابعة طلباتي/)).toHaveAttribute('href', '/client/login')
@@ -89,49 +90,43 @@ describe('PublicHomePage — journeys', () => {
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
     const header = screen.getByRole('banner')
     expect(within(header).getByRole('link', { name: /Dashboard/i })).toHaveAttribute('href', '/dashboard')
-    expect(within(header).queryByRole('link', { name: /Get started/i })).not.toBeInTheDocument()
+    expect(within(header).queryByRole('link', { name: /Create account/i })).not.toBeInTheDocument()
   })
 
-  it('renders the "already have an account" block with workspace + client-tracking login (not system login)', () => {
+  it('the 3 navigating options go to their exact v5 routes; the services option does not navigate', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
     const hrefs = linkHrefs()
-    expect(hrefs).toContain('/login')
-    expect(hrefs).toContain('/client/login')
-    expect(screen.getByText('Do you already have an account?')).toBeInTheDocument()
-    // «Workspace login» is unique to this block; it must point at the standard /login.
-    expect(screen.getByRole('link', { name: /Workspace login/i })).toHaveAttribute('href', '/login')
-    // «Track my requests» appears in both the header and this block; every instance targets /client/login.
-    const trackLinks = screen.getAllByRole('link', { name: /Track my requests/i })
-    expect(trackLinks.length).toBeGreaterThanOrEqual(1)
-    trackLinks.forEach((l) => expect(l).toHaveAttribute('href', '/client/login'))
+    expect(hrefs).toContain('/register?journey=self-managed&module=paid-media')
+    expect(hrefs).toContain('/register?journey=agency&module=paid-media')
+    expect(hrefs).toContain('/requests/new?module=influencer-marketing')
+    // The paid-media services option reveals the selector inline; no bare navigate to the intake exists.
+    expect(hrefs).not.toContain('/requests/new?module=paid-media')
+    expect(hrefs).not.toContain('/requests/new?service=paid-media')
   })
 
-  it('renders the two clearly-separated commercial tracks (SaaS subscription + service request)', () => {
+  it('the 4th journey route (paid-media services) is carried by the CTA once a service is picked', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
-    expect(screen.getByText('SaaS subscription')).toBeInTheDocument()
-    expect(screen.getByText('Service request')).toBeInTheDocument()
-    // A representative step from each track, in the right column.
-    expect(screen.getByText('Connect your platforms')).toBeInTheDocument()
-    expect(screen.getByText('Receive a quote')).toBeInTheDocument()
+    revealServices()
+    fireEvent.click(screen.getByText('New campaign'))
+    expect(linkHrefs()).toContain('/requests/new?module=paid-media&services=new_campaign')
   })
 
-  it('never renders the removed «تسجيل دخول النظام» wording anywhere on the page', () => {
+  it('renders the below-card login block with ONLY log-in + track-my-requests (no internal login)', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'ar' })
-    expect(screen.queryByText(/تسجيل دخول النظام/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/دخول الإدارة/)).not.toBeInTheDocument()
+    const hrefs = linkHrefs()
+    expect(hrefs).toContain('/login')
+    expect(hrefs).toContain('/client/login')
+    // Every «تسجيل الدخول» instance points at /login; every «متابعة طلباتي» at /client/login.
+    screen.getAllByRole('link', { name: /تسجيل الدخول/ }).forEach((l) => expect(l).toHaveAttribute('href', '/login'))
+    screen.getAllByRole('link', { name: /متابعة طلباتي/ }).forEach((l) => expect(l).toHaveAttribute('href', '/client/login'))
+    // The below-card helper line, in customer language (no «دخول مساحة العمل»).
+    expect(screen.getByText(/سجّل الدخول لإدارة حملاتك/)).toBeInTheDocument()
   })
 
-  it('keeps the headline and shows the new hero subtext', () => {
-    signOut()
-    renderWithProviders(<PublicHomePage />, { locale: 'en' })
-    expect(screen.getByRole('heading', { name: /All your paid ad campaigns in one place/i })).toBeInTheDocument()
-    expect(screen.getByText(/Run your campaigns yourself in a professional workspace/i)).toBeInTheDocument()
-  })
-
-  it('does not duplicate the journey options — each navigating journey route appears exactly once', () => {
+  it('does not duplicate the options — each navigating route appears exactly once', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
     const hrefs = linkHrefs()
@@ -140,12 +135,41 @@ describe('PublicHomePage — journeys', () => {
     }
   })
 
-  it('renders the Arabic journeys under RTL', () => {
+  it('shows the customer-facing hero: eyebrow, headline and description', () => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { locale: 'en' })
+    expect(screen.getByRole('heading', { name: /All your paid ad campaigns in one place/i })).toBeInTheDocument()
+    expect(screen.getByText(/from one clear dashboard/i)).toBeInTheDocument()
+    expect(screen.getByText('Paid advertising management')).toBeInTheDocument()
+  })
+
+  it('renders the Arabic options card «كيف تريد البدء؟» under RTL', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'ar' })
-    expect(screen.getByText('كيف تريد استخدام CampaignsHub؟')).toBeInTheDocument()
+    expect(screen.getByText('كيف تريد البدء؟')).toBeInTheDocument()
     expect(linkHrefs()).toContain('/register?journey=agency&module=paid-media')
     expect(document.querySelector('[dir="rtl"]')).not.toBeNull()
+  })
+})
+
+describe('PublicHomePage — forbidden internal jargon guard', () => {
+  afterEach(() => {
+    catalogState.isError = false
+    signOut()
+  })
+
+  it('renders NONE of the forbidden internal terms in Arabic (incl. the revealed services)', () => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { locale: 'ar' })
+    revealServices()
+    for (const term of FORBIDDEN) expect(screen.queryByText(term)).not.toBeInTheDocument()
+  })
+
+  it('renders NONE of the forbidden internal terms in English (incl. the revealed services)', () => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { locale: 'en' })
+    revealServices()
+    for (const term of FORBIDDEN) expect(screen.queryByText(term)).not.toBeInTheDocument()
   })
 })
 
@@ -155,7 +179,7 @@ describe('PublicHomePage — inline paid-media services', () => {
     signOut()
   })
 
-  it('is hidden until the services journey is chosen, then reveals category tabs + featured cards', () => {
+  it('is hidden until the services option is chosen, then reveals category tabs + featured cards', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
     expect(screen.queryByText('New campaign')).not.toBeInTheDocument()
