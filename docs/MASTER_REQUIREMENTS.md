@@ -120,3 +120,5 @@ Two-review gate per phase:
 ---
 
 _Last updated: 2026-07-27 · branch `feat/auth-premium`_
+
+> **HANDOFF (2026-07-28)**: session hit context limit at HEAD `aaa79da` (branch feat/taxonomy-ux). Authoritative resume state + Exact Next Task in `docs/RESUME_STATE.md`; bootstrap in `CLAUDE.md`. Taxonomy-UX phase: T1-T6,T8,T9,T11,T12 committed & verified; T7 + homepage journey section are UNVERIFIED WIP in `aaa79da` (verify build/tests/seed first); then T15 paid-media vertical (docs/PAID_MEDIA_SERVICES_SPEC.md), T10 forms, T13/T14 regression.

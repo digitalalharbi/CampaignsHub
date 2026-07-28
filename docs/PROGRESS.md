@@ -611,3 +611,5 @@ renders (Billing/Messages/Connection Center/Google Drive/Branding surfaces live,
 passed; frontend build clean + 98 vitest. Entitlement nav: personal=Operations Console (full), company=SaaS
 Workspace (simplified subscriber). Remaining: client-portal files/campaigns/reports real pages + Subscriptions
 UI (in progress), expanded E2E (e2e/expansion-surfaces.spec.ts added), expanded clean install, expanded ZIP+SHA.
+
+> **HANDOFF (2026-07-28)**: session hit context limit at HEAD `aaa79da` (branch feat/taxonomy-ux). Authoritative resume state + Exact Next Task in `docs/RESUME_STATE.md`; bootstrap in `CLAUDE.md`. Taxonomy-UX phase: T1-T6,T8,T9,T11,T12 committed & verified; T7 + homepage journey section are UNVERIFIED WIP in `aaa79da` (verify build/tests/seed first); then T15 paid-media vertical (docs/PAID_MEDIA_SERVICES_SPEC.md), T10 forms, T13/T14 regression.
