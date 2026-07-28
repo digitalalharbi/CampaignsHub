@@ -53,3 +53,17 @@ Demo: owner@demo-agency.local / analyst@… / viewer@… — password `password`
 
 ## Honest external deps (Awaiting External Dependency; never claim real)
 Email/WhatsApp/SMS/Google OAuth/Payment gateway/Ad platforms + Google Drive — Null/Sandbox adapters delivered.
+
+## CONSOLIDATION PASS (after in-flight completion agent commits) — per docs/CANONICAL_MODULES.md
+1. AppShell operationalNav → canonical only: dashboard, requests, clients, projects, campaigns, analytics,
+   reports, alerts, messaging, billing(المالية), integrations(→/app/integrations); add subscriptions(الاشتراك)
+   for SaaS via ent. Remove nav items: connections_center, drive, branding (dupes). Relabel billing=المالية,
+   subscriptions=الاشتراك.
+2. Router: /app/integrations = ConnectionCenterPage (canonical). Add <Navigate> redirects: /integrations,
+   /app/connections, /app/drive → /app/integrations; /app/branding → /settings/branding. Add /settings/branding
+   = BrandingCenterPage under SettingsLayout children.
+3. Entitlements (AccountEntitlements): PERSONAL_NAV = dashboard,requests,clients,projects,campaigns,analytics,
+   reports,alerts,messaging,billing,connections,team,settings (drop subscriptions,branding,drive,messaging?keep).
+   COMPANY_NAV = dashboard,projects,campaigns,analytics,reports,connections,alerts,team,subscriptions,settings
+   (drop billing,branding). Update RegistrationOnboardingTest accordingly.
+4. Rebuild + vitest + backend test; browser-verify the 3 menus; then expanded E2E, clean install, ZIP, audit.
