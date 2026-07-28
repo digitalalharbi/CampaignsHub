@@ -1,5 +1,36 @@
 # Paid-Media Services — selector + dynamic request form (engine-driven)
 
+## ⚑⚑ v3 BINDING — Public read-only catalog contract (single source of truth for services)
+This supersedes any conflicting field names/paths above. Every service-showing surface (homepage selector, dynamic intake, request review, client portal, internal request dashboard, quote items, invoice items) uses THIS one endpoint + THESE canonical keys. No hardcoded fallback arrays, no duplicated lists, no differing keys between page and form, no demo data on API failure — on failure show a clear Error State + Retry (never a static list).
+
+**Endpoint:** `GET /api/v1/public/catalog/paid-media-services` — public (no auth), rate-limited, `ETag` + `Cache-Control`, deterministic ordering, AR/EN. Fail-closed.
+**Serves ONLY options where:** `definition_key = request.paid_service` AND `scope = platform` AND `is_active = true` AND `is_public = true`. Any other/unknown definition → fail closed (404/empty). Never serve tenant/client/project scope, inactive, or non-public options.
+**Allowed public fields ONLY** (per option): `key`, `category_key`, `label_ar`, `label_en`, `description_ar`, `description_en`, `icon`, `sort_order`, `required_field_rules`. 
+**MUST NOT return:** tenant_id, internal/DB ids, audit metadata, usage counts, admin permissions, inactive options, private pricing, internal notes, legacy mappings, raw metadata blobs, is_public/is_system flags.
+**Response (ApiEnvelope `data`):**
+```
+{ "data": {
+  "version": "<catalog version — bump when options change; also the ETag basis>",
+  "categories": [ { "key":"launch_manage","label_ar":"إدارة الحملات","label_en":"…","icon":"…","sort_order":1 }, … 10 ],
+  "services":   [ { "key":"new_campaign","category_key":"launch_manage","label_ar":"…","label_en":"…",
+                    "description_ar":"…","description_en":"…","icon":"…","sort_order":1,
+                    "required_field_rules":["budget","objective","platforms","regions","creatives"] }, … ~90 ]
+}}
+```
+Categories carry only {key,label_ar,label_en,icon,sort_order}. Ordering deterministic by (category sort_order, service sort_order). "Featured/أبرز الخدمات" strip on the homepage = first ~8 services by that global order (NO `popular` field — derived from sort_order).
+
+**`is_public`:** add as a fail-closed attribute on taxonomy options (column or metadata; default false). Only options explicitly published are served. It is a FILTER, never exposed in the payload.
+
+**Persistence + server validation (never trust the browser query params):** canonical store = a `request_services` table (request_id FK, service_key, category_key, details jsonb, position) — the source of truth quote/invoice line items derive from. On request submit the backend re-validates every submitted service key is `is_active` AND `is_public` AND belongs to `request.paid_service` (allowed for paid-media); reject unknown/inactive/private keys (422). 
+**Custom request** = the single system option key `custom_request` (in the catalog) → reveals a free-text description field in intake. It is NOT anonymous taxonomy creation.
+
+**Tests the catalog must pass:** anonymous access works · tenant options never leak · inactive options never appear · private (is_public=false) options never appear · unknown definition fails closed · ordering deterministic · (submit) forged/unknown/inactive service keys rejected.
+
+**Frontend consumes via** `frontend/src/features/paid-media/publicCatalog.ts` (`usePublicPaidServices()`), which is the ONLY client of this endpoint; both marketing + requests import it read-only.
+
+---
+
+
 ## ⚑ v2 (SUPERSEDES the "click استعرض الخدمات first" flow below) — services visible in the FIRST viewport
 The visitor must understand and pick services **without first clicking away**. Redesign the homepage Hero as **two columns** (do NOT regress the existing visual polish, reference-inspired, RTL/LTR, light/dark, mobile-balanced, page not made longer):
 - **Main column**: value proposition + Product Preview. Headline stays «كل حملاتك الإعلانية المدفوعة في مكان واحد». New sub-desc: «أدر حملاتك بنفسك، أو اختر خدمة متخصصة في الإدارة والتحسين والتتبع والتحليل والتقارير، وتابع طلبك وتنفيذه من منصة واحدة.»
