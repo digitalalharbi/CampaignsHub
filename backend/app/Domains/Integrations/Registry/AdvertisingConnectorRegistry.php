@@ -19,6 +19,15 @@ use App\Domains\Integrations\Sandbox\SandboxAdvertisingConnector;
  */
 final class AdvertisingConnectorRegistry
 {
+    /**
+     * Additional keys a connector must answer to, because stored data and connector keys disagree.
+     *
+     * @var array<string, list<string>>
+     */
+    private const ALIASES = [
+        'google_ads' => ['google'],
+    ];
+
     /** @var array<string, AdvertisingConnector> */
     private array $connectors = [];
 
@@ -41,6 +50,14 @@ final class AdvertisingConnectorRegistry
         foreach ($classes as $class) {
             $connector = new $class;
             $this->connectors[$connector->key()] = $connector;
+
+            // Provider keys drifted: the Google connector registers itself as "google_ads" while every
+            // stored row (daily_metrics, external_accounts, external_campaigns) uses "google". Without
+            // this alias a Google account resolves to NO connector, so its sync is recorded as
+            // "no connector registered" instead of the truthful awaiting-credentials state.
+            foreach (self::ALIASES[$connector->key()] ?? [] as $alias) {
+                $this->connectors[$alias] = $connector;
+            }
         }
     }
 

@@ -70,7 +70,7 @@ Commit = short hash. Test = suite that covers it. Review = route reviewed live.
 | PAIDMEDIA-001 | Q/R | Paid-media catalog + selector + dynamic intake + request_services + quote/invoice | ✓ | ✓ | BE 411 + E2E | VERIFIED | bc61402 | — |
 | REGRESS-001 | X | Three-app E2E Chromium/Firefox/WebKit 0/0 | — | — | 188 E2E | VERIFIED | b2d7278 | re-run at each phase end |
 | DEVSTATUS-001 | X | /dev/status shows requirement-tracking board | DevStatusController | PARTIAL | — | **NOT_STARTED** (enrich) | — | add current/next requirement + counts |
-| ADAUDIT-001 | J | docs/AD_PLATFORM_INTEGRATIONS_AUDIT.md per-platform matrix | — | — | — | **NOT_STARTED** | — | write while implementing integrations (not before) |
+| ADAUDIT-001 | — | docs/AD_PLATFORM_INTEGRATIONS_AUDIT.md per-platform matrix | ✓ audit written against the code at HEAD: shared machinery inventory, per-platform table (OAuth/accounts/campaigns/ad-sets/insights), demo-mode labelling, definition-of-done | — | Found and fixed 2 real defects while auditing: the google/google_ads registry key drift (a Google account resolved to NO connector and reported a misleading failure) and a sync gate on the non-existent `integrations.manage` permission | **VERIFIED** | (this commit) | Every ⬜ is the honest awaiting-credentials path — no cell marked done on a mock |
 
 ## UNIMPLEMENTED REQUIREMENTS CHECK (run after each module)
 Open (NOT_STARTED/PARTIAL/IMPLEMENTED_NOT_VERIFIED): HOME-010, DASH-010, DASH-011, CAMPAIGN-010, CAMPAIGN-020,

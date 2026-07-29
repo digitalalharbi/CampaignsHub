@@ -118,4 +118,21 @@ final class MetricsSyncPipelineTest extends TestCase
 
         $this->assertSame($first, DailyMetric::withoutGlobalScopes()->count(), 'a re-sync updates in place, it does not duplicate');
     }
+
+    /**
+     * Regression: stored rows use the provider key "google" while the connector registers itself as
+     * "google_ads". Without an alias a Google account resolved to no connector at all and its sync was
+     * recorded as "no connector registered" — a misleading failure instead of the truthful
+     * awaiting-credentials state.
+     */
+    public function test_google_accounts_resolve_to_the_google_ads_connector(): void
+    {
+        $account = $this->account('google');
+
+        $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-06-01'), Carbon::parse('2026-06-07'));
+
+        $this->assertSame('awaiting_credentials', $run->status);
+        $this->assertStringNotContainsString('No connector is registered', (string) $run->error);
+        $this->assertStringContainsString('Google Ads API', (string) $run->error);
+    }
 }
