@@ -20,7 +20,7 @@ const COPY = {
     last_activity: 'آخر نشاط', no_messages: 'لا توجد رسائل بعد.',
   },
   en: {
-    title: 'Messages', subtitle: 'The team inbox — follow and reply to client conversations.',
+    title: 'Conversations', subtitle: 'The team inbox — follow and reply to client conversations.',
     filter_open: 'Open', filter_closed: 'Closed', filter_all: 'All',
     none: 'No threads.', error: 'Could not load threads.', loading: 'Loading…',
     pick: 'Pick a thread to view it.', unread: 'unread', mark_read: 'Mark read', marking: 'Marking…',
