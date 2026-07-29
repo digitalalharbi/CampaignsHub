@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Receipt, X } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import { BillingTabs } from './BillingTabs'
+import { TaxTreatmentChip } from './QuotesPage'
+import { taxTreatmentLabel } from './taxTreatment'
 import { formatDate, formatMoney, isPayable, listInvoices, type Invoice, type InvoiceStatus } from './api'
 
 const COPY = {
@@ -12,6 +14,7 @@ const COPY = {
     all: 'الكل', number: 'الرقم', total: 'الإجمالي', paid: 'المدفوع', outstanding: 'المتبقي',
     subtotal: 'المجموع الفرعي', tax: 'الضريبة', discount: 'الخصم', due: 'الاستحقاق', issued: 'صدرت',
     paid_at: 'تاريخ السداد', created_at: 'أُنشئت', details: 'تفاصيل الفاتورة', close: 'إغلاق',
+    tax_treatment: 'المعالجة الضريبية',
     payable_note: 'قابلة للسداد — ابدأ الدفع من صفحة المدفوعات.',
   },
   en: {
@@ -20,6 +23,7 @@ const COPY = {
     all: 'All', number: 'Number', total: 'Total', paid: 'Paid', outstanding: 'Outstanding',
     subtotal: 'Subtotal', tax: 'Tax', discount: 'Discount', due: 'Due', issued: 'Issued',
     paid_at: 'Paid at', created_at: 'Created', details: 'Invoice details', close: 'Close',
+    tax_treatment: 'Tax treatment',
     payable_note: 'Payable — start a payment from the Payments page.',
   },
 }
@@ -111,6 +115,7 @@ export function InvoicesPage() {
                       <div className="flex flex-col gap-1">
                         <span className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{inv.number}</span>
                         <span className={`w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold ${status.tone}`}>{status.label}</span>
+                        <TaxTreatmentChip treatment={inv.tax_treatment} ar={ar} />
                       </div>
                     </td>
                     <td className="p-3 tnum text-text-primary" dir="ltr">{formatMoney(inv.total, inv.currency)}</td>
@@ -149,6 +154,7 @@ function InvoiceDrawer({ invoice, c, ar, onClose }: { invoice: Invoice; c: Copy;
 
         <dl className="flex flex-col gap-2 rounded-2xl border border-border p-4 text-sm">
           <Row label={c.subtotal} value={formatMoney(invoice.subtotal, invoice.currency)} />
+          <Row label={c.tax_treatment} value={taxTreatmentLabel(invoice.tax_treatment, ar) ?? '—'} />
           <Row label={c.tax} value={formatMoney(invoice.tax, invoice.currency)} />
           <Row label={c.discount} value={formatMoney(invoice.discount, invoice.currency)} />
           <div className="my-1 border-t border-border" />

@@ -81,6 +81,7 @@ export interface PortalQuote {
   currency: string
   subtotal: string
   tax: string
+  tax_treatment: string | null
   discount: string
   total: string
   status: string
@@ -111,6 +112,7 @@ export interface PortalInvoice {
   currency: string
   subtotal: string
   tax: string
+  tax_treatment: string | null
   discount: string
   total: string
   amount_paid: string

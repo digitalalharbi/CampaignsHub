@@ -25,6 +25,7 @@ export interface Quote {
   currency: string
   subtotal: string
   tax: string
+  tax_treatment: string | null
   discount: string
   total: string
   status: QuoteStatus | string
@@ -42,6 +43,7 @@ export interface NewQuote {
   currency?: string
   subtotal?: number
   tax?: number
+  tax_treatment?: string
   discount?: number
   total?: number
   valid_until?: string | null
@@ -72,6 +74,7 @@ export interface Invoice {
   currency: string
   subtotal: string
   tax: string
+  tax_treatment: string | null
   discount: string
   total: string
   amount_paid: string

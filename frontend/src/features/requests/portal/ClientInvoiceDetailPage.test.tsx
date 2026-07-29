@@ -14,7 +14,7 @@ import { getPortalInvoice, payPortalInvoice } from './portalAccountApi'
 
 const invoice: PortalInvoice = {
   id: 'i1', number: 'INV-1001', currency: 'SAR',
-  subtotal: '1000', tax: '150', discount: '0', total: '1150', amount_paid: '0',
+  subtotal: '1000', tax: '150', tax_treatment: 'basic_15', discount: '0', total: '1150', amount_paid: '0',
   status: 'unpaid', payment_status: 'unpaid', due_date: '2026-04-01', issued_at: '2026-03-01T00:00:00Z', paid_at: null,
 }
 

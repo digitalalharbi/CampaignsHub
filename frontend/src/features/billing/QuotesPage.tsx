@@ -5,6 +5,7 @@ import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { BillingTabs } from './BillingTabs'
 import { DateField } from '@/components/ui/DateField'
+import { DEFAULT_TREATMENT, SELECTABLE_TREATMENTS, isHistoricalTreatment, taxForTreatment, taxTreatmentLabel } from './taxTreatment'
 import {
   approveQuote, createQuote, formatDate, formatMoney, listQuotes,
   type NewQuote, type Quote,
@@ -23,6 +24,7 @@ const COPY = {
     optional: 'اختياري', close: 'إغلاق', details: 'تفاصيل العرض',
     search_ph: 'ابحث برقم العرض…', all: 'الكل', no_match: 'لا عروض تطابق البحث أو الفلتر.',
     sum_total: 'إجمالي العروض', sum_approved: 'معتمدة', sum_sent: 'مُرسلة', sum_draft: 'مسودات',
+    tax_treatment: 'المعالجة الضريبية',
   },
   en: {
     title: 'Quotes', subtitle: 'Create quotes and track their status. Approving a quote issues the invoice automatically.',
@@ -35,6 +37,7 @@ const COPY = {
     optional: 'optional', close: 'Close', details: 'Quote details',
     search_ph: 'Search by quote number…', all: 'All', no_match: 'No quotes match your search or filter.',
     sum_total: 'Total quotes', sum_approved: 'Approved', sum_sent: 'Sent', sum_draft: 'Drafts',
+    tax_treatment: 'Tax treatment',
   },
 }
 
@@ -166,6 +169,7 @@ export function QuotesPage() {
                   <div className="flex flex-col gap-1">
                     <span className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{quote.number}</span>
                     <span className="tnum text-lg font-extrabold text-text-primary" dir="ltr">{formatMoney(quote.total, quote.currency)}</span>
+                    <TaxTreatmentChip treatment={quote.tax_treatment} ar={ar} />
                     <span className="text-[11px] text-text-tertiary">{c.created_at}: <span className="tnum">{formatDate(quote.created_at)}</span></span>
                   </div>
                   <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${status.tone}`}>{status.label}</span>
@@ -178,6 +182,7 @@ export function QuotesPage() {
       {creating ? (
         <CreateQuoteDrawer
           c={c}
+          ar={ar}
           onClose={() => setCreating(false)}
           onCreated={() => { qc.invalidateQueries({ queryKey: ['billing', 'quotes'] }); setCreating(false) }}
         />
@@ -198,7 +203,7 @@ export function QuotesPage() {
 }
 
 /** Slide-over drawer that hosts the create-quote form — opened from the header button, keeping the page for data. */
-function CreateQuoteDrawer({ c, onClose, onCreated }: { c: Copy; onClose: () => void; onCreated: () => void }) {
+function CreateQuoteDrawer({ c, ar, onClose, onCreated }: { c: Copy; ar: boolean; onClose: () => void; onCreated: () => void }) {
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
       <div
@@ -209,33 +214,39 @@ function CreateQuoteDrawer({ c, onClose, onCreated }: { c: Copy; onClose: () => 
           <h2 className="flex items-center gap-2 text-lg font-extrabold text-text-primary"><Plus size={18} /> {c.new_quote}</h2>
           <button onClick={onClose} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-hover" aria-label={c.close}><X size={18} /></button>
         </div>
-        <CreateQuoteForm c={c} onCreated={onCreated} embedded />
+        <CreateQuoteForm c={c} ar={ar} onCreated={onCreated} embedded />
       </div>
     </div>
   )
 }
 
-function CreateQuoteForm({ c, onCreated, embedded }: { c: Copy; onCreated: () => void; embedded?: boolean }) {
-  const [form, setForm] = useState<NewQuote>({ currency: 'SAR', subtotal: 0, tax: 0, discount: 0 })
+function CreateQuoteForm({ c, ar, onCreated, embedded }: { c: Copy; ar: boolean; onCreated: () => void; embedded?: boolean }) {
+  const initial: NewQuote = { currency: 'SAR', subtotal: 0, discount: 0, tax_treatment: DEFAULT_TREATMENT }
+  const [form, setForm] = useState<NewQuote>(initial)
   const [number, setNumber] = useState('')
   const [notes, setNotes] = useState('')
+
+  const num = (v: number | undefined) => (typeof v === 'number' ? v : 0)
+  // Tax is DERIVED from the treatment (never typed); total follows. The backend re-derives authoritatively.
+  const derivedTax = taxForTreatment(form.tax_treatment, num(form.subtotal))
+  const computedTotal = Math.max(0, num(form.subtotal) + derivedTax - num(form.discount))
+
   const createM = useMutation({
     mutationFn: () =>
       createQuote({
         ...form,
+        tax: derivedTax,
+        total: computedTotal,
         number: number.trim() || undefined,
         notes: notes.trim() || null,
       }),
     onSuccess: () => {
       onCreated()
-      setForm({ currency: 'SAR', subtotal: 0, tax: 0, discount: 0 })
+      setForm(initial)
       setNumber('')
       setNotes('')
     },
   })
-
-  const num = (v: number | undefined) => (typeof v === 'number' ? v : 0)
-  const computedTotal = Math.max(0, num(form.subtotal) + num(form.tax) - num(form.discount))
 
   return (
     <form
@@ -252,13 +263,9 @@ function CreateQuoteForm({ c, onCreated, embedded }: { c: Copy; onCreated: () =>
         <input required value={form.currency} onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))}
           maxLength={3} dir="ltr" className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm uppercase text-text-primary" />
       </Field>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <Field label={c.subtotal}>
           <input type="number" min={0} step="0.01" value={form.subtotal} onChange={(e) => setForm((f) => ({ ...f, subtotal: Number(e.target.value) }))}
-            dir="ltr" className="tnum rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-text-primary" />
-        </Field>
-        <Field label={c.tax}>
-          <input type="number" min={0} step="0.01" value={form.tax} onChange={(e) => setForm((f) => ({ ...f, tax: Number(e.target.value) }))}
             dir="ltr" className="tnum rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-text-primary" />
         </Field>
         <Field label={c.discount}>
@@ -266,9 +273,25 @@ function CreateQuoteForm({ c, onCreated, embedded }: { c: Copy; onCreated: () =>
             dir="ltr" className="tnum rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-text-primary" />
         </Field>
       </div>
-      <div className="flex items-center justify-between rounded-lg bg-surface-hover px-3 py-2 text-sm">
-        <span className="font-semibold text-text-secondary">{c.total}</span>
-        <span className="tnum font-extrabold text-text-primary" dir="ltr">{formatMoney(computedTotal, form.currency ?? 'SAR')}</span>
+      <Field label={c.tax_treatment}>
+        <select
+          value={form.tax_treatment} onChange={(e) => setForm((f) => ({ ...f, tax_treatment: e.target.value }))}
+          className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary"
+        >
+          {SELECTABLE_TREATMENTS.map((k) => (
+            <option key={k} value={k}>{taxTreatmentLabel(k, ar)}</option>
+          ))}
+        </select>
+      </Field>
+      <div className="flex flex-col gap-1 rounded-lg bg-surface-hover px-3 py-2 text-sm">
+        <div className="flex items-center justify-between text-text-secondary">
+          <span>{c.tax}</span>
+          <span className="tnum" dir="ltr">{formatMoney(derivedTax, form.currency ?? 'SAR')}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-semibold text-text-secondary">{c.total}</span>
+          <span className="tnum font-extrabold text-text-primary" dir="ltr">{formatMoney(computedTotal, form.currency ?? 'SAR')}</span>
+        </div>
       </div>
       <Field label={`${c.valid_until} (${c.optional})`}>
         <DateField value={form.valid_until ?? ''} onChange={(v) => setForm((f) => ({ ...f, valid_until: v || null }))} />
@@ -312,6 +335,7 @@ function QuoteDrawer({
 
         <dl className="flex flex-col gap-2 rounded-2xl border border-border p-4 text-sm">
           <Row label={c.subtotal} value={formatMoney(quote.subtotal, quote.currency)} />
+          <Row label={c.tax_treatment} value={taxTreatmentLabel(quote.tax_treatment, ar) ?? '—'} />
           <Row label={c.tax} value={formatMoney(quote.tax, quote.currency)} />
           <Row label={c.discount} value={formatMoney(quote.discount, quote.currency)} />
           <div className="my-1 border-t border-border" />
@@ -342,6 +366,22 @@ function QuoteDrawer({
         )}
       </div>
     </div>
+  )
+}
+
+/** Small badge showing a document's VAT treatment (with a «تاريخي/historical» tag for the legacy rate). */
+export function TaxTreatmentChip({ treatment, ar }: { treatment: string | null; ar: boolean }) {
+  const label = taxTreatmentLabel(treatment, ar)
+  if (!label) return null
+  const historical = isHistoricalTreatment(treatment)
+  return (
+    <span
+      className={`w-fit rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${
+        historical ? 'bg-warning/15 text-warning' : 'bg-surface-hover text-text-secondary'
+      }`}
+    >
+      {label}
+    </span>
   )
 }
 

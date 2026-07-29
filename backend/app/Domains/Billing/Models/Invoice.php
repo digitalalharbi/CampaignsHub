@@ -19,7 +19,7 @@ final class Invoice extends Model
 
     protected $fillable = [
         'tenant_id', 'client_workspace_id', 'quote_id', 'number', 'currency',
-        'subtotal', 'tax', 'discount', 'total', 'line_items', 'amount_paid', 'status',
+        'subtotal', 'tax', 'tax_treatment', 'discount', 'total', 'line_items', 'amount_paid', 'status',
         'due_date', 'issued_at', 'paid_at',
     ];
 

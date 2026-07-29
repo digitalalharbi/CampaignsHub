@@ -7,7 +7,7 @@ import {
 function invoice(overrides: Partial<Invoice> = {}): Invoice {
   return {
     id: 'i1', tenant_id: 't1', client_workspace_id: null, quote_id: 'q1', number: 'INV-1',
-    currency: 'SAR', subtotal: '1000', tax: '150', discount: '0', total: '1150', amount_paid: '0',
+    currency: 'SAR', subtotal: '1000', tax: '150', tax_treatment: 'basic_15', discount: '0', total: '1150', amount_paid: '0',
     status: 'issued', due_date: null, issued_at: null, paid_at: null, created_at: null, ...overrides,
   }
 }

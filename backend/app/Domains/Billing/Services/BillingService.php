@@ -10,6 +10,7 @@ use App\Domains\Billing\Models\PaymentAttempt;
 use App\Domains\Billing\Models\PaymentWebhookEvent;
 use App\Domains\Billing\Models\Quote;
 use App\Domains\Billing\Providers\PaymentProviderRegistry;
+use App\Domains\Billing\Support\TaxTreatment;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Scopes\TenantScope;
@@ -48,11 +49,21 @@ final class BillingService
     public function createQuote(array $data): Quote
     {
         $subtotal = (float) ($data['subtotal'] ?? 0);
-        $tax = (float) ($data['tax'] ?? 0);
         $discount = (float) ($data['discount'] ?? 0);
-        $total = array_key_exists('total', $data)
-            ? (float) $data['total']
-            : max(0, $subtotal + $tax - $discount);
+
+        // When a VAT treatment is supplied it is authoritative: the tax amount is DERIVED from its rate (never
+        // trusted from the caller), and the total is recomputed. Without a treatment the legacy behaviour holds
+        // (caller-provided tax/total), so programmatic callers and old flows are unaffected.
+        $treatment = TaxTreatment::isValid($data['tax_treatment'] ?? null) ? (string) $data['tax_treatment'] : null;
+        if ($treatment !== null) {
+            $tax = TaxTreatment::taxFor($treatment, $subtotal);
+            $total = round(max(0, $subtotal + $tax - $discount), 2);
+        } else {
+            $tax = (float) ($data['tax'] ?? 0);
+            $total = array_key_exists('total', $data)
+                ? (float) $data['total']
+                : max(0, $subtotal + $tax - $discount);
+        }
 
         return Quote::create([
             'tenant_id' => $data['tenant_id'] ?? null,
@@ -64,6 +75,7 @@ final class BillingService
             'currency' => $data['currency'] ?? config('billing.currency', 'SAR'),
             'subtotal' => $subtotal,
             'tax' => $tax,
+            'tax_treatment' => $treatment,
             'discount' => $discount,
             'total' => $total,
             'line_items' => $this->normalizeLineItems($data['line_items'] ?? null),
@@ -151,6 +163,7 @@ final class BillingService
                 'currency' => $quote->currency,
                 'subtotal' => $quote->subtotal,
                 'tax' => $quote->tax,
+                'tax_treatment' => $quote->tax_treatment, // VAT treatment carries from the quote onto the invoice
                 'discount' => $quote->discount,
                 'total' => $quote->total,
                 'line_items' => $quote->line_items, // services carry from the quote onto the issued invoice

@@ -7,11 +7,13 @@ namespace App\Domains\Billing\Http\Controllers;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\Billing\Models\Quote;
 use App\Domains\Billing\Services\BillingService;
+use App\Domains\Billing\Support\TaxTreatment;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 /**
  * Tenant billing: quotes → invoices → payments. Tenant isolation comes from the models' global scope
@@ -45,6 +47,7 @@ final class BillingController extends Controller
             'currency' => ['nullable', 'string', 'size:3'],
             'subtotal' => ['nullable', 'numeric', 'min:0'],
             'tax' => ['nullable', 'numeric', 'min:0'],
+            'tax_treatment' => ['nullable', 'string', Rule::in(TaxTreatment::keys())],
             'discount' => ['nullable', 'numeric', 'min:0'],
             'total' => ['nullable', 'numeric', 'min:0'],
             'valid_until' => ['nullable', 'date'],

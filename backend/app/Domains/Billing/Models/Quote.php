@@ -18,7 +18,7 @@ final class Quote extends Model
 
     protected $fillable = [
         'tenant_id', 'client_workspace_id', 'request_id', 'external_request_id', 'project_id', 'number', 'currency',
-        'subtotal', 'tax', 'discount', 'total', 'line_items', 'status', 'valid_until', 'notes', 'created_by',
+        'subtotal', 'tax', 'tax_treatment', 'discount', 'total', 'line_items', 'status', 'valid_until', 'notes', 'created_by',
     ];
 
     protected $casts = [

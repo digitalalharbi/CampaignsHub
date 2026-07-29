@@ -5,6 +5,7 @@ import { AlertCircle, ArrowLeft, CreditCard, Loader2 } from 'lucide-react'
 import { getPortalInvoice, payPortalInvoice, formatDate, formatMoney, type PortalPayment } from './portalAccountApi'
 import { invoiceStatusMeta } from './ClientInvoicesPage'
 import { PortalShell } from './PortalShell'
+import { taxTreatmentLabel } from '@/features/billing/taxTreatment'
 import { usePortalGuard } from './usePortalGuard'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
@@ -12,7 +13,7 @@ import { useUi } from '@/stores/ui'
 const COPY = {
   ar: {
     title: 'تفاصيل الفاتورة', back: 'الفواتير', error: 'تعذّر تحميل الفاتورة.',
-    subtotal: 'المجموع الفرعي', tax: 'الضريبة', discount: 'الخصم', total: 'الإجمالي',
+    subtotal: 'المجموع الفرعي', tax: 'الضريبة', tax_treatment: 'المعالجة الضريبية', discount: 'الخصم', total: 'الإجمالي',
     paid_amount: 'المدفوع', due: 'تاريخ الاستحقاق', issued: 'صدرت في', paid_at: 'دُفعت في',
     pay: 'ادفع الآن',
     // HONEST payment states — never a fake receipt.
@@ -23,7 +24,7 @@ const COPY = {
   },
   en: {
     title: 'Invoice details', back: 'Invoices', error: 'Could not load the invoice.',
-    subtotal: 'Subtotal', tax: 'Tax', discount: 'Discount', total: 'Total',
+    subtotal: 'Subtotal', tax: 'Tax', tax_treatment: 'Tax treatment', discount: 'Discount', total: 'Total',
     paid_amount: 'Paid', due: 'Due', issued: 'Issued', paid_at: 'Paid at',
     pay: 'Pay now',
     awaiting_title: 'Online payment isn’t available yet',
@@ -72,6 +73,9 @@ export function ClientInvoiceDetailPage() {
 
         <dl className="mt-5 space-y-2 text-sm">
           <Row label={t.subtotal} value={formatMoney(invoice.subtotal, invoice.currency)} />
+          {taxTreatmentLabel(invoice.tax_treatment, ar) ? (
+            <Row label={t.tax_treatment} value={taxTreatmentLabel(invoice.tax_treatment, ar) as string} />
+          ) : null}
           <Row label={t.tax} value={formatMoney(invoice.tax, invoice.currency)} />
           <Row label={t.discount} value={formatMoney(invoice.discount, invoice.currency)} />
           <div className="flex items-center justify-between border-t border-border pt-2">

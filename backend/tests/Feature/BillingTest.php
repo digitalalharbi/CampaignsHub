@@ -54,6 +54,20 @@ final class BillingTest extends TestCase
         return app(BillingService::class);
     }
 
+    /** An owner in the primary tenant, holding every permission (billing.manage included). */
+    private function owner(): User
+    {
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner-'.uniqid()]);
+        $role->givePermissionTo(...Permission::pluck('key')->all());
+        $user = User::create([
+            'tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'owner-'.uniqid().'@a.test',
+            'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
+        ]);
+        $user->assignRole($role);
+
+        return $user;
+    }
+
     private function draftQuote(float $total = 1000): Quote
     {
         return $this->billing()->createQuote([
@@ -90,6 +104,52 @@ final class BillingTest extends TestCase
         $again = $this->billing()->approveQuote($quote->refresh());
         $this->assertSame($invoice->id, $again->id);
         $this->assertSame(1, Invoice::count());
+    }
+
+    public function test_tax_treatment_derives_tax_and_carries_onto_the_invoice(): void
+    {
+        // basic_15 → tax is 15% of subtotal and total is recomputed, even if the caller sends a bogus tax.
+        $quote = $this->billing()->createQuote([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->client->id,
+            'subtotal' => 1000,
+            'tax' => 999, // ignored — derived from the treatment
+            'total' => 1, // ignored — recomputed
+            'tax_treatment' => 'basic_15',
+        ]);
+        $this->assertSame('150.00', (string) $quote->tax);
+        $this->assertSame('1150.00', (string) $quote->total);
+        $this->assertSame('basic_15', $quote->tax_treatment);
+
+        // The treatment (and derived amounts) carry onto the issued invoice.
+        $invoice = $this->billing()->approveQuote($quote);
+        $this->assertSame('basic_15', $invoice->tax_treatment);
+        $this->assertSame('150.00', (string) $invoice->tax);
+
+        // Non-standard treatments zero the tax.
+        foreach (['zero_rated', 'exempt', 'out_of_scope'] as $t) {
+            $q = $this->billing()->createQuote([
+                'tenant_id' => $this->tenant->id, 'client_workspace_id' => $this->client->id,
+                'subtotal' => 1000, 'tax_treatment' => $t,
+            ]);
+            $this->assertSame('0.00', (string) $q->tax, "tax for {$t}");
+            $this->assertSame('1000.00', (string) $q->total, "total for {$t}");
+        }
+    }
+
+    public function test_store_quote_endpoint_rejects_an_unknown_tax_treatment(): void
+    {
+        $owner = $this->owner();
+        $this->actingAs($owner, 'sanctum')
+            ->postJson('/api/v1/billing/quotes', ['subtotal' => 500, 'tax_treatment' => 'bogus'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('tax_treatment');
+
+        $ok = $this->actingAs($owner, 'sanctum')
+            ->postJson('/api/v1/billing/quotes', ['subtotal' => 500, 'tax_treatment' => 'basic_15'])
+            ->assertCreated();
+        $this->assertSame('75.00', (string) $ok->json('data.tax'));
+        $this->assertSame('basic_15', $ok->json('data.tax_treatment'));
     }
 
     public function test_start_payment_with_null_provider_stays_pending_and_settles_nothing(): void
