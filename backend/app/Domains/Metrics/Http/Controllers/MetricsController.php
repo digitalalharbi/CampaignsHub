@@ -155,10 +155,21 @@ final class MetricsController extends Controller
         return array_values(array_filter(array_map('trim', $list)));
     }
 
-    /** The aggregator scoped by the dashboard platform filter. */
+    /** The objective filter from the request (?objective=sales,leads). Empty when absent. @return list<string> */
+    private function objectiveFilter(Request $request): array
+    {
+        $raw = $request->query('objective', []);
+        $list = is_array($raw) ? $raw : ($raw === '' ? [] : explode(',', (string) $raw));
+
+        return array_values(array_filter(array_map('trim', $list)));
+    }
+
+    /** The aggregator scoped by the dashboard platform + objective filters (backend-supported). */
     private function scoped(Request $request): MetricsAggregator
     {
-        return $this->agg->forProviders($this->providerFilter($request));
+        return $this->agg
+            ->forProviders($this->providerFilter($request))
+            ->forObjectives($this->objectiveFilter($request));
     }
 
     /** @return array{0: Carbon, 1: Carbon} */

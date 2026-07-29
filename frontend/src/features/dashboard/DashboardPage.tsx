@@ -23,10 +23,47 @@ import {
 } from '../analytics/hooks'
 import { DemoBadge, Panel, RangeTabs, SERIES, tooltipProps } from '../analytics/components'
 import { compact, money, num, percent, ratio } from '../analytics/format'
-import { UnifiedCampaignOverview, providerColor, providerName, type OverviewVM } from '@/features/campaigns/overview/UnifiedCampaignOverview'
+import { UnifiedCampaignOverview, providerColor, providerName, type OverviewKpi, type OverviewVM } from '@/features/campaigns/overview/UnifiedCampaignOverview'
+import type { MetricTotals } from '../analytics/api'
 
 /** The six paid platforms CampaignsHub unifies — the dashboard platform filter. */
 const PLATFORM_KEYS = ['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin']
+
+/** DASH-010-D: campaign objectives (keys match the CampaignObjective enum) for the objective filter/KPIs. */
+const OBJECTIVES: { key: string; label: string }[] = [
+  { key: 'all', label: 'كل الأهداف' },
+  { key: 'awareness', label: 'الوعي' },
+  { key: 'traffic', label: 'الزيارات' },
+  { key: 'leads', label: 'العملاء المحتملون' },
+  { key: 'sales', label: 'المبيعات' },
+  { key: 'app_installs', label: 'التطبيقات' },
+  { key: 'engagement', label: 'التفاعل' },
+]
+
+/**
+ * The KPI set shown for the selected objective — the RIGHT metrics per objective (never ROAS for everything).
+ * "all" (mixed objectives) shows a correct shared set. Values come from the expanded, normalized summary.
+ */
+function objectiveKpis(objective: string, cur: MetricTotals | undefined, activeCount: number): OverviewKpi[] {
+  const active: OverviewKpi = { key: 'active', label: 'حملات نشطة', value: num(activeCount) }
+  const spend: OverviewKpi = { key: 'spend', label: 'الإنفاق', value: money(cur?.spend) }
+  switch (objective) {
+    case 'awareness':
+      return [{ key: 'reach', label: 'الوصول', value: num(cur?.reach) }, { key: 'impr', label: 'الظهور', value: num(cur?.impressions) }, { key: 'freq', label: 'التكرار', value: ratio(cur?.frequency ?? null) }, { key: 'cpm', label: 'CPM', value: money(cur?.cpm) }, { key: 'vv', label: 'مشاهدات الفيديو', value: num(cur?.video_views) }, spend]
+    case 'traffic':
+      return [{ key: 'clicks', label: 'النقرات', value: num(cur?.clicks) }, { key: 'lpv', label: 'مشاهدات الصفحة', value: num(cur?.landing_page_views) }, { key: 'ctr', label: 'CTR', value: percent(cur?.ctr, 2) }, { key: 'cpc', label: 'CPC', value: money(cur?.cpc) }, spend, active]
+    case 'leads':
+      return [{ key: 'leads', label: 'العملاء المحتملون', value: num(cur?.leads) }, { key: 'ql', label: 'المؤهلون', value: num(cur?.qualified_leads) }, { key: 'cpl', label: 'CPL', value: money(cur?.cpl) }, { key: 'cvr', label: 'معدل التحويل', value: percent(cur?.conversion_rate, 2) }, spend, active]
+    case 'sales':
+      return [{ key: 'purch', label: 'المشتريات', value: num(cur?.purchases) }, { key: 'rev', label: 'الإيرادات', value: money(cur?.revenue) }, { key: 'cpa', label: 'تكلفة النتيجة', value: money(cur?.cpa) }, { key: 'roas', label: 'ROAS', value: ratio(cur?.roas ?? null), tone: 'good' }, { key: 'aov', label: 'متوسط قيمة الطلب', value: money(cur?.aov) }, spend]
+    case 'app_installs':
+      return [{ key: 'inst', label: 'التثبيتات', value: num(cur?.installs) }, { key: 'cpi', label: 'CPI', value: money(cur?.cpi) }, { key: 'reg', label: 'التسجيلات', value: num(cur?.registrations) }, { key: 'iae', label: 'أحداث داخل التطبيق', value: num(cur?.in_app_events) }, spend, active]
+    case 'engagement':
+      return [{ key: 'eng', label: 'التفاعلات', value: num(cur?.engagements) }, { key: 'er', label: 'معدل التفاعل', value: percent(cur?.engagement_rate, 2) }, { key: 'cpe', label: 'CPE', value: money(cur?.cpe) }, { key: 'vv', label: 'مشاهدات الفيديو', value: num(cur?.video_views) }, spend, active]
+    default:
+      return [{ key: 'spend', label: 'الإنفاق', value: money(cur?.spend), hint: 'إجمالي الإنفاق' }, { key: 'results', label: 'النتائج', value: num(cur?.conversions) }, { key: 'roas', label: 'ROAS', value: ratio(cur?.roas ?? null) }, { key: 'cpa', label: 'تكلفة النتيجة', value: money(cur?.cpa) }, { key: 'rev', label: 'الإيرادات', value: money(cur?.revenue) }, active]
+  }
+}
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
@@ -37,7 +74,8 @@ export function DashboardPage() {
   const [days, setDays] = useState(30)
   const range = useLastNDaysRange(days)
   const [providers, setProviders] = useState<string[]>([])
-  const filters = useMemo(() => ({ provider: providers }), [providers])
+  const [objective, setObjective] = useState('all')
+  const filters = useMemo(() => ({ provider: providers, objective: objective === 'all' ? [] : [objective] }), [providers, objective])
   const toggleProvider = (key: string) =>
     setProviders((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]))
 
@@ -75,14 +113,7 @@ export function DashboardPage() {
       currency: 'SAR',
       dataStatus: 'demo',
       lastSyncAt: lastSync ?? null,
-      kpis: [
-        { key: 'spend', label: 'الإنفاق', value: money(cur?.spend), hint: 'إجمالي الإنفاق المعياري بعملة المشروع' },
-        { key: 'results', label: 'النتائج', value: num(cur?.conversions) },
-        { key: 'roas', label: 'ROAS', value: ratio(cur?.roas ?? null), hint: 'الإيرادات ÷ الإنفاق' },
-        { key: 'cpa', label: 'تكلفة النتيجة', value: money(cur?.cpa), hint: 'الإنفاق ÷ النتائج' },
-        { key: 'revenue', label: 'الإيرادات', value: money(cur?.revenue) },
-        { key: 'active', label: 'حملات نشطة', value: num(campaigns.data?.length ?? 0) },
-      ],
+      kpis: objectiveKpis(objective, cur, campaigns.data?.length ?? 0),
       platforms: (platforms.data ?? []).map((p) => ({
         key: p.provider,
         name: p.provider,
@@ -106,7 +137,7 @@ export function DashboardPage() {
         .map((c) => ({ id: String(c.campaign_id), name: c.campaign_name ?? '—', reason: 'إنفاق مرتفع دون تحويلات' })),
       alerts: alerts.map((a) => ({ severity: a.kind === 'budget' ? ('medium' as const) : ('high' as const), text: a.text })),
     }),
-    [cur, campaigns.data, platforms.data, alerts, lastSync],
+    [cur, campaigns.data, platforms.data, alerts, lastSync, objective],
   )
 
   return (
@@ -129,6 +160,25 @@ export function DashboardPage() {
             الحملات <ArrowUpRight size={16} />
           </Link>
         </div>
+      </div>
+
+      {/* Objective filter — switches the KPI set AND filters all tiles by campaign objective (backend-supported). */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-text-muted">الهدف:</span>
+        {OBJECTIVES.map((o) => {
+          const on = objective === o.key
+          return (
+            <button
+              key={o.key}
+              type="button"
+              onClick={() => setObjective(o.key)}
+              aria-pressed={on}
+              className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${on ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-text-secondary hover:bg-surface-hover'}`}
+            >
+              {o.label}
+            </button>
+          )
+        })}
       </div>
 
       {/* Platform filter — backend-supported (?provider=…); affects every KPI, chart, table below. */}

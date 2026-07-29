@@ -13,6 +13,26 @@ export interface MetricTotals {
   ctr: number | null
   cpc: number | null
   cpm: number | null
+  // DASH-010-D objective-specific base + derived metrics.
+  reach: number
+  video_views: number
+  video_completions: number
+  landing_page_views: number
+  leads: number
+  qualified_leads: number
+  purchases: number
+  installs: number
+  registrations: number
+  in_app_events: number
+  engagements: number
+  frequency: number | null
+  cpl: number | null
+  cpi: number | null
+  cpe: number | null
+  aov: number | null
+  conversion_rate: number | null
+  engagement_rate: number | null
+  video_completion_rate: number | null
 }
 
 export interface Summary {
@@ -82,12 +102,15 @@ const base = (projectId: string) => `/projects/${projectId}/metrics`
 /** Dashboard command-center filters. Backend-supported (sent as query params) — never a React-only filter. */
 export interface MetricFilters {
   provider?: string[]
+  objective?: string[]
 }
-const qf = (f?: MetricFilters) => (f?.provider && f.provider.length ? `&provider=${f.provider.join(',')}` : '')
+const qf = (f?: MetricFilters) =>
+  (f?.provider?.length ? `&provider=${f.provider.join(',')}` : '') +
+  (f?.objective?.length ? `&objective=${f.objective.join(',')}` : '')
 
 function useMetric<T>(key: string, projectId: string | null, range: Range, path: string, filters?: MetricFilters) {
   return useQuery({
-    queryKey: ['metrics', key, projectId, range.from, range.to, filters?.provider?.join(',') ?? ''],
+    queryKey: ['metrics', key, projectId, range.from, range.to, filters?.provider?.join(',') ?? '', filters?.objective?.join(',') ?? ''],
     queryFn: () => getData<T>(`${base(projectId!)}/${path}?${q(range)}${qf(filters)}`),
     enabled: Boolean(projectId),
   })

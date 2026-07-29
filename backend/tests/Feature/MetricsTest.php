@@ -156,6 +156,37 @@ final class MetricsTest extends TestCase
         $this->assertEqualsWithDelta(0.75, $rows[0]['spend_share'], 0.001);
     }
 
+    public function test_expanded_objective_metrics_and_objective_filter(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        app(ProjectContext::class)->setProjectId($this->projectA->id);
+        $camp = UnifiedCampaign::create(['tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id, 'name' => 'Sales', 'objective' => 'sales', 'status' => 'active']);
+        app(ProjectContext::class)->forget();
+        app(TenantContext::class)->forget();
+
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'leads', 20, '2026-06-01', ['unified' => $camp->id]),
+            $this->metric($this->projectA->id, 'video_views', 500, '2026-06-01', ['unified' => $camp->id]),
+            $this->metric($this->projectA->id, 'reach', 800, '2026-06-01', ['unified' => $camp->id]),
+            $this->metric($this->projectA->id, 'impressions', 1600, '2026-06-01', ['unified' => $camp->id]),
+            $this->metric($this->projectA->id, 'spend', 100, '2026-06-01', ['unified' => $camp->id]),
+        ]);
+
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        app(ProjectContext::class)->setProjectId($this->projectA->id);
+        $t = app(MetricsAggregator::class)->totals(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-02'));
+        $this->assertEquals(20.0, $t['leads']);          // new base metric aggregates
+        $this->assertEquals(500.0, $t['video_views']);
+        $this->assertEquals(5.0, $t['cpl']);             // 100 / 20 (new derived)
+        $this->assertEquals(2.0, $t['frequency']);       // 1600 / 800 (new derived)
+
+        // Objective filter (backend-supported): sales returns the campaign's spend; awareness returns nothing.
+        $sales = app(MetricsAggregator::class)->forObjectives(['sales'])->totals(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-02'));
+        $this->assertEquals(100.0, $sales['spend']);
+        $aware = app(MetricsAggregator::class)->forObjectives(['awareness'])->totals(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-02'));
+        $this->assertEquals(0.0, $aware['spend']);
+    }
+
     public function test_platform_filter_scopes_metrics_backend_side(): void
     {
         app(UpsertDailyMetrics::class)->handle([

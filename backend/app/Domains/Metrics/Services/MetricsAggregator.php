@@ -23,6 +23,18 @@ final class MetricsAggregator
         'conversions' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'conversions'), 0)",
         'spend' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'), 0)",
         'revenue' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'revenue'), 0)",
+        // DASH-010-D: objective-specific base metrics (tall table → new keys, no schema change).
+        'reach' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'reach'), 0)",
+        'video_views' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'video_views'), 0)",
+        'video_completions' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'video_completions'), 0)",
+        'landing_page_views' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'landing_page_views'), 0)",
+        'leads' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'leads'), 0)",
+        'qualified_leads' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'qualified_leads'), 0)",
+        'purchases' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'purchases'), 0)",
+        'installs' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'installs'), 0)",
+        'registrations' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'registrations'), 0)",
+        'in_app_events' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'in_app_events'), 0)",
+        'engagements' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'engagements'), 0)",
     ];
 
     /** When set, every aggregation is scoped to this single unified campaign (command center). */
@@ -33,6 +45,9 @@ final class MetricsAggregator
 
     /** When set, every aggregation is scoped to these ad platforms (dashboard command-center filter). */
     private ?array $providers = null;
+
+    /** When set, every aggregation is scoped to campaigns with these objectives (objective-KPI filter). */
+    private ?array $objectives = null;
 
     /**
      * Return a campaign-scoped copy of the aggregator — every subsequent totals/byProvider/timeseries/
@@ -77,6 +92,20 @@ final class MetricsAggregator
         return $clone;
     }
 
+    /**
+     * Return a copy scoped to campaigns with these objectives (DASH-010-D objective filter). Objective lives
+     * on unified_campaigns; we scope daily_metrics via the campaign id. Empty → no objective filter.
+     *
+     * @param  list<string>  $objectives
+     */
+    public function forObjectives(array $objectives): self
+    {
+        $clone = clone $this;
+        $clone->objectives = $objectives === [] ? null : array_values($objectives);
+
+        return $clone;
+    }
+
     private function base(Carbon $from, Carbon $to): Builder
     {
         // Reuse the model's project/tenant scope, then drop to the query builder for aggregation.
@@ -96,6 +125,12 @@ final class MetricsAggregator
 
         if ($this->providers !== null) {
             $query->whereIn('daily_metrics.provider', $this->providers);
+        }
+
+        if ($this->objectives !== null) {
+            $query->whereIn('daily_metrics.unified_campaign_id', function ($sub) {
+                $sub->select('id')->from('unified_campaigns')->whereIn('objective', $this->objectives);
+            });
         }
 
         return $query->toBase();
@@ -275,18 +310,50 @@ final class MetricsAggregator
         $conv = (float) ($row['conversions'] ?? 0);
         $spend = (float) ($row['spend'] ?? 0);
         $revenue = (float) ($row['revenue'] ?? 0);
+        $reach = (float) ($row['reach'] ?? 0);
+        $videoViews = (float) ($row['video_views'] ?? 0);
+        $videoCompletions = (float) ($row['video_completions'] ?? 0);
+        $lpv = (float) ($row['landing_page_views'] ?? 0);
+        $leads = (float) ($row['leads'] ?? 0);
+        $qualifiedLeads = (float) ($row['qualified_leads'] ?? 0);
+        $purchases = (float) ($row['purchases'] ?? 0);
+        $installs = (float) ($row['installs'] ?? 0);
+        $registrations = (float) ($row['registrations'] ?? 0);
+        $inAppEvents = (float) ($row['in_app_events'] ?? 0);
+        $engagements = (float) ($row['engagements'] ?? 0);
 
         return [
+            // base sums
             'impressions' => round($impr, 2),
             'clicks' => round($clicks, 2),
             'conversions' => round($conv, 2),
             'spend' => round($spend, 2),
             'revenue' => round($revenue, 2),
+            'reach' => round($reach, 2),
+            'video_views' => round($videoViews, 2),
+            'video_completions' => round($videoCompletions, 2),
+            'landing_page_views' => round($lpv, 2),
+            'leads' => round($leads, 2),
+            'qualified_leads' => round($qualifiedLeads, 2),
+            'purchases' => round($purchases, 2),
+            'installs' => round($installs, 2),
+            'registrations' => round($registrations, 2),
+            'in_app_events' => round($inAppEvents, 2),
+            'engagements' => round($engagements, 2),
+            // derived KPIs (computed from the sums, never summed)
             'roas' => $spend > 0 ? round($revenue / $spend, 3) : null,
             'cpa' => $conv > 0 ? round($spend / $conv, 2) : null,
             'ctr' => $impr > 0 ? round($clicks / $impr, 5) : null,
             'cpc' => $clicks > 0 ? round($spend / $clicks, 3) : null,
             'cpm' => $impr > 0 ? round($spend / $impr * 1000, 2) : null,
+            'frequency' => $reach > 0 ? round($impr / $reach, 2) : null,
+            'cpl' => $leads > 0 ? round($spend / $leads, 2) : null,
+            'cpi' => $installs > 0 ? round($spend / $installs, 2) : null,
+            'cpe' => $engagements > 0 ? round($spend / $engagements, 3) : null,
+            'aov' => $purchases > 0 ? round($revenue / $purchases, 2) : null,
+            'conversion_rate' => $clicks > 0 ? round($conv / $clicks, 5) : null,
+            'engagement_rate' => $impr > 0 ? round($engagements / $impr, 5) : null,
+            'video_completion_rate' => $videoViews > 0 ? round($videoCompletions / $videoViews, 5) : null,
         ];
     }
 }
