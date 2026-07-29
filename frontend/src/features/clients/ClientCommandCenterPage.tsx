@@ -5,6 +5,8 @@ import { ArrowLeft, Pencil } from 'lucide-react'
 import { getClient } from './api'
 import { CLIENT_STATUS_LABELS, INDUSTRY_LABELS, labelOf, PRIORITY_LABELS, SERVICE_LEVEL_LABELS } from './labels'
 import { ClassificationEditor } from './ClassificationEditor'
+import { TabBilling } from './TabBilling'
+import { TabMessages } from './TabMessages'
 import { TabActivity } from './TabActivity'
 import { TabAnalytics } from './TabAnalytics'
 import { TabFiles } from './TabFiles'
@@ -14,7 +16,7 @@ import { TabTeam } from './TabTeam'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 
-type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'reports' | 'requests' | 'team' | 'files' | 'activity' | 'settings'
+type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'reports' | 'requests' | 'billing' | 'messages' | 'team' | 'files' | 'activity' | 'settings'
 
 export function ClientCommandCenterPage() {
   const t = useT()
@@ -35,6 +37,8 @@ export function ClientCommandCenterPage() {
     ...(d.can.view_analytics ? [{ key: 'analytics' as Tab, label: t('tab_analytics') }] : []),
     ...(d.can.view_reports ? [{ key: 'reports' as Tab, label: t('tab_reports') }] : []),
     { key: 'requests', label: t('tab_requests') },
+    { key: 'billing' as Tab, label: lang === 'ar' ? 'الاشتراكات' : 'Billing' },
+    { key: 'messages' as Tab, label: lang === 'ar' ? 'المحادثات' : 'Conversations' },
     ...(d.can.manage_team ? [{ key: 'team' as Tab, label: t('tab_team') }] : []),
     ...(d.can.manage_files ? [{ key: 'files' as Tab, label: t('tab_files') }] : []),
     { key: 'activity', label: t('tab_activity') },
@@ -129,6 +133,8 @@ export function ClientCommandCenterPage() {
 
           {tab === 'reports' && d.can.view_reports && <TabReports d={d} />}
 
+          {tab === 'billing' && <TabBilling clientId={d.id} />}
+          {tab === 'messages' && <TabMessages clientId={d.id} />}
           {tab === 'team' && d.can.manage_team && <TabTeam d={d} />}
 
           {tab === 'files' && d.can.manage_files && <TabFiles clientId={d.id} />}
