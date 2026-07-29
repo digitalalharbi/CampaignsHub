@@ -86,7 +86,7 @@ export function ReportsPage() {
   const s = list.data?.summary
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">

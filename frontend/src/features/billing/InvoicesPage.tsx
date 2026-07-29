@@ -58,7 +58,7 @@ export function InvoicesPage() {
   const filterLabel = (f: InvoiceStatus | 'all') => (f === 'all' ? c.all : invoiceStatusMeta(f, ar).label)
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 p-4 md:p-6">
+    <div className="flex w-full flex-col gap-4">
       <header className="flex flex-col gap-1">
         <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
         <p className="text-sm text-text-secondary">{c.subtitle}</p>
