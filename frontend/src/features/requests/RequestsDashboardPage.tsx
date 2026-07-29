@@ -7,6 +7,7 @@ import { STATUS_LABELS, priorityTone, statusTone } from './labels'
 import { SearchableSelect } from '@/components/forms'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { useT, type TranslationKey } from '@/lib/i18n'
+import { useUi } from '@/stores/ui'
 
 // Board-column layout order (a request-workflow layout constant, not a select's option source — those now come
 // from the taxonomy engine). Terminal states (rejected/cancelled/archived) are intentionally not columns.
@@ -29,6 +30,13 @@ export function RequestsDashboardPage() {
   const set = (patch: Partial<RequestFilters>) => setFilters((f) => ({ ...f, ...patch, page: 1 }))
   const setViewPref = (v: View) => { setView(v); localStorage.setItem(VIEW_KEY, v) }
   const rows = query.data?.data ?? []
+  const ar = useUi((s) => s.locale) === 'ar'
+  const summary = {
+    total: query.data?.meta?.total ?? rows.length,
+    new: rows.filter((r) => r.status === 'new').length,
+    review: rows.filter((r) => r.status === 'under_review').length,
+    waiting: rows.filter((r) => r.status === 'waiting_client').length,
+  }
 
   // Kanban move: optimistic status change, rollback (refetch) on failure. Backend is the state-machine authority.
   const move = useMutation({
@@ -38,10 +46,10 @@ export function RequestsDashboardPage() {
   })
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <div className="w-full">
+      <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-heading text-2xl font-extrabold text-text-primary">{t('requests_inbox')}</h1>
+          <h1 className="font-heading text-3xl font-extrabold tracking-tight text-text-primary">{t('requests_inbox')}</h1>
           <p className="mt-1 text-sm text-text-secondary">{t('requests_inbox_subtitle')}</p>
         </div>
         <div className="flex rounded-lg border border-border bg-surface p-0.5">
@@ -50,6 +58,14 @@ export function RequestsDashboardPage() {
           ))}
         </div>
       </header>
+
+      {/* Summary — inbox at a glance. */}
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <ReqSummaryCard label={ar ? 'إجمالي الطلبات' : 'Total requests'} value={summary.total} tone="brand" />
+        <ReqSummaryCard label={ar ? 'جديدة' : 'New'} value={summary.new} tone="info" />
+        <ReqSummaryCard label={ar ? 'قيد المراجعة' : 'Under review'} value={summary.review} tone="warning" />
+        <ReqSummaryCard label={ar ? 'بانتظار العميل' : 'Waiting on client'} value={summary.waiting} tone="muted" />
+      </div>
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
@@ -188,6 +204,19 @@ function KanbanView({ rows, onMove }: { rows: RequestRow[]; onMove: (id: string,
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function ReqSummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'info' | 'warning' | 'muted' }) {
+  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', info: 'bg-info', warning: 'bg-warning', muted: 'bg-text-muted' }
+  return (
+    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
+        <span className="text-xs font-semibold text-text-secondary">{label}</span>
+      </div>
+      <span className="tnum text-2xl font-extrabold text-text-primary" dir="ltr">{value}</span>
     </div>
   )
 }
