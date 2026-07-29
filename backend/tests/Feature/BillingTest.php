@@ -293,6 +293,82 @@ final class BillingTest extends TestCase
         app(TenantContext::class)->setTenantId($this->tenant->id);
         $this->assertSame('issued', $invoiceA->refresh()->status);
     }
+
+    /**
+     * FINANCE-001: the overview must consolidate what is really owed, and it must never present pending
+     * or failed money as collected. Outstanding is derived from total - amount_paid, never a stored field.
+     */
+    public function test_finance_overview_consolidates_outstanding_aging_and_never_counts_pending_money(): void
+    {
+        $owner = $this->owner();
+        $svc = $this->billing();
+
+        // Invoice 1: 1000 total, 400 paid, due 45 days ago → 600 outstanding in the 31–60 bucket.
+        $q1 = $this->draftQuote(1000);
+        $svc->approveQuote($q1);
+        $inv1 = Invoice::query()->where('quote_id', $q1->id)->firstOrFail();
+        $inv1->forceFill(['amount_paid' => 400, 'status' => 'partially_paid', 'due_date' => now()->subDays(45)->toDateString()])->save();
+
+        // Invoice 2: 500 total, nothing paid, not yet due → current bucket.
+        $q2 = $this->draftQuote(500);
+        $svc->approveQuote($q2);
+        $inv2 = Invoice::query()->where('quote_id', $q2->id)->firstOrFail();
+        $inv2->forceFill(['amount_paid' => 0, 'status' => 'issued', 'due_date' => now()->addDays(10)->toDateString()])->save();
+
+        // A pending payment must NOT be treated as money in.
+        Payment::create([
+            'tenant_id' => $this->tenant->id, 'invoice_id' => $inv2->id, 'provider' => 'fake',
+            'amount' => 500, 'currency' => 'SAR', 'status' => 'pending', 'idempotency_key' => 'k-'.uniqid(),
+        ]);
+
+        $res = $this->actingAs($owner, 'sanctum')->getJson('/api/v1/billing/overview')->assertOk();
+
+        $this->assertEqualsWithDelta(1100.0, $res->json('data.invoices.outstanding'), 0.01);  // 600 + 500
+        $this->assertEqualsWithDelta(600.0, $res->json('data.aging.d31_60'), 0.01);
+        $this->assertEqualsWithDelta(500.0, $res->json('data.aging.current'), 0.01);
+        $this->assertSame(1, $res->json('data.invoices.overdue_count'));
+        // 400 collected out of 1500 invoiced.
+        $this->assertEqualsWithDelta(400.0, $res->json('data.invoices.collected'), 0.01);
+        $this->assertEqualsWithDelta(0.2667, $res->json('data.invoices.collection_rate'), 0.001);
+        // The pending payment is visible in its own bucket but contributes nothing to succeeded money.
+        $this->assertSame(1, $res->json('data.payments.by_status.pending.count'));
+        $this->assertEqualsWithDelta(0.0, $res->json('data.payments.succeeded_total'), 0.01);
+    }
+
+    /** The receivables worklist is ordered by lateness and never lists a fully paid invoice. */
+    public function test_receivables_lists_only_what_is_still_owed(): void
+    {
+        $owner = $this->owner();
+        $svc = $this->billing();
+
+        $paidQuote = $this->draftQuote(300);
+        $svc->approveQuote($paidQuote);
+        $paid = Invoice::query()->where('quote_id', $paidQuote->id)->firstOrFail();
+        $paid->forceFill(['amount_paid' => 300, 'status' => 'paid'])->save();
+
+        $openQuote = $this->draftQuote(800);
+        $svc->approveQuote($openQuote);
+        $open = Invoice::query()->where('quote_id', $openQuote->id)->firstOrFail();
+        $open->forceFill(['amount_paid' => 100, 'status' => 'overdue', 'due_date' => now()->subDays(12)->toDateString()])->save();
+
+        $rows = $this->actingAs($owner, 'sanctum')->getJson('/api/v1/billing/receivables')->assertOk()->json('data');
+
+        $this->assertCount(1, $rows, 'a fully paid invoice is not a receivable');
+        $this->assertEqualsWithDelta(700.0, $rows[0]['due'], 0.01);
+        $this->assertSame(12, $rows[0]['days_late']);
+    }
+
+    public function test_finance_reads_require_billing_view(): void
+    {
+        $viewer = User::create([
+            'tenant_id' => $this->tenant->id, 'name' => 'V', 'email' => 'v-'.uniqid().'@a.test',
+            'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
+        ]);
+
+        $this->actingAs($viewer, 'sanctum')->getJson('/api/v1/billing/overview')->assertForbidden();
+        $this->actingAs($viewer, 'sanctum')->getJson('/api/v1/billing/payments')->assertForbidden();
+        $this->actingAs($viewer, 'sanctum')->getJson('/api/v1/billing/receivables')->assertForbidden();
+    }
 }
 
 /**

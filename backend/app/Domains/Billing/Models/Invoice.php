@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Billing\Models;
 
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -39,6 +40,12 @@ final class Invoice extends Model
     public function quote(): BelongsTo
     {
         return $this->belongsTo(Quote::class);
+    }
+
+    /** The client this invoice bills — needed by the receivables worklist. @return BelongsTo<ClientWorkspace, $this> */
+    public function clientWorkspace(): BelongsTo
+    {
+        return $this->belongsTo(ClientWorkspace::class);
     }
 
     /** @return HasMany<Payment, $this> */

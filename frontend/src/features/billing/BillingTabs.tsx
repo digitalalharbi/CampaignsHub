@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { CreditCard, FileText, ReceiptText } from 'lucide-react'
+import { CreditCard, FileText, PieChart, ReceiptText } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -7,12 +7,13 @@ import { useUi } from '@/stores/ui'
  * /app/billing, so these tabs are how the invoices and payments views become reachable. Self-contained copy.
  */
 const COPY = {
-  ar: { quotes: 'عروض الأسعار', invoices: 'الفواتير', payments: 'المدفوعات' },
-  en: { quotes: 'Quotes', invoices: 'Invoices', payments: 'Payments' },
+  ar: { overview: 'نظرة عامة', quotes: 'عروض الأسعار', invoices: 'الفواتير', payments: 'المدفوعات' },
+  en: { overview: 'Overview', quotes: 'Quotes', invoices: 'Invoices', payments: 'Payments' },
 }
 
 const TABS = [
-  { to: '/app/billing', key: 'quotes', icon: FileText, end: true },
+  { to: '/app/finance', key: 'overview', icon: PieChart, end: true },
+  { to: '/app/billing/quotes', key: 'quotes', icon: FileText, end: true },
   { to: '/app/billing/invoices', key: 'invoices', icon: ReceiptText, end: false },
   { to: '/app/billing/payments', key: 'payments', icon: CreditCard, end: false },
 ] as const

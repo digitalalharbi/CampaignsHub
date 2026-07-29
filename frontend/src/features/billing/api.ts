@@ -170,3 +170,56 @@ export function formatDateTime(iso: string | null | undefined): string {
   if (Number.isNaN(d.getTime())) return '—'
   return `${d.toLocaleDateString('en-CA')} ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
 }
+
+// ---------------------------------------------------------------------------
+// FINANCE-001 — the consolidated finance center read model
+// ---------------------------------------------------------------------------
+
+export interface StatusBucket { count: number; total: number }
+
+export interface FinanceOverview {
+  quotes: { by_status: Record<string, StatusBucket>; count: number; total: number; approved_total: number }
+  invoices: {
+    by_status: Record<string, StatusBucket>
+    count: number
+    total: number
+    collected: number
+    outstanding: number
+    overdue_count: number
+    /** null (not 0) when nothing was invoiced — an undefined rate is not a zero rate. */
+    collection_rate: number | null
+  }
+  payments: { by_status: Record<string, StatusBucket>; count: number; succeeded_total: number }
+  aging: { current: number; d1_30: number; d31_60: number; d61_90: number; d90_plus: number }
+  currency: string
+}
+
+export interface PaymentRow {
+  id: string
+  provider: string
+  provider_payment_id: string | null
+  amount: number
+  currency: string
+  status: string
+  error: string | null
+  paid_at: string | null
+  created_at: string | null
+  invoice: { id: string; number: string; total: number } | null
+}
+
+export interface ReceivableRow {
+  id: string
+  number: string
+  client: string | null
+  status: string
+  total: number
+  amount_paid: number
+  due: number
+  currency: string
+  due_date: string | null
+  days_late: number
+}
+
+export const getFinanceOverview = () => getData<FinanceOverview>('/billing/overview')
+export const listPaymentsLedger = (query = '') => getData<PaymentRow[]>(`/billing/payments${query ? `?${query}` : ''}`)
+export const listReceivables = () => getData<ReceivableRow[]>('/billing/receivables')
