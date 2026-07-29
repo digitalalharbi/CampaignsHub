@@ -58,6 +58,7 @@ import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoute
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
 import { ConnectionCenterPage } from '@/features/connections/ConnectionCenterPage'
 import { DrivePage } from '@/features/drive/DrivePage'
+import { TasksPage } from '@/features/tasks/TasksPage'
 import { BrandingCenterPage } from '@/features/branding/BrandingCenterPage'
 import { AppShell } from '@/layouts/AppShell'
 
@@ -143,7 +144,7 @@ export const router = createBrowserRouter([
           { path: 'tracking', element: <PagePlaceholder title="Tracking" /> },
           { path: 'reports', element: <ReportsPage /> },
           { path: 'optimization', element: <PagePlaceholder title="Optimization" /> },
-          { path: 'tasks', element: <PagePlaceholder title="Tasks" /> },
+          { path: 'tasks', element: <TasksPage /> },
           { path: 'notifications', element: <PagePlaceholder title="Notifications" /> },
           // User account settings (self). Workspace/org settings live under /settings/workspace.
           {
