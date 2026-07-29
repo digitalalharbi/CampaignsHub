@@ -9,12 +9,18 @@ use App\Domains\Requests\Http\Controllers\Internal\RequestJourneyController;
 use App\Domains\Requests\Http\Controllers\Internal\RequestsController;
 use App\Domains\Requests\Http\Controllers\PublicRequestController;
 use App\Domains\Requests\Http\Controllers\UploadController;
+use App\Domains\Settings\Http\Controllers\PublicPageSettingsController;
 use Illuminate\Support\Facades\Route;
 
 /*
 | External Request Portal — PUBLIC endpoints (no auth). Internal dashboard/workflow routes (tenant-scoped,
 | permission-gated) are added in the workflow phase.
 */
+// PUBLIC editable page content (published only) — lets the marketing homepage and the external portals
+// render tenant-edited copy with no code change. No auth: it serves exactly what was published.
+Route::get('public/pages/{page}', [PublicPageSettingsController::class, 'publicShow'])
+    ->name('public.pages.show')->middleware('throttle:60,1');
+
 Route::prefix('requests')->name('requests.')->group(function (): void {
     Route::get('/meta', [PublicRequestController::class, 'meta'])->name('meta');
 

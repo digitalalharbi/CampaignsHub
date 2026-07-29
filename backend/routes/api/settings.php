@@ -6,6 +6,7 @@ use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Settings\Http\Controllers\BrandingController;
 use App\Domains\Settings\Http\Controllers\NotificationPreferenceController;
 use App\Domains\Settings\Http\Controllers\OrganizationSettingsController;
+use App\Domains\Settings\Http\Controllers\PublicPageSettingsController;
 use App\Domains\Settings\Http\Controllers\SecurityController;
 use App\Domains\Settings\Http\Controllers\TeamController;
 use Illuminate\Support\Facades\Route;
@@ -15,6 +16,12 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('settings')->name('setting
     // General (organization profile + display defaults).
     Route::get('organization', [OrganizationSettingsController::class, 'show'])->name('organization.show');
     Route::match(['put', 'patch'], 'organization', [OrganizationSettingsController::class, 'update'])->name('organization.update');
+
+    // Public surfaces (marketing homepage + external portals) — draft/preview/publish, settings.manage gated.
+    Route::get('public-pages', [PublicPageSettingsController::class, 'index'])->name('public-pages.index');
+    Route::match(['put', 'patch'], 'public-pages/{page}', [PublicPageSettingsController::class, 'update'])->name('public-pages.update');
+    Route::post('public-pages/{page}/publish', [PublicPageSettingsController::class, 'publish'])->name('public-pages.publish');
+    Route::post('public-pages/{page}/revert', [PublicPageSettingsController::class, 'revert'])->name('public-pages.revert');
 
     // Branding.
     Route::get('branding', [BrandingController::class, 'show'])->name('branding.show');
