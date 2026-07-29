@@ -40,6 +40,19 @@ const COPY = {
 }
 type Copy = (typeof COPY)['ar']
 
+function DriveSummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'info' | 'success' | 'muted' }) {
+  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', info: 'bg-info', success: 'bg-success', muted: 'bg-text-muted' }
+  return (
+    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
+        <span className="text-xs font-semibold text-text-secondary">{label}</span>
+      </div>
+      <span className="tnum text-2xl font-extrabold text-text-primary" dir="ltr">{value}</span>
+    </div>
+  )
+}
+
 const SCOPE_LABEL: Record<DriveScope, { ar: string; en: string }> = {
   tenant: { ar: 'المستأجر', en: 'Tenant' },
   client: { ar: 'العميل', en: 'Client' },
@@ -59,6 +72,7 @@ export function DrivePage() {
   const canView = useAuth((s) => s.hasPermission('drive.view'))
   const canManage = useAuth((s) => s.hasPermission('drive.manage'))
   const [openLink, setOpenLink] = useState<DriveLink | null>(null)
+  const [search, setSearch] = useState('')
 
   const q = useQuery({ queryKey: ['drive-links'], queryFn: listDriveLinks, enabled: canView })
 
@@ -71,22 +85,44 @@ export function DrivePage() {
   }
 
   const links = q.data ?? []
+  const ar = locale === 'ar'
+  const byScope = (s: DriveScope) => links.filter((l) => l.scope === s).length
+  const needle = search.trim().toLowerCase()
+  const shown = needle ? links.filter((l) => `${l.folder_name ?? ''}`.toLowerCase().includes(needle)) : links
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 p-4 md:p-6">
+    <div className="flex w-full flex-col gap-4">
       <header className="flex flex-col gap-1">
         <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
         <p className="text-sm text-text-secondary">{c.subtitle}</p>
       </header>
 
+      {/* Summary — linked Drive folders by scope. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <DriveSummaryCard label={ar ? 'إجمالي الروابط' : 'Total links'} value={links.length} tone="brand" />
+        <DriveSummaryCard label={ar ? 'عملاء' : 'Clients'} value={byScope('client')} tone="info" />
+        <DriveSummaryCard label={ar ? 'مشاريع' : 'Projects'} value={byScope('project')} tone="success" />
+        <DriveSummaryCard label={ar ? 'حملات' : 'Campaigns'} value={byScope('campaign')} tone="muted" />
+      </div>
+
+      {/* Search */}
+      <div className="rounded-2xl border border-border bg-surface p-3">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={ar ? 'ابحث باسم المجلد…' : 'Search by folder name…'}
+          className="w-full rounded-xl border border-border bg-surface-secondary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none sm:max-w-xs" />
+      </div>
+
       <div className="grid gap-4 md:grid-cols-[1fr_320px]">
         <div className="flex flex-col gap-2">
           {q.isLoading ? (
-            <p className="p-8 text-center text-sm text-text-secondary">{c.loading}</p>
+            <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">{c.loading}</p>
+          ) : q.isError ? (
+            <p className="rounded-xl border border-danger/30 bg-danger/5 p-8 text-center text-sm text-danger">{c.no_permission}</p>
           ) : links.length === 0 ? (
             <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">{c.no_links}</p>
+          ) : shown.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">{ar ? 'لا مجلدات تطابق البحث.' : 'No folders match your search.'}</p>
           ) : (
-            links.map((link) => (
+            shown.map((link) => (
               <LinkRow key={link.id} c={c} locale={locale} link={link} canManage={canManage} onBrowse={() => setOpenLink(link)} />
             ))
           )}
