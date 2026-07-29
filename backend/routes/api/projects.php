@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
+use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\Projects\Http\Controllers\ProjectController;
 use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
@@ -28,6 +29,16 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('projects')->name('project
     Route::post('{project}/restore', [ProjectController::class, 'restore'])->name('restore');
     Route::post('{project}/pause', [ProjectController::class, 'pause'])->name('pause');
     Route::post('{project}/resume', [ProjectController::class, 'resume'])->name('resume');
+});
+
+// DASH-010-E: saved dashboard views (persisted per user + tenant; not project-scoped).
+Route::middleware(['auth:sanctum', 'tenant'])->prefix('dashboard/saved-views')->name('dashboard.saved-views.')->group(function (): void {
+    Route::get('/', [SavedDashboardViewController::class, 'index'])->name('index');
+    Route::post('/', [SavedDashboardViewController::class, 'store'])->name('store');
+    Route::get('{view}', [SavedDashboardViewController::class, 'show'])->name('show');
+    Route::match(['put', 'patch'], '{view}', [SavedDashboardViewController::class, 'update'])->name('update');
+    Route::delete('{view}', [SavedDashboardViewController::class, 'destroy'])->name('destroy');
+    Route::post('{view}/default', [SavedDashboardViewController::class, 'setDefault'])->name('default');
 });
 
 // Project-scoped resources (ResolveProject enforces project isolation).
