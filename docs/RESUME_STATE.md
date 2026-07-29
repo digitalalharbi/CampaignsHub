@@ -11,7 +11,7 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
-`654dea4` — *docs: REPORT-SCHEDULING unblocked — API + UI delivered, midnight bug fixed*
+`2919ec9` — *perf(campaigns): open on the card list, not the chart-heavy overview*
 
 Last work unit: `f0c813e` (CMS backend) → `320b569` (CMS editor + homepage rendering) → `fc90666` (docs).
 Frozen delivery tags, **never move or rewrite**: `v1.0.0-baseline`, `v1.1.0-expanded-final`.
@@ -22,40 +22,38 @@ Frozen delivery tags, **never move or rewrite**: `v1.0.0-baseline`, `v1.1.0-expa
 closed on a green run.
 
 ## Completed work (this session — each committed, tested and live-reviewed)
-1. **SITE-CMS-002** `7afaa00` — the three external portals (paid / influencer / request-tracking) render
-   their OWN published CMS content; `PublicHomePage` resolves the document from `?portal` and
-   `RequestTrackPage` reads `portal_tracking`. Proven live, then reverted to shipped defaults.
-2. **XBROWSER-GATE** `131231c` — **Chromium 70/70 · Firefox 62/62 · WebKit 62/62, 0 failed.** Running
-   Firefox exposed two real defects that Chromium-only runs had hidden: the backend's `PublicPageDefaults`
-   scaffolding was overriding the frontend's shipped homepage copy even with nothing published (fixed —
-   only `source === 'published'` may override), and `account-settings.spec` still drove the pre-split
-   `/settings/profile` route. **23 matrix rows moved from IMPLEMENTED_NOT_VERIFIED to VERIFIED.**
-3. **CAMPAIGN-010 + CAMPAIGN-020** `d5cdfcc` — five campaign view modes (overview / cards / table /
-   compare / needs-attention) with taxonomy chips, plus a real multi-campaign comparison backed by
-   `MetricsAggregator::compare()` and `GET metrics/compare`. Results and cost-per-result are counted with
-   each campaign's OWN objective definition; best-value highlighting appears only when the picked
-   campaigns share one objective, otherwise a warning replaces the ranking.
-4. **CAMPDET-010 (partial)** `1bb796d` — campaign detail gains «الجمهور والاستهداف», «الأحداث» and
-   «سجل المزامنة», backed by new `events` and `sync-log` endpoints. Zero-count events are omitted; failed
-   sync runs show their error text.
-5. **REPORT-SCHEDULING** `f2ea999` — was BLOCKED_NO_API. The HTTP surface now exists
-   (index/store/update/toggle/run/destroy) and the Reports page has a real «الجدولة» section. Fixed a
-   pre-existing engine bug: `Carbon::next()` rewound the time, so every weekly schedule fired at midnight
-   instead of its configured hour.
+1. **SITE-CMS-002** `7afaa00` · **XBROWSER-GATE** `131231c` (found 2 real defects Chromium had hidden)
+2. **CAMPAIGN-010 + CAMPAIGN-020** `d5cdfcc` — five view modes, taxonomy chips, real multi-campaign
+   comparison with objective-aware results.
+3. **CAMPDET-010** `1bb796d` + `6606226` — audience, events, sync log, and **real ad sets + ads**
+   (new `external_ad_sets` / `external_ads` tables, API and UI — no longer a "needs connection" note).
+4. **REPORT-SCHEDULING** `f2ea999` — was BLOCKED_NO_API; API + UI built. Fixed an engine bug where
+   `Carbon::next()` made every weekly schedule fire at midnight.
+5. **FINANCE-001** `2d34eaa` — consolidated finance center: overview, aging, receivables worklist,
+   payments ledger. Outstanding derived per invoice; pending money never counted as collected.
+6. **SYNC-001 + DEMO-001** `4080a93` — real sync pipeline (queued per account, honest
+   `awaiting_credentials` state) and the demo credential → connection → account → campaign chain that
+   was missing. Linked campaigns went 0/39 → 39/39.
+7. **PROJINT-001 + INTEG-UI-001** `a11cbfc` — project integrations rebuilt around the six real
+   platforms, proven end to end live (trigger → queue → connector check → recorded run → log).
+8. **ADAUDIT-001** `bd48b7f` — per-platform audit; found and fixed the `google`/`google_ads` registry
+   drift and a sync gate on the non-existent `integrations.manage` permission.
+9. **XREL-001 + DEVSTATUS-001** `3ae5098` — cross-module entity links; requirement board parsed from
+   the matrix itself.
+10. **PERF-CAMPAIGNS-001 (partial)** `2919ec9` — campaigns page opens on the card list again.
 
 ## Work in progress
-**None.** Tree clean at HEAD; every unit above closed on a green run.
+**None.** Tree clean at HEAD.
 
 ## Exact next task
-**FINANCE-001** — unified finance center `/app/finance` (overview KPIs + quotes/invoices/payments/
-outstanding), currently PARTIAL. After it, in matrix order: `PROJINT-001` (project integrations rebuilt
-around the 6 real ad platforms) → `INTEG-UI-001` → `SYNC-001` (metrics sync pipeline: SyncRun +
-per-provider queued jobs) → `NORM-001` → `XREL-001` → `DEMO-001` → `DEVSTATUS-001` → `ADAUDIT-001`.
+**PERF-CAMPAIGNS-001** — Firefox is **61/62**; the failing spec MOVES between runs
+(`campaigns-linking:24`, then `campaigns.spec:38`), so it is a load-dependent first-paint flake, not a
+broken assertion — each passes when its file runs alone. Next step: profile the campaign DETAIL page,
+which now also issues the related-entities query on every tab, and cut its first-paint work.
+**Do not loosen assertions or add blanket retries.**
 
-**Note on ordering:** `DEMO-001` now blocks live verification of two shipped features — no campaign in
-the demo data has a linked external campaign, so the populated sync-log rendering and the platforms tab
-cannot be observed live (both are test-covered). Consider pulling `DEMO-001` forward if live evidence
-matters more than matrix order.
+Then: **NORM-001** (surface raw + source + objective-compat in the UI) and **FILE-001** (unified files
+library) — the two requirements from the user's list not yet reached this session.
 
 ## Files currently involved (what the next task touches)
 - `frontend/src/features/marketing/PublicHomePage.tsx` — **reference implementation** of the overlay.
@@ -106,13 +104,13 @@ browser verification.
 ## Test results (at `fc90666`)
 | Suite | Result |
 |---|---|
-| Backend (PHPUnit) | **433 passed, 2536 assertions, 0 failed** |
+| Backend (PHPUnit) | **443 passed, 2585 assertions, 0 failed** |
 | ↳ `PublicPageSettingsTest` | 6 passed, 33 assertions |
 | Frontend unit (vitest) | **226 passed, 47 files, 0 failed** |
 | `tsc --noEmit` | clean |
 | `npm run build` | clean |
 | Pint (backend style) | clean |
-| Playwright E2E | **Chromium 70/70 · Firefox 62/62 · WebKit 62/62 — 0 failed** (XBROWSER-GATE closed) |
+| Playwright E2E | **Chromium 70/70 · WebKit 62/62 · Firefox 61/62** — one moving campaign-spec flake, see PERF-CAMPAIGNS-001 |
 
 Matrix status counts: 35 VERIFIED · 4 IMPLEMENTED_NOT_VERIFIED (awaiting a browser re-run) ·
 4 PARTIAL · 6 NOT_STARTED · 6 BLOCKED_EXTERNAL_CREDENTIALS. REPORT-SCHEDULING is no longer BLOCKED_NO_API.
