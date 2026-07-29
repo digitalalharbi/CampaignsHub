@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Lock, MessageSquare } from 'lucide-react'
 import {
   addInternalNote, archiveRequest, assignRequest, changeRequestPriority, changeRequestStatus,
-  convertRequest, getRequest, replyToClientInternal, requestInformation,
+  convertRequest, getRequest, raiseQuoteFromRequest, replyToClientInternal, requestInformation,
 } from './internalApi'
 import { STATUS_LABELS, priorityTone, statusTone } from './labels'
 import { Button } from '@/components/ui/Button'
@@ -13,12 +13,14 @@ import { TextareaField } from '@/components/ui/form'
 import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
 import { useT } from '@/lib/i18n'
+import { useUi } from '@/stores/ui'
 
 const STATUS_OPTIONS = ['under_review', 'waiting_client', 'qualified', 'approved', 'in_progress', 'completed', 'rejected', 'cancelled']
 const PRIORITY_OPTIONS = ['critical', 'high', 'medium', 'low']
 
 export function RequestDetailPage() {
   const t = useT()
+  const lang = useUi((s) => s.locale)
   const { requestId = '' } = useParams()
   const qc = useQueryClient()
   const { user } = useAuth()
@@ -39,6 +41,7 @@ export function RequestDetailPage() {
   const infoMut = useMutation({ mutationFn: () => requestInformation(requestId, info), onSuccess: () => { setInfo(''); void refresh() } })
   const archiveMut = useMutation({ mutationFn: () => archiveRequest(requestId), onSuccess: refresh })
   const convertMut = useMutation({ mutationFn: () => convertRequest(requestId), onSuccess: refresh, onError: (e) => setActionError(toApiError(e).message) })
+  const quoteMut = useMutation({ mutationFn: () => raiseQuoteFromRequest(requestId), onSuccess: refresh, onError: (e) => setActionError(toApiError(e).message) })
 
   if (query.isLoading) return <div className="mx-auto max-w-4xl"><div className="h-64 animate-pulse rounded-2xl bg-surface-secondary" /></div>
   if (query.isError) return <div className="mx-auto max-w-4xl rounded-2xl border border-danger/30 bg-[var(--negative-background)] p-6 text-center text-sm text-danger">{t('error_generic')}</div>
@@ -79,6 +82,11 @@ export function RequestDetailPage() {
           {!d.archived_at && <Button variant="ghost" size="sm" onClick={() => archiveMut.mutate()}>{t('archive')}</Button>}
           {!d.conversion && !d.archived_at && (
             <Button size="sm" onClick={() => convertMut.mutate()} loading={convertMut.isPending}>{t('convert')}</Button>
+          )}
+          {!d.archived_at && (
+            <Button variant="secondary" size="sm" onClick={() => quoteMut.mutate()} loading={quoteMut.isPending}>
+              {lang === 'ar' ? 'إنشاء عرض سعر' : 'Raise quote'}
+            </Button>
           )}
         </div>
         {actionError && <p className="mt-2 text-sm text-danger">{actionError}</p>}
@@ -154,6 +162,43 @@ export function RequestDetailPage() {
               <Info k={t('col_assignee')} v={d.assignee ?? '—'} />
             </dl>
           </section>
+          {/* Selected services (canonical request_services, resolved to display labels). */}
+          {(d.services_resolved?.length ?? 0) > 0 && (
+            <section className="rounded-2xl border border-border bg-surface p-5 text-sm">
+              <h2 className="mb-3 text-sm font-bold text-text-primary">{lang === 'ar' ? 'الخدمات المطلوبة' : 'Requested services'}</h2>
+              <ul className="flex flex-wrap gap-1.5">
+                {d.services_resolved!.map((s) => (
+                  <li key={s.key} className="rounded-full bg-surface-hover px-2.5 py-1 text-[11px] font-semibold text-text-secondary">
+                    {lang === 'ar' ? (s.label_ar ?? s.label_en ?? s.key) : (s.label_en ?? s.key)}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* Billing thread — quotes raised from this request, each with its issued invoice. */}
+          {(d.billing?.length ?? 0) > 0 && (
+            <section className="rounded-2xl border border-border bg-surface p-5 text-sm">
+              <h2 className="mb-3 text-sm font-bold text-text-primary">{lang === 'ar' ? 'العروض والفواتير' : 'Quotes & invoices'}</h2>
+              <ul className="space-y-2">
+                {d.billing!.map((b) => (
+                  <li key={b.quote_id} className="rounded-xl border border-border p-2.5">
+                    <Link to="/app/billing" className="flex items-center justify-between gap-2 hover:text-brand-600">
+                      <span className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{b.number}</span>
+                      <span className="tnum text-xs font-bold" dir="ltr">{Number(b.total).toLocaleString('en-US')} {b.currency}</span>
+                    </Link>
+                    {b.invoice && (
+                      <Link to="/app/billing/invoices" className="mt-1 flex items-center justify-between gap-2 border-t border-border pt-1 text-text-secondary hover:text-brand-600">
+                        <span className="font-mono text-[11px]" dir="ltr">{b.invoice.number}</span>
+                        <span className="rounded-full bg-surface-hover px-1.5 py-0.5 text-[10px] font-semibold">{b.invoice.status}</span>
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {d.files.length > 0 && (
             <section className="rounded-2xl border border-border bg-surface p-5 text-sm">
               <h2 className="mb-3 text-sm font-bold text-text-primary">{t('files')}</h2>

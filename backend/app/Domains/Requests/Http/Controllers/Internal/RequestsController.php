@@ -106,7 +106,36 @@ final class RequestsController
             'files' => $files,
             'archived_at' => optional($req->archived_at)->toIso8601String(),
             'conversion' => $this->conversion($req),
+            'billing' => $this->billing($req),
         ])]);
+    }
+
+    /**
+     * Quotes raised FROM this request, each with its issued invoice (if any) — the request's billing thread.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function billing(ExternalRequest $req): array
+    {
+        return \App\Domains\Billing\Models\Quote::query()
+            ->where('external_request_id', $req->id)
+            ->with('invoices')
+            ->orderByDesc('created_at')->limit(10)->get()
+            ->map(fn ($q) => [
+                'quote_id' => (string) $q->getKey(),
+                'number' => $q->number,
+                'status' => $q->status,
+                'total' => (string) $q->total,
+                'currency' => $q->currency,
+                'tax_treatment' => $q->tax_treatment,
+                'invoice' => $q->invoices->first() !== null ? [
+                    'invoice_id' => (string) $q->invoices->first()->getKey(),
+                    'number' => $q->invoices->first()->number,
+                    'status' => $q->invoices->first()->status,
+                    'total' => (string) $q->invoices->first()->total,
+                    'amount_paid' => (string) $q->invoices->first()->amount_paid,
+                ] : null,
+            ])->all();
     }
 
     /** @return array<string,mixed>|null the completed conversion result (client/project/campaign), if any */

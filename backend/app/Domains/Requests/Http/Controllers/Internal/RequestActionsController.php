@@ -183,6 +183,40 @@ final class RequestActionsController
         ]], 201);
     }
 
+    /**
+     * POST /app/requests/{request}/quote — raise a draft quote FROM this request. The request's selected
+     * services become line items (via BillingService::quoteFromRequest); optional subtotal/tax_treatment
+     * price it immediately. Records an event + audit so the request timeline shows the billing step.
+     */
+    public function raiseQuote(Request $request, string $id): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('billing.manage'), 403);
+        $req = $this->find($id);
+        abort_if($req->archived_at !== null, 422, 'An archived request cannot be quoted.');
+
+        $data = $request->validate([
+            'subtotal' => ['nullable', 'numeric', 'min:0'],
+            'tax_treatment' => ['nullable', 'string', Rule::in(\App\Domains\Billing\Support\TaxTreatment::keys())],
+            'valid_until' => ['nullable', 'date'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $quote = app(\App\Domains\Billing\Services\BillingService::class)->quoteFromRequest($req, array_merge($data, [
+            'created_by' => $request->user()->id,
+        ]));
+
+        $this->event($req, 'quote_raised', clientVisible: true, message: 'Quote '.$quote->number.' raised');
+        $this->audit->log('request.quote_raised', 'external_request', $req->id, after: ['quote_id' => (string) $quote->getKey()]);
+
+        return response()->json(['data' => [
+            'quote_id' => (string) $quote->getKey(),
+            'number' => $quote->number,
+            'status' => $quote->status,
+            'total' => (string) $quote->total,
+            'currency' => $quote->currency,
+        ]], 201);
+    }
+
     /** PATCH /app/requests/{request}/archive */
     public function archive(string $id): JsonResponse
     {

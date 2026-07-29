@@ -43,6 +43,18 @@ export interface RequestDetail extends RequestRow {
   files: { id: number; name: string; size: number; client_visible: boolean }[]
   archived_at: string | null
   conversion: { client_id: string; project_id: string; campaign_id: string; completed_at: string | null } | null
+  /** Canonical selected services resolved to display labels (taxonomy engine). */
+  services_resolved?: { key: string; label_en?: string | null; label_ar?: string | null }[]
+  /** Quotes raised from this request, each with its issued invoice (if any). */
+  billing?: {
+    quote_id: string
+    number: string
+    status: string
+    total: string
+    currency: string
+    tax_treatment: string | null
+    invoice: { invoice_id: string; number: string; status: string; total: string; amount_paid: string } | null
+  }[]
 }
 
 export interface RequestFilters {
@@ -90,3 +102,7 @@ export const addInternalNote = (id: string, body: string) => postData<{ status: 
 export const replyToClientInternal = (id: string, body: string) => postData<{ status: string }>(`/app/requests/${id}/reply`, { body })
 export const archiveRequest = (id: string) => patchData<{ status: string }>(`/app/requests/${id}/archive`, {})
 export const convertRequest = (id: string, client_id?: string) => postData<ConversionResult>(`/app/requests/${id}/convert`, client_id ? { client_id } : {})
+
+/** Raise a draft quote FROM this request (services become line items; backend derives tax from treatment). */
+export const raiseQuoteFromRequest = (id: string, body?: { subtotal?: number; tax_treatment?: string }) =>
+  postData<{ quote_id: string; number: string; status: string; total: string; currency: string }>(`/app/requests/${id}/quote`, body ?? {})

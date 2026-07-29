@@ -117,4 +117,5 @@ Route::middleware(['auth:sanctum', 'tenant', 'entitlement:requests'])->prefix('a
     Route::post('/{id}/reply', [RequestActionsController::class, 'replyToClient'])->name('reply');
     Route::patch('/{id}/archive', [RequestActionsController::class, 'archive'])->name('archive');
     Route::post('/{id}/convert', [RequestActionsController::class, 'convert'])->name('convert');
+    Route::post('/{id}/quote', [RequestActionsController::class, 'raiseQuote'])->name('quote');
 });
