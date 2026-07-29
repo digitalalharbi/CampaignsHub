@@ -79,18 +79,24 @@ export function lastNDays(days: number): Range {
 const q = (r: Range) => `from=${r.from}&to=${r.to}`
 const base = (projectId: string) => `/projects/${projectId}/metrics`
 
-function useMetric<T>(key: string, projectId: string | null, range: Range, path: string) {
+/** Dashboard command-center filters. Backend-supported (sent as query params) — never a React-only filter. */
+export interface MetricFilters {
+  provider?: string[]
+}
+const qf = (f?: MetricFilters) => (f?.provider && f.provider.length ? `&provider=${f.provider.join(',')}` : '')
+
+function useMetric<T>(key: string, projectId: string | null, range: Range, path: string, filters?: MetricFilters) {
   return useQuery({
-    queryKey: ['metrics', key, projectId, range.from, range.to],
-    queryFn: () => getData<T>(`${base(projectId!)}/${path}?${q(range)}`),
+    queryKey: ['metrics', key, projectId, range.from, range.to, filters?.provider?.join(',') ?? ''],
+    queryFn: () => getData<T>(`${base(projectId!)}/${path}?${q(range)}${qf(filters)}`),
     enabled: Boolean(projectId),
   })
 }
 
-export const useSummary = (p: string | null, r: Range) => useMetric<Summary>('summary', p, r, 'summary')
-export const useTimeseries = (p: string | null, r: Range) => useMetric<TimePoint[]>('timeseries', p, r, 'timeseries')
-export const usePlatforms = (p: string | null, r: Range) => useMetric<PlatformRow[]>('platforms', p, r, 'platforms')
-export const useCampaigns = (p: string | null, r: Range) => useMetric<CampaignRow[]>('campaigns', p, r, 'campaigns')
-export const useFunnel = (p: string | null, r: Range) => useMetric<FunnelStage[]>('funnel', p, r, 'funnel')
-export const useBudget = (p: string | null, r: Range) => useMetric<BudgetRow[]>('budget', p, r, 'budget')
-export const useFreshness = (p: string | null, r: Range) => useMetric<FreshnessRow[]>('freshness', p, r, 'freshness')
+export const useSummary = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Summary>('summary', p, r, 'summary', f)
+export const useTimeseries = (p: string | null, r: Range, f?: MetricFilters) => useMetric<TimePoint[]>('timeseries', p, r, 'timeseries', f)
+export const usePlatforms = (p: string | null, r: Range, f?: MetricFilters) => useMetric<PlatformRow[]>('platforms', p, r, 'platforms', f)
+export const useCampaigns = (p: string | null, r: Range, f?: MetricFilters) => useMetric<CampaignRow[]>('campaigns', p, r, 'campaigns', f)
+export const useFunnel = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FunnelStage[]>('funnel', p, r, 'funnel', f)
+export const useBudget = (p: string | null, r: Range, f?: MetricFilters) => useMetric<BudgetRow[]>('budget', p, r, 'budget', f)
+export const useFreshness = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FreshnessRow[]>('freshness', p, r, 'freshness', f)

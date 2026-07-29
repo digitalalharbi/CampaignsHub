@@ -23,7 +23,10 @@ import {
 } from '../analytics/hooks'
 import { DemoBadge, Panel, RangeTabs, SERIES, tooltipProps } from '../analytics/components'
 import { compact, money, num, percent, ratio } from '../analytics/format'
-import { UnifiedCampaignOverview, type OverviewVM } from '@/features/campaigns/overview/UnifiedCampaignOverview'
+import { UnifiedCampaignOverview, providerColor, providerName, type OverviewVM } from '@/features/campaigns/overview/UnifiedCampaignOverview'
+
+/** The six paid platforms CampaignsHub unifies — the dashboard platform filter. */
+const PLATFORM_KEYS = ['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin']
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
@@ -33,14 +36,18 @@ export function DashboardPage() {
   const { currentProjectId } = useProject()
   const [days, setDays] = useState(30)
   const range = useLastNDaysRange(days)
+  const [providers, setProviders] = useState<string[]>([])
+  const filters = useMemo(() => ({ provider: providers }), [providers])
+  const toggleProvider = (key: string) =>
+    setProviders((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]))
 
-  const summary = useSummary(currentProjectId, range)
-  const series = useTimeseries(currentProjectId, range)
-  const platforms = usePlatforms(currentProjectId, range)
-  const campaigns = useCampaigns(currentProjectId, range)
-  const funnel = useFunnel(currentProjectId, range)
-  const budget = useBudget(currentProjectId, range)
-  const freshness = useFreshness(currentProjectId, range)
+  const summary = useSummary(currentProjectId, range, filters)
+  const series = useTimeseries(currentProjectId, range, filters)
+  const platforms = usePlatforms(currentProjectId, range, filters)
+  const campaigns = useCampaigns(currentProjectId, range, filters)
+  const funnel = useFunnel(currentProjectId, range, filters)
+  const budget = useBudget(currentProjectId, range, filters)
+  const freshness = useFreshness(currentProjectId, range, filters)
 
   const cur = summary.data?.current
   const points = series.data ?? []
@@ -122,6 +129,31 @@ export function DashboardPage() {
             الحملات <ArrowUpRight size={16} />
           </Link>
         </div>
+      </div>
+
+      {/* Platform filter — backend-supported (?provider=…); affects every KPI, chart, table below. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-text-muted">المنصات:</span>
+        {PLATFORM_KEYS.map((key) => {
+          const on = providers.includes(key)
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => toggleProvider(key)}
+              aria-pressed={on}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${on ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-text-secondary hover:bg-surface-hover'}`}
+            >
+              <span className="h-2 w-2 rounded-full" style={{ background: providerColor(key) }} />
+              {providerName(key)}
+            </button>
+          )
+        })}
+        {providers.length > 0 && (
+          <button type="button" onClick={() => setProviders([])} className="text-xs font-semibold text-text-muted underline underline-offset-2 hover:text-text-primary">
+            إعادة ضبط
+          </button>
+        )}
       </div>
 
       {/* Unified command center (shared with the marketing preview) */}
