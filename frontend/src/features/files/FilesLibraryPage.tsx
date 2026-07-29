@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Download, FileText, FolderGit2, Link2, Search } from 'lucide-react'
+import { Download, FileSpreadsheet, FileText, FileType, FolderGit2, LayoutGrid, Link2, Rows3, Search } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import { fmtDateTime } from '@/lib/datetime'
 import { getFilesLibrary } from './api'
@@ -14,7 +14,7 @@ const COPY = {
     src_request: 'طلب', src_report: 'تقرير',
     vis_internal: 'داخلي', vis_client: 'مرئي للعميل',
     col_name: 'الملف', col_source: 'المصدر', col_client: 'العميل', col_related: 'مرتبط بـ', col_size: 'الحجم', col_uploaded: 'أُضيف', col_visibility: 'الظهور',
-    download: 'تنزيل', drive_cta: 'إدارة مجلدات Drive',
+    download: 'تنزيل', drive_cta: 'إدارة مجلدات Drive', view_grid: 'شبكة', view_table: 'جدول',
     none: 'لا توجد ملفات بعد — تظهر هنا مرفقات الطلبات وتصديرات التقارير.', no_match: 'لا ملفات تطابق البحث أو الفلاتر.',
     loading: 'جارٍ التحميل…', error: 'تعذّر تحميل الملفات.',
   },
@@ -25,7 +25,7 @@ const COPY = {
     src_request: 'Request', src_report: 'Report',
     vis_internal: 'Internal', vis_client: 'Client-visible',
     col_name: 'File', col_source: 'Source', col_client: 'Client', col_related: 'Related to', col_size: 'Size', col_uploaded: 'Added', col_visibility: 'Visibility',
-    download: 'Download', drive_cta: 'Manage Drive folders',
+    download: 'Download', drive_cta: 'Manage Drive folders', view_grid: 'Grid', view_table: 'Table',
     none: 'No files yet — request attachments and report exports appear here.', no_match: 'No files match your search or filters.',
     loading: 'Loading…', error: 'Could not load files.',
   },
@@ -44,6 +44,7 @@ export function FilesLibraryPage() {
   const [term, setTerm] = useState('')
   const [source, setSource] = useState<'all' | string>('all')
   const [visibility, setVisibility] = useState<'all' | string>('all')
+  const [view, setView] = useState<'grid' | 'table'>('grid')
 
   const q = useQuery({ queryKey: ['files', 'library'], queryFn: getFilesLibrary })
   const files = q.data?.files ?? []
@@ -93,7 +94,7 @@ export function FilesLibraryPage() {
           <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder={c.search_ph}
             className="w-full rounded-xl border border-border bg-surface-secondary py-2 pe-3 ps-9 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none" />
         </label>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {(['all', 'request', 'report'] as const).map((s) => (
             <Chip key={s} active={source === s} onClick={() => setSource(s)}>{s === 'all' ? `${c.col_source}: ${c.all}` : srcLabel(s)}</Chip>
           ))}
@@ -103,6 +104,14 @@ export function FilesLibraryPage() {
               {v === 'all' ? `${c.col_visibility}: ${c.all}` : v === 'internal' ? c.vis_internal : c.vis_client}
             </Chip>
           ))}
+          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+          {/* View switch — grid for browsing, table for scanning (same language as Content). */}
+          <div className="flex overflow-hidden rounded-lg border border-border">
+            <button onClick={() => setView('grid')} aria-label={c.view_grid} title={c.view_grid}
+              className={`flex items-center px-2.5 py-1.5 ${view === 'grid' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}><LayoutGrid size={14} /></button>
+            <button onClick={() => setView('table')} aria-label={c.view_table} title={c.view_table}
+              className={`flex items-center px-2.5 py-1.5 ${view === 'table' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}><Rows3 size={14} /></button>
+          </div>
         </div>
       </div>
 
@@ -114,6 +123,33 @@ export function FilesLibraryPage() {
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border p-12 text-center text-text-secondary">
           <FileText size={24} /><span className="text-sm">{files.length === 0 ? c.none : c.no_match}</span>
+        </div>
+      ) : view === 'grid' ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {items.map((f) => (
+            <div key={`${f.source}-${f.id}`} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+              {/* Type-honest tile: we never fabricate a thumbnail for a private file. */}
+              <div className="flex aspect-video items-center justify-center bg-surface-hover text-text-muted">
+                <FileIcon name={f.name} type={f.type} />
+              </div>
+              <div className="flex flex-col gap-1 p-3">
+                <span className="line-clamp-1 text-sm font-semibold text-text-primary" title={f.name}>{f.name}</span>
+                <span className="line-clamp-1 text-[11px] text-text-tertiary">{f.client_name ?? '—'} · {f.related.label ?? srcLabel(f.source)}</span>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${f.visibility === 'internal' ? 'bg-surface-hover text-text-secondary' : 'bg-info/15 text-info'}`}>
+                    {f.visibility === 'internal' ? c.vis_internal : c.vis_client}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="tnum text-[11px] text-text-tertiary" dir="ltr">{fmtSize(f.size)}</span>
+                    {f.download_url && (
+                      <a href={f.download_url} target="_blank" rel="noopener noreferrer" title={c.download} aria-label={c.download}
+                        className="text-text-secondary hover:text-brand-600"><Download size={13} /></a>
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-border">
@@ -178,4 +214,13 @@ function FileSummaryCard({ label, value, tone }: { label: string; value: number;
       <span className="tnum text-2xl font-extrabold text-text-primary" dir="ltr">{value}</span>
     </div>
   )
+}
+
+/** An honest type icon derived from the file's extension/mime — never a fabricated preview image. */
+function FileIcon({ name, type }: { name: string; type: string | null }) {
+  const ext = (name.split('.').pop() ?? '').toLowerCase()
+  const t = `${type ?? ''} ${ext}`.toLowerCase()
+  if (/pdf/.test(t)) return <FileType size={26} />
+  if (/csv|xls|sheet/.test(t)) return <FileSpreadsheet size={26} />
+  return <FileText size={26} />
 }

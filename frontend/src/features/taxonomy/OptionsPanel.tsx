@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronDown, ChevronUp, GitMerge, MoreVertical, Pencil, Plus, Shuffle, Star, Ban,
 } from 'lucide-react'
+import * as LucideIcons from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Switch } from '@/components/ui/Switch'
@@ -256,11 +257,11 @@ function OptionRow({
       )}
 
       <span
-        className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[13px]"
+        className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full text-[13px]"
         style={{ backgroundColor: (opt.color ?? '#94a3b8') + '22', color: opt.color ?? undefined }}
         aria-hidden
       >
-        {opt.icon || '●'}
+        <OptionIcon name={opt.icon} />
       </span>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -368,4 +369,18 @@ function RowMenu({
       )}
     </div>
   )
+}
+
+/**
+ * An option's `icon` stores a lucide icon NAME (e.g. "wallet", "trending-up"). Rendering that string raw
+ * overflowed the 28px badge with visible text; resolve it to the real icon and fall back to a neutral dot
+ * for unknown/empty names.
+ */
+function OptionIcon({ name }: { name?: string | null }) {
+  if (!name) return <span>●</span>
+  const pascal = name.split(/[-_ ]/).filter(Boolean).map((p) => p[0].toUpperCase() + p.slice(1)).join('')
+  const Icon = (LucideIcons as unknown as Record<string, unknown>)[pascal]
+  if (typeof Icon !== 'function') return <span>●</span>
+  const C = Icon as ComponentType<{ size?: number }>
+  return <C size={15} />
 }
