@@ -222,7 +222,8 @@ final class UnifiedCampaignController extends Controller
             'primary_conversion_purpose' => ['nullable', 'string', 'max:60'],
             'attribution_model' => ['nullable', 'string', 'max:60'],
             'attribution_window' => ['nullable', 'string', 'max:60'],
-            'owner_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
+            // The owner MUST belong to this tenant — never assign a user from another workspace.
+            'owner_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('tenant_id', $request->user()->tenant_id)],
             'target_kpi' => ['nullable', 'array'],
             'audience' => ['nullable', 'string'],
             // Additive taxonomy-driven multi-selects. Keys with a canonical option set are validated against the

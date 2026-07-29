@@ -11,6 +11,7 @@ import {
   updateCampaign,
 } from './api'
 import { CampaignFormModal } from './CampaignFormModal'
+import { listUsers } from '@/features/projects/api'
 import { LinkExternalModal } from './LinkExternalModal'
 import {
   PERFORMANCE_KEYS,
@@ -75,6 +76,8 @@ export function CampaignDetailPage() {
   const queryClient = useQueryClient()
   const { projectId = '', campaignId = '' } = useParams()
   const [sp, setSp] = useSearchParams()
+  // Resolve the owner id to a real member name (same source as the edit modal's owner select).
+  const usersQ = useQuery({ queryKey: ['users'], queryFn: () => listUsers() })
   const [days, setDays] = useState(30)
   const range = useLastNDaysRange(days)
 
@@ -248,7 +251,7 @@ export function CampaignDetailPage() {
           <HeaderFact label={t('budget_label')}>
             <span className="tnum">{c.total_budget != null ? `${c.total_budget.toLocaleString('en-US')} ${c.budget_currency}` : '—'}</span>
           </HeaderFact>
-          <HeaderFact label={t('owner_label')}>{c.owner_id != null ? <span className="tnum">#{c.owner_id}</span> : '—'}</HeaderFact>
+          <HeaderFact label={t('owner_label')}>{c.owner_id != null ? ((usersQ.data ?? []).find((u) => String(u.id) === String(c.owner_id))?.name ?? <span className="tnum">#{c.owner_id}</span>) : '—'}</HeaderFact>
           <HeaderFact label={t('cmc_attribution')}>{c.attribution_window || '—'}</HeaderFact>
           <HeaderFact label={t('cmc_source_of_truth')}>{c.primary_conversion_purpose || '—'}</HeaderFact>
           <HeaderFact label={t('linked_count')}><span className="tnum">{platforms.length}</span></HeaderFact>

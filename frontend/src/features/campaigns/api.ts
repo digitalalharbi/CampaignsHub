@@ -34,6 +34,8 @@ export interface CampaignInput {
   ends_on?: string | null
   audience?: string | null
   owner_id?: number | null
+  attribution_model?: string | null
+  attribution_window?: string | null
   /** Derived from the selected objective's metadata (primary/secondary KPIs, funnel, report template). */
   target_kpi?: Record<string, unknown> | null
   // Additive taxonomy-driven multi-selects (nullable jsonb columns; the backend validates these keys).

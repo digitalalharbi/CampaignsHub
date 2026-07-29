@@ -24,10 +24,20 @@ import { useAuth } from '@/stores/auth'
 
 const CURRENCIES = ['SAR', 'USD', 'AED', 'EGP', 'KWD', 'BHD', 'QAR']
 
+// Common attribution choices across ad platforms (stored as strings; backend allows free-form up to 60 chars).
+const ATTRIBUTION_MODELS = [
+  { value: 'last_click', ar: 'آخر نقرة', en: 'Last click' },
+  { value: 'data_driven', ar: 'مبني على البيانات', en: 'Data-driven' },
+  { value: 'first_click', ar: 'أول نقرة', en: 'First click' },
+  { value: 'linear', ar: 'خطّي', en: 'Linear' },
+]
+const ATTRIBUTION_WINDOWS = ['1d_click', '7d_click', '7d_click_1d_view', '28d_click', '28d_click_1d_view']
+
 const CF_COPY = {
   ar: {
     platforms: 'المنصات', regions: 'المناطق', audiences: 'الجماهير', conversionEvents: 'أحداث التحويل',
     creativeTypes: 'أنواع المحتوى الإبداعي', tags: 'الوسوم',
+    attributionModel: 'نموذج الإسناد', attributionWindow: 'نافذة الإسناد',
     derivedTitle: 'مؤشرات مشتقة من الهدف', primaryKpi: 'المؤشر الأساسي', secondaryKpi: 'مؤشرات ثانوية',
     funnel: 'مرحلة المسار', template: 'قالب التقرير', alerts: 'تنبيهات مقترحة',
     errTitle: 'يرجى تصحيح الأخطاء التالية',
@@ -35,6 +45,7 @@ const CF_COPY = {
   en: {
     platforms: 'Platforms', regions: 'Regions', audiences: 'Audiences', conversionEvents: 'Conversion events',
     creativeTypes: 'Creative types', tags: 'Tags',
+    attributionModel: 'Attribution model', attributionWindow: 'Attribution window',
     derivedTitle: 'KPIs derived from the objective', primaryKpi: 'Primary KPI', secondaryKpi: 'Secondary KPIs',
     funnel: 'Funnel stage', template: 'Report template', alerts: 'Suggested alerts',
     errTitle: 'Please fix the following errors',
@@ -76,6 +87,8 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
           ends_on: z.string(),
           audience: z.string(),
           owner_id: z.string(),
+          attribution_model: z.string(),
+          attribution_window: z.string(),
         })
         .refine((d) => !d.starts_on || !d.ends_on || d.ends_on >= d.starts_on, {
           path: ['ends_on'],
@@ -95,6 +108,8 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
       ends_on: campaign?.ends_on ?? '',
       audience: campaign?.audience ?? '',
       owner_id: campaign?.owner_id != null ? String(campaign.owner_id) : '',
+      attribution_model: campaign?.attribution_model ?? '',
+      attribution_window: campaign?.attribution_window ?? '',
     }),
     [campaign],
   )
@@ -172,6 +187,8 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
         ends_on: values.ends_on || null,
         audience: values.audience || null,
         owner_id: values.owner_id === '' ? null : Number(values.owner_id),
+        attribution_model: values.attribution_model || null,
+        attribution_window: values.attribution_window || null,
         target_kpi: derived.primary
           ? { primary: derived.primary, secondary: derived.secondary, funnel: derived.funnel, template: derived.template }
           : null,
@@ -291,6 +308,18 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
           </Field>
           <Field label={t('currency_label')} htmlFor="campaign-currency" error={errors.budget_currency?.message}>
             <Select id="campaign-currency" {...register('budget_currency')} options={CURRENCIES.map((cur) => ({ value: cur, label: cur }))} />
+          </Field>
+        </div>
+
+        {/* Attribution governance — model + window, stored on the campaign (backend-validated). */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label={c.attributionModel} htmlFor="campaign-attr-model">
+            <Select id="campaign-attr-model" {...register('attribution_model')} placeholder="—"
+              options={ATTRIBUTION_MODELS.map((m) => ({ value: m.value, label: locale === 'ar' ? m.ar : m.en }))} />
+          </Field>
+          <Field label={c.attributionWindow} htmlFor="campaign-attr-window">
+            <Select id="campaign-attr-window" {...register('attribution_window')} placeholder="—"
+              options={ATTRIBUTION_WINDOWS.map((w) => ({ value: w, label: w }))} />
           </Field>
         </div>
 
