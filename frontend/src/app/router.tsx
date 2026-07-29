@@ -11,6 +11,7 @@ import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { LeadsPage } from '@/features/crm/LeadsPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
+import { PublicPagesSettingsPage } from '@/features/settings/PublicPagesSettingsPage'
 import { PublicReport } from '@/features/reports/PublicReport'
 import { PrintReport } from '@/features/reports/PrintReport'
 import { DesignSystemPage } from '@/features/design/DesignSystemPage'
@@ -161,7 +162,9 @@ export const router = createBrowserRouter([
               { index: true, element: <Navigate to="/settings/workspace" replace /> },
               { path: 'workspace', element: <SettingsPage only={['general', 'clients', 'projects', 'notifications', 'security']} /> },
               { path: 'permissions', element: <SettingsPage only={['team']} title="الصلاحيات والفريق" subtitle="أعضاء مساحة العمل وأدوارهم وصلاحياتهم" /> },
-              { path: 'portals', element: <SettingsPage only={['disclaimer']} title="البوابات الخارجية" subtitle="الملاحظات والمنهجية التي يراها العملاء في البوابة والتقارير" /> },
+              // Real CMS for the public homepage + the three external portals (draft → preview → publish).
+              { path: 'public-pages', element: <PublicPagesSettingsPage /> },
+              { path: 'portals', element: <SettingsPage only={['disclaimer']} title="ملاحظات البوابات" subtitle="الملاحظات والمنهجية التي يراها العملاء في البوابة والتقارير" /> },
               // Identity/Branding lives INSIDE Settings (canonical — not a standalone nav section).
               { path: 'branding', element: <BrandingCenterPage /> },
               { path: 'taxonomies', element: <TaxonomyManagerPage /> },

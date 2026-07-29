@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Activity, ArrowLeft, ArrowRight, BarChart3, Bell, CheckCircle2, FileText, LayoutDashboard, LogIn,
@@ -10,6 +11,7 @@ import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCa
 import { DEMO_OVERVIEW_VM } from '@/features/campaigns/overview/demoOverview'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/stores/auth'
+import { getPublishedPage } from '@/features/settings/publicPagesApi'
 import { useUi } from '@/stores/ui'
 
 const STATUS_TONE: Record<string, string> = {
@@ -45,6 +47,24 @@ export function PublicHomePage() {
   const [showServices, setShowServices] = useState(false)
   const authed = status === 'authenticated'
 
+  // Tenant-editable public content (System Settings → الواجهة الرئيسية والبوابات). Published copy wins over
+  // the shipped defaults; a failed/absent fetch simply leaves the shipped copy in place (never a blank page).
+  const cms = useQuery({ queryKey: ['public-page', 'home'], queryFn: () => getPublishedPage('home'), retry: false, staleTime: 60_000 })
+  const cmsContent = cms.data?.content
+  const sec = (key: string): { enabled?: boolean; order?: number; [k: string]: unknown } | undefined =>
+    (cmsContent?.[key] as { enabled?: boolean } | undefined) ?? undefined
+  /** A section renders unless the tenant explicitly disabled it. */
+  const on = (key: string) => sec(key)?.enabled !== false
+  /** Published text for a section field, falling back to the shipped copy. */
+  const txt = (key: string, field: string, fallback: string): string => {
+    const v = sec(key)?.[field]
+    return typeof v === 'string' && v.trim() !== '' ? v : fallback
+  }
+  const cta = (key: string, which: 'primary_cta' | 'secondary_cta', fallback: { label: string; to: string }) => {
+    const v = sec(key)?.[which] as { label?: string; to?: string } | undefined
+    return { label: v?.label?.trim() || fallback.label, to: v?.to?.trim() || fallback.to }
+  }
+
   // Marketing page owns its direction regardless of app chrome.
   useEffect(() => {
     document.documentElement.setAttribute('dir', c.dir)
@@ -76,9 +96,9 @@ export function PublicHomePage() {
             ) : (
               <>
                 <Link to="/client/login" className="hidden lg:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.clientLogin}</Button></Link>
-                <Link to="/requests/new" className="hidden md:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.request}</Button></Link>
+                <Link to={cta('hero', 'secondary_cta', { label: c.nav.request, to: '/requests/new' }).to} className="hidden md:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{cta('hero', 'secondary_cta', { label: c.nav.request, to: '/requests/new' }).label}</Button></Link>
                 <Link to="/login" className="hidden sm:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.login}</Button></Link>
-                <Link to="/register"><Button size="sm" className="whitespace-nowrap">{c.nav.start}</Button></Link>
+                <Link to={cta('hero', 'primary_cta', { label: c.nav.start, to: '/register' }).to}><Button size="sm" className="whitespace-nowrap">{cta('hero', 'primary_cta', { label: c.nav.start, to: '/register' }).label}</Button></Link>
               </>
             )}
           </div>
@@ -93,9 +113,9 @@ export function PublicHomePage() {
         <div className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)] lg:py-10">
           {/* Value proposition — right column, row 1 */}
           <div className="order-1 flex flex-col lg:col-start-1 lg:row-start-1">
-            <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[13px] font-semibold text-brand-700">{hero.eyebrow}</p>
-            <h1 className="mt-4 font-heading text-[28px] font-extrabold leading-[1.14] sm:text-[40px]">{hero.title}</h1>
-            <p className="mt-3 max-w-xl text-[16px] leading-relaxed text-text-secondary">{hero.desc}</p>
+            <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[13px] font-semibold text-brand-700">{portal ? hero.eyebrow : txt('hero', 'eyebrow', hero.eyebrow)}</p>
+            <h1 className="mt-4 font-heading text-[28px] font-extrabold leading-[1.14] sm:text-[40px]">{portal ? hero.title : txt('hero', 'title', hero.title)}</h1>
+            <p className="mt-3 max-w-xl text-[16px] leading-relaxed text-text-secondary">{portal ? hero.desc : txt('hero', 'desc', hero.desc)}</p>
             <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-text-muted">{hero.support}</p>
             <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
               {hero.points.map((pt) => (
@@ -192,10 +212,11 @@ export function PublicHomePage() {
       </section>
 
       {/* How it works — 4 steps */}
+      {on('steps') && (
       <section id="how" className="border-b border-border">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.steps.title}</h2>
-          <p className="mt-2 max-w-2xl text-text-secondary">{c.steps.subtitle}</p>
+          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{txt('steps', 'title', c.steps.title)}</h2>
+          <p className="mt-2 max-w-2xl text-text-secondary">{txt('steps', 'subtitle', c.steps.subtitle)}</p>
           <ol className="mt-7 grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {c.steps.items.map((step, i) => (
               <li key={step.title} className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5">
@@ -210,8 +231,10 @@ export function PublicHomePage() {
           </ol>
         </div>
       </section>
+      )}
 
       {/* Services — customer-facing service areas + a single request CTA */}
+      {on('services') && (
       <section id="services" className="border-b border-border bg-surface-secondary">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -235,12 +258,14 @@ export function PublicHomePage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Key features — one balanced grid */}
+      {on('features') && (
       <section id="features" className="border-b border-border">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.features.title}</h2>
-          <p className="mt-2 max-w-2xl text-text-secondary">{c.features.subtitle}</p>
+          <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{txt('features', 'title', c.features.title)}</h2>
+          <p className="mt-2 max-w-2xl text-text-secondary">{txt('features', 'subtitle', c.features.subtitle)}</p>
           <div className="mt-7 grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {c.features.items.map((f, i) => {
               const Icon = FEATURE_ICONS[i] ?? LayoutDashboard
@@ -255,8 +280,10 @@ export function PublicHomePage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Supported platforms + reports & alerts — one combined band (التكاملات والتقارير) */}
+      {on('platforms') && (
       <section id="integrations" className="border-b border-border bg-surface-secondary">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
           <div className="grid auto-rows-fr gap-4 lg:grid-cols-2">
@@ -290,6 +317,7 @@ export function PublicHomePage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Final CTA */}
       <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6">

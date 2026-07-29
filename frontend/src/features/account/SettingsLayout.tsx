@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Building2, ExternalLink, FileText, Palette, Plug, Tags, Users } from 'lucide-react'
+import { Building2, ExternalLink, FileText, LayoutTemplate, Palette, Plug, Tags, Users } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -25,7 +25,8 @@ const GROUPS = [
   {
     ar: 'الاتصال الخارجي', en: 'External surfaces',
     items: [
-      { to: '/settings/portals', ar: 'البوابات الخارجية', en: 'External portals', icon: FileText },
+      { to: '/settings/public-pages', ar: 'الواجهة الرئيسية والبوابات', en: 'Homepage & portals', icon: LayoutTemplate },
+      { to: '/settings/portals', ar: 'ملاحظات البوابات', en: 'Portal notes', icon: FileText },
       { to: '/app/integrations', ar: 'التكاملات', en: 'Integrations', icon: Plug, external: true },
     ],
   },
