@@ -20,6 +20,22 @@ use Illuminate\Support\Facades\DB;
  */
 final class CreativeLibraryController extends Controller
 {
+    /** Campaign objective → ranking group. Groups are judged with DIFFERENT KPIs — never cross-compared. */
+    private const OBJECTIVE_GROUP = [
+        'sales' => 'conversion', 'conversions' => 'conversion', 'cart' => 'conversion',
+        'leads' => 'lead', 'app_installs' => 'lead',
+        'awareness' => 'awareness', 'reach' => 'awareness', 'video' => 'awareness',
+        'traffic' => 'traffic', 'engagement' => 'traffic',
+    ];
+
+    /** group => [kpi name, higher-is-better]. conversion=ROAS↑, lead=CPA↓, awareness=CPM↓, traffic=CTR↑. */
+    private const GROUP_KPI = [
+        'conversion' => ['roas', true],
+        'lead' => ['cpa', false],
+        'awareness' => ['cpm', false],
+        'traffic' => ['ctr', true],
+    ];
+
     public function index(Request $request): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
@@ -28,9 +44,10 @@ final class CreativeLibraryController extends Controller
         $ids = $creatives->pluck('id')->all();
         $campaignIds = $creatives->pluck('campaign_id')->filter()->unique()->values()->all();
 
-        $campaignNames = $campaignIds === []
+        $campaigns = $campaignIds === []
             ? collect()
-            : UnifiedCampaign::query()->whereIn('id', $campaignIds)->pluck('name', 'id');
+            : UnifiedCampaign::query()->whereIn('id', $campaignIds)->get(['id', 'name', 'objective'])->keyBy('id');
+        $campaignNames = $campaigns->map(fn ($c) => $c->name);
 
         $to = Carbon::today();
         $from = $to->copy()->subDays(29);
@@ -45,13 +62,31 @@ final class CreativeLibraryController extends Controller
                 ->get()
                 ->keyBy('creative_id');
 
-        // Median CTR across creatives WITH impressions — the honest baseline for top/needs-attention.
-        $ctrs = $metrics->map(fn ($m) => (float) $m->impressions > 0 ? (float) $m->clicks / (float) $m->impressions : null)
-            ->filter(fn ($v) => $v !== null)->sort()->values();
-        $medianCtr = $ctrs->isEmpty() ? null : (float) $ctrs[(int) floor(($ctrs->count() - 1) / 2)];
-
-        $rows = $creatives->map(function (ExternalCreative $c) use ($campaignNames, $metrics, $medianCtr): array {
+        // Objective-aware ranking: each creative is judged ONLY against creatives whose campaigns share its
+        // objective GROUP, using that group's KPI — awareness content is never compared to sales content.
+        $groupOf = fn (?string $objective): string => self::OBJECTIVE_GROUP[$objective] ?? 'traffic';
+        $kpiValues = []; // group => list of the group's KPI values (for medians)
+        foreach ($creatives as $c) {
             $m = $metrics->get($c->id);
+            if ($m === null) {
+                continue;
+            }
+            $group = $groupOf($c->campaign_id !== null ? ($campaigns[$c->campaign_id]->objective ?? null) : null);
+            $v = $this->kpiValue($group, $m);
+            if ($v !== null) {
+                $kpiValues[$group][] = $v;
+            }
+        }
+        $medians = [];
+        foreach ($kpiValues as $group => $values) {
+            sort($values);
+            $medians[$group] = $values[(int) floor((count($values) - 1) / 2)];
+        }
+
+        $rows = $creatives->map(function (ExternalCreative $c) use ($campaigns, $campaignNames, $metrics, $medians, $groupOf): array {
+            $m = $metrics->get($c->id);
+            $objective = $c->campaign_id !== null ? ($campaigns[$c->campaign_id]->objective ?? null) : null;
+            $group = $groupOf($objective);
 
             return [
                 'id' => $c->id,
@@ -69,9 +104,13 @@ final class CreativeLibraryController extends Controller
                 'project_id' => $c->project_id,
                 'is_demo' => (bool) $c->is_demo,
                 'last_synced_at' => optional($c->last_synced_at)->toIso8601String(),
+                'objective' => $objective,
+                'objective_group' => $group,
                 'metrics' => $this->metricsFor($m),
-                // Performance classification vs the workspace's own median CTR — explainable, never fabricated.
-                'performance' => $this->classify($m, $medianCtr),
+                // The group's OWN KPI (name + value) — what this creative is actually judged on.
+                'kpi' => ['name' => self::GROUP_KPI[$group][0], 'value' => $this->kpiValue($group, $m)],
+                // Classification vs the creative's objective-group median — explainable, never cross-objective.
+                'performance' => $this->classify($group, $m, $medians[$group] ?? null),
             ];
         })->values();
 
@@ -95,18 +134,47 @@ final class CreativeLibraryController extends Controller
             'revenue' => $rev,
             'ctr' => $impr > 0 ? round($clicks / $impr, 4) : null,
             'roas' => $spend > 0 ? round($rev / $spend, 2) : null,
+            'cpa' => $conv > 0 ? round($spend / $conv, 2) : null,
+            'cpm' => $impr > 0 ? round($spend / $impr * 1000, 2) : null,
         ];
     }
 
+    /** The group's KPI value for a creative's 30d sums (null when the inputs are missing). */
+    private function kpiValue(string $group, ?object $m): ?float
+    {
+        if ($m === null) {
+            return null;
+        }
+        $spend = (float) ($m->spend ?? 0);
+        $impr = (float) ($m->impressions ?? 0);
+        $clicks = (float) ($m->clicks ?? 0);
+        $conv = (float) ($m->conversions ?? 0);
+        $rev = (float) ($m->revenue ?? 0);
+
+        return match ($group) {
+            'conversion' => $spend > 0 ? round($rev / $spend, 2) : null,             // ROAS
+            'lead' => $conv > 0 ? round($spend / $conv, 2) : null,                    // CPA
+            'awareness' => $impr > 0 ? round($spend / $impr * 1000, 2) : null,        // CPM
+            default => $impr > 0 ? round($clicks / $impr, 4) : null,                  // CTR
+        };
+    }
+
+    /** KPI display names per group (index 0 used in the payload). */
+    private const KPI_LABEL = [
+        'roas' => ['ar' => 'عائد الإنفاق', 'en' => 'ROAS'],
+        'cpa' => ['ar' => 'تكلفة التحويل', 'en' => 'CPA'],
+        'cpm' => ['ar' => 'تكلفة الألف ظهور', 'en' => 'CPM'],
+        'ctr' => ['ar' => 'نسبة النقر', 'en' => 'CTR'],
+    ];
+
     /**
-     * Classify a creative against the workspace's own 30-day baseline:
-     *   top             — CTR ≥ 1.5× the median CTR (with real impressions), or ROAS ≥ 2
-     *   needs_attention — meaningful spend with zero conversions, or CTR ≤ 0.5× the median
-     *   normal          — everything else with data;  null — no data in the window (unranked, honest)
+     * Classify a creative vs its OWN objective-group median (top ≥1.5× better than the group median,
+     * needs_attention ≥2× worse with real spend; lower-is-better KPIs invert). Reasons name the group KPI so
+     * the judgement is explainable; null = no data in the window (unranked, honest).
      *
      * @return array{class: string, reason_ar: string, reason_en: string}|null
      */
-    private function classify(?object $m, ?float $medianCtr): ?array
+    private function classify(string $group, ?object $m, ?float $median): ?array
     {
         $spend = (float) ($m->spend ?? 0);
         $impr = (float) ($m->impressions ?? 0);
@@ -114,25 +182,32 @@ final class CreativeLibraryController extends Controller
             return null;
         }
 
-        $clicks = (float) ($m->clicks ?? 0);
-        $conv = (float) ($m->conversions ?? 0);
-        $rev = (float) ($m->revenue ?? 0);
-        $ctr = $impr > 0 ? $clicks / $impr : null;
-        $roas = $spend > 0 ? $rev / $spend : null;
+        [$kpiName, $higherBetter] = self::GROUP_KPI[$group];
+        $label = self::KPI_LABEL[$kpiName];
+        $v = $this->kpiValue($group, $m);
 
-        if ($roas !== null && $roas >= 2) {
-            return ['class' => 'top', 'reason_ar' => 'عائد إنفاق ' . round($roas, 1) . 'x', 'reason_en' => 'ROAS ' . round($roas, 1) . 'x'];
+        // No KPI value (e.g. lead group with zero conversions): meaningful spend = attention, else unranked-normal.
+        if ($v === null) {
+            if ($group === 'lead' && $spend >= 500) {
+                return ['class' => 'needs_attention', 'reason_ar' => 'إنفاق بلا تحويلات', 'reason_en' => 'Spend with no conversions'];
+            }
+
+            return ['class' => 'normal', 'reason_ar' => 'بيانات غير كافية للمقارنة', 'reason_en' => 'Not enough data to rank'];
         }
-        if ($ctr !== null && $medianCtr !== null && $medianCtr > 0 && $impr >= 1000 && $ctr >= $medianCtr * 1.5) {
-            return ['class' => 'top', 'reason_ar' => 'نسبة نقر أعلى من الوسيط بـ' . round($ctr / $medianCtr, 1) . 'x', 'reason_en' => 'CTR ' . round($ctr / $medianCtr, 1) . 'x the median'];
-        }
-        if ($spend >= 500 && $conv <= 0) {
-            return ['class' => 'needs_attention', 'reason_ar' => 'إنفاق بلا تحويلات', 'reason_en' => 'Spend with no conversions'];
-        }
-        if ($ctr !== null && $medianCtr !== null && $medianCtr > 0 && $impr >= 1000 && $ctr <= $medianCtr * 0.5) {
-            return ['class' => 'needs_attention', 'reason_ar' => 'نسبة نقر منخفضة (≤ نصف الوسيط)', 'reason_en' => 'Low CTR (≤ half the median)'];
+        if ($median === null || $median <= 0) {
+            return ['class' => 'normal', 'reason_ar' => 'لا وسيط مجموعة للمقارنة', 'reason_en' => 'No group median to compare against'];
         }
 
-        return ['class' => 'normal', 'reason_ar' => 'ضمن النطاق المعتاد', 'reason_en' => 'Within the usual range'];
+        $ratio = $higherBetter ? $v / $median : $median / $v; // >1 = better than the group's median
+        $fmt = $kpiName === 'ctr' ? round($v * 100, 2).'%' : round($v, 2).($kpiName === 'roas' ? 'x' : '');
+
+        if ($ratio >= 1.5 && $impr >= 1000) {
+            return ['class' => 'top', 'reason_ar' => $label['ar'].' '.$fmt.' (أفضل من وسيط مجموعته ×'.round($ratio, 1).')', 'reason_en' => $label['en'].' '.$fmt.' ('.round($ratio, 1).'× better than its group median)'];
+        }
+        if ($ratio <= 0.5 && $spend >= 500) {
+            return ['class' => 'needs_attention', 'reason_ar' => $label['ar'].' '.$fmt.' (أسوأ من وسيط مجموعته)', 'reason_en' => $label['en'].' '.$fmt.' (worse than its group median)'];
+        }
+
+        return ['class' => 'normal', 'reason_ar' => 'ضمن نطاق مجموعته ('.$label['ar'].' '.$fmt.')', 'reason_en' => 'Within its group range ('.$label['en'].' '.$fmt.')'];
     }
 }

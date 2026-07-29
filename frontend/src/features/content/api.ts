@@ -25,7 +25,13 @@ export interface Creative {
     revenue: number
     ctr: number | null
     roas: number | null
+    cpa: number | null
+    cpm: number | null
   }
+  objective: string | null
+  objective_group: 'conversion' | 'lead' | 'awareness' | 'traffic' | string
+  /** The KPI this creative is judged on within its objective group. */
+  kpi: { name: 'roas' | 'cpa' | 'cpm' | 'ctr' | string; value: number | null }
   /** Explainable 30d classification vs the workspace median (null = no data in window). */
   performance: { class: 'top' | 'needs_attention' | 'normal' | string; reason_ar: string; reason_en: string } | null
 }

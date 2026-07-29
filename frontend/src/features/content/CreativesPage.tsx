@@ -60,6 +60,18 @@ const statusMeta = (s: string) => STATUS_LABEL[s] ?? { ar: s, en: s, tone: 'bg-s
 const money = (n: number) => `${n.toLocaleString('en-US', { maximumFractionDigits: 0 })} SAR`
 const compact = (n: number) => n.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 })
 
+/** Render a creative's objective-group KPI (ROAS/CPA/CPM/CTR) in its natural unit. */
+function kpiDisplay(x: Creative): string {
+  const v = x.kpi?.value
+  if (v == null) return '—'
+  switch (x.kpi.name) {
+    case 'roas': return `ROAS ${v.toFixed(2)}x`
+    case 'cpa': return `CPA ${v.toLocaleString('en-US')}`
+    case 'cpm': return `CPM ${v.toLocaleString('en-US')}`
+    default: return `CTR ${(v * 100).toFixed(2)}%`
+  }
+}
+
 export function CreativesPage() {
   const locale = useUi((s) => s.locale)
   const ar = locale === 'ar'
@@ -168,7 +180,7 @@ export function CreativesPage() {
         <StateBox>{all.length === 0 ? c.none : c.no_match}</StateBox>
       ) : view === 'grid' ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {items.map((x) => <CreativeCard key={x.id} creative={x} c={c} ar={ar} onClick={() => setSelected(x)} />)}
+          {items.map((x) => <CreativeCard key={x.id} creative={x} ar={ar} onClick={() => setSelected(x)} />)}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-border">
@@ -264,7 +276,7 @@ function Thumb({ creative, className }: { creative: Creative; className?: string
   )
 }
 
-function CreativeCard({ creative, c, ar, onClick }: { creative: Creative; c: Copy; ar: boolean; onClick: () => void }) {
+function CreativeCard({ creative, ar, onClick }: { creative: Creative; ar: boolean; onClick: () => void }) {
   const st = statusMeta(creative.status)
   return (
     <button onClick={onClick} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-surface text-start transition-colors hover:border-brand-400">
@@ -279,7 +291,8 @@ function CreativeCard({ creative, c, ar, onClick }: { creative: Creative; c: Cop
         <span className="line-clamp-1 text-[11px] text-text-tertiary">{creative.campaign_name ?? '—'} · {formatLabel(creative.format, ar)}</span>
         <div className="mt-1 flex items-center justify-between text-[11px] text-text-secondary">
           <span className="tnum" dir="ltr">{money(creative.metrics.spend)}</span>
-          <span className="tnum" dir="ltr">{compact(creative.metrics.impressions)} {c.impressions}</span>
+          {/* The creative's OWN group KPI — awareness shows CPM, sales shows ROAS, etc. */}
+          <span className="tnum font-semibold" dir="ltr">{kpiDisplay(creative)}</span>
         </div>
       </div>
     </button>
