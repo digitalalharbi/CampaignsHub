@@ -99,7 +99,9 @@ export function DateField({
     today.getFullYear() === viewY && today.getMonth() === viewM && today.getDate() === d
 
   return (
-    <div ref={root} className="relative flex w-full items-center">
+    // The field box is internally LTR (like a professional accounting date field): calendar icon pinned to the
+    // right, the YYYY-MM-DD value left-aligned with a fixed gap — icon and text never overlap.
+    <div ref={root} dir="ltr" className="relative flex w-full items-center">
       <input
         id={id}
         type="text"
@@ -113,7 +115,7 @@ export function DateField({
         aria-label={rest['aria-label']}
         onChange={(e) => fromText(e.target.value)}
         onFocus={() => setOpen(true)}
-        className={`${controlClass} pe-9 text-start ${className}`}
+        className={`${controlClass} pr-10 text-left tracking-wide tabular-nums ${className}`}
       />
       <button
         type="button"
@@ -121,7 +123,7 @@ export function DateField({
         aria-label="Open calendar"
         aria-expanded={open}
         tabIndex={-1}
-        className="absolute end-2 flex items-center text-text-muted transition-colors hover:text-text-primary"
+        className="absolute right-2 flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
       >
         <CalendarDays size={16} />
       </button>

@@ -4,14 +4,21 @@
  */
 export type TaxTreatmentKey = 'basic_15' | 'zero_rated' | 'exempt' | 'out_of_scope' | 'historical_5'
 
-interface TaxTreatmentMeta { rate: number; ar: string; en: string; historical?: boolean }
+interface TaxTreatmentMeta {
+  rate: number
+  /** Compact label — just the rate or status (for selectors and card chips). */
+  shortAr: string; shortEn: string
+  /** Full label — the descriptive treatment name (for detail rows and helper text). */
+  ar: string; en: string
+  historical?: boolean
+}
 
 export const TAX_TREATMENTS: Record<TaxTreatmentKey, TaxTreatmentMeta> = {
-  basic_15: { rate: 0.15, ar: 'ضريبة أساسية 15%', en: 'Standard VAT 15%' },
-  zero_rated: { rate: 0, ar: 'خاضع لنسبة صفرية 0%', en: 'Zero-rated 0%' },
-  exempt: { rate: 0, ar: 'معفى من الضريبة', en: 'Exempt' },
-  out_of_scope: { rate: 0, ar: 'خارج نطاق الضريبة', en: 'Out of scope' },
-  historical_5: { rate: 0.05, ar: 'ضريبة تاريخية 5%', en: 'Historical VAT 5%', historical: true },
+  basic_15: { rate: 0.15, shortAr: '15%', shortEn: '15%', ar: 'ضريبة أساسية 15%', en: 'Standard VAT 15%' },
+  zero_rated: { rate: 0, shortAr: '0%', shortEn: '0%', ar: 'خاضع لنسبة صفرية 0%', en: 'Zero-rated 0%' },
+  exempt: { rate: 0, shortAr: 'معفى', shortEn: 'Exempt', ar: 'معفى من الضريبة', en: 'Exempt' },
+  out_of_scope: { rate: 0, shortAr: 'خارج النطاق', shortEn: 'Out of scope', ar: 'خارج نطاق الضريبة', en: 'Out of scope' },
+  historical_5: { rate: 0.05, shortAr: '5%', shortEn: '5%', ar: 'ضريبة تاريخية 5%', en: 'Historical VAT 5%', historical: true },
 }
 
 export const DEFAULT_TREATMENT: TaxTreatmentKey = 'basic_15'
@@ -22,13 +29,21 @@ export const SELECTABLE_TREATMENTS: TaxTreatmentKey[] = ['basic_15', 'zero_rated
 export const isHistoricalTreatment = (key: string | null | undefined): boolean =>
   !!key && TAX_TREATMENTS[key as TaxTreatmentKey]?.historical === true
 
-/** Human label for a treatment (adds a «تاريخي/historical» tag for the legacy rate). */
+/** Full descriptive label for a treatment (adds a «تاريخي/historical» tag for the legacy rate). */
 export function taxTreatmentLabel(key: string | null | undefined, ar: boolean): string | null {
   if (!key) return null
   const m = TAX_TREATMENTS[key as TaxTreatmentKey]
   if (!m) return key
   const base = ar ? m.ar : m.en
   return m.historical ? `${base} · ${ar ? 'تاريخي' : 'historical'}` : base
+}
+
+/** Compact label — just the rate or status (for selectors and card chips). */
+export function taxTreatmentShort(key: string | null | undefined, ar: boolean): string | null {
+  if (!key) return null
+  const m = TAX_TREATMENTS[key as TaxTreatmentKey]
+  if (!m) return key
+  return ar ? m.shortAr : m.shortEn
 }
 
 /** Derived tax amount for a subtotal under a treatment (2 dp). */

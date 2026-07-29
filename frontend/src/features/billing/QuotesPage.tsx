@@ -5,7 +5,7 @@ import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { BillingTabs } from './BillingTabs'
 import { DateField } from '@/components/ui/DateField'
-import { DEFAULT_TREATMENT, SELECTABLE_TREATMENTS, isHistoricalTreatment, taxForTreatment, taxTreatmentLabel } from './taxTreatment'
+import { DEFAULT_TREATMENT, SELECTABLE_TREATMENTS, isHistoricalTreatment, taxForTreatment, taxTreatmentLabel, taxTreatmentShort } from './taxTreatment'
 import {
   approveQuote, createQuote, formatDate, formatMoney, listQuotes,
   type NewQuote, type Quote,
@@ -279,9 +279,11 @@ function CreateQuoteForm({ c, ar, onCreated, embedded }: { c: Copy; ar: boolean;
           className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary"
         >
           {SELECTABLE_TREATMENTS.map((k) => (
-            <option key={k} value={k}>{taxTreatmentLabel(k, ar)}</option>
+            <option key={k} value={k}>{taxTreatmentShort(k, ar)}</option>
           ))}
         </select>
+        {/* Full treatment name — the extra detail, shown quietly under the compact selector. */}
+        <span className="mt-1 text-[11px] text-text-tertiary">{taxTreatmentLabel(form.tax_treatment, ar)}</span>
       </Field>
       <div className="flex flex-col gap-1 rounded-lg bg-surface-hover px-3 py-2 text-sm">
         <div className="flex items-center justify-between text-text-secondary">
@@ -369,18 +371,19 @@ function QuoteDrawer({
   )
 }
 
-/** Small badge showing a document's VAT treatment (with a «تاريخي/historical» tag for the legacy rate). */
+/** Compact badge showing a document's VAT rate/status (with a «تاريخي» tag for the legacy rate). */
 export function TaxTreatmentChip({ treatment, ar }: { treatment: string | null; ar: boolean }) {
-  const label = taxTreatmentLabel(treatment, ar)
-  if (!label) return null
+  const short = taxTreatmentShort(treatment, ar)
+  if (!short) return null
   const historical = isHistoricalTreatment(treatment)
   return (
     <span
-      className={`w-fit rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${
+      title={taxTreatmentLabel(treatment, ar) ?? undefined}
+      className={`inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${
         historical ? 'bg-warning/15 text-warning' : 'bg-surface-hover text-text-secondary'
       }`}
     >
-      {label}
+      {short}{historical ? <span className="opacity-80">· {ar ? 'تاريخي' : 'historical'}</span> : null}
     </span>
   )
 }
