@@ -11,7 +11,7 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
-`fc90666` — *docs: SITE-CMS-001 delivered (f0c813e+320b569); SITE-CMS-002 is the Exact Next Requirement*
+`654dea4` — *docs: REPORT-SCHEDULING unblocked — API + UI delivered, midnight bug fixed*
 
 Last work unit: `f0c813e` (CMS backend) → `320b569` (CMS editor + homepage rendering) → `fc90666` (docs).
 Frozen delivery tags, **never move or rewrite**: `v1.0.0-baseline`, `v1.1.0-expanded-final`.
@@ -21,45 +21,41 @@ Frozen delivery tags, **never move or rewrite**: `v1.0.0-baseline`, `v1.1.0-expa
 **No uncommitted work, no stash, no undocumented WIP.** Nothing was left half-edited; the last unit
 closed on a green run.
 
-## Completed work (last session — committed and checked live)
-**SITE-CMS-001 — homepage + external portals editable from System Settings.** The newest explicit user
-directive, implemented as real code (not documentation):
-- **DB** `public_page_settings`: uuid, `tenant_id`, `page`, `draft` jsonb, `published` jsonb, `version`,
-  `updated_by`, `published_by`, `published_at`; unique `[tenant_id, page]`, tenant FK cascade.
-- **API** `GET /settings/public-pages`, `PUT /settings/public-pages/{page}` (draft only),
-  `POST …/publish`, `POST …/revert` — all `settings.manage`-gated, tenant-scoped, every write recorded in
-  the **audit log** — plus a **public, unauthenticated** `GET /api/v1/public/pages/{page}` serving
-  published content only (falls back to shipped defaults).
-- **Editor** `/settings/public-pages`: 4 page tabs (home, portal_paid, portal_influencer, portal_tracking);
-  per section enable/disable, reorder ↑↓, texts (eyebrow/title/subtitle/desc/tagline), buttons
-  (label + destination); **preview drawer before publish**; save / publish / revert; permission, loading
-  and error states. Present in the **system** nav only.
-- **Public rendering** `PublicHomePage` overlays published content on hero texts, header CTAs and section
-  visibility, with safe fallback to shipped copy.
-- **Proven live, not only by tests:** edited the hero title and disabled `services` → the public endpoint
-  still served **v1** (a draft is never live) → published → **v2** → the public homepage rendered the new
-  `h1` and `#services` was **absent**, with **zero code changes**. Demo content restored to defaults (v3).
-
-Also re-verified: the **settings split** — system settings only in the sidebar (`/settings/*`), user
-settings only in the account icon (`/account/*`), zero overlap, legacy personal `/settings/*` redirect.
+## Completed work (this session — each committed, tested and live-reviewed)
+1. **SITE-CMS-002** `7afaa00` — the three external portals (paid / influencer / request-tracking) render
+   their OWN published CMS content; `PublicHomePage` resolves the document from `?portal` and
+   `RequestTrackPage` reads `portal_tracking`. Proven live, then reverted to shipped defaults.
+2. **XBROWSER-GATE** `131231c` — **Chromium 70/70 · Firefox 62/62 · WebKit 62/62, 0 failed.** Running
+   Firefox exposed two real defects that Chromium-only runs had hidden: the backend's `PublicPageDefaults`
+   scaffolding was overriding the frontend's shipped homepage copy even with nothing published (fixed —
+   only `source === 'published'` may override), and `account-settings.spec` still drove the pre-split
+   `/settings/profile` route. **23 matrix rows moved from IMPLEMENTED_NOT_VERIFIED to VERIFIED.**
+3. **CAMPAIGN-010 + CAMPAIGN-020** `d5cdfcc` — five campaign view modes (overview / cards / table /
+   compare / needs-attention) with taxonomy chips, plus a real multi-campaign comparison backed by
+   `MetricsAggregator::compare()` and `GET metrics/compare`. Results and cost-per-result are counted with
+   each campaign's OWN objective definition; best-value highlighting appears only when the picked
+   campaigns share one objective, otherwise a warning replaces the ranking.
+4. **CAMPDET-010 (partial)** `1bb796d` — campaign detail gains «الجمهور والاستهداف», «الأحداث» and
+   «سجل المزامنة», backed by new `events` and `sync-log` endpoints. Zero-count events are omitted; failed
+   sync runs show their error text.
+5. **REPORT-SCHEDULING** `f2ea999` — was BLOCKED_NO_API. The HTTP surface now exists
+   (index/store/update/toggle/run/destroy) and the Reports page has a real «الجدولة» section. Fixed a
+   pre-existing engine bug: `Carbon::next()` rewound the time, so every weekly schedule fired at midnight
+   instead of its configured hour.
 
 ## Work in progress
-**None.** No partial edit, no stashed change, no half-applied migration, no orphaned branch.
+**None.** Tree clean at HEAD; every unit above closed on a green run.
 
 ## Exact next task
-**SITE-CMS-002 — wire the published-content overlay into the THREE external portal PUBLIC surfaces**
-(paid campaigns · influencer/UGC · request tracking).
-Backend and editor already store and publish their content — `GET /api/v1/public/pages/portal_paid`,
-`…/portal_influencer`, `…/portal_tracking` return it **today**; only the public React surfaces still
-render hard-coded copy. Reuse the helper pattern already proven in
-`frontend/src/features/marketing/PublicHomePage.tsx` (`on()` / `txt()` / `cta()` + ordered sections),
-then prove it live the same way: edit → save (public unchanged) → publish → public surface changes with
-no code edit. Extend `backend/tests/Feature/PublicPageSettingsTest.php` and add an E2E check.
+**FINANCE-001** — unified finance center `/app/finance` (overview KPIs + quotes/invoices/payments/
+outstanding), currently PARTIAL. After it, in matrix order: `PROJINT-001` (project integrations rebuilt
+around the 6 real ad platforms) → `INTEG-UI-001` → `SYNC-001` (metrics sync pipeline: SyncRun +
+per-provider queued jobs) → `NORM-001` → `XREL-001` → `DEMO-001` → `DEVSTATUS-001` → `ADAUDIT-001`.
 
-**Then, in matrix order:** `XBROWSER-GATE` (run the full E2E suite on Firefox + WebKit; only then may the
-22 `IMPLEMENTED_NOT_VERIFIED` rows be flipped to `VERIFIED`) → `CAMPAIGN-010` → `CAMPAIGN-020` →
-`CAMPDET-010` → `PROJINT-001` → `INTEG-UI-001` → `SYNC-001` → `NORM-001` → `XREL-001` → `DEMO-001` →
-`DEVSTATUS-001` → `FINANCE-001`.
+**Note on ordering:** `DEMO-001` now blocks live verification of two shipped features — no campaign in
+the demo data has a linked external campaign, so the populated sync-log rendering and the platforms tab
+cannot be observed live (both are test-covered). Consider pulling `DEMO-001` forward if live evidence
+matters more than matrix order.
 
 ## Files currently involved (what the next task touches)
 - `frontend/src/features/marketing/PublicHomePage.tsx` — **reference implementation** of the overlay.
@@ -110,16 +106,16 @@ browser verification.
 ## Test results (at `fc90666`)
 | Suite | Result |
 |---|---|
-| Backend (PHPUnit) | **422 passed, 2467 assertions, 0 failed** |
+| Backend (PHPUnit) | **433 passed, 2536 assertions, 0 failed** |
 | ↳ `PublicPageSettingsTest` | 6 passed, 33 assertions |
-| Frontend unit (vitest) | **215 passed, 46 files, 0 failed** |
+| Frontend unit (vitest) | **226 passed, 47 files, 0 failed** |
 | `tsc --noEmit` | clean |
 | `npm run build` | clean |
 | Pint (backend style) | clean |
-| Playwright E2E | **Chromium only: 144 passed / 0 failed.** Firefox + WebKit **NOT yet run** |
+| Playwright E2E | **Chromium 70/70 · Firefox 62/62 · WebKit 62/62 — 0 failed** (XBROWSER-GATE closed) |
 
-Matrix status counts at handoff: 11 VERIFIED · 22 IMPLEMENTED_NOT_VERIFIED · 6 PARTIAL ·
-8 NOT_STARTED · 6 BLOCKED_EXTERNAL_CREDENTIALS · 1 BLOCKED_NO_API.
+Matrix status counts: 35 VERIFIED · 4 IMPLEMENTED_NOT_VERIFIED (awaiting a browser re-run) ·
+4 PARTIAL · 6 NOT_STARTED · 6 BLOCKED_EXTERNAL_CREDENTIALS. REPORT-SCHEDULING is no longer BLOCKED_NO_API.
 
 ## Known failures
 None outstanding — no failing test and no test skipped for being broken at HEAD.
