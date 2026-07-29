@@ -53,10 +53,11 @@ import { useT } from '@/lib/i18n'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import { CampaignAudienceTab, CampaignEventsTab, CampaignSyncLogTab } from './CampaignDepthTabs'
+import { CampaignStructureTab } from './CampaignStructureTab'
 import { useProject } from '@/stores/project'
 
 const TAB_KEYS = [
-  'overview', 'performance', 'platforms', 'creatives', 'audience', 'events', 'budget',
+  'overview', 'performance', 'platforms', 'structure', 'creatives', 'audience', 'events', 'budget',
   'funnel', 'sync', 'notes', 'alerts', 'reports', 'activity',
 ] as const
 type TabKey = (typeof TAB_KEYS)[number]
@@ -363,6 +364,11 @@ export function CampaignDetailPage() {
         <TabPanel>
           <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
           <CampaignCreativesTab campaign={c} projectId={projectId} range={range} locale={locale} />
+        </TabPanel>
+      )}
+      {tab === 'structure' && (
+        <TabPanel>
+          <CampaignStructureTab campaign={c} projectId={projectId} />
         </TabPanel>
       )}
       {tab === 'audience' && (

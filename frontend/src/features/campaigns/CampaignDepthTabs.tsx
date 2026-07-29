@@ -58,8 +58,9 @@ export function CampaignAudienceTab({ campaign, locale }: { campaign: UnifiedCam
       <div className="flex items-start gap-2 rounded-xl border border-border bg-surface-secondary p-3 text-sm">
         <Layers size={16} className="mt-0.5 shrink-0 text-text-muted" />
         <p className="text-text-secondary">
-          الاستهداف على مستوى <strong className="text-text-primary">المجموعات الإعلانية والإعلانات</strong> يأتي من المنصة الإعلانية نفسها،
-          ولا يمكن عرضه قبل ربط حساب حقيقي بمفاتيح اعتماد. لن يُعرض هنا أي تقدير أو بيانات مُصطنعة.
+          الاستهداف على مستوى <strong className="text-text-primary">المجموعات الإعلانية والإعلانات</strong> يُعرض في تبويب
+          «المجموعات والإعلانات» كما تُرجعه المنصة — الهدف، استراتيجية المزايدة، الميزانية اليومية، شرائح الاستهداف وحالة مراجعة كل إعلان.
+          كل صف موسوم بمصدره، ولا يُعرض أي تقدير أو بيانات مُصطنعة.
         </p>
       </div>
     </div>

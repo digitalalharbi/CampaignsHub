@@ -7,6 +7,7 @@ use App\Domains\Campaigns\Http\Controllers\CampaignAlertsController;
 use App\Domains\Campaigns\Http\Controllers\CampaignAnnotationController;
 use App\Domains\Campaigns\Http\Controllers\CampaignCreativesController;
 use App\Domains\Campaigns\Http\Controllers\CampaignMetricsController;
+use App\Domains\Campaigns\Http\Controllers\CampaignStructureController;
 use App\Domains\Campaigns\Http\Controllers\CampaignReportsController;
 use App\Domains\Campaigns\Http\Controllers\ExternalCampaignController;
 use App\Domains\Campaigns\Http\Controllers\UnifiedCampaignController;
@@ -42,6 +43,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])
         // CAMPDET-010: recorded conversion events + the real sync history behind the numbers.
         Route::get('campaigns/{campaign}/events', [CampaignMetricsController::class, 'events'])->name('events');
         Route::get('campaigns/{campaign}/sync-log', [CampaignMetricsController::class, 'syncLog'])->name('sync-log');
+        // CAMPDET-010: the real ad-set / ad hierarchy beneath the campaign.
+        Route::get('campaigns/{campaign}/structure', [CampaignStructureController::class, 'index'])->name('structure');
         Route::get('campaigns/{campaign}/creatives', [CampaignCreativesController::class, 'index'])->name('creatives');
         Route::get('campaigns/{campaign}/activity', [CampaignActivityController::class, 'index'])->name('activity');
         Route::get('campaigns/{campaign}/alerts', [CampaignAlertsController::class, 'index'])->name('alerts');

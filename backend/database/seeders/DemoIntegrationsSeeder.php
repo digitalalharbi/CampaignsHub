@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Domains\Campaigns\Models\ExternalAd;
+use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -165,6 +167,8 @@ final class DemoIntegrationsSeeder extends Seeder
             );
         }
 
+        $this->seedStructure($tenant->id, $project->id);
+
         // The demo sync runs already existed but belonged to no account, which is why the campaign sync
         // log was empty. Attach each run to its provider's account so the log has something real to show.
         foreach ($accountsByProvider as $provider => $account) {
@@ -207,5 +211,94 @@ final class DemoIntegrationsSeeder extends Seeder
     private function uuid(string $label): string
     {
         return (string) Uuid::uuid5(Uuid::NAMESPACE_DNS, self::NS.':'.$label);
+    }
+
+    /**
+     * Ad sets and ads for every linked demo campaign, so the campaign structure tab has a real hierarchy
+     * to render. Deliberately varied — a paused ad set, a rejected ad — because a demo where everything
+     * is green teaches nothing. Every row is marked `source_type = demo` and `is_demo`.
+     */
+    private function seedStructure(string $tenantId, string $projectId): void
+    {
+        $externals = ExternalCampaign::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->whereNotNull('unified_campaign_id')
+            ->get(['id', 'provider', 'unified_campaign_id', 'name', 'currency']);
+
+        // Three shapes of ad set, cycled so the demo shows more than one configuration.
+        $shapes = [
+            ['الجمهور الأساسي', 'conversions', 'lowest_cost', 1200.0, 'active', ['countries' => ['SA'], 'age' => '25-44', 'interests' => ['تسوق إلكتروني']]],
+            ['إعادة الاستهداف', 'conversions', 'cost_cap', 800.0, 'active', ['countries' => ['SA'], 'audience' => 'زوار آخر ٣٠ يومًا']],
+            ['توسيع الجمهور', 'link_clicks', 'lowest_cost', 400.0, 'paused', ['countries' => ['SA', 'AE'], 'age' => '18-34']],
+        ];
+
+        foreach ($externals as $i => $external) {
+            foreach ($shapes as $j => [$label, $goal, $bid, $budget, $status, $targeting]) {
+                // Two ad sets per campaign is enough to show the hierarchy without flooding the demo.
+                if ($j >= 2 && $i % 3 !== 0) {
+                    continue;
+                }
+
+                $adSet = ExternalAdSet::withoutGlobalScopes()->updateOrCreate(
+                    ['id' => $this->uuid("adset:{$external->id}:{$j}")],
+                    [
+                        'tenant_id' => $tenantId,
+                        'project_id' => $projectId,
+                        'external_campaign_id' => $external->id,
+                        'unified_campaign_id' => $external->unified_campaign_id,
+                        'provider' => $external->provider,
+                        'external_id' => $this->platformId($external->provider, "as{$j}", $external->id),
+                        'name' => $label,
+                        'status' => $status,
+                        'optimization_goal' => $goal,
+                        'bid_strategy' => $bid,
+                        'daily_budget' => $budget,
+                        'currency' => $external->currency ?: 'SAR',
+                        'targeting' => $targeting,
+                        'source_type' => 'demo',
+                        'is_demo' => true,
+                        'last_synced_at' => Carbon::now()->subHours(3),
+                    ],
+                );
+
+                foreach ([['إعلان صورة', 'approved', 'active'], ['إعلان فيديو', 'pending', 'active'], ['إعلان كاروسيل', 'rejected', 'paused']] as $k => [$adName, $review, $adStatus]) {
+                    if ($k === 2 && $j !== 0) {
+                        continue; // only the first ad set carries the rejected example
+                    }
+
+                    ExternalAd::withoutGlobalScopes()->updateOrCreate(
+                        ['id' => $this->uuid("ad:{$adSet->id}:{$k}")],
+                        [
+                            'tenant_id' => $tenantId,
+                            'project_id' => $projectId,
+                            'external_ad_set_id' => $adSet->id,
+                            'external_campaign_id' => $external->id,
+                            'unified_campaign_id' => $external->unified_campaign_id,
+                            'provider' => $external->provider,
+                            'external_id' => $this->platformId($external->provider, "ad{$j}{$k}", $external->id),
+                            'name' => $adName.' — '.$label,
+                            'status' => $adStatus,
+                            'review_status' => $review,
+                            'destination_url' => 'https://example.test/landing',
+                            'source_type' => 'demo',
+                            'is_demo' => true,
+                            'last_synced_at' => Carbon::now()->subHours(3),
+                        ],
+                    );
+                }
+            }
+        }
+    }
+
+    private function platformId(string $provider, string $suffix, string $seed): string
+    {
+        $slug = substr(md5($seed.$suffix), 0, 8);
+
+        return match ($provider) {
+            'meta' => '2381'.$slug,
+            'google' => '8'.$slug,
+            'tiktok' => '18'.$slug,
+            default => 'snap-'.$slug,
+        };
     }
 }

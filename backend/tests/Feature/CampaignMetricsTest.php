@@ -8,6 +8,8 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Campaigns\Models\CampaignAnnotation;
+use App\Domains\Campaigns\Models\ExternalAd;
+use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
@@ -329,5 +331,72 @@ final class CampaignMetricsTest extends TestCase
             ->assertOk();
         $this->assertSame(0, $empty->json('data.linked_accounts'));
         $this->assertSame([], $empty->json('data.runs'));
+    }
+
+    /**
+     * CAMPDET-010: the structure endpoint must tell three different situations apart, because "empty"
+     * for three different reasons is three different instructions to the user.
+     */
+    public function test_structure_distinguishes_not_linked_from_not_synced_from_ready(): void
+    {
+        // 1) Nothing linked at all.
+        $this->actingAs($this->owner)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/structure")
+            ->assertOk()
+            ->assertJsonPath('data.state', 'not_linked');
+
+        // 2) Linked, but the hierarchy was never pulled.
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $credential = new IntegrationCredential(['provider' => 'meta', 'credential_scope' => 'project_only', 'credential_type' => 'oauth', 'status' => 'active']);
+        $credential->setPayload('t');
+        $credential->save();
+        $connection = ProviderConnection::create(['credential_id' => $credential->id, 'provider' => 'meta', 'connection_name' => 'm', 'scope' => 'project_only', 'status' => 'connected']);
+        $account = ExternalAccount::create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id, 'provider' => 'meta',
+            'account_type' => 'ad_account', 'external_id' => 'act_9', 'name' => 'A', 'status' => 'active',
+        ]);
+        $external = ExternalCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'unified_campaign_id' => $this->campA1->id, 'external_account_id' => $account->id,
+            'provider' => 'meta', 'external_id' => 'c-9', 'name' => 'Ext', 'status' => 'active',
+        ]);
+        app(TenantContext::class)->forget();
+
+        $this->actingAs($this->owner)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/structure")
+            ->assertOk()
+            ->assertJsonPath('data.state', 'not_synced');
+
+        // 3) The hierarchy exists.
+        $adSet = ExternalAdSet::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'external_campaign_id' => $external->id, 'unified_campaign_id' => $this->campA1->id,
+            'provider' => 'meta', 'external_id' => 'as-1', 'name' => 'Core audience', 'status' => 'active',
+            'optimization_goal' => 'conversions', 'daily_budget' => 500, 'currency' => 'SAR',
+            'targeting' => ['countries' => ['SA']], 'source_type' => 'api',
+        ]);
+        ExternalAd::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'external_ad_set_id' => $adSet->id, 'external_campaign_id' => $external->id,
+            'unified_campaign_id' => $this->campA1->id, 'provider' => 'meta',
+            'external_id' => 'ad-1', 'name' => 'Ad one', 'status' => 'active', 'review_status' => 'rejected',
+        ]);
+
+        $res = $this->actingAs($this->owner)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/structure")
+            ->assertOk()
+            ->assertJsonPath('data.state', 'ready');
+
+        $this->assertSame('Core audience', $res->json('data.ad_sets.0.name'));
+        $this->assertSame(['SA'], $res->json('data.ad_sets.0.targeting.countries'));
+        // A rejected ad is surfaced, not filtered out — that is exactly what an operator needs to see.
+        $this->assertSame('rejected', $res->json('data.ad_sets.0.ads.0.review_status'));
+        $this->assertFalse($res->json('data.ad_sets.0.is_demo'));
+
+        // Another campaign's structure never leaks in.
+        $this->actingAs($this->owner)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA2->id}/structure")
+            ->assertOk()
+            ->assertJsonPath('data.state', 'not_linked');
     }
 }
