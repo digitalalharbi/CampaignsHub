@@ -1,5 +1,33 @@
 # RESUME STATE — CampaignsHub (authoritative handoff)
 
+## ▶ START HERE (2026-07-29 · session close) — read `docs/MASTER_EXECUTION_CONTRACT.md` + `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then resume at EXACT NEXT REQUIREMENT below.
+
+**Branch `feat/taxonomy-ux` · HEAD `dac07f2` · tree CLEAN · preview up (5173 / 127.0.0.1:8000).**
+**Green at HEAD:** backend `php artisan test` **416 passed (2434 assertions)** · frontend `npx vitest run` **215 passed (46 files)** · `npm run build` clean · `npx tsc --noEmit` clean.
+
+### Shipped this session (all live-verified in the browser, one committed slice each)
+- `00ce4bc` tasks: legacy status/priority normalized in the BACKEND + data migration (writer `RequestConversionService` → `todo`/`normal`; DB now canonical only).
+- `0074060` **Content library** `/content` + new `GET /creatives` (tenant-wide, 30d spend) · `b3fc8d7` performance ranking · `7e41a2b` **objective-aware KPIs** (groups conversion=ROAS↑ / lead=CPA↓ / awareness=CPM↓ / traffic=CTR↑, medians PER GROUP — awareness never compared to sales).
+- `2d003ae` **unified Files library** `/files` + new `GET /files/library` (request_files + report_exports, verified downloads) · `abb8fdd` grid view.
+- `37575bf` **Request detail 360** (services chips, quotes/invoices thread via `billing[]`, new `POST /app/requests/{id}/quote`).
+- `7640623` **Client 360** (billing + conversations tabs) · `1c6452c` project integrations data-status · `0848cfc` **campaign governance editable** + owner_id tenant-scoping FIX (cross-tenant owner now 422).
+- `946aba0` analytics tab selection + reports type-filter/cards · `2dbd290` task detail drawer · `f5ae0e9` conversations context links, invoices summary, alerts category filter.
+- `abb8fdd` taxonomy icon-overflow BUG FIX (raw lucide names rendered as text over cards) · `dac07f2` **settings split: system (/settings, sidebar) vs user (/account, account menu only), zero duplication, old paths redirect**.
+
+### ⏭ EXACT NEXT REQUIREMENT
+**Cross-browser verification pass (Firefox + WebKit) for every section elevated in this phase**, then flip their matrix rows from IMPLEMENTED_NOT_VERIFIED → VERIFIED.
+Command: `cd frontend && CI=1 npx playwright test --project=firefox --project=webkit`.
+Routes to cover: `/dashboard /analytics /campaigns /content /reports /tasks /files /projects /app/clients /app/requests /app/alerts /app/messages /app/billing /settings/* /account/*`.
+All Chromium + mobile-375 + RTL/LTR + light/dark checks already passed live this session — **only Firefox/WebKit remain**.
+After that: `CAMPAIGN-010` (campaign view modes: overview/comparison/needs-attention), `CAMPDET-010` (campaign detail depth), then metric-normalization surfacing + sandbox sync pipeline.
+
+### Honest gaps recorded (do NOT fake these)
+- **No report-scheduling HTTP API** (engine `ScheduledReportDispatcher` exists, no routes) → no scheduling UI was built.
+- **No settings backend for «الواجهة الرئيسية»** (public homepage is static copy) → intentionally absent from system settings, NOT a placeholder.
+- Content ranking currently exercises only the `conversion` group (all seeded campaigns are `objective=sales`); lead/awareness/traffic paths are implemented but unexercised by real data.
+
+---
+
 ## ▶ RESUME HERE (permanent trackers now govern): read `docs/MASTER_EXECUTION_CONTRACT.md` + `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` first
 - ✅ Shipped this session: **UNIFIED-001/002 VERIFIED** — shared `frontend/src/features/campaigns/overview/UnifiedCampaignOverview.tsx` + dashboard wired to it (commit `2a2d4b5`; tsc/build/209 vitest/11 chromium E2E green). Permanent contract+matrix committed `9a64e96`.
 - **User rename done (5e4d78e):** المالية→الاشتراكات, الرسائل→المحادثات. **NEW open UI work to reference (Campaigns/Integrations) level, keep current design/fonts:** SUBSCRIPTION-UI-001 (/app/billing subscriptions page), ALERT-001 (/app/alerts command center — already tracked), MESSAGE-001 (/app/messages Conversations inbox — already tracked): each needs summary KPIs + filters + search + professional table/cards + detail drawer + loading/empty/error + related-entity links. **EXACT NEXT REQUIREMENT = DASH-010-F** (dashboard filter propagation + compare toggle) then DASH-010-G, OR the user may prioritize the three page overhauls next — do them to the acceptance bar, one committed+tested slice each.
