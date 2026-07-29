@@ -54,7 +54,9 @@ export function PublicHomePage() {
   // Tenant-editable public content (System Settings → الواجهة الرئيسية والبوابات). Published copy wins over
   // the shipped defaults; a failed/absent fetch simply leaves the shipped copy in place (never a blank page).
   const cms = useQuery({ queryKey: ['public-page', cmsPage], queryFn: () => getPublishedPage(cmsPage), retry: false, staleTime: 60_000 })
-  const cmsContent = cms.data?.content
+  // Only a PUBLISHED document may override the shipped copy — the endpoint's `defaults` payload is editor
+  // scaffolding, not content, and must never silently replace what this page ships with.
+  const cmsContent = cms.data?.source === 'published' ? cms.data.content : undefined
   const sec = (key: string): { enabled?: boolean; order?: number; [k: string]: unknown } | undefined =>
     (cmsContent?.[key] as { enabled?: boolean } | undefined) ?? undefined
   /** A section renders unless the tenant explicitly disabled it. */

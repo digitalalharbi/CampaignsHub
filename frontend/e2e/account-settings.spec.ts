@@ -9,12 +9,14 @@ test.use({ storageState: { cookies: [], origins: [] } })
 
 test('change display name → persists and reflects in the shell; then reset', async ({ page }) => {
   // Guest → protected settings route bounces to login with the intended path.
-  await page.goto('/settings/profile')
-  await expect(page).toHaveURL(/\/login\?redirect=%2Fsettings%2Fprofile/)
+  // Personal settings moved out of the system settings section into the account menu (dac07f2):
+  // /settings/profile now redirects to /account/profile.
+  await page.goto('/account/profile')
+  await expect(page).toHaveURL(/\/login\?redirect=%2Faccount%2Fprofile/)
   await page.locator('input[type="email"]').fill('owner@demo-agency.local')
   await page.locator('input[type="password"]').fill('password')
   await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
-  await expect(page).toHaveURL(/\/settings\/profile$/)
+  await expect(page).toHaveURL(/\/account\/profile$/)
 
   const nameField = page.getByLabel(/اسم العرض|Display name/)
   const original = await nameField.inputValue()

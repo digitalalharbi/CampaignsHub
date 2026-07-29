@@ -16,7 +16,8 @@ import { getPublishedPage } from '@/features/settings/publicPagesApi'
  */
 function useTrackingCopy() {
   const cms = useQuery({ queryKey: ['public-page', 'portal_tracking'], queryFn: () => getPublishedPage('portal_tracking'), retry: false, staleTime: 60_000 })
-  const heroSection = cms.data?.content?.hero as Record<string, unknown> | undefined
+  // Published content only; the endpoint's shipped-defaults payload must not override this page's copy.
+  const heroSection = (cms.data?.source === 'published' ? cms.data.content?.hero : undefined) as Record<string, unknown> | undefined
   return (field: string, fallback: string): string => {
     const v = heroSection?.[field]
     return typeof v === 'string' && v.trim() !== '' ? v : fallback
