@@ -49,11 +49,19 @@ export function ClientsPortfolioPage() {
 
   const patch = (p: Partial<ClientFilters>) => setFilters((f) => ({ ...f, ...p, page: 1 }))
 
+  const summary = {
+    total: query.data?.meta.total ?? rows.length,
+    active: rows.filter((c) => c.client_status === 'active').length,
+    attention: rows.filter((c) => c.client_status === 'needs_attention' || c.alerts > 0).length,
+    openRequests: rows.reduce((s, c) => s + c.open_requests, 0),
+  }
+  const ar = lang === 'ar'
+
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <div className="w-full">
+      <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-heading text-2xl font-extrabold text-text-primary">{t('clients_portfolio')}</h1>
+          <h1 className="font-heading text-3xl font-extrabold tracking-tight text-text-primary">{t('clients_portfolio')}</h1>
           <p className="mt-1 text-sm text-text-secondary">{t('clients_subtitle')}</p>
         </div>
         <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-1">
@@ -63,6 +71,14 @@ export function ClientsPortfolioPage() {
             className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold ${view === 'table' ? 'bg-brand-primary-soft text-brand-700' : 'text-text-secondary'}`}><Table2 size={14} /> {t('cc_view_table')}</button>
         </div>
       </header>
+
+      {/* Summary — the portfolio at a glance (total is the server count; the rest reflect the loaded set). */}
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <ClientSummaryCard label={ar ? 'إجمالي العملاء' : 'Total clients'} value={summary.total} tone="brand" />
+        <ClientSummaryCard label={ar ? 'نشطون' : 'Active'} value={summary.active} tone="success" />
+        <ClientSummaryCard label={ar ? 'يحتاجون متابعة' : 'Needs attention'} value={summary.attention} tone="warning" />
+        <ClientSummaryCard label={ar ? 'طلبات مفتوحة' : 'Open requests'} value={summary.openRequests} tone="info" />
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
         <form className="relative" onSubmit={(e) => { e.preventDefault(); patch({ q: search || undefined }) }}>
@@ -128,6 +144,19 @@ export function ClientsPortfolioPage() {
       ) : (
         <ClientTableView rows={rows} t={t} lang={lang} />
       )}
+    </div>
+  )
+}
+
+function ClientSummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'success' | 'warning' | 'info' }) {
+  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', success: 'bg-success', warning: 'bg-warning', info: 'bg-info' }
+  return (
+    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
+        <span className="text-xs font-semibold text-text-secondary">{label}</span>
+      </div>
+      <span className="tnum text-2xl font-extrabold text-text-primary" dir="ltr">{value}</span>
     </div>
   )
 }
