@@ -108,6 +108,19 @@ export function LoginPage() {
   const setUser = useAuth((s) => s.setUser)
   const { theme, locale, toggleTheme, toggleLocale } = useUi()
   const c = COPY[locale]
+  // AUTH-002: adapt ONLY the marketing panel copy to the portal/journey the user arrived from
+  // (?portal, or a /client redirect) — same auth engine + destination logic, content only.
+  const portal = params.get('portal') ?? (params.get('redirect')?.startsWith('/client') ? 'client' : null)
+  const panel =
+    portal === 'influencer'
+      ? locale === 'ar'
+        ? { eyebrow: 'حملات المؤثرين والمحتوى', heroTitle: 'أدر حملات المؤثرين والمحتوى من مكان واحد', heroValue: 'من الطلب حتى التسليم — تابع المحتويات والموافقات والتسليمات ونتائج الحملة.' }
+        : { eyebrow: 'Influencer & content campaigns', heroTitle: 'Run influencer & content campaigns from one place', heroValue: 'From request to delivery — track content, approvals, deliverables and results.' }
+      : portal === 'client'
+        ? locale === 'ar'
+          ? { eyebrow: 'متابعة طلباتك', heroTitle: 'تابع طلباتك وعروضك وفواتيرك من مكان واحد', heroValue: 'حالة الطلب، وعروض الأسعار، والفواتير والمدفوعات، والرسائل والملفات في بوابة واحدة.' }
+          : { eyebrow: 'Track your requests', heroTitle: 'Track your requests, quotes and invoices', heroValue: 'Request status, quotes, invoices and payments, plus messages and files in one portal.' }
+        : { eyebrow: c.eyebrow, heroTitle: c.heroTitle, heroValue: c.heroValue }
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -138,9 +151,9 @@ export function LoginPage() {
         </div>
 
         <div className="relative max-w-xl">
-          <p className="text-[13px] font-semibold text-brand-300">{c.eyebrow}</p>
-          <h1 className="mt-3 font-[var(--font-heading)] text-4xl font-extrabold leading-[1.15] xl:text-[44px]">{c.heroTitle}</h1>
-          <p className="mt-4 text-lg leading-relaxed text-white/75">{c.heroValue}</p>
+          <p className="text-[13px] font-semibold text-brand-300">{panel.eyebrow}</p>
+          <h1 className="mt-3 font-[var(--font-heading)] text-4xl font-extrabold leading-[1.15] xl:text-[44px]">{panel.heroTitle}</h1>
+          <p className="mt-4 text-lg leading-relaxed text-white/75">{panel.heroValue}</p>
           <ul className="mt-9 space-y-3.5">
             {c.benefits.map(({ icon: Icon, title, desc }) => (
               <li key={title} className="flex items-start gap-3.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 backdrop-blur-sm">
