@@ -24,6 +24,7 @@ import { ErrorSummary, SelectField, type FieldError } from '@/components/forms'
 import { optionLabel } from '@/components/forms/types'
 import { toApiError } from '@/lib/api/client'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
+import { SchedulesPanel } from './SchedulesPanel'
 import { DemoBadge } from '@/features/analytics/components'
 import { InteractiveReport } from './InteractiveReport'
 import { AnnotationsPanel } from './AnnotationsPanel'
@@ -62,6 +63,8 @@ export function ReportsPage() {
   const [shareId, setShareId] = useState<string | null>(null)
   const [view, setView] = useState<'table' | 'cards'>('table')
   const [typeFilter, setTypeFilter] = useState('')
+  // REPORT-SCHEDULING: saved documents vs the schedules that produce them.
+  const [section, setSection] = useState<'documents' | 'schedules'>('documents')
 
   const params = new URLSearchParams()
   if (status) params.set('status', status)
@@ -122,6 +125,27 @@ export function ReportsPage() {
         ))}
       </div>
 
+      {/* Section switcher — the documents themselves vs the schedules that produce them. */}
+      <div className="inline-flex rounded-xl border border-border bg-surface-secondary p-1">
+        {([['documents', 'التقارير'], ['schedules', 'الجدولة']] as const).map(([id, label]) => (
+          <button
+            key={id}
+            data-testid={`reports-section-${id}`}
+            aria-pressed={section === id}
+            onClick={() => setSection(id)}
+            className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors ${
+              section === id ? 'bg-surface text-text-primary shadow-[var(--shadow-small)]' : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'schedules' ? (
+        <SchedulesPanel projectId={currentProjectId!} />
+      ) : (
+      <>
       {/* Toolbar — search + status segmented filter (matches the platform's other command pages). */}
       <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
         <input
@@ -236,6 +260,9 @@ export function ReportsPage() {
           </div>
         )}
       </div>
+
+      </>
+      )}
 
       {builderOpen && (
         <ReportBuilder

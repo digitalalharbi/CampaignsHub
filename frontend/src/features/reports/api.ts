@@ -120,3 +120,46 @@ export const listAnnotations = (p: string, id: string) =>
   getData<{ annotations: ReportAnnotation[] }>(`${base(p)}/${id}/annotations`)
 export const setAnnotationStatus = (p: string, id: string, annId: string, status: string) =>
   postData(`${base(p)}/${id}/annotations/${annId}/status`, { status })
+
+/** REPORT-SCHEDULING: a saved schedule and its honest delivery ledger counts. */
+export interface ReportScheduleRow {
+  id: string
+  name: string
+  type: string
+  frequency: 'daily' | 'weekly' | 'monthly' | 'custom'
+  day: string | null
+  time: string | null
+  timezone: string | null
+  audience: string | null
+  language: string | null
+  formats: string[]
+  recipients: Array<{ email: string; name?: string }>
+  cron: string | null
+  report_id: string | null
+  active: boolean
+  is_demo: boolean
+  last_run_at: string | null
+  next_run_at: string | null
+  /** status → count, exactly as recorded. `sent` only ever appears after a provider acknowledgement. */
+  deliveries: Record<string, number>
+}
+
+export type ReportScheduleInput = Partial<Omit<ReportScheduleRow, 'id' | 'deliveries' | 'is_demo' | 'last_run_at' | 'next_run_at'>>
+
+const schedulesBase = (projectId: string) => `/projects/${projectId}/reports/schedules`
+
+export const listSchedules = (projectId: string) =>
+  getData<ReportScheduleRow[]>(schedulesBase(projectId))
+
+export const createSchedule = (projectId: string, input: ReportScheduleInput) =>
+  postData<ReportScheduleRow>(schedulesBase(projectId), input as Record<string, unknown>)
+
+export const toggleSchedule = (projectId: string, id: string) =>
+  postData<ReportScheduleRow>(`${schedulesBase(projectId)}/${id}/toggle`)
+
+export const runScheduleNow = (projectId: string, id: string) =>
+  postData<{ schedule: ReportScheduleRow; report_id: string }>(`${schedulesBase(projectId)}/${id}/run`)
+
+export async function deleteSchedule(projectId: string, id: string): Promise<void> {
+  await api.delete(`${schedulesBase(projectId)}/${id}`)
+}

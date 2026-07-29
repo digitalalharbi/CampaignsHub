@@ -131,7 +131,9 @@ final class ScheduledReportDispatcher
 
     private function nextWeekly(Carbon $local, Carbon $now, string $day): Carbon
     {
-        $target = $local->copy()->next(ucfirst($day));
+        // Carbon::next() rewinds to 00:00, which would silently fire every weekly schedule at midnight
+        // instead of its configured hour — re-apply the time the schedule actually asked for.
+        $target = $local->copy()->next(ucfirst($day))->setTimeFrom($local);
         // If today IS the target weekday and the time is still ahead, keep today.
         if (strtolower($local->englishDayOfWeek) === strtolower($day) && $local->gt($now)) {
             return $local;

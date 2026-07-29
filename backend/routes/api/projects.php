@@ -11,6 +11,7 @@ use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
 use App\Domains\Projects\Http\Controllers\ProjectOverviewController;
 use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
 use App\Domains\Reports\Http\Controllers\ReportController;
+use App\Domains\Reports\Http\Controllers\ReportScheduleController;
 use App\Domains\Reports\Http\Controllers\ReportPrintController;
 use App\Domains\Reports\Http\Controllers\ReportShareController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
@@ -61,6 +62,15 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{proj
 
     // Reports (project-scoped; reports.view / reports.export).
     Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
+    // REPORT-SCHEDULING: the HTTP surface the dispatcher engine never had. Declared BEFORE
+    // reports/{report} so "schedules" is not swallowed by the {report} wildcard.
+    Route::get('reports/schedules', [ReportScheduleController::class, 'index'])->name('reports.schedules.index');
+    Route::post('reports/schedules', [ReportScheduleController::class, 'store'])->name('reports.schedules.store');
+    Route::match(['put', 'patch'], 'reports/schedules/{schedule}', [ReportScheduleController::class, 'update'])->name('reports.schedules.update');
+    Route::post('reports/schedules/{schedule}/toggle', [ReportScheduleController::class, 'toggle'])->name('reports.schedules.toggle');
+    Route::post('reports/schedules/{schedule}/run', [ReportScheduleController::class, 'runNow'])->name('reports.schedules.run');
+    Route::delete('reports/schedules/{schedule}', [ReportScheduleController::class, 'destroy'])->name('reports.schedules.destroy');
+
     Route::get('reports/template', [ReportController::class, 'template'])->name('reports.template');
     Route::post('reports', [ReportController::class, 'store'])->name('reports.store');
     Route::get('reports/{report}', [ReportController::class, 'show'])->name('reports.show');
