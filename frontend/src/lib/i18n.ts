@@ -13,7 +13,7 @@ const dictionary = {
     leads: 'العملاء المحتملون',
     opportunities: 'الفرص',
     campaigns: 'الحملات',
-    content: 'المحتوى',
+    content: 'المحتويات',
     approvals: 'الاعتمادات',
     tracking: 'التتبع',
     optimization: 'التحسين',

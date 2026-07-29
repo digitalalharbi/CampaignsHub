@@ -15,11 +15,11 @@ final class AccountEntitlements
 {
     // Operations Console (personal) menu. Canonical modules only — Integrations (connections) absorbs the
     // Connection Center + Drive connector; Branding lives inside Settings; Finance = 'billing' (المالية).
-    private const PERSONAL_NAV = ['dashboard', 'requests', 'clients', 'projects', 'campaigns', 'analytics', 'reports', 'tasks', 'connections', 'alerts', 'messaging', 'billing', 'team', 'settings'];
+    private const PERSONAL_NAV = ['dashboard', 'requests', 'clients', 'projects', 'campaigns', 'content', 'analytics', 'reports', 'tasks', 'connections', 'alerts', 'messaging', 'billing', 'team', 'settings'];
 
     // SaaS Workspace (company) menu — subscriber surfaces only. Finance surfaces as 'subscriptions' (الاشتراك);
     // no agency tools (clients/requests), no internal messaging inbox, no platform settings.
-    private const COMPANY_NAV = ['dashboard', 'projects', 'campaigns', 'analytics', 'reports', 'tasks', 'connections', 'alerts', 'subscriptions', 'team', 'settings'];
+    private const COMPANY_NAV = ['dashboard', 'projects', 'campaigns', 'content', 'analytics', 'reports', 'tasks', 'connections', 'alerts', 'subscriptions', 'team', 'settings'];
 
     public function workspaceKind(Tenant $tenant): string
     {

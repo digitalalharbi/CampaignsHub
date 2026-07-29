@@ -59,6 +59,7 @@ import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoute
 import { ConnectionCenterPage } from '@/features/connections/ConnectionCenterPage'
 import { DrivePage } from '@/features/drive/DrivePage'
 import { TasksPage } from '@/features/tasks/TasksPage'
+import { CreativesPage } from '@/features/content/CreativesPage'
 import { BrandingCenterPage } from '@/features/branding/BrandingCenterPage'
 import { AppShell } from '@/layouts/AppShell'
 
@@ -139,7 +140,7 @@ export const router = createBrowserRouter([
           { path: 'app/connections', element: <Navigate to="/app/integrations" replace /> },
           { path: 'app/drive', element: <Navigate to="/app/integrations/drive" replace /> },
           { path: 'app/branding', element: <Navigate to="/settings/branding" replace /> },
-          { path: 'content', element: <PagePlaceholder title="Content" /> },
+          { path: 'content', element: <CreativesPage /> },
           { path: 'approvals', element: <PagePlaceholder title="Approvals" /> },
           { path: 'tracking', element: <PagePlaceholder title="Tracking" /> },
           { path: 'reports', element: <ReportsPage /> },

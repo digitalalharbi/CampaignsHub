@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\AI\Http\Controllers\AICredentialController;
 use App\Domains\Alerts\Http\Controllers\AlertController;
+use App\Domains\Campaigns\Http\Controllers\CreativeLibraryController;
 use App\Domains\ClientWorkspaces\Http\Controllers\ClientWorkspaceController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\Tasks\Http\Controllers\TaskController;
@@ -35,6 +36,9 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
     Route::get('alerts/events', [AlertController::class, 'events'])->name('alerts.events.index');
     Route::post('alerts/events/{alertEvent}/resolve', [AlertController::class, 'resolve'])->name('alerts.events.resolve');
     Route::post('alerts/events/{alertEvent}/snooze', [AlertController::class, 'snooze'])->name('alerts.events.snooze');
+
+    // Creative library (tenant-wide content).
+    Route::get('creatives', [CreativeLibraryController::class, 'index'])->name('creatives.library');
 
     // Tasks.
     Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
