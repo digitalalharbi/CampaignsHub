@@ -1,37 +1,43 @@
 # RESUME STATE — CampaignsHub (authoritative handoff)
 
-## ▶ START HERE (2026-07-29 · session close) — read `docs/MASTER_EXECUTION_CONTRACT.md` + `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then resume at EXACT NEXT REQUIREMENT below.
+## ▶ START HERE (2026-07-29 · session 2 close) — read `docs/MASTER_EXECUTION_CONTRACT.md` + `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then resume at EXACT NEXT REQUIREMENT below.
 
-**Branch `feat/taxonomy-ux` · HEAD `dac07f2` · tree CLEAN · preview up (5173 / 127.0.0.1:8000).**
-**Green at HEAD:** backend `php artisan test` **416 passed (2434 assertions)** · frontend `npx vitest run` **215 passed (46 files)** · `npm run build` clean · `npx tsc --noEmit` clean.
+**Branch `feat/taxonomy-ux` · HEAD `320b569` · tree CLEAN · preview up (5173 / 127.0.0.1:8000).**
+**Green at HEAD:** backend **422 passed (2467 assertions)** · frontend **215 passed (46 files)** · `npm run build` + `tsc --noEmit` clean.
 
-### Shipped this session (all live-verified in the browser, one committed slice each)
-- `00ce4bc` tasks: legacy status/priority normalized in the BACKEND + data migration (writer `RequestConversionService` → `todo`/`normal`; DB now canonical only).
-- `0074060` **Content library** `/content` + new `GET /creatives` (tenant-wide, 30d spend) · `b3fc8d7` performance ranking · `7e41a2b` **objective-aware KPIs** (groups conversion=ROAS↑ / lead=CPA↓ / awareness=CPM↓ / traffic=CTR↑, medians PER GROUP — awareness never compared to sales).
-- `2d003ae` **unified Files library** `/files` + new `GET /files/library` (request_files + report_exports, verified downloads) · `abb8fdd` grid view.
-- `37575bf` **Request detail 360** (services chips, quotes/invoices thread via `billing[]`, new `POST /app/requests/{id}/quote`).
-- `7640623` **Client 360** (billing + conversations tabs) · `1c6452c` project integrations data-status · `0848cfc` **campaign governance editable** + owner_id tenant-scoping FIX (cross-tenant owner now 422).
-- `946aba0` analytics tab selection + reports type-filter/cards · `2dbd290` task detail drawer · `f5ae0e9` conversations context links, invoices summary, alerts category filter.
-- `abb8fdd` taxonomy icon-overflow BUG FIX (raw lucide names rendered as text over cards) · `dac07f2` **settings split: system (/settings, sidebar) vs user (/account, account menu only), zero duplication, old paths redirect**.
+### Shipped this session — SITE-CMS-001 (the newest user directive, now DONE)
+Homepage + external portals are editable from System Settings, stored in the DB, with permissions, audit log,
+preview-before-publish, and the public homepage rendering published content **without any code edit**.
+- `f0c813e` backend: `public_page_settings` (tenant+page, draft/published, version, updated_by/published_by/
+  published_at) · `PublicPageSettingsController` (index / update-draft / publish / revert + **PUBLIC**
+  `GET /public/pages/{page}`) · `PublicPageDefaults` (stable section keys with enabled+order+texts+CTAs).
+  settings.manage gated · tenant-scoped · every write audit-logged. Tests: `PublicPageSettingsTest` 6/33.
+- `320b569` frontend: `/settings/public-pages` editor (4 page tabs, per-section enable/reorder/texts/buttons,
+  preview drawer, save/publish/revert, permission + loading/error states) — in the SYSTEM nav only;
+  `PublicHomePage` overlays published content (hero texts, header CTAs, section on/off) with safe fallback.
+- Live-proven: draft stayed private (public still v1) → publish → v2 live → homepage `h1` changed and the
+  `#services` section disappeared, no code change. Demo content restored to shipped defaults afterwards.
+
+### Settings separation (verified intact this session)
+System settings = sidebar `/settings/*` (workspace · permissions · branding · taxonomies · **الواجهة الرئيسية
+والبوابات** · portal notes · integrations link). User settings = account menu `/account/*` only
+(profile · password · security & sessions · language & appearance · personal notifications). Zero overlap;
+old `/settings/{profile,password,security,preferences,notifications}` redirect to `/account/*`.
 
 ### ⏭ EXACT NEXT REQUIREMENT
-**Cross-browser verification pass (Firefox + WebKit) for every section elevated in this phase**, then flip their matrix rows from IMPLEMENTED_NOT_VERIFIED → VERIFIED.
-Command: `cd frontend && CI=1 npx playwright test --project=firefox --project=webkit`.
-Routes to cover: `/dashboard /analytics /campaigns /content /reports /tasks /files /projects /app/clients /app/requests /app/alerts /app/messages /app/billing /settings/* /account/*`.
-All Chromium + mobile-375 + RTL/LTR + light/dark checks already passed live this session — **only Firefox/WebKit remain**.
-After that: `CAMPAIGN-010` (campaign view modes: overview/comparison/needs-attention), `CAMPDET-010` (campaign detail depth), then metric-normalization surfacing + sandbox sync pipeline.
+**SITE-CMS-002** — wire the same published-content overlay into the THREE external portal public surfaces
+(paid campaigns / influencer+UGC / request tracking). The API + editor already publish their content
+(`GET /public/pages/portal_paid|portal_influencer|portal_tracking`); only the public rendering is missing.
+Then, in matrix order: **XBROWSER-GATE** (Firefox + WebKit for every elevated section → flip
+IMPLEMENTED_NOT_VERIFIED rows to VERIFIED), then `CAMPAIGN-010`, `CAMPAIGN-020`, `CAMPDET-010`, `INTEG-UI-001`,
+`SYNC-001`, `NORM-001`, `XREL-001`, `DEMO-001`, `DEVSTATUS-001`.
 
-### Honest gaps recorded (do NOT fake these)
-- **No report-scheduling HTTP API** (engine `ScheduledReportDispatcher` exists, no routes) → no scheduling UI was built.
-- **No settings backend for «الواجهة الرئيسية»** (public homepage is static copy) → intentionally absent from system settings, NOT a placeholder.
-- Content ranking currently exercises only the `conversion` group (all seeded campaigns are `objective=sales`); lead/awareness/traffic paths are implemented but unexercised by real data.
+### Honest gaps (do NOT fake)
+- Report scheduling has **no HTTP API** (engine only) → `REPORT-SCHEDULING` = BLOCKED_NO_API, no UI built.
+- Per-platform ad integrations remain BLOCKED_EXTERNAL_CREDENTIALS (Meta/Google/TikTok/Snapchat/X/LinkedIn).
+- Content objective-ranking currently exercises only the `conversion` group (all seeded campaigns are sales).
 
 ---
-
-## ▶ RESUME HERE (permanent trackers now govern): read `docs/MASTER_EXECUTION_CONTRACT.md` + `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` first
-- ✅ Shipped this session: **UNIFIED-001/002 VERIFIED** — shared `frontend/src/features/campaigns/overview/UnifiedCampaignOverview.tsx` + dashboard wired to it (commit `2a2d4b5`; tsc/build/209 vitest/11 chromium E2E green). Permanent contract+matrix committed `9a64e96`.
-- **User rename done (5e4d78e):** المالية→الاشتراكات, الرسائل→المحادثات. **NEW open UI work to reference (Campaigns/Integrations) level, keep current design/fonts:** SUBSCRIPTION-UI-001 (/app/billing subscriptions page), ALERT-001 (/app/alerts command center — already tracked), MESSAGE-001 (/app/messages Conversations inbox — already tracked): each needs summary KPIs + filters + search + professional table/cards + detail drawer + loading/empty/error + related-entity links. **EXACT NEXT REQUIREMENT = DASH-010-F** (dashboard filter propagation + compare toggle) then DASH-010-G, OR the user may prioritize the three page overhauls next — do them to the acceptance bar, one committed+tested slice each.
-- Work order + all open requirement IDs live in the matrix (UNIMPLEMENTED REQUIREMENTS CHECK). Do NOT re-audit; implement in code, one functional+tested+committed unit at a time. Delivery stays HALTED until all requirements VERIFIED. Preview up (5173/8000/dev-status).
 
 ## 🚧 ACTIVE PHASE (2026-07-28): CORE CAMPAIGN-MANAGEMENT DEEPENING — delivery packaging HALTED
 User halted delivery/clean-install/final-package. Goal: make CampaignsHub a REAL unified center to manage/monitor/review ALL paid campaigns from one place — functionally AND visually — across Homepage/Dashboard/Campaigns/Analytics/Reports/Alerts/Integrations/Campaign-details. Do NOT package delivery until execution items 1–16 are closed. Single orchestrator, sequential, no parallel agents, economical (no long interim messages). Keep preview running. Enrich `/dev/status` to show: Current Task, Last Green Commit, Preview/FE/BE/DB/Redis/Queue/Scheduler status, last BE/FE/E2E results, Exact Next Task. Update RESUME_STATE + docs/PROGRESS.md after each tested commit.
