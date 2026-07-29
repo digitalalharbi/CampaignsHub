@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Area,
@@ -25,6 +25,8 @@ import { DemoBadge, Panel, RangeTabs, SERIES, tooltipProps } from '../analytics/
 import { compact, money, num, percent, ratio } from '../analytics/format'
 import { UnifiedCampaignOverview, providerColor, providerName, type OverviewKpi, type OverviewVM } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import type { MetricTotals } from '../analytics/api'
+import { SavedViewsBar } from './SavedViewsBar'
+import { useSavedViews, type SavedView } from './savedViews'
 
 /** The six paid platforms CampaignsHub unifies — the dashboard platform filter. */
 const PLATFORM_KEYS = ['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin']
@@ -81,6 +83,24 @@ export function DashboardPage() {
   const filters = useMemo(() => ({ provider: providers, objective: objective === 'all' ? [] : [objective] }), [providers, objective])
   const toggleProvider = (key: string) =>
     setProviders((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]))
+
+  // Saved views (DASH-010-E-FE): apply restores objective + platforms + date range; a default applies once on load.
+  const savedViews = useSavedViews()
+  const applyView = (v: SavedView) => {
+    if (v.filters?.objective) setObjective(v.filters.objective)
+    if (v.filters?.provider) setProviders(v.filters.provider)
+    if (v.date_range?.days) setDays(v.date_range.days)
+  }
+  const appliedDefault = useRef(false)
+  useEffect(() => {
+    if (appliedDefault.current) return
+    const def = savedViews.data?.find((v) => v.is_default)
+    if (def) {
+      appliedDefault.current = true
+      applyView(def)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedViews.data])
 
   const summary = useSummary(currentProjectId, range, filters)
   const series = useTimeseries(currentProjectId, range, filters)
@@ -167,6 +187,9 @@ export function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      {/* Saved views — server-persisted (DASH-010-E); save/apply/rename/default/delete the current filters. */}
+      <SavedViewsBar current={{ objective, providers, days }} onApply={applyView} />
 
       {/* Objective filter — switches the KPI set AND filters all tiles by campaign objective (backend-supported). */}
       <div className="flex flex-wrap items-center gap-2">
