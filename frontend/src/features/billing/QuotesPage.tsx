@@ -4,6 +4,7 @@ import { Check, FileText, Plus, Search, X } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { BillingTabs } from './BillingTabs'
+import { DateField } from '@/components/ui/DateField'
 import {
   approveQuote, createQuote, formatDate, formatMoney, listQuotes,
   type NewQuote, type Quote,
@@ -270,8 +271,7 @@ function CreateQuoteForm({ c, onCreated, embedded }: { c: Copy; onCreated: () =>
         <span className="tnum font-extrabold text-text-primary" dir="ltr">{formatMoney(computedTotal, form.currency ?? 'SAR')}</span>
       </div>
       <Field label={`${c.valid_until} (${c.optional})`}>
-        <input type="date" value={form.valid_until ?? ''} onChange={(e) => setForm((f) => ({ ...f, valid_until: e.target.value || null }))}
-          dir="ltr" className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary" />
+        <DateField value={form.valid_until ?? ''} onChange={(v) => setForm((f) => ({ ...f, valid_until: v || null }))} />
       </Field>
       <Field label={`${c.notes} (${c.optional})`}>
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={2000}

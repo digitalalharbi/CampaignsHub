@@ -308,5 +308,6 @@ function fmtBytes(n: number): string {
 }
 function fmtDate(iso: string): string {
   const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { dateStyle: 'medium' })
+  // Gregorian + Latin digits, YYYY-MM-DD — never locale-dependent (avoids Arabic/Hijri output).
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-CA')
 }

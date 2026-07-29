@@ -4,6 +4,7 @@ import { useSecurityActions, useSecurityActivity, useSecurityPolicy, type Securi
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
+import { fmtDateTime } from '@/lib/datetime'
 import { Switch } from '@/components/ui/Switch'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/States'
@@ -93,7 +94,7 @@ export function SecurityTab() {
                 <td className="p-2">{h.action === 'user.login' ? 'دخول' : 'خروج'}</td>
                 <td className="p-2 tnum text-xs">{h.ip_address ?? '—'}</td>
                 <td className="p-2 max-w-[220px] truncate text-xs text-text-muted" title={h.user_agent ?? ''}>{h.user_agent ?? '—'}</td>
-                <td className="p-2 text-xs">{h.at ? new Date(h.at).toLocaleString('en-GB') : '—'}</td>
+                <td className="p-2 text-xs">{h.at ? fmtDateTime(h.at) : '—'}</td>
               </tr>
             ))}</tbody>
           </table></div>

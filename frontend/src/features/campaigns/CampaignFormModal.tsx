@@ -11,6 +11,7 @@ import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
+import { DateField } from '@/components/ui/DateField'
 import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { Textarea } from '@/components/ui/Textarea'
@@ -104,6 +105,7 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
     reset,
     setError,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: defaults })
 
@@ -297,12 +299,12 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
             <Input id="campaign-budget" type="number" min="0" step="0.01" {...register('total_budget')} />
           </Field>
           <Field label={t('start_date')} htmlFor="campaign-start" error={errors.starts_on?.message}>
-            <Input id="campaign-start" type="date" {...register('starts_on')} />
+            <DateField id="campaign-start" value={watch('starts_on') ?? ''} onChange={(v) => setValue('starts_on', v, { shouldValidate: true, shouldDirty: true })} />
           </Field>
         </div>
 
         <Field label={t('end_date')} htmlFor="campaign-end" error={errors.ends_on?.message}>
-          <Input id="campaign-end" type="date" {...register('ends_on')} />
+          <DateField id="campaign-end" value={watch('ends_on') ?? ''} onChange={(v) => setValue('ends_on', v, { shouldValidate: true, shouldDirty: true })} />
         </Field>
 
         <TaxonomyMultiSelect label={c.platforms} defKey="campaign.platforms" value={platforms} onChange={setPlatforms} tax={platformsTax} canCreate={canCreate} errText={t('error')} />

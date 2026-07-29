@@ -18,6 +18,7 @@ import type { CreatedShare, ReportDetail, ReportFormat, ReportRow, ShareRow } fr
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
+import { DateField } from '@/components/ui/DateField'
 import { Skeleton } from '@/components/ui/States'
 import { ErrorSummary, SelectField, type FieldError } from '@/components/forms'
 import { optionLabel } from '@/components/forms/types'
@@ -352,8 +353,8 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
           clearable={false}
         />
         <div className="grid grid-cols-2 gap-3">
-          <Field label="من" htmlFor="rb-from"><input id="rb-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>
-          <Field label="إلى" htmlFor="rb-to"><input id="rb-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>
+          <Field label="من" htmlFor="rb-from"><DateField id="rb-from" value={from} onChange={setFrom} /></Field>
+          <Field label="إلى" htmlFor="rb-to"><DateField id="rb-to" value={to} onChange={setTo} /></Field>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" onClick={onClose}>إلغاء</Button>
@@ -453,7 +454,7 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               <Field label="كلمة مرور (اختياري)"><input type="text" value={opts.password} onChange={(e) => setOpts((o) => ({ ...o, password: e.target.value }))} placeholder="4 أحرف فأكثر" className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>
-              <Field label="تاريخ الانتهاء (اختياري)"><input type="date" value={opts.expires_at} onChange={(e) => setOpts((o) => ({ ...o, expires_at: e.target.value }))} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base" /></Field>
+              <Field label="تاريخ الانتهاء (اختياري)"><DateField value={opts.expires_at} onChange={(v) => setOpts((o) => ({ ...o, expires_at: v }))} /></Field>
             </div>
             <Button loading={create.isPending} onClick={() => create.mutate()}><Share2 size={16} /> إنشاء رابط آمن</Button>
           </div>

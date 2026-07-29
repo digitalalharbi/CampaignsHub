@@ -9,6 +9,7 @@ import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
 import { toApiError } from '@/lib/api/client'
+import { fmtDateTime } from '@/lib/datetime'
 import { SearchableSelect } from '@/components/forms/SearchableSelect'
 import type { Option } from '@/components/forms/types'
 import {
@@ -599,7 +600,6 @@ function RunStatus({ status }: { status: string }) {
 }
 
 function fmt(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+  const s = fmtDateTime(iso)
+  return s === '—' ? '' : s
 }

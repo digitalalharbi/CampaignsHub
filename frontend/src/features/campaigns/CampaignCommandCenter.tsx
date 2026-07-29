@@ -17,6 +17,7 @@ import {
 import type { MetricTotals, PlatformRow, Range, TimePoint } from '@/features/analytics/api'
 import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, PlatformDonutChart, ProgressRing, SpendRevenueAreaChart } from '@/features/analytics/charts'
 import { compact, money, num, percent, ratio, trend } from '@/features/analytics/format'
+import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { providerLabel } from './labels'
 import type { Locale } from '@/stores/ui'
@@ -254,7 +255,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
               {budgetChanges.map((e) => (
                 <li key={e.id} className="flex items-center justify-between gap-2 border-b border-border pb-1.5 last:border-0">
                   <span className="tnum">{money(Number(e.before?.total_budget ?? 0), cur)} → {money(Number(e.after?.total_budget ?? 0), cur)}</span>
-                  <span className="text-xs text-text-muted">{e.actor} · {e.at ? new Date(e.at).toLocaleDateString('en-GB') : ''}</span>
+                  <span className="text-xs text-text-muted">{e.actor} · {e.at ? fmtDate(e.at) : ''}</span>
                 </li>
               ))}
             </ul>
@@ -323,7 +324,7 @@ export function CampaignActivityTab({ campaign, projectId, limit }: { campaign: 
           <span className="absolute -start-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-brand-500 ring-2 ring-surface" aria-hidden />
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="text-sm font-semibold text-text-primary">{e.label}</span>
-            <span className="text-[11px] text-text-muted">{e.actor} · {e.at ? new Date(e.at).toLocaleString('en-GB') : ''}</span>
+            <span className="text-[11px] text-text-muted">{e.actor} · {e.at ? fmtDateTime(e.at) : ''}</span>
           </div>
           {e.action === 'campaign.updated' && e.before && e.after && (
             <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-text-muted">
@@ -392,7 +393,7 @@ export function CampaignPlatformsTab({
                   <span className="text-base font-bold text-text-primary">{providerLabel(prov, locale)}</span>
                   {isDemo && <span className="rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">Demo</span>}
                 </div>
-                <span className="text-[11px] text-text-muted">آخر مزامنة: {lastSync ? new Date(lastSync).toLocaleDateString('en-GB') : '—'}</span>
+                <span className="text-[11px] text-text-muted">آخر مزامنة: {lastSync ? fmtDate(lastSync) : '—'}</span>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <MiniStat label="الإنفاق" value={money(Number(m?.spend ?? 0), cur)} />
@@ -467,7 +468,7 @@ export function CampaignAlertsTab({ campaign, projectId }: { campaign: UnifiedCa
               <li key={a.id} className={`rounded-xl border p-3 ${sevTone[a.severity] ?? sevTone.info}`}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-bold">{a.title}</span>
-                  <span className="text-[11px] opacity-70">{a.created_at ? new Date(a.created_at).toLocaleString('en-GB') : ''}</span>
+                  <span className="text-[11px] opacity-70">{a.created_at ? fmtDateTime(a.created_at) : ''}</span>
                 </div>
                 {a.message && <p className="mt-0.5 text-xs opacity-90">{a.message}</p>}
                 <div className="mt-1 flex items-center gap-2 text-[11px] opacity-70"><span>{a.severity}</span>{a.source && <><span>·</span><span>{a.source}</span></>}<span>·</span><span>{a.status}</span></div>
@@ -503,7 +504,7 @@ export function CampaignReportsTab({ campaign, projectId }: { campaign: UnifiedC
             <div className="mt-0.5 flex items-center gap-2 text-[11px] text-text-muted">
               <span className={statusTone[r.status] ?? ''}>{r.status}</span>
               <span>· {r.mode === 'live' ? 'Live' : 'Snapshot'}</span>
-              {r.last_sent_at && <span>· أُرسل {new Date(r.last_sent_at).toLocaleDateString('en-GB')}</span>}
+              {r.last_sent_at && <span>· أُرسل {fmtDate(r.last_sent_at)}</span>}
             </div>
           </div>
           <div className="flex items-center gap-1.5">

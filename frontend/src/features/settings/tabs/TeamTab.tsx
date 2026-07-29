@@ -4,6 +4,7 @@ import { useTeam, useTeamActions } from '../api'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
+import { fmtDate } from '@/lib/datetime'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import { EmptyState, Skeleton } from '@/components/ui/States'
@@ -61,7 +62,7 @@ export function TeamTab() {
                     <td className="p-3">
                       <Select value={m.roles[0]?.slug ?? ''} onChange={(e) => guard(setRole.mutateAsync({ id: m.id, role: e.target.value }))} options={roleOptions} className="min-w-[140px]" />
                     </td>
-                    <td className="p-3 text-xs text-text-secondary">{m.last_login_at ? new Date(m.last_login_at).toLocaleDateString('en-GB') : '—'}</td>
+                    <td className="p-3 text-xs text-text-secondary">{m.last_login_at ? fmtDate(m.last_login_at) : '—'}</td>
                     <td className="p-3">{m.disabled ? <span className="rounded-full bg-[var(--negative-background)] px-2 py-0.5 text-xs text-danger">معطّل</span> : <span className="rounded-full bg-[var(--positive-background)] px-2 py-0.5 text-xs text-success">نشط</span>}</td>
                     <td className="p-3 text-end">
                       <button onClick={() => guard(toggle.mutateAsync(m.id))} className="me-2 text-xs font-semibold text-text-secondary hover:text-text-primary">{m.disabled ? 'تفعيل' : 'تعطيل'}</button>

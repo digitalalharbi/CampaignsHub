@@ -8,6 +8,7 @@ import {
 } from './api'
 import { listDeliveries, type NotificationDeliveryRow } from '@/features/notifications/api'
 import { getData, putData } from '@/lib/api/client'
+import { fmtDateTime } from '@/lib/datetime'
 import { ErrorSummary, MultiSelectField, SelectField, type FieldError } from '@/components/forms'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { toApiError } from '@/lib/api/client'
@@ -467,11 +468,11 @@ function PrefsTab({ c }: { c: Copy }) {
         </label>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1.5 text-xs text-text-secondary">{c.from}
-            <input type="time" value={p.quiet_hours.start} onChange={(e) => set({ quiet_hours: { ...p.quiet_hours, start: e.target.value } })}
+            <input type="time" lang="en-CA" dir="ltr" value={p.quiet_hours.start} onChange={(e) => set({ quiet_hours: { ...p.quiet_hours, start: e.target.value } })}
               className="rounded-lg border border-border bg-background px-2 py-1 text-sm text-text-primary" />
           </label>
           <label className="flex items-center gap-1.5 text-xs text-text-secondary">{c.to}
-            <input type="time" value={p.quiet_hours.end} onChange={(e) => set({ quiet_hours: { ...p.quiet_hours, end: e.target.value } })}
+            <input type="time" lang="en-CA" dir="ltr" value={p.quiet_hours.end} onChange={(e) => set({ quiet_hours: { ...p.quiet_hours, end: e.target.value } })}
               className="rounded-lg border border-border bg-background px-2 py-1 text-sm text-text-primary" />
           </label>
         </div>
@@ -549,8 +550,4 @@ function parseThreshold(raw: string, type: AlertType): Record<string, number> | 
   if (type === 'roas_drop' || type === 'cpa_increase' || type === 'cpl_increase') return { pct: n }
   return { ratio: n }
 }
-function fmt(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-}
+const fmt = (iso: string | null): string => fmtDateTime(iso)

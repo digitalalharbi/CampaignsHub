@@ -11,6 +11,7 @@ import { PaidMediaIntake } from './PaidMediaIntake'
 import { Button } from '@/components/ui/Button'
 import { EmailInput, FormField, TextInput, TextareaField } from '@/components/ui/form'
 import { controlClass } from '@/components/ui/Field'
+import { DateField } from '@/components/ui/DateField'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 
@@ -398,10 +399,10 @@ function DefaultIntake() {
               )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField label={ar ? 'تاريخ البداية' : 'Start date'}>
-                  <input type="date" className={controlClass} value={form.start_date} onChange={(e) => set('start_date', e.target.value)} />
+                  <DateField value={form.start_date} onChange={(v) => set('start_date', v)} />
                 </FormField>
                 <FormField label={ar ? 'التاريخ المطلوب' : 'Needed by'}>
-                  <input type="date" className={controlClass} value={form.due_date} onChange={(e) => set('due_date', e.target.value)} />
+                  <DateField value={form.due_date} onChange={(v) => set('due_date', v)} />
                 </FormField>
               </div>
               <FormField label={ar ? 'الأولوية' : 'Priority'}>

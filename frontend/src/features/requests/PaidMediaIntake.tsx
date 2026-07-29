@@ -18,6 +18,7 @@ import { MultiSelectField, SelectField, TagInput, type Option } from '@/componen
 import { Button } from '@/components/ui/Button'
 import { FormField, TextInput, TextareaField } from '@/components/ui/form'
 import { controlClass } from '@/components/ui/Field'
+import { DateField } from '@/components/ui/DateField'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 
@@ -310,13 +311,13 @@ export function PaidMediaIntake() {
       case 'date':
         return (
           <FormField key={f.token} label={label} hint={hint}>
-            <input type="date" className={controlClass} value={(answers[f.token] as string) ?? ''} onChange={(e) => setAnswer(f.token, e.target.value)} />
+            <DateField value={(answers[f.token] as string) ?? ''} onChange={(v) => setAnswer(f.token, v)} />
           </FormField>
         )
       case 'datetime':
         return (
           <FormField key={f.token} label={label} hint={hint}>
-            <input type="datetime-local" className={controlClass} value={(answers[f.token] as string) ?? ''} onChange={(e) => setAnswer(f.token, e.target.value)} />
+            <DateField withTime value={(answers[f.token] as string) ?? ''} onChange={(v) => setAnswer(f.token, v)} />
           </FormField>
         )
       case 'files':
