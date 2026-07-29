@@ -31,8 +31,8 @@ final class MetricsController extends Controller
         $prevTo = $from->copy()->subDay();
         $prevFrom = $prevTo->copy()->subDays($len - 1);
 
-        $current = $this->agg->totals($from, $to);
-        $previous = $this->agg->totals($prevFrom, $prevTo);
+        $current = $this->scoped($request)->totals($from, $to);
+        $previous = $this->scoped($request)->totals($prevFrom, $prevTo);
 
         $deltas = [];
         foreach ($current as $k => $v) {
@@ -52,7 +52,7 @@ final class MetricsController extends Controller
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
-        return ApiResponse::success($this->agg->timeseries($from, $to), 'Metrics time series.', meta: $this->meta($from, $to));
+        return ApiResponse::success($this->scoped($request)->timeseries($from, $to), 'Metrics time series.', meta: $this->meta($from, $to));
     }
 
     public function platforms(Request $request): JsonResponse
@@ -60,7 +60,7 @@ final class MetricsController extends Controller
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
-        return ApiResponse::success($this->agg->byProvider($from, $to), 'Metrics by platform.', meta: $this->meta($from, $to));
+        return ApiResponse::success($this->scoped($request)->byProvider($from, $to), 'Metrics by platform.', meta: $this->meta($from, $to));
     }
 
     public function campaigns(Request $request): JsonResponse
@@ -68,7 +68,7 @@ final class MetricsController extends Controller
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
-        return ApiResponse::success($this->agg->byCampaign($from, $to), 'Metrics by campaign.', meta: $this->meta($from, $to));
+        return ApiResponse::success($this->scoped($request)->byCampaign($from, $to), 'Metrics by campaign.', meta: $this->meta($from, $to));
     }
 
     public function funnel(Request $request): JsonResponse
@@ -76,7 +76,7 @@ final class MetricsController extends Controller
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
-        return ApiResponse::success($this->agg->funnel($from, $to), 'Conversion funnel.', meta: $this->meta($from, $to));
+        return ApiResponse::success($this->scoped($request)->funnel($from, $to), 'Conversion funnel.', meta: $this->meta($from, $to));
     }
 
     public function budget(Request $request): JsonResponse
@@ -85,7 +85,7 @@ final class MetricsController extends Controller
         [$from, $to] = $this->range($request);
 
         return ApiResponse::success(
-            $this->agg->budgetPacing($from, $to, Carbon::today()),
+            $this->scoped($request)->budgetPacing($from, $to, Carbon::today()),
             'Budget pacing.',
             meta: $this->meta($from, $to),
         );
@@ -103,8 +103,10 @@ final class MetricsController extends Controller
             ->groupBy('provider')
             ->map(fn ($g) => $g->first());
 
+        $providerFilter = $this->providerFilter($request);
         $providers = DailyMetric::query()
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->when($providerFilter !== [], fn ($q) => $q->whereIn('provider', $providerFilter))
             ->toBase()
             ->select('provider')
             ->selectRaw('MAX(metric_date) AS latest_date')
@@ -137,6 +139,26 @@ final class MetricsController extends Controller
     private function authorizeView(Request $request): void
     {
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+    }
+
+    /**
+     * The dashboard platform filter from the request (?provider=meta,google_ads — comma-list or repeated).
+     * Empty when absent. Backend-supported so every metric respects it (never a React-only filter).
+     *
+     * @return list<string>
+     */
+    private function providerFilter(Request $request): array
+    {
+        $raw = $request->query('provider', []);
+        $list = is_array($raw) ? $raw : ($raw === '' ? [] : explode(',', (string) $raw));
+
+        return array_values(array_filter(array_map('trim', $list)));
+    }
+
+    /** The aggregator scoped by the dashboard platform filter. */
+    private function scoped(Request $request): MetricsAggregator
+    {
+        return $this->agg->forProviders($this->providerFilter($request));
     }
 
     /** @return array{0: Carbon, 1: Carbon} */

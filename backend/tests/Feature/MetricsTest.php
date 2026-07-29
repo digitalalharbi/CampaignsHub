@@ -156,6 +156,36 @@ final class MetricsTest extends TestCase
         $this->assertEqualsWithDelta(0.75, $rows[0]['spend_share'], 0.001);
     }
 
+    public function test_platform_filter_scopes_metrics_backend_side(): void
+    {
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'spend', 300, '2026-06-01', ['provider' => 'meta', 'camp' => 'm1']),
+            $this->metric($this->projectA->id, 'spend', 100, '2026-06-01', ['provider' => 'google_ads', 'camp' => 'g1']),
+        ]);
+
+        // Aggregator: forProviders() limits every figure to the selected platform(s).
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        app(ProjectContext::class)->setProjectId($this->projectA->id);
+        $metaOnly = app(MetricsAggregator::class)->forProviders(['meta'])->totals(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-02'));
+        $this->assertEquals(300.0, $metaOnly['spend']);
+        $all = app(MetricsAggregator::class)->totals(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-02'));
+        $this->assertEquals(400.0, $all['spend']);
+        app(ProjectContext::class)->forget();
+        app(TenantContext::class)->forget();
+
+        // API: ?provider=meta filters the platform breakdown AND the summary — backend-supported, not React-only.
+        $platforms = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/platforms?from=2026-06-01&to=2026-06-02&provider=meta")
+            ->assertOk()->json('data');
+        $this->assertCount(1, $platforms);
+        $this->assertSame('meta', $platforms[0]['provider']);
+
+        $summary = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/summary?from=2026-06-01&to=2026-06-02&provider=meta")
+            ->assertOk()->json('data');
+        $this->assertEquals(300.0, $summary['current']['spend']);
+    }
+
     public function test_summary_api_requires_permission_and_returns_shape(): void
     {
         app(UpsertDailyMetrics::class)->handle([

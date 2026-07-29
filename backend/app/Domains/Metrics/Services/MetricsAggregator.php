@@ -31,6 +31,9 @@ final class MetricsAggregator
     /** When set, every aggregation is scoped to these project ids (a client spans many projects). */
     private ?array $projectIds = null;
 
+    /** When set, every aggregation is scoped to these ad platforms (dashboard command-center filter). */
+    private ?array $providers = null;
+
     /**
      * Return a campaign-scoped copy of the aggregator — every subsequent totals/byProvider/timeseries/
      * funnel/budget call is filtered to this campaign's metrics (on top of the project/tenant scope).
@@ -59,6 +62,21 @@ final class MetricsAggregator
         return $clone;
     }
 
+    /**
+     * Return a copy scoped to a set of ad platforms (Snapchat/TikTok/Meta/Google Ads/X/LinkedIn). Empty →
+     * no platform filter. Backend-supported dashboard platform filter — every KPI/chart/breakdown it
+     * produces is limited to these providers (never a React-only filter).
+     *
+     * @param  list<string>  $providers
+     */
+    public function forProviders(array $providers): self
+    {
+        $clone = clone $this;
+        $clone->providers = $providers === [] ? null : array_values($providers);
+
+        return $clone;
+    }
+
     private function base(Carbon $from, Carbon $to): Builder
     {
         // Reuse the model's project/tenant scope, then drop to the query builder for aggregation.
@@ -74,6 +92,10 @@ final class MetricsAggregator
             // A never-matching UUID keeps the column type valid on Postgres. Column is qualified because
             // byCampaign() left-joins unified_campaigns (which also has a project_id).
             $query->whereIn('daily_metrics.project_id', $this->projectIds ?: ['00000000-0000-0000-0000-000000000000']);
+        }
+
+        if ($this->providers !== null) {
+            $query->whereIn('daily_metrics.provider', $this->providers);
         }
 
         return $query->toBase();
