@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, BellRing, CheckCircle2, Clock, ListChecks, Plus, Settings2, Truck } from 'lucide-react'
+import { AlertTriangle, BellRing, CheckCircle2, Clock, ListChecks, Plus, Search, Settings2, Truck } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import {
   createAlertRule, createTaskFromAlert, listAlertEvents, listAlertRules,
@@ -17,7 +17,9 @@ const COPY = {
   ar: {
     title: 'التنبيهات', subtitle: 'راقب المخاطر التشغيلية وتصرّف عليها — الميزانية، النتائج، المزامنة، والتوكنات.',
     tab_alerts: 'التنبيهات', tab_rules: 'القواعد', tab_prefs: 'التفضيلات', tab_deliveries: 'سجل التسليم',
-    active: 'نشِطة', snoozed: 'مؤجّلة', resolved: 'مُغلقة', none: 'لا يوجد شيء هنا.',
+    all: 'الكل', active: 'نشِطة', snoozed: 'مؤجّلة', resolved: 'مُغلقة', none: 'لا يوجد شيء هنا.',
+    no_match: 'لا نتائج تطابق البحث أو الفلاتر.', search_ph: 'ابحث في التنبيهات…',
+    sum_open: 'مفتوحة', sum_critical: 'حرِجة', sum_snoozed: 'مؤجّلة', sum_resolved: 'مُغلقة', sum_open_hint: 'تحتاج إجراء',
     resolve: 'إغلاق', snooze: 'تأجيل', create_task: 'إنشاء مهمة', task_created: 'أُنشئت المهمة',
     severity: 'الخطورة', source: 'المصدر', value: 'القيمة', threshold: 'الحد', triggered: 'أُطلق',
     sev_info: 'معلومة', sev_warning: 'تحذير', sev_critical: 'حرِج',
@@ -35,7 +37,9 @@ const COPY = {
   en: {
     title: 'Alerts', subtitle: 'Watch and act on operational risk — budget, results, sync, and tokens.',
     tab_alerts: 'Alerts', tab_rules: 'Rules', tab_prefs: 'Preferences', tab_deliveries: 'Delivery log',
-    active: 'Active', snoozed: 'Snoozed', resolved: 'Resolved', none: 'Nothing here.',
+    all: 'All', active: 'Active', snoozed: 'Snoozed', resolved: 'Resolved', none: 'Nothing here.',
+    no_match: 'No alerts match your search or filters.', search_ph: 'Search alerts…',
+    sum_open: 'Open', sum_critical: 'Critical', sum_snoozed: 'Snoozed', sum_resolved: 'Resolved', sum_open_hint: 'Need action',
     resolve: 'Resolve', snooze: 'Snooze', create_task: 'Create task', task_created: 'Task created',
     severity: 'Severity', source: 'Source', value: 'Value', threshold: 'Threshold', triggered: 'Triggered',
     sev_info: 'Info', sev_warning: 'Warning', sev_critical: 'Critical',
@@ -117,8 +121,11 @@ type Copy = (typeof COPY)['ar']
 function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   const qc = useQueryClient()
   const [filter, setFilter] = useState<EventFilter>('open')
+  const [sev, setSev] = useState<'all' | AlertEvent['severity']>('all')
+  const [term, setTerm] = useState('')
   // Live update: poll every 20s so newly-raised alerts appear without a manual refresh.
-  const q = useQuery({ queryKey: ['alert-events', filter], queryFn: () => listAlertEvents(filter), refetchInterval: 20_000 })
+  // Fetch the full ledger once (backend caps at 200) so the summary cards and filters stay client-side.
+  const q = useQuery({ queryKey: ['alert-events', 'all'], queryFn: () => listAlertEvents(), refetchInterval: 20_000 })
   const invalidate = () => qc.invalidateQueries({ queryKey: ['alert-events'] })
 
   const resolveM = useMutation({ mutationFn: resolveAlert, onSuccess: invalidate })
@@ -129,29 +136,82 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     onSuccess: (_d, e) => setTasked((t) => ({ ...t, [e.id]: true })),
   })
 
+  const all = q.data ?? []
+  const summary = {
+    open: all.filter((e) => e.status === 'open').length,
+    critical: all.filter((e) => e.status === 'open' && e.severity === 'critical').length,
+    snoozed: all.filter((e) => e.status === 'snoozed').length,
+    resolved: all.filter((e) => e.status === 'resolved').length,
+  }
+
   const filters: { id: EventFilter; label: string }[] = [
     { id: 'open', label: c.active }, { id: 'snoozed', label: c.snoozed }, { id: 'resolved', label: c.resolved },
   ]
-  const events = q.data ?? []
+  const sevFilters: { id: 'all' | AlertEvent['severity']; label: string }[] = [
+    { id: 'all', label: c.all }, { id: 'critical', label: c.sev_critical },
+    { id: 'warning', label: c.sev_warning }, { id: 'info', label: c.sev_info },
+  ]
+  const needle = term.trim().toLowerCase()
+  const events = all.filter((e) => {
+    if (e.status !== filter) return false
+    if (sev !== 'all' && e.severity !== sev) return false
+    if (!needle) return true
+    const hay = `${labelFor(e, locale)} ${messageFor(e, locale)} ${TYPE_LABEL[e.type as AlertType]?.[locale] ?? e.type}`.toLowerCase()
+    return hay.includes(needle)
+  })
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex gap-2">
-        {filters.map((f) => (
-          <button
-            key={f.id}
-            onClick={() => setFilter(f.id)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              filter === f.id ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
+    <div className="flex flex-col gap-4">
+      {/* Summary — status of the alert ledger at a glance. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <SummaryCard label={c.sum_open} value={summary.open} hint={c.sum_open_hint} tone="brand" />
+        <SummaryCard label={c.sum_critical} value={summary.critical} tone="danger" />
+        <SummaryCard label={c.sum_snoozed} value={summary.snoozed} tone="warning" />
+        <SummaryCard label={c.sum_resolved} value={summary.resolved} tone="success" />
+      </div>
+
+      {/* Search + status/severity filters. */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
+        <label className="relative flex w-full items-center sm:max-w-xs">
+          <Search size={15} className="pointer-events-none absolute start-3 text-text-muted" aria-hidden />
+          <input
+            value={term}
+            onChange={(ev) => setTerm(ev.target.value)}
+            placeholder={c.search_ph}
+            className="w-full rounded-xl border border-border bg-surface-secondary py-2 pe-3 ps-9 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none"
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          {filters.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setFilter(f.id)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                filter === f.id ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+          {sevFilters.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setSev(f.id)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                sev === f.id ? 'bg-text-primary text-surface' : 'bg-surface-hover text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {events.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">{c.none}</p>
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">
+          {all.length === 0 ? c.none : c.no_match}
+        </p>
       ) : (
         <ul className="flex flex-col gap-2">
           {events.map((e) => (
@@ -195,6 +255,20 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           ))}
         </ul>
       )}
+    </div>
+  )
+}
+
+function SummaryCard({ label, value, hint, tone }: { label: string; value: number; hint?: string; tone: 'brand' | 'danger' | 'warning' | 'success' }) {
+  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', danger: 'bg-danger', warning: 'bg-warning', success: 'bg-success' }
+  return (
+    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
+        <span className="text-xs font-semibold text-text-secondary">{label}</span>
+      </div>
+      <span className="text-2xl font-extrabold tnum text-text-primary">{value}</span>
+      {hint && <span className="text-[11px] text-text-tertiary">{hint}</span>}
     </div>
   )
 }
