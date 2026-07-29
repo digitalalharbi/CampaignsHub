@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCheck, Inbox, MessagesSquare, Plus, Send, X } from 'lucide-react'
+import { CheckCheck, Inbox, MessagesSquare, Plus, Search, Send, X } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import {
@@ -12,6 +12,8 @@ const COPY = {
   ar: {
     title: 'المحادثات', subtitle: 'صندوق وارد فريق العمل — تابع محادثات العملاء وردّ عليها.',
     filter_open: 'مفتوحة', filter_closed: 'مغلقة', filter_all: 'الكل',
+    search_ph: 'ابحث بالموضوع…', no_match: 'لا محادثات تطابق البحث أو الفلتر.',
+    sum_total: 'إجمالي المحادثات', sum_open: 'مفتوحة', sum_closed: 'مغلقة', sum_recent: 'نشطة خلال 7 أيام',
     none: 'لا توجد محادثات.', error: 'تعذّر تحميل المحادثات.', loading: 'جارٍ التحميل…',
     pick: 'اختر محادثة لعرضها.', unread: 'غير مقروءة', mark_read: 'تحديد كمقروء', marking: 'جارٍ…',
     reply_ph: 'اكتب ردًا باسم الفريق…', send: 'إرسال', sending: 'جارٍ الإرسال…',
@@ -22,6 +24,8 @@ const COPY = {
   en: {
     title: 'Conversations', subtitle: 'The team inbox — follow and reply to client conversations.',
     filter_open: 'Open', filter_closed: 'Closed', filter_all: 'All',
+    search_ph: 'Search by subject…', no_match: 'No conversations match your search or filter.',
+    sum_total: 'Total conversations', sum_open: 'Open', sum_closed: 'Closed', sum_recent: 'Active in 7 days',
     none: 'No threads.', error: 'Could not load threads.', loading: 'Loading…',
     pick: 'Pick a thread to view it.', unread: 'unread', mark_read: 'Mark read', marking: 'Marking…',
     reply_ph: 'Write a reply as the team…', send: 'Send', sending: 'Sending…',
@@ -40,19 +44,36 @@ export function ThreadsPage() {
   const c = COPY[locale]
   const canManage = useAuth((s) => s.hasPermission('messaging.manage'))
   const [filter, setFilter] = useState<ThreadStatus | 'all'>('open')
+  const [term, setTerm] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [composing, setComposing] = useState(false)
   const qc = useQueryClient()
 
+  // Fetch the full thread list once so the summary and filters stay client-side (the list endpoint carries status).
   const q = useQuery({
-    queryKey: ['messaging', 'threads', filter],
-    queryFn: () => listThreads(filter === 'all' ? undefined : filter),
+    queryKey: ['messaging', 'threads', 'all'],
+    queryFn: () => listThreads(),
     refetchInterval: 30_000,
   })
-  const threads = q.data ?? []
+  const all = q.data ?? []
+
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+  const summary = {
+    total: all.length,
+    open: all.filter((t) => t.status === 'open').length,
+    closed: all.filter((t) => t.status === 'closed').length,
+    recent: all.filter((t) => t.last_message_at && new Date(t.last_message_at).getTime() >= weekAgo).length,
+  }
 
   const filterLabel = (f: ThreadStatus | 'all') =>
     f === 'open' ? c.filter_open : f === 'closed' ? c.filter_closed : c.filter_all
+
+  const needle = term.trim().toLowerCase()
+  const threads = all.filter((t) => {
+    if (filter !== 'all' && t.status !== filter) return false
+    if (needle && !t.subject.toLowerCase().includes(needle)) return false
+    return true
+  })
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 p-4 md:p-6">
@@ -69,18 +90,38 @@ export function ThreadsPage() {
         ) : null}
       </header>
 
-      <div className="flex gap-2">
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              filter === f ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {filterLabel(f)}
-          </button>
-        ))}
+      {/* Summary — the inbox at a glance. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <ThreadSummaryCard label={c.sum_total} value={summary.total} tone="brand" />
+        <ThreadSummaryCard label={c.sum_open} value={summary.open} tone="warning" />
+        <ThreadSummaryCard label={c.sum_closed} value={summary.closed} tone="success" />
+        <ThreadSummaryCard label={c.sum_recent} value={summary.recent} tone="muted" />
+      </div>
+
+      {/* Search + status filters. */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
+        <label className="relative flex w-full items-center sm:max-w-xs">
+          <Search size={15} className="pointer-events-none absolute start-3 text-text-muted" aria-hidden />
+          <input
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+            placeholder={c.search_ph}
+            className="w-full rounded-xl border border-border bg-surface-secondary py-2 pe-3 ps-9 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none"
+          />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {FILTERS.map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                filter === f ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              {filterLabel(f)}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-[320px_1fr]">
@@ -91,7 +132,7 @@ export function ThreadsPage() {
             <p className="rounded-xl border border-danger/30 bg-danger/5 p-8 text-center text-sm text-danger">{c.error}</p>
           ) : threads.length === 0 ? (
             <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border p-10 text-center text-text-secondary">
-              <Inbox size={22} /><span className="text-sm">{c.none}</span>
+              <Inbox size={22} /><span className="text-sm">{all.length === 0 ? c.none : c.no_match}</span>
             </div>
           ) : (
             threads.map((t) => (
@@ -123,6 +164,19 @@ export function ThreadsPage() {
           qc.invalidateQueries({ queryKey: ['messaging', 'threads'] })
         }} />
       ) : null}
+    </div>
+  )
+}
+
+function ThreadSummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'warning' | 'success' | 'muted' }) {
+  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', warning: 'bg-warning', success: 'bg-success', muted: 'bg-text-muted' }
+  return (
+    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
+        <span className="text-xs font-semibold text-text-secondary">{label}</span>
+      </div>
+      <span className="text-2xl font-extrabold tnum text-text-primary" dir="ltr">{value}</span>
     </div>
   )
 }
