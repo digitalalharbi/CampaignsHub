@@ -46,7 +46,10 @@ export function CampaignsPage() {
   const { currentProjectId: projectId } = useProject()
 
   const [days, setDays] = useState(30)
-  const [view, setView] = useState<ViewMode>('overview')
+  // PERF-CAMPAIGNS-001: the page opens on the CARD LIST, not the chart-heavy overview. Four charts plus
+  // five metric queries on first paint made the page slow to become interactive on Firefox under load —
+  // and a page called "campaigns" should show campaigns first anyway. Overview is one click away.
+  const [view, setView] = useState<ViewMode>('cards')
   const [compareIds, setCompareIds] = useState<string[]>([])
   const [status, setStatus] = useState('')
   const [objective, setObjective] = useState('')
@@ -61,8 +64,8 @@ export function CampaignsPage() {
     enabled: Boolean(projectId),
   })
   const summary = useSummary(projectId, range)
-  const timeseries = useTimeseries(projectId, range)
-  const platforms = usePlatforms(projectId, range)
+  const timeseries = useTimeseries(view === 'overview' ? projectId : null, range)
+  const platforms = usePlatforms(view === 'overview' ? projectId : null, range)
   const budget = useBudget(projectId, range)
   const metricCampaigns = useCampaigns(projectId, range)
 
