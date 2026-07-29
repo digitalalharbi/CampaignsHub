@@ -53,11 +53,18 @@ export function InvoicesPage() {
   const [filter, setFilter] = useState<InvoiceStatus | 'all'>('all')
   const [selected, setSelected] = useState<Invoice | null>(null)
 
-  const q = useQuery({
-    queryKey: ['billing', 'invoices', filter],
-    queryFn: () => listInvoices(filter === 'all' ? undefined : filter),
-  })
-  const invoices = q.data ?? []
+  // Fetch the full ledger once — summary cards + filters stay client-side.
+  const q = useQuery({ queryKey: ['billing', 'invoices', 'all'], queryFn: () => listInvoices() })
+  const all = q.data ?? []
+  const invoices = filter === 'all' ? all : all.filter((i) => i.status === filter)
+
+  const outstandingOf = (i: Invoice) => Math.max(0, Number(i.total) - Number(i.amount_paid))
+  const summary = {
+    total: all.length,
+    issued: all.filter((i) => i.status === 'issued' || i.status === 'partially_paid').length,
+    paid: all.filter((i) => i.status === 'paid').length,
+    outstanding: all.reduce((s, i) => s + (['issued', 'partially_paid'].includes(i.status) ? outstandingOf(i) : 0), 0),
+  }
 
   const filterLabel = (f: InvoiceStatus | 'all') => (f === 'all' ? c.all : invoiceStatusMeta(f, ar).label)
 
@@ -69,6 +76,16 @@ export function InvoicesPage() {
       </header>
 
       <BillingTabs />
+
+      {/* Summary — the invoice ledger at a glance (outstanding = unpaid remainder of payable invoices). */}
+      {!q.isLoading && !q.isError && all.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <InvSummaryCard label={ar ? 'إجمالي الفواتير' : 'Total invoices'} value={String(summary.total)} tone="brand" />
+          <InvSummaryCard label={ar ? 'قابلة للسداد' : 'Payable'} value={String(summary.issued)} tone="info" />
+          <InvSummaryCard label={ar ? 'مدفوعة' : 'Paid'} value={String(summary.paid)} tone="success" />
+          <InvSummaryCard label={ar ? 'المتبقي' : 'Outstanding'} value={formatMoney(summary.outstanding, all[0]?.currency ?? 'SAR')} tone="warning" />
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((f) => (
@@ -132,6 +149,19 @@ export function InvoicesPage() {
       )}
 
       {selected ? <InvoiceDrawer invoice={selected} c={c} ar={ar} onClose={() => setSelected(null)} /> : null}
+    </div>
+  )
+}
+
+function InvSummaryCard({ label, value, tone }: { label: string; value: string; tone: 'brand' | 'info' | 'success' | 'warning' }) {
+  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', info: 'bg-info', success: 'bg-success', warning: 'bg-warning' }
+  return (
+    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
+        <span className="text-xs font-semibold text-text-secondary">{label}</span>
+      </div>
+      <span className="tnum text-2xl font-extrabold text-text-primary" dir="ltr">{value}</span>
     </div>
   )
 }

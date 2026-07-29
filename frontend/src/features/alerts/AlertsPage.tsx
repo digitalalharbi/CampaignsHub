@@ -123,6 +123,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   const qc = useQueryClient()
   const [filter, setFilter] = useState<EventFilter>('open')
   const [sev, setSev] = useState<'all' | AlertEvent['severity']>('all')
+  const [type, setType] = useState<'all' | string>('all')
   const [term, setTerm] = useState('')
   // Live update: poll every 20s so newly-raised alerts appear without a manual refresh.
   // Fetch the full ledger once (backend caps at 200) so the summary cards and filters stay client-side.
@@ -152,10 +153,14 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     { id: 'all', label: c.all }, { id: 'critical', label: c.sev_critical },
     { id: 'warning', label: c.sev_warning }, { id: 'info', label: c.sev_info },
   ]
+  // Category (type) chips — only the types actually present in the ledger, to keep the row honest and short.
+  const presentTypes = [...new Set(all.map((e) => e.type))]
+
   const needle = term.trim().toLowerCase()
   const events = all.filter((e) => {
     if (e.status !== filter) return false
     if (sev !== 'all' && e.severity !== sev) return false
+    if (type !== 'all' && e.type !== type) return false
     if (!needle) return true
     const hay = `${labelFor(e, locale)} ${messageFor(e, locale)} ${TYPE_LABEL[e.type as AlertType]?.[locale] ?? e.type}`.toLowerCase()
     return hay.includes(needle)
@@ -208,6 +213,22 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           ))}
         </div>
       </div>
+
+      {/* Category (type) filter — only types present in the data. */}
+      {presentTypes.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button onClick={() => setType('all')}
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${type === 'all' ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
+            {c.source}: {c.all}
+          </button>
+          {presentTypes.map((tp) => (
+            <button key={tp} onClick={() => setType(type === tp ? 'all' : tp)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${type === tp ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
+              {TYPE_LABEL[tp as AlertType]?.[locale] ?? tp}
+            </button>
+          ))}
+        </div>
+      )}
 
       {events.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">

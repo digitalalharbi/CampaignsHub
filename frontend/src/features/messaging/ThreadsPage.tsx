@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCheck, Inbox, MessagesSquare, Plus, Search, Send, X } from 'lucide-react'
 import { useUi } from '@/stores/ui'
@@ -14,6 +15,7 @@ const COPY = {
     filter_open: 'مفتوحة', filter_closed: 'مغلقة', filter_all: 'الكل',
     search_ph: 'ابحث بالموضوع…', no_match: 'لا محادثات تطابق البحث أو الفلتر.',
     sum_total: 'إجمالي المحادثات', sum_open: 'مفتوحة', sum_closed: 'مغلقة', sum_recent: 'نشطة خلال 7 أيام',
+    ctx_client: 'ملف العميل', ctx_request: 'الطلب المرتبط', ctx_project: 'المشروع',
     none: 'لا توجد محادثات.', error: 'تعذّر تحميل المحادثات.', loading: 'جارٍ التحميل…',
     pick: 'اختر محادثة لعرضها.', unread: 'غير مقروءة', mark_read: 'تحديد كمقروء', marking: 'جارٍ…',
     reply_ph: 'اكتب ردًا باسم الفريق…', send: 'إرسال', sending: 'جارٍ الإرسال…',
@@ -26,6 +28,7 @@ const COPY = {
     filter_open: 'Open', filter_closed: 'Closed', filter_all: 'All',
     search_ph: 'Search by subject…', no_match: 'No conversations match your search or filter.',
     sum_total: 'Total conversations', sum_open: 'Open', sum_closed: 'Closed', sum_recent: 'Active in 7 days',
+    ctx_client: 'Client profile', ctx_request: 'Linked request', ctx_project: 'Project',
     none: 'No threads.', error: 'Could not load threads.', loading: 'Loading…',
     pick: 'Pick a thread to view it.', unread: 'unread', mark_read: 'Mark read', marking: 'Marking…',
     reply_ph: 'Write a reply as the team…', send: 'Send', sending: 'Sending…',
@@ -233,6 +236,29 @@ function ThreadDetailPanel({
         <div className="flex flex-col gap-1">
           <h2 className="font-extrabold text-text-primary">{thread.subject}</h2>
           <span className="text-[11px] text-text-tertiary">{c.last_activity}: <span className="tnum" dir="ltr">{formatDateTime(thread.last_message_at)}</span></span>
+          {/* Context linkage — jump to the entities this conversation is about. */}
+          {(thread.client_workspace_id || thread.request_id || thread.project_id) && (
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {thread.client_workspace_id && (
+                <Link to={`/app/clients/${thread.client_workspace_id}`}
+                  className="rounded-md bg-surface-hover px-1.5 py-0.5 text-[11px] font-semibold text-text-secondary hover:text-brand-600">
+                  {c.ctx_client}
+                </Link>
+              )}
+              {thread.request_id && (
+                <Link to={`/app/requests/${thread.request_id}`}
+                  className="rounded-md bg-surface-hover px-1.5 py-0.5 text-[11px] font-semibold text-text-secondary hover:text-brand-600">
+                  {c.ctx_request}
+                </Link>
+              )}
+              {thread.project_id && (
+                <Link to="/projects"
+                  className="rounded-md bg-surface-hover px-1.5 py-0.5 text-[11px] font-semibold text-text-secondary hover:text-brand-600">
+                  {c.ctx_project}
+                </Link>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {unread.team > 0 ? (
