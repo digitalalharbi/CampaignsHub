@@ -11,7 +11,7 @@ import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCa
 import { DEMO_OVERVIEW_VM } from '@/features/campaigns/overview/demoOverview'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/stores/auth'
-import { getPublishedPage } from '@/features/settings/publicPagesApi'
+import { getPublishedPage, type PublicPageKey } from '@/features/settings/publicPagesApi'
 import { useUi } from '@/stores/ui'
 
 const STATUS_TONE: Record<string, string> = {
@@ -44,12 +44,16 @@ export function PublicHomePage() {
   const portal = portalParam === 'influencer' || portalParam === 'client' ? portalParam : null
   const hero = portal ? { ...c.hero, ...c.portals[portal] } : c.hero
   const portalPreview = portal ? c.portals[portal] : null
+  // SITE-CMS-002: each public surface reads its OWN editable document, so the paid, influencer and
+  // request-tracking portals are managed separately from the homepage in System Settings.
+  const cmsPage: PublicPageKey =
+    portal === 'influencer' ? 'portal_influencer' : portal === 'client' ? 'portal_tracking' : portalParam === 'paid' ? 'portal_paid' : 'home'
   const [showServices, setShowServices] = useState(false)
   const authed = status === 'authenticated'
 
   // Tenant-editable public content (System Settings → الواجهة الرئيسية والبوابات). Published copy wins over
   // the shipped defaults; a failed/absent fetch simply leaves the shipped copy in place (never a blank page).
-  const cms = useQuery({ queryKey: ['public-page', 'home'], queryFn: () => getPublishedPage('home'), retry: false, staleTime: 60_000 })
+  const cms = useQuery({ queryKey: ['public-page', cmsPage], queryFn: () => getPublishedPage(cmsPage), retry: false, staleTime: 60_000 })
   const cmsContent = cms.data?.content
   const sec = (key: string): { enabled?: boolean; order?: number; [k: string]: unknown } | undefined =>
     (cmsContent?.[key] as { enabled?: boolean } | undefined) ?? undefined
@@ -113,9 +117,9 @@ export function PublicHomePage() {
         <div className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)] lg:py-10">
           {/* Value proposition — right column, row 1 */}
           <div className="order-1 flex flex-col lg:col-start-1 lg:row-start-1">
-            <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[13px] font-semibold text-brand-700">{portal ? hero.eyebrow : txt('hero', 'eyebrow', hero.eyebrow)}</p>
-            <h1 className="mt-4 font-heading text-[28px] font-extrabold leading-[1.14] sm:text-[40px]">{portal ? hero.title : txt('hero', 'title', hero.title)}</h1>
-            <p className="mt-3 max-w-xl text-[16px] leading-relaxed text-text-secondary">{portal ? hero.desc : txt('hero', 'desc', hero.desc)}</p>
+            <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[13px] font-semibold text-brand-700">{txt('hero', 'eyebrow', hero.eyebrow)}</p>
+            <h1 className="mt-4 font-heading text-[28px] font-extrabold leading-[1.14] sm:text-[40px]">{txt('hero', 'title', hero.title)}</h1>
+            <p className="mt-3 max-w-xl text-[16px] leading-relaxed text-text-secondary">{txt('hero', 'desc', hero.desc)}</p>
             <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-text-muted">{hero.support}</p>
             <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
               {hero.points.map((pt) => (

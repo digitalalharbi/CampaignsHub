@@ -7,6 +7,21 @@ import { Button } from '@/components/ui/Button'
 import { TextareaField } from '@/components/ui/form'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { getPublishedPage } from '@/features/settings/publicPagesApi'
+
+/**
+ * SITE-CMS-002: the request-tracking portal reads its own published document
+ * (System Settings → الواجهة الرئيسية والبوابات → بوابة متابعة الطلبات), so its copy is editable
+ * without a code change. A missing/failed fetch leaves the shipped copy in place.
+ */
+function useTrackingCopy() {
+  const cms = useQuery({ queryKey: ['public-page', 'portal_tracking'], queryFn: () => getPublishedPage('portal_tracking'), retry: false, staleTime: 60_000 })
+  const heroSection = cms.data?.content?.hero as Record<string, unknown> | undefined
+  return (field: string, fallback: string): string => {
+    const v = heroSection?.[field]
+    return typeof v === 'string' && v.trim() !== '' ? v : fallback
+  }
+}
 
 /**
  * Public request tracking — client-safe view keyed by a secure token. Shows only what the API returns
@@ -39,11 +54,12 @@ export function RequestTrackPage() {
 
 function TokenEntry({ ar, onSubmit }: { ar: boolean; onSubmit: (t: string) => void }) {
   const [value, setValue] = useState('')
+  const txt = useTrackingCopy()
   return (
     <div className="rounded-2xl border border-border bg-surface p-6 text-center">
       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-primary-soft text-brand-600"><Search size={26} /></div>
-      <h1 className="mt-4 font-heading text-2xl font-extrabold">{ar ? 'تتبع الطلب' : 'Track your request'}</h1>
-      <p className="mt-1.5 text-sm text-text-secondary">{ar ? 'أدخل رمز التتبع الآمن الخاص بطلبك.' : 'Enter your secure tracking token.'}</p>
+      <h1 className="mt-4 font-heading text-2xl font-extrabold">{txt('title', ar ? 'تتبع الطلب' : 'Track your request')}</h1>
+      <p className="mt-1.5 text-sm text-text-secondary">{txt('desc', ar ? 'أدخل رمز التتبع الآمن الخاص بطلبك.' : 'Enter your secure tracking token.')}</p>
       <form className="mt-5 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (value.trim()) onSubmit(value.trim()) }}>
         <input value={value} onChange={(e) => setValue(e.target.value)} dir="ltr" placeholder="token" className="min-h-[52px] flex-1 rounded-xl border border-border bg-surface px-4 text-base outline-none focus:border-brand-500" />
         <Button type="submit" size="lg">{ar ? 'تتبع' : 'Track'}</Button>

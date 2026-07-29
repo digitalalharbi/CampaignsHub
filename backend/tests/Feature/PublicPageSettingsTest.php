@@ -137,4 +137,30 @@ final class PublicPageSettingsTest extends TestCase
         $this->assertFalse($paid['is_published']);
         $this->assertNotSame('A only', $paid['draft']['hero']['title'] ?? null);
     }
+
+    /**
+     * SITE-CMS-002: each of the three external portals is its own editable document, so publishing the
+     * influencer portal must not touch the homepage or the other portals.
+     */
+    public function test_each_external_portal_publishes_independently(): void
+    {
+        $owner = $this->owner();
+
+        $this->actingAs($owner, 'sanctum')
+            ->putJson('/api/v1/settings/public-pages/portal_influencer', ['draft' => ['hero' => ['title' => 'بوابة المؤثرين المحرَّرة']]])
+            ->assertOk();
+        $this->actingAs($owner, 'sanctum')->postJson('/api/v1/settings/public-pages/portal_influencer/publish')->assertOk();
+
+        // The influencer portal serves the edited copy to a visitor with no auth...
+        $influencer = $this->getJson('/api/v1/public/pages/portal_influencer')->assertOk();
+        $this->assertSame('published', $influencer->json('data.source'));
+        $this->assertSame('بوابة المؤثرين المحرَّرة', $influencer->json('data.content.hero.title'));
+
+        // ...while every other public surface is untouched and still serves its shipped defaults.
+        foreach (['home', 'portal_paid', 'portal_tracking'] as $page) {
+            $other = $this->getJson("/api/v1/public/pages/{$page}")->assertOk();
+            $this->assertSame('defaults', $other->json('data.source'), "{$page} must not inherit another portal's content");
+            $this->assertNotSame('بوابة المؤثرين المحرَّرة', $other->json('data.content.hero.title'));
+        }
+    }
 }
