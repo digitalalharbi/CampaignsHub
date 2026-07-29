@@ -61,7 +61,9 @@ function objectiveKpis(objective: string, cur: MetricTotals | undefined, activeC
     case 'engagement':
       return [{ key: 'eng', label: 'التفاعلات', value: num(cur?.engagements) }, { key: 'er', label: 'معدل التفاعل', value: percent(cur?.engagement_rate, 2) }, { key: 'cpe', label: 'CPE', value: money(cur?.cpe) }, { key: 'vv', label: 'مشاهدات الفيديو', value: num(cur?.video_views) }, spend, active]
     default:
-      return [{ key: 'spend', label: 'الإنفاق', value: money(cur?.spend), hint: 'إجمالي الإنفاق' }, { key: 'results', label: 'النتائج', value: num(cur?.conversions) }, { key: 'roas', label: 'ROAS', value: ratio(cur?.roas ?? null) }, { key: 'cpa', label: 'تكلفة النتيجة', value: money(cur?.cpa) }, { key: 'rev', label: 'الإيرادات', value: money(cur?.revenue) }, active]
+      // "all"/mixed objectives → operational, objective-NEUTRAL metrics only. NEVER a blended ROAS/CPA/CPL
+      // across incompatible objectives (that would be misleading — different objectives, different success).
+      return [{ key: 'spend', label: 'إجمالي الإنفاق', value: money(cur?.spend), hint: 'إجمالي الإنفاق عبر كل الأهداف' }, { key: 'campaigns', label: 'عدد الحملات', value: num(activeCount) }, { key: 'impr', label: 'الظهور', value: num(cur?.impressions) }, { key: 'clicks', label: 'النقرات', value: num(cur?.clicks) }]
   }
 }
 import { useProject } from '@/stores/project'
@@ -74,7 +76,8 @@ export function DashboardPage() {
   const [days, setDays] = useState(30)
   const range = useLastNDaysRange(days)
   const [providers, setProviders] = useState<string[]>([])
-  const [objective, setObjective] = useState('all')
+  // Default objective = Awareness (never "all" with blended KPIs); a saved default view can override it.
+  const [objective, setObjective] = useState('awareness')
   const filters = useMemo(() => ({ provider: providers, objective: objective === 'all' ? [] : [objective] }), [providers, objective])
   const toggleProvider = (key: string) =>
     setProviders((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]))
@@ -140,13 +143,16 @@ export function DashboardPage() {
     [cur, campaigns.data, platforms.data, alerts, lastSync, objective],
   )
 
+  const objLabel = OBJECTIVES.find((o) => o.key === objective)?.label ?? ''
+  const pageTitle = objective === 'all' ? 'لوحة التحكم — نظرة تشغيلية' : `لوحة أداء حملات ${objLabel}`
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">لوحة التحكم</h1>
+            <h1 className="text-[32px] font-extrabold leading-tight tracking-tight text-text-primary sm:text-[34px]">{pageTitle}</h1>
             <DemoBadge />
           </div>
           <p className="mt-1 text-sm text-text-secondary">مركز قيادة موحّد لكل حملاتك الإعلانية المدفوعة عبر المنصات.</p>
@@ -180,6 +186,12 @@ export function DashboardPage() {
           )
         })}
       </div>
+
+      {objective === 'all' && (
+        <div className="rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-[13px] text-text-secondary">
+          تعرض هذه النظرة مؤشرات تشغيلية مشتركة فقط؛ اختر هدفًا محددًا لعرض مؤشرات الأداء المتخصصة.
+        </div>
+      )}
 
       {/* Platform filter — backend-supported (?provider=…); affects every KPI, chart, table below. */}
       <div className="flex flex-wrap items-center gap-2">
