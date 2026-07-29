@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, ChevronDown, ChevronUp, CreditCard, Play } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
+import { BillingTabs } from './BillingTabs'
 import {
   formatDateTime, formatMoney, isPayable, listInvoices, paymentDisplayState, startPayment,
   type Invoice, type Payment, type PaymentDisplayState,
@@ -109,6 +110,8 @@ export function PaymentsPage() {
         <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
         <p className="text-sm text-text-secondary">{c.subtitle}</p>
       </header>
+
+      <BillingTabs />
 
       <p className="flex items-start gap-2 rounded-xl bg-surface-hover px-3 py-2.5 text-xs text-text-secondary">
         <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning" /> {c.honest}

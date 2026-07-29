@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Receipt, X } from 'lucide-react'
 import { useUi } from '@/stores/ui'
+import { BillingTabs } from './BillingTabs'
 import { formatDate, formatMoney, isPayable, listInvoices, type Invoice, type InvoiceStatus } from './api'
 
 const COPY = {
@@ -62,6 +63,8 @@ export function InvoicesPage() {
         <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
         <p className="text-sm text-text-secondary">{c.subtitle}</p>
       </header>
+
+      <BillingTabs />
 
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((f) => (

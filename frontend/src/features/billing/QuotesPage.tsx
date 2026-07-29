@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, FileText, Plus, X } from 'lucide-react'
+import { Check, FileText, Plus, Search, X } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
+import { BillingTabs } from './BillingTabs'
 import {
   approveQuote, createQuote, formatDate, formatMoney, listQuotes,
   type NewQuote, type Quote,
@@ -19,6 +20,8 @@ const COPY = {
     approving: 'جارٍ الاعتماد…', reject: 'رفض', reject_ref: 'الرفض إجراء يخص العميل — معروض للاطلاع فقط.',
     approved_note: 'تم الاعتماد وإصدار الفاتورة.', created_at: 'أُنشئ',
     optional: 'اختياري', close: 'إغلاق', details: 'تفاصيل العرض',
+    search_ph: 'ابحث برقم العرض…', all: 'الكل', no_match: 'لا عروض تطابق البحث أو الفلتر.',
+    sum_total: 'إجمالي العروض', sum_approved: 'معتمدة', sum_sent: 'مُرسلة', sum_draft: 'مسودات',
   },
   en: {
     title: 'Quotes', subtitle: 'Create quotes and track their status. Approving a quote issues the invoice automatically.',
@@ -29,6 +32,8 @@ const COPY = {
     approving: 'Approving…', reject: 'Reject', reject_ref: 'Rejecting is a client-side action — shown here for reference only.',
     approved_note: 'Approved — invoice issued.', created_at: 'Created',
     optional: 'optional', close: 'Close', details: 'Quote details',
+    search_ph: 'Search by quote number…', all: 'All', no_match: 'No quotes match your search or filter.',
+    sum_total: 'Total quotes', sum_approved: 'Approved', sum_sent: 'Sent', sum_draft: 'Drafts',
   },
 }
 
@@ -54,9 +59,25 @@ export function QuotesPage() {
   const canManage = useAuth((s) => s.hasPermission('billing.manage'))
   const qc = useQueryClient()
   const [selected, setSelected] = useState<Quote | null>(null)
+  const [term, setTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | string>('all')
 
   const q = useQuery({ queryKey: ['billing', 'quotes'], queryFn: listQuotes })
   const quotes = q.data ?? []
+
+  const summary = {
+    total: quotes.length,
+    approved: quotes.filter((x) => x.status === 'approved').length,
+    sent: quotes.filter((x) => x.status === 'sent').length,
+    draft: quotes.filter((x) => x.status === 'draft').length,
+  }
+  const statusChips: string[] = ['all', ...Object.keys(QUOTE_STATUS)]
+  const needle = term.trim().toLowerCase()
+  const filtered = quotes.filter((x) => {
+    if (statusFilter !== 'all' && x.status !== statusFilter) return false
+    if (needle && !(x.number ?? '').toLowerCase().includes(needle)) return false
+    return true
+  })
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 p-4 md:p-6">
@@ -64,6 +85,47 @@ export function QuotesPage() {
         <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
         <p className="text-sm text-text-secondary">{c.subtitle}</p>
       </header>
+
+      <BillingTabs />
+
+      {/* Summary — quote pipeline at a glance. */}
+      {!q.isLoading && !q.isError && quotes.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <QuoteSummaryCard label={c.sum_total} value={summary.total} tone="brand" />
+          <QuoteSummaryCard label={c.sum_approved} value={summary.approved} tone="success" />
+          <QuoteSummaryCard label={c.sum_sent} value={summary.sent} tone="info" />
+          <QuoteSummaryCard label={c.sum_draft} value={summary.draft} tone="muted" />
+        </div>
+      )}
+
+      {/* Search + status filters. */}
+      {!q.isLoading && !q.isError && quotes.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
+          <label className="relative flex w-full items-center sm:max-w-xs">
+            <Search size={15} className="pointer-events-none absolute start-3 text-text-muted" aria-hidden />
+            <input
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              placeholder={c.search_ph}
+              dir="ltr"
+              className="w-full rounded-xl border border-border bg-surface-secondary py-2 pe-3 ps-9 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none"
+            />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {statusChips.map((f) => (
+              <button
+                key={f}
+                onClick={() => setStatusFilter(f)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  statusFilter === f ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                {f === 'all' ? c.all : quoteStatusMeta(f, ar).label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-[1fr_340px]">
         <div className="flex flex-col gap-2">
@@ -75,8 +137,12 @@ export function QuotesPage() {
             <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border p-12 text-center text-text-secondary">
               <FileText size={24} /><span className="text-sm">{c.none}</span>
             </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border p-12 text-center text-text-secondary">
+              <FileText size={24} /><span className="text-sm">{c.no_match}</span>
+            </div>
           ) : (
-            quotes.map((quote) => {
+            filtered.map((quote) => {
               const status = quoteStatusMeta(quote.status, ar)
               return (
                 <button
@@ -244,6 +310,19 @@ function QuoteDrawer({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function QuoteSummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'success' | 'info' | 'muted' }) {
+  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', success: 'bg-success', info: 'bg-info', muted: 'bg-text-muted' }
+  return (
+    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
+        <span className="text-xs font-semibold text-text-secondary">{label}</span>
+      </div>
+      <span className="text-2xl font-extrabold tnum text-text-primary" dir="ltr">{value}</span>
     </div>
   )
 }
