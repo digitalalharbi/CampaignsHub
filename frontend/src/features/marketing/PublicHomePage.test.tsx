@@ -253,4 +253,26 @@ describe('PublicHomePage — inline paid-media services', () => {
     expect(screen.queryByText('New campaign')).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Popular' })).not.toBeInTheDocument()
   })
+
+  it('HOME-013: the influencer portal shows a differentiated hero + tailored preview', () => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { route: '/?portal=influencer', locale: 'en' })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/influencer & content campaigns/i)
+    expect(within(screen.getByTestId('portal-preview')).getByText('Deliverables')).toBeInTheDocument()
+    expect(screen.queryByTestId('campaign-overview')).not.toBeInTheDocument() // no paid overview for this portal
+  })
+
+  it('HOME-013: the client portal shows request-tracking hero + preview', () => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { route: '/?portal=client', locale: 'en' })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/track your requests/i)
+    expect(within(screen.getByTestId('portal-preview')).getByText('Invoices')).toBeInTheDocument()
+  })
+
+  it('HOME-013: default (no portal) keeps the paid campaign overview preview', () => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { route: '/', locale: 'en' })
+    expect(screen.getByTestId('campaign-overview')).toBeInTheDocument()
+    expect(screen.queryByTestId('portal-preview')).not.toBeInTheDocument()
+  })
 })

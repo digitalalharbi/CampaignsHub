@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Activity, ArrowLeft, ArrowRight, BarChart3, Bell, CheckCircle2, FileText, LayoutDashboard, LogIn,
   Megaphone, MessageSquare, Moon, Sparkles, Sun, Target, UserCircle, Users, Wallet,
@@ -36,6 +36,12 @@ export function PublicHomePage() {
   const { locale, theme, toggleLocale, toggleTheme } = useUi()
   const { status } = useAuth()
   const c = HOME_COPY[locale as Locale]
+  // HOME-013: differentiated public experience per portal (?portal=influencer|client); paid-media is default.
+  const [searchParams] = useSearchParams()
+  const portalParam = searchParams.get('portal')
+  const portal = portalParam === 'influencer' || portalParam === 'client' ? portalParam : null
+  const hero = portal ? { ...c.hero, ...c.portals[portal] } : c.hero
+  const portalPreview = portal ? c.portals[portal] : null
   const [showServices, setShowServices] = useState(false)
   const authed = status === 'authenticated'
 
@@ -87,12 +93,12 @@ export function PublicHomePage() {
         <div className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)] lg:py-10">
           {/* Value proposition — right column, row 1 */}
           <div className="order-1 flex flex-col lg:col-start-1 lg:row-start-1">
-            <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[13px] font-semibold text-brand-700">{c.hero.eyebrow}</p>
-            <h1 className="mt-4 font-heading text-[28px] font-extrabold leading-[1.14] sm:text-[40px]">{c.hero.title}</h1>
-            <p className="mt-3 max-w-xl text-[16px] leading-relaxed text-text-secondary">{c.hero.desc}</p>
-            <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-text-muted">{c.hero.support}</p>
+            <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[13px] font-semibold text-brand-700">{hero.eyebrow}</p>
+            <h1 className="mt-4 font-heading text-[28px] font-extrabold leading-[1.14] sm:text-[40px]">{hero.title}</h1>
+            <p className="mt-3 max-w-xl text-[16px] leading-relaxed text-text-secondary">{hero.desc}</p>
+            <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-text-muted">{hero.support}</p>
             <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-              {c.hero.points.map((pt) => (
+              {hero.points.map((pt) => (
                 <li key={pt} className="flex items-center gap-2 text-[14px] text-text-secondary"><CheckCircle2 size={16} className="shrink-0 text-brand-500" /> {pt}</li>
               ))}
             </ul>
@@ -163,7 +169,24 @@ export function PublicHomePage() {
               <span className="flex items-center gap-2 text-sm font-bold text-white"><LayoutDashboard size={15} className="text-brand-300" /> CampaignsHub</span>
               <span className="flex items-center gap-1.5 text-[11px] text-white/50"><span className="h-1.5 w-1.5 rounded-full bg-warning" /> {c.hero.demoTag}</span>
             </div>
-            <UnifiedCampaignOverview variant="marketing" compact vm={DEMO_OVERVIEW_VM} />
+            {portalPreview ? (
+              <div data-testid="portal-preview" className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-white">{portalPreview.previewTitle}</span>
+                  <span className="flex items-center gap-1.5 text-[11px] text-white/50"><span className="h-1.5 w-1.5 rounded-full bg-warning" /> {c.hero.demoTag}</span>
+                </div>
+                <ul className="grid gap-2">
+                  {portalPreview.previewItems.map((item) => (
+                    <li key={item} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white/85">
+                      <span>{item}</span>
+                      <span className="h-2 w-2 rounded-full bg-brand-400" />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <UnifiedCampaignOverview variant="marketing" compact vm={DEMO_OVERVIEW_VM} />
+            )}
           </div>
         </div>
       </section>

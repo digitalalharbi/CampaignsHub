@@ -19,6 +19,11 @@ export interface HomeCopy {
     login: string; start: string; request: string; clientLogin: string; dashboard: string
   }
   hero: { eyebrow: string; title: string; desc: string; support: string; points: string[]; demoTag: string; currency: string }
+  /** Per-portal public experiences (HOME-013): distinct copy + preview per ?portal (paid default). */
+  portals: Record<
+    'influencer' | 'client',
+    { eyebrow: string; title: string; desc: string; support: string; points: string[]; previewTitle: string; previewItems: string[] }
+  >
   /** Localised labels for the dark CampaignsHub demo preview (numbers/platform names live in the component). */
   preview: {
     kpis: { spend: string; results: string; active: string; cpr: string }
@@ -66,6 +71,26 @@ const ar: HomeCopy = {
     points: ['متابعة موحدة لجميع المنصات', 'مقارنة واضحة بين الحملات', 'بيانات من الحسابات المرتبطة', 'تقارير وتنبيهات تساعدك على اتخاذ القرار'],
     demoTag: 'معاينة توضيحية ببيانات تجريبية',
     currency: 'ر.س',
+  },
+  portals: {
+    influencer: {
+      eyebrow: 'حملات المؤثرين والمحتوى',
+      title: 'أدر حملات المؤثرين والمحتوى من مكان واحد',
+      desc: 'أرسل تفاصيل حملتك، وتابع المحتويات والمراجعات والموافقات والتسليمات، وقِس النتائج بوضوح.',
+      support: 'من الطلب حتى التسليم — كل خطوات حملة المؤثرين في مكان واحد.',
+      points: ['إدارة طلبات المؤثرين', 'مراجعة المحتويات والموافقات', 'متابعة التسليمات', 'قياس نتائج الحملة'],
+      previewTitle: 'لمحة عن حملة مؤثرين',
+      previewItems: ['طلبات المؤثرين', 'المحتويات قيد المراجعة', 'الموافقات', 'التسليمات', 'نتائج الحملة'],
+    },
+    client: {
+      eyebrow: 'متابعة طلباتك',
+      title: 'تابع طلباتك وعروضك وفواتيرك من مكان واحد',
+      desc: 'تابع حالة طلباتك، وعروض الأسعار، والفواتير والمدفوعات، والرسائل والملفات وتنفيذ الخدمة.',
+      support: 'كل ما يخص طلبك — العرض، الفاتورة، الرسائل والتنفيذ — في بوابة واحدة.',
+      points: ['متابعة حالة الطلبات', 'عروض الأسعار والفواتير', 'المدفوعات والرسائل', 'الملفات وتقارير التنفيذ'],
+      previewTitle: 'لمحة عن متابعة الطلبات',
+      previewItems: ['الطلبات', 'عروض الأسعار', 'الفواتير', 'المدفوعات', 'الرسائل والملفات'],
+    },
   },
   preview: {
     kpis: { spend: 'إجمالي الإنفاق', results: 'النتائج', active: 'الحملات النشطة', cpr: 'متوسط تكلفة النتيجة' },
@@ -211,6 +236,26 @@ const en: HomeCopy = {
     points: ['Unified tracking across all platforms', 'Clear comparison between campaigns', 'Data from your connected accounts', 'Reports and alerts that help you decide'],
     demoTag: 'Illustrative preview with demo data',
     currency: 'SAR',
+  },
+  portals: {
+    influencer: {
+      eyebrow: 'Influencer & content campaigns',
+      title: 'Run influencer & content campaigns from one place',
+      desc: 'Send your brief, follow content, reviews, approvals and deliverables, and measure results clearly.',
+      support: 'From request to delivery — every step of an influencer campaign in one place.',
+      points: ['Manage influencer requests', 'Review content & approvals', 'Track deliverables', 'Measure campaign results'],
+      previewTitle: 'Influencer campaign at a glance',
+      previewItems: ['Influencer requests', 'Content in review', 'Approvals', 'Deliverables', 'Campaign results'],
+    },
+    client: {
+      eyebrow: 'Track your requests',
+      title: 'Track your requests, quotes and invoices in one place',
+      desc: 'Follow your request status, quotes, invoices and payments, plus messages, files and delivery.',
+      support: 'Everything about your request — quote, invoice, messages and delivery — in one portal.',
+      points: ['Follow request status', 'Quotes & invoices', 'Payments & messages', 'Files & delivery reports'],
+      previewTitle: 'Request tracking at a glance',
+      previewItems: ['Requests', 'Quotes', 'Invoices', 'Payments', 'Messages & files'],
+    },
   },
   preview: {
     kpis: { spend: 'Total spend', results: 'Results', active: 'Active campaigns', cpr: 'Avg cost per result' },
