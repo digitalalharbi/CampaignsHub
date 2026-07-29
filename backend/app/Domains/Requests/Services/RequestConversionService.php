@@ -175,8 +175,8 @@ final class RequestConversionService
                 'assignee_id' => $request->assigned_to,
                 'created_by' => $actor->id,
                 'title' => $title,
-                'status' => 'open',
-                'priority' => 'medium',
+                'status' => 'todo', // canonical Task status (was legacy 'open')
+                'priority' => 'normal', // canonical Task priority (was legacy 'medium')
                 'meta' => ['source_request_id' => $request->id],
             ]);
         }

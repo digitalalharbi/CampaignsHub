@@ -53,11 +53,10 @@ const PRIORITY_META: Record<string, { ar: string; en: string; tone: string }> = 
   urgent: { ar: 'عاجلة', en: 'Urgent', tone: 'text-danger' },
 }
 
-// Statuses/priorities offered as FILTERS include legacy values present in real data. Change-targets (the
-// row select + create form) stay canonical (TASK_STATUSES) so a PATCH never sends a value the API rejects.
-const FILTER_STATUSES: string[] = ['open', ...TASK_STATUSES]
-const FILTER_PRIORITIES: string[] = ['urgent', 'high', 'medium', 'normal', 'low']
-/** Options for a task's status select: canonical targets, plus its own current value if legacy. */
+// Filters use the canonical vocabulary (legacy 'open'/'medium' were normalized in the DB migration).
+const FILTER_STATUSES: string[] = TASK_STATUSES
+const FILTER_PRIORITIES: string[] = ['urgent', 'high', 'normal', 'low']
+/** Options for a task's status select: canonical targets, plus its own current value if any stray value survives. */
 const statusOptions = (current: string): string[] =>
   (TASK_STATUSES as string[]).includes(current) ? TASK_STATUSES : [current, ...TASK_STATUSES]
 const statusLabel = (s: string, ar: boolean) => (STATUS_META[s] ? (ar ? STATUS_META[s].ar : STATUS_META[s].en) : s)

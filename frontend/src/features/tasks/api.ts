@@ -25,11 +25,8 @@ export const TASK_STATUSES: TaskStatus[] = [
 ]
 export const TASK_PRIORITIES: TaskPriority[] = ['low', 'normal', 'high', 'urgent']
 
-/**
- * Statuses that count as "open" work (not terminal). Includes the legacy `open` value some domain services
- * (e.g. request→task conversion) still write, so summary counts and the board reflect real data.
- */
-export const OPEN_STATUSES: string[] = ['open', 'backlog', 'todo', 'in_progress', 'waiting_client', 'blocked', 'review']
+/** Statuses that count as "open" work (not terminal). Canonical set (legacy values normalized in the DB). */
+export const OPEN_STATUSES: string[] = ['backlog', 'todo', 'in_progress', 'waiting_client', 'blocked', 'review']
 
 export interface TaskFilters { status?: string; mine?: boolean }
 
