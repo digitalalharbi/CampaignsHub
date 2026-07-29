@@ -15,6 +15,9 @@ import { PublicReport } from '@/features/reports/PublicReport'
 import { PrintReport } from '@/features/reports/PrintReport'
 import { DesignSystemPage } from '@/features/design/DesignSystemPage'
 import { SettingsLayout } from '@/features/account/SettingsLayout'
+import { AccountSettingsLayout } from '@/features/account/AccountSettingsLayout'
+import { PreferencesPage } from '@/features/account/PreferencesPage'
+import { PersonalNotificationsPage } from '@/features/account/PersonalNotificationsPage'
 import { TaxonomyManagerPage } from '@/features/taxonomy/TaxonomyManagerPage'
 import { ProfilePage } from '@/features/account/ProfilePage'
 import { PasswordPage } from '@/features/account/PasswordPage'
@@ -151,20 +154,36 @@ export const router = createBrowserRouter([
           { path: 'notifications', element: <PagePlaceholder title="Notifications" /> },
           // User account settings (self). Workspace/org settings live under /settings/workspace.
           {
+            // SYSTEM settings (sidebar). Workspace-wide only — no personal settings here.
             path: 'settings',
             element: <SettingsLayout />,
             children: [
-              { index: true, element: <ProfilePage /> },
+              { index: true, element: <Navigate to="/settings/workspace" replace /> },
+              { path: 'workspace', element: <SettingsPage only={['general', 'clients', 'projects', 'notifications', 'security']} /> },
+              { path: 'permissions', element: <SettingsPage only={['team']} title="الصلاحيات والفريق" subtitle="أعضاء مساحة العمل وأدوارهم وصلاحياتهم" /> },
+              { path: 'portals', element: <SettingsPage only={['disclaimer']} title="البوابات الخارجية" subtitle="الملاحظات والمنهجية التي يراها العملاء في البوابة والتقارير" /> },
+              // Identity/Branding lives INSIDE Settings (canonical — not a standalone nav section).
+              { path: 'branding', element: <BrandingCenterPage /> },
+              { path: 'taxonomies', element: <TaxonomyManagerPage /> },
+              // Personal settings moved to /account — keep old links working.
+              { path: 'profile', element: <Navigate to="/account/profile" replace /> },
+              { path: 'password', element: <Navigate to="/account/password" replace /> },
+              { path: 'security', element: <Navigate to="/account/security" replace /> },
+              { path: 'preferences', element: <Navigate to="/account/preferences" replace /> },
+              { path: 'notifications', element: <Navigate to="/account/notifications" replace /> },
+            ],
+          },
+          {
+            // USER settings — reachable ONLY from the account menu in the top bar.
+            path: 'account',
+            element: <AccountSettingsLayout />,
+            children: [
+              { index: true, element: <Navigate to="/account/profile" replace /> },
               { path: 'profile', element: <ProfilePage /> },
               { path: 'password', element: <PasswordPage /> },
               { path: 'security', element: <SecurityPage /> },
-              // Identity/Branding lives INSIDE Settings (canonical — not a standalone nav section).
-              { path: 'branding', element: <BrandingCenterPage /> },
-              { path: 'preferences', element: <PagePlaceholder title="Preferences" /> },
-              { path: 'notifications', element: <PagePlaceholder title="Notifications" /> },
-              { path: 'workspace', element: <SettingsPage /> },
-              { path: 'taxonomies', element: <TaxonomyManagerPage /> },
-              { path: 'support', element: <PagePlaceholder title="Support" /> },
+              { path: 'preferences', element: <PreferencesPage /> },
+              { path: 'notifications', element: <PersonalNotificationsPage /> },
             ],
           },
           // Sales CRM (behind sales_crm_enabled; routes always exist, nav is gated).

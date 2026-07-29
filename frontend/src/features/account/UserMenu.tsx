@@ -1,20 +1,21 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, ChevronDown, HelpCircle, LifeBuoy, LogOut, Palette, Shield, SlidersHorizontal, User as UserIcon } from 'lucide-react'
+import { Bell, ChevronDown, KeyRound, LogOut, Palette, Shield, User as UserIcon } from 'lucide-react'
 import { logout } from '@/features/auth/api'
 import { useAuth } from '@/stores/auth'
 import { useT } from '@/lib/i18n'
 import type { AuthUser } from '@/lib/api/types'
 
+/**
+ * PERSONAL settings only — this menu is the single entry point for them. Workspace/system settings live in
+ * the sidebar (/settings) and are deliberately NOT repeated here; each entry is one distinct route.
+ */
 const OPTIONS = [
-  { key: 'menu_profile', to: '/settings/profile', icon: UserIcon },
-  { key: 'menu_password', to: '/settings/password', icon: Shield },
-  { key: 'menu_security', to: '/settings/security', icon: Shield },
-  { key: 'menu_notifications', to: '/settings/notifications', icon: Bell },
-  { key: 'menu_preferences', to: '/settings/preferences', icon: SlidersHorizontal },
-  { key: 'menu_appearance', to: '/settings/preferences', icon: Palette },
-  { key: 'menu_workspace', to: '/settings/workspace', icon: LifeBuoy },
-  { key: 'menu_support', to: '/settings/support', icon: HelpCircle },
+  { key: 'menu_profile', to: '/account/profile', icon: UserIcon },
+  { key: 'menu_password', to: '/account/password', icon: KeyRound },
+  { key: 'menu_security', to: '/account/security', icon: Shield },
+  { key: 'menu_preferences', to: '/account/preferences', icon: Palette },
+  { key: 'menu_notifications', to: '/account/notifications', icon: Bell },
 ] as const
 
 function initialsOf(user: AuthUser | null): string {
