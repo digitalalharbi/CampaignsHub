@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Integrations\Http\Controllers\IntegrationController;
+use App\Domains\Integrations\Http\Controllers\PlatformOverviewController;
 use App\Domains\Integrations\Http\Controllers\ProjectIntegrationController;
 use App\Domains\Integrations\Http\Controllers\ProviderConnectionController;
 use Illuminate\Support\Facades\Route;
@@ -26,6 +27,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])
     ->name('projects.integrations.')
     ->group(function (): void {
         Route::get('/', [ProjectIntegrationController::class, 'index'])->name('index');
+        // PROJINT-001: the same project's integrations organised by the six real ad platforms.
+        Route::get('platforms', [PlatformOverviewController::class, 'index'])->name('platforms');
         Route::post('connect', [ProjectIntegrationController::class, 'connect'])->name('connect');
         Route::post('bindings', [ProjectIntegrationController::class, 'bind'])->name('bind');
         Route::post('bindings/{binding}/sync', [ProjectIntegrationController::class, 'sync'])->name('sync');

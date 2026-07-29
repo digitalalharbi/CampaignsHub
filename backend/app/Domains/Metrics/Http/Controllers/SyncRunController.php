@@ -83,7 +83,7 @@ final class SyncRunController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('integrations.manage'), 403);
+        abort_unless($request->user()->hasPermission('integrations.connect'), 403);
 
         $data = $request->validate([
             'external_account_id' => ['required', 'uuid'],

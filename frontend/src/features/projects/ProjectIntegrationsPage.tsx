@@ -12,6 +12,7 @@ import {
   syncBinding,
   type ExternalAccount,
 } from './api'
+import { PlatformIntegrationsPanel } from './PlatformIntegrationsPanel'
 import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -107,6 +108,13 @@ export function ProjectIntegrationsPage() {
       </div>
 
       {bindError && <Alert severity={bindError.status === 409 ? 'warning' : 'danger'} title={bindError.message} />}
+
+      {/* PROJINT-001: the six real ad platforms first — status, accounts, discovery, sync and errors. */}
+      <PlatformIntegrationsPanel projectId={projectId} />
+
+      <h2 className="pt-2 text-lg font-bold text-text-primary">
+        {lang === 'ar' ? 'الربط التقني للحسابات' : 'Account bindings'}
+      </h2>
 
       {/* Data status — the project's integration surface at a glance. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
