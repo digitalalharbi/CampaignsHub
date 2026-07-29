@@ -115,24 +115,32 @@ export function ReportsPage() {
         ))}
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Toolbar — search + status segmented filter (matches the platform's other command pages). */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="ابحث في التقارير…"
-          className="h-10 flex-1 rounded-xl border border-border bg-surface px-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+          className="h-10 w-full rounded-xl border border-border bg-surface-secondary px-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 sm:max-w-xs"
         />
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          className="h-10 rounded-xl border border-border bg-surface px-3 text-sm font-semibold"
-        >
-          <option value="">كل الحالات</option>
-          <option value="completed">مكتمل</option>
-          <option value="processing">قيد المعالجة</option>
-          <option value="failed">فشل</option>
-        </select>
+        <div className="flex flex-wrap gap-2">
+          {[
+            ['', 'الكل'],
+            ['completed', STATUS_LABEL.completed],
+            ['processing', STATUS_LABEL.processing],
+            ['failed', STATUS_LABEL.failed],
+          ].map(([value, label]) => (
+            <button
+              key={value || 'all'}
+              onClick={() => setStatus(value)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                status === value ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* List */}
@@ -145,7 +153,9 @@ export function ReportsPage() {
         ) : (list.data?.reports.length ?? 0) === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 p-12 text-center">
             <FileText size={28} className="text-text-muted" />
-            <p className="text-sm text-text-secondary">لا توجد تقارير بعد — أنشئ تقريرك الأول.</p>
+            <p className="text-sm text-text-secondary">
+              {status || search ? 'لا تقارير تطابق البحث أو الفلتر.' : 'لا توجد تقارير بعد — أنشئ تقريرك الأول.'}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
