@@ -13,8 +13,8 @@ import { register } from './api'
 describe('RegisterPage — journey handoff', () => {
   afterEach(() => { signOut(); localStorage.clear() })
 
-  it('presets the agency path from ?journey=agency and keeps it editable', () => {
-    renderWithProviders(<RegisterPage />, { route: '/register?journey=agency', locale: 'en' })
+  it('presets the agency path from ?journey=multi-client and keeps it editable', () => {
+    renderWithProviders(<RegisterPage />, { route: '/register?journey=multi-client', locale: 'en' })
     expect(screen.getByText('Your selected path')).toBeInTheDocument()
     // Agency card is the selected path (not a forced re-pick).
     expect(screen.getByRole('button', { name: /I manage several clients/i })).toHaveAttribute('aria-pressed', 'true')
@@ -22,8 +22,8 @@ describe('RegisterPage — journey handoff', () => {
     expect(screen.getByText(/Clients and requests enabled for the agency workspace/i)).toBeInTheDocument()
   })
 
-  it('presets the self-managed path from ?journey=self-managed with an editable account type', () => {
-    renderWithProviders(<RegisterPage />, { route: '/register?journey=self-managed', locale: 'en' })
+  it('presets the self-managed path from ?journey=self-service with an editable account type', () => {
+    renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service', locale: 'en' })
     expect(screen.getByRole('button', { name: /I run my own campaigns/i })).toHaveAttribute('aria-pressed', 'true')
     // Account-type select is offered (freelancer/brand/in-house), defaulting to freelancer.
     const select = screen.getByRole('combobox') as HTMLSelectElement
@@ -39,7 +39,7 @@ describe('RegisterPage — journey handoff', () => {
   })
 
   it('surfaces ?module= read-only, carried through unchanged', () => {
-    renderWithProviders(<RegisterPage />, { route: '/register?journey=agency&module=paid_media', locale: 'en' })
+    renderWithProviders(<RegisterPage />, { route: '/register?journey=multi-client&module=paid_media', locale: 'en' })
     expect(screen.getByText(/Requested module/i)).toBeInTheDocument()
     expect(screen.getByText('paid_media')).toBeInTheDocument()
   })

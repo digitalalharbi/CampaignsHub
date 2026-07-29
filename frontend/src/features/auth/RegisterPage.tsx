@@ -14,15 +14,15 @@ import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 
 /**
- * Journey handoff from the public homepage decision section. `?journey=self-managed|agency` presets the
+ * Journey handoff from the public homepage decision section. `?journey=self-service|multi-client` presets the
  * onboarding so the visitor does NOT re-pick a path — the chosen path is shown here and stays editable.
  * The selection is carried forward via navigation state (and stays in the URL) so it reaches onboarding.
  */
-type Journey = 'self-managed' | 'agency'
+type Journey = 'self-service' | 'multi-client'
 type SelfAccountType = 'freelancer' | 'brand' | 'in_house_team'
 
 function parseJourney(raw: string | null): Journey | null {
-  return raw === 'self-managed' || raw === 'agency' ? raw : null
+  return raw === 'self-service' || raw === 'multi-client' ? raw : null
 }
 
 /** Bilingual copy for the journey panel — kept local so the shared i18n dictionary is untouched. */
@@ -84,8 +84,8 @@ export function RegisterPage() {
 
   // The onboarding intent presets carried into the app so the user never re-selects their path.
   const onboarding = useMemo(() => {
-    if (journey === 'agency') return { journey, account_type: 'agency', modules: ['clients', 'requests'] }
-    if (journey === 'self-managed') return { journey, account_type: selfType, modules: ['paid_media'] }
+    if (journey === 'multi-client') return { journey, account_type: 'agency', modules: ['clients', 'requests'] }
+    if (journey === 'self-service') return { journey, account_type: selfType, modules: ['paid_media'] }
     return null
   }, [journey, selfType])
 
@@ -122,8 +122,8 @@ export function RegisterPage() {
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {([
-              { key: 'self-managed' as const, label: jc.selfManaged, Icon: LayoutDashboard },
-              { key: 'agency' as const, label: jc.agency, Icon: Users },
+              { key: 'self-service' as const, label: jc.selfManaged, Icon: LayoutDashboard },
+              { key: 'multi-client' as const, label: jc.agency, Icon: Users },
             ]).map(({ key, label, Icon }) => {
               const on = journey === key
               return (
@@ -138,7 +138,7 @@ export function RegisterPage() {
             })}
           </div>
 
-          {journey === 'self-managed' ? (
+          {journey === 'self-service' ? (
             <div className="mt-3">
               <FormField label={jc.accountTypeLabel} hint={jc.selfSummary}>
                 <select className={controlClass} value={selfType} onChange={(e) => setSelfType(e.target.value as SelfAccountType)}>

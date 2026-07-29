@@ -40,9 +40,9 @@ test('homepage: hero, language/theme, preview, journeys and CTAs into real route
 
   // Options card «How do you want to start?» maps each journey to a real, param-carrying route.
   await expect(page.getByRole('link', { name: /I run my own campaigns/ }))
-    .toHaveAttribute('href', '/register?journey=self-managed&module=paid-media')
+    .toHaveAttribute('href', '/register?journey=self-service&module=paid-media')
   await expect(page.getByRole('link', { name: /I manage campaigns for several clients/ }))
-    .toHaveAttribute('href', '/register?journey=agency&module=paid-media')
+    .toHaveAttribute('href', '/register?journey=multi-client&module=paid-media')
   await expect(page.getByRole('link', { name: /I need influencers or UGC content/ }))
     .toHaveAttribute('href', '/requests/new?module=influencer-marketing')
 

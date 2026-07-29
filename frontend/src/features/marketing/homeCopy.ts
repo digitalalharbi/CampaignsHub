@@ -89,8 +89,8 @@ const ar: HomeCopy = {
     title: 'كيف تريد البدء؟',
     subtitle: 'اختر ما يناسب احتياجك وسنأخذك مباشرة إلى الخطوة التالية.',
     cards: [
-      { title: 'أدير حملاتي بنفسي', desc: 'اجمع حملاتك ومنصاتك وميزانياتك وتقاريرك في مكان واحد.', to: '/register?journey=self-managed&module=paid-media' },
-      { title: 'أدير حملات لعدة عملاء', desc: 'نظّم عملاءك ومشاريعك وحملاتك وتابع أداء كل عميل بشكل مستقل.', to: '/register?journey=agency&module=paid-media' },
+      { title: 'أدير حملاتي بنفسي', desc: 'اجمع حملاتك ومنصاتك وميزانياتك وتقاريرك في مكان واحد.', to: '/register?journey=self-service&module=paid-media' },
+      { title: 'أدير حملات لعدة عملاء', desc: 'نظّم عملاءك ومشاريعك وحملاتك وتابع أداء كل عميل بشكل مستقل.', to: '/register?journey=multi-client&module=paid-media' },
       { title: 'أحتاج خدمات إعلانية', desc: 'اختر خدمات الإدارة أو التحسين أو التتبع أو التحليل أو التقارير.', action: 'reveal-services' },
       { title: 'أحتاج مؤثرين أو محتوى UGC', desc: 'أرسل تفاصيل حملتك وتابع المحتوى والتنفيذ والتسليمات من حسابك.', to: '/requests/new?module=influencer-marketing' },
     ],
@@ -234,8 +234,8 @@ const en: HomeCopy = {
     title: 'How do you want to start?',
     subtitle: 'Pick what fits your need and we’ll take you straight to the next step.',
     cards: [
-      { title: 'I run my own campaigns', desc: 'Bring your campaigns, platforms, budgets and reports into one place.', to: '/register?journey=self-managed&module=paid-media' },
-      { title: 'I manage campaigns for several clients', desc: 'Organize your clients, projects and campaigns, and track each client independently.', to: '/register?journey=agency&module=paid-media' },
+      { title: 'I run my own campaigns', desc: 'Bring your campaigns, platforms, budgets and reports into one place.', to: '/register?journey=self-service&module=paid-media' },
+      { title: 'I manage campaigns for several clients', desc: 'Organize your clients, projects and campaigns, and track each client independently.', to: '/register?journey=multi-client&module=paid-media' },
       { title: 'I need paid-media services', desc: 'Pick management, optimization, tracking, analysis or reporting services.', action: 'reveal-services' },
       { title: 'I need influencers or UGC content', desc: 'Send your campaign details and track content, execution and deliverables from your account.', to: '/requests/new?module=influencer-marketing' },
     ],

@@ -97,8 +97,8 @@ describe('PublicHomePage — v5 journeys & header', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
     const hrefs = linkHrefs()
-    expect(hrefs).toContain('/register?journey=self-managed&module=paid-media')
-    expect(hrefs).toContain('/register?journey=agency&module=paid-media')
+    expect(hrefs).toContain('/register?journey=self-service&module=paid-media')
+    expect(hrefs).toContain('/register?journey=multi-client&module=paid-media')
     expect(hrefs).toContain('/requests/new?module=influencer-marketing')
     // The paid-media services option reveals the selector inline; no bare navigate to the intake exists.
     expect(hrefs).not.toContain('/requests/new?module=paid-media')
@@ -130,7 +130,7 @@ describe('PublicHomePage — v5 journeys & header', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
     const hrefs = linkHrefs()
-    for (const route of ['/register?journey=self-managed&module=paid-media', '/register?journey=agency&module=paid-media', '/requests/new?module=influencer-marketing']) {
+    for (const route of ['/register?journey=self-service&module=paid-media', '/register?journey=multi-client&module=paid-media', '/requests/new?module=influencer-marketing']) {
       expect(hrefs.filter((h) => h === route)).toHaveLength(1)
     }
   })
@@ -147,7 +147,7 @@ describe('PublicHomePage — v5 journeys & header', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'ar' })
     expect(screen.getByText('كيف تريد البدء؟')).toBeInTheDocument()
-    expect(linkHrefs()).toContain('/register?journey=agency&module=paid-media')
+    expect(linkHrefs()).toContain('/register?journey=multi-client&module=paid-media')
     expect(document.querySelector('[dir="rtl"]')).not.toBeNull()
   })
 })
