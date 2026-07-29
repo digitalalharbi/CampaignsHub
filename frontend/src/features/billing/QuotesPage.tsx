@@ -59,6 +59,7 @@ export function QuotesPage() {
   const canManage = useAuth((s) => s.hasPermission('billing.manage'))
   const qc = useQueryClient()
   const [selected, setSelected] = useState<Quote | null>(null)
+  const [creating, setCreating] = useState(false)
   const [term, setTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | string>('all')
 
@@ -81,9 +82,19 @@ export function QuotesPage() {
 
   return (
     <div className="flex w-full flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
-        <p className="text-sm text-text-secondary">{c.subtitle}</p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
+          <p className="text-sm text-text-secondary">{c.subtitle}</p>
+        </div>
+        {canManage ? (
+          <button
+            onClick={() => setCreating(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-700"
+          >
+            <Plus size={15} /> {c.new_quote}
+          </button>
+        ) : null}
       </header>
 
       <BillingTabs />
@@ -127,8 +138,7 @@ export function QuotesPage() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-[1fr_340px]">
-        <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
           {q.isLoading ? (
             <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">{c.loading}</p>
           ) : q.isError ? (
@@ -162,12 +172,15 @@ export function QuotesPage() {
               )
             })
           )}
-        </div>
-
-        {canManage ? (
-          <CreateQuoteForm c={c} onCreated={() => qc.invalidateQueries({ queryKey: ['billing', 'quotes'] })} />
-        ) : null}
       </div>
+
+      {creating ? (
+        <CreateQuoteDrawer
+          c={c}
+          onClose={() => setCreating(false)}
+          onCreated={() => { qc.invalidateQueries({ queryKey: ['billing', 'quotes'] }); setCreating(false) }}
+        />
+      ) : null}
 
       {selected ? (
         <QuoteDrawer
@@ -183,7 +196,25 @@ export function QuotesPage() {
   )
 }
 
-function CreateQuoteForm({ c, onCreated }: { c: Copy; onCreated: () => void }) {
+/** Slide-over drawer that hosts the create-quote form — opened from the header button, keeping the page for data. */
+function CreateQuoteDrawer({ c, onClose, onCreated }: { c: Copy; onClose: () => void; onCreated: () => void }) {
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
+      <div
+        className="flex h-full w-full max-w-md flex-col gap-4 overflow-y-auto bg-surface p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-lg font-extrabold text-text-primary"><Plus size={18} /> {c.new_quote}</h2>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-hover" aria-label={c.close}><X size={18} /></button>
+        </div>
+        <CreateQuoteForm c={c} onCreated={onCreated} embedded />
+      </div>
+    </div>
+  )
+}
+
+function CreateQuoteForm({ c, onCreated, embedded }: { c: Copy; onCreated: () => void; embedded?: boolean }) {
   const [form, setForm] = useState<NewQuote>({ currency: 'SAR', subtotal: 0, tax: 0, discount: 0 })
   const [number, setNumber] = useState('')
   const [notes, setNotes] = useState('')
@@ -208,9 +239,9 @@ function CreateQuoteForm({ c, onCreated }: { c: Copy; onCreated: () => void }) {
   return (
     <form
       onSubmit={(e) => { e.preventDefault(); createM.mutate() }}
-      className="flex h-fit flex-col gap-3 rounded-2xl border border-border bg-surface p-4"
+      className={embedded ? 'flex flex-col gap-3' : 'flex h-fit flex-col gap-3 rounded-2xl border border-border bg-surface p-4'}
     >
-      <h3 className="flex items-center gap-2 text-sm font-bold text-text-primary"><Plus size={15} /> {c.new_quote}</h3>
+      {!embedded && <h3 className="flex items-center gap-2 text-sm font-bold text-text-primary"><Plus size={15} /> {c.new_quote}</h3>}
 
       <Field label={`${c.number} (${c.optional})`}>
         <input value={number} onChange={(e) => setNumber(e.target.value)} placeholder="QUO-…" dir="ltr"
