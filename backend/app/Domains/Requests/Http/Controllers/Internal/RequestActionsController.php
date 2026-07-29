@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Requests\Http\Controllers\Internal;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Billing\Services\BillingService;
+use App\Domains\Billing\Support\TaxTreatment;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestStatus;
 use App\Domains\Requests\Services\ClientNotifier;
@@ -196,12 +198,12 @@ final class RequestActionsController
 
         $data = $request->validate([
             'subtotal' => ['nullable', 'numeric', 'min:0'],
-            'tax_treatment' => ['nullable', 'string', Rule::in(\App\Domains\Billing\Support\TaxTreatment::keys())],
+            'tax_treatment' => ['nullable', 'string', Rule::in(TaxTreatment::keys())],
             'valid_until' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $quote = app(\App\Domains\Billing\Services\BillingService::class)->quoteFromRequest($req, array_merge($data, [
+        $quote = app(BillingService::class)->quoteFromRequest($req, array_merge($data, [
             'created_by' => $request->user()->id,
         ]));
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Requests\Http\Controllers\Internal;
 
+use App\Domains\Billing\Models\Quote;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestConversion;
 use App\Domains\Requests\Services\RequestSla;
@@ -117,7 +118,7 @@ final class RequestsController
      */
     private function billing(ExternalRequest $req): array
     {
-        return \App\Domains\Billing\Models\Quote::query()
+        return Quote::query()
             ->where('external_request_id', $req->id)
             ->with('invoices')
             ->orderByDesc('created_at')->limit(10)->get()

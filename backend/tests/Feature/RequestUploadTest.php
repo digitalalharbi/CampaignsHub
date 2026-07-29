@@ -10,9 +10,9 @@ use App\Domains\Requests\Models\RequestUploadSession;
 use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\Concerns\VerifiesContact;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Tests\Concerns\VerifiesContact;
 use Tests\TestCase;
 
 final class RequestUploadTest extends TestCase

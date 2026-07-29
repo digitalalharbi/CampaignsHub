@@ -270,4 +270,68 @@ final class MetricsTest extends TestCase
             ->assertOk()->assertJsonFragment(['budget' => 1000]);
         $this->actingAs($this->owner, 'sanctum')->getJson("{$base}/freshness?from=2026-06-01&to=2026-06-02")->assertOk();
     }
+
+    /**
+     * CAMPAIGN-020: comparing campaigns side by side must reuse the same derived-KPI formulas, must
+     * expose each campaign's own objective (so the UI never blends KPIs across objectives), and must
+     * fail closed when someone slips in a campaign from another project.
+     */
+    public function test_compare_returns_per_campaign_totals_series_and_platform_split(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $sales = UnifiedCampaign::create(['project_id' => $this->projectA->id, 'name' => 'Sales', 'objective' => 'sales', 'status' => 'active']);
+        $reach = UnifiedCampaign::create(['project_id' => $this->projectA->id, 'name' => 'Reach', 'objective' => 'awareness', 'status' => 'active']);
+        app(TenantContext::class)->forget();
+
+        app(UpsertDailyMetrics::class)->handle([
+            // Sales campaign: two days, two platforms.
+            $this->metric($this->projectA->id, 'spend', 100, '2026-06-01', ['unified' => $sales->id, 'camp' => 's1']),
+            $this->metric($this->projectA->id, 'conversions', 10, '2026-06-01', ['unified' => $sales->id, 'camp' => 's1']),
+            $this->metric($this->projectA->id, 'revenue', 500, '2026-06-01', ['unified' => $sales->id, 'camp' => 's1']),
+            $this->metric($this->projectA->id, 'spend', 60, '2026-06-02', ['unified' => $sales->id, 'camp' => 's2', 'provider' => 'tiktok']),
+            // Awareness campaign: impressions only — no conversions, so its CPA must stay null, not 0.
+            $this->metric($this->projectA->id, 'impressions', 20000, '2026-06-01', ['unified' => $reach->id, 'camp' => 'r1']),
+            $this->metric($this->projectA->id, 'spend', 40, '2026-06-01', ['unified' => $reach->id, 'camp' => 'r1']),
+        ]);
+
+        $res = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/compare?from=2026-06-01&to=2026-06-02"
+                ."&campaign_ids[]={$sales->id}&campaign_ids[]={$reach->id}")
+            ->assertOk();
+
+        $this->assertTrue($res->json('data.mixed_objectives'), 'sales vs awareness must be flagged as mixed');
+
+        $rows = collect($res->json('data.campaigns'))->keyBy('campaign_id');
+        $s = $rows[$sales->id];
+        $this->assertSame('sales', $s['objective']);
+        $this->assertEquals(160.0, $s['totals']['spend']);        // 100 + 60
+        $this->assertEquals(16.0, $s['totals']['cpa']);           // 160 / 10 — derived from sums, not averaged
+        $this->assertEquals(3.125, $s['totals']['roas']);         // 500 / 160
+        $this->assertCount(2, $s['series']);                      // one point per day
+        $this->assertSame(['meta', 'tiktok'], collect($s['platforms'])->pluck('provider')->sort()->values()->all());
+
+        $r = $rows[$reach->id];
+        $this->assertSame('awareness', $r['objective']);
+        $this->assertNull($r['totals']['cpa'], 'no conversions must stay null, never 0');
+        $this->assertEquals(2.0, $r['totals']['cpm']);            // 40 / 20000 * 1000
+    }
+
+    public function test_compare_refuses_campaigns_outside_the_active_project(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $mine = UnifiedCampaign::create(['project_id' => $this->projectA->id, 'name' => 'Mine', 'objective' => 'sales', 'status' => 'active']);
+        $theirs = UnifiedCampaign::create(['project_id' => $this->projectB->id, 'name' => 'Theirs', 'objective' => 'sales', 'status' => 'active']);
+        app(TenantContext::class)->forget();
+
+        // Only one id survives the project scope, so there is nothing to compare — 422, never a silent
+        // one-sided result and never another project's numbers.
+        $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/compare?campaign_ids[]={$mine->id}&campaign_ids[]={$theirs->id}")
+            ->assertStatus(422);
+
+        // Fewer than two ids is a validation error, not an empty comparison.
+        $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/compare?campaign_ids[]={$mine->id}")
+            ->assertStatus(422);
+    }
 }

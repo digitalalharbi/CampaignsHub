@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Http\Controllers;
 
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\MetricsAggregator;
@@ -61,6 +62,42 @@ final class MetricsController extends Controller
         [$from, $to] = $this->range($request);
 
         return ApiResponse::success($this->scoped($request)->byProvider($from, $to), 'Metrics by platform.', meta: $this->meta($from, $to));
+    }
+
+    /**
+     * CAMPAIGN-020: compare 2–5 campaigns of the SAME project side by side over one window.
+     *
+     * Campaign ids are validated to exist inside the active project, so a caller cannot pull another
+     * project's (or tenant's) campaign into a comparison. Mixed objectives are returned as-is with each
+     * campaign's own objective attached — the UI must not blend KPIs across different objectives.
+     */
+    public function compare(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        $data = $request->validate([
+            'campaign_ids' => ['required', 'array', 'min:2', 'max:5'],
+            'campaign_ids.*' => ['required', 'uuid'],
+        ]);
+
+        // Fail closed: only ids that really belong to the active project survive.
+        $ids = UnifiedCampaign::query()
+            ->whereIn('id', $data['campaign_ids'])
+            ->pluck('id')
+            ->all();
+
+        abort_if(count($ids) < 2, 422, 'Pick at least two campaigns from this project to compare.');
+
+        $rows = $this->scoped($request)->compare($ids, $from, $to);
+        $objectives = array_values(array_unique(array_filter(array_column($rows, 'objective'))));
+
+        return ApiResponse::success([
+            'campaigns' => $rows,
+            // The UI shows a warning instead of a blended total when this is true.
+            'mixed_objectives' => count($objectives) > 1,
+            'objectives' => $objectives,
+        ], 'Campaign comparison.', meta: $this->meta($from, $to));
     }
 
     public function campaigns(Request $request): JsonResponse

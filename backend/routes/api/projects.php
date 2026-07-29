@@ -53,6 +53,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{proj
     Route::get('metrics/timeseries', [MetricsController::class, 'timeseries'])->name('metrics.timeseries');
     Route::get('metrics/platforms', [MetricsController::class, 'platforms'])->name('metrics.platforms');
     Route::get('metrics/campaigns', [MetricsController::class, 'campaigns'])->name('metrics.campaigns');
+    // CAMPAIGN-020: side-by-side comparison of 2–5 campaigns of this project.
+    Route::get('metrics/compare', [MetricsController::class, 'compare'])->name('metrics.compare');
     Route::get('metrics/funnel', [MetricsController::class, 'funnel'])->name('metrics.funnel');
     Route::get('metrics/budget', [MetricsController::class, 'budget'])->name('metrics.budget');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');

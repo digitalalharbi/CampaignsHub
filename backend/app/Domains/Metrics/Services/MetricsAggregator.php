@@ -169,6 +169,122 @@ final class MetricsAggregator
     }
 
     /** @return list<array<string, mixed>> one row per unified campaign (id/name/provider) ranked by spend. */
+    /**
+     * CAMPAIGN-020: side-by-side comparison of a chosen set of campaigns over one window.
+     *
+     * Every campaign is measured with the SAME sums and the SAME derived-KPI formulas as the rest of the
+     * engine — there is no parallel comparison maths. Each row carries its own objective so the UI can
+     * refuse to blend KPIs across different objectives, and the daily series / platform split / top
+     * creatives are each fetched in ONE grouped query rather than per campaign.
+     *
+     * @param  list<string>  $campaignIds
+     * @return list<array<string,mixed>>
+     */
+    public function compare(array $campaignIds, Carbon $from, Carbon $to): array
+    {
+        $ids = array_values(array_unique(array_filter($campaignIds)));
+        if ($ids === []) {
+            return [];
+        }
+
+        // Identity comes from unified_campaigns so a campaign with NO metrics in the window still appears
+        // in the comparison (as zeros) instead of silently vanishing.
+        $meta = DB::table('unified_campaigns')->whereIn('id', $ids)
+            ->select('id', 'name', 'objective', 'status', 'client_display_name', 'total_budget', 'budget_currency')
+            ->get()->keyBy('id');
+
+        $totals = $this->base($from, $to)->whereIn('daily_metrics.unified_campaign_id', $ids)
+            ->select('daily_metrics.unified_campaign_id as campaign_id')
+            ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", self::PIVOT, array_keys(self::PIVOT))))
+            ->groupBy('daily_metrics.unified_campaign_id')
+            ->get()->keyBy('campaign_id');
+
+        $series = $this->base($from, $to)->whereIn('daily_metrics.unified_campaign_id', $ids)
+            ->select('daily_metrics.unified_campaign_id as campaign_id', 'metric_date')
+            ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", self::PIVOT, array_keys(self::PIVOT))))
+            ->groupBy('daily_metrics.unified_campaign_id', 'metric_date')
+            ->orderBy('metric_date')
+            ->get()->groupBy('campaign_id');
+
+        $platforms = $this->base($from, $to)->whereIn('daily_metrics.unified_campaign_id', $ids)
+            ->select('daily_metrics.unified_campaign_id as campaign_id', 'daily_metrics.provider')
+            ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'), 0) AS spend")
+            ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'conversions'), 0) AS conversions")
+            ->groupBy('daily_metrics.unified_campaign_id', 'daily_metrics.provider')
+            ->get()->groupBy('campaign_id');
+
+        $creatives = $this->topCreatives($ids, $from, $to);
+
+        return array_values(array_map(function (string $id) use ($meta, $totals, $series, $platforms, $creatives): array {
+            $m = $meta->get($id);
+
+            return [
+                'campaign_id' => $id,
+                'name' => $m->name ?? '—',
+                'objective' => $m->objective ?? null,
+                'status' => $m->status ?? null,
+                'client_display_name' => $m->client_display_name ?? null,
+                'total_budget' => $m->total_budget ?? null,
+                'budget_currency' => $m->budget_currency ?? null,
+                'totals' => $this->withDerived((array) ($totals->get($id) ?? new \stdClass)),
+                'series' => collect($series->get($id) ?? [])
+                    ->map(fn ($r) => ['date' => Carbon::parse($r->metric_date)->toDateString()] + $this->withDerived((array) $r))
+                    ->values()->all(),
+                'platforms' => collect($platforms->get($id) ?? [])
+                    ->map(fn ($r) => ['provider' => $r->provider, 'spend' => round((float) $r->spend, 2), 'conversions' => round((float) $r->conversions, 2)])
+                    ->sortByDesc('spend')->values()->all(),
+                'creatives' => $creatives[$id] ?? [],
+            ];
+        }, $ids));
+    }
+
+    /**
+     * Top creatives per campaign by spend, from the creative tables (not daily_metrics). Thumbnails are
+     * passed through as stored — never fabricated; the UI shows "preview unavailable" when null.
+     *
+     * @param  list<string>  $campaignIds
+     * @return array<string, list<array<string,mixed>>>
+     */
+    private function topCreatives(array $campaignIds, Carbon $from, Carbon $to, int $perCampaign = 3): array
+    {
+        $rows = DB::table('creative_daily_metrics as m')
+            ->join('external_creatives as c', 'c.id', '=', 'm.creative_id')
+            ->whereIn('m.campaign_id', $campaignIds)
+            ->whereBetween('m.metric_date', [$from->toDateString(), $to->toDateString()])
+            ->select('m.campaign_id', 'c.id as creative_id', 'c.name', 'c.format', 'c.thumbnail_url', 'c.provider')
+            ->selectRaw('SUM(m.spend) AS spend, SUM(m.impressions) AS impressions, SUM(m.clicks) AS clicks, SUM(m.conversions) AS conversions')
+            ->groupBy('m.campaign_id', 'c.id', 'c.name', 'c.format', 'c.thumbnail_url', 'c.provider')
+            ->orderByDesc('spend')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $r) {
+            $bucket = &$out[$r->campaign_id];
+            if (count($bucket ?? []) >= $perCampaign) {
+                continue;
+            }
+            $spend = (float) $r->spend;
+            $conv = (float) $r->conversions;
+            $impr = (float) $r->impressions;
+            $bucket[] = [
+                'creative_id' => $r->creative_id,
+                'name' => $r->name,
+                'format' => $r->format,
+                'provider' => $r->provider,
+                'thumbnail_url' => $r->thumbnail_url,
+                'spend' => round($spend, 2),
+                'impressions' => round($impr, 2),
+                'clicks' => round((float) $r->clicks, 2),
+                'conversions' => round($conv, 2),
+                'cpa' => $conv > 0 ? round($spend / $conv, 2) : null,
+                'cpm' => $impr > 0 ? round($spend / $impr * 1000, 2) : null,
+            ];
+            unset($bucket);
+        }
+
+        return $out;
+    }
+
     public function byCampaign(Carbon $from, Carbon $to): array
     {
         $rows = $this->base($from, $to)

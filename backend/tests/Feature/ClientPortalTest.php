@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Requests\Models\ExternalRequest;
+use App\Domains\Requests\Services\ClientNotifier;
 use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
@@ -170,8 +172,8 @@ final class ClientPortalTest extends TestCase
 
         // Deduplicated per (request,event,channel) — re-notifying the same event adds nothing.
         $req = ExternalRequest::where('reference', $ref)->firstOrFail();
-        app(\App\Domains\Requests\Services\ClientNotifier::class)->notify($req, 'received');
-        $this->assertSame(2, (int) \Illuminate\Support\Facades\DB::table('client_notifications')->where('event', 'received')->count());
+        app(ClientNotifier::class)->notify($req, 'received');
+        $this->assertSame(2, (int) DB::table('client_notifications')->where('event', 'received')->count());
 
         // The portal surfaces the delivery log honestly.
         $cookie = $this->portalLogin($email);

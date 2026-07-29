@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { CampaignsPage } from './CampaignsPage'
 import type { UnifiedCampaign } from './types'
 import type { Project } from '@/features/projects/api'
@@ -41,23 +41,59 @@ describe('CampaignsPage', () => {
     useProject.getState().setCurrentProjectId('p1')
   })
 
+  /** The page opens on the overview; the list lives behind the cards/table modes (CAMPAIGN-010). */
+  const openList = async () => fireEvent.click(await screen.findByTestId('view-cards'))
+
   it('lists campaigns for the auto-selected project', async () => {
     signInWith(['campaigns.view'])
     renderWithProviders(<CampaignsPage />)
 
+    await openList()
     expect(await screen.findByText('National Day')).toBeInTheDocument()
     await waitFor(() => expect(listCampaigns).toHaveBeenCalledWith('p1', expect.anything()))
+  })
+
+  it('offers all five view modes and switches between them', async () => {
+    signInWith(['campaigns.view'])
+    renderWithProviders(<CampaignsPage />)
+
+    for (const mode of ['overview', 'cards', 'table', 'compare', 'attention']) {
+      expect(await screen.findByTestId(`view-${mode}`)).toBeInTheDocument()
+    }
+
+    fireEvent.click(screen.getByTestId('view-compare'))
+    expect(await screen.findByText('اختر حملات للمقارنة')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('view-attention'))
+    // One linked, active, on-budget campaign with no metrics loaded is reported as "no data",
+    // never silently treated as healthy.
+    expect(await screen.findByTestId('attention-row')).toBeInTheDocument()
+  })
+
+  it('filters by taxonomy chips without leaving the list', async () => {
+    signInWith(['campaigns.view'])
+    renderWithProviders(<CampaignsPage />)
+
+    await openList()
+    await screen.findByText('National Day')
+    const chips = await screen.findAllByTestId('taxonomy-chip')
+    expect(chips.length).toBeGreaterThan(1)
+
+    fireEvent.click(chips[1])
+    await waitFor(() => expect(listCampaigns).toHaveBeenCalledWith('p1', expect.objectContaining({ status: 'draft' })))
   })
 
   it('shows the create button only with campaigns.create', async () => {
     signInWith(['campaigns.view'])
     const view = renderWithProviders(<CampaignsPage />)
+    await openList()
     await screen.findByText('National Day')
     expect(screen.queryByText('New campaign')).not.toBeInTheDocument()
 
     view.unmount()
     signInWith(['campaigns.view', 'campaigns.create'])
     renderWithProviders(<CampaignsPage />)
+    await openList()
     await screen.findByText('National Day')
     expect(screen.getByText('New campaign')).toBeInTheDocument()
   })
@@ -66,6 +102,7 @@ describe('CampaignsPage', () => {
     vi.mocked(listCampaigns).mockResolvedValue([])
     signInWith(['campaigns.view'])
     renderWithProviders(<CampaignsPage />)
+    await openList()
     expect(await screen.findByText('No campaigns yet')).toBeInTheDocument()
   })
 

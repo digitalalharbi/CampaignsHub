@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { LayoutGrid, Plus, Rows, Search, TriangleAlert } from 'lucide-react'
+import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert } from 'lucide-react'
 import { listCampaigns } from './api'
 import { CampaignFormModal } from './CampaignFormModal'
+import { CampaignComparison } from './CampaignComparison'
+import { attentionFlags, attentionRank, type AttentionMetrics } from './campaignInsights'
 import { campaignStatusLabel, campaignStatusTone, objectiveLabel } from './labels'
 import { CAMPAIGN_OBJECTIVES, CAMPAIGN_STATUSES, type UnifiedCampaign } from './types'
 import { Badge } from '@/components/ui/Badge'
@@ -25,6 +27,17 @@ const STATUS_COLORS: Record<string, string> = {
   draft: 'var(--text-muted)', scheduled: 'var(--purple)', archived: 'var(--border-strong)',
 }
 
+/** The five ways to look at a project's campaigns (CAMPAIGN-010). */
+type ViewMode = 'overview' | 'cards' | 'table' | 'compare' | 'attention'
+
+const VIEWS: Array<{ id: ViewMode; ar: string; icon: typeof LayoutGrid }> = [
+  { id: 'overview', ar: 'نظرة عامة', icon: BarChart3 },
+  { id: 'cards', ar: 'بطاقات', icon: LayoutGrid },
+  { id: 'table', ar: 'جدول', icon: Rows },
+  { id: 'compare', ar: 'مقارنة', icon: GitCompare },
+  { id: 'attention', ar: 'تحتاج تدخلًا', icon: TriangleAlert },
+]
+
 export function CampaignsPage() {
   const t = useT()
   const locale = useUi((s) => s.locale)
@@ -33,7 +46,8 @@ export function CampaignsPage() {
   const { currentProjectId: projectId } = useProject()
 
   const [days, setDays] = useState(30)
-  const [view, setView] = useState<'cards' | 'table'>('cards')
+  const [view, setView] = useState<ViewMode>('overview')
+  const [compareIds, setCompareIds] = useState<string[]>([])
   const [status, setStatus] = useState('')
   const [objective, setObjective] = useState('')
   const [search, setSearch] = useState('')
@@ -74,6 +88,28 @@ export function CampaignsPage() {
     [metricCampaigns.data],
   )
   const platformDonut = (platforms.data ?? []).map((p) => ({ name: String(p.provider), value: Number(p.spend ?? 0) }))
+
+  // Per-campaign metric slice, keyed by campaign id — the needs-attention rules read from this and
+  // report "no data" rather than assuming a campaign without metrics is healthy.
+  const metricsByCampaign = useMemo(() => {
+    const map = new Map<string, AttentionMetrics>()
+    for (const r of metricCampaigns.data ?? []) {
+      const id = String((r as unknown as Record<string, unknown>).campaign_id ?? '')
+      if (id) map.set(id, r as unknown as AttentionMetrics)
+    }
+    return map
+  }, [metricCampaigns.data])
+
+  const attention = useMemo(
+    () => campaigns
+      .map((c) => ({ c, flags: attentionFlags(c, metricsByCampaign.get(c.id)) }))
+      .filter((x) => x.flags.length > 0)
+      .sort((a, b) => attentionRank(b.flags) - attentionRank(a.flags)),
+    [campaigns, metricsByCampaign],
+  )
+
+  const toggleCompare = (id: string) =>
+    setCompareIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= 5 ? prev : [...prev, id]))
 
   const k = summary.data?.current
   const d = summary.data?.delta ?? {}
@@ -116,68 +152,170 @@ export function CampaignsPage() {
         <StatCard label="ROAS" value={ratio(k?.roas ?? null)} delta={d.roas} />
       </div>
 
-      {/* Charts — all from project-scoped metrics API */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <ChartCard title="الإنفاق مقابل الإيرادات" subtitle="اتجاه المشروع" className="lg:col-span-2">
-          {timeseries.isLoading ? <Skeleton className="h-[200px]" /> : <SpendRevenueAreaChart data={(timeseries.data ?? []) as unknown as Array<Record<string, unknown>>} height={200} />}
-        </ChartCard>
-        <ChartCard title="توزيع الإنفاق" subtitle="حسب المنصة">
-          {platforms.isLoading ? <Skeleton className="h-[200px]" /> : <PlatformDonutChart data={platformDonut} centerLabel="الإجمالي" centerValue={compact(platformDonut.reduce((a, b) => a + b.value, 0))} height={200} />}
-        </ChartCard>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-3">
-        <ChartCard title="حالات الحملات" subtitle="توزيع الحالة">
-          {statusDonut.length ? <PlatformDonutChart data={statusDonut} colorBy="series" centerLabel="الحملات" centerValue={String(counts.total)} height={190} /> : <EmptyState title="لا حملات" />}
-        </ChartCard>
-        <ChartCard title="أفضل الحملات" subtitle="حسب الإنفاق" className="lg:col-span-2">
-          {topCampaigns.length >= 2 ? <RankingBarChart data={topCampaigns} bars={[{ key: 'spend', name: 'الإنفاق', kind: 'money' }]} horizontal height={190} colorByPlatform /> : <div className="flex h-[190px] items-center justify-center"><ProgressRing value={budgetTotals.consumed} sublabel={`${compact(budgetTotals.spent)} / ${compact(budgetTotals.total)}`} size={140} tone={budgetTotals.consumed > 0.95 ? 'danger' : 'brand'} /></div>}
-        </ChartCard>
-      </div>
-
-      {/* Filters + view toggle */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1">
-          <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث في حملات المشروع…" className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
-        </div>
-        <Select value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: 'كل الحالات' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
-        <Select value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: 'كل الأهداف' }, ...CAMPAIGN_OBJECTIVES.map((o) => ({ value: o, label: objectiveLabel(o, locale) }))]} />
-        <div className="inline-flex rounded-xl border border-border bg-surface-secondary p-0.5">
-          <button aria-label="Cards view" onClick={() => setView('cards')} className={`flex h-9 w-9 items-center justify-center rounded-lg ${view === 'cards' ? 'bg-surface shadow-[var(--shadow-small)]' : 'text-text-secondary'}`}><LayoutGrid size={16} /></button>
-          <button aria-label="Table view" onClick={() => setView('table')} className={`flex h-9 w-9 items-center justify-center rounded-lg ${view === 'table' ? 'bg-surface shadow-[var(--shadow-small)]' : 'text-text-secondary'}`}><Rows size={16} /></button>
-        </div>
+      {/* View switcher — the five modes of CAMPAIGN-010. */}
+      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-surface-secondary p-1">
+        {VIEWS.map((v) => {
+          const Icon = v.icon
+          const on = view === v.id
+          const count = v.id === 'attention' ? attention.length : v.id === 'compare' ? compareIds.length : 0
+          return (
+            <button
+              key={v.id}
+              data-testid={`view-${v.id}`}
+              aria-pressed={on}
+              onClick={() => setView(v.id)}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+                on ? 'bg-surface text-text-primary shadow-[var(--shadow-small)]' : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              <Icon size={15} className={v.id === 'attention' && attention.length > 0 ? 'text-warning' : undefined} />
+              {v.ar}
+              {count > 0 && <span className="tnum rounded-full bg-surface-secondary px-1.5 text-[11px] text-text-secondary">{count}</span>}
+            </button>
+          )
+        })}
       </div>
 
-      {/* Campaign list */}
-      {campaignsQuery.isLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-40" />)}</div>
-      ) : campaigns.length === 0 ? (
-        <EmptyState title={t('no_campaigns')} description={t('no_campaigns_hint')} />
-      ) : view === 'cards' ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {campaigns.map((c) => <CampaignCard key={c.id} c={c} locale={locale} onOpen={() => navigate(`/campaigns/${projectId}/${c.id}`)} />)}
-        </div>
+      {view === 'overview' ? (
+        <>
+          {/* Charts — all from the project-scoped metrics API. */}
+          <div className="grid gap-4 lg:grid-cols-3">
+            <ChartCard title="الإنفاق مقابل الإيرادات" subtitle="اتجاه المشروع" className="lg:col-span-2">
+              {timeseries.isLoading ? <Skeleton className="h-[200px]" /> : <SpendRevenueAreaChart data={(timeseries.data ?? []) as unknown as Array<Record<string, unknown>>} height={200} />}
+            </ChartCard>
+            <ChartCard title="توزيع الإنفاق" subtitle="حسب المنصة">
+              {platforms.isLoading ? <Skeleton className="h-[200px]" /> : <PlatformDonutChart data={platformDonut} centerLabel="الإجمالي" centerValue={compact(platformDonut.reduce((a, b) => a + b.value, 0))} height={200} />}
+            </ChartCard>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <ChartCard title="حالات الحملات" subtitle="توزيع الحالة">
+              {statusDonut.length ? <PlatformDonutChart data={statusDonut} colorBy="series" centerLabel="الحملات" centerValue={String(counts.total)} height={190} /> : <EmptyState title="لا حملات" />}
+            </ChartCard>
+            <ChartCard title="أفضل الحملات" subtitle="حسب الإنفاق" className="lg:col-span-2">
+              {topCampaigns.length >= 2 ? <RankingBarChart data={topCampaigns} bars={[{ key: 'spend', name: 'الإنفاق', kind: 'money' }]} horizontal height={190} colorByPlatform /> : <div className="flex h-[190px] items-center justify-center"><ProgressRing value={budgetTotals.consumed} sublabel={`${compact(budgetTotals.spent)} / ${compact(budgetTotals.total)}`} size={140} tone={budgetTotals.consumed > 0.95 ? 'danger' : 'brand'} /></div>}
+            </ChartCard>
+          </div>
+          {attention.length > 0 && (
+            <button onClick={() => setView('attention')} className="flex w-full items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-start text-sm text-text-primary hover:bg-warning/15">
+              <TriangleAlert size={16} className="shrink-0 text-warning" />
+              <span><span className="tnum font-bold">{attention.length}</span> حملة تحتاج تدخلًا — اعرض التفاصيل والأسباب.</span>
+            </button>
+          )}
+        </>
+      ) : view === 'compare' ? (
+        <CampaignComparison
+          projectId={projectId}
+          campaigns={campaigns}
+          selected={compareIds}
+          onToggle={toggleCompare}
+          onClear={() => setCompareIds([])}
+          range={range}
+          locale={locale}
+        />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
-          <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
-            <thead><tr className="border-b border-border text-text-muted"><th className="p-3 text-start">الحملة</th><th className="p-3 text-start">الهدف</th><th className="p-3 text-start">الحالة</th><th className="p-3 text-end">الميزانية</th><th className="p-3 text-end">مرتبطة</th></tr></thead>
-            <tbody>
-              {campaigns.map((c) => (
-                <tr key={c.id} data-testid="campaign-row" className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-hover" onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}>
-                  <td className="p-3 font-semibold text-text-primary">{c.name}</td>
-                  <td className="p-3 text-text-secondary">{objectiveLabel(c.objective, locale)}</td>
-                  <td className="p-3"><Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge></td>
-                  <td className="tnum p-3 text-end">{money(c.total_budget, c.budget_currency)}</td>
-                  <td className="tnum p-3 text-end">{c.external_campaigns_count ?? 0}</td>
-                </tr>
+        <>
+          {/* Filters — search + taxonomy chips for status and objective. */}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1">
+                <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث في حملات المشروع…" className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
+              </div>
+              <Select value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: 'كل الحالات' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
+              <Select value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: 'كل الأهداف' }, ...CAMPAIGN_OBJECTIVES.map((o) => ({ value: o, label: objectiveLabel(o, locale) }))]} />
+            </div>
+            {/* Taxonomy chips — the same taxonomy the selects use, one tap away, with live counts. */}
+            <div className="flex flex-wrap gap-1.5">
+              <Chip active={status === '' && objective === ''} onClick={() => { setStatus(''); setObjective('') }}>الكل <span className="tnum">{counts.total}</span></Chip>
+              {CAMPAIGN_STATUSES.filter((s) => (counts[s] ?? 0) > 0).map((s) => (
+                <Chip key={s} active={status === s} onClick={() => setStatus(status === s ? '' : s)}>
+                  {campaignStatusLabel(s, locale)} <span className="tnum">{counts[s]}</span>
+                </Chip>
               ))}
-            </tbody>
-          </table></div>
-        </div>
+              {CAMPAIGN_OBJECTIVES.filter((o) => campaigns.some((c) => c.objective === o)).map((o) => (
+                <Chip key={o} active={objective === o} onClick={() => setObjective(objective === o ? '' : o)}>
+                  {objectiveLabel(o, locale)}
+                </Chip>
+              ))}
+            </div>
+          </div>
+
+          {/* Campaign list */}
+          {campaignsQuery.isLoading ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-40" />)}</div>
+          ) : campaigns.length === 0 ? (
+            <EmptyState title={t('no_campaigns')} description={t('no_campaigns_hint')} />
+          ) : view === 'attention' ? (
+            attention.length === 0 ? (
+              <EmptyState title="لا توجد حملات تحتاج تدخلًا" description="كل حملات المشروع مرتبطة بمنصاتها وتنفق ضمن ميزانياتها وتحقق نتائج في الفترة المحددة." />
+            ) : (
+              <div className="space-y-2">
+                {attention.map(({ c, flags }) => (
+                  <button
+                    key={c.id}
+                    data-testid="attention-row"
+                    onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}
+                    className="flex w-full flex-col gap-2 rounded-2xl border border-border bg-surface p-4 text-start shadow-[var(--shadow-small)] transition-colors hover:border-brand-300 hover:bg-surface-hover"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold text-text-primary">{c.name}</span>
+                      <Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge>
+                      <Badge tone="neutral">{objectiveLabel(c.objective, locale)}</Badge>
+                    </div>
+                    <ul className="space-y-1">
+                      {flags.map((f) => (
+                        <li key={f.code} className={`flex items-start gap-1.5 text-sm ${f.severity === 'high' ? 'text-danger' : 'text-warning'}`}>
+                          <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+                          <span className="text-text-secondary">{f.ar}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </button>
+                ))}
+              </div>
+            )
+          ) : view === 'cards' ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {campaigns.map((c) => <CampaignCard key={c.id} c={c} locale={locale} onOpen={() => navigate(`/campaigns/${projectId}/${c.id}`)} />)}
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
+              <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
+                <thead><tr className="border-b border-border text-text-muted"><th className="p-3 text-start">الحملة</th><th className="p-3 text-start">الهدف</th><th className="p-3 text-start">الحالة</th><th className="p-3 text-end">الميزانية</th><th className="p-3 text-end">مرتبطة</th></tr></thead>
+                <tbody>
+                  {campaigns.map((c) => (
+                    <tr key={c.id} data-testid="campaign-row" className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-hover" onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}>
+                      <td className="p-3 font-semibold text-text-primary">{c.name}</td>
+                      <td className="p-3 text-text-secondary">{objectiveLabel(c.objective, locale)}</td>
+                      <td className="p-3"><Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge></td>
+                      <td className="tnum p-3 text-end">{money(c.total_budget, c.budget_currency)}</td>
+                      <td className="tnum p-3 text-end">{c.external_campaigns_count ?? 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table></div>
+            </div>
+          )}
+        </>
       )}
 
       <CampaignFormModal open={modalOpen} onClose={() => setModalOpen(false)} projectId={projectId} />
     </div>
+  )
+}
+
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      data-testid="taxonomy-chip"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+        active ? 'border-brand-500 bg-brand-primary-soft text-brand-700' : 'border-border text-text-secondary hover:border-brand-300 hover:bg-surface-hover'
+      }`}
+    >
+      {children}
+    </button>
   )
 }
 
