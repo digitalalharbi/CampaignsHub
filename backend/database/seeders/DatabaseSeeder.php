@@ -53,6 +53,9 @@ class DatabaseSeeder extends Seeder
                 DemoAnalyticsSeeder::class,
                 DemoReportsSeeder::class,
                 DemoCreativesSeeder::class,
+                // DEMO-001: the credential → connection → ad account → external campaign chain the
+                // analytics demo was missing, so the integration surfaces have real rows to show.
+                DemoIntegrationsSeeder::class,
             ]);
         }
     }

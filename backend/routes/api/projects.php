@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
+use App\Domains\Metrics\Http\Controllers\SyncRunController;
 use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\Projects\Http\Controllers\ProjectController;
@@ -59,6 +60,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{proj
     Route::get('metrics/funnel', [MetricsController::class, 'funnel'])->name('metrics.funnel');
     Route::get('metrics/budget', [MetricsController::class, 'budget'])->name('metrics.budget');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
+
+    // SYNC-001: the sync pipeline's operator surface — what ran, what it produced, what broke.
+    Route::get('sync-runs', [SyncRunController::class, 'index'])->name('sync-runs.index');
+    Route::post('sync-runs', [SyncRunController::class, 'store'])->name('sync-runs.store');
 
     // Reports (project-scoped; reports.view / reports.export).
     Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
