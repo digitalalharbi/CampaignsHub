@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Copy, FolderKanban, Pause, Pencil, Play, Plus, RotateCcw, Users } from 'lucide-react'
+import { Copy, FolderKanban, Pause, Pencil, Play, Plus, RotateCcw, Search, Users } from 'lucide-react'
 import {
   archiveProject,
   createProject,
@@ -29,6 +29,11 @@ const STATUSES = ['draft', 'onboarding', 'active', 'paused', 'completed', 'archi
 
 /** Error-summary title — local bilingual copy (shared i18n dictionary is untouched). */
 const PROJ_ERR_TITLE = { ar: 'يرجى تصحيح الأخطاء التالية', en: 'Please fix the following errors' } as const
+/** Summary/toolbar copy — local bilingual (shared i18n dictionary is untouched). */
+const PROJ_COPY = {
+  ar: { search_ph: 'ابحث باسم المشروع…', all: 'الكل', total: 'إجمالي المشاريع', active: 'نشطة', paused: 'متوقفة', onboarding: 'قيد الإعداد', no_match: 'لا مشاريع تطابق البحث أو الفلتر.' },
+  en: { search_ph: 'Search by project name…', all: 'All', total: 'Total projects', active: 'Active', paused: 'Paused', onboarding: 'Onboarding', no_match: 'No projects match your search or filter.' },
+} as const
 const PROJ_CREATE_IDS: Record<string, string> = { name: 'proj-name', client_workspace_id: 'proj-workspace' }
 const PROJ_EDIT_IDS: Record<string, string> = { name: 'proj-edit-name', status: 'proj-edit-status' }
 
@@ -43,6 +48,9 @@ export function ProjectsPage() {
   const [status, setStatus] = useState('active')
   const [workspaceId, setWorkspaceId] = useState('')
   const [showArchived, setShowArchived] = useState(false)
+  const [term, setTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | string>('all')
+  const pc = PROJ_COPY[locale]
 
   const projects = useQuery({
     queryKey: ['projects', { showArchived }],
@@ -88,6 +96,21 @@ export function ProjectsPage() {
   const createErrors = createMutation.isError ? toSummary(createMutation.error, PROJ_CREATE_IDS) : []
   const editErrors = updateMutation.isError ? toSummary(updateMutation.error, PROJ_EDIT_IDS) : []
 
+  const items = projects.data ?? []
+  const summary = {
+    total: items.length,
+    active: items.filter((p) => p.status === 'active').length,
+    paused: items.filter((p) => p.status === 'paused').length,
+    onboarding: items.filter((p) => p.status === 'onboarding').length,
+  }
+  const needle = term.trim().toLowerCase()
+  const filtered = items.filter((p) => {
+    if (statusFilter !== 'all' && p.status !== statusFilter) return false
+    if (needle && !p.name.toLowerCase().includes(needle)) return false
+    return true
+  })
+  const statusChips: string[] = ['all', ...STATUSES]
+
   return (
     <section className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -111,17 +134,57 @@ export function ProjectsPage() {
         </div>
       </div>
 
+      {/* Summary — the portfolio at a glance. */}
+      {!projects.isLoading && items.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <ProjSummaryCard label={pc.total} value={summary.total} tone="brand" />
+          <ProjSummaryCard label={pc.active} value={summary.active} tone="success" />
+          <ProjSummaryCard label={pc.paused} value={summary.paused} tone="warning" />
+          <ProjSummaryCard label={pc.onboarding} value={summary.onboarding} tone="muted" />
+        </div>
+      )}
+
+      {/* Search + status filters. */}
+      {!projects.isLoading && items.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
+          <label className="relative flex w-full items-center sm:max-w-xs">
+            <Search size={15} className="pointer-events-none absolute start-3 text-text-muted" aria-hidden />
+            <input
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              placeholder={pc.search_ph}
+              className="w-full rounded-xl border border-border bg-surface-secondary py-2 pe-3 ps-9 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none"
+            />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {statusChips.map((f) => (
+              <button
+                key={f}
+                onClick={() => setStatusFilter(f)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  statusFilter === f ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                {f === 'all' ? pc.all : f}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {projects.isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-36 w-full" />
           ))}
         </div>
-      ) : (projects.data?.length ?? 0) === 0 ? (
+      ) : items.length === 0 ? (
         <EmptyState title={t('no_projects')} />
+      ) : filtered.length === 0 ? (
+        <EmptyState title={pc.no_match} />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {projects.data?.map((p) => {
+          {filtered.map((p) => {
             const ws = wsById.get(p.client_workspace_id)
             const archived = p.status === 'archived'
             const paused = p.status === 'paused'
@@ -227,5 +290,18 @@ export function ProjectsPage() {
         </div>
       </Modal>
     </section>
+  )
+}
+
+function ProjSummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'success' | 'warning' | 'muted' }) {
+  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', success: 'bg-success', warning: 'bg-warning', muted: 'bg-text-muted' }
+  return (
+    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
+        <span className="text-xs font-semibold text-text-secondary">{label}</span>
+      </div>
+      <span className="text-2xl font-extrabold tnum text-text-primary" dir="ltr">{value}</span>
+    </div>
   )
 }
