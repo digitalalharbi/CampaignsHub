@@ -54,6 +54,7 @@ import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import { CampaignAudienceTab, CampaignEventsTab, CampaignSyncLogTab } from './CampaignDepthTabs'
 import { CampaignStructureTab } from './CampaignStructureTab'
+import { RelatedEntitiesPanel } from './RelatedEntitiesPanel'
 import { useProject } from '@/stores/project'
 
 const TAB_KEYS = [
@@ -264,6 +265,8 @@ export function CampaignDetailPage() {
       </Card>
 
       {actionError && <Alert severity="danger" title={actionError} />}
+
+      <RelatedEntitiesPanel projectId={projectId} campaignId={campaignId} />
 
       <Tabs items={tabs} active={tab} onChange={setTab} />
 

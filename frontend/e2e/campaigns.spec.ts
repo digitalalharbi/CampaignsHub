@@ -5,20 +5,33 @@ import { AUTH, switchToEnglish } from './helpers'
  * Core campaigns paths (authenticated as the demo owner via reused storage state).
  * All external/platform data is Sandbox (Demo), never production.
  */
+
+/**
+ * CAMPAIGN-010 gave the campaigns page five view modes and it opens on the overview, so the card list
+ * is one click away. Every spec that works with cards goes through here.
+ */
+async function openCardsView(page: import('@playwright/test').Page) {
+  await page.getByTestId('view-cards').click()
+}
+
 test.use({ storageState: AUTH.owner })
 
 test('create a unified campaign and see it in the list', async ({ page }) => {
   await page.goto('/campaigns')
   await switchToEnglish(page)
 
-  // A demo project is auto-selected by the switcher.
+  // A demo project is auto-selected by the switcher. The page opens on the overview, which renders four
+  // charts — wait for the view switcher to be interactive before clicking anything, otherwise a slow
+  // parallel run can time out on a button that is still behind chart layout work.
+  await expect(page.getByTestId('view-overview')).toBeVisible({ timeout: 20000 })
   await page.getByRole('button', { name: /New campaign|حملة جديدة/ }).click()
 
   const name = `E2E Campaign ${Date.now()}`
   await page.getByLabel(/Campaign name|اسم الحملة/).fill(name)
   await page.getByRole('button', { name: /^Save$|^حفظ$/ }).click()
 
-  // Refetched from the API — the new campaign appears in the table.
+  // Refetched from the API — the new campaign appears once the list view is shown.
+  await openCardsView(page)
   await expect(page.getByText(name)).toBeVisible()
 })
 
@@ -26,6 +39,7 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
   await page.goto('/campaigns')
   await switchToEnglish(page)
 
+  await openCardsView(page)
   await page.getByTestId('campaign-card').first().click()
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
 
@@ -40,6 +54,7 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
 test('link-external modal opens and labels sandbox data as Demo', async ({ page }) => {
   await page.goto('/campaigns')
   await switchToEnglish(page)
+  await openCardsView(page)
   await page.getByTestId('campaign-card').first().click()
 
   await page.getByRole('tab', { name: /Platforms|المنصات/ }).click()

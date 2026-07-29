@@ -56,10 +56,21 @@ export async function seedExternals(request: APIRequestContext, projectId: strin
 }
 
 export async function createCampaign(page: Page, name: string) {
+  // The campaigns page opens on the chart-heavy overview; wait for it to be interactive first.
+  await expect(page.getByTestId('view-overview')).toBeVisible({ timeout: 20000 })
   await page.getByRole('button', { name: /New campaign|حملة جديدة/ }).click()
   await page.getByLabel(/Campaign name|اسم الحملة/).fill(name)
-  await page.getByRole('button', { name: /^Save$|^حفظ$/ }).click()
-  await expect(page.getByText(name)).toBeVisible()
+  const save = page.getByRole('button', { name: /^Save$|^حفظ$/ })
+  await save.click()
+  // Wait for the modal to actually close before touching the page behind it — clicking the view
+  // switcher while the overlay is still up lands on the overlay and silently does nothing (this was
+  // an intermittent failure under parallel load on WebKit and Firefox).
+  await expect(save).toBeHidden({ timeout: 15000 })
+
+  // CAMPAIGN-010: the page opens on the overview, so the new campaign is only visible once the card
+  // list is shown. Switching here keeps every caller of this helper working.
+  await page.getByTestId('view-cards').click()
+  await expect(page.getByText(name)).toBeVisible({ timeout: 15000 })
 }
 
 /**

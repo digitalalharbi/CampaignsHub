@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Models;
 
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Concerns\BelongsToProject;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -46,6 +48,12 @@ final class UnifiedCampaign extends Model
     ];
 
     /** @return HasMany<ExternalCampaign, $this> */
+    /** The client this campaign belongs to — the top of the cross-module chain. @return BelongsTo<\App\Domains\ClientWorkspaces\Models\ClientWorkspace, $this> */
+    public function clientWorkspace(): BelongsTo
+    {
+        return $this->belongsTo(ClientWorkspace::class);
+    }
+
     public function externalCampaigns(): HasMany
     {
         return $this->hasMany(ExternalCampaign::class);

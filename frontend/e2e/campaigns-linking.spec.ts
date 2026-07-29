@@ -13,7 +13,9 @@ import { API_HEADERS, AUTH, createCampaign, seedExternals, switchToEnglish, useP
 test.use({ storageState: AUTH.owner })
 
 async function openCampaignLinkedTab(page: Page, name: string) {
-  // The rebuilt list navigates via clickable campaign cards (no "Open" button).
+  // The rebuilt list navigates via clickable campaign cards (no "Open" button), and the page opens on
+  // the overview mode, so switch to the card list first (CAMPAIGN-010).
+  await page.getByTestId('view-cards').click()
   await page.getByTestId('campaign-card').filter({ hasText: name }).first().click()
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
   await page.getByRole('tab', { name: /Platforms|المنصات/ }).click()

@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Http\Controllers\CampaignAnnotationController;
 use App\Domains\Campaigns\Http\Controllers\CampaignCreativesController;
 use App\Domains\Campaigns\Http\Controllers\CampaignMetricsController;
 use App\Domains\Campaigns\Http\Controllers\CampaignStructureController;
+use App\Domains\Campaigns\Http\Controllers\RelatedEntitiesController;
 use App\Domains\Campaigns\Http\Controllers\CampaignReportsController;
 use App\Domains\Campaigns\Http\Controllers\ExternalCampaignController;
 use App\Domains\Campaigns\Http\Controllers\UnifiedCampaignController;
@@ -45,6 +46,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])
         Route::get('campaigns/{campaign}/sync-log', [CampaignMetricsController::class, 'syncLog'])->name('sync-log');
         // CAMPDET-010: the real ad-set / ad hierarchy beneath the campaign.
         Route::get('campaigns/{campaign}/structure', [CampaignStructureController::class, 'index'])->name('structure');
+        // XREL-001: everything this campaign is connected to, one click away.
+        Route::get('campaigns/{campaign}/related', [RelatedEntitiesController::class, 'campaign'])->name('related');
         Route::get('campaigns/{campaign}/creatives', [CampaignCreativesController::class, 'index'])->name('creatives');
         Route::get('campaigns/{campaign}/activity', [CampaignActivityController::class, 'index'])->name('activity');
         Route::get('campaigns/{campaign}/alerts', [CampaignAlertsController::class, 'index'])->name('alerts');

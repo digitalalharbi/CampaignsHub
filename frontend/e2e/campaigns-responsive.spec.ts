@@ -74,6 +74,7 @@ test('no console errors while using the campaigns surface', async ({ page }) => 
   await page.goto('/campaigns')
   await expect(page.getByRole('heading', { level: 1, name: /Campaigns|الحملات/ })).toBeVisible()
   // Each campaign row is itself the button (data-testid="campaign-card") — open the first one.
+  await page.getByTestId('view-cards').click()
   await page.locator('[data-testid="campaign-card"]').first().click()
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
   await page.getByRole('tab', { name: /Performance|الأداء/ }).click()
