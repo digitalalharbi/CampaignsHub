@@ -1,5 +1,27 @@
 # CampaignsHub — Implementation Matrix
 
+> **HANDOFF SNAPSHOT — 2026-07-29 (context-window emergency close).**
+> Branch `feat/taxonomy-ux` · HEAD `fc90666` · working tree CLEAN · no WIP.
+> Backend 422 passed (2467 assertions) · Frontend 215 passed · tsc/build clean ·
+> Playwright **Chromium only** 144/0 (Firefox + WebKit still to run).
+> Full state, next task and acceptance criteria: **`docs/RESUME_STATE.md`**.
+
+> **The authoritative per-requirement matrix is `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`** — this file is
+> a summary view and must never contradict it.
+>
+> Status counts at handoff: **11 VERIFIED · 22 IMPLEMENTED_NOT_VERIFIED · 6 PARTIAL · 8 NOT_STARTED ·
+> 6 BLOCKED_EXTERNAL_CREDENTIALS · 1 BLOCKED_NO_API.**
+>
+> `IMPLEMENTED_NOT_VERIFIED` means the code exists, is tested and was reviewed live **on Chromium only**.
+> Those rows may be flipped to `VERIFIED` **only after** `XBROWSER-GATE` (Firefox + WebKit) passes.
+>
+> | ID | Status | Evidence |
+> |---|---|---|
+> | `SITE-CMS-001` | IMPLEMENTED_NOT_VERIFIED | `f0c813e` + `320b569`; 6 tests/33 assertions; live publish→homepage change with no code edit |
+> | `SITE-CMS-002` | **NOT_STARTED — EXACT NEXT** | API + editor ready; portal public surfaces not wired |
+> | `XBROWSER-GATE` | NOT_STARTED | Chromium 144/0 only |
+
+
 Backend ↔ Frontend ↔ Test coverage per capability. Fills the gap between "a controller exists" and "the button
 works and is proven". Columns: **BE** (endpoint/service), **FE** (page/component), **Test** (automated proof), **Status**.
 

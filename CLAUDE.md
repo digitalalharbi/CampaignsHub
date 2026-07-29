@@ -1,3 +1,28 @@
+# CampaignsHub — permanent session-start protocol
+
+> **مُلزِم — عند بدء أي جلسة جديدة، نفّذ هذا قبل أي شيء آخر:**
+>
+> 1. اقرأ `docs/RESUME_STATE.md`.
+> 2. اقرأ `docs/MASTER_REQUIREMENTS.md`.
+> 3. اقرأ `docs/IMPLEMENTATION_MATRIX.md`.
+> 4. اقرأ `docs/OPEN_GAPS.md`.
+> 5. افحص `git status` و`git log --oneline -10` و`git worktree list`.
+> 6. تحقق من الخدمات والمعاينة (frontend 5173 · backend 8000 · postgres 5432) وأعد تشغيلها عند الحاجة.
+> 7. استأنف من **Exact next task** في `docs/RESUME_STATE.md` دون إعادة أي مرحلة مكتملة.
+> 8. لا تسأل المستخدم ولا ترسل تحديثات مرحلية — نفّذ الحلقة: متطلب → كود → اختبار → مراجعة حية → Commit → تحديث المصفوفة → التالي.
+>
+> **قواعد دائمة:** جميع التعليمات تراكمية؛ أحدث تصحيح صريح يلغي الجزء المتعارض فقط ولا يُسقط بقية المتطلبات.
+> نجاح الاختبارات وحده **ليس** دليل اكتمال، والتوثيق **ليس** بديلًا عن الكود. لا تدّعِ اكتمال أي مهمة غير مختبرة.
+> استأنف دائمًا من أول Requirement غير `VERIFIED` حسب ترتيب المصفوفة.
+>
+> **Governance files (authoritative):** `docs/MASTER_EXECUTION_CONTRACT.md` ·
+> `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` · `docs/RESUME_STATE.md` · `docs/OPEN_GAPS.md` ·
+> `docs/PROGRESS.md`. Active branch: `feat/taxonomy-ux`.
+> Note: `docs/CampaignsHub_Master_Context_and_Instructions.md` is referenced by the user's standing
+> instructions but is **not present in this repository** — do not fabricate its contents.
+
+---
+
 # MediaBuying Platform — Engineering Guide (CLAUDE.md)
 
 > منصة SaaS متعددة العملاء لإدارة وأتمتة رحلة الميديا باينج بالكامل.

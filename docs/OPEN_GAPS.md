@@ -1,5 +1,30 @@
 # CampaignsHub — Open Gaps
 
+> **HANDOFF SNAPSHOT — 2026-07-29 (context-window emergency close).**
+> Branch `feat/taxonomy-ux` · HEAD `fc90666` · working tree CLEAN · no WIP.
+> Backend 422 passed (2467 assertions) · Frontend 215 passed · tsc/build clean ·
+> Playwright **Chromium only** 144/0 (Firefox + WebKit still to run).
+> Full state, next task and acceptance criteria: **`docs/RESUME_STATE.md`**.
+
+> **Open gaps at handoff (honest, unclosed):**
+> 1. **`SITE-CMS-002`** — the three portal PUBLIC surfaces (paid / influencer / tracking) still render
+>    hard-coded copy; their CMS content is already stored, editable and published by the API. **EXACT NEXT.**
+> 2. **`XBROWSER-GATE`** — E2E has passed on **Chromium only** (144/0). Firefox and WebKit have not run, so
+>    22 requirements are `IMPLEMENTED_NOT_VERIFIED`, not `VERIFIED`.
+> 3. **Ad-platform integrations** (Meta, Google Ads, TikTok, Snapchat, X, LinkedIn) — no credentials
+>    supplied, therefore **no live sync exists**. Keep the honest "awaiting credentials" state; never show
+>    Connected/Synced/Live.
+> 4. **Report scheduling** — engine exists but has **no HTTP API**, so no UI was built (`BLOCKED_NO_API`).
+> 5. **Content objective-ranking** currently exercises only the `conversion` group, because every seeded
+>    campaign is a sales campaign; the awareness/lead/traffic groups are implemented but unexercised.
+> 6. `docs/CampaignsHub_Master_Context_and_Instructions.md` is referenced by the user's standing
+>    instructions but **does not exist in the repo** — governance in force is the contract + matrix +
+>    RESUME_STATE. Do not invent it.
+> 7. Partial requirements still open: `CAMPAIGN-010`, `CAMPDET-010`, `INTEG-UI-001`, `FINANCE-001`;
+>    not started: `CAMPAIGN-020`, `PROJINT-001`, `SYNC-001`, `NORM-001`, `XREL-001`, `DEMO-001`,
+>    `DEVSTATUS-001`.
+
+
 Anything not proven closed lives here. A test failure is **never** dismissed as "transient" without a logged
 cause and a reproduction attempt. If the cause is unknown, it stays OPEN with the evidence gathered so far.
 

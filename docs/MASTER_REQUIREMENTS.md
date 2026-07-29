@@ -1,5 +1,22 @@
 # CampaignsHub — Master Requirements
 
+> **HANDOFF SNAPSHOT — 2026-07-29 (context-window emergency close).**
+> Branch `feat/taxonomy-ux` · HEAD `fc90666` · working tree CLEAN · no WIP.
+> Backend 422 passed (2467 assertions) · Frontend 215 passed · tsc/build clean ·
+> Playwright **Chromium only** 144/0 (Firefox + WebKit still to run).
+> Full state, next task and acceptance criteria: **`docs/RESUME_STATE.md`**.
+
+> **Newest binding directives (cumulative — nothing earlier is dropped):**
+> 1. **DONE `SITE-CMS-001`** — homepage + external portals (paid campaigns, influencer/UGC, request
+>    tracking) manageable from System Settings: texts, sections, buttons, display order, enable/disable;
+>    stored in the database, permission-gated, audit-logged, previewed before publish, and reflected on the
+>    public surfaces **with no code change**. Delivered in `f0c813e` + `320b569`.
+> 2. **OPEN `SITE-CMS-002`** — the same published content must drive the three portal PUBLIC surfaces
+>    (only the homepage consumes it today).
+> 3. Settings stay split: **system settings in the sidebar**, **user settings inside the account icon only**.
+> 4. Then continue every open Requirement ID in matrix order, starting with Firefox/WebKit verification.
+
+
 Single source of truth for every requirement the client has mandated. Each row carries a status from the
 canonical set and links to evidence. **`Completed` is forbidden without live verification + evidence.**
 

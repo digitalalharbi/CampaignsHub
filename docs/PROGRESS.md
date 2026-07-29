@@ -1,5 +1,34 @@
 # Build Progress & Evidence Log
 
+> **HANDOFF SNAPSHOT — 2026-07-29 (context-window emergency close).**
+> Branch `feat/taxonomy-ux` · HEAD `fc90666` · working tree CLEAN · no WIP.
+> Backend 422 passed (2467 assertions) · Frontend 215 passed · tsc/build clean ·
+> Playwright **Chromium only** 144/0 (Firefox + WebKit still to run).
+> Full state, next task and acceptance criteria: **`docs/RESUME_STATE.md`**.
+
+> **Session log — 2026-07-29 (session 2, closed on context limit).** All work committed; tree clean.
+>
+> - `dac07f2` — settings split: system settings in the sidebar, user settings inside the account icon only
+>   (verified live: system nav 6 links / 0 personal routes; account menu exactly 5 personal items + logout).
+> - `f0c813e` — **public-page CMS backend**: `public_page_settings` table (tenant+page, draft/published,
+>   version, updated_by/published_by/published_at), `PublicPageSettingsController`
+>   (index / save-draft / publish / revert + **public** `GET /api/v1/public/pages/{page}`),
+>   `PublicPageDefaults`. `settings.manage`-gated, tenant-scoped, every write audit-logged.
+>   `PublicPageSettingsTest` — **6 passed, 33 assertions** (defaults, draft-not-live, publish→public,
+>   revert, permission + 404, tenant isolation).
+> - `320b569` — **CMS editor + public rendering**: `/settings/public-pages` with 4 page tabs, per-section
+>   enable/reorder/texts/buttons, preview drawer, save/publish/revert; `PublicHomePage` renders published
+>   content.
+>   **Live evidence:** hero title edited and `services` disabled → public endpoint still served **v1**
+>   (draft never live) → publish → **v2** → public homepage `h1` changed and `#services` was absent, while
+>   `#how` and `#features` still rendered — **no code change**. Demo content restored to defaults (v3).
+> - `fc90666` — matrix + resume-state bookkeeping.
+>
+> **Regression at close:** backend 422 passed / 2467 assertions · frontend 215 passed / 46 files ·
+> `tsc --noEmit` clean · `npm run build` clean · Pint clean · Playwright Chromium 144/0
+> (Firefox + WebKit not yet run).
+
+
 This log records what is actually built and **verified**, versus pending. No item is marked done
 without evidence (command output / test result / screenshot).
 

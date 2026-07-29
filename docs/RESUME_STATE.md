@@ -1,43 +1,190 @@
-# RESUME STATE — CampaignsHub (authoritative handoff)
+# RESUME STATE — CampaignsHub
 
-## ▶ START HERE (2026-07-29 · session 2 close) — read `docs/MASTER_EXECUTION_CONTRACT.md` + `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then resume at EXACT NEXT REQUIREMENT below.
-
-**Branch `feat/taxonomy-ux` · HEAD `320b569` · tree CLEAN · preview up (5173 / 127.0.0.1:8000).**
-**Green at HEAD:** backend **422 passed (2467 assertions)** · frontend **215 passed (46 files)** · `npm run build` + `tsc --noEmit` clean.
-
-### Shipped this session — SITE-CMS-001 (the newest user directive, now DONE)
-Homepage + external portals are editable from System Settings, stored in the DB, with permissions, audit log,
-preview-before-publish, and the public homepage rendering published content **without any code edit**.
-- `f0c813e` backend: `public_page_settings` (tenant+page, draft/published, version, updated_by/published_by/
-  published_at) · `PublicPageSettingsController` (index / update-draft / publish / revert + **PUBLIC**
-  `GET /public/pages/{page}`) · `PublicPageDefaults` (stable section keys with enabled+order+texts+CTAs).
-  settings.manage gated · tenant-scoped · every write audit-logged. Tests: `PublicPageSettingsTest` 6/33.
-- `320b569` frontend: `/settings/public-pages` editor (4 page tabs, per-section enable/reorder/texts/buttons,
-  preview drawer, save/publish/revert, permission + loading/error states) — in the SYSTEM nav only;
-  `PublicHomePage` overlays published content (hero texts, header CTAs, section on/off) with safe fallback.
-- Live-proven: draft stayed private (public still v1) → publish → v2 live → homepage `h1` changed and the
-  `#services` section disappeared, no code change. Demo content restored to shipped defaults afterwards.
-
-### Settings separation (verified intact this session)
-System settings = sidebar `/settings/*` (workspace · permissions · branding · taxonomies · **الواجهة الرئيسية
-والبوابات** · portal notes · integrations link). User settings = account menu `/account/*` only
-(profile · password · security & sessions · language & appearance · personal notifications). Zero overlap;
-old `/settings/{profile,password,security,preferences,notifications}` redirect to `/account/*`.
-
-### ⏭ EXACT NEXT REQUIREMENT
-**SITE-CMS-002** — wire the same published-content overlay into the THREE external portal public surfaces
-(paid campaigns / influencer+UGC / request tracking). The API + editor already publish their content
-(`GET /public/pages/portal_paid|portal_influencer|portal_tracking`); only the public rendering is missing.
-Then, in matrix order: **XBROWSER-GATE** (Firefox + WebKit for every elevated section → flip
-IMPLEMENTED_NOT_VERIFIED rows to VERIFIED), then `CAMPAIGN-010`, `CAMPAIGN-020`, `CAMPDET-010`, `INTEG-UI-001`,
-`SYNC-001`, `NORM-001`, `XREL-001`, `DEMO-001`, `DEVSTATUS-001`.
-
-### Honest gaps (do NOT fake)
-- Report scheduling has **no HTTP API** (engine only) → `REPORT-SCHEDULING` = BLOCKED_NO_API, no UI built.
-- Per-platform ad integrations remain BLOCKED_EXTERNAL_CREDENTIALS (Meta/Google/TikTok/Snapchat/X/LinkedIn).
-- Content objective-ranking currently exercises only the `conversion` group (all seeded campaigns are sales).
+> **AUTHORITATIVE HANDOFF — written 2026-07-29 at a context-window emergency close.**
+> A new session reads this file FIRST, then `docs/MASTER_EXECUTION_CONTRACT.md`,
+> `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, `docs/OPEN_GAPS.md`, then resumes at
+> **Exact next task** below — without redoing completed work and without asking the user.
 
 ---
+
+## Current branch
+`feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
+
+## Current commit
+`fc90666` — *docs: SITE-CMS-001 delivered (f0c813e+320b569); SITE-CMS-002 is the Exact Next Requirement*
+
+Last work unit: `f0c813e` (CMS backend) → `320b569` (CMS editor + homepage rendering) → `fc90666` (docs).
+Frozen delivery tags, **never move or rewrite**: `v1.0.0-baseline`, `v1.1.0-expanded-final`.
+
+## Working tree status
+**CLEAN** — `git status --porcelain` is empty at `fc90666`.
+**No uncommitted work, no stash, no undocumented WIP.** Nothing was left half-edited; the last unit
+closed on a green run.
+
+## Completed work (last session — committed and checked live)
+**SITE-CMS-001 — homepage + external portals editable from System Settings.** The newest explicit user
+directive, implemented as real code (not documentation):
+- **DB** `public_page_settings`: uuid, `tenant_id`, `page`, `draft` jsonb, `published` jsonb, `version`,
+  `updated_by`, `published_by`, `published_at`; unique `[tenant_id, page]`, tenant FK cascade.
+- **API** `GET /settings/public-pages`, `PUT /settings/public-pages/{page}` (draft only),
+  `POST …/publish`, `POST …/revert` — all `settings.manage`-gated, tenant-scoped, every write recorded in
+  the **audit log** — plus a **public, unauthenticated** `GET /api/v1/public/pages/{page}` serving
+  published content only (falls back to shipped defaults).
+- **Editor** `/settings/public-pages`: 4 page tabs (home, portal_paid, portal_influencer, portal_tracking);
+  per section enable/disable, reorder ↑↓, texts (eyebrow/title/subtitle/desc/tagline), buttons
+  (label + destination); **preview drawer before publish**; save / publish / revert; permission, loading
+  and error states. Present in the **system** nav only.
+- **Public rendering** `PublicHomePage` overlays published content on hero texts, header CTAs and section
+  visibility, with safe fallback to shipped copy.
+- **Proven live, not only by tests:** edited the hero title and disabled `services` → the public endpoint
+  still served **v1** (a draft is never live) → published → **v2** → the public homepage rendered the new
+  `h1` and `#services` was **absent**, with **zero code changes**. Demo content restored to defaults (v3).
+
+Also re-verified: the **settings split** — system settings only in the sidebar (`/settings/*`), user
+settings only in the account icon (`/account/*`), zero overlap, legacy personal `/settings/*` redirect.
+
+## Work in progress
+**None.** No partial edit, no stashed change, no half-applied migration, no orphaned branch.
+
+## Exact next task
+**SITE-CMS-002 — wire the published-content overlay into the THREE external portal PUBLIC surfaces**
+(paid campaigns · influencer/UGC · request tracking).
+Backend and editor already store and publish their content — `GET /api/v1/public/pages/portal_paid`,
+`…/portal_influencer`, `…/portal_tracking` return it **today**; only the public React surfaces still
+render hard-coded copy. Reuse the helper pattern already proven in
+`frontend/src/features/marketing/PublicHomePage.tsx` (`on()` / `txt()` / `cta()` + ordered sections),
+then prove it live the same way: edit → save (public unchanged) → publish → public surface changes with
+no code edit. Extend `backend/tests/Feature/PublicPageSettingsTest.php` and add an E2E check.
+
+**Then, in matrix order:** `XBROWSER-GATE` (run the full E2E suite on Firefox + WebKit; only then may the
+22 `IMPLEMENTED_NOT_VERIFIED` rows be flipped to `VERIFIED`) → `CAMPAIGN-010` → `CAMPAIGN-020` →
+`CAMPDET-010` → `PROJINT-001` → `INTEG-UI-001` → `SYNC-001` → `NORM-001` → `XREL-001` → `DEMO-001` →
+`DEVSTATUS-001` → `FINANCE-001`.
+
+## Files currently involved (what the next task touches)
+- `frontend/src/features/marketing/PublicHomePage.tsx` — **reference implementation** of the overlay.
+- `frontend/src/features/settings/publicPagesApi.ts` — `getPublishedPage(page)` + `PageContent` types.
+- `frontend/src/features/settings/PublicPagesSettingsPage.tsx` — the editor (already complete).
+- The portal public surfaces themselves: locate their routes in `frontend/src/app/router.tsx`
+  (request intake portal variants + the tracking view under `frontend/src/features/requests/`)
+  **before** editing — do not guess file names.
+- `backend/app/Domains/Settings/Services/PublicPageDefaults.php` — the portal section keys
+  (`hero`, `highlights`, `steps`) the public surfaces must honour.
+- `backend/tests/Feature/PublicPageSettingsTest.php` — extend, do not rewrite.
+
+## Agents and worktrees
+No background agents running. Registered git worktrees:
+
+| Path | Commit | Branch | Note |
+|---|---|---|---|
+| `…/Developer/CampaignsHub-UI` | `fc90666` | `feat/taxonomy-ux` | **ACTIVE — work here** |
+| `…/Developer/CampaignsHub-C3` | `029ccec` | `feat/metrics-c3` | idle older side branch |
+| `…/Developer/CampaignsHub-Preview` | `37aa464` | detached | frozen preview snapshot |
+| `…/Desktop/MediaBying System` | `37aa464` | `main` | different project — do not touch |
+
+No agent work is lost: everything produced last session is in `f0c813e`, `320b569`, `fc90666`.
+
+## Database migrations
+All applied; schema matches the code at HEAD. Most recent five:
+```
+2026_07_28_333000_create_request_services.php
+2026_07_29_000100_create_saved_dashboard_views.php
+2026_07_29_000200_add_tax_treatment_to_billing.php
+2026_07_29_000300_normalize_legacy_task_status_priority.php
+2026_07_29_000400_create_public_page_settings.php   ← newest (public page CMS)
+```
+`…000300…` is a **data** migration (legacy task `status='open'` / `priority='medium'` normalised at the
+writer AND in the database) — already-normalised data will show no further changes on re-run.
+
+## Running services and ports
+| Service | Address | Started by |
+|---|---|---|
+| Vite dev server (frontend) | `http://localhost:5173` | `npm run dev` in `frontend/` |
+| Laravel API | `http://127.0.0.1:8000` | `php artisan serve` in `backend/` |
+| PostgreSQL | `127.0.0.1:5432` | local service |
+
+All three were listening at handoff. A new session should re-check and restart rather than assume.
+Known trap: the dev API server can serve stale routes after new routes are added — restart it before a
+browser verification.
+
+## Test results (at `fc90666`)
+| Suite | Result |
+|---|---|
+| Backend (PHPUnit) | **422 passed, 2467 assertions, 0 failed** |
+| ↳ `PublicPageSettingsTest` | 6 passed, 33 assertions |
+| Frontend unit (vitest) | **215 passed, 46 files, 0 failed** |
+| `tsc --noEmit` | clean |
+| `npm run build` | clean |
+| Pint (backend style) | clean |
+| Playwright E2E | **Chromium only: 144 passed / 0 failed.** Firefox + WebKit **NOT yet run** |
+
+Matrix status counts at handoff: 11 VERIFIED · 22 IMPLEMENTED_NOT_VERIFIED · 6 PARTIAL ·
+8 NOT_STARTED · 6 BLOCKED_EXTERNAL_CREDENTIALS · 1 BLOCKED_NO_API.
+
+## Known failures
+None outstanding — no failing test and no test skipped for being broken at HEAD.
+The only open **verification** debt is the browser matrix (`XBROWSER-GATE`).
+
+## Open external dependencies
+- **Ad-platform integrations** (Meta, Google Ads, TikTok, Snapchat, X, LinkedIn) —
+  `BLOCKED_EXTERNAL_CREDENTIALS`. No API keys / OAuth apps supplied, so no live sync exists. The UI must
+  keep showing honest states — never "Connected"/"Synced"/"Live" without a real operation.
+- **Report scheduling** — `BLOCKED_NO_API`: the engine exists but has **no HTTP API**, so no UI was built.
+  Building those endpoints is real work, not a user blocker.
+- `docs/CampaignsHub_Master_Context_and_Instructions.md` is referenced by the user's permanent-instruction
+  block but **does not exist in the repository** (checked at root and in `docs/`). The governance actually
+  in force is `MASTER_EXECUTION_CONTRACT.md` + `REQUIREMENTS_TRACEABILITY_MATRIX.md` + this file. If the
+  user holds that document elsewhere it should be added — do not invent its contents.
+
+## Commands to resume
+```bash
+cd /Users/mohammedalharbimacbook/Developer/CampaignsHub-UI
+git status && git log --oneline -5 && git worktree list
+
+# services
+(cd backend  && php artisan serve --host=127.0.0.1 --port=8000)   # terminal 1
+(cd frontend && npm run dev)                                       # terminal 2
+
+# green baseline before touching anything
+(cd backend  && php artisan test)
+(cd frontend && npx tsc --noEmit && npm run test -- --run && npm run build)
+
+# next task's proof loop (SITE-CMS-002)
+curl -s http://127.0.0.1:8000/api/v1/public/pages/portal_paid | head -c 400
+```
+
+## Acceptance criteria (SITE-CMS-002)
+1. Each of the three portal public surfaces renders **published** CMS content: hero texts, buttons
+   (label + destination), section enable/disable and order.
+2. A saved **draft** changes nothing for a visitor; only **publish** does.
+3. With nothing published, each surface renders shipped defaults — never a blank page.
+4. Content changes require **no code edit**, and the homepage does not regress.
+5. Backend test extended and green; frontend `tsc` + unit + build green; a **live** before/after check
+   recorded in `docs/PROGRESS.md` with the actual observed values.
+6. Matrix row `SITE-CMS-002` updated with an honest status and the commit SHA.
+
+## Do-not-repeat decisions
+- **Never** use native `<input type="date">`: Chromium localises it by *browser* locale and ignores the
+  element `lang` (probed and confirmed). Use `frontend/src/components/ui/DateField.tsx` everywhere —
+  LTR box, `YYYY-MM-DD`, tabular numerals — including filters and financial forms.
+- **VAT** is picked as a *tax treatment* key (basic 15% default, zero-rated, exempt, out-of-scope) and the
+  rate is derived server-side. 5% is never offered as a current option, only tagged historical.
+- **No blended ROAS/CPA across mixed objectives.** Default dashboard objective is **Awareness**; creative
+  performance ranks within per-objective groups using per-group medians.
+- **Honest states only** — never render Connected / Synced / Paid / Sent / Live without a real operation.
+- **Latin digits everywhere**; keep current fonts and brand identity; no internal jargon on public pages.
+- Saved views are **server-persisted**, not localStorage.
+- Keep system settings (sidebar) and user settings (account icon) split; never reintroduce personal items
+  into the system nav.
+- Commit messages containing Arabic go through `git commit -F <file>`, never inline `-m`.
+- Stale HMR console errors are not evidence of a defect — confirm against a clean production build.
+- Never treat an old report as proof a section is "already developed" — open the page live and check.
+- Passing tests are **not** proof of completion; documentation is **never** a substitute for code.
+
+---
+---
+
+# ARCHIVE — earlier phase notes (superseded by the sections above; kept for traceability)
 
 ## 🚧 ACTIVE PHASE (2026-07-28): CORE CAMPAIGN-MANAGEMENT DEEPENING — delivery packaging HALTED
 User halted delivery/clean-install/final-package. Goal: make CampaignsHub a REAL unified center to manage/monitor/review ALL paid campaigns from one place — functionally AND visually — across Homepage/Dashboard/Campaigns/Analytics/Reports/Alerts/Integrations/Campaign-details. Do NOT package delivery until execution items 1–16 are closed. Single orchestrator, sequential, no parallel agents, economical (no long interim messages). Keep preview running. Enrich `/dev/status` to show: Current Task, Last Green Commit, Preview/FE/BE/DB/Redis/Queue/Scheduler status, last BE/FE/E2E results, Exact Next Task. Update RESUME_STATE + docs/PROGRESS.md after each tested commit.
