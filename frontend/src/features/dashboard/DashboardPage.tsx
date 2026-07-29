@@ -71,7 +71,7 @@ function objectiveKpis(objective: string, cur: MetricTotals | undefined, activeC
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
-const axis = { stroke: 'var(--text-muted)', fontSize: 13 }
+const axis = { stroke: 'var(--text-muted)', fontSize: 12 }
 
 export function DashboardPage() {
   const { currentProjectId } = useProject()
@@ -172,10 +172,10 @@ export function DashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-[32px] font-extrabold leading-tight tracking-tight text-text-primary sm:text-[34px]">{pageTitle}</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{pageTitle}</h1>
             <DemoBadge />
           </div>
-          <p className="mt-1.5 text-base text-text-secondary">مركز قيادة موحّد لكل حملاتك الإعلانية المدفوعة عبر المنصات.</p>
+          <p className="mt-1 text-sm text-text-secondary">مركز قيادة موحّد لكل حملاتك الإعلانية المدفوعة عبر المنصات.</p>
         </div>
         <div className="flex items-center gap-2">
           <RangeTabs value={days} onChange={setDays} />

@@ -108,7 +108,7 @@ export function Panel({
     <section className={`flex flex-col rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] ${className}`}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-lg font-bold tracking-tight text-text-primary">{title}</h3>
+          <h3 className="text-base font-bold tracking-tight text-text-primary">{title}</h3>
           {description && <p className="mt-0.5 text-sm text-text-secondary">{description}</p>}
         </div>
         {action}
