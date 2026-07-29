@@ -1,5 +1,14 @@
 # Build Progress & Evidence Log
 
+> **2026-07-29 · SITE-CMS-002 (`7afaa00`)** — the three external portals now render their own published
+> CMS content. `PublicHomePage` picks the document from `?portal` (influencer / client / paid, else home)
+> and stopped bypassing published copy on portal variants; `RequestTrackPage` reads `portal_tracking`.
+> Live evidence, published then reverted to shipped defaults: `/?portal=influencer` h1 became
+> "بوابة المؤثرين — محرَّرة حيًا من الإعدادات" with `#how` removed while `#features` and the portal preview
+> stayed; `/requests/track` h1 became "تتبع طلبك — نص محرَّر من الإعدادات"; `/?portal=paid` h1 became
+> "بوابة الحملات المدفوعة — محرَّرة"; `/` stayed on its own title with `#how` present the whole time.
+> Green: `PublicPageSettingsTest` 7 passed / 47 assertions · frontend 215 passed · tsc clean.
+
 > **HANDOFF SNAPSHOT — 2026-07-29 (context-window emergency close).**
 > Branch `feat/taxonomy-ux` · HEAD `fc90666` · working tree CLEAN · no WIP.
 > Backend 422 passed (2467 assertions) · Frontend 215 passed · tsc/build clean ·
