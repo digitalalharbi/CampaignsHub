@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, Download, FileText, Link2, Loader2, Plus, RefreshCw, Send, Share2, Trash2 } from 'lucide-react'
+import { Check, Copy, Download, FileText, LayoutGrid, Link2, Loader2, Plus, RefreshCw, Rows3, Send, Share2, Trash2 } from 'lucide-react'
 import {
   createReport,
   createShare,
@@ -60,6 +60,8 @@ export function ReportsPage() {
   const [builderOpen, setBuilderOpen] = useState(false)
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [shareId, setShareId] = useState<string | null>(null)
+  const [view, setView] = useState<'table' | 'cards'>('table')
+  const [typeFilter, setTypeFilter] = useState('')
 
   const params = new URLSearchParams()
   if (status) params.set('status', status)
@@ -83,6 +85,10 @@ export function ReportsPage() {
     mutationFn: ({ id, emails }: { id: string; emails: string[] }) => sendReport(currentProjectId!, id, emails),
     onSuccess: invalidate,
   })
+
+  const allRows = list.data?.reports ?? []
+  const presentTypes = [...new Set(allRows.map((r) => r.type))]
+  const rows = typeFilter ? allRows.filter((r) => r.type === typeFilter) : allRows
 
   const s = list.data?.summary
 
@@ -124,7 +130,7 @@ export function ReportsPage() {
           placeholder="ابحث في التقارير…"
           className="h-10 w-full rounded-xl border border-border bg-surface-secondary px-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 sm:max-w-xs"
         />
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {[
             ['', 'الكل'],
             ['completed', STATUS_LABEL.completed],
@@ -141,8 +147,32 @@ export function ReportsPage() {
               {label}
             </button>
           ))}
+          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+          {/* View switch — table for scanning, cards for browsing. */}
+          <div className="flex overflow-hidden rounded-lg border border-border">
+            <button onClick={() => setView('table')} aria-label="جدول" title="جدول"
+              className={`flex items-center px-2.5 py-1.5 ${view === 'table' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}><Rows3 size={14} /></button>
+            <button onClick={() => setView('cards')} aria-label="بطاقات" title="بطاقات"
+              className={`flex items-center px-2.5 py-1.5 ${view === 'cards' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}><LayoutGrid size={14} /></button>
+          </div>
         </div>
       </div>
+
+      {/* Report-type filter — driven by the taxonomy engine (report.type), only types present in the list. */}
+      {presentTypes.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button onClick={() => setTypeFilter('')}
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${typeFilter === '' ? 'bg-text-primary text-surface' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
+            النوع: الكل
+          </button>
+          {presentTypes.map((tp) => (
+            <button key={tp} onClick={() => setTypeFilter(typeFilter === tp ? '' : tp)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${typeFilter === tp ? 'bg-text-primary text-surface' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
+              {typeLabel(tp)}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* List */}
       <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
@@ -151,12 +181,26 @@ export function ReportsPage() {
             <Skeleton className="h-12 w-full" />
             <Skeleton className="h-12 w-full" />
           </div>
-        ) : (list.data?.reports.length ?? 0) === 0 ? (
+        ) : rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 p-12 text-center">
             <FileText size={28} className="text-text-muted" />
             <p className="text-sm text-text-secondary">
-              {status || search ? 'لا تقارير تطابق البحث أو الفلتر.' : 'لا توجد تقارير بعد — أنشئ تقريرك الأول.'}
+              {status || search || typeFilter ? 'لا تقارير تطابق البحث أو الفلتر.' : 'لا توجد تقارير بعد — أنشئ تقريرك الأول.'}
             </p>
+          </div>
+        ) : view === 'cards' ? (
+          <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
+            {rows.map((r) => (
+              <button key={r.id} onClick={() => setPreviewId(r.id)}
+                className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 text-start transition-colors hover:border-brand-400">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="line-clamp-1 font-bold text-text-primary">{r.name}</span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[r.status] ?? ''}`}>{STATUS_LABEL[r.status] ?? r.status}</span>
+                </div>
+                <span className="text-[11px] text-text-muted">{typeLabel(r.type)}</span>
+                <span className="tnum text-[11px] text-text-tertiary" dir="ltr">{r.period.from ?? '…'} → {r.period.to ?? '…'}</span>
+              </button>
+            ))}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -171,7 +215,7 @@ export function ReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {list.data?.reports.map((r) => (
+                {rows.map((r) => (
                   <ReportRowView
                     key={r.id}
                     report={r}

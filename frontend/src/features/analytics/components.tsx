@@ -143,8 +143,12 @@ export function RangeTabs({ value, onChange }: { value: number; onChange: (days:
         <button
           key={r.days}
           onClick={() => onChange(r.days)}
+          aria-pressed={value === r.days}
+          // Selected range is brand-filled — the same clear selection language the other sections use.
           className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
-            value === r.days ? 'bg-surface text-text-primary shadow-[var(--shadow-small)]' : 'text-text-secondary hover:text-text-primary'
+            value === r.days
+              ? 'bg-brand-600 text-white shadow-[var(--shadow-small)]'
+              : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
           }`}
         >
           {r.label}
