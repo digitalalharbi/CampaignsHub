@@ -71,7 +71,7 @@ function objectiveKpis(objective: string, cur: MetricTotals | undefined, activeC
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
-const axis = { stroke: 'var(--text-muted)', fontSize: 12 }
+const axis = { stroke: 'var(--text-muted)', fontSize: 13 }
 
 export function DashboardPage() {
   const { currentProjectId } = useProject()
@@ -175,7 +175,7 @@ export function DashboardPage() {
             <h1 className="text-[32px] font-extrabold leading-tight tracking-tight text-text-primary sm:text-[34px]">{pageTitle}</h1>
             <DemoBadge />
           </div>
-          <p className="mt-1 text-sm text-text-secondary">مركز قيادة موحّد لكل حملاتك الإعلانية المدفوعة عبر المنصات.</p>
+          <p className="mt-1.5 text-base text-text-secondary">مركز قيادة موحّد لكل حملاتك الإعلانية المدفوعة عبر المنصات.</p>
         </div>
         <div className="flex items-center gap-2">
           <RangeTabs value={days} onChange={setDays} />
@@ -193,7 +193,7 @@ export function DashboardPage() {
 
       {/* Objective filter — switches the KPI set AND filters all tiles by campaign objective (backend-supported). */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-text-muted">الهدف:</span>
+        <span className="text-sm font-semibold text-text-muted">الهدف:</span>
         {OBJECTIVES.map((o) => {
           const on = objective === o.key
           return (
@@ -202,7 +202,7 @@ export function DashboardPage() {
               type="button"
               onClick={() => setObjective(o.key)}
               aria-pressed={on}
-              className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${on ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-text-secondary hover:bg-surface-hover'}`}
+              className={`rounded-full border px-2.5 py-1 text-sm font-semibold transition-colors ${on ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-text-secondary hover:bg-surface-hover'}`}
             >
               {o.label}
             </button>
@@ -218,7 +218,7 @@ export function DashboardPage() {
 
       {/* Platform filter — backend-supported (?provider=…); affects every KPI, chart, table below. */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-text-muted">المنصات:</span>
+        <span className="text-sm font-semibold text-text-muted">المنصات:</span>
         {PLATFORM_KEYS.map((key) => {
           const on = providers.includes(key)
           return (
@@ -227,7 +227,7 @@ export function DashboardPage() {
               type="button"
               onClick={() => toggleProvider(key)}
               aria-pressed={on}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${on ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-text-secondary hover:bg-surface-hover'}`}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm font-semibold transition-colors ${on ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-text-secondary hover:bg-surface-hover'}`}
             >
               <span className="h-2 w-2 rounded-full" style={{ background: providerColor(key) }} />
               {providerName(key)}
@@ -235,7 +235,7 @@ export function DashboardPage() {
           )
         })}
         {providers.length > 0 && (
-          <button type="button" onClick={() => setProviders([])} className="text-xs font-semibold text-text-muted underline underline-offset-2 hover:text-text-primary">
+          <button type="button" onClick={() => setProviders([])} className="text-sm font-semibold text-text-muted underline underline-offset-2 hover:text-text-primary">
             إعادة ضبط
           </button>
         )}
@@ -289,7 +289,7 @@ export function DashboardPage() {
                   <span className="w-28 shrink-0 text-sm text-text-secondary">{s.label}</span>
                   <div className="h-8 flex-1 overflow-hidden rounded-lg bg-surface-secondary">
                     <div
-                      className="flex h-full items-center justify-end rounded-lg px-2 text-xs font-semibold text-white"
+                      className="flex h-full items-center justify-end rounded-lg px-2 text-sm font-semibold text-white"
                       style={{ width: `${w}%`, background: `color-mix(in oklab, ${SERIES.spend} ${100 - i * 12}%, var(--brand-700))` }}
                     >
                       <span className="tnum">{compact(s.count)}</span>

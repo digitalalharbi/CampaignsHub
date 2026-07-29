@@ -26,18 +26,18 @@ export function SavedViewsBar({
 
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="saved-views-bar">
-      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-muted"><Bookmark size={14} /> العروض المحفوظة:</span>
+      <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-text-muted"><Bookmark size={14} /> العروض المحفوظة:</span>
 
-      {isLoading && <span className="text-xs text-text-muted">جارٍ التحميل…</span>}
+      {isLoading && <span className="text-sm text-text-muted">جارٍ التحميل…</span>}
       {isError && (
-        <button type="button" onClick={() => refetch()} className="text-xs font-semibold text-danger underline">
+        <button type="button" onClick={() => refetch()} className="text-sm font-semibold text-danger underline">
           تعذّر التحميل — إعادة المحاولة
         </button>
       )}
-      {!isLoading && !isError && views.length === 0 && <span className="text-xs text-text-muted">لا عروض محفوظة بعد.</span>}
+      {!isLoading && !isError && views.length === 0 && <span className="text-sm text-text-muted">لا عروض محفوظة بعد.</span>}
 
       {views.map((v) => (
-        <span key={v.id} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-1 text-xs">
+        <span key={v.id} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-1 text-sm">
           <button type="button" onClick={() => onApply(v)} className="font-semibold text-text-secondary hover:text-text-primary" title="تطبيق العرض">
             {v.name}
           </button>
@@ -70,7 +70,7 @@ export function SavedViewsBar({
         type="button"
         onClick={onSave}
         disabled={save.isPending}
-        className="inline-flex items-center gap-1.5 rounded-full border border-primary bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/15 disabled:opacity-60"
+        className="inline-flex items-center gap-1.5 rounded-full border border-primary bg-primary/10 px-2.5 py-1 text-sm font-semibold text-primary hover:bg-primary/15 disabled:opacity-60"
       >
         {save.isPending ? 'جارٍ الحفظ…' : 'حفظ العرض الحالي'}
       </button>

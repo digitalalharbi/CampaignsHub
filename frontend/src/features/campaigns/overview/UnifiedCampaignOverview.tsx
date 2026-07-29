@@ -162,6 +162,7 @@ export function UnifiedCampaignOverview({
   const currency = vm.currency ?? 'SAR'
   const c = palette(variant)
   const isMarketing = variant === 'marketing'
+  const lg = !compact // dashboard = larger, more readable typography; marketing preview stays compact
   const maxSpend = Math.max(1, ...vm.platforms.map((p) => p.spend))
   const topN = isMarketing ? 3 : compact ? 4 : 6
   const donutH = isMarketing ? 150 : compact ? 168 : 208
@@ -187,10 +188,10 @@ export function UnifiedCampaignOverview({
       {/* KPI row */}
       <div className={`grid grid-cols-2 gap-2 ${isMarketing ? 'sm:grid-cols-4' : compact ? 'sm:grid-cols-3' : 'md:grid-cols-3 xl:grid-cols-6'}`}>
         {kpis.map((k) => (
-          <div key={k.key} className={`rounded-xl border p-2.5 ${c.card}`}>
-            <div className={`text-[11px] font-medium ${c.label}`} title={k.hint}>{k.label}</div>
+          <div key={k.key} className={`rounded-xl border ${lg ? 'p-4' : 'p-2.5'} ${c.card}`}>
+            <div className={`${lg ? 'text-[15px]' : 'text-[11px]'} font-medium ${c.label}`} title={k.hint}>{k.label}</div>
             <div
-              className={`mt-0.5 text-lg font-extrabold tracking-tight tnum ${
+              className={`${lg ? 'mt-1' : 'mt-0.5'} font-extrabold tracking-tight tnum ${lg ? 'text-[34px] leading-none' : 'text-lg'} ${
                 k.tone === 'good' ? 'text-success' : k.tone === 'bad' ? 'text-danger' : c.value
               }`}
             >
@@ -203,18 +204,18 @@ export function UnifiedCampaignOverview({
       <div className={`grid gap-3 ${isMarketing ? 'sm:grid-cols-3' : compact ? '' : 'lg:grid-cols-3'}`}>
         {/* Platform comparison (spend bars + ROAS) */}
         <div className={`rounded-xl border p-3 ${c.card} ${isMarketing ? 'sm:col-span-2' : compact ? '' : 'lg:col-span-2'}`}>
-          <div className={`mb-2 text-sm font-bold ${c.title}`}>مقارنة أداء المنصات</div>
+          <div className={`mb-2 ${lg ? 'text-lg' : 'text-sm'} font-bold ${c.title}`}>مقارنة أداء المنصات</div>
           <div className="space-y-2">
             {vm.platforms.map((p) => (
               <div key={p.key} className="flex items-center gap-2">
-                <span className={`flex w-20 shrink-0 items-center gap-1.5 text-xs ${c.sub}`}>
+                <span className={`flex w-20 shrink-0 items-center gap-1.5 ${lg ? 'text-sm' : 'text-xs'} ${c.sub}`}>
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: providerColor(p.key) }} />
                   {providerName(p.key)}
                 </span>
                 <div className={`h-5 flex-1 overflow-hidden rounded-md ${c.track}`}>
                   <div className="h-full rounded-md" style={{ width: `${Math.max(4, (p.spend / maxSpend) * 100)}%`, background: providerColor(p.key) }} />
                 </div>
-                <span className={`tnum w-20 text-end text-xs ${c.sub}`}>{money(p.spend, currency)}</span>
+                <span className={`tnum w-20 text-end ${lg ? 'text-sm' : 'text-xs'} ${c.sub}`}>{money(p.spend, currency)}</span>
                 <span className={`tnum w-14 text-end text-xs font-semibold ${c.value}`}>{p.roas === null ? '—' : `${ratio(p.roas)}`}</span>
               </div>
             ))}
@@ -223,7 +224,7 @@ export function UnifiedCampaignOverview({
 
         {/* Spend distribution donut */}
         <div className={`rounded-xl border p-3 ${c.card}`}>
-          <div className={`mb-1 text-sm font-bold ${c.title}`}>توزيع الإنفاق</div>
+          <div className={`mb-1 ${lg ? 'text-lg' : 'text-sm'} font-bold ${c.title}`}>توزيع الإنفاق</div>
           <div style={{ height: donutH }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -242,9 +243,9 @@ export function UnifiedCampaignOverview({
       <div className={`grid gap-3 ${compact ? '' : 'lg:grid-cols-3'}`}>
         {/* Top campaigns */}
         <div className={`rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:col-span-2'}`}>
-          <div className={`mb-1 text-sm font-bold ${c.title}`}>أفضل الحملات</div>
+          <div className={`mb-1 ${lg ? 'text-lg' : 'text-sm'} font-bold ${c.title}`}>أفضل الحملات</div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px] text-xs">
+            <table className={`w-full min-w-[420px] ${lg ? 'text-sm' : 'text-xs'}`}>
               <thead>
                 <tr className={`border-b ${c.rowBorder} ${c.muted}`}>
                   <th className="py-1.5 text-start font-semibold">الحملة</th>
@@ -280,7 +281,7 @@ export function UnifiedCampaignOverview({
         {!isMarketing && (
         <div className="space-y-3">
           <div className={`rounded-xl border p-3 ${c.card}`}>
-            <div className={`mb-1.5 text-sm font-bold ${c.title}`}>حملات تحتاج تدخلًا</div>
+            <div className={`mb-1.5 ${lg ? 'text-lg' : 'text-sm'} font-bold ${c.title}`}>حملات تحتاج تدخلًا</div>
             {vm.needsAttention.length === 0 ? (
               <p className={`text-xs ${c.muted}`}>لا شيء يحتاج تدخلًا الآن.</p>
             ) : (
@@ -295,7 +296,7 @@ export function UnifiedCampaignOverview({
             )}
           </div>
           <div className={`rounded-xl border p-3 ${c.card}`}>
-            <div className={`mb-1.5 text-sm font-bold ${c.title}`}>أهم التنبيهات</div>
+            <div className={`mb-1.5 ${lg ? 'text-lg' : 'text-sm'} font-bold ${c.title}`}>أهم التنبيهات</div>
             {vm.alerts.length === 0 ? (
               <p className={`text-xs ${c.muted}`}>لا تنبيهات حرجة.</p>
             ) : (
@@ -311,7 +312,7 @@ export function UnifiedCampaignOverview({
           </div>
           {vm.topCreatives && vm.topCreatives.length > 0 && (
             <div className={`rounded-xl border p-3 ${c.card}`}>
-              <div className={`mb-1.5 text-sm font-bold ${c.title}`}>أفضل المحتويات الإعلانية</div>
+              <div className={`mb-1.5 ${lg ? 'text-lg' : 'text-sm'} font-bold ${c.title}`}>أفضل المحتويات الإعلانية</div>
               <ul className="space-y-1.5">
                 {vm.topCreatives.slice(0, 3).map((cr) => (
                   <li key={cr.id} className="flex items-center justify-between gap-2 text-xs">
