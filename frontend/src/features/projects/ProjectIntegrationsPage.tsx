@@ -18,10 +18,14 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardTitle } from '@/components/ui/Card'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
+import { listExternalCampaigns } from '@/features/campaigns/api'
+import { fmtDateTime } from '@/lib/datetime'
 import { useT } from '@/lib/i18n'
+import { useUi } from '@/stores/ui'
 
 export function ProjectIntegrationsPage() {
   const t = useT()
+  const lang = useUi((s) => s.locale)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { projectId = '' } = useParams()
@@ -40,6 +44,13 @@ export function ProjectIntegrationsPage() {
   const tasks = useQuery({
     queryKey: ['project', projectId, 'tasks'],
     queryFn: () => listProjectTasks(projectId),
+    enabled: Boolean(projectId),
+  })
+
+  // Campaigns discovered in this project (synced from bound accounts).
+  const campaigns = useQuery({
+    queryKey: ['project', projectId, 'campaigns-count'],
+    queryFn: () => listExternalCampaigns(projectId),
     enabled: Boolean(projectId),
   })
 
@@ -68,11 +79,16 @@ export function ProjectIntegrationsPage() {
 
   const bindError = bindMutation.isError ? toApiError(bindMutation.error) : null
 
+  const rows = bindings.data ?? []
+  const providers = [...new Set((campaigns.data ?? []).map((c) => c.provider).filter(Boolean))]
+  const lastSync = rows.map((b) => b.account?.last_synced_at).filter(Boolean).sort().at(-1) ?? null
+  const discoveredCampaigns = campaigns.data?.length ?? 0
+
   return (
     <section className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('project_integrations')}</h1>
+          <h1 className="font-[var(--font-heading)] text-3xl font-extrabold tracking-tight">{t('project_integrations')}</h1>
           <p className="mt-1 text-sm text-text-secondary">{t('project_switch_hint')}</p>
         </div>
         {/* Project selector — switching reloads project-scoped data with no leakage. */}
@@ -91,6 +107,21 @@ export function ProjectIntegrationsPage() {
       </div>
 
       {bindError && <Alert severity={bindError.status === 409 ? 'warning' : 'danger'} title={bindError.message} />}
+
+      {/* Data status — the project's integration surface at a glance. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          [t('bound_accounts'), String(rows.length)],
+          [lang === 'ar' ? 'المنصات' : 'Platforms', String(providers.length)],
+          [t('campaigns'), String(discoveredCampaigns)],
+          [t('last_updated'), lastSync ? fmtDateTime(lastSync) : '—'],
+        ].map(([l, v]) => (
+          <div key={String(l)} className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
+            <span className="text-xs font-semibold text-text-secondary">{l as string}</span>
+            <span className="tnum text-xl font-extrabold text-text-primary" dir="ltr">{v as string}</span>
+          </div>
+        ))}
+      </div>
 
       <div className="flex gap-2">
         <Button loading={connectMutation.isPending} onClick={() => connectMutation.mutate()}>
