@@ -39,6 +39,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'project'])
         Route::get('campaigns/{campaign}/platforms', [CampaignMetricsController::class, 'platforms'])->name('platforms');
         Route::get('campaigns/{campaign}/budget', [CampaignMetricsController::class, 'budget'])->name('budget');
         Route::get('campaigns/{campaign}/funnel', [CampaignMetricsController::class, 'funnel'])->name('funnel');
+        // CAMPDET-010: recorded conversion events + the real sync history behind the numbers.
+        Route::get('campaigns/{campaign}/events', [CampaignMetricsController::class, 'events'])->name('events');
+        Route::get('campaigns/{campaign}/sync-log', [CampaignMetricsController::class, 'syncLog'])->name('sync-log');
         Route::get('campaigns/{campaign}/creatives', [CampaignCreativesController::class, 'index'])->name('creatives');
         Route::get('campaigns/{campaign}/activity', [CampaignActivityController::class, 'index'])->name('activity');
         Route::get('campaigns/{campaign}/alerts', [CampaignAlertsController::class, 'index'])->name('alerts');

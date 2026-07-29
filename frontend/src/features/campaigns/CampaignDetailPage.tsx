@@ -52,11 +52,12 @@ import { Tabs, TabPanel, type TabItem } from '@/components/ui/Tabs'
 import { useT } from '@/lib/i18n'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
+import { CampaignAudienceTab, CampaignEventsTab, CampaignSyncLogTab } from './CampaignDepthTabs'
 import { useProject } from '@/stores/project'
 
 const TAB_KEYS = [
-  'overview', 'performance', 'platforms', 'creatives', 'budget',
-  'funnel', 'notes', 'alerts', 'reports', 'activity',
+  'overview', 'performance', 'platforms', 'creatives', 'audience', 'events', 'budget',
+  'funnel', 'sync', 'notes', 'alerts', 'reports', 'activity',
 ] as const
 type TabKey = (typeof TAB_KEYS)[number]
 
@@ -362,6 +363,22 @@ export function CampaignDetailPage() {
         <TabPanel>
           <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
           <CampaignCreativesTab campaign={c} projectId={projectId} range={range} locale={locale} />
+        </TabPanel>
+      )}
+      {tab === 'audience' && (
+        <TabPanel>
+          <CampaignAudienceTab campaign={c} locale={locale} />
+        </TabPanel>
+      )}
+      {tab === 'events' && (
+        <TabPanel>
+          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
+          <CampaignEventsTab campaign={c} projectId={projectId} range={range} />
+        </TabPanel>
+      )}
+      {tab === 'sync' && (
+        <TabPanel>
+          <CampaignSyncLogTab campaign={c} projectId={projectId} />
         </TabPanel>
       )}
       {tab === 'notes' && (

@@ -8,11 +8,16 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Campaigns\Models\CampaignAnnotation;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
+use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
@@ -234,5 +239,95 @@ final class CampaignMetricsTest extends TestCase
                 'video_views' => 0, 'video_completions' => 0, 'is_demo' => false, 'created_at' => now(), 'updated_at' => now(),
             ]);
         }
+    }
+
+    /**
+     * CAMPDET-010: the events section reports what was actually RECORDED — no zero-count rows padding
+     * the list, and cost-per-event only when there was spend to divide.
+     */
+    public function test_events_returns_only_recorded_events_with_cost_per_event(): void
+    {
+        $uid = fn (string $x) => (string) Uuid::uuid5(Uuid::NAMESPACE_DNS, $x.$this->campA1->id);
+        $m = fn (string $k, float $v) => new NormalizedMetric(
+            tenantId: $this->tenant->id, projectId: $this->projectA->id, externalAccountId: $uid('acc'),
+            externalCampaignId: $uid('camp'), provider: 'meta', metricKey: $k, metricDate: Carbon::parse('2026-06-15'),
+            value: $v, unifiedCampaignId: $this->campA1->id,
+        );
+        app(UpsertDailyMetrics::class)->handle([$m('purchases', 8), $m('leads', 0)]);
+
+        $res = $this->actingAs($this->owner)->getJson($this->url($this->projectA, $this->campA1->id, 'events'))->assertOk();
+
+        $keys = array_column($res->json('data.events'), 'key');
+        $this->assertContains('purchases', $keys);
+        $this->assertContains('conversions', $keys);
+        $this->assertNotContains('leads', $keys, 'a zero-count event must not be listed');
+        $this->assertNotContains('installs', $keys);
+
+        $purchases = collect($res->json('data.events'))->firstWhere('key', 'purchases');
+        $this->assertEquals(8.0, $purchases['count']);
+        $this->assertEquals(125.0, $purchases['cost_per']);   // spend 1000 / 8 purchases
+
+        // Campaign-scoped: campaign A2 never recorded purchases.
+        $other = $this->actingAs($this->owner)->getJson($this->url($this->projectA, $this->campA2->id, 'events'))->assertOk();
+        $this->assertNotContains('purchases', array_column($other->json('data.events'), 'key'));
+    }
+
+    /**
+     * CAMPDET-010: the sync log is the audit trail behind "last synced". A campaign with no linked
+     * external campaign has no sync history at all — it must say so rather than showing the project's runs.
+     */
+    public function test_sync_log_returns_runs_for_linked_accounts_only_and_surfaces_failures(): void
+    {
+        // A real account chain — the FK to external_accounts is what makes the sync log auditable.
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $credential = new IntegrationCredential(['provider' => 'meta', 'credential_scope' => 'project_only', 'credential_type' => 'oauth', 'status' => 'active']);
+        $credential->setPayload('token-meta');
+        $credential->save();
+        $connection = ProviderConnection::create([
+            'credential_id' => $credential->id, 'provider' => 'meta',
+            'connection_name' => 'meta connection', 'scope' => 'project_only', 'status' => 'connected',
+        ]);
+        $account = ExternalAccount::create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id, 'provider' => 'meta',
+            'account_type' => 'ad_account', 'external_id' => 'act_1', 'name' => 'Ad account', 'status' => 'active',
+        ]);
+        $accountId = $account->id;
+        app(TenantContext::class)->forget();
+
+        ExternalCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'unified_campaign_id' => $this->campA1->id, 'external_account_id' => $accountId,
+            'provider' => 'meta', 'external_id' => 'ext-1', 'name' => 'Ext', 'status' => 'active',
+        ]);
+
+        MetricSyncRun::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'external_account_id' => $accountId, 'provider' => 'meta', 'status' => 'failed',
+            'window_start' => '2026-06-01', 'window_end' => '2026-06-30',
+            'started_at' => now(), 'finished_at' => now(), 'error' => 'token expired',
+        ]);
+        // A run for an account this campaign is NOT linked to must never appear.
+        MetricSyncRun::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'external_account_id' => null, 'provider' => 'tiktok', 'status' => 'success',
+            'window_start' => '2026-06-01', 'window_end' => '2026-06-30',
+        ]);
+
+        $res = $this->actingAs($this->owner)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/sync-log")
+            ->assertOk();
+
+        $runs = $res->json('data.runs');
+        $this->assertCount(1, $runs);
+        $this->assertSame('failed', $runs[0]['status']);
+        $this->assertSame('token expired', $runs[0]['error'], 'a failure must be shown, not hidden');
+        $this->assertSame(1, $res->json('data.linked_accounts'));
+
+        // Unlinked campaign → honest empty history.
+        $empty = $this->actingAs($this->owner)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA2->id}/sync-log")
+            ->assertOk();
+        $this->assertSame(0, $empty->json('data.linked_accounts'));
+        $this->assertSame([], $empty->json('data.runs'));
     }
 }

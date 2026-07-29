@@ -162,3 +162,50 @@ export interface CampaignCreative {
 export function useCampaignCreatives(projectId: string | null, campaignId: string | null, range: Range) {
   return useCampaignMetric<CampaignCreative[]>('creatives', projectId, campaignId, range)
 }
+
+export interface CampaignEvent {
+  key: string
+  label_ar: string
+  label_en: string
+  count: number
+  cost_per: number | null
+}
+
+export interface CampaignEventsPayload {
+  events: CampaignEvent[]
+  spend: number
+  declared_purpose: string | null
+  attribution_model: string | null
+  attribution_window: string | null
+}
+
+/** CAMPDET-010: conversion events actually recorded for this campaign (zero-count keys are omitted). */
+export const useCampaignEvents = (p: string | null, c: string | null, r: Range) =>
+  useCampaignMetric<CampaignEventsPayload>('events', p, c, r)
+
+export interface CampaignSyncRun {
+  id: string
+  provider: string
+  status: string
+  window_start: string | null
+  window_end: string | null
+  metrics_upserted: number
+  attempts: number
+  started_at: string | null
+  finished_at: string | null
+  error: string | null
+}
+
+export interface CampaignSyncLog {
+  linked_accounts: number
+  runs: CampaignSyncRun[]
+}
+
+/** CAMPDET-010: the sync history behind this campaign's numbers. Not range-scoped. */
+export function useCampaignSyncLog(projectId: string | null, campaignId: string | null) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'campaigns', campaignId, 'sync-log'],
+    queryFn: () => getData<CampaignSyncLog>(`${base(projectId!, campaignId!)}/sync-log`),
+    enabled: Boolean(projectId && campaignId),
+  })
+}
