@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Domains\AI\Http\Controllers\AICredentialController;
 use App\Domains\Alerts\Http\Controllers\AlertController;
 use App\Domains\Campaigns\Http\Controllers\CreativeLibraryController;
+use App\Domains\ClientWorkspaces\Http\Controllers\Internal\FilesLibraryController;
 use App\Domains\ClientWorkspaces\Http\Controllers\ClientWorkspaceController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\Tasks\Http\Controllers\TaskController;
@@ -39,6 +40,9 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
 
     // Creative library (tenant-wide content).
     Route::get('creatives', [CreativeLibraryController::class, 'index'])->name('creatives.library');
+
+    // Unified files library (tenant-wide, read-only over real stores).
+    Route::get('files/library', [FilesLibraryController::class, 'index'])->name('files.library');
 
     // Tasks.
     Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');

@@ -60,6 +60,7 @@ import { ConnectionCenterPage } from '@/features/connections/ConnectionCenterPag
 import { DrivePage } from '@/features/drive/DrivePage'
 import { TasksPage } from '@/features/tasks/TasksPage'
 import { CreativesPage } from '@/features/content/CreativesPage'
+import { FilesLibraryPage } from '@/features/files/FilesLibraryPage'
 import { BrandingCenterPage } from '@/features/branding/BrandingCenterPage'
 import { AppShell } from '@/layouts/AppShell'
 
@@ -137,6 +138,7 @@ export const router = createBrowserRouter([
           ...subscriptionsRoutes,
           { path: 'app/integrations', element: <ConnectionCenterPage /> },
           { path: 'app/integrations/drive', element: <DrivePage /> },
+          { path: 'files', element: <FilesLibraryPage /> },
           { path: 'app/connections', element: <Navigate to="/app/integrations" replace /> },
           { path: 'app/drive', element: <Navigate to="/app/integrations/drive" replace /> },
           { path: 'app/branding', element: <Navigate to="/settings/branding" replace /> },

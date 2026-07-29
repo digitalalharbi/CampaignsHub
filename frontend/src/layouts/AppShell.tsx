@@ -48,7 +48,7 @@ const operationalNav: NavItem[] = [
   { to: '/reports', key: 'reports', icon: BarChart3, ent: 'reports' },
   { to: '/tasks', key: 'tasks', icon: ListChecks, ent: 'tasks' },
   { to: '/app/integrations', key: 'integrations', icon: Plug, ent: 'connections' },
-  { to: '/app/integrations/drive', key: 'files', icon: FolderOpen, ent: 'connections' },
+  { to: '/files', key: 'files', icon: FolderOpen, ent: 'connections' },
   { to: '/app/alerts', key: 'alerts', icon: BellRing, ent: 'alerts' },
   { to: '/app/messages', key: 'messages', icon: MessageSquare, ent: 'messaging' },
   { to: '/app/billing', key: 'billing', icon: Receipt, ent: 'billing' },
