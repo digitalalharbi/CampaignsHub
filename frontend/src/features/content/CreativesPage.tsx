@@ -15,6 +15,8 @@ const COPY = {
     provider: 'المنصة', format: 'النوع', status: 'الحالة', campaign: 'الحملة', spend: 'الإنفاق', impressions: 'الظهور',
     details: 'تفاصيل المحتوى', no_preview: 'لا تتوفر معاينة من المنصة', open_dest: 'فتح الوجهة', last_sync: 'آخر مزامنة', close: 'إغلاق',
     view_grid: 'شبكة', view_table: 'جدول', demo: 'تجريبي',
+    perf_all: 'الكل', perf_top: 'أفضل المحتويات', perf_attention: 'تحتاج تدخلًا', perf_reason: 'السبب',
+    clicks: 'النقرات', conversions: 'التحويلات', ctr: 'نسبة النقر', roas: 'العائد',
   },
   en: {
     title: 'Content', subtitle: 'The ad library synced across your platforms — browse and analyze it in one place.',
@@ -25,6 +27,8 @@ const COPY = {
     provider: 'Platform', format: 'Format', status: 'Status', campaign: 'Campaign', spend: 'Spend', impressions: 'Impressions',
     details: 'Creative details', no_preview: 'No preview provided by the platform', open_dest: 'Open destination', last_sync: 'Last sync', close: 'Close',
     view_grid: 'Grid', view_table: 'Table', demo: 'Demo',
+    perf_all: 'All', perf_top: 'Top content', perf_attention: 'Needs attention', perf_reason: 'Reason',
+    clicks: 'Clicks', conversions: 'Conversions', ctr: 'CTR', roas: 'ROAS',
   },
 }
 type Copy = (typeof COPY)['ar']
@@ -65,6 +69,7 @@ export function CreativesPage() {
   const [provider, setProvider] = useState<'all' | string>('all')
   const [format, setFormat] = useState<'all' | string>('all')
   const [status, setStatus] = useState<'all' | string>('all')
+  const [perf, setPerf] = useState<'all' | 'top' | 'needs_attention'>('all')
   const [view, setView] = useState<'grid' | 'table'>('grid')
   const [selected, setSelected] = useState<Creative | null>(null)
 
@@ -82,14 +87,25 @@ export function CreativesPage() {
     spend: all.reduce((s, x) => s + (x.metrics?.spend ?? 0), 0),
   }
 
+  const topCount = all.filter((x) => x.performance?.class === 'top').length
+  const attentionCount = all.filter((x) => x.performance?.class === 'needs_attention').length
+
   const needle = term.trim().toLowerCase()
-  const items = all.filter((x) => {
-    if (provider !== 'all' && x.provider !== provider) return false
-    if (format !== 'all' && x.format !== format) return false
-    if (status !== 'all' && x.status !== status) return false
-    if (needle && !`${x.name ?? ''} ${x.client_display_name ?? ''} ${x.campaign_name ?? ''}`.toLowerCase().includes(needle)) return false
-    return true
-  })
+  const items = all
+    .filter((x) => {
+      if (perf !== 'all' && x.performance?.class !== perf) return false
+      if (provider !== 'all' && x.provider !== provider) return false
+      if (format !== 'all' && x.format !== format) return false
+      if (status !== 'all' && x.status !== status) return false
+      if (needle && !`${x.name ?? ''} ${x.client_display_name ?? ''} ${x.campaign_name ?? ''}`.toLowerCase().includes(needle)) return false
+      return true
+    })
+    // Ranked tabs sort by what earned the rank: top by ROAS→CTR desc, needs-attention by wasted spend desc.
+    .sort((a, b) => {
+      if (perf === 'top') return (b.metrics.roas ?? b.metrics.ctr ?? 0) - (a.metrics.roas ?? a.metrics.ctr ?? 0)
+      if (perf === 'needs_attention') return b.metrics.spend - a.metrics.spend
+      return 0
+    })
 
   return (
     <div className="flex w-full flex-col gap-4">
@@ -104,6 +120,18 @@ export function CreativesPage() {
         <SummaryCard label={c.sum_active} value={String(summary.active)} tone="success" />
         <SummaryCard label={c.sum_paused} value={String(summary.paused)} tone="warning" />
         <SummaryCard label={c.sum_spend} value={money(summary.spend)} tone="muted" />
+      </div>
+
+      {/* Performance tabs — the workspace's own 30d baseline decides top / needs-attention. */}
+      <div className="flex flex-wrap gap-1 border-b border-border">
+        {([['all', `${c.perf_all} (${all.length})`], ['top', `${c.perf_top} (${topCount})`], ['needs_attention', `${c.perf_attention} (${attentionCount})`]] as const).map(([k, label]) => (
+          <button key={k} onClick={() => setPerf(k)}
+            className={`rounded-t-lg px-3 py-2 text-sm font-semibold transition-colors ${
+              perf === k ? 'border-b-2 border-brand-600 text-brand-600' : 'text-text-secondary hover:text-text-primary'
+            }`}>
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* Toolbar */}
@@ -212,6 +240,18 @@ function ProviderDot({ provider }: { provider: string }) {
   )
 }
 
+/** Explainable performance badge (⭐ top / ⚠ needs attention) with the reason on hover. */
+function PerfBadge({ creative, ar }: { creative: Creative; ar: boolean }) {
+  const p = creative.performance
+  if (!p || p.class === 'normal') return null
+  const reason = ar ? p.reason_ar : p.reason_en
+  return p.class === 'top' ? (
+    <span title={reason} className="inline-flex w-fit items-center gap-1 rounded-md bg-success/15 px-1.5 py-0.5 text-[10px] font-bold text-success">★ {reason}</span>
+  ) : (
+    <span title={reason} className="inline-flex w-fit items-center gap-1 rounded-md bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold text-danger">⚠ {reason}</span>
+  )
+}
+
 /** A thumbnail (only when the platform provided one) or an honest format placeholder — never fabricated. */
 function Thumb({ creative, className }: { creative: Creative; className?: string }) {
   const src = creative.thumbnail_url ?? creative.preview_url
@@ -235,6 +275,7 @@ function CreativeCard({ creative, c, ar, onClick }: { creative: Creative; c: Cop
       </div>
       <div className="flex flex-col gap-1 p-3">
         <span className="line-clamp-1 text-sm font-semibold text-text-primary">{creative.name ?? '—'}</span>
+        <PerfBadge creative={creative} ar={ar} />
         <span className="line-clamp-1 text-[11px] text-text-tertiary">{creative.campaign_name ?? '—'} · {formatLabel(creative.format, ar)}</span>
         <div className="mt-1 flex items-center justify-between text-[11px] text-text-secondary">
           <span className="tnum" dir="ltr">{money(creative.metrics.spend)}</span>
@@ -273,8 +314,19 @@ function CreativeDrawer({ creative, c, ar, onClose }: { creative: Creative; c: C
           <div className="my-1 border-t border-border" />
           <Row label={c.spend}><span className="tnum" dir="ltr">{money(creative.metrics.spend)}</span></Row>
           <Row label={c.impressions}><span className="tnum" dir="ltr">{creative.metrics.impressions.toLocaleString('en-US')}</span></Row>
+          <Row label={c.clicks}><span className="tnum" dir="ltr">{creative.metrics.clicks.toLocaleString('en-US')}</span></Row>
+          <Row label={c.conversions}><span className="tnum" dir="ltr">{creative.metrics.conversions.toLocaleString('en-US')}</span></Row>
+          <Row label={c.ctr}><span className="tnum" dir="ltr">{creative.metrics.ctr !== null ? `${(creative.metrics.ctr * 100).toFixed(2)}%` : '—'}</span></Row>
+          <Row label={c.roas}><span className="tnum" dir="ltr">{creative.metrics.roas !== null ? `${creative.metrics.roas.toFixed(2)}x` : '—'}</span></Row>
           <Row label={c.last_sync}><span className="tnum" dir="ltr">{fmtDate(creative.last_synced_at)}</span></Row>
         </dl>
+
+        {creative.performance && creative.performance.class !== 'normal' ? (
+          <div className="flex items-center justify-between rounded-xl bg-surface-hover px-3 py-2 text-sm">
+            <span className="font-semibold text-text-secondary">{c.perf_reason}</span>
+            <PerfBadge creative={creative} ar={ar} />
+          </div>
+        ) : null}
 
         {creative.destination_url ? (
           <a href={creative.destination_url} target="_blank" rel="noopener noreferrer"

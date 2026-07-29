@@ -17,7 +17,17 @@ export interface Creative {
   project_id: string | null
   is_demo: boolean
   last_synced_at: string | null
-  metrics: { spend: number; impressions: number }
+  metrics: {
+    spend: number
+    impressions: number
+    clicks: number
+    conversions: number
+    revenue: number
+    ctr: number | null
+    roas: number | null
+  }
+  /** Explainable 30d classification vs the workspace median (null = no data in window). */
+  performance: { class: 'top' | 'needs_attention' | 'normal' | string; reason_ar: string; reason_en: string } | null
 }
 
 export const listCreatives = () => getData<Creative[]>('/creatives')
