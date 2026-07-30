@@ -214,7 +214,7 @@ test('forgot password, create account and request tracking all lead somewhere re
 
   await page.goto('/login')
   await page.getByRole('link', { name: /Track my requests|متابعة طلباتي/ }).click()
-  await expect(page).toHaveURL(/\/client\/login/)
+  await expect(page).toHaveURL(/\/portal\/login/)
   // The portal signs in by one-time code, not a password — assert its own control, not the staff form's.
   await expect(page.getByRole('button', { name: /Send code|إرسال الرمز/ })).toBeVisible()
 })
