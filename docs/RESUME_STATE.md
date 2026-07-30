@@ -258,17 +258,33 @@ notes, taxonomies, services). `/app/settings/public-pages|portals|taxonomies` re
     notifications, opportunities. Reachable only by typing the URL; linked from nothing.
 
 ## Exact next task
-**Drop `users.tenant_id`.** The blocker is breadth, not design: 46 test files plus `UserFactory` and
-`MembershipProvisioner::ensureForOwnWorkspace` still write it. Order in
-`docs/TENANT_ID_MIGRATION.md`: migrate factories and tests off the column, prove Fresh AND Upgrade
-migrations, then drop it in a separate upgrade migration.
+**SIGNUP-001** — the account + subscription state machine. It is first because everything else in the
+2026-07-31 addendum hangs off it: plans cannot gate what has no state, payment cannot activate what
+has no state to move, and the admin review queue has nothing to review. The twelve states and the
+whole contract are in `docs/MASTER_EXECUTION_CONTRACT.md` under "ADDENDUM — Paid, self-serve SaaS",
+and the ordered rows are the new table at the end of the matrix.
 
-Then: a full cross-browser E2E + `migrate:fresh --seed` + clean-install pass (PORTAL-9) for closure.
+The binding rule to encode first: **no membership, permission or portal access before the activation
+conditions are met.** Today registration provisions a tenant and a membership immediately; that
+becomes the auto-activate branch of the new path, not the only path — and it must not be deleted,
+because self-serve trial signup stays a supported policy.
 
-**PORTAL-AUTH-001c (step 5)** is deliberately NOT next: it is blocked on evidence from a real
-environment, not on code. `/admin/cutover` measures the three conditions; the last dev reading was
-0 conflicts, 0 parity mismatches, **14 live legacy sessions**. Do not delete `ClientPortalToken` to
-tidy up.
+Then in order: SIGNUP-002 → SIGNUP-003/004 → PLAN-001/002/003 → PAY-001/003/002/004 → OPS-001 →
+the rest.
+
+**PORTAL-AUTH-001c (step 5)** stays NOT next: blocked on evidence from a real environment, not on
+code. `/admin/cutover` measures the three conditions; last dev reading was 0 conflicts, 0 parity
+mismatches, **14 live legacy sessions**. Do not delete `ClientPortalToken` to tidy up.
+
+### Decision 24 — `users.tenant_id` is gone, and the grant is now always explicit
+Dropped in `2026_07_31_090000_grant_memberships_then_drop_users_tenant_id`, which grants a membership
+to every user that still had a tenant and none, THEN drops — in one transaction, refusing the drop if
+anyone would be left unplaceable. Proven both ways: fresh seed leaves 0 stranded; the upgrade on dev
+data rescued 3. "Who belongs to this tenant?" is `User::scopeInTenant`, once, fail-closed on a null
+tenant. `$user->tenant` survives as an accessor over the active membership.
+
+It hid a real defect: `TeamController::invite` assigned a role but granted no membership, so invitees
+landed nowhere. Expect more of these — anywhere the column was quietly standing in for a grant.
 
 ### Decision 21 — the creator surface INVERTS the money, it does not narrow it (INFL-002)
 The agency sees `agreed_fee` (billed to the client) always, and `influencer_fee` + margin behind

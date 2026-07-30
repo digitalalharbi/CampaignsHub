@@ -121,3 +121,33 @@ views + compare-period + data-freshness. Backend: add filter params to the analy
 context feeding `UnifiedCampaignOverview` + the trend/funnel. Then CAMPAIGN-010 (view modes + taxonomy chips +
 comparison), CAMPDET-010, CREATIVE-001, ALERT-001 … per the contract order. Keep preview up; one tested unit
 per commit; update this matrix after each.
+
+## Paid self-serve SaaS — contract addendum of 2026-07-31
+
+Opened by the binding addendum in `docs/MASTER_EXECUTION_CONTRACT.md`. Every row is NOT_STARTED
+unless stated; none may be closed on a green test alone — each needs the live review the addendum
+lists. Ordered by dependency: the gate must exist before plans can enforce anything, and plans must
+exist before payment can activate anything.
+
+| ID | Portal | Requirement | Depends on | Status | Notes |
+| --- | --- | --- | --- | --- | --- |
+| SIGNUP-001 | PLATFORM | Account + subscription state machine — the twelve states, and no membership, permission or portal access before activation conditions are met | — | **NOT_STARTED** | The gate everything else hangs from. States: Draft, Email Verification Required, Mobile Verification Required, Pending Approval, Approved Awaiting Payment, Payment Pending, Active, Past Due, Suspended, Rejected, Cancelled, Expired. |
+| SIGNUP-002 | PLATFORM | Gated registration path: account type/portal → plan → inactive account → email → mobile → approval → payment → server-verified payment → tenant+workspace+membership → portal enabled → onboarding | SIGNUP-001 | **NOT_STARTED** | Existing registration provisions a tenant immediately; that becomes one branch of this, not the whole path. |
+| SIGNUP-003 | ADMIN | Approval policy configurable per account type and plan (manual-before-payment, pay-then-review, auto-on-verified-payment, manual-only, trial, request-documents, reject-with-reason, suspend/reactivate) | SIGNUP-001 | **NOT_STARTED** | Policy is data, not code branches. |
+| SIGNUP-004 | ADMIN | Registration review queue — accept / reject / request info, see plan, verification and payment state, change plan pre-activation, grant exceptional period or discount, decide who may self-register | SIGNUP-003 | **NOT_STARTED** | |
+| SIGNUP-005 | PLATFORM | Mobile verification (OTP) as a first-class account state | SIGNUP-001 | **NOT_STARTED** | Email verification exists; mobile does not. Delivery is Awaiting Credentials until a provider exists — the STATE must still be real. |
+| PLAN-001 | ADMIN | Central plans engine — portals, user/client/project/campaign/ad-account/integration/report/schedule counts, storage, advanced features, White Label, custom domain, retention, support level, usage and API limits, currencies, billing cycle, trial | — | **NOT_STARTED** | Replaces fixed arrays. Plans are rows, editable from /admin. |
+| PLAN-002 | PLATFORM | Entitlements + usage limits enforced in the BACKEND | PLAN-001 | **NOT_STARTED** | Hiding a button is not enforcement. |
+| PLAN-003 | ALL | Over-limit behaviour: block clearly, show usage against the limit, offer upgrade, never delete or abruptly hide the user's own data | PLAN-002 | **NOT_STARTED** | |
+| PAY-001 | PLATFORM | Provider-agnostic payment layer: checkout session, payment intent, signed webhooks, idempotency | — | **NOT_STARTED** | System logic must not bind to one provider. |
+| PAY-002 | PLATFORM | Subscription lifecycle: auto-renewal, cancellation, upgrade/downgrade, proration, refunds, chargebacks, retries | PAY-001, PLAN-001 | **NOT_STARTED** | |
+| PAY-003 | PLATFORM | Activation ONLY on verified webhook or server-to-server check — returning from a payment page proves nothing | PAY-001 | **NOT_STARTED** | The honesty rule with teeth. |
+| PAY-004 | PLATFORM | Invoices, receipts, taxes, currencies, and a complete payment event log | PAY-002 | **NOT_STARTED** | VAT treatment already decided — see RESUME_STATE. |
+| PAY-005 | ADMIN | Four revenue streams kept separate: CampaignsHub subscriptions · agency→client invoices · request service payments · influencer/creator payouts | PAY-004 | **PARTIAL** | `PlatformBillingController` already refuses to merge customers' money into platform revenue; the other three still need their own surfaces. |
+| OPS-001 | PLATFORM | Self-operation: renewal, expiry and payment-failure alerts, manageable grace period, suspension with data preserved, reactivation after payment | PAY-002 | **NOT_STARTED** | |
+| OPS-002 | ADMIN | Queue, scheduler and webhook monitoring; audit trail for every subscription, payment, approval and permission change | PAY-001 | **PARTIAL** | Operational status exists (ADMIN-003); the subscription/payment/approval audit does not. |
+| INTG-001 | APP/AGENCY | Six platforms end to end: OAuth → account discovery → selection → bind to project → campaign discovery → ad sets/ads/creatives → sync → metric normalisation → analytics → reports → alerts | — | **PARTIAL** | Adapters and honest states exist. Live paths are Awaiting Credentials; a demo sync is never reported as a connection. |
+| APP-ADS-001 | APP | Ad sets and ads as first-class objects under a campaign | INTG-001 | **NOT_STARTED** | Currently campaigns stop at the campaign. |
+| INFL-003 | INFLUENCERS | Nominations, tracking links and discount codes, and results per deliverable | INFL-002 | **NOT_STARTED** | The remaining half of the influencers contract. |
+| PORTAL-PAY-001 | PORTAL | Payment on a client-portal invoice | PAY-001 | **NOT_STARTED** | The portal shows invoices; it cannot take money. |
+| REVIEW-001 | ALL | Per-portal audit against its stated purpose: own dashboard, own menu and taxonomy, own workspace settings, real isolation, loading/empty/error, working search-filters-views-details-actions, ≤2 menu levels, nothing copied between portals | — | **PARTIAL** | `docs/REGRESSION_AUDIT_PORTALS.md` covers /app and /agency; /admin, /influencers and /portal still need the same pass. |
