@@ -158,7 +158,9 @@ which also carries the audit of what the codebase actually looked like at adopti
 | SEC-ADMIN-001 `is_platform_admin` hardening | `d8de729` | **VERIFIED** — removed from `$fillable`; three routes closed |
 | NAV-001 grouped rails | `c182e14`, `0c2204c` | **VERIFIED** — two levels, nothing hidden, portals stay distinct |
 | AGENCY-005 white-label per client space | `3982fff` | **VERIFIED** — plus SEC-BRAND-001, the ownership check on branding writes |
-| PORTAL-AUTH-001a backfill | `40fb5a5` | **VERIFIED** — identities exist; nothing reads them yet (that is step 3) |
+| PORTAL-AUTH-001a backfill | `40fb5a5` | **VERIFIED** — identities exist |
+| PORTAL-AUTH-001b steps 2–4 | `fd77ca7` | **VERIFIED** — both engines live, membership preferred, parity gate green |
+| PORTAL-AUTH-001c step 5 | — | **NOT_STARTED** — blocked on EVIDENCE (zero open conflicts + no token-served session), not on code |
 
 **What the audit actually found.** Nothing was lost in the `/app/*` move: 74 routes before, 90 now,
 every old path resolving; the advertiser rail has the same fifteen entries; all eight settings
@@ -252,12 +254,17 @@ notes, taxonomies, services). `/app/settings/public-pages|portals|taxonomies` re
     notifications, opportunities. Reachable only by typing the URL; linked from nothing.
 
 ## Exact next task
-**PORTAL-AUTH-001 step 2** — an OTP grant on the shared auth engine that issues a Sanctum session for
-the users the backfill created. Step 1 is done (`40fb5a5`); `docs/PORTAL_AUTH_MIGRATION.md` has the
-remaining order. Step 3 then switches `ClientPortalController` to resolve identity from
-`$request->user()` + membership scope — one method, because `contactScope()` is already the single
-choke point. Step 4 accepts BOTH sessions for a release; step 5 drops `ClientPortalToken` only once
-the log shows zero token-served requests.
+**INFL-002** — the creator-facing portal. It was blocked behind the auth work, and that block is now
+lifted: creators can be given `users` + a membership the same way clients were, and the OTP-opens-a-
+session path already exists (`ClientPortalController::loginVerify`). The data model is done
+(`d1317a2`): brief and feedback are already marked creator-shareable, `internal_notes` never-shared,
+and `influencer_fee`/`margin` behind `influencers.view_costs`.
+
+Then: dropping `users.tenant_id`, and a full cross-browser E2E + `migrate:fresh --seed` +
+clean-install pass for closure.
+
+**PORTAL-AUTH-001c (step 5)** is deliberately NOT next: it is blocked on evidence from a real
+environment, not on code. Do not delete `ClientPortalToken` to tidy up.
 
 Then: **INFL-002** (blocked behind the same auth work — creators have no password either), dropping
 `users.tenant_id`, and a full cross-browser E2E + `migrate:fresh --seed` + clean-install pass for

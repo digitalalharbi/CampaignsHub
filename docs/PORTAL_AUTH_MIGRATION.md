@@ -1,6 +1,6 @@
 # PORTAL-AUTH-001 — unifying the client portal onto the single auth engine
 
-**State: PARTIAL.** The URL space is unified and the identities exist. The auth engines are not merged: nothing reads the new memberships yet.
+**State: PARTIAL — steps 1–4 done, step 5 pending evidence.** Both engines run side by side; the membership is preferred and the token is the fallback. The legacy engine stays until no live session depends on it.
 
 ## What is done
 
@@ -55,13 +55,30 @@ a boundary that is written down and tested.
    contact with no client space grants nothing.
 
    Nothing reads from these memberships yet — that is step 3.
-2. Add an OTP grant to the shared auth engine that issues a Sanctum session for those users.
-3. Change `ClientPortalController` to resolve identity from `$request->user()` + membership scope.
-   The choke point already exists — `contactScope()` — so this is one method, not twenty.
-4. Accept BOTH sessions for one release: the `client_portal` cookie continues to work, and its
-   holders are upgraded on next login. Log which engine served each request so the cutover can be
-   observed rather than assumed.
-5. Delete `ClientPortalToken` only once that log shows zero token-served requests.
+2. ~~Add an OTP grant to the shared auth engine that issues a Sanctum session for those users.~~
+   **DONE — `fd77ca7`.** `loginVerify` opens both. Guarded on `hasSession()`, because the same route
+   is called without one (the dev-token header path, any non-browser client) — those keep the token
+   and lose nothing. Logout ends both.
+3. ~~Change `ClientPortalController` to resolve identity from `$request->user()` + membership scope.~~
+   **DONE — `fd77ca7`.** `ClientPortalIdentity` decides; membership wins, token is the fallback.
+   NOTE the exception found doing it: a request with no `client_id` (submitted, not yet converted)
+   is not in ANY space, so scope alone hid it from its own submitter. It stays visible outside a
+   space and hidden inside one.
+4. ~~Accept BOTH sessions for one release.~~ **DONE — `fd77ca7`.** `ClientPortalIdentity::reach()`
+   reports which engine served, and `parity()` returns what both would answer.
+   `ClientPortalCutoverParityTest` compares them for every contact and fails naming the one that
+   disagrees.
+5. **NOT DONE — and this is the one step that must not be rushed.** Delete `ClientPortalToken`,
+   `ClientPortalContacts`, the `client_portal` cookie and the token header path only once ALL of
+   these hold in the environment being cut over:
+
+   - `/api/v1/admin/portal-conflicts` reports `safe_to_retire_legacy_engine: true` (zero open).
+   - `ClientPortalIdentity::reach()` reports engine `token` for no live session — i.e. every holder
+     has signed in again since the cutover, or their token has expired.
+   - `ClientPortalCutoverParityTest` green, which it is.
+
+   Until then BOTH engines stay. Removing the token while any session still depends on it signs
+   those clients out mid-task, and they have no password to sign back in with.
 
 ## What holds the line until then
 
