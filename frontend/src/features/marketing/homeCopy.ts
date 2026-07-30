@@ -46,6 +46,8 @@ export interface HomeCopy {
    */
   dashboard: {
     dateRange: string
+    /** Which objective these figures cover — comparing across objectives would be misleading. */
+    objectiveLabel: string
     demoBadge: string
     footnote: string
     vsPrevious: string
@@ -177,6 +179,7 @@ const ar: HomeCopy = {
   },
   dashboard: {
     dateRange: '1 أبريل — 25 مايو 2026',
+    objectiveLabel: 'هدف: المبيعات — تُقارن الحملات ضمن الهدف نفسه فقط',
     demoBadge: 'معاينة توضيحية ببيانات تجريبية',
     footnote: 'جميع الأرقام تقريبية وتُستخدم لأغراض توضيحية فقط.',
     vsPrevious: 'مقارنة بالفترة السابقة',
@@ -473,6 +476,7 @@ const en: HomeCopy = {
   },
   dashboard: {
     dateRange: '1 April — 25 May 2026',
+    objectiveLabel: 'Objective: Sales — campaigns are compared within one objective only',
     demoBadge: 'Illustrative preview with demo data',
     footnote: 'All figures are approximate and shown for illustration only.',
     vsPrevious: 'vs previous period',

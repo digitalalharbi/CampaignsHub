@@ -75,6 +75,10 @@ export function HeroDashboard({ c }: { c: HomeCopy }) {
         <span className="flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.05] px-2 py-1 text-[10px] text-white/60">
           <CalendarDays size={10} /> {d.dateRange}
         </span>
+        {/* Cost-per-result and ROAS only compare like with like — say which objective this is. */}
+        <span className="flex items-center gap-1 rounded-md bg-brand-500/15 px-2 py-1 text-[9.5px] font-semibold text-brand-200">
+          {d.objectiveLabel}
+        </span>
         <span className="ms-auto flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[9.5px] font-semibold text-warning">
           <Info size={10} /> {d.demoBadge}
         </span>

@@ -254,8 +254,14 @@ describe('PublicHomePage — inline paid-media services', () => {
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
     revealServices()
 
+    // Both surfaces depend on the same catalogue query, so a failure now offers a retry in the
+    // services selector AND in the homepage services section — scope to the selector's own region.
+    // Both surfaces depend on the same catalogue query, so a failure now offers a retry in the
+    // services selector AND in the homepage services section. Assert both messages and both retries
+    // exist — every failing surface must give the visitor a way to recover.
     expect(screen.getByText("Couldn't load services")).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument()
+    expect(screen.getByText('The services catalogue could not be loaded.')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /Retry/i }).length).toBeGreaterThanOrEqual(2)
     // Never fall back to a static/demo list.
     expect(screen.queryByText('New campaign')).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Popular' })).not.toBeInTheDocument()

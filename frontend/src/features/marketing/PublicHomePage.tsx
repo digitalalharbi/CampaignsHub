@@ -3,10 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Activity, ArrowLeft, ArrowRight, BarChart3, Bell, CheckCircle2, FileText, LayoutDashboard, LogIn,
-  Megaphone, MessageSquare, Moon, ShieldCheck, Sun, Target, UserCircle, Wallet,
+  Megaphone, Moon, ShieldCheck, Sun, Target, UserCircle, Wallet,
 } from 'lucide-react'
+import * as LucideIcons from 'lucide-react'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { HeroSection } from './HeroSection'
+import { usePaidMediaCatalog } from '@/features/paid-media/publicCatalog'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/stores/auth'
 import { getPublishedPage, type PublicPageKey } from '@/features/settings/publicPagesApi'
@@ -29,8 +31,19 @@ const PLATFORM_BAR: Record<string, string> = {
   'LinkedIn Ads': '#0A66C2',
 }
 
+/** Resolve a taxonomy icon name to its component; unknown names simply render nothing. */
+function ServiceCategoryIcon({ name, size = 18 }: { name?: string | null; size?: number }) {
+  if (!name) return <Megaphone size={size} />
+  const pascal = name.split(/[-_ ]/).filter(Boolean).map((p) => p[0].toUpperCase() + p.slice(1)).join('')
+  const Resolved = (LucideIcons as unknown as Record<string, unknown>)[pascal]
+  const isComponent =
+    typeof Resolved === 'function' || (typeof Resolved === 'object' && Resolved !== null && '$$typeof' in (Resolved as object))
+  if (!isComponent) return <Megaphone size={size} />
+  const Icon = Resolved as React.ComponentType<{ size?: number }>
+  return <Icon size={size} />
+}
+
 const FEATURE_ICONS = [LayoutDashboard, BarChart3, FileText, Wallet, Megaphone, Bell]
-const SERVICE_AREA_ICONS = [Megaphone, Target, Activity, BarChart3, FileText, MessageSquare]
 const ACCOUNT_ICONS = [LogIn, UserCircle]
 /** One icon per hero benefit, in the same order as `hero.points`. */
 const BENEFIT_ICONS = [Activity, BarChart3, Target, Bell]
@@ -57,6 +70,8 @@ export function PublicHomePage() {
   const cmsPage: PublicPageKey =
     portal === 'influencer' ? 'portal_influencer' : portal === 'client' ? 'portal_tracking' : portalParam === 'paid' ? 'portal_paid' : 'home'
   const authed = status === 'authenticated'
+  // The services section reads the tenant's real catalogue from the taxonomy engine.
+  const catalog = usePaidMediaCatalog()
 
   // Tenant-editable public content (System Settings → الواجهة الرئيسية والبوابات). Published copy wins over
   // the shipped defaults; a failed/absent fetch simply leaves the shipped copy in place (never a blank page).
@@ -190,29 +205,63 @@ export function PublicHomePage() {
       </section>
       )}
 
-      {/* Services — customer-facing service areas + a single request CTA */}
+      {/* Services — the REAL categories from the taxonomy engine, not an array in this bundle. Each one
+          links into its own catalogue page, and from there straight into the intake with the chosen
+          service pre-selected. A load failure says so and offers a retry; it never shows a stale list. */}
       {on('services') && (
       <section id="services" className="border-b border-border bg-surface-secondary">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{c.serviceAreas.title}</h2>
-              <p className="mt-2 max-w-2xl text-text-secondary">{c.serviceAreas.subtitle}</p>
+              <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{txt('services', 'title', c.serviceAreas.title)}</h2>
+              <p className="mt-2 max-w-2xl text-text-secondary">{txt('services', 'subtitle', c.serviceAreas.subtitle)}</p>
             </div>
-            <Link to="/requests/new"><Button variant="secondary" size="sm">{c.serviceAreas.cta}</Button></Link>
+            <div className="flex flex-wrap gap-2">
+              <Link to="/services"><Button variant="secondary" size="sm">{locale === 'ar' ? 'تصفّح كل الخدمات' : 'Browse all services'}</Button></Link>
+              <Link to="/requests/new"><Button size="sm">{c.serviceAreas.cta}</Button></Link>
+            </div>
           </div>
-          <div className="mt-7 grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {c.serviceAreas.items.map((s, i) => {
-              const Icon = SERVICE_AREA_ICONS[i] ?? Megaphone
-              return (
-                <div key={s.title} className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Icon size={18} /></span>
-                  <h3 className="mt-3 text-base font-bold text-text-primary">{s.title}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">{s.desc}</p>
-                </div>
-              )
-            })}
-          </div>
+
+          {catalog.isLoading && (
+            <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="h-28 animate-pulse rounded-2xl bg-surface" />)}
+            </div>
+          )}
+
+          {catalog.isError && (
+            <div role="alert" className="mt-7 flex flex-col items-start gap-3 rounded-2xl border border-danger/30 bg-[var(--negative-background)] p-5">
+              <p className="text-sm font-semibold text-danger">
+                {locale === 'ar' ? 'تعذّر تحميل قائمة الخدمات.' : 'The services catalogue could not be loaded.'}
+              </p>
+              <Button variant="secondary" size="sm" onClick={() => void catalog.refetch()}>
+                {locale === 'ar' ? 'إعادة المحاولة' : 'Retry'}
+              </Button>
+            </div>
+          )}
+
+          {!catalog.isLoading && !catalog.isError && (
+            <ul data-testid="home-service-categories" className="mt-7 grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {catalog.categories.map((cat) => {
+                const count = (catalog.data?.services ?? []).filter((s) => s.category_key === cat.key).length
+                return (
+                  <li key={cat.key} className="h-full">
+                    <Link
+                      to={`/services/${cat.key}`}
+                      className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5 transition-colors hover:border-brand-300 hover:bg-surface-hover"
+                    >
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600">
+                        <ServiceCategoryIcon name={cat.icon} />
+                      </span>
+                      <h3 className="mt-3 text-base font-bold text-text-primary">{locale === 'ar' ? cat.label_ar : cat.label_en}</h3>
+                      <p className="tnum mt-1.5 text-sm text-text-muted">
+                        {count} {locale === 'ar' ? 'خدمة' : 'services'}
+                      </p>
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </div>
       </section>
       )}

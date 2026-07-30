@@ -30,6 +30,7 @@ import { ProjectTeamPage } from '@/features/projects/ProjectTeamPage'
 import { SystemStatusPage } from '@/features/system/SystemStatusPage'
 import { PublicHomePage } from '@/features/marketing/PublicHomePage'
 import { PublicInfoPage } from '@/features/marketing/PublicInfoPage'
+import { PublicServicesPage } from '@/features/marketing/PublicServicesPage'
 import { RequestIntakePage } from '@/features/requests/RequestIntakePage'
 import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
 import { ClientPortalLoginPage } from '@/features/requests/portal/ClientPortalLoginPage'
@@ -83,6 +84,10 @@ export const router = createBrowserRouter([
   // content change, and an unknown slug renders a clear not-found state rather than a blank screen.
   ...['privacy', 'terms', 'data-processing', 'cookies', 'security', 'about', 'contact', 'support', 'faq']
     .map((slug) => ({ path: `/${slug}`, element: <PublicInfoPage /> })),
+
+  // Public services catalogue, read from the taxonomy engine (never a bundled array).
+  { path: '/services', element: <PublicServicesPage /> },
+  { path: '/services/:category', element: <PublicServicesPage /> },
   // External Client Portal (own cookie session; not the staff app). Each page guards itself: a 401 from the
   // portal endpoints redirects to /client/login. The section nav lives in PortalShell.
   { path: '/client/login', element: <ClientPortalLoginPage /> },
