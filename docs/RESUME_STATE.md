@@ -110,13 +110,13 @@ browser verification.
 ## Test results (at `fc90666`)
 | Suite | Result |
 |---|---|
-| Backend (PHPUnit) | **443 passed, 2585 assertions, 0 failed** |
+| Backend (PHPUnit) | **444 passed, 2612 assertions, 0 failed** (on a `migrate:fresh --seed` database) |
 | ↳ `PublicPageSettingsTest` | 6 passed, 33 assertions |
-| Frontend unit (vitest) | **226 passed, 47 files, 0 failed** |
+| Frontend unit (vitest) | **235 passed, 49 files, 0 failed** |
 | `tsc --noEmit` | clean |
 | `npm run build` | clean |
 | Pint (backend style) | clean |
-| Playwright E2E | **Chromium 70/70 · WebKit 62/62 · Firefox 61/62** — one moving campaign-spec flake, see PERF-CAMPAIGNS-001 |
+| Playwright E2E | **Chromium 70/70 · Firefox 62/62 · WebKit 62/62 — 0 failed** (requires the queue worker) |
 
 Matrix status counts: 35 VERIFIED · 4 IMPLEMENTED_NOT_VERIFIED (awaiting a browser re-run) ·
 4 PARTIAL · 6 NOT_STARTED · 6 BLOCKED_EXTERNAL_CREDENTIALS. REPORT-SCHEDULING is no longer BLOCKED_NO_API.
