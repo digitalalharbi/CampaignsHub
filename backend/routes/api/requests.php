@@ -65,6 +65,11 @@ Route::prefix('client')->name('client.')->group(function (): void {
     Route::get('/spaces', [ClientPortalController::class, 'spaces'])->name('spaces.index')
         ->middleware('throttle:120,1');
 
+    // AGENCY-005: the agency's brand as THIS client's space should show it. The space comes from the
+    // session, never from a parameter.
+    Route::get('/branding', [ClientPortalController::class, 'branding'])->name('branding.show')
+        ->middleware('throttle:120,1');
+
     Route::get('/requests', [ClientPortalController::class, 'index'])->name('requests.index')
         ->middleware('throttle:120,1');
     Route::get('/requests/{reference}', [ClientPortalController::class, 'show'])->name('requests.show')

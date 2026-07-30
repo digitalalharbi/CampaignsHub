@@ -9,6 +9,10 @@ use App\Domains\Billing\Models\Payment;
 use App\Domains\Billing\Models\Quote;
 use App\Domains\Billing\Providers\PaymentProviderRegistry;
 use App\Domains\Billing\Services\BillingService;
+use App\Domains\Branding\BrandingSpec;
+use App\Domains\Branding\Models\BrandingAsset;
+use App\Domains\Branding\Models\BrandingSetting;
+use App\Domains\Branding\Services\BrandingService;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Drive\Models\DriveFile;
@@ -958,6 +962,45 @@ final class ClientPortalController
 
             return (string) $space->getKey();
         })();
+    }
+
+    /**
+     * GET /client/branding — the agency's brand, as this client's space should show it (AGENCY-005).
+     *
+     * The space is resolved from the caller's OWN session, never from a parameter: asking for another
+     * agency's branding is not expressible here, let alone permitted. With no space selected the
+     * tenant's own brand answers, which is the correct fallback for the merged view.
+     *
+     * `white_label_requested` is named for what it is — a stored preference. Whether an agency MAY
+     * hide the platform's name is a subscription question decided elsewhere, and a field called
+     * `white_label` would read as an entitlement this endpoint is in no position to grant.
+     */
+    public function branding(Request $request): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+
+        $spaceId = $this->selectedSpaceId($token);
+        $scope = $spaceId === null ? 'tenant' : 'client';
+
+        $assets = app(BrandingService::class)->resolve($scope, $spaceId, BrandingSpec::THEME_ANY);
+        $settings = BrandingSetting::query()
+            ->where('scope', $scope)
+            ->where('scope_id', $spaceId)
+            ->first();
+
+        $space = $spaceId === null ? null : ClientWorkspace::query()->whereKey($spaceId)->first();
+
+        return response()->json(['data' => [
+            'space' => $space === null ? null : ['name' => $space->name, 'slug' => $space->slug],
+            'colors' => $settings?->colors ?? [],
+            'fonts' => $settings?->fonts ?? [],
+            'white_label_requested' => (bool) ($settings?->white_label ?? false),
+            'logos' => collect($assets)->map(fn (BrandingAsset $a, string $kind) => [
+                'kind' => $kind,
+                'url' => route('api.v1.branding.assets.file', ['brandingAsset' => $a->getKey()]),
+            ])->values()->all(),
+        ]]);
     }
 
     /**

@@ -48,3 +48,21 @@ export interface ClientSpace {
 export function fetchClientSpaces(): Promise<ClientSpace[]> {
   return getData<{ spaces: ClientSpace[] }>('/client/spaces').then((d) => d.spaces)
 }
+
+export interface ClientBranding {
+  space: { name: string; slug: string } | null
+  /** Brand colours as CSS values. Empty when the agency has set none — the default palette stands. */
+  colors: Record<string, string>
+  fonts: Record<string, string>
+  /**
+   * A stored PREFERENCE, not a capability. Whether an agency may hide the platform's name is a
+   * subscription question decided elsewhere, so the field is named for what it actually is.
+   */
+  white_label_requested: boolean
+  logos: { kind: string; url: string }[]
+}
+
+/** The agency's brand as THIS space should show it. The space comes from the session, not a parameter. */
+export function fetchClientBranding(): Promise<ClientBranding> {
+  return getData<ClientBranding>('/client/branding')
+}
