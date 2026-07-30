@@ -41,7 +41,7 @@ final class WorkspaceInvitationTest extends TestCase
         $this->memberRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Analyst', 'slug' => 'analyst']);
         $this->memberRole->givePermissionTo('campaigns.view', 'reports.view');
 
-        $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'o@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
+        $this->owner = User::create(['name' => 'Owner', 'email' => 'o@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
         $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($ownerRole);
     }
@@ -73,7 +73,9 @@ final class WorkspaceInvitationTest extends TestCase
             ->assertCreated()->assertJsonPath('data.user.role_slug', 'analyst');
 
         $member = User::where('email', 'member@a.test')->firstOrFail();
-        $this->assertSame($this->tenant->id, $member->tenant_id);       // joined the EXISTING tenant
+        // Joined the EXISTING workspace — asserted through the membership, since that is now the
+        // only record of where someone belongs.
+        $this->assertTrue($member->memberships()->where('tenant_id', $this->tenant->id)->exists());
         $this->assertNotNull($member->email_verified_at);               // verified by accepting the link
         $this->assertSame(1, Tenant::count());                          // NO new workspace was created
         $this->assertDatabaseHas('workspace_invitations', ['email' => 'member@a.test', 'accepted_user_id' => $member->id]);
@@ -140,7 +142,7 @@ final class WorkspaceInvitationTest extends TestCase
     {
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'NoInvite', 'slug' => 'noinvite']);
         $role->givePermissionTo('campaigns.view');
-        $u = User::create(['tenant_id' => $this->tenant->id, 'name' => 'X', 'email' => 'x@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
+        $u = User::create(['name' => 'X', 'email' => 'x@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
         $this->grantMembership($u, $this->tenant);
         $u->assignRole($role);
 

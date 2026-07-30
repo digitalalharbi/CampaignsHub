@@ -54,7 +54,7 @@ final class PlatformConsoleTest extends TestCase
             'name' => 'Platform Owner', 'email' => 'owner@platform.test',
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
-        $user->forceFill(['is_platform_admin' => true, 'tenant_id' => null])->save();
+        $user->forceFill(['is_platform_admin' => true])->save();
 
         return $user;
     }
@@ -63,7 +63,7 @@ final class PlatformConsoleTest extends TestCase
     private function tenantAdmin(Tenant $tenant): User
     {
         $user = User::create([
-            'tenant_id' => $tenant->id, 'name' => 'Tenant Admin', 'email' => 'admin@tenant.test',
+            'name' => 'Tenant Admin', 'email' => 'admin@tenant.test',
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
 

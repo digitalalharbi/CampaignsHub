@@ -35,7 +35,7 @@ final class AIBYOKTest extends TestCase
         app(TenantContext::class)->setTenantId($this->tenant->id);
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
-        $this->user = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
+        $this->user = User::create(['name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
         $this->grantMembership($this->user, $this->tenant);
         $this->user->assignRole($role);
     }
@@ -104,7 +104,7 @@ final class AIBYOKTest extends TestCase
 
     public function test_storing_a_key_requires_ai_manage_permission(): void
     {
-        $viewer = User::create(['tenant_id' => $this->tenant->id, 'name' => 'V', 'email' => 'v@agency.test', 'password' => 'secret123']);
+        $viewer = User::create(['name' => 'V', 'email' => 'v@agency.test', 'password' => 'secret123']);
         $this->grantMembership($viewer, $this->tenant);
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Viewer', 'slug' => 'viewer']);
         $role->givePermissionTo('ai.view');

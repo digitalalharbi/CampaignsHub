@@ -42,7 +42,7 @@ final class MembershipGrantTest extends TestCase
     private function bareUser(Tenant $tenant, string $email): User
     {
         return User::create([
-            'tenant_id' => $tenant->id, 'name' => 'U', 'email' => $email,
+            'name' => 'U', 'email' => $email,
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
     }
@@ -85,19 +85,38 @@ final class MembershipGrantTest extends TestCase
         $this->assertSame('agency', $agencyTenant->account_type);
     }
 
-    /** And the legacy column is equally powerless to decide a portal. */
-    public function test_the_portal_is_not_derived_from_the_user_tenant_column(): void
+    /**
+     * A grant in one tenant says nothing about another.
+     *
+     * This test used to prove that `users.tenant_id` could not decide a portal. The column was
+     * dropped in `2026_07_31_090000_grant_memberships_then_drop_users_tenant_id`, so that claim is
+     * now vacuous — but the property it was really protecting is not: a person may hold different
+     * portals in different tenants, and granting one must not disturb or redefine the other.
+     */
+    public function test_a_grant_in_one_tenant_leaves_another_untouched(): void
     {
         $a = $this->tenant('Column A', 'agency');
         $b = $this->tenant('Column B', 'brand');
         $user = $this->bareUser($a, 'column@test.dev');
 
-        $membership = app(GrantMembership::class)->execute(new MembershipGrant(
+        $first = app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $user, tenant: $a, portal: Portal::Agency, role: 'member',
+        ));
+
+        $second = app(GrantMembership::class)->execute(new MembershipGrant(
             user: $user, tenant: $b, portal: Portal::ClientPortal, role: 'client_viewer',
         ));
 
-        $this->assertSame((string) $b->id, (string) $membership->tenant_id);
-        $this->assertSame((string) $a->id, (string) $user->tenant_id, 'the legacy column is untouched and unused');
+        $this->assertSame((string) $b->id, (string) $second->tenant_id);
+        $this->assertSame(Portal::ClientPortal, $second->portal);
+
+        // A is exactly as it was — same portal, same role, and still their default, because the
+        // first grant a person receives is where they land and later ones do not steal it.
+        $first->refresh();
+        $this->assertSame(Portal::Agency, $first->portal);
+        $this->assertTrue($first->is_default);
+        $this->assertFalse($second->refresh()->is_default);
+        $this->assertSame(2, $user->memberships()->count());
     }
 
     /**

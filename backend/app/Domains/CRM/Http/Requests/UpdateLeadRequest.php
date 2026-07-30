@@ -6,6 +6,7 @@ namespace App\Domains\CRM\Http\Requests;
 
 use App\Domains\CRM\Enums\LeadSource;
 use App\Domains\CRM\Enums\LeadStatus;
+use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -28,8 +29,8 @@ final class UpdateLeadRequest extends FormRequest
             'estimated_value' => ['sometimes', 'numeric', 'min:0'],
             'currency' => ['sometimes', 'string', 'size:3'],
             'notes' => ['nullable', 'string'],
-            'company_id' => ['nullable', 'uuid', Rule::exists('companies', 'id')->where('tenant_id', $this->user()?->tenant_id)],
-            'contact_id' => ['nullable', 'uuid', Rule::exists('contacts', 'id')->where('tenant_id', $this->user()?->tenant_id)],
+            'company_id' => ['nullable', 'uuid', Rule::exists('companies', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
+            'contact_id' => ['nullable', 'uuid', Rule::exists('contacts', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
             'owner_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
             'tags' => ['nullable', 'array'],
             'tags.*' => ['string', 'max:40'],

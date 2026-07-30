@@ -62,7 +62,7 @@ final class MilestoneAcceptanceTest extends TestCase
         Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Analyst', 'slug' => 'analyst'])
             ->givePermissionTo('campaigns.view', 'reports.view');
 
-        $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'o@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
+        $this->owner = User::create(['name' => 'Owner', 'email' => 'o@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
         $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($ownerRole);
     }
@@ -70,7 +70,7 @@ final class MilestoneAcceptanceTest extends TestCase
     public function test_full_milestone_acceptance_flow(): void
     {
         // 1) SUSPENDED USER BLOCKED — a disabled user cannot log in, with a non-revealing message.
-        $suspended = User::create(['tenant_id' => $this->tenant->id, 'name' => 'S', 'email' => 's@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
+        $suspended = User::create(['name' => 'S', 'email' => 's@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
         $this->grantMembership($suspended, $this->tenant);
         $suspended->forceFill(['disabled_at' => now()])->save();
         $this->withHeaders($this->spa)->postJson('/api/v1/auth/login', ['email' => 's@a.test', 'password' => 'secret1234'])
@@ -89,7 +89,8 @@ final class MilestoneAcceptanceTest extends TestCase
         $this->postJson('/api/v1/invitations/accept', ['token' => $token, 'name' => 'New Member', 'password' => 'secret1234'])
             ->assertCreated()->assertJsonPath('data.user.role_slug', 'analyst');
         $member = User::where('email', 'member@a.test')->firstOrFail();
-        $this->assertSame($this->tenant->id, $member->tenant_id); // joined existing tenant, no new workspace
+        // Joined the existing workspace, no new one — read from the membership (ADR 0002).
+        $this->assertTrue($member->memberships()->where('tenant_id', $this->tenant->id)->exists());
         $this->assertSame(1, Tenant::where('slug', 'agency')->count());
 
         // The accept endpoint logs the new member into the web/session guard; clear that resolved state and
@@ -164,7 +165,7 @@ final class MilestoneAcceptanceTest extends TestCase
 
         $role = Role::create(['tenant_id' => $company->id, 'name' => 'Owner', 'slug' => 'tenant-owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
-        $user = User::create(['tenant_id' => $company->id, 'name' => 'B', 'email' => 'b@brand.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
+        $user = User::create(['name' => 'B', 'email' => 'b@brand.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
         $this->grantMembership($user, $company);
         $user->assignRole($role);
 

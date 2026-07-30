@@ -30,7 +30,7 @@ final class SuspendedAccountTest extends TestCase
     private function user(array $over = []): User
     {
         $user = User::create([
-            'tenant_id' => $this->tenant->id, 'name' => 'U', 'email' => 'u@a.test',
+            'name' => 'U', 'email' => 'u@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
         $this->grantMembership($user, $this->tenant);

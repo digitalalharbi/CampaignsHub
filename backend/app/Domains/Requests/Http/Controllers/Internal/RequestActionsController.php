@@ -47,7 +47,7 @@ final class RequestActionsController
         $assigneeId = $data['assignee_id'] ?? null;
         if ($assigneeId !== null) {
             // The assignee MUST belong to the same tenant — never assign outside the org.
-            $ok = User::where('id', $assigneeId)->where('tenant_id', $this->tenant->tenantId())->exists();
+            $ok = User::query()->whereKey($assigneeId)->inTenant($this->tenant->tenantId())->exists();
             abort_unless($ok, 422, 'Assignee must be a member of this workspace.');
         }
 

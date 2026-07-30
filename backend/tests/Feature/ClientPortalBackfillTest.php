@@ -230,7 +230,7 @@ final class ClientPortalBackfillTest extends TestCase
     {
         $space = $this->space('Acme');
         $staff = User::create([
-            'tenant_id' => $this->agency->id, 'name' => 'Employee', 'email' => 'staff@agency.test',
+            'name' => 'Employee', 'email' => 'staff@agency.test',
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
         app(GrantMembership::class)->execute(new MembershipGrant(

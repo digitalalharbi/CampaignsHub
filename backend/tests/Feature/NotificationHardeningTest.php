@@ -32,7 +32,7 @@ final class NotificationHardeningTest extends TestCase
         // Scope dies with the request since ADR 0002; this test creates rows directly
         // between requests, so it holds its tenant for the whole test.
         $this->holdingTenant((string) $this->tenant->id);
-        $this->user = User::create(['tenant_id' => $this->tenant->id, 'name' => 'U', 'email' => 'u@a.test', 'password' => 'secret123']);
+        $this->user = User::create(['name' => 'U', 'email' => 'u@a.test', 'password' => 'secret123']);
         $this->grantMembership($this->user, $this->tenant);
         $this->dispatcher = app(NotificationDispatcher::class);
     }
@@ -119,7 +119,7 @@ final class NotificationHardeningTest extends TestCase
     public function test_deliveries_are_isolated_per_user(): void
     {
         $this->dispatcher->dispatch($this->payload());
-        $other = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $other = User::create(['name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
         $this->grantMembership($other, $this->tenant);
         $this->actingAs($other, 'sanctum')->getJson('/api/v1/notifications/deliveries')
             ->assertOk()->assertJsonCount(0, 'data');

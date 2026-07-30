@@ -30,17 +30,19 @@ final class CampaignTest extends TestCase
 
     private Project $projectB;
 
+    private Tenant $tenant;
+
     protected function setUp(): void
     {
         parent::setUp();
         $this->seed(PermissionSeeder::class);
 
-        $tenant = Tenant::create(['name' => 'Agency', 'slug' => 'agency', 'status' => 'active']);
+        $this->tenant = $tenant = Tenant::create(['name' => 'Agency', 'slug' => 'agency', 'status' => 'active']);
         app(TenantContext::class)->setTenantId($tenant->id);
 
         $owner = Role::create(['tenant_id' => $tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $owner->givePermissionTo(...Permission::pluck('key')->all());
-        $this->owner = User::create(['tenant_id' => $tenant->id, 'name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
+        $this->owner = User::create(['name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
         $this->grantMembership($this->owner, $tenant);
         $this->owner->assignRole($owner);
 
@@ -275,11 +277,11 @@ final class CampaignTest extends TestCase
 
     private function viewerUser(): User
     {
-        app(TenantContext::class)->setTenantId($this->owner->tenant_id);
-        $role = Role::create(['tenant_id' => $this->owner->tenant_id, 'name' => 'Analyst', 'slug' => 'analyst']);
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Analyst', 'slug' => 'analyst']);
         $role->givePermissionTo('campaigns.view', 'projects.view', 'projects.view.all', 'integrations.view');
-        $user = User::create(['tenant_id' => $this->owner->tenant_id, 'name' => 'A', 'email' => 'a@agency.test', 'password' => 'secret123']);
-        $this->grantMembership($user, Tenant::findOrFail($this->owner->tenant_id));
+        $user = User::create(['name' => 'A', 'email' => 'a@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($user, Tenant::findOrFail($this->tenant->id));
         $user->assignRole($role);
         app(TenantContext::class)->forget();
 

@@ -12,7 +12,10 @@ use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportSchedule;
 use App\Domains\Reports\Services\ScheduledReportDispatcher;
+use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\DTOs\MembershipGrant;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -41,7 +44,12 @@ final class ScheduledReportsTest extends TestCase
         app(TenantContext::class)->setTenantId($this->tenant->id);
         $client = ClientWorkspace::create(['tenant_id' => $this->tenant->id, 'name' => 'C', 'slug' => 'c-'.uniqid(), 'mode' => 'managed', 'status' => 'active', 'client_status' => 'active']);
         $this->project = Project::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $client->id, 'name' => 'P', 'status' => 'active']);
-        User::create(['tenant_id' => $this->tenant->id, 'name' => 'Staff', 'email' => 'staff@a.test', 'password' => Hash::make('secret1234')]);
+        // Internal recipients are those with a MEMBERSHIP in the workspace (ADR 0002). Creating the
+        // user is no longer enough to make them one, which is the point of the change.
+        $staff = User::create(['name' => 'Staff', 'email' => 'staff@a.test', 'password' => Hash::make('secret1234')]);
+        app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $staff, tenant: $this->tenant, portal: Portal::App, role: 'member',
+        ));
     }
 
     private function schedule(array $over = []): ReportSchedule
@@ -120,7 +128,7 @@ final class ScheduledReportsTest extends TestCase
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner-'.uniqid()]);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $user = User::create([
-            'tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o-'.uniqid().'@a.test',
+            'name' => 'O', 'email' => 'o-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
         $this->grantMembership($user, $this->tenant);
@@ -197,7 +205,7 @@ final class ScheduledReportsTest extends TestCase
     {
         $this->seed(PermissionSeeder::class);
         $viewer = User::create([
-            'tenant_id' => $this->tenant->id, 'name' => 'V', 'email' => 'v-'.uniqid().'@a.test',
+            'name' => 'V', 'email' => 'v-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
         $this->grantMembership($viewer, $this->tenant);

@@ -112,7 +112,7 @@ final class ClientTeamService
 
     private function assertSameTenant(int $userId): void
     {
-        $ok = User::where('id', $userId)->where('tenant_id', (string) $this->tenant->tenantId())->exists();
+        $ok = User::query()->whereKey($userId)->inTenant((string) $this->tenant->tenantId())->exists();
         if (! $ok) {
             throw ValidationException::withMessages(['user_id' => 'User must belong to this workspace.']);
         }

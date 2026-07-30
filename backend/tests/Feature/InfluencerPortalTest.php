@@ -84,7 +84,7 @@ final class InfluencerPortalTest extends TestCase
     private function operator(string $email, array $permissions, ?array $clientScope = null, Portal $portal = Portal::Influencers): User
     {
         $user = User::create([
-            'tenant_id' => $this->agency->id, 'name' => 'Op', 'email' => $email,
+            'name' => 'Op', 'email' => $email,
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
 

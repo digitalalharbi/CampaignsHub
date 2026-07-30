@@ -26,15 +26,17 @@ final class ProjectManagementTest extends TestCase
 
     private ClientWorkspace $workspace;
 
+    private Tenant $tenant;
+
     protected function setUp(): void
     {
         parent::setUp();
         $this->seed(PermissionSeeder::class);
-        $tenant = Tenant::create(['name' => 'Agency', 'slug' => 'agency', 'status' => 'active']);
+        $this->tenant = $tenant = Tenant::create(['name' => 'Agency', 'slug' => 'agency', 'status' => 'active']);
         app(TenantContext::class)->setTenantId($tenant->id);
         $role = Role::create(['tenant_id' => $tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
-        $this->user = User::create(['tenant_id' => $tenant->id, 'name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
+        $this->user = User::create(['name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
         $this->grantMembership($this->user, $tenant);
         $this->user->assignRole($role);
         $this->workspace = ClientWorkspace::create(['name' => 'Client', 'slug' => 'client', 'mode' => 'managed']);
@@ -73,8 +75,8 @@ final class ProjectManagementTest extends TestCase
     public function test_team_membership_and_last_admin_protection(): void
     {
         $project = $this->makeProject();
-        $member = User::create(['tenant_id' => $this->user->tenant_id, 'name' => 'M', 'email' => 'm@agency.test', 'password' => 'secret123']);
-        $this->grantMembership($member, Tenant::findOrFail($this->user->tenant_id));
+        $member = User::create(['name' => 'M', 'email' => 'm@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($member, Tenant::findOrFail($this->tenant->id));
 
         $membershipId = $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$project->id}/team", [
             'user_id' => $member->id, 'role' => 'account_manager',
@@ -91,10 +93,10 @@ final class ProjectManagementTest extends TestCase
     public function test_update_member_role_and_block_demoting_last_admin(): void
     {
         $project = $this->makeProject();
-        $admin = User::create(['tenant_id' => $this->user->tenant_id, 'name' => 'A', 'email' => 'a@agency.test', 'password' => 'secret123']);
-        $this->grantMembership($admin, Tenant::findOrFail($this->user->tenant_id));
-        $member = User::create(['tenant_id' => $this->user->tenant_id, 'name' => 'M', 'email' => 'm@agency.test', 'password' => 'secret123']);
-        $this->grantMembership($member, Tenant::findOrFail($this->user->tenant_id));
+        $admin = User::create(['name' => 'A', 'email' => 'a@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($admin, Tenant::findOrFail($this->tenant->id));
+        $member = User::create(['name' => 'M', 'email' => 'm@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($member, Tenant::findOrFail($this->tenant->id));
 
         $adminId = $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$project->id}/team", ['user_id' => $admin->id, 'role' => 'account_manager'])->json('data.id');
         $memberId = $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$project->id}/team", ['user_id' => $member->id, 'role' => 'analyst'])->json('data.id');
@@ -112,7 +114,7 @@ final class ProjectManagementTest extends TestCase
     public function test_project_overview_returns_real_counts_and_not_available_markers(): void
     {
         $project = $this->makeProject();
-        app(TenantContext::class)->setTenantId($this->user->tenant_id);
+        app(TenantContext::class)->setTenantId($this->tenant->id);
         app(ProjectContext::class)->setProjectId($project->id);
         Task::create(['title' => 'T1', 'created_by' => $this->user->id]);
         app(ProjectContext::class)->forget();
@@ -131,7 +133,7 @@ final class ProjectManagementTest extends TestCase
         $b = $this->makeProject('Project B');
 
         // Tasks + notifications scoped to each project (tenant + project context both set).
-        app(TenantContext::class)->setTenantId($this->user->tenant_id);
+        app(TenantContext::class)->setTenantId($this->tenant->id);
         app(ProjectContext::class)->setProjectId($a->id);
         Task::create(['title' => 'Task A', 'created_by' => $this->user->id]);
         AppNotification::create(['user_id' => $this->user->id, 'project_id' => $a->id, 'type' => 't', 'title' => 'Notif A']);
@@ -156,7 +158,7 @@ final class ProjectManagementTest extends TestCase
 
     private function makeProject(string $name = 'P'): Project
     {
-        app(TenantContext::class)->setTenantId($this->user->tenant_id);
+        app(TenantContext::class)->setTenantId($this->tenant->id);
         $p = Project::create(['client_workspace_id' => $this->workspace->id, 'name' => $name, 'status' => 'active']);
         app(TenantContext::class)->forget();
 

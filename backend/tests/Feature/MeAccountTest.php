@@ -30,7 +30,7 @@ final class MeAccountTest extends TestCase
         $role = Role::create(['tenant_id' => $tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $this->user = User::create([
-            'tenant_id' => $tenant->id, 'name' => 'Sara Ali', 'email' => 'sara@demo.test',
+            'name' => 'Sara Ali', 'email' => 'sara@demo.test',
             'password' => 'secret123',
         ]);
         $this->grantMembership($this->user, $tenant);

@@ -724,7 +724,6 @@ final class TaxonomyEngineSeeder extends Seeder
         return TaxonomyOption::updateOrCreate(
             [
                 'taxonomy_definition_id' => $definition->getKey(),
-                'tenant_id' => null,
                 'key' => $option['key'],
             ],
             [

@@ -106,7 +106,7 @@ final class InvitationService
             }
 
             $user = User::create([
-                'tenant_id' => $inv->tenant_id, // joins the EXISTING workspace — no new tenant
+                // joins the EXISTING workspace — no new tenant
                 'name' => $name,
                 'email' => $inv->email,
                 'password' => Hash::make($password),

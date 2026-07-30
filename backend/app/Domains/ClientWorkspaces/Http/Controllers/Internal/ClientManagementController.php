@@ -114,7 +114,7 @@ final class ClientManagementController
 
     private function assertSameTenantUser(int $userId): void
     {
-        $ok = User::where('id', $userId)->where('tenant_id', (string) $this->tenant->tenantId())->exists();
+        $ok = User::query()->whereKey($userId)->inTenant((string) $this->tenant->tenantId())->exists();
         if (! $ok) {
             throw ValidationException::withMessages(['owner_id' => 'Owner must be a user in this workspace.']);
         }

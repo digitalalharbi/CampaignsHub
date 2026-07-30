@@ -29,7 +29,11 @@ final class ReportDeliveryAudienceGuard
 
         // Internal reports may only reach internal team members of the SAME tenant.
         $internal = User::query()
-            ->where('tenant_id', $report->tenant_id)
+            // Internal = holds an active membership in this workspace (ADR 0002). Was
+            // `users.tenant_id`, which marked a person internal to exactly one tenant — so a
+            // consultant with two memberships read as external to one of them and their internal
+            // report was suppressed.
+            ->whereHas('memberships', fn ($q) => $q->where('tenant_id', $report->tenant_id)->where('status', 'active'))
             ->whereIn('email', $recipientEmails)
             ->pluck('email')
             ->map(fn ($e) => strtolower((string) $e))

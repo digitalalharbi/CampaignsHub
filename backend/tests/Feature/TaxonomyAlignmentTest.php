@@ -56,7 +56,7 @@ final class TaxonomyAlignmentTest extends TestCase
 
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
-        $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->owner = User::create(['name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
         $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($role);
 

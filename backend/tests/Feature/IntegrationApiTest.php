@@ -28,7 +28,7 @@ final class IntegrationApiTest extends TestCase
         app(TenantContext::class)->setTenantId($tenant->id);
         $role = Role::create(['tenant_id' => $tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
-        $this->user = User::create(['tenant_id' => $tenant->id, 'name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
+        $this->user = User::create(['name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
         $this->grantMembership($this->user, $tenant);
         $this->user->assignRole($role);
     }

@@ -74,7 +74,7 @@ final class AgencyDashboardTest extends TestCase
     private function operator(string $email, array $permissions, ?array $clientScope = null): User
     {
         $user = User::create([
-            'tenant_id' => $this->agency->id, 'name' => 'Op', 'email' => $email,
+            'name' => 'Op', 'email' => $email,
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
 
@@ -164,7 +164,7 @@ final class AgencyDashboardTest extends TestCase
     public function test_an_advertiser_membership_cannot_reach_the_agency_dashboard(): void
     {
         $user = User::create([
-            'tenant_id' => $this->agency->id, 'name' => 'Adv', 'email' => 'adv@test.dev',
+            'name' => 'Adv', 'email' => 'adv@test.dev',
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
         $role = Role::create(['tenant_id' => $this->agency->id, 'name' => 'R', 'slug' => 'adv-'.uniqid()]);

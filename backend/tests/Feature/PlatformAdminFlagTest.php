@@ -53,7 +53,7 @@ final class PlatformAdminFlagTest extends TestCase
         $tenant = $this->tenant();
 
         $created = User::create([
-            'tenant_id' => $tenant->id, 'name' => 'Sneaky', 'email' => 'sneaky@test.dev',
+            'name' => 'Sneaky', 'email' => 'sneaky@test.dev',
             'password' => 'secret123', 'is_platform_admin' => true,
         ]);
 
@@ -85,7 +85,7 @@ final class PlatformAdminFlagTest extends TestCase
         $tenant = $this->tenant();
 
         $user = User::create([
-            'tenant_id' => $tenant->id, 'name' => 'Everything', 'email' => 'everything@test.dev',
+            'name' => 'Everything', 'email' => 'everything@test.dev',
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
 
@@ -123,7 +123,7 @@ final class PlatformAdminFlagTest extends TestCase
     {
         $tenant = $this->tenant();
         $user = User::create([
-            'tenant_id' => $tenant->id, 'name' => 'Self', 'email' => 'self@test.dev',
+            'name' => 'Self', 'email' => 'self@test.dev',
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
         app(GrantMembership::class)->execute(new MembershipGrant(

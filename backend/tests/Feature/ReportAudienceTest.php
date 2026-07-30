@@ -42,7 +42,7 @@ final class ReportAudienceTest extends TestCase
         $this->holdingTenant((string) $this->tenant->id);
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'slug' => 'o']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
-        $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->owner = User::create(['name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
         $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($role);
         $ws = ClientWorkspace::create(['name' => 'C', 'slug' => 'c', 'mode' => 'managed']);

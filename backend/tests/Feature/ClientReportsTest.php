@@ -42,10 +42,10 @@ final class ClientReportsTest extends TestCase
         $limitedRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Ltd', 'slug' => 'ltd']);
         $limitedRole->givePermissionTo('clients.view', 'clients.view_all');
 
-        $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->owner = User::create(['name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
         $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($ownerRole);
-        $this->limited = User::create(['tenant_id' => $this->tenant->id, 'name' => 'L', 'email' => 'l@a.test', 'password' => 'secret123']);
+        $this->limited = User::create(['name' => 'L', 'email' => 'l@a.test', 'password' => 'secret123']);
         $this->grantMembership($this->limited, $this->tenant);
         $this->limited->assignRole($limitedRole);
     }

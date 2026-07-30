@@ -65,7 +65,7 @@ final class SubscriptionTest extends TestCase
         $role = Role::create(['tenant_id' => $tenant->id, 'name' => 'Owner', 'slug' => 'owner-'.uniqid()]);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $user = User::create([
-            'tenant_id' => $tenant->id, 'name' => 'O', 'email' => 'o-'.uniqid().'@a.test',
+            'name' => 'O', 'email' => 'o-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
         $this->grantMembership($user, $tenant);
@@ -197,7 +197,7 @@ final class SubscriptionTest extends TestCase
         $role = Role::create(['tenant_id' => $tenant->id, 'name' => 'Viewer', 'slug' => 'viewer']);
         $role->givePermissionTo('subscriptions.view'); // view but NOT manage
         $viewer = User::create([
-            'tenant_id' => $tenant->id, 'name' => 'V', 'email' => 'v@c.test',
+            'name' => 'V', 'email' => 'v@c.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
         $this->grantMembership($viewer, $tenant);

@@ -63,7 +63,7 @@ final class PortalIdentityConflictTest extends TestCase
             'name' => 'Owner', 'email' => 'owner@platform.test',
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
-        $user->forceFill(['is_platform_admin' => true, 'tenant_id' => null])->save();
+        $user->forceFill(['is_platform_admin' => true])->save();
 
         return $this->owner = $user;
     }
@@ -81,7 +81,7 @@ final class PortalIdentityConflictTest extends TestCase
     private function staffAlsoAContact(string $email, ClientWorkspace $space): User
     {
         $staff = User::create([
-            'tenant_id' => $this->agency->id, 'name' => 'Both Hats', 'email' => $email,
+            'name' => 'Both Hats', 'email' => $email,
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
         app(GrantMembership::class)->execute(new MembershipGrant(
@@ -283,7 +283,7 @@ final class PortalIdentityConflictTest extends TestCase
     public function test_the_register_is_closed_to_everyone_but_the_platform_owner(): void
     {
         $tenantUser = User::create([
-            'tenant_id' => $this->agency->id, 'name' => 'Staff', 'email' => 'staff@agency.test',
+            'name' => 'Staff', 'email' => 'staff@agency.test',
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
 

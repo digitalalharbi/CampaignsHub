@@ -34,7 +34,7 @@ final class PlatformBillingTest extends TestCase
             'name' => 'Owner', 'email' => 'owner@platform.test',
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
-        $user->forceFill(['is_platform_admin' => true, 'tenant_id' => null])->save();
+        $user->forceFill(['is_platform_admin' => true])->save();
 
         return $user;
     }
@@ -199,7 +199,7 @@ final class PlatformBillingTest extends TestCase
     {
         $tenant = $this->tenant('Outsider Co');
         $user = User::create([
-            'tenant_id' => $tenant->id, 'name' => 'Outsider', 'email' => 'outsider@test.dev',
+            'name' => 'Outsider', 'email' => 'outsider@test.dev',
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
 

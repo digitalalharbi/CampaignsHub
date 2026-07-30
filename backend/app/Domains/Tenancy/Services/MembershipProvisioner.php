@@ -93,20 +93,17 @@ final class MembershipProvisioner
     }
 
     /**
-     * The membership implied by the user's own workspace — used by seeders and by any legacy path
-     * that still creates a user straight from `users.tenant_id`.
+     * The membership for a workspace the caller NAMES.
+     *
+     * Took its tenant from `users.tenant_id` until that column was removed (ADR 0002). That was the
+     * last app-code reader of it, and the reason it had to go: the column describes at most one
+     * workspace while a user may hold memberships in several, so it silently answered "which
+     * tenant?" with whichever one happened to be stamped at registration.
+     *
+     * The caller now says which tenant, because the caller is the only one that knows.
      */
-    public function ensureForOwnWorkspace(User $user, string $role = 'member'): ?Membership
+    public function ensureForWorkspace(User $user, Tenant $tenant, string $role = 'member'): Membership
     {
-        if ($user->tenant_id === null) {
-            return null;
-        }
-
-        $tenant = Tenant::find($user->tenant_id);
-        if ($tenant === null) {
-            return null;
-        }
-
         return $this->ensure($user, $tenant, Portal::forAccountType($tenant->account_type), $role);
     }
 

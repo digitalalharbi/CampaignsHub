@@ -46,7 +46,6 @@ trait GrantsMemberships
         string $role = 'member',
     ): User {
         $user = User::create([
-            'tenant_id' => $tenant->id,
             'name' => 'Test User',
             'email' => $email,
             'password' => 'secret123',

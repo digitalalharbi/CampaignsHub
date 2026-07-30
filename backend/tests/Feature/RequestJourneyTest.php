@@ -39,7 +39,7 @@ final class RequestJourneyTest extends TestCase
 
         $ownerRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $ownerRole->givePermissionTo(...Permission::pluck('key')->all());
-        $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'owner@agency.test', 'password' => 'secret123']);
+        $this->owner = User::create(['name' => 'Owner', 'email' => 'owner@agency.test', 'password' => 'secret123']);
         $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($ownerRole);
     }

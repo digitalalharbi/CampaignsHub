@@ -95,7 +95,7 @@ final class CreatorPortalTest extends TestCase
     private function operator(string $email, array $permissions): User
     {
         $user = User::create([
-            'tenant_id' => $this->agency->id, 'name' => 'Op', 'email' => $email,
+            'name' => 'Op', 'email' => $email,
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
 
@@ -185,7 +185,7 @@ final class CreatorPortalTest extends TestCase
         $this->offered($this->creator('Layla', 'layla-unlinked'));
 
         $stranger = User::create([
-            'tenant_id' => $this->agency->id, 'name' => 'Nobody', 'email' => 'nobody@creators.test',
+            'name' => 'Nobody', 'email' => 'nobody@creators.test',
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
         app(GrantMembership::class)->execute(new MembershipGrant(
@@ -205,7 +205,7 @@ final class CreatorPortalTest extends TestCase
     public function test_me_refuses_a_login_that_is_not_a_creator_here(): void
     {
         $stranger = User::create([
-            'tenant_id' => $this->agency->id, 'name' => 'Nobody', 'email' => 'nobody2@creators.test',
+            'name' => 'Nobody', 'email' => 'nobody2@creators.test',
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
         app(GrantMembership::class)->execute(new MembershipGrant(

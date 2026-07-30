@@ -34,7 +34,7 @@ final class EntitlementMatrixTest extends TestCase
         app(TenantContext::class)->setTenantId($tenant->id);
         $role = Role::create(['tenant_id' => $tenant->id, 'name' => 'Owner', 'slug' => 'tenant-owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
-        $user = User::create(['tenant_id' => $tenant->id, 'name' => 'O', 'email' => $email, 'password' => Hash::make('secret1234')]);
+        $user = User::create(['name' => 'O', 'email' => $email, 'password' => Hash::make('secret1234')]);
         $this->grantMembership($user, $tenant);
         $user->forceFill(['email_verified_at' => now()])->save();
         $user->assignRole($role);

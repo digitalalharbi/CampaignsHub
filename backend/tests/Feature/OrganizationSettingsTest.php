@@ -31,7 +31,7 @@ final class OrganizationSettingsTest extends TestCase
         app(TenantContext::class)->setTenantId($this->tenant->id);
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'slug' => 'o']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
-        $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->owner = User::create(['name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
         $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($role);
     }
@@ -73,7 +73,7 @@ final class OrganizationSettingsTest extends TestCase
     public function test_update_forbidden_without_permission(): void
     {
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'V', 'slug' => 'v']);
-        $viewer = User::create(['tenant_id' => $this->tenant->id, 'name' => 'V', 'email' => 'v@a.test', 'password' => 'secret123']);
+        $viewer = User::create(['name' => 'V', 'email' => 'v@a.test', 'password' => 'secret123']);
         $this->grantMembership($viewer, $this->tenant);
         $viewer->assignRole($role);
         Sanctum::actingAs($viewer);

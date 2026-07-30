@@ -37,7 +37,7 @@ final class ClientFilesActivityTest extends TestCase
 
         $ownerRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $ownerRole->givePermissionTo(...Permission::pluck('key')->all());
-        $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->owner = User::create(['name' => 'Owner', 'email' => 'o@a.test', 'password' => 'secret123']);
         $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($ownerRole);
     }
@@ -117,7 +117,7 @@ final class ClientFilesActivityTest extends TestCase
         $c = $this->client();
         $limited = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Ltd', 'slug' => 'ltd']);
         $limited->givePermissionTo('clients.view', 'clients.view_all');
-        $u = User::create(['tenant_id' => $this->tenant->id, 'name' => 'L', 'email' => 'l@a.test', 'password' => 'secret123']);
+        $u = User::create(['name' => 'L', 'email' => 'l@a.test', 'password' => 'secret123']);
         $this->grantMembership($u, $this->tenant);
         $u->assignRole($limited);
 

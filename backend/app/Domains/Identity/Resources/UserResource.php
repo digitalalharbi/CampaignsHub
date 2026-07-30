@@ -32,7 +32,10 @@ final class UserResource extends JsonResource
             'bio' => $this->bio,
             'avatar_url' => $this->avatar_path ? asset('storage/'.$this->avatar_path) : null,
             'initials' => $this->initials(),
-            'tenant_id' => $this->tenant_id,
+            // Was `users.tenant_id`, one id (ADR 0002). A person may belong to several, so the
+            // resource reports the set — a single id here silently picked one and hid the rest.
+            'tenant_ids' => $this->memberships
+                ->where('status', 'active')->pluck('tenant_id')->map(fn ($id) => (string) $id)->unique()->values(),
             'workspace_name' => optional($this->tenant)->name,
             'role' => $role?->name,
             'role_slug' => $role?->slug,

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Tenancy\Actions\GrantMembership;
+use App\Domains\Tenancy\DTOs\MembershipGrant;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
@@ -12,7 +14,6 @@ use App\Domains\Tenancy\Models\Workspace;
 use App\Domains\Tenancy\Services\MembershipProvisioner;
 use App\Domains\Tenancy\Services\PortalResolver;
 use App\Models\User;
-use Database\Seeders\MembershipBackfillSeeder;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -43,7 +44,7 @@ final class MembershipPortalTest extends TestCase
     private function user(Tenant $tenant, string $email): User
     {
         return User::create([
-            'tenant_id' => $tenant->id, 'name' => 'U', 'email' => $email, 'password' => 'secret123',
+            'name' => 'U', 'email' => $email, 'password' => 'secret123',
         ]);
     }
 
@@ -230,28 +231,33 @@ final class MembershipPortalTest extends TestCase
     }
 
     /**
-     * A clean install must not strand anyone. The migration's backfill runs while `users` is still
-     * empty, so without the seeder every seeded account would have no portal and fall through to
-     * onboarding — which is exactly what `migrate:fresh --seed` produced before this was added.
+     * Nobody ends up in a workspace without a membership.
+     *
+     * This used to run `MembershipBackfillSeeder`, which read `users.tenant_id` to place users that
+     * predated memberships. Both are gone: the column was dropped in
+     * `2026_07_31_090000_grant_memberships_then_drop_users_tenant_id`, which performs that same
+     * placement one last time and REFUSES to drop the column if anyone would be left stranded.
+     *
+     * What remains testable — and what actually matters going forward — is that creating a user is
+     * not what puts them in a workspace, and that the explicit grant is.
      */
-    public function test_the_backfill_seeder_leaves_no_tenant_user_without_a_membership(): void
+    public function test_a_user_is_only_in_a_workspace_once_granted_one(): void
     {
-        $tenant = $this->tenant('Seeded Co', 'agency');
-        $stranded = $this->user($tenant, 'stranded@test.dev');
-        $platform = User::create([
-            'tenant_id' => null, 'name' => 'Platform', 'email' => 'platform@test.dev',
-            'password' => 'secret123', 'is_platform_admin' => true,
-        ]);
+        $tenant = $this->tenant('agency');
+        $user = $this->user($tenant, 'granted@test.dev');
 
-        $this->assertCount(0, $stranded->memberships()->get());
+        // A bare user row places them nowhere. Read as "they belong to their tenant", this would be
+        // the old column's behaviour and the bug it caused.
+        $this->assertCount(0, $user->memberships()->get());
 
-        $this->seed(MembershipBackfillSeeder::class);
+        app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $user, tenant: $tenant, portal: Portal::Agency, role: 'member',
+        ));
 
-        $membership = $stranded->refresh()->memberships()->firstOrFail();
+        $membership = $user->refresh()->memberships()->firstOrFail();
         $this->assertSame(Portal::Agency, $membership->portal);
+        // Their first grant is where they land.
         $this->assertTrue($membership->is_default);
-        // A platform user belongs to no tenant, so it belongs to no portal either.
-        $this->assertCount(0, $platform->refresh()->memberships()->get());
     }
 
     /** Re-running the seeder (or re-inviting) must not violate the unique index. */

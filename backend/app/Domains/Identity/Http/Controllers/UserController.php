@@ -20,7 +20,7 @@ final class UserController extends Controller
 
         $tenantId = app(TenantContext::class)->tenantId();
         $users = User::query()
-            ->where('tenant_id', $tenantId)
+            ->inTenant($tenantId)
             ->orderBy('name')
             ->get(['id', 'uuid', 'name', 'email'])
             ->map(fn (User $u) => [

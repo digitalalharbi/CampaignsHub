@@ -77,6 +77,6 @@ final class InvitationController extends Controller
             $request->session()->regenerate();
         }
 
-        return ApiResponse::success(['user' => new UserResource($user->load('roles', 'tenant'))], 'Invitation accepted.', status: 201);
+        return ApiResponse::success(['user' => new UserResource($user->load('roles'))], 'Invitation accepted.', status: 201);
     }
 }

@@ -38,7 +38,7 @@ final class DemoAccountsSeederTest extends TestCase
         $tenant = Tenant::where('slug', 'demo-agency')->firstOrFail();
         $owner = User::where('email', 'owner@demo-agency.local')->firstOrFail();
 
-        $this->assertSame($tenant->id, $owner->tenant_id);
+        $this->assertTrue($owner->memberships()->where('tenant_id', $tenant->id)->exists());
         $this->assertNotNull($owner->email_verified_at);
         $this->assertTrue($owner->hasPermission('campaigns.view'));
 
@@ -66,7 +66,7 @@ final class DemoAccountsSeederTest extends TestCase
         // Two verified company logins.
         foreach (['owner@demo-company.local', 'member@demo-company.local'] as $email) {
             $user = User::where('email', $email)->firstOrFail();
-            $this->assertSame($tenant->id, $user->tenant_id);
+            $this->assertTrue($user->memberships()->where('tenant_id', $tenant->id)->exists());
             $this->assertNotNull($user->email_verified_at);
         }
 

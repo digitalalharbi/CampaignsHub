@@ -66,7 +66,6 @@ final class DemoAgencyScopeSeeder extends Seeder
             [
                 'name' => 'Demo Account Manager',
                 'password' => Hash::make('password'),
-                'tenant_id' => $tenant->id,
                 'email_verified_at' => now(),
             ],
         );

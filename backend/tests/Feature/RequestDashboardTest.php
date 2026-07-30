@@ -44,10 +44,10 @@ final class RequestDashboardTest extends TestCase
         $ownerRole->givePermissionTo(...Permission::pluck('key')->all());
         $viewerRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Viewer', 'slug' => 'viewer']);
 
-        $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'owner@agency.test', 'password' => 'secret123']);
+        $this->owner = User::create(['name' => 'Owner', 'email' => 'owner@agency.test', 'password' => 'secret123']);
         $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($ownerRole);
-        $this->viewer = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Viewer', 'email' => 'viewer@agency.test', 'password' => 'secret123']);
+        $this->viewer = User::create(['name' => 'Viewer', 'email' => 'viewer@agency.test', 'password' => 'secret123']);
         $this->grantMembership($this->viewer, $this->tenant);
         $this->viewer->assignRole($viewerRole);
     }
@@ -78,7 +78,7 @@ final class RequestDashboardTest extends TestCase
             ->assertOk()->assertJsonPath('data.0.reference', $ref)->assertJsonPath('meta.total', 1);
 
         // Assign — assignee must be in the same tenant (an outside id is rejected).
-        $outsider = User::create(['tenant_id' => null, 'name' => 'X', 'email' => 'x@ex.test', 'password' => 'secret123']);
+        $outsider = User::create(['name' => 'X', 'email' => 'x@ex.test', 'password' => 'secret123']);
         $this->actingAs($this->owner, 'sanctum')->patchJson("/api/v1/app/requests/{$req->id}/assign", ['assignee_id' => $outsider->id])->assertStatus(422);
         $this->actingAs($this->owner, 'sanctum')->patchJson("/api/v1/app/requests/{$req->id}/assign", ['assignee_id' => $this->owner->id])->assertOk();
 
@@ -119,7 +119,7 @@ final class RequestDashboardTest extends TestCase
         $other = Tenant::create(['name' => 'Other', 'slug' => 'other', 'status' => 'active']);
         $otherRole = Role::create(['tenant_id' => $other->id, 'name' => 'Owner', 'slug' => 'owner']);
         $otherRole->givePermissionTo(...Permission::pluck('key')->all());
-        $otherOwner = User::create(['tenant_id' => $other->id, 'name' => 'O2', 'email' => 'o2@other.test', 'password' => 'secret123']);
+        $otherOwner = User::create(['name' => 'O2', 'email' => 'o2@other.test', 'password' => 'secret123']);
         $this->grantMembership($otherOwner, $other);
         $otherOwner->assignRole($otherRole);
 

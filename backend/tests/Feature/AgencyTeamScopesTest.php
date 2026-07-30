@@ -55,7 +55,7 @@ final class AgencyTeamScopesTest extends TestCase
         $tenant ??= $this->agency;
 
         $user = User::create([
-            'tenant_id' => $tenant->id, 'name' => 'Op '.$email, 'email' => $email,
+            'name' => 'Op '.$email, 'email' => $email,
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
 
@@ -292,7 +292,7 @@ final class AgencyTeamScopesTest extends TestCase
     public function test_an_advertiser_membership_cannot_reach_the_agency_team(): void
     {
         $user = User::create([
-            'tenant_id' => $this->agency->id, 'name' => 'Adv', 'email' => 'adv@scope.dev',
+            'name' => 'Adv', 'email' => 'adv@scope.dev',
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
         $role = Role::create(['tenant_id' => $this->agency->id, 'name' => 'R', 'slug' => 'adv-'.uniqid()]);

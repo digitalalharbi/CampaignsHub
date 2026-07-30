@@ -22,7 +22,7 @@ final class EmailVerificationController extends Controller
         $data = $request->validate(['token' => ['required', 'string']]);
         $user = $this->service->verify($data['token']);
 
-        return ApiResponse::success(['user' => new UserResource($user->load('roles', 'tenant'))], 'Email verified.');
+        return ApiResponse::success(['user' => new UserResource($user->load('roles'))], 'Email verified.');
     }
 
     /** POST /auth/email/resend — re-issue a verification link for the current user. */

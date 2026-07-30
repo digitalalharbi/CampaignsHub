@@ -36,11 +36,12 @@ final class AuthTest extends TestCase
 
         $response->assertCreated()
             ->assertJson(['success' => true])
-            ->assertJsonStructure(['data' => ['user' => ['id', 'email', 'tenant_id']]])
+            ->assertJsonStructure(['data' => ['user' => ['id', 'email', 'tenant_ids']]])
             ->assertJsonMissingPath('data.token'); // SPA never receives a token
 
         $this->assertDatabaseHas('tenants', ['name' => 'Acme Media']);
-        $this->assertNotNull(User::where('email', 'sara@acme.test')->first()->tenant_id);
+        // Registration puts them IN the workspace it just created — a membership, not a column.
+        $this->assertTrue(User::where('email', 'sara@acme.test')->firstOrFail()->memberships()->exists());
     }
 
     public function test_registration_validates_input(): void
@@ -56,7 +57,6 @@ final class AuthTest extends TestCase
     {
         $tenant = Tenant::create(['name' => 'T', 'slug' => 't', 'status' => 'active']);
         $user = User::create([
-            'tenant_id' => $tenant->id,
             'name' => 'Ali',
             'email' => 'ali@t.test',
             'password' => 'secret123',
@@ -135,7 +135,7 @@ final class AuthTest extends TestCase
     {
         $tenant = Tenant::create(['name' => 'R', 'slug' => 'r', 'status' => 'active']);
         $user = User::create([
-            'tenant_id' => $tenant->id, 'name' => 'Rem', 'email' => 'rem@t.test', 'password' => 'secret123',
+            'name' => 'Rem', 'email' => 'rem@t.test', 'password' => 'secret123',
         ]);
         $this->grantMembership($user, $tenant);
 
@@ -151,7 +151,7 @@ final class AuthTest extends TestCase
     {
         $tenant = Tenant::create(['name' => 'N', 'slug' => 'n', 'status' => 'active']);
         $user = User::create([
-            'tenant_id' => $tenant->id, 'name' => 'NoRem', 'email' => 'norem@t.test', 'password' => 'secret123',
+            'name' => 'NoRem', 'email' => 'norem@t.test', 'password' => 'secret123',
         ]);
         $this->grantMembership($user, $tenant);
 

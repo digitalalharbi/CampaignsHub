@@ -28,7 +28,10 @@ use App\Domains\Requests\Models\RequestStatus;
 use App\Domains\Requests\Models\RequestType;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Services\SubscriptionService;
+use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\DTOs\MembershipGrant;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Models\Workspace;
 use App\Models\User;
@@ -378,11 +381,19 @@ final class DemoAccountsSeeder extends Seeder
             [
                 'name' => $name,
                 'password' => Hash::make(self::PASSWORD),
-                'tenant_id' => $tenant->id,
                 'email_verified_at' => now(),
             ],
         );
         $user->assignRole($role);
+
+        // Creating a user is not granting them access (ADR 0002). `users.tenant_id` used to imply
+        // one; now the grant is explicit, and it is what puts them in the workspace at all.
+        app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $user,
+            tenant: $tenant,
+            portal: Portal::forAccountType($tenant->account_type),
+            role: 'member',
+        ));
 
         return $user;
     }

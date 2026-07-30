@@ -9,15 +9,19 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
- * ADR 0002 — `users.tenant_id` is legacy data, not an authorisation input.
+ * ADR 0002 — `users.tenant_id` is GONE, and stays gone.
  *
- * The column still exists so migration and factories have somewhere to say "this user belongs to
- * tenant X", but nothing may derive scope, permission, portal or routing from it. These tests exist
- * to make a return to it fail loudly: the behavioural one proves a membership-less user gets nothing,
- * and the source scans catch a reintroduction at the places it would most plausibly reappear.
+ * Dropped in `2026_07_31_090000_grant_memberships_then_drop_users_tenant_id`, which first grants a
+ * membership to every user that still had a tenant and none, then removes the column — and refuses
+ * to remove it if anyone would be left stranded.
+ *
+ * These tests exist so bringing it back fails loudly. The behavioural ones prove a user without a
+ * membership reaches nothing; the schema one proves the column is absent; the source scan catches a
+ * reader reappearing, with no allowlist to hide behind.
  */
 final class TenantIdDeprecationTest extends TestCase
 {
@@ -36,7 +40,7 @@ final class TenantIdDeprecationTest extends TestCase
 
         $tenant = Tenant::create(['name' => 'Legacy Co', 'slug' => 'legacy-co', 'status' => 'active']);
         $user = User::create([
-            'tenant_id' => $tenant->id, 'name' => 'Legacy', 'email' => 'legacy@test.dev',
+            'name' => 'Legacy', 'email' => 'legacy@test.dev',
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
 
@@ -63,7 +67,7 @@ final class TenantIdDeprecationTest extends TestCase
         ]);
 
         $user = User::create([
-            'tenant_id' => $tenant->id, 'name' => 'Auto', 'email' => 'auto@test.dev', 'password' => 'secret123',
+            'name' => 'Auto', 'email' => 'auto@test.dev', 'password' => 'secret123',
         ]);
 
         $this->assertSame(0, $user->memberships()->count());
@@ -73,7 +77,7 @@ final class TenantIdDeprecationTest extends TestCase
     public function test_a_platform_user_gets_no_membership(): void
     {
         $user = User::create([
-            'tenant_id' => null, 'name' => 'Platform', 'email' => 'platform@test.dev',
+            'name' => 'Platform', 'email' => 'platform@test.dev',
             'password' => 'secret123', 'is_platform_admin' => true,
         ]);
 
@@ -110,21 +114,29 @@ final class TenantIdDeprecationTest extends TestCase
             $source = file_get_contents($file);
             if (str_contains($source, 'user()->tenant_id') || str_contains($source, 'user->tenant_id')) {
                 /*
-                 * ONE exception, and it is the migration path itself: MembershipProvisioner reads
-                 * the column to move a legacy user INTO a membership. Everything else that used to
-                 * be excused here — suspension, the sign-in check, the onboarding step, the audit
-                 * stamp — now reads the membership, so the allowlist is a single named file rather
-                 * than a list that quietly grows.
+                 * NO exceptions any more. MembershipProvisioner was the last one — it read the
+                 * column to move a legacy user into a membership — and the upgrade migration took
+                 * that job over before dropping the column. An empty allowlist is the point: there
+                 * is nothing left for a new reader to hide behind.
                  */
-                if (str_contains($file, 'MembershipProvisioner.php')) {
-                    continue;
-                }
                 $offenders[] = str_replace(app_path(), '', $file);
             }
         }
 
         $this->assertSame([], $offenders,
             'these read users.tenant_id; scope must come from MembershipContext/TenantContext instead');
+    }
+
+    /**
+     * The column is absent. Stated plainly, because every other test here would still pass against
+     * a schema where it quietly came back and nothing read it YET.
+     */
+    public function test_the_column_does_not_exist(): void
+    {
+        $this->assertFalse(
+            Schema::hasColumn('users', 'tenant_id'),
+            'users.tenant_id is back; scope must come from memberships (ADR 0002)',
+        );
     }
 
     /** @return list<string> */

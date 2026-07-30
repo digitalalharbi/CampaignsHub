@@ -34,7 +34,7 @@ final class SettingsTabsTest extends TestCase
         app(TenantContext::class)->setTenantId($this->tenant->id);
         $this->ownerRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'tenant-owner']);
         $this->ownerRole->givePermissionTo(...Permission::pluck('key')->all());
-        $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->owner = User::create(['name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
         $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($this->ownerRole);
     }
@@ -59,14 +59,17 @@ final class SettingsTabsTest extends TestCase
 
         $this->postJson('/api/v1/settings/team', ['name' => 'New', 'email' => 'new@a.test', 'role' => 'analyst'])
             ->assertStatus(201);
-        $this->assertDatabaseHas('users', ['email' => 'new@a.test', 'tenant_id' => $this->tenant->id]);
+        // An invited member must land IN the workspace — a role without a membership put them
+        // nowhere, which is what this assertion caught when `users.tenant_id` stopped covering it.
+        $invited = User::where('email', 'new@a.test')->firstOrFail();
+        $this->assertTrue($invited->memberships()->where('tenant_id', $this->tenant->id)->exists());
         $this->assertDatabaseHas('audit_logs', ['action' => 'settings.team.invited']);
     }
 
     public function test_team_requires_permission(): void
     {
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'V', 'slug' => 'viewer2']);
-        $viewer = User::create(['tenant_id' => $this->tenant->id, 'name' => 'V', 'email' => 'v@a.test', 'password' => 'secret123']);
+        $viewer = User::create(['name' => 'V', 'email' => 'v@a.test', 'password' => 'secret123']);
         $this->grantMembership($viewer, $this->tenant);
         $viewer->assignRole($role);
         Sanctum::actingAs($viewer);

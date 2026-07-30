@@ -95,7 +95,7 @@ final class ClientTeamController
         $this->access->assert($request->user(), 'clients.manage_team', $c);
 
         $existing = DB::table('client_workspace_user')->where('client_workspace_id', $c->id)->pluck('user_id');
-        $users = User::where('tenant_id', $c->tenant_id)->whereNotIn('id', $existing)
+        $users = User::query()->inTenant((string) $c->tenant_id)->whereNotIn('id', $existing)
             ->orderBy('name')->get(['id', 'name', 'email'])
             ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email]);
 

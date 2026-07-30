@@ -16,7 +16,10 @@ use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Tasks\Models\Task;
+use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\DTOs\MembershipGrant;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Models\Workspace;
 use App\Models\User;
@@ -85,11 +88,14 @@ final class DemoSeeder extends Seeder
 
         $ownerUser = User::firstOrCreate(
             ['email' => 'owner@demo-agency.local'],
-            ['name' => 'Demo Owner', 'password' => Hash::make('password'), 'tenant_id' => $tenant->id, 'email_verified_at' => now()],
+            ['name' => 'Demo Owner', 'password' => Hash::make('password'), 'email_verified_at' => now()],
         );
         $ownerUser->assignRole($owner);
+        $this->grant($ownerUser, $tenant);
         // Ensure pre-existing demo users are verified + past onboarding (firstOrCreate won't update).
-        User::where('tenant_id', $tenant->id)->whereNull('email_verified_at')->update(['email_verified_at' => now()]);
+        // Scoped by MEMBERSHIP now that `users.tenant_id` is gone (ADR 0002).
+        User::query()->inTenant((string) $tenant->id)->whereNull('email_verified_at')
+            ->update(['email_verified_at' => now()]);
 
         // Agency-wide read-only Analyst: projects.view.all → sees every project, but cannot create/edit.
         $analyst = Role::firstOrCreate(
@@ -97,10 +103,12 @@ final class DemoSeeder extends Seeder
             ['name' => 'Analyst', 'is_system' => true],
         );
         $analyst->givePermissionTo('campaigns.view', 'projects.view', 'projects.view.all', 'integrations.view', 'reports.view');
-        User::firstOrCreate(
+        $analystUser = User::firstOrCreate(
             ['email' => 'analyst@demo-agency.local'],
-            ['name' => 'Demo Analyst', 'password' => Hash::make('password'), 'tenant_id' => $tenant->id, 'email_verified_at' => now()],
-        )->assignRole($analyst);
+            ['name' => 'Demo Analyst', 'password' => Hash::make('password'), 'email_verified_at' => now()],
+        );
+        $analystUser->assignRole($analyst);
+        $this->grant($analystUser, $tenant);
 
         // Project-scoped Client Viewer: projects.view + campaigns.view but NOT projects.view.all →
         // confined to the projects they are a member of (membership added below).
@@ -111,9 +119,10 @@ final class DemoSeeder extends Seeder
         $clientViewer->givePermissionTo('projects.view', 'campaigns.view', 'reports.view');
         $viewerUser = User::firstOrCreate(
             ['email' => 'viewer@demo-agency.local'],
-            ['name' => 'Demo Viewer', 'password' => Hash::make('password'), 'tenant_id' => $tenant->id, 'email_verified_at' => now()],
+            ['name' => 'Demo Viewer', 'password' => Hash::make('password'), 'email_verified_at' => now()],
         );
         $viewerUser->assignRole($clientViewer);
+        $this->grant($viewerUser, $tenant);
 
         // Demo CRM leads (only if none exist yet for this tenant).
         if (Lead::count() === 0) {
@@ -223,5 +232,19 @@ final class DemoSeeder extends Seeder
         }
 
         $context->forget();
+    }
+
+    /**
+     * Put a demo user in the workspace. Creating a user is NOT granting them access (ADR 0002) —
+     * `users.tenant_id` used to imply one, and its removal makes every grant explicit.
+     */
+    private function grant(User $user, Tenant $tenant): void
+    {
+        app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $user,
+            tenant: $tenant,
+            portal: Portal::forAccountType($tenant->account_type),
+            role: 'member',
+        ));
     }
 }

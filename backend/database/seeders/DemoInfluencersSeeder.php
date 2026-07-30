@@ -230,7 +230,6 @@ final class DemoInfluencersSeeder extends Seeder
             [
                 'name' => $name,
                 'password' => Hash::make('password'),
-                'tenant_id' => $tenant->id,
                 'email_verified_at' => now(),
             ],
         );

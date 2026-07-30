@@ -40,7 +40,7 @@ final class PublicPageSettingsTest extends TestCase
         $role = Role::create(['tenant_id' => $t->id, 'name' => 'Owner', 'slug' => 'owner-'.uniqid()]);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $user = User::create([
-            'tenant_id' => $t->id, 'name' => 'Owner', 'email' => 'o-'.uniqid().'@a.test',
+            'name' => 'Owner', 'email' => 'o-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
         $this->grantMembership($user, $t);
@@ -113,7 +113,7 @@ final class PublicPageSettingsTest extends TestCase
     public function test_writes_require_settings_manage_and_unknown_pages_404(): void
     {
         $viewer = User::create([
-            'tenant_id' => $this->tenant->id, 'name' => 'V', 'email' => 'v-'.uniqid().'@a.test',
+            'name' => 'V', 'email' => 'v-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
         $this->grantMembership($viewer, $this->tenant);

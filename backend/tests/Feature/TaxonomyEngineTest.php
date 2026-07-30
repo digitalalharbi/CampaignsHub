@@ -74,7 +74,7 @@ final class TaxonomyEngineTest extends TestCase
             $role->givePermissionTo(...$permissions);
         }
         $user = User::create([
-            'tenant_id' => $tenant->id, 'name' => 'U', 'email' => 'u'.uniqid().'@t.test',
+            'name' => 'U', 'email' => 'u'.uniqid().'@t.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
         $this->grantMembership($user, $tenant);

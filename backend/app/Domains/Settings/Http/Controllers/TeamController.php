@@ -6,7 +6,11 @@ namespace App\Domains\Settings\Http\Controllers;
 
 use App\Domains\Access\Models\Role;
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\DTOs\MembershipGrant;
+use App\Domains\Tenancy\Enums\Portal;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -29,7 +33,7 @@ final class TeamController extends Controller
         $tenantId = $this->tenantId();
 
         $roles = Role::where('tenant_id', $tenantId)->get(['id', 'name', 'slug']);
-        $users = User::where('tenant_id', $tenantId)->with('roles:id,name,slug')->get();
+        $users = self::inTenant($tenantId)->with('roles:id,name,slug')->get();
 
         return ApiResponse::success([
             'members' => $users->map(fn (User $u) => [
@@ -46,7 +50,7 @@ final class TeamController extends Controller
         ], 'Team retrieved.');
     }
 
-    public function invite(Request $request, AuditLogger $audit): JsonResponse
+    public function invite(Request $request, AuditLogger $audit, GrantMembership $grants): JsonResponse
     {
         abort_unless($request->user()->hasPermission('settings.manage'), 403);
         $tenantId = $this->tenantId();
@@ -57,7 +61,7 @@ final class TeamController extends Controller
             'role' => ['required', 'string', 'exists:roles,slug'],
         ]);
         abort_if(
-            User::where('tenant_id', $tenantId)->where('email', $data['email'])->exists(),
+            self::inTenant($tenantId)->where('email', $data['email'])->exists(),
             422, 'A user with this email already exists.',
         );
 
@@ -66,10 +70,25 @@ final class TeamController extends Controller
         // Provision a pending member with a random password (real invite email is delivered by the
         // Scheduled Reports & Email phase; the account is usable via password reset meanwhile).
         $user = User::create([
-            'tenant_id' => $tenantId, 'name' => $data['name'], 'email' => $data['email'],
+            'name' => $data['name'], 'email' => $data['email'],
             'password' => Str::password(24),
         ]);
         $user->assignRole($role);
+
+        /*
+         * A role is not a workspace. Creating the user and assigning a role left them with no
+         * membership, so `inTenant()` could not see them and they landed nowhere on first sign-in —
+         * the same defect already fixed once in InvitationService::accept, in a second place.
+         * Dropping `users.tenant_id` is what made it visible: the column had been quietly standing
+         * in for the grant.
+         */
+        $grants->execute(new MembershipGrant(
+            user: $user,
+            tenant: Tenant::query()->findOrFail($tenantId),
+            portal: Portal::forAccountType(Tenant::query()->findOrFail($tenantId)->account_type),
+            role: $data['role'],
+            grantedBy: $request->user(),
+        ));
 
         $audit->log(action: 'settings.team.invited', entityType: 'user', entityId: $user->uuid, after: ['email' => $user->email, 'role' => $role->slug]);
 
@@ -127,9 +146,26 @@ final class TeamController extends Controller
         return ApiResponse::success(null, 'Member removed.');
     }
 
+    /**
+     * The users who belong to a tenant, by MEMBERSHIP (ADR 0002).
+     *
+     * Was `users.tenant_id`, which described one workspace per person: a user with memberships in
+     * two tenants appeared on one team list and vanished from the other. One helper so the four
+     * call sites here cannot answer "who is on this team?" four different ways.
+     *
+     * @return Builder<User>
+     */
+    private static function inTenant(string $tenantId)
+    {
+        return User::query()->whereHas(
+            'memberships',
+            fn ($q) => $q->where('tenant_id', $tenantId)->where('status', 'active'),
+        );
+    }
+
     private function member(string $uuid): User
     {
-        return User::where('tenant_id', $this->tenantId())->where('uuid', $uuid)->with('roles:id,name,slug')->firstOrFail();
+        return self::inTenant($this->tenantId())->where('uuid', $uuid)->with('roles:id,name,slug')->firstOrFail();
     }
 
     private function ownerCount(): int
@@ -147,8 +183,13 @@ final class TeamController extends Controller
         return DB::table('users')
             ->join('role_user', 'role_user.user_id', '=', 'users.id')
             ->join('roles', 'roles.id', '=', 'role_user.role_id')
-            ->where('users.tenant_id', $this->tenantId())
-            ->where('roles.slug', 'tenant-owner');
+            ->join('memberships', 'memberships.user_id', '=', 'users.id')
+            ->where('memberships.tenant_id', $this->tenantId())
+            ->where('memberships.status', 'active')
+            ->where('roles.slug', 'tenant-owner')
+            // A user may hold several memberships in one tenant (different portals), which would
+            // otherwise count one owner more than once and let the last owner be removed.
+            ->distinct('users.id');
     }
 
     private function tenantId(): string

@@ -43,10 +43,10 @@ final class ClientAnalyticsTest extends TestCase
         $limited = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'NoA', 'slug' => 'noa']);
         $limited->givePermissionTo('clients.view', 'clients.view_all');
 
-        $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->owner = User::create(['name' => 'Owner', 'email' => 'o@a.test', 'password' => 'secret123']);
         $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($ownerRole);
-        $this->noAnalytics = User::create(['tenant_id' => $this->tenant->id, 'name' => 'NoA', 'email' => 'na@a.test', 'password' => 'secret123']);
+        $this->noAnalytics = User::create(['name' => 'NoA', 'email' => 'na@a.test', 'password' => 'secret123']);
         $this->grantMembership($this->noAnalytics, $this->tenant);
         $this->noAnalytics->assignRole($limited);
     }

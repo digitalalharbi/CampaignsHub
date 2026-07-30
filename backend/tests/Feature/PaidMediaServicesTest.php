@@ -281,7 +281,7 @@ final class PaidMediaServicesTest extends TestCase
         app(TenantContext::class)->setTenantId($tenantB->id);
         $roleB = Role::create(['tenant_id' => $tenantB->id, 'name' => 'Owner', 'slug' => 'owner']);
         $roleB->givePermissionTo(...Permission::pluck('key')->all());
-        $userB = User::create(['tenant_id' => $tenantB->id, 'name' => 'B', 'email' => 'b@other.test', 'password' => 'secret123']);
+        $userB = User::create(['name' => 'B', 'email' => 'b@other.test', 'password' => 'secret123']);
         $this->grantMembership($userB, $tenantB);
         $userB->assignRole($roleB);
 
@@ -300,7 +300,7 @@ final class PaidMediaServicesTest extends TestCase
         app(TenantContext::class)->setTenantId($this->tenant->id);
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
-        $owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
+        $owner = User::create(['name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
         $this->grantMembership($owner, $this->tenant);
         $owner->assignRole($role);
 

@@ -55,7 +55,7 @@ final class PortalAccessTest extends TestCase
     private function user(Tenant $tenant, string $email): User
     {
         return User::create([
-            'tenant_id' => $tenant->id, 'name' => 'U', 'email' => $email,
+            'name' => 'U', 'email' => $email,
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
     }

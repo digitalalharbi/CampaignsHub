@@ -61,7 +61,6 @@ final class RegisterTenantAction
             ]);
 
             $user = User::create([
-                'tenant_id' => $tenant->id,
                 'name' => $data->name,
                 'email' => $data->email,
                 'password' => Hash::make($data->password),

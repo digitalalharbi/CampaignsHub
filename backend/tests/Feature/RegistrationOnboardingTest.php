@@ -89,11 +89,15 @@ final class RegistrationOnboardingTest extends TestCase
 
         $this->actingAs($user, 'sanctum')->postJson('/api/v1/onboarding/first-client', ['name' => 'First Client'])
             ->assertOk()->assertJsonPath('data.account.onboarding.step', 'first_project');
-        $this->assertDatabaseHas('client_workspaces', ['tenant_id' => $user->tenant_id, 'name' => 'First Client']);
+        $this->assertDatabaseHas('client_workspaces', [
+            'tenant_id' => $user->currentTenant()?->id, 'name' => 'First Client',
+        ]);
 
         $this->actingAs($user, 'sanctum')->postJson('/api/v1/onboarding/first-project', ['name' => 'First Project'])
             ->assertOk()->assertJsonPath('data.account.onboarding.step', 'data_source');
-        $this->assertDatabaseHas('projects', ['tenant_id' => $user->tenant_id, 'name' => 'First Project']);
+        $this->assertDatabaseHas('projects', [
+            'tenant_id' => $user->currentTenant()?->id, 'name' => 'First Project',
+        ]);
 
         $this->actingAs($user, 'sanctum')->postJson('/api/v1/onboarding/complete')
             ->assertOk()->assertJsonPath('data.account.onboarding.completed', true);

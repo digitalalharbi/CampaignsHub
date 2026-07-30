@@ -60,7 +60,7 @@ final class BillingTest extends TestCase
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner-'.uniqid()]);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $user = User::create([
-            'tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'owner-'.uniqid().'@a.test',
+            'name' => 'Owner', 'email' => 'owner-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
         $this->grantMembership($user, $this->tenant);
@@ -276,7 +276,7 @@ final class BillingTest extends TestCase
         app(TenantContext::class)->setTenantId($tenantB->id);
         $role = Role::create(['tenant_id' => $tenantB->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
-        $ownerB = User::create(['tenant_id' => $tenantB->id, 'name' => 'O', 'email' => 'o@b.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
+        $ownerB = User::create(['name' => 'O', 'email' => 'o@b.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
         $this->grantMembership($ownerB, $tenantB);
         $ownerB->assignRole($role);
 
@@ -363,7 +363,7 @@ final class BillingTest extends TestCase
     public function test_finance_reads_require_billing_view(): void
     {
         $viewer = User::create([
-            'tenant_id' => $this->tenant->id, 'name' => 'V', 'email' => 'v-'.uniqid().'@a.test',
+            'name' => 'V', 'email' => 'v-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
         $this->grantMembership($viewer, $this->tenant);

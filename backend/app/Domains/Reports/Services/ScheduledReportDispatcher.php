@@ -8,6 +8,7 @@ use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportSchedule;
+use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -102,7 +103,8 @@ final class ScheduledReportDispatcher
     {
         if (($schedule->audience ?? 'client') === 'internal') {
             // Internal reports may only go to a user of the same tenant.
-            $internal = DB::table('users')->where('tenant_id', $schedule->tenant_id)->whereRaw('lower(email) = ?', [Str::lower($email)])->exists();
+            $internal = User::query()->inTenant((string) $schedule->tenant_id)
+                ->whereRaw('lower(email) = ?', [Str::lower($email)])->exists();
             if (! $internal) {
                 return 'suppressed';
             }

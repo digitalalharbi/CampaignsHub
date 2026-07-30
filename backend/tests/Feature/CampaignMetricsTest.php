@@ -64,7 +64,7 @@ final class CampaignMetricsTest extends TestCase
         $this->holdingTenant((string) $this->tenant->id);
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'slug' => 'o']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
-        $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->owner = User::create(['name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
         $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($role);
         $ws = ClientWorkspace::create(['name' => 'C', 'slug' => 'c', 'mode' => 'managed']);
@@ -126,7 +126,7 @@ final class CampaignMetricsTest extends TestCase
 
     public function test_requires_view_permission(): void
     {
-        $stranger = User::create(['tenant_id' => $this->tenant->id, 'name' => 'S', 'email' => 's@a.test', 'password' => 'secret123']);
+        $stranger = User::create(['name' => 'S', 'email' => 's@a.test', 'password' => 'secret123']);
         $this->grantMembership($stranger, $this->tenant);
         $this->actingAs($stranger)
             ->getJson($this->url($this->projectA, $this->campA1->id))
@@ -204,7 +204,7 @@ final class CampaignMetricsTest extends TestCase
         $this->assertSame('approved', CampaignAnnotation::find($id)->status);
 
         // A user without reports.approve cannot change status.
-        $editor = User::create(['tenant_id' => $this->tenant->id, 'name' => 'E', 'email' => 'e@a.test', 'password' => 'secret123']);
+        $editor = User::create(['name' => 'E', 'email' => 'e@a.test', 'password' => 'secret123']);
         $this->grantMembership($editor, $this->tenant);
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'ed', 'slug' => 'ed']);
         $role->givePermissionTo(...Permission::whereIn('key', ['campaigns.view', 'campaigns.update'])->pluck('key')->all());
