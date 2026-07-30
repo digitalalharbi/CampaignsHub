@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Http\Controllers;
 
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -17,7 +18,7 @@ final class UserController extends Controller
     {
         abort_unless($request->user()->hasPermission('users.view'), 403);
 
-        $tenantId = $request->user()->tenant_id;
+        $tenantId = app(TenantContext::class)->tenantId();
         $users = User::query()
             ->where('tenant_id', $tenantId)
             ->orderBy('name')

@@ -8,6 +8,7 @@ use App\Domains\Identity\Http\Controllers\InvitationController;
 use App\Domains\Identity\Http\Controllers\MeController;
 use App\Domains\Identity\Http\Controllers\OnboardingController;
 use App\Domains\Identity\Http\Controllers\UserController;
+use App\Domains\Tenancy\Http\Controllers\MembershipController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -34,6 +35,13 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
     Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
         Route::get('/me', [AuthController::class, 'me'])->name('me');
         Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+        // ADR 0002 — the portal/workspace switcher. `index` answers "where may I go?"; `switch`
+        // changes the active membership. Both derive everything from the authenticated user, so
+        // neither can be used to enumerate or reach another person's workspaces.
+        Route::get('/memberships', [MembershipController::class, 'index'])->name('memberships.index');
+        Route::post('/memberships/switch', [MembershipController::class, 'switch'])->name('memberships.switch')
+            ->middleware('throttle:30,1');
     });
 });
 

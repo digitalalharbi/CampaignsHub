@@ -6,6 +6,7 @@ namespace App\Domains\Tasks\Http\Controllers;
 
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tasks\Resources\TaskResource;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -43,8 +44,8 @@ final class TaskController extends Controller
             'description' => ['nullable', 'string'],
             'status' => ['sometimes', Rule::in(self::STATUSES)],
             'priority' => ['sometimes', Rule::in(['low', 'normal', 'high', 'urgent'])],
-            'project_id' => ['nullable', 'uuid', Rule::exists('projects', 'id')->where('tenant_id', $request->user()->tenant_id)],
-            'client_workspace_id' => ['nullable', 'uuid', Rule::exists('client_workspaces', 'id')->where('tenant_id', $request->user()->tenant_id)],
+            'project_id' => ['nullable', 'uuid', Rule::exists('projects', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
+            'client_workspace_id' => ['nullable', 'uuid', Rule::exists('client_workspaces', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
             'assignee_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
             'due_date' => ['nullable', 'date'],
             'checklist' => ['nullable', 'array'],

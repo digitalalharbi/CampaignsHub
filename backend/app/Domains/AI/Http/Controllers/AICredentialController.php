@@ -8,6 +8,7 @@ use App\Domains\AI\Enums\AIProvider;
 use App\Domains\AI\Models\AIProviderCredential;
 use App\Domains\AI\Resources\AICredentialResource;
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -38,8 +39,8 @@ final class AICredentialController extends Controller
             'provider' => ['required', Rule::in(AIProvider::values())],
             'credential_scope' => ['required', Rule::in(['platform', 'tenant', 'client', 'project'])],
             'secret' => ['required', 'string', 'min:8'],
-            'client_workspace_id' => ['nullable', 'uuid', Rule::exists('client_workspaces', 'id')->where('tenant_id', $request->user()->tenant_id)],
-            'project_id' => ['nullable', 'uuid', Rule::exists('projects', 'id')->where('tenant_id', $request->user()->tenant_id)],
+            'client_workspace_id' => ['nullable', 'uuid', Rule::exists('client_workspaces', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
+            'project_id' => ['nullable', 'uuid', Rule::exists('projects', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
             'organization_id' => ['nullable', 'string', 'max:120'],
             'monthly_budget' => ['nullable', 'numeric', 'min:0'],
             'monthly_token_limit' => ['nullable', 'integer', 'min:0'],

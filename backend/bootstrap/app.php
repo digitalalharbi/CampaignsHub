@@ -12,7 +12,8 @@ use App\Domains\Reports\Console\RegenerateDemoExportsCommand;
 use App\Domains\Reports\Console\ReportsHealthCommand;
 use App\Domains\Requests\Console\EvaluateSla;
 use App\Domains\Requests\Console\PruneUploadSessions;
-use App\Domains\Tenancy\Middleware\ResolveTenant;
+use App\Domains\Tenancy\Middleware\EnsurePortal;
+use App\Domains\Tenancy\Middleware\ResolveMembership;
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\ConditionalThrottle;
 use App\Support\ApiResponse;
@@ -70,7 +71,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // Route-middleware aliases. `throttle` is overridden so rate limiting is enforced in production but
         // relaxed in local/dev (single-IP dev + E2E traffic must not trip per-IP limits).
         $middleware->alias([
-            'tenant' => ResolveTenant::class,
+            // ADR 0002: scope comes from the active MEMBERSHIP, not from users.tenant_id. The old
+            // alias still resolves to the new middleware so every existing route keeps working.
+            'tenant' => ResolveMembership::class,
+            'membership' => ResolveMembership::class,
+            'portal' => EnsurePortal::class,
             'project' => ResolveProject::class,
             'entitlement' => EnsureEntitlement::class,
             'throttle' => ConditionalThrottle::class,
@@ -85,7 +90,8 @@ return Application::configure(basePath: dirname(__DIR__))
             ShareErrorsFromSession::class,
             Authenticate::class,
             AuthenticateSession::class,
-            ResolveTenant::class,
+            ResolveMembership::class,
+            EnsurePortal::class,
             ResolveProject::class,
             SubstituteBindings::class,
             Authorize::class,

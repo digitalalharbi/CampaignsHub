@@ -10,6 +10,7 @@ use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Models\Opportunity;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
@@ -26,6 +27,10 @@ class AppServiceProvider extends ServiceProvider
     {
         // Shared per-request tenant context — the authority on "current tenant".
         $this->app->singleton(TenantContext::class);
+        // ADR 0002: request-scoped and shared, exactly like TenantContext. Without the singleton
+        // every injection would receive its own empty instance and the membership resolved in
+        // middleware would be invisible to controllers and policies.
+        $this->app->singleton(MembershipContext::class);
 
         // Shared per-request project context — the authority on "current project".
         $this->app->singleton(ProjectContext::class);

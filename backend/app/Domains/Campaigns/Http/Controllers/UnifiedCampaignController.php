@@ -17,6 +17,7 @@ use App\Domains\Campaigns\Resources\UnifiedCampaignResource;
 use App\Domains\Campaigns\Services\CampaignLinker;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Taxonomy\Services\TaxonomyService;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -223,7 +224,7 @@ final class UnifiedCampaignController extends Controller
             'attribution_model' => ['nullable', 'string', 'max:60'],
             'attribution_window' => ['nullable', 'string', 'max:60'],
             // The owner MUST belong to this tenant — never assign a user from another workspace.
-            'owner_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('tenant_id', $request->user()->tenant_id)],
+            'owner_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
             'target_kpi' => ['nullable', 'array'],
             'audience' => ['nullable', 'string'],
             // Additive taxonomy-driven multi-selects. Keys with a canonical option set are validated against the

@@ -25,7 +25,7 @@ final class ResolveProject
     {
         $projectId = (string) $request->route('project');
 
-        // Tenant global scope is already active (ResolveTenant runs first), so a cross-tenant id
+        // Tenant global scope is already active (ResolveMembership runs first), so a cross-tenant id
         // simply returns null here — fail-closed.
         $project = Project::find($projectId);
         abort_if($project === null, 404, 'Project not found.');

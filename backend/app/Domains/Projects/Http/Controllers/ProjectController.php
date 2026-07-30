@@ -8,6 +8,7 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Projects\Resources\ProjectResource;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -61,7 +62,7 @@ final class ProjectController extends Controller
         abort_unless($request->user()->hasPermission('projects.create'), 403);
 
         $validated = $request->validate([
-            'client_workspace_id' => ['required', 'uuid', Rule::exists('client_workspaces', 'id')->where('tenant_id', $request->user()->tenant_id)],
+            'client_workspace_id' => ['required', 'uuid', Rule::exists('client_workspaces', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
             'name' => ['required', 'string', 'max:160'],
             'status' => ['sometimes', Rule::in(self::STATUSES)],
             'account_manager_id' => ['nullable', 'integer', Rule::exists('users', 'id')],

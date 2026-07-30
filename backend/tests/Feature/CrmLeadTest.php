@@ -68,7 +68,7 @@ final class CrmLeadTest extends TestCase
     {
         $lead = Lead::create(['name' => 'Bound', 'source' => 'manual']);
 
-        // Force reliance on the ResolveTenant middleware (must run before route-model binding).
+        // Force reliance on the ResolveMembership middleware (must run before route-model binding).
         app(TenantContext::class)->forget();
 
         $this->actingAs($this->user, 'sanctum')->getJson("/api/v1/leads/{$lead->id}")

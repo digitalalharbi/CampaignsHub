@@ -13,6 +13,7 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Sandbox\SandboxAdvertisingConnector;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -57,7 +58,7 @@ final class ProjectIntegrationController extends Controller
         abort_unless($request->user()->hasPermission('integrations.connect'), 403);
 
         $validated = $request->validate([
-            'external_account_id' => ['required', 'uuid', Rule::exists('external_accounts', 'id')->where('tenant_id', $request->user()->tenant_id)],
+            'external_account_id' => ['required', 'uuid', Rule::exists('external_accounts', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
             'purpose' => ['required', Rule::in(['advertising', 'analytics', 'tag_management', 'ecommerce', 'tracking', 'conversion_api', 'reporting'])],
             'is_primary' => ['sometimes', 'boolean'],
         ]);

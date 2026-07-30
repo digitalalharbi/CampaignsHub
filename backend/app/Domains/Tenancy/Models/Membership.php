@@ -15,8 +15,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * A user's membership of one portal, in one tenant (ADR 0002).
  *
- * Deliberately does NOT use {@see \App\Domains\Tenancy\Models\Concerns\BelongsToTenant}. That trait
- * adds a global scope filtering by the *current* tenant, which is exactly wrong here: the whole point
+ * Deliberately does NOT use the BelongsToTenant trait (referenced in prose, not imported, so no one
+ * mistakes this for a model that carries it). That trait adds a global scope filtering by the
+ * *current* tenant, which is exactly wrong here: the whole point
  * of this table is to answer "which tenants and portals does this user belong to?" — a question that
  * necessarily crosses tenants, and is asked before a current tenant has been established at all.
  *

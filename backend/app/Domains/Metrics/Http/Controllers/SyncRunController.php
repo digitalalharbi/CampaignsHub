@@ -11,6 +11,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -99,7 +100,7 @@ final class SyncRunController extends Controller
 
         $account = ExternalAccount::withoutGlobalScopes()
             ->where('id', $data['external_account_id'])
-            ->where('tenant_id', $request->user()->tenant_id)
+            ->where('tenant_id', app(TenantContext::class)->tenantId())
             ->firstOrFail();
 
         $to = isset($data['to']) ? Carbon::parse($data['to']) : Carbon::now();
