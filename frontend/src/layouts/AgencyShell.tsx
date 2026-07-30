@@ -1,20 +1,9 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  BarChart3,
-  Building2,
-  FolderKanban,
-  FolderOpen,
-  Images,
-  Inbox,
-  LayoutDashboard,
-  ListChecks,
-  Megaphone,
   Menu,
-  MessageSquare,
   Moon,
   PanelLeft,
-  Receipt,
   Sun,
   Users,
   X,
@@ -23,6 +12,8 @@ import { AccountMenu } from '@/features/account/UserMenu'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { fetchMemberships } from '@/features/auth/memberships'
 import { useUi } from '@/stores/ui'
+import { SidebarNav } from './SidebarNav'
+import { agencyNavGroups } from './agencyNav'
 
 /**
  * The agency portal's shell (ADR 0002).
@@ -37,60 +28,20 @@ import { useUi } from '@/stores/ui'
  * plainly. A partial view that looks like the whole agency is the failure mode this avoids.
  */
 
-const agencyNav = [
-  { to: '/agency/dashboard', ar: 'لوحة الوكالة', en: 'Agency overview', icon: LayoutDashboard },
-  { to: '/agency/clients', ar: 'العملاء', en: 'Clients', icon: Building2 },
-  { to: '/agency/requests', ar: 'الطلبات', en: 'Requests', icon: Inbox },
-  { to: '/agency/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban },
-  { to: '/agency/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
-  { to: '/agency/content', ar: 'المحتوى', en: 'Content', icon: Images },
-  { to: '/agency/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3 },
-  { to: '/agency/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks },
-  { to: '/agency/files', ar: 'الملفات', en: 'Files', icon: FolderOpen },
-  { to: '/agency/messages', ar: 'المحادثات', en: 'Conversations', icon: MessageSquare },
-  { to: '/agency/billing', ar: 'المالية', en: 'Finance', icon: Receipt },
-  { to: '/agency/team', ar: 'الفريق والنطاقات', en: 'Team & scopes', icon: Users },
-] as const
-
-type NavEntry = (typeof agencyNav)[number]
-
+/**
+ * Navigation lives in `agencyNav.ts` — the same twelve sections, grouped around the question an
+ * agency actually asks. Clients is top level rather than one item inside Work, because for an agency
+ * it is the axis everything else hangs off.
+ */
 function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: boolean; onNavigate?: () => void }) {
-  const render = (list: readonly NavEntry[]) =>
-    list.map(({ to, icon: Icon, ...label }) => (
-      <NavLink
-        key={to}
-        to={to}
-        onClick={onNavigate}
-        title={collapsed ? (ar ? label.ar : label.en) : undefined}
-        className={({ isActive }) =>
-          `group relative flex items-center rounded-xl text-sm font-semibold transition-all duration-150 ${
-            collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5'
-          } ${
-            isActive
-              ? 'bg-[var(--brand-background)] text-brand-600'
-              : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
-          }`
-        }
-      >
-        {({ isActive }) => (
-          <>
-            {isActive && <span className="absolute inset-y-2 start-0 w-[3px] rounded-full bg-brand-600" aria-hidden />}
-            <Icon size={19} strokeWidth={isActive ? 2.4 : 2} aria-hidden />
-            {!collapsed && <span>{ar ? label.ar : label.en}</span>}
-          </>
-        )}
-      </NavLink>
-    ))
-
   return (
-    <>
-      <nav aria-label={ar ? 'أقسام الوكالة' : 'Agency sections'} className="flex flex-col gap-1">
-        {render(agencyNav)}
-      </nav>
-      {/* Nothing is listed here before it works. The client portals join this rail when their
-          surface lands — a nav entry that leads nowhere is a broken promise, not a roadmap. */}
-      <div className="mt-auto" />
-    </>
+    <SidebarNav
+      groups={agencyNavGroups}
+      ar={ar}
+      collapsed={collapsed}
+      onNavigate={onNavigate}
+      label={ar ? 'أقسام الوكالة' : 'Agency sections'}
+    />
   )
 }
 

@@ -1,104 +1,42 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import {
-  BarChart3,
-  BellRing,
-  Building2,
-  CreditCard,
-  FolderKanban,
-  FolderOpen,
-  Inbox,
-  Images,
-  LayoutDashboard,
-  ListChecks,
-  MessageSquare,
   Megaphone,
   Menu,
   Moon,
   PanelLeft,
-  Plug,
-  Receipt,
   Search,
-  Settings,
   Sun,
-  TrendingUp,
   X,
 } from 'lucide-react'
 import { ProjectSwitcher } from '@/components/ProjectSwitcher'
 import { AccountMenu } from '@/features/account/UserMenu'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
-import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
-import type { TranslationKey } from '@/lib/i18n'
+import { SidebarNav } from './SidebarNav'
+import { appNavGroups } from './appNav'
 
 // `ent` = the account-entitlement nav key; an item shows only when it's in the workspace's entitled nav.
-type NavItem = { to: string; key: TranslationKey; icon: typeof LayoutDashboard; ent: string }
 
-// Canonical navigation — ONE entry per module (see docs/CANONICAL_MODULES.md). Integrations absorbs the
-// Connection Center + the Google Drive connector; Branding lives under Settings; Finance is one backend
-// surfaced as المالية (Ops, ent:billing) or الاشتراك (SaaS, ent:subscriptions) via entitlements.
-const operationalNav: NavItem[] = [
-  { to: '/app/dashboard', key: 'dashboard', icon: LayoutDashboard, ent: 'dashboard' },
-  { to: '/app/requests', key: 'requests_inbox', icon: Inbox, ent: 'requests' },
-  { to: '/app/clients', key: 'clients_portfolio', icon: Building2, ent: 'clients' },
-  { to: '/app/projects', key: 'projects', icon: FolderKanban, ent: 'projects' },
-  { to: '/app/campaigns', key: 'campaigns', icon: Megaphone, ent: 'campaigns' },
-  { to: '/app/content', key: 'content', icon: Images, ent: 'content' },
-  { to: '/app/analytics', key: 'analytics', icon: TrendingUp, ent: 'analytics' },
-  { to: '/app/reports', key: 'reports', icon: BarChart3, ent: 'reports' },
-  { to: '/app/tasks', key: 'tasks', icon: ListChecks, ent: 'tasks' },
-  { to: '/app/integrations', key: 'integrations', icon: Plug, ent: 'connections' },
-  { to: '/app/files', key: 'files', icon: FolderOpen, ent: 'connections' },
-  { to: '/app/alerts', key: 'alerts', icon: BellRing, ent: 'alerts' },
-  { to: '/app/messages', key: 'messages', icon: MessageSquare, ent: 'messaging' },
-  { to: '/app/billing', key: 'billing', icon: Receipt, ent: 'billing' },
-  { to: '/app/subscriptions', key: 'subscriptions', icon: CreditCard, ent: 'subscriptions' },
-]
-const utilityNav: NavItem[] = [{ to: '/app/settings', key: 'settings', icon: Settings, ent: 'settings' }]
-
+/**
+ * Navigation lives in `appNav.ts` — the same sixteen sections the flat rail had, grouped by the
+ * question the advertiser is asking. See that file for why each group holds what it does.
+ */
 function NavItems({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
-  const t = useT()
-  // Filter navigation by the workspace's entitlements (personal = full menu; company = simplified).
-  // No entitlements yet (older payload) → show everything, preserving current behavior.
+  const ar = useUi((s) => s.locale) === 'ar'
+  // Filter by the workspace's entitlements (personal = full menu; company = simplified). No
+  // entitlements yet (older payload) → show everything, preserving the previous behaviour.
   const nav = useAuth((s) => s.user?.account?.nav)
-  const allowed = (item: NavItem) => !nav || nav.includes(item.ent)
-  const render = (list: NavItem[]) =>
-    list.filter(allowed).map(({ to, key, icon: Icon }) => (
-      <NavLink
-        key={to}
-        to={to}
-        end={to === '/'}
-        onClick={onNavigate}
-        title={collapsed ? t(key) : undefined}
-        className={({ isActive }) =>
-          `group relative flex items-center rounded-xl text-sm font-semibold transition-all duration-150 ${
-            collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5'
-          } ${
-            isActive
-              ? 'bg-[var(--brand-background)] text-brand-600'
-              : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
-          }`
-        }
-      >
-        {({ isActive }) => (
-          <>
-            {isActive && (
-              <span className="absolute inset-y-2 start-0 w-[3px] rounded-full bg-brand-600" aria-hidden />
-            )}
-            <Icon size={19} strokeWidth={isActive ? 2.4 : 2} aria-hidden />
-            {!collapsed && <span>{t(key)}</span>}
-          </>
-        )}
-      </NavLink>
-    ))
+
   return (
-    <>
-      <nav className="flex flex-col gap-1">{render(operationalNav)}</nav>
-      <div className="mt-auto flex flex-col gap-1 pt-4">
-        <div className="mb-3 border-t border-border" />
-        {render(utilityNav)}
-      </div>
-    </>
+    <SidebarNav
+      groups={appNavGroups}
+      ar={ar}
+      collapsed={collapsed}
+      onNavigate={onNavigate}
+      allow={(leaf) => !nav || leaf.ent === undefined || nav.includes(leaf.ent)}
+      label={ar ? 'أقسام مساحة العمل' : 'Workspace sections'}
+    />
   )
 }
 
@@ -116,7 +54,6 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
 }
 
 export function AppShell() {
-  const t = useT()
   const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
     useUi()
 
@@ -164,7 +101,7 @@ export function AppShell() {
               <Brand />
               <button
                 onClick={() => setSidebarOpen(false)}
-                aria-label={t('cancel')}
+                aria-label="Close"
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover"
               >
                 <X size={18} />
@@ -190,7 +127,7 @@ export function AppShell() {
           {/* Command / search (visual entry point). */}
           <button className="hidden h-9 items-center gap-2 rounded-xl border border-border bg-surface-secondary px-3 text-sm text-text-muted transition-colors hover:border-border-strong sm:flex sm:w-[280px]">
             <Search size={16} />
-            <span className="flex-1 text-start">{t('search')}…</span>
+            <span className="flex-1 text-start">Search…</span>
             <kbd className="tnum rounded-md border border-border bg-surface px-1.5 py-0.5 text-xs text-text-muted">⌘K</kbd>
           </button>
 
