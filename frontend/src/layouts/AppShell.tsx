@@ -36,6 +36,7 @@ function NavItems({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?:
       onNavigate={onNavigate}
       allow={(leaf) => !nav || leaf.ent === undefined || nav.includes(leaf.ent)}
       label={ar ? 'أقسام مساحة العمل' : 'Workspace sections'}
+      storageKey="nav.collapsed.app"
     />
   )
 }

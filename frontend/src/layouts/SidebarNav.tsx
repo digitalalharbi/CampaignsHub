@@ -13,10 +13,17 @@ import type { LucideIcon } from 'lucide-react'
  * differ in what they contain rather than in how they draw it — an agency has clients and team
  * scopes, an advertiser has integrations and subscriptions, and neither shows the other's.
  *
- * Grouping never HIDES a section. Every leaf that existed as a flat entry is still a leaf here, and
- * the group holding the current page opens on arrival, so a deep link never lands the user inside a
- * collapsed rail with no idea where they are. `navLeaves()` exists so a test can assert that
- * flattening the groups returns exactly the sections the portal had before.
+ * Grouping never HIDES a section, and that is why every group is OPEN by default. Collapsing them
+ * would trade one problem for a worse one: a long list becomes a short list of labels, and reaching
+ * any section costs a click plus the guess about which label holds it. The labels are the value here
+ * — they say what the sections have in common — not the collapsing.
+ *
+ * A user may still collapse a group they do not use, and that choice is remembered per portal. The
+ * group holding the current page is always open regardless, so a deep link never lands someone
+ * inside a collapsed rail with no idea where they are.
+ *
+ * `navLeaves()` exists so a test can assert that flattening the groups returns exactly the sections
+ * the portal had before.
  */
 
 export interface NavLeaf {
@@ -60,6 +67,7 @@ export function SidebarNav({
   onNavigate,
   allow,
   label,
+  storageKey,
 }: {
   groups: readonly NavGroup[]
   ar: boolean
@@ -68,6 +76,8 @@ export function SidebarNav({
   /** Entitlement filter. Applied to leaves; a group whose leaves are all filtered out disappears. */
   allow?: (leaf: NavLeaf) => boolean
   label: string
+  /** Where this portal remembers which groups the user chose to collapse. */
+  storageKey?: string
 }) {
   const { pathname } = useLocation()
   const permitted = (leaf: NavLeaf) => (allow ? allow(leaf) : true)
@@ -82,7 +92,15 @@ export function SidebarNav({
         group.leaves.length === 1 ? (
           <Leaf key={group.key} leaf={group.leaves[0]} ar={ar} collapsed={collapsed} onNavigate={onNavigate} nested={false} />
         ) : (
-          <Group key={group.key} group={group} ar={ar} collapsed={collapsed} onNavigate={onNavigate} pathname={pathname} />
+          <Group
+            key={group.key}
+            group={group}
+            ar={ar}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+            pathname={pathname}
+            storageKey={storageKey}
+          />
         ),
       )}
     </nav>
@@ -114,13 +132,25 @@ function Leaf({
 }
 
 function Group({
-  group, ar, collapsed, onNavigate, pathname,
-}: { group: NavGroup; ar: boolean; collapsed?: boolean; onNavigate?: () => void; pathname: string }) {
-  // Open if the current page lives inside it. A deep link must never land someone in a collapsed
-  // rail with no indication of where they are.
+  group, ar, collapsed, onNavigate, pathname, storageKey,
+}: {
+  group: NavGroup; ar: boolean; collapsed?: boolean; onNavigate?: () => void
+  pathname: string; storageKey?: string
+}) {
+  // Open unless the user has collapsed this one before. Defaulting to closed would put every section
+  // behind a click and a guess, which is not simpler — it is the same list with the labels removed.
+  const [open, setOpen] = useState(() => !collapsedGroups(storageKey).includes(group.key))
+
+  // Always open when the current page lives inside it, whatever the stored preference: a deep link
+  // must never land someone in a collapsed rail with no indication of where they are.
   const holdsCurrent = group.leaves.some((l) => pathname === l.to || pathname.startsWith(`${l.to}/`))
-  const [open, setOpen] = useState(holdsCurrent)
   const text = ar ? group.ar : group.en
+
+  const toggle = () => {
+    const next = !open
+    setOpen(next)
+    rememberCollapsed(storageKey, group.key, !next)
+  }
 
   // Collapsed rail: no room for a disclosure, so the sections show directly as icons. Hiding them
   // behind a popover would make the collapsed rail strictly worse than the expanded one.
@@ -140,7 +170,7 @@ function Group({
         type="button"
         aria-expanded={open || holdsCurrent}
         data-testid={`nav-group-${group.key}`}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors ${
           holdsCurrent ? 'text-text-primary' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
         }`}
@@ -159,4 +189,31 @@ function Group({
       )}
     </div>
   )
+}
+
+/** @return list<string> group keys the user has collapsed in this portal. */
+function collapsedGroups(storageKey?: string): string[] {
+  if (storageKey === undefined || typeof window === 'undefined') return []
+
+  try {
+    const raw = window.localStorage.getItem(storageKey)
+
+    return raw === null ? [] : (JSON.parse(raw) as string[])
+  } catch {
+    // A corrupt preference is not worth failing navigation over — everything open is the safe answer.
+    return []
+  }
+}
+
+function rememberCollapsed(storageKey: string | undefined, key: string, isCollapsed: boolean): void {
+  if (storageKey === undefined || typeof window === 'undefined') return
+
+  const next = new Set(collapsedGroups(storageKey))
+  isCollapsed ? next.add(key) : next.delete(key)
+
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify([...next]))
+  } catch {
+    // Storage unavailable (private mode, quota). The rail still works; the choice just is not kept.
+  }
 }

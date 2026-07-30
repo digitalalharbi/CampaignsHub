@@ -41,6 +41,7 @@ function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: bool
       collapsed={collapsed}
       onNavigate={onNavigate}
       label={ar ? 'أقسام الوكالة' : 'Agency sections'}
+      storageKey="nav.collapsed.agency"
     />
   )
 }
