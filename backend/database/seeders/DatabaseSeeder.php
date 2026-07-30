@@ -71,6 +71,9 @@ class DatabaseSeeder extends Seeder
             // And a client contact named on two brands, so the isolated client space has something
             // to isolate — otherwise the picker never appears and the boundary is never seen.
             $this->call(DemoClientSpacesSeeder::class);
+            // Influencer work in three states — published, owed, and late — because a demo where
+            // everything is fine shows none of what the portal is for.
+            $this->call(DemoInfluencersSeeder::class);
         }
     }
 }

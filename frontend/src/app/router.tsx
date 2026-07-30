@@ -74,6 +74,11 @@ import { AgencyShell } from '@/layouts/AgencyShell'
 import { AgencyDashboardPage } from '@/features/agency/AgencyDashboardPage'
 import { RequireAgencyPortal } from '@/features/agency/RequireAgencyPortal'
 import { AgencyTeamPage } from '@/features/agency/AgencyTeamPage'
+import { InfluencerShell } from '@/layouts/InfluencerShell'
+import { RequireInfluencerPortal } from '@/features/influencers/RequireInfluencerPortal'
+import { CollaborationsPage } from '@/features/influencers/CollaborationsPage'
+import { RosterPage } from '@/features/influencers/RosterPage'
+import { DeliverablesPage } from '@/features/influencers/DeliverablesPage'
 import { WorkspaceSwitcherPage } from '@/features/auth/WorkspaceSwitcherPage'
 import { legacyAppRedirects } from './legacyRedirects'
 
@@ -270,6 +275,21 @@ export const router = createBrowserRouter([
             { path: 'team', element: <AgencyTeamPage /> },
             ...messagingRoutes,
             ...billingRoutes,
+          ],
+        }],
+      },
+      // ADR 0002 / INFL-001: the influencers & UGC portal. Its two halves have different boundaries
+      // and that is the point — the roster is agency-wide, while collaborations carry the client and
+      // narrow with the same client-scope ceiling every other client-bound surface uses.
+      {
+        path: 'influencers',
+        element: <RequireInfluencerPortal />,
+        children: [{
+          element: <InfluencerShell />,
+          children: [
+            { index: true, element: <CollaborationsPage /> },
+            { path: 'roster', element: <RosterPage /> },
+            { path: 'deliverables', element: <DeliverablesPage /> },
           ],
         }],
       }],
