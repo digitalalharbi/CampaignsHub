@@ -8,8 +8,10 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Identity\DTOs\RegisterData;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Models\Workspace;
+use App\Domains\Tenancy\Services\MembershipProvisioner;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -28,7 +30,10 @@ final class RegisterTenantAction
         'combined' => ['paid_media', 'influencer_marketing'],
     ];
 
-    public function __construct(private readonly TenantContext $context) {}
+    public function __construct(
+        private readonly TenantContext $context,
+        private readonly MembershipProvisioner $memberships,
+    ) {}
 
     public function execute(RegisterData $data): User
     {
@@ -70,6 +75,17 @@ final class RegisterTenantAction
             // permission catalogue (previously the role was created empty, leaving new owners powerless).
             $ownerRole->givePermissionTo(...Permission::pluck('key')->all());
             $user->assignRole($ownerRole);
+
+            // ADR 0002: the membership is what routes the user to a portal after signing in. Granted
+            // through the same provisioner the seeders use, so there is one grant path rather than two
+            // that can drift. Inferring a portal from the account type at every login instead would
+            // make the portal a permanent property of the user, which it explicitly is not.
+            $this->memberships->ensure(
+                $user,
+                $tenant,
+                Portal::forAccountType($data->accountType),
+                role: 'owner',
+            );
 
             return $user;
         });

@@ -58,5 +58,9 @@ class DatabaseSeeder extends Seeder
                 DemoIntegrationsSeeder::class,
             ]);
         }
+
+        // 4) LAST: every tenant user needs a membership, or they have no portal to land in. Runs after
+        //    all the seeders above so it catches whatever they created, and is idempotent.
+        $this->call(MembershipBackfillSeeder::class);
     }
 }

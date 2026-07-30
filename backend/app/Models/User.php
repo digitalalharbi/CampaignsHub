@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Domains\Access\Models\Concerns\HasRoles;
+use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -68,5 +70,15 @@ class User extends Authenticatable
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    /**
+     * Every portal this user belongs to, across tenants (ADR 0002). `tenant_id` above is the primary
+     * membership kept for the existing tenant scope; this is the full picture the portal switcher and
+     * the post-authentication routing are built on.
+     */
+    public function memberships(): HasMany
+    {
+        return $this->hasMany(Membership::class);
     }
 }
