@@ -28,6 +28,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class GrantMembership
 {
+    public function __construct(private readonly ManageMembershipScopes $scopes) {}
+
     public function execute(MembershipGrant $grant): Membership
     {
         return DB::transaction(function () use ($grant): Membership {
@@ -53,36 +55,24 @@ final class GrantMembership
                 ]);
             }
 
-            if ($grant->clientScopeIds !== null) {
-                $this->replaceScope($membership, MembershipScope::TYPE_CLIENT, $grant->clientScopeIds);
+            /*
+             * ADDITIVE. A grant — an invitation, "give them this client too", a retry — may only
+             * widen what the person already has. Replacing here meant adding a second client
+             * silently removed the first, and re-sending an invitation narrowed someone to whatever
+             * that one invitation happened to mention.
+             *
+             * Taking access away is a different, explicitly named operation:
+             * {@see ManageMembershipScopes::remove()} and ::replace().
+             */
+            if ($grant->clientScopeIds !== null && $grant->clientScopeIds !== []) {
+                $this->scopes->add($membership, MembershipScope::TYPE_CLIENT, $grant->clientScopeIds);
             }
 
-            if ($grant->projectScopeIds !== null) {
-                $this->replaceScope($membership, MembershipScope::TYPE_PROJECT, $grant->projectScopeIds);
+            if ($grant->projectScopeIds !== null && $grant->projectScopeIds !== []) {
+                $this->scopes->add($membership, MembershipScope::TYPE_PROJECT, $grant->projectScopeIds);
             }
 
             return $membership->refresh()->load('scopes');
         });
-    }
-
-    /**
-     * Replaces the set for one scope type. An EMPTY list clears it, which means unrestricted within
-     * the tenant — so widening and narrowing are the same call rather than two that could disagree.
-     *
-     * @param  list<string>  $ids
-     */
-    private function replaceScope(Membership $membership, string $type, array $ids): void
-    {
-        $membership->scopes()->where('scope_type', $type)->delete();
-
-        foreach (array_unique($ids) as $id) {
-            MembershipScope::create([
-                'membership_id' => $membership->getKey(),
-                'scope_type' => $type,
-                'scope_id' => $id,
-            ]);
-        }
-
-        $membership->unsetRelation('scopes');
     }
 }

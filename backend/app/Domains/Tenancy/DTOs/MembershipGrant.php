@@ -20,8 +20,12 @@ use App\Models\User;
 final readonly class MembershipGrant
 {
     /**
-     * @param  list<string>|null  $clientScopeIds  null = leave scopes untouched; [] = unrestricted
-     *                                             within the tenant; a list = a hard ceiling.
+     * @param  list<string>|null  $clientScopeIds  clients to GRANT. A grant only ever widens: null
+     *                                             or [] leaves existing scopes untouched, and a list is added to them.
+     *                                             Taking access away is {@see ManageMembershipScopes::remove()};
+     *                                             redefining it wholesale is ::replace(). Neither happens here.
+     *                                             An empty set of reachable clients means NO clients — unrestricted
+     *                                             access is the `clients.view_all` permission, never an absence of rows.
      * @param  list<string>|null  $projectScopeIds  same convention.
      */
     public function __construct(

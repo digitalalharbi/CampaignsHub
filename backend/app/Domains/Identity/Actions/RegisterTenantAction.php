@@ -90,8 +90,9 @@ final class RegisterTenantAction
                 tenant: $tenant,
                 portal: Portal::forAccountType($data->accountType),
                 role: 'owner',
-                clientScopeIds: [],   // an owner is unrestricted within their own workspace
             ));
+            // The owner reaches every client through the clients.view_all permission granted with the
+            // full catalogue above — never through having no scope rows, which now means nothing.
 
             return $user;
         });

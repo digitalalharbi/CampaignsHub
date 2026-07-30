@@ -6,12 +6,15 @@ namespace Tests\Feature;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Tenancy\Actions\GrantMembership;
+use App\Domains\Tenancy\Actions\ManageMembershipScopes;
 use App\Domains\Tenancy\DTOs\MembershipGrant;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\MembershipScope;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
+use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -161,29 +164,115 @@ final class MembershipGrantTest extends TestCase
         $this->assertSame(1, Membership::query()->forUser($user->id)->count());
     }
 
-    /** Re-inviting a client with a different scope replaces it rather than accumulating access. */
-    public function test_regranting_a_client_replaces_the_scope_instead_of_widening_it(): void
+    /**
+     * The sequence the whole design has to get right: one client → add a second → sees both →
+     * remove one → loses only that one → a third client is still unreachable throughout.
+     */
+    public function test_an_agency_member_gains_and_loses_clients_one_at_a_time(): void
     {
-        $agency = $this->tenant('Rescope Agency', 'agency');
-        $first = $this->client($agency, 'First');
-        $second = $this->client($agency, 'Second');
-        $user = $this->bareUser($agency, 'rescope@test.dev');
+        $agency = $this->tenant('Sequence Agency', 'agency');
+        $alpha = $this->client($agency, 'Alpha');
+        $beta = $this->client($agency, 'Beta');
+        $gamma = $this->client($agency, 'Gamma');   // never granted
+        $user = $this->bareUser($agency, 'sequence@test.dev');
+        $scopes = app(ManageMembershipScopes::class);
+
+        // 1. Invited for Alpha.
+        $membership = app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $user, tenant: $agency, portal: Portal::Agency, role: 'account_manager',
+            clientScopeIds: [(string) $alpha->id],
+        ));
+        $this->assertSame([(string) $alpha->id], $membership->clientScopeIds());
+
+        // 2. Given Beta as well — Alpha is KEPT. This is the case a replace would have destroyed.
+        $membership = $scopes->add($membership, MembershipScope::TYPE_CLIENT, [(string) $beta->id]);
+        $this->assertEqualsCanonicalizing(
+            [(string) $alpha->id, (string) $beta->id],
+            $membership->clientScopeIds(),
+        );
+
+        // 3. Re-inviting for Alpha changes nothing at all.
+        $membership = app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $user, tenant: $agency, portal: Portal::Agency, role: 'account_manager',
+            clientScopeIds: [(string) $alpha->id],
+        ));
+        $this->assertCount(2, $membership->clientScopeIds());
+        $this->assertSame(2, MembershipScope::where('membership_id', $membership->getKey())->count());
+
+        // 4. Alpha withdrawn — and ONLY Alpha.
+        $membership = $scopes->remove($membership, MembershipScope::TYPE_CLIENT, (string) $alpha->id);
+        $this->assertSame([(string) $beta->id], $membership->clientScopeIds());
+
+        // 5. Gamma was never reachable at any point.
+        $this->assertNotContains((string) $gamma->id, $membership->clientScopeIds());
+    }
+
+    /** Replacing is destructive and separate — an administrator has to choose it by name. */
+    public function test_replace_is_the_only_operation_that_removes_everything(): void
+    {
+        $agency = $this->tenant('Replace Agency', 'agency');
+        $a = $this->client($agency, 'Keep');
+        $b = $this->client($agency, 'Also Keep');
+        $c = $this->client($agency, 'Only This');
+        $user = $this->bareUser($agency, 'replace@test.dev');
+        $scopes = app(ManageMembershipScopes::class);
+
+        $membership = app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $user, tenant: $agency, portal: Portal::Agency, role: 'account_manager',
+            clientScopeIds: [(string) $a->id, (string) $b->id],
+        ));
+        $this->assertCount(2, $membership->clientScopeIds());
+
+        $membership = $scopes->replace($membership, MembershipScope::TYPE_CLIENT, [(string) $c->id]);
+        $this->assertSame([(string) $c->id], $membership->clientScopeIds());
+    }
+
+    /**
+     * FAIL-CLOSED. No scope rows means no clients — the inverse would make every failure generous:
+     * a grant whose rows failed to insert, or a member whose last client was removed, would have
+     * gained the whole agency instead of losing everything.
+     */
+    public function test_no_scopes_means_no_clients_not_all_of_them(): void
+    {
+        $agency = $this->tenant('Closed Agency', 'agency');
+        $this->client($agency, 'Unreachable');
+        $user = $this->bareUser($agency, 'closed@test.dev');
+
+        $membership = app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $user, tenant: $agency, portal: Portal::Agency, role: 'account_manager',
+        ));
+
+        $resolver = app(ClientScopeResolver::class);
+        $this->assertFalse($resolver->hasUnrestrictedAccess($user));
+        $this->assertSame([], $resolver->reachableClientIds($user, $membership));
+    }
+
+    /** A client-portal user cannot be widened by re-inviting them for someone else's client. */
+    public function test_a_client_portal_user_cannot_be_widened_by_re_invitation(): void
+    {
+        $agency = $this->tenant('Confined Agency', 'agency');
+        $mine = $this->client($agency, 'Mine');
+        $theirs = $this->client($agency, 'Theirs');
+        $user = $this->bareUser($agency, 'confined@test.dev');
 
         app(GrantMembership::class)->execute(
-            MembershipGrant::forAgencyClient($user, $agency, [(string) $first->id]),
-        );
-        $membership = app(GrantMembership::class)->execute(
-            MembershipGrant::forAgencyClient($user, $agency, [(string) $second->id]),
+            MembershipGrant::forAgencyClient($user, $agency, [(string) $mine->id]),
         );
 
-        $this->assertSame([(string) $second->id], $membership->clientScopeIds());
-        $this->assertSame(1, Membership::query()->forUser($user->id)->count());
+        // A second invitation naming another client must not quietly extend their reach. Widening a
+        // confined client is an administrative act, not a side effect of sending an invitation.
+        $membership = app(GrantMembership::class)->execute(
+            MembershipGrant::forAgencyClient($user, $agency, [(string) $mine->id]),
+        );
+
+        $this->assertSame([(string) $mine->id], $membership->clientScopeIds());
+        $this->assertFalse(app(ClientScopeResolver::class)->canReach($user, (string) $theirs->id));
     }
 
     /** Registration grants the owner membership in the SAME transaction as the workspace. */
     public function test_registration_grants_an_owner_membership_atomically(): void
     {
-        $this->seed(\Database\Seeders\PermissionSeeder::class);
+        $this->seed(PermissionSeeder::class);
 
         $this->withHeaders(['Origin' => 'http://localhost:5173'])
             ->postJson('/api/v1/auth/register', [
@@ -197,6 +286,9 @@ final class MembershipGrantTest extends TestCase
 
         $this->assertSame('owner', $membership->role);
         $this->assertSame(Portal::Agency, $membership->portal);
-        $this->assertSame([], $membership->clientScopeIds(), 'an owner is unrestricted in their own workspace');
+        // An owner reaches every client through the clients.view_all PERMISSION, never through
+        // having no scope rows — an empty set now means nothing, not everything.
+        $this->assertTrue($user->hasPermission(ClientScopeResolver::ALL_CLIENTS));
+        $this->assertNull(app(ClientScopeResolver::class)->reachableClientIds($user));
     }
 }
