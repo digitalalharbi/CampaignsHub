@@ -7,7 +7,6 @@ namespace Tests\Feature;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Models\NotificationDelivery;
 use App\Domains\Notifications\Services\NotificationDispatcher;
-use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -30,7 +29,9 @@ final class NotificationHardeningTest extends TestCase
     {
         parent::setUp();
         $this->tenant = Tenant::create(['name' => 'Agency', 'slug' => 'agency', 'status' => 'active']);
-        app(TenantContext::class)->setTenantId($this->tenant->id);
+        // Scope dies with the request since ADR 0002; this test creates rows directly
+        // between requests, so it holds its tenant for the whole test.
+        $this->holdingTenant((string) $this->tenant->id);
         $this->user = User::create(['tenant_id' => $this->tenant->id, 'name' => 'U', 'email' => 'u@a.test', 'password' => 'secret123']);
         $this->dispatcher = app(NotificationDispatcher::class);
     }

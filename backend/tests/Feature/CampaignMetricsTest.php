@@ -59,7 +59,9 @@ final class CampaignMetricsTest extends TestCase
         parent::setUp();
         $this->seed(PermissionSeeder::class);
         $this->tenant = Tenant::create(['name' => 'A', 'slug' => 'a', 'status' => 'active']);
-        app(TenantContext::class)->setTenantId($this->tenant->id);
+        // Scope dies with the request since ADR 0002; this test creates rows directly
+        // between requests, so it holds its tenant for the whole test.
+        $this->holdingTenant((string) $this->tenant->id);
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'slug' => 'o']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
@@ -281,7 +283,9 @@ final class CampaignMetricsTest extends TestCase
     public function test_sync_log_returns_runs_for_linked_accounts_only_and_surfaces_failures(): void
     {
         // A real account chain — the FK to external_accounts is what makes the sync log auditable.
-        app(TenantContext::class)->setTenantId($this->tenant->id);
+        // Scope dies with the request since ADR 0002; this test creates rows directly
+        // between requests, so it holds its tenant for the whole test.
+        $this->holdingTenant((string) $this->tenant->id);
         $credential = new IntegrationCredential(['provider' => 'meta', 'credential_scope' => 'project_only', 'credential_type' => 'oauth', 'status' => 'active']);
         $credential->setPayload('token-meta');
         $credential->save();
@@ -346,7 +350,9 @@ final class CampaignMetricsTest extends TestCase
             ->assertJsonPath('data.state', 'not_linked');
 
         // 2) Linked, but the hierarchy was never pulled.
-        app(TenantContext::class)->setTenantId($this->tenant->id);
+        // Scope dies with the request since ADR 0002; this test creates rows directly
+        // between requests, so it holds its tenant for the whole test.
+        $this->holdingTenant((string) $this->tenant->id);
         $credential = new IntegrationCredential(['provider' => 'meta', 'credential_scope' => 'project_only', 'credential_type' => 'oauth', 'status' => 'active']);
         $credential->setPayload('t');
         $credential->save();

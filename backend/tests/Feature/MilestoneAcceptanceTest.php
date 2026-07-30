@@ -48,11 +48,14 @@ final class MilestoneAcceptanceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
         Queue::fake(); // report generation is queued — never faked as "done"
         $this->seed(PermissionSeeder::class);
         $this->tenant = Tenant::create(['name' => 'Agency', 'slug' => 'agency', 'status' => 'active',
             'account_type' => 'agency', 'enabled_modules' => ['paid_media'], 'onboarding_step' => 'done', 'onboarding_completed_at' => now()]);
-        app(TenantContext::class)->setTenantId($this->tenant->id);
+        // Scope is request-scoped since ADR 0002; this test creates rows directly between
+        // requests, so it holds its tenant for the whole test rather than for one call.
+        $this->holdingTenant((string) $this->tenant->id);
 
         $ownerRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'tenant-owner']);
         $ownerRole->givePermissionTo(...Permission::pluck('key')->all());

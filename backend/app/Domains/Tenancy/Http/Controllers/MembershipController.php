@@ -91,12 +91,10 @@ final class MembershipController extends Controller
                 'name' => $membership->tenant?->name,
                 'slug' => $membership->tenant?->slug,
             ],
-            // Present only for a membership confined to one client space.
-            'client_workspace' => $membership->clientWorkspace === null ? null : [
-                'id' => (string) $membership->client_workspace_id,
-                'name' => $membership->clientWorkspace->name,
-                'slug' => $membership->clientWorkspace->slug,
-            ],
+            // Empty = unrestricted within the tenant; a list is a hard ceiling on what this
+            // membership may reach, whatever the role would otherwise allow.
+            'client_scope_ids' => $membership->clientScopeIds(),
+            'project_scope_ids' => $membership->projectScopeIds(),
         ];
     }
 }

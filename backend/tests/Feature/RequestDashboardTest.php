@@ -31,6 +31,10 @@ final class RequestDashboardTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Scope is request-scoped since ADR 0002; these tests assert on persisted rows,
+        // not on what one tenant can see, so they read across tenants deliberately.
+        $this->assertingAcrossTenants();
         $this->seed(PermissionSeeder::class);
         $this->seed(RequestCatalogSeeder::class);
         $this->tenant = Tenant::create(['name' => 'Agency', 'slug' => 'agency', 'status' => 'active', 'is_default_portal' => true, 'portal_enabled' => true]);

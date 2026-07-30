@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Tenancy\Context\MembershipContext;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
@@ -35,8 +37,8 @@ final class PortalAccessTest extends TestCase
         foreach (Portal::cases() as $portal) {
             Route::middleware(['api', 'auth:sanctum', 'tenant', 'portal:'.$portal->value])
                 ->get('/__probe/'.$portal->value, fn () => response()->json([
-                    'portal' => app(\App\Domains\Tenancy\Context\MembershipContext::class)->portal()?->value,
-                    'tenant' => app(\App\Domains\Tenancy\Context\TenantContext::class)->tenantId(),
+                    'portal' => app(MembershipContext::class)->portal()?->value,
+                    'tenant' => app(TenantContext::class)->tenantId(),
                 ]));
         }
     }
@@ -223,6 +225,7 @@ final class PortalAccessTest extends TestCase
         $this->withHeaders($this->spaHeaders)
             ->postJson('/api/v1/auth/memberships/switch', ['membership_id' => 'x'])->assertUnauthorized();
     }
+
     /**
      * The portal chosen before signing in survives authentication — but only as a preference. A
      * visitor who asks for a portal they do not hold lands on their own, not on someone else's.
@@ -265,5 +268,67 @@ final class PortalAccessTest extends TestCase
         $this->actingAs($user, 'sanctum')->withHeaders($this->spaHeaders)
             ->getJson('/api/v1/auth/memberships?portal=../../etc/passwd')
             ->assertOk()->assertJsonPath('data.destination', '/app/dashboard');
+    }
+    // ---- request-scoped lifetime ----
+
+    /**
+     * The context must not survive the request that populated it. If it did, a second request that
+     * resolves no membership would inherit the first one's tenant and run its queries against data
+     * nobody granted it — the kind of leak that never fails loudly.
+     */
+    public function test_the_membership_context_does_not_leak_between_requests(): void
+    {
+        $tenant = $this->tenant('Leak Co', 'agency');
+        $member = $this->user($tenant, 'member@test.dev');
+        $this->grant($member, $tenant, Portal::Agency);
+
+        $this->actingAs($member, 'sanctum')->getJson('/__probe/agency')
+            ->assertOk()->assertJsonPath('tenant', (string) $tenant->id);
+
+        // The context is torn down with the request, so nothing is left set for the next one.
+        $this->assertFalse(app(MembershipContext::class)->has());
+        $this->assertNull(app(TenantContext::class)->tenantId());
+    }
+
+    /** A second user in the same process must not inherit the first user's scope. */
+    public function test_a_second_request_by_another_user_gets_its_own_scope(): void
+    {
+        $agency = $this->tenant('First Co', 'agency');
+        $brand = $this->tenant('Second Co', 'brand');
+        $first = $this->user($agency, 'first@test.dev');
+        $second = $this->user($brand, 'second@test.dev');
+        $this->grant($first, $agency, Portal::Agency);
+        $this->grant($second, $brand, Portal::App);
+
+        $this->actingAs($first, 'sanctum')->getJson('/__probe/agency')
+            ->assertOk()->assertJsonPath('tenant', (string) $agency->id);
+
+        $this->actingAs($second, 'sanctum')->getJson('/__probe/app')
+            ->assertOk()->assertJsonPath('tenant', (string) $brand->id);
+    }
+
+    /**
+     * The context is SCOPED, so everything resolved within one request shares one instance. A
+     * singleton would have been shared too — but would also have outlived the request; a plain
+     * binding would have handed each service its own empty copy, and the membership resolved in
+     * middleware would be invisible to controllers and policies.
+     */
+    public function test_every_service_in_one_request_sees_the_same_context(): void
+    {
+        Route::middleware(['api', 'auth:sanctum', 'tenant', 'portal:app'])
+            ->get('/__probe-identity', fn () => response()->json([
+                'same' => app(MembershipContext::class)
+                    === app(MembershipContext::class),
+                'portal' => app(MembershipContext::class)->portal()?->value,
+            ]));
+
+        $tenant = $this->tenant('Identity Co', 'brand');
+        $user = $this->user($tenant, 'identity@test.dev');
+        $this->grant($user, $tenant, Portal::App);
+
+        $this->actingAs($user, 'sanctum')->getJson('/__probe-identity')
+            ->assertOk()
+            ->assertJsonPath('same', true)
+            ->assertJsonPath('portal', 'app');
     }
 }

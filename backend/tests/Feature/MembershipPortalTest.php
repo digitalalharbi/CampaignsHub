@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Domains\Tenancy\Models\Workspace;
+use App\Domains\Tenancy\Services\MembershipProvisioner;
 use App\Domains\Tenancy\Services\PortalResolver;
 use App\Models\User;
+use Database\Seeders\MembershipBackfillSeeder;
+use Database\Seeders\PermissionSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -38,6 +43,15 @@ final class MembershipPortalTest extends TestCase
     {
         return User::create([
             'tenant_id' => $tenant->id, 'name' => 'U', 'email' => $email, 'password' => 'secret123',
+        ]);
+    }
+
+    private function clientWorkspace(Tenant $tenant, string $name): ClientWorkspace
+    {
+        return ClientWorkspace::create([
+            'tenant_id' => $tenant->id, 'name' => $name,
+            'slug' => str($name)->slug()->value().'-'.uniqid(),
+            'mode' => 'managed', 'status' => 'active',
         ]);
     }
 
@@ -166,13 +180,14 @@ final class MembershipPortalTest extends TestCase
         $this->assertSame(Portal::App, Portal::forAccountType(null));
         $this->assertSame(['app', 'agency', 'influencers', 'portal'], Portal::values());
     }
+
     /**
      * Registration must create the membership, not leave the user relying on `users.tenant_id`.
      * Without it a brand-new account has no portal to land in and falls through to onboarding forever.
      */
     public function test_registration_creates_the_matching_membership(): void
     {
-        $this->seed(\Database\Seeders\PermissionSeeder::class);
+        $this->seed(PermissionSeeder::class);
 
         $this->withHeaders(['Origin' => 'http://localhost:5173'])
             ->postJson('/api/v1/auth/register', [
@@ -193,7 +208,7 @@ final class MembershipPortalTest extends TestCase
     /** An advertiser signup lands in the campaigns portal, not the agency one. */
     public function test_an_advertiser_signup_gets_the_app_portal(): void
     {
-        $this->seed(\Database\Seeders\PermissionSeeder::class);
+        $this->seed(PermissionSeeder::class);
 
         $this->withHeaders(['Origin' => 'http://localhost:5173'])
             ->postJson('/api/v1/auth/register', [
@@ -205,6 +220,7 @@ final class MembershipPortalTest extends TestCase
         $user = User::where('email', 'brand.signup@test.dev')->firstOrFail();
         $this->assertSame(Portal::App, $user->memberships()->firstOrFail()->portal);
     }
+
     /**
      * A clean install must not strand anyone. The migration's backfill runs while `users` is still
      * empty, so without the seeder every seeded account would have no portal and fall through to
@@ -221,7 +237,7 @@ final class MembershipPortalTest extends TestCase
 
         $this->assertCount(0, $stranded->memberships()->get());
 
-        $this->seed(\Database\Seeders\MembershipBackfillSeeder::class);
+        $this->seed(MembershipBackfillSeeder::class);
 
         $membership = $stranded->refresh()->memberships()->firstOrFail();
         $this->assertSame(Portal::Agency, $membership->portal);
@@ -235,7 +251,7 @@ final class MembershipPortalTest extends TestCase
     {
         $tenant = $this->tenant('Idempotent Co', 'brand');
         $user = $this->user($tenant, 'idem@test.dev');
-        $provisioner = app(\App\Domains\Tenancy\Services\MembershipProvisioner::class);
+        $provisioner = app(MembershipProvisioner::class);
 
         $first = $provisioner->ensure($user, $tenant, Portal::App);
         $second = $provisioner->ensure($user, $tenant, Portal::App);
@@ -250,7 +266,7 @@ final class MembershipPortalTest extends TestCase
         $a = $this->tenant('Move A', 'agency');
         $b = $this->tenant('Move B', 'brand');
         $user = $this->user($a, 'move@test.dev');
-        $provisioner = app(\App\Domains\Tenancy\Services\MembershipProvisioner::class);
+        $provisioner = app(MembershipProvisioner::class);
 
         $first = $provisioner->ensure($user, $a, Portal::Agency);
         $second = $provisioner->ensure($user, $b, Portal::App);
@@ -261,5 +277,125 @@ final class MembershipPortalTest extends TestCase
 
         $this->assertFalse($first->refresh()->is_default);
         $this->assertTrue($second->refresh()->is_default);
+    }
+    // ---- the five scenarios the schema must actually support (ADR 0002) ----
+
+    private function workspace(Tenant $tenant, string $name): Workspace
+    {
+        return Workspace::create([
+            'tenant_id' => $tenant->id, 'name' => $name, 'slug' => str($name)->slug()->value(),
+        ]);
+    }
+
+    /** (1) One person, two tenants. */
+    public function test_scenario_user_in_several_tenants(): void
+    {
+        $a = $this->tenant('Tenant A', 'agency');
+        $b = $this->tenant('Tenant B', 'brand');
+        $user = $this->user($a, 'two-tenants@test.dev');
+        $p = app(MembershipProvisioner::class);
+
+        $p->ensure($user, $a, Portal::Agency);
+        $p->ensure($user, $b, Portal::App);
+
+        $this->assertSame(2, $user->memberships()->count());
+    }
+
+    /**
+     * (2) One person, two workspaces of the SAME tenant. The first schema rejected this outright:
+     * the unique key left `workspace_id` out, so the second workspace violated it.
+     */
+    public function test_scenario_user_in_several_workspaces_of_one_tenant(): void
+    {
+        $tenant = $this->tenant('Multi WS', 'agency');
+        $user = $this->user($tenant, 'two-workspaces@test.dev');
+        $p = app(MembershipProvisioner::class);
+
+        $p->ensure($user, $tenant, Portal::Agency, 'member', $this->workspace($tenant, 'North'));
+        $p->ensure($user, $tenant, Portal::Agency, 'member', $this->workspace($tenant, 'South'));
+
+        $this->assertSame(2, $user->memberships()->count());
+    }
+
+    /** (3) One person, several portals. */
+    public function test_scenario_user_holding_several_portals(): void
+    {
+        $tenant = $this->tenant('Many Portals', 'agency');
+        $user = $this->user($tenant, 'many-portals@test.dev');
+        $p = app(MembershipProvisioner::class);
+
+        foreach (Portal::cases() as $portal) {
+            $p->ensure($user, $tenant, $portal);
+        }
+
+        $this->assertSame(4, $user->memberships()->count());
+    }
+
+    /**
+     * (4) An agency operator responsible for SEVERAL named clients — one membership, one entry in
+     * the switcher, three clients. As a single column this needed three membership rows.
+     */
+    public function test_scenario_agency_member_scoped_to_several_clients(): void
+    {
+        $tenant = $this->tenant('Scoped Agency', 'agency');
+        $user = $this->user($tenant, 'account-manager@test.dev');
+        $p = app(MembershipProvisioner::class);
+        $membership = $p->ensure($user, $tenant, Portal::Agency, 'account_manager');
+
+        $clients = collect(['Alpha', 'Beta', 'Gamma'])->map(fn ($n) => $this->clientWorkspace($tenant, $n));
+        $p->scopeToClients($membership, $clients->pluck('id')->map(fn ($i) => (string) $i)->all());
+
+        $membership->refresh()->load('scopes');
+        $this->assertCount(3, $membership->clientScopeIds());
+        $this->assertTrue($membership->isClientScoped());
+        // Still ONE membership: the switcher shows one workspace, not three.
+        $this->assertSame(1, $user->memberships()->count());
+    }
+
+    /** (5) A single client inside the agency, confined to their own space. */
+    public function test_scenario_one_client_inside_the_agency(): void
+    {
+        $tenant = $this->tenant('Host Agency', 'agency');
+        $client = $this->clientWorkspace($tenant, 'Only Client');
+        $user = $this->user($tenant, 'client-user@test.dev');
+        $p = app(MembershipProvisioner::class);
+
+        $membership = $p->ensure($user, $tenant, Portal::ClientPortal, 'client_viewer');
+        $p->scopeToClients($membership, [(string) $client->id]);
+
+        $membership->refresh()->load('scopes');
+        $this->assertSame([(string) $client->id], $membership->clientScopeIds());
+    }
+
+    /** No scope rows means unrestricted within the tenant — an agency owner, not a locked-out user. */
+    public function test_a_membership_without_scopes_is_unrestricted(): void
+    {
+        $tenant = $this->tenant('Owner Agency', 'agency');
+        $user = $this->user($tenant, 'owner@test.dev');
+        $membership = app(MembershipProvisioner::class)
+            ->ensure($user, $tenant, Portal::Agency, 'owner');
+
+        $this->assertSame([], $membership->clientScopeIds());
+        $this->assertFalse($membership->isClientScoped());
+    }
+
+    /** Re-scoping replaces the set rather than appending, and an empty list restores full access. */
+    public function test_scopes_can_be_narrowed_and_widened(): void
+    {
+        $tenant = $this->tenant('Rescope Co', 'agency');
+        $user = $this->user($tenant, 'rescope@test.dev');
+        $p = app(MembershipProvisioner::class);
+        $membership = $p->ensure($user, $tenant, Portal::Agency);
+        $a = $this->clientWorkspace($tenant, 'One');
+        $b = $this->clientWorkspace($tenant, 'Two');
+
+        $p->scopeToClients($membership, [(string) $a->id, (string) $b->id]);
+        $this->assertCount(2, $membership->refresh()->load('scopes')->clientScopeIds());
+
+        $p->scopeToClients($membership, [(string) $b->id]);
+        $this->assertSame([(string) $b->id], $membership->refresh()->load('scopes')->clientScopeIds());
+
+        $p->scopeToClients($membership, []);
+        $this->assertSame([], $membership->refresh()->load('scopes')->clientScopeIds());
     }
 }

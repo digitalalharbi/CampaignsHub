@@ -26,11 +26,16 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         // Shared per-request tenant context — the authority on "current tenant".
-        $this->app->singleton(TenantContext::class);
-        // ADR 0002: request-scoped and shared, exactly like TenantContext. Without the singleton
-        // every injection would receive its own empty instance and the membership resolved in
-        // middleware would be invisible to controllers and policies.
-        $this->app->singleton(MembershipContext::class);
+        /*
+         * Scope contexts are SCOPED, not singletons: every service inside one request shares the
+         * same instance, and the container drops it when the request ends (Octane forgets scoped
+         * instances between requests; ResolveMembership::terminate() does the same everywhere else).
+         *
+         * A singleton would outlive the request that populated it, so the next request handled by
+         * the same process could inherit a tenant nobody granted it.
+         */
+        $this->app->scoped(TenantContext::class);
+        $this->app->scoped(MembershipContext::class);
 
         // Shared per-request project context — the authority on "current project".
         $this->app->singleton(ProjectContext::class);

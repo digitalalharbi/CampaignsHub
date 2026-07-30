@@ -27,7 +27,7 @@ final class PortalResolver
         return Membership::query()
             ->forUser($user->id)
             ->active()
-            ->with(['tenant:id,name,slug,account_type', 'clientWorkspace:id,name,slug'])
+            ->with(['tenant:id,name,slug,account_type', 'scopes'])
             ->orderByDesc('is_default')
             ->orderByDesc('last_used_at')
             ->get();

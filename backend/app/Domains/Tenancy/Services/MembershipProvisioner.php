@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Tenancy\Services;
 
-use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
+use App\Domains\Tenancy\Models\MembershipScope;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Domains\Tenancy\Models\Workspace;
 use App\Models\User;
 
 /**
@@ -31,13 +32,13 @@ final class MembershipProvisioner
         Tenant $tenant,
         Portal $portal,
         string $role = 'member',
-        ?ClientWorkspace $clientWorkspace = null,
+        ?Workspace $workspace = null,
     ): Membership {
         $existing = Membership::query()
             ->forUser($user->id)
             ->where('tenant_id', $tenant->id)
             ->where('portal', $portal->value)
-            ->where('client_workspace_id', $clientWorkspace?->id)
+            ->where('workspace_id', $workspace?->id)
             ->first();
 
         if ($existing !== null) {
@@ -50,11 +51,45 @@ final class MembershipProvisioner
             'user_id' => $user->id,
             'tenant_id' => $tenant->id,
             'portal' => $portal->value,
-            'client_workspace_id' => $clientWorkspace?->id,
+            'workspace_id' => $workspace?->id,
             'role' => $role,
             'status' => 'active',
             'is_default' => ! $hasDefault,
         ]);
+    }
+
+    /**
+     * Confine a membership to specific entities. Passing an empty list REMOVES every scope, which
+     * means unrestricted within the tenant — so this is also how an account manager is promoted to
+     * seeing everything, and the two states are expressed by the same call rather than two.
+     *
+     * @param  list<string>  $ids
+     */
+    public function setScope(Membership $membership, string $scopeType, array $ids): void
+    {
+        $membership->scopes()->where('scope_type', $scopeType)->delete();
+
+        foreach (array_unique($ids) as $id) {
+            MembershipScope::create([
+                'membership_id' => $membership->getKey(),
+                'scope_type' => $scopeType,
+                'scope_id' => $id,
+            ]);
+        }
+
+        $membership->unsetRelation('scopes');
+    }
+
+    /** @param  list<string>  $clientIds */
+    public function scopeToClients(Membership $membership, array $clientIds): void
+    {
+        $this->setScope($membership, MembershipScope::TYPE_CLIENT, $clientIds);
+    }
+
+    /** @param  list<string>  $projectIds */
+    public function scopeToProjects(Membership $membership, array $projectIds): void
+    {
+        $this->setScope($membership, MembershipScope::TYPE_PROJECT, $projectIds);
     }
 
     /**

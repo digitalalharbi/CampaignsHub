@@ -59,12 +59,21 @@ final class MembershipContext
     }
 
     /**
-     * Set only for a membership confined to one client space. When present it is a HARD ceiling: the
-     * request may not reach past that single client, whatever else the user's role would allow.
+     * The clients this request may reach. EMPTY means unrestricted within the tenant (an agency
+     * owner); a non-empty list is a HARD ceiling that no role can widen — an account manager scoped
+     * to three clients reaches those three, whatever else their permissions say.
+     *
+     * @return list<string>
      */
-    public function clientWorkspaceId(): ?string
+    public function clientScopeIds(): array
     {
-        return $this->membership?->client_workspace_id;
+        return $this->membership?->clientScopeIds() ?? [];
+    }
+
+    /** @return list<string> the projects this request may reach; empty = every project in scope. */
+    public function projectScopeIds(): array
+    {
+        return $this->membership?->projectScopeIds() ?? [];
     }
 
     public function isClientScoped(): bool

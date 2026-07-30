@@ -11,7 +11,6 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Services\ClientReportContentValidator;
 use App\Domains\Reports\Services\ReportExporter;
-use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -35,9 +34,12 @@ final class ReportAudienceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
         $this->seed(PermissionSeeder::class);
         $this->tenant = Tenant::create(['name' => 'A', 'slug' => 'a', 'status' => 'active']);
-        app(TenantContext::class)->setTenantId($this->tenant->id);
+        // Scope is request-scoped since ADR 0002; this test creates rows directly between
+        // requests, so it holds its tenant for the whole test rather than for one call.
+        $this->holdingTenant((string) $this->tenant->id);
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'slug' => 'o']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);

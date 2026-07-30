@@ -125,6 +125,7 @@ final class AuthTest extends TestCase
 
         $this->postJson('/api/v1/auth/forgot-password', ['email' => 'not-an-email'])->assertStatus(422);
     }
+
     /**
      * "Keep me signed in" must actually do something. The flag reaches Auth::login($user, $remember),
      * which mints the long-lived remember cookie and persists a remember_token on the user.

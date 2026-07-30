@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -171,6 +172,7 @@ final class RegistrationOnboardingTest extends TestCase
         // A bogus token fails.
         $this->postJson('/api/v1/auth/email/verify', ['token' => 'nope'])->assertStatus(422);
     }
+
     /**
      * AUTH-002: the path chosen on the public site must survive registration. It is stored on the tenant,
      * so verification lands on the workspace step instead of asking the visitor to pick it a second time.
@@ -196,7 +198,7 @@ final class RegistrationOnboardingTest extends TestCase
 
         $this->assertSame(
             ['paid_media'],
-            \App\Domains\Tenancy\Models\Tenant::where('name', 'Journey WS')->value('enabled_modules'),
+            Tenant::where('name', 'Journey WS')->value('enabled_modules'),
         );
     }
 

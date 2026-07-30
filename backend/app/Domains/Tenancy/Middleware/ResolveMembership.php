@@ -38,10 +38,6 @@ final class ResolveMembership
 
     public function handle(Request $request, Closure $next): Response
     {
-        // Start from nothing on every request. The context is a singleton, so a membership left over
-        // from an earlier request in the same process would otherwise survive its own revocation.
-        $this->memberships->forget();
-
         $user = $request->user();
 
         if ($user === null) {
@@ -81,5 +77,22 @@ final class ResolveMembership
         }
 
         return $next($request);
+    }
+
+    /**
+     * Tear the request's scope down once the response has been sent.
+     *
+     * Both contexts are bound `scoped`, which is enough for Octane (it forgets scoped instances
+     * between requests) but says nothing about a long-lived container that handles two requests
+     * without one — a queue worker, or a test process issuing several calls. Clearing them here makes
+     * the lifetime explicit and identical everywhere: scope belongs to a request and dies with it.
+     *
+     * Without this, the *previous* request's tenant would still be set when a request arrives that
+     * resolves no membership — and its queries would silently run against that tenant's data.
+     */
+    public function terminate(Request $request, Response $response): void
+    {
+        $this->memberships->forget();
+        $this->tenants->forget();
     }
 }

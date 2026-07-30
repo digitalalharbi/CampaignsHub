@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Domains\Tenancy\Models;
 
-use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * A user's membership of one portal, in one tenant (ADR 0002).
@@ -31,7 +31,7 @@ final class Membership extends Model
     protected $table = 'memberships';
 
     protected $fillable = [
-        'user_id', 'tenant_id', 'portal', 'workspace_id', 'client_workspace_id',
+        'user_id', 'tenant_id', 'portal', 'workspace_id',
         'role', 'status', 'is_default', 'last_used_at', 'invited_by',
     ];
 
@@ -59,9 +59,29 @@ final class Membership extends Model
         return $this->belongsTo(Workspace::class);
     }
 
-    public function clientWorkspace(): BelongsTo
+    /**
+     * The entities this membership is confined to. EMPTY means unrestricted within the tenant (an
+     * agency owner); one or more rows is a hard ceiling that no role can widen.
+     */
+    public function scopes(): HasMany
     {
-        return $this->belongsTo(ClientWorkspace::class);
+        return $this->hasMany(MembershipScope::class);
+    }
+
+    /** @return list<string> client workspace ids this membership may reach; empty = all of them. */
+    public function clientScopeIds(): array
+    {
+        return $this->scopes
+            ->where('scope_type', MembershipScope::TYPE_CLIENT)
+            ->pluck('scope_id')->map(fn ($id) => (string) $id)->values()->all();
+    }
+
+    /** @return list<string> project ids this membership may reach; empty = all of them. */
+    public function projectScopeIds(): array
+    {
+        return $this->scopes
+            ->where('scope_type', MembershipScope::TYPE_PROJECT)
+            ->pluck('scope_id')->map(fn ($id) => (string) $id)->values()->all();
     }
 
     /** Only ever called with the authenticated user's id — never with an id taken from a request. */
@@ -80,9 +100,9 @@ final class Membership extends Model
         return $this->status === 'active';
     }
 
-    /** A membership confined to a single client space (the agency's isolated client portal). */
+    /** True when this membership may only reach specific clients, rather than the whole tenant. */
     public function isClientScoped(): bool
     {
-        return $this->client_workspace_id !== null;
+        return $this->clientScopeIds() !== [];
     }
 }
