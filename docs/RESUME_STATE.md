@@ -77,6 +77,51 @@ Two real defects were found and fixed while wiring it, both of which had passing
 Google sign-in was **NOT** added: there is no Socialite package and no OAuth routes, so the button would
 be dead. It is left out rather than faked.
 
+## PORTAL PROGRAM (ADR 0002) — state as of `c5f200a`
+
+**Adopted:** CampaignsHub is one multi-tenant modular monolith with four functionally separate portals
+(`/app`, `/agency`, `/influencers`, `/portal`). See `docs/adr/0002-four-portal-modular-monolith.md`,
+which also carries the audit of what the codebase actually looked like at adoption.
+
+### Done, committed, tested
+
+| Unit | Commit | What it delivers |
+|---|---|---|
+| PORTAL-0 | `618a201` | ADR + real audit (not documentation): 2 of 4 portals did not exist; client portal on its own token engine; app tree split across two prefixes |
+| PORTAL-1 | `1b2a245` | `memberships` layer. `users.tenant_id` could only name one tenant, so multi-membership was structurally impossible |
+| PORTAL-2a | `71256a3` | Membership is the scope source. `ResolveTenant` DELETED; `EnsurePortal` per-portal gate |
+| PORTAL-2b | `5266411` | Switcher + server-derived destinations, proven live |
+| PORTAL-3a | `34d7a6c` | `/app/*` consolidation; 11 legacy paths verified redirecting live |
+| HARDEN-1/3 | `6a5a90f` | Request-scoped contexts (`scoped` + `terminate`); `membership_scopes` as a MANY relation |
+| HARDEN-2 | `e3b8a10` | `users.tenant_id` fallback deleted; guard test blocks its return |
+| HARDEN-4 | `008e979` | Access granted only explicitly (`GrantMembership`); the `User::created` auto-grant was wrong and is gone |
+| HARDEN-5 | `c5f200a` | Scopes only widen by default; **no scopes = NO clients**, fail-closed; `clients.view_all` is the positive grant |
+
+**504 backend tests · 253 vitest · `migrate:fresh --seed` clean (5 users / 5 memberships / 0 stranded).**
+
+### Defects found by RUNNING rather than reading — all fixed
+
+  - `migrate:fresh --seed` produced 5 users and **0 memberships**; every seeded account would have sat
+    in onboarding forever. The migration backfill runs while `users` is still empty.
+  - `MembershipContext` was not bound, so each injection got its own empty instance; the portal gate
+    only worked because it re-queried the database.
+  - Seven controllers validated foreign keys against `users.tenant_id` — the WRONG tenant the moment
+    a user can switch workspace.
+  - A plain `/login` claimed the `app` portal, so a multi-membership user could never reach the
+    switcher. Caught live when the demo owner went straight to a dashboard.
+  - `EnsurePortal` switched membership without moving the tenant scope.
+  - Suspension read off the legacy column: one suspended agency locked its client out of an
+    UNRELATED workspace they also belonged to.
+
+### NOT done — do not mark these complete
+
+  - **PORTAL-3b**: `/agency/*`, `/influencers/*`, `/portal/*` route trees and their subsystems. The
+    membership/scope foundation they need is finished; the portals themselves are not started.
+  - **PORTAL-7**: the client portal still runs its own OTP token-cookie session at `/client/*`. It has
+    NOT been unified onto the shared auth engine, and `/client/*` has not moved to `/portal/*`.
+  - **Dropping `users.tenant_id`**: no decision reads it, but 46 test files and `UserFactory` still
+    pass it at creation. See `docs/TENANT_ID_MIGRATION.md`.
+
 ## Exact next task
 **PERF-CAMPAIGNS-001** — Firefox is **61/62**; the failing spec MOVES between runs
 (`campaigns-linking:24`, then `campaigns.spec:38`), so it is a load-dependent first-paint flake, not a
