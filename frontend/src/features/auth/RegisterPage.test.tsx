@@ -90,7 +90,7 @@ describe('RegisterPage — the journey is submitted, not just displayed', () => 
     renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
     fill()
     await waitFor(() => expect(register).toHaveBeenCalled())
-    const payload = vi.mocked(register).mock.calls[0][0] as Record<string, unknown>
+    const payload = vi.mocked(register).mock.calls[0][0] as unknown as Record<string, unknown>
     expect(payload).not.toHaveProperty('account_type')
     expect(payload).not.toHaveProperty('service')
   })

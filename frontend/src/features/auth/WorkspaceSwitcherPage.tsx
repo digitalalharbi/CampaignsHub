@@ -121,10 +121,17 @@ export function WorkspaceSwitcherPage() {
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-[15px] font-bold text-text-primary">
-                        {m.client_workspace?.name ?? m.tenant.name}
+                        {m.tenant.name ?? (ar ? 'مساحة عمل' : 'Workspace')}
                       </span>
                       <span className="mt-0.5 block text-[12.5px] text-text-muted">
                         {ar ? label.ar : label.en} · {m.role}
+                        {/* A membership confined to named clients says so here, so the row is never
+                            mistaken for access to the whole workspace. */}
+                        {m.client_scope_ids.length > 0 && (
+                          <> · {ar
+                            ? `${m.client_scope_ids.length} عميل محدّد`
+                            : `${m.client_scope_ids.length} selected client${m.client_scope_ids.length === 1 ? '' : 's'}`}</>
+                        )}
                       </span>
                     </span>
                     {pick.isPending ? <Loader2 size={16} className="animate-spin text-text-muted" /> : <Arrow size={16} className="shrink-0 text-text-muted" />}

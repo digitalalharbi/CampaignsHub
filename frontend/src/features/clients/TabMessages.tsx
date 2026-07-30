@@ -4,9 +4,11 @@ import { MessagesSquare } from 'lucide-react'
 import { listThreads } from '@/features/messaging/api'
 import { formatDateTime } from '@/features/messaging/api'
 import { useUi } from '@/stores/ui'
+import { usePortalPath } from '@/app/portalPath'
 
 /** Client conversations tab — the team-inbox threads that belong to this client workspace. */
 export function TabMessages({ clientId }: { clientId: string }) {
+  const portalTo = usePortalPath()
   const ar = useUi((s) => s.locale) === 'ar'
   const q = useQuery({ queryKey: ['messaging', 'threads', 'all'], queryFn: () => listThreads() })
   const threads = (q.data ?? []).filter((t) => t.client_workspace_id === clientId)
@@ -22,7 +24,7 @@ export function TabMessages({ clientId }: { clientId: string }) {
     <ul className="space-y-2 text-sm">
       {threads.map((t) => (
         <li key={t.id}>
-          <Link to="/app/messages" className="flex items-center justify-between gap-3 rounded-xl border border-border p-3 hover:border-brand-400">
+          <Link to={portalTo('/messages')} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3 hover:border-brand-400">
             <span className="line-clamp-1 font-semibold text-text-primary">{t.subject}</span>
             <span className="flex shrink-0 items-center gap-2">
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${t.status === 'open' ? 'bg-info/15 text-info' : 'bg-surface-hover text-text-secondary'}`}>

@@ -5,6 +5,7 @@ import { Download, FileSpreadsheet, FileText, FileType, FolderGit2, LayoutGrid, 
 import { useUi } from '@/stores/ui'
 import { fmtDateTime } from '@/lib/datetime'
 import { getFilesLibrary } from './api'
+import { usePortalPath } from '@/app/portalPath'
 
 const COPY = {
   ar: {
@@ -38,6 +39,7 @@ function fmtSize(bytes: number | null): string {
 }
 
 export function FilesLibraryPage() {
+  const portalTo = usePortalPath()
   const locale = useUi((s) => s.locale)
   const c = COPY[locale]
 
@@ -73,7 +75,7 @@ export function FilesLibraryPage() {
           <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
           <p className="text-sm text-text-secondary">{c.subtitle}</p>
         </div>
-        <Link to="/app/integrations/drive"
+        <Link to={portalTo('/integrations/drive')}
           className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:border-brand-500 hover:text-brand-600">
           <FolderGit2 size={15} /> {c.drive_cta}
         </Link>

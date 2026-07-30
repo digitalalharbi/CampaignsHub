@@ -15,10 +15,12 @@ import { TabSettings } from './TabSettings'
 import { TabTeam } from './TabTeam'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
+import { usePortalPath } from '@/app/portalPath'
 
 type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'reports' | 'requests' | 'billing' | 'messages' | 'team' | 'files' | 'activity' | 'settings'
 
 export function ClientCommandCenterPage() {
+  const portalTo = usePortalPath()
   const t = useT()
   const lang = useUi((s) => s.locale)
   const { clientId = '' } = useParams()
@@ -47,7 +49,7 @@ export function ClientCommandCenterPage() {
 
   return (
     <div className="mx-auto w-full max-w-5xl">
-      <Link to="/app/clients" className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {t('clients_portfolio')}</Link>
+      <Link to={portalTo('/clients')} className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {t('clients_portfolio')}</Link>
 
       {d.is_archived && (
         <div className="mb-3 rounded-xl border border-warning/40 bg-warning/10 px-4 py-2.5 text-sm text-warning">{t('cc_archived_banner')}</div>
@@ -122,7 +124,7 @@ export function ClientCommandCenterPage() {
               {d.requests.length === 0 && <li className="text-sm text-text-muted">—</li>}
               {d.requests.map((r) => (
                 <li key={r.id} className="flex items-center justify-between rounded-lg border border-border px-4 py-3 text-sm">
-                  <Link to={`/app/requests/${r.id}`} className="font-mono font-semibold text-brand-600 hover:underline" dir="ltr">{r.reference}</Link>
+                  <Link to={portalTo(`/requests/${r.id}`)} className="font-mono font-semibold text-brand-600 hover:underline" dir="ltr">{r.reference}</Link>
                   <span className="flex items-center gap-2 text-xs text-text-secondary">{r.service}<span className="rounded-full bg-surface-secondary px-2 py-0.5">{r.status}</span></span>
                 </li>
               ))}

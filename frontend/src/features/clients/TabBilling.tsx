@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom'
 import { listInvoices, listQuotes } from '@/features/billing/api'
 import { TaxTreatmentChip } from '@/features/billing/QuotesPage'
 import { useUi } from '@/stores/ui'
+import { usePortalPath } from '@/app/portalPath'
 
 /**
  * Client billing tab — this client's quotes + invoices, filtered from the tenant billing ledger
  * (both models carry client_workspace_id). Read-only rollup; actions live in the Billing section.
  */
 export function TabBilling({ clientId }: { clientId: string }) {
+  const portalTo = usePortalPath()
   const ar = useUi((s) => s.locale) === 'ar'
   const quotesQ = useQuery({ queryKey: ['billing', 'quotes'], queryFn: listQuotes })
   const invoicesQ = useQuery({ queryKey: ['billing', 'invoices', 'all'], queryFn: () => listInvoices() })
@@ -42,7 +44,7 @@ export function TabBilling({ clientId }: { clientId: string }) {
             <ul className="space-y-2">
               {quotes.slice(0, 8).map((q) => (
                 <li key={q.id}>
-                  <Link to="/app/billing" className="flex items-center justify-between gap-2 rounded-xl border border-border p-3 hover:border-brand-400">
+                  <Link to={portalTo('/billing')} className="flex items-center justify-between gap-2 rounded-xl border border-border p-3 hover:border-brand-400">
                     <span className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{q.number}</span>
                     <span className="flex items-center gap-2">
                       <TaxTreatmentChip treatment={q.tax_treatment} ar={ar} />
@@ -59,7 +61,7 @@ export function TabBilling({ clientId }: { clientId: string }) {
             <ul className="space-y-2">
               {invoices.slice(0, 8).map((i) => (
                 <li key={i.id}>
-                  <Link to="/app/billing/invoices" className="flex items-center justify-between gap-2 rounded-xl border border-border p-3 hover:border-brand-400">
+                  <Link to={portalTo('/billing/invoices')} className="flex items-center justify-between gap-2 rounded-xl border border-border p-3 hover:border-brand-400">
                     <span className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{i.number}</span>
                     <span className="flex items-center gap-2">
                       <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[10px] font-semibold text-text-secondary">{i.status}</span>

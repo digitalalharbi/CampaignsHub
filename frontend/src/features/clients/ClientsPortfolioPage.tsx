@@ -8,6 +8,7 @@ import { SearchableSelect } from '@/components/forms'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
+import { usePortalPath } from '@/app/portalPath'
 
 function statusTone(s: string | null): string {
   switch (s) {
@@ -162,8 +163,9 @@ function ClientSummaryCard({ label, value, tone }: { label: string; value: numbe
 }
 
 function ClientCardView({ c, t, lang }: { c: ClientCard; t: ReturnType<typeof useT>; lang: 'ar' | 'en' }) {
+  const portalTo = usePortalPath()
   return (
-    <Link to={`/app/clients/${c.id}`} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 hover:border-brand-400">
+    <Link to={portalTo(`/clients/${c.id}`)} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 hover:border-brand-400">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2.5">
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-primary-soft text-brand-600"><Building2 size={18} /></span>
@@ -196,6 +198,7 @@ function ClientCardView({ c, t, lang }: { c: ClientCard; t: ReturnType<typeof us
 }
 
 function ClientTableView({ rows, t, lang }: { rows: ClientCard[]; t: ReturnType<typeof useT>; lang: 'ar' | 'en' }) {
+  const portalTo = usePortalPath()
   return (
     <div className="overflow-x-auto rounded-2xl border border-border bg-surface">
       <table className="w-full min-w-[720px] text-start text-sm">
@@ -214,7 +217,7 @@ function ClientTableView({ rows, t, lang }: { rows: ClientCard[]; t: ReturnType<
         <tbody>
           {rows.map((c) => (
             <tr key={c.id} className="border-b border-border/60 last:border-0 hover:bg-surface-secondary/50">
-              <td className="p-3"><Link to={`/app/clients/${c.id}`} className="font-semibold text-brand-600 hover:underline">{c.name}</Link>
+              <td className="p-3"><Link to={portalTo(`/clients/${c.id}`)} className="font-semibold text-brand-600 hover:underline">{c.name}</Link>
                 {c.industry && <div className="text-[11px] text-text-muted">{labelOf(INDUSTRY_LABELS, c.industry, lang)}</div>}</td>
               <td className="p-3"><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone(c.client_status)}`}>{labelOf(CLIENT_STATUS_LABELS, c.client_status, lang)}</span></td>
               <td className="p-3 text-center tnum">{c.projects}</td>

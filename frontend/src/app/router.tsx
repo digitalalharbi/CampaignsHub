@@ -69,6 +69,9 @@ import { CreativesPage } from '@/features/content/CreativesPage'
 import { FilesLibraryPage } from '@/features/files/FilesLibraryPage'
 import { BrandingCenterPage } from '@/features/branding/BrandingCenterPage'
 import { AppShell } from '@/layouts/AppShell'
+import { AgencyShell } from '@/layouts/AgencyShell'
+import { AgencyDashboardPage } from '@/features/agency/AgencyDashboardPage'
+import { RequireAgencyPortal } from '@/features/agency/RequireAgencyPortal'
 import { WorkspaceSwitcherPage } from '@/features/auth/WorkspaceSwitcherPage'
 import { legacyAppRedirects } from './legacyRedirects'
 
@@ -213,6 +216,38 @@ export const router = createBrowserRouter([
           { path: 'leads', element: <LeadsPage /> },
           { path: 'opportunities', element: <PagePlaceholder title="Opportunities" /> },
         ],
+      },
+      // ADR 0002: the agency portal owns /agency/*. It is a portal, not a menu variant — its own
+      // shell, its own landing, its own entry gate. Several sections below are the SAME engines the
+      // advertiser portal uses, mounted here rather than copied, because the business rules must not
+      // exist twice; the rows they show are narrowed on the server by the membership's client scope.
+      // Their internal links resolve through `usePortalPath()`, so following one keeps the operator
+      // inside /agency instead of dropping them into /app mid-journey.
+      {
+        path: 'agency',
+        element: <RequireAgencyPortal />,
+        children: [{
+          element: <AgencyShell />,
+          children: [
+            { index: true, element: <Navigate to="/agency/dashboard" replace /> },
+            { path: 'dashboard', element: <AgencyDashboardPage /> },
+            { path: 'clients', element: <ClientsPortfolioPage /> },
+            { path: 'clients/:clientId', element: <ClientCommandCenterPage /> },
+            { path: 'requests', element: <RequestsDashboardPage /> },
+            { path: 'requests/:requestId', element: <RequestDetailPage /> },
+            { path: 'projects', element: <ProjectsPage /> },
+            { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
+            { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
+            { path: 'campaigns', element: <CampaignsPage /> },
+            { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
+            { path: 'content', element: <CreativesPage /> },
+            { path: 'reports', element: <ReportsPage /> },
+            { path: 'tasks', element: <TasksPage /> },
+            { path: 'files', element: <FilesLibraryPage /> },
+            ...messagingRoutes,
+            ...billingRoutes,
+          ],
+        }],
       }],
       },
     ],

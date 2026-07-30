@@ -19,8 +19,14 @@ export interface Membership {
   is_default: boolean
   is_active: boolean
   tenant: { id: string; name: string | null; slug: string | null }
-  /** Present only for a membership confined to one client space. */
-  client_workspace: { id: string; name: string; slug: string } | null
+  /**
+   * The clients / projects this membership is confined to. EMPTY means unrestricted within the
+   * tenant — it never means "nothing", and a non-empty list is a hard ceiling the server enforces
+   * whatever the role would otherwise allow. Named scopes are a list, not a single id, because one
+   * account manager routinely covers several clients from one membership.
+   */
+  client_scope_ids: string[]
+  project_scope_ids: string[]
 }
 
 export interface MembershipState {
