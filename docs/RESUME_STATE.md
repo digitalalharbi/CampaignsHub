@@ -46,11 +46,16 @@ closed on a green run.
 **None.** Tree clean at HEAD.
 
 ## Latest work unit — AUTH-003/004/005 (auth redesign)
-Login and register rebuilt around a shared `frontend/src/features/auth/AuthPanel.tsx`:
-green→teal→navy gradient (the near-black slab is gone), a large two-tone hook whose closing phrase
-«في مكان واحد» carries the accent, four **tinted feature cards** (capability + one plain sentence, at the
-same weight the InfluencerHub reference gives them), and a four-portal switcher on /login. On phones the
-panel is not beside the form: the form comes first and the panel collapses beneath it.
+Login and register rebuilt around a shared `frontend/src/features/auth/AuthPanel.tsx`, built from the
+**same tokens as the marketing homepage** — light surface, soft-green eyebrow pill, near-black heading,
+brand-green accent — so signing in reads as the next section of one site. The hook «كل حملاتك الإعلانية
+المدفوعة **في مكان واحد**» is the largest thing on the page, followed by four **tinted feature cards**
+(capability + one plain sentence). /login gains a four-portal switcher; the wordmark links back to `/`.
+On phones the panel is not beside the form: the form comes first and the panel collapses beneath it.
+
+Two earlier attempts were rejected and are recorded so they are not retried: a near-black slab, then a
+saturated green→teal→navy gradient. Neither appears anywhere on the homepage, which is what the auth
+pages have to continue.
 
 Two real defects were found and fixed while wiring it, both of which had passing tests before:
 - **Remember me was decorative** — held in React state and never sent, so `Auth::login($user, $remember)`

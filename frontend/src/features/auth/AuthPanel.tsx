@@ -1,14 +1,19 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { BarChart3, Bell, Check, ChevronDown, FileText, LayoutDashboard, Megaphone } from 'lucide-react'
 import type { Locale } from '@/features/marketing/homeCopy'
 
 /**
  * The brand panel shared by sign-in and sign-up.
  *
- * One component so the two pages cannot drift apart, and one gradient — deep green through teal into a
- * light navy — instead of the near-black slab the pages used to carry. The copy adapts to the portal the
- * visitor arrived from, but the shape stays constant: wordmark, badge, the hook at the largest size on
- * the page, and four feature cards each carrying a capability and a plain sentence about it.
+ * One component so the two pages cannot drift apart, built from the same tokens as the marketing
+ * homepage — light surface, soft-green eyebrow, near-black heading, brand-green accent — so signing in
+ * reads as the next section of one site rather than a jump into a different product. (It replaces a
+ * near-black slab, and then a saturated gradient, neither of which the homepage has anywhere.)
+ *
+ * The copy adapts to the portal the visitor arrived from, but the shape stays constant: wordmark, badge,
+ * the hook at the largest size on the page, and four feature cards each carrying a capability and a
+ * plain sentence about it.
  *
  * On phones the panel is NOT shown beside the form: the form comes first and this collapses to a short
  * summary the visitor can open, because cramming both into one screen is what made the fields hard to
@@ -44,14 +49,14 @@ const FEATURE_ICONS = [LayoutDashboard, BarChart3, FileText, Bell]
 
 /**
  * A distinct tint per capability, so the four cards read as four different things at a glance instead of
- * one repeated block. They stay translucent and light-on-dark, so the gradient still shows through and the
- * panel remains recognisably CampaignsHub rather than a rainbow.
+ * one repeated block. Kept at 10% over the surface token, so they stay quiet next to the brand green and
+ * work in both themes rather than becoming a rainbow.
  */
 const FEATURE_TINTS = [
-  'bg-emerald-400/20 text-emerald-200',
-  'bg-cyan-400/20 text-cyan-200',
-  'bg-amber-400/20 text-amber-200',
-  'bg-violet-400/20 text-violet-200',
+  'bg-emerald-500/10 text-emerald-600',
+  'bg-sky-500/10 text-sky-600',
+  'bg-amber-500/10 text-amber-600',
+  'bg-violet-500/10 text-violet-600',
 ]
 
 const COPY: Record<Locale, Record<AuthPortal, PanelCopy>> = {
@@ -169,47 +174,50 @@ export function authPanelCopy(locale: Locale, portal: AuthPortal): PanelCopy {
   return COPY[locale][portal] ?? COPY[locale].default
 }
 
-/** Deep green → teal → light navy. Replaces the near-black panel while staying unmistakably CampaignsHub. */
-export const AUTH_GRADIENT =
-  'bg-[linear-gradient(140deg,#0b3f34_0%,#0e6155_42%,#17506e_78%,#22608a_100%)]'
-
-/** The desktop panel: identity, promise, four benefits. */
+/**
+ * The desktop panel: identity, promise, four capabilities — in the homepage's own visual language.
+ *
+ * The surface, the soft-green eyebrow pill, the near-black heading and the muted body are the same tokens
+ * the marketing hero uses, so arriving here from the homepage feels like the next section of one site
+ * rather than a jump into a different product.
+ */
 export function AuthPanel({ locale, portal }: { locale: Locale; portal: AuthPortal }) {
   const c = authPanelCopy(locale, portal)
 
   return (
     <aside
       data-testid="auth-panel"
-      className={`relative hidden overflow-hidden p-8 text-white lg:flex lg:flex-col lg:justify-center xl:p-12 ${AUTH_GRADIENT}`}
+      className="relative hidden overflow-hidden border-e border-border bg-surface-secondary p-8 lg:flex lg:flex-col lg:justify-center xl:p-12"
     >
-      {/* Soft light, not a black vignette. */}
-      <div aria-hidden className="pointer-events-none absolute -end-24 -top-28 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
-      <div aria-hidden className="pointer-events-none absolute -bottom-32 -start-24 h-80 w-80 rounded-full bg-[var(--teal)]/20 blur-3xl" />
+      {/* A soft brand wash, the same green the homepage carries — not a slab of colour. */}
+      <div aria-hidden className="pointer-events-none absolute -end-24 -top-28 h-72 w-72 rounded-full bg-brand-primary-soft blur-3xl" />
+      <div aria-hidden className="pointer-events-none absolute -bottom-32 -start-24 h-80 w-80 rounded-full bg-brand-primary-soft/70 blur-3xl" />
 
       <div className="relative">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 backdrop-blur"><Megaphone size={20} /></span>
-          <span className="min-w-0">
-            <span className="block text-xl font-extrabold leading-tight tracking-tight">CampaignsHub</span>
-            <span className="block text-[12px] text-white/60">{c.tagline}</span>
+        {/* A real way back to the site the visitor came from. */}
+        <Link to="/" className="flex w-fit items-center gap-2.5">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-[var(--shadow-small)]">
+            <Megaphone size={20} />
           </span>
-        </div>
+          <span className="min-w-0">
+            <span className="block font-heading text-xl font-extrabold leading-tight tracking-tight text-text-primary">CampaignsHub</span>
+            <span className="block text-[12px] text-text-muted">{c.tagline}</span>
+          </span>
+        </Link>
 
-        <p className="mt-7 inline-flex w-fit items-center gap-2 rounded-full bg-white/10 px-3.5 py-1.5 text-[12px] font-semibold text-white/85 ring-1 ring-inset ring-white/15">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+        <p className="mt-7 inline-flex w-fit items-center gap-2 rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[12px] font-semibold text-brand-700">
+          <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
           {c.eyebrow}
         </p>
 
         {/* The hook. Deliberately the largest thing on the page — it is what the product promises, and the
-            closing phrase carries the accent so the promise lands rather than reading as one grey block. */}
-        <h1 className="mt-4 font-[var(--font-heading)] text-[34px] font-extrabold leading-[1.14] tracking-tight sm:text-[40px] xl:text-[46px]">
+            closing phrase carries the brand green so the promise lands rather than reading as one block. */}
+        <h1 className="mt-4 font-heading text-[34px] font-extrabold leading-[1.14] tracking-tight text-text-primary sm:text-[40px] xl:text-[46px]">
           {c.title}{' '}
           {/* Kept unbreakable: "in one place" split across two lines reads as a typo, not a promise. */}
-          <span className="whitespace-nowrap bg-gradient-to-l from-emerald-200 via-teal-200 to-cyan-200 bg-clip-text text-transparent">
-            {c.titleAccent}
-          </span>
+          <span className="whitespace-nowrap text-brand-600">{c.titleAccent}</span>
         </h1>
-        <p className="mt-4 max-w-xl text-[14.5px] leading-relaxed text-white/70">{c.body}</p>
+        <p className="mt-4 max-w-xl text-[14.5px] leading-relaxed text-text-secondary">{c.body}</p>
 
         {/* Feature cards, at the same weight the rest of the product gives them: an icon tile, the
             capability, and one plain sentence saying what it does. */}
@@ -219,14 +227,14 @@ export function AuthPanel({ locale, portal }: { locale: Locale; portal: AuthPort
             return (
               <li
                 key={f.title}
-                className="flex items-start gap-3 rounded-2xl border border-white/12 bg-white/8 p-3.5 backdrop-blur-sm"
+                className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)]"
               >
-                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${FEATURE_TINTS[i] ?? 'bg-white/15 text-white'}`}>
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${FEATURE_TINTS[i] ?? 'bg-brand-primary-soft text-brand-600'}`}>
                   <Icon size={17} />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-[14.5px] font-bold leading-snug text-white">{f.title}</span>
-                  <span className="mt-1 block text-[12.5px] leading-relaxed text-white/70">{f.desc}</span>
+                  <span className="block text-[14.5px] font-bold leading-snug text-text-primary">{f.title}</span>
+                  <span className="mt-1 block text-[12.5px] leading-relaxed text-text-secondary">{f.desc}</span>
                 </span>
               </li>
             )
