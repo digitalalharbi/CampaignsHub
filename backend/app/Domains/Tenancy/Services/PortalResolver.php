@@ -68,6 +68,13 @@ final class PortalResolver
      */
     public function landingPathFor(User $user, ?Portal $requested = null): string
     {
+        // The platform owner belongs to no tenant on purpose, so they have no membership to resolve.
+        // Before this, they fell through to `/onboarding` — the person who owns the system was asked
+        // to set up a workspace like a brand-new customer, and had no console at all.
+        if ($user->is_platform_admin) {
+            return Portal::Admin->landingPath();
+        }
+
         $membership = $this->resolve($user, $requested);
 
         if ($membership === null) {

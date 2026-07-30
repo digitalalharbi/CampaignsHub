@@ -179,7 +179,14 @@ final class MembershipPortalTest extends TestCase
         $this->assertSame(Portal::Agency, Portal::forAccountType('agency'));
         $this->assertSame(Portal::App, Portal::forAccountType('brand'));
         $this->assertSame(Portal::App, Portal::forAccountType(null));
-        $this->assertSame(['app', 'agency', 'influencers', 'portal'], Portal::values());
+        $this->assertSame(['admin', 'app', 'agency', 'influencers', 'portal'], Portal::values());
+
+        // The owner's console is a portal, but never a membership — the owner belongs to no tenant.
+        $this->assertSame(
+            ['app', 'agency', 'influencers', 'portal'],
+            array_map(fn (Portal $p) => $p->value, Portal::membershipPortals()),
+        );
+        $this->assertFalse(Portal::Admin->isMembershipPortal());
     }
 
     /**
@@ -325,7 +332,9 @@ final class MembershipPortalTest extends TestCase
         $user = $this->user($tenant, 'many-portals@test.dev');
         $p = app(MembershipProvisioner::class);
 
-        foreach (Portal::cases() as $portal) {
+        // membershipPortals(), NOT cases(): minting an `admin` membership would put this user inside
+        // a tenant AS the platform owner, which is the one combination the model must never produce.
+        foreach (Portal::membershipPortals() as $portal) {
             $p->ensure($user, $tenant, $portal);
         }
 

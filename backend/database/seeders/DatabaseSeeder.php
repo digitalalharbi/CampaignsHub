@@ -26,7 +26,7 @@ class DatabaseSeeder extends Seeder
         $this->call(TaxonomyEngineSeeder::class);
 
         // 2) Platform super-admin (idempotent).
-        User::firstOrCreate(
+        $platform = User::firstOrCreate(
             ['email' => 'platform@mediabuying.local'],
             [
                 'name' => 'Platform Admin',
@@ -35,6 +35,14 @@ class DatabaseSeeder extends Seeder
                 'tenant_id' => null,
             ],
         );
+
+        // Verified on creation, because this account is PROVISIONED by whoever installs the system,
+        // not self-registered. Leaving it unverified put the platform owner behind a confirmation
+        // email sent to an address no mail provider will ever deliver to — they signed in and met
+        // "confirm your email" instead of their console, with no way through.
+        if ($platform->email_verified_at === null) {
+            $platform->forceFill(['email_verified_at' => now()])->save();
+        }
 
         // 3) Demo tenant + demo users + Sandbox data — DEV/LOCAL/DEMO only, NEVER in production.
         if (App::environment(['local', 'testing', 'demo'])) {

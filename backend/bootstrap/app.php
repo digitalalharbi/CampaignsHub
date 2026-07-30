@@ -12,6 +12,7 @@ use App\Domains\Reports\Console\RegenerateDemoExportsCommand;
 use App\Domains\Reports\Console\ReportsHealthCommand;
 use App\Domains\Requests\Console\EvaluateSla;
 use App\Domains\Requests\Console\PruneUploadSessions;
+use App\Domains\Tenancy\Middleware\EnsurePlatformAdmin;
 use App\Domains\Tenancy\Middleware\EnsurePortal;
 use App\Domains\Tenancy\Middleware\ResolveMembership;
 use App\Http\Middleware\AssignRequestId;
@@ -76,6 +77,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant' => ResolveMembership::class,
             'membership' => ResolveMembership::class,
             'portal' => EnsurePortal::class,
+            // NOT an alias of `portal`: the platform owner belongs to no tenant, so they hold no
+            // membership to gate on. See EnsurePlatformAdmin.
+            'platform' => EnsurePlatformAdmin::class,
             'project' => ResolveProject::class,
             'entitlement' => EnsureEntitlement::class,
             'throttle' => ConditionalThrottle::class,

@@ -1,0 +1,90 @@
+import { useQuery } from '@tanstack/react-query'
+import { ScrollText } from 'lucide-react'
+import { fetchAudit, type AuditEntry } from './api'
+import { ErrorState, Skeleton } from '@/components/ui/States'
+import { useUi } from '@/stores/ui'
+
+/**
+ * `/admin/audit` — the platform's own trail (ADMIN-001).
+ *
+ * Spans tenants on purpose. A per-tenant audit view cannot show the thing most worth auditing: an
+ * action the platform owner took ACROSS tenants, such as suspending one.
+ *
+ * Entries are immutable and shown newest first, with the reason as first-class text rather than
+ * buried in a diff — the reason is the part a person reads a year later, and an entry without one
+ * explains nothing.
+ */
+export function AuditPage() {
+  const ar = useUi((s) => s.locale) === 'ar'
+  const query = useQuery({ queryKey: ['admin', 'audit'], queryFn: fetchAudit })
+
+  return (
+    <div className="w-full">
+      <header className="mb-5">
+        <h1 className="font-heading text-3xl font-extrabold tracking-tight text-text-primary">
+          {ar ? 'السجلات والتدقيق' : 'Logs & audit'}
+        </h1>
+        <p className="mt-1 text-sm text-text-secondary">
+          {ar
+            ? 'ما جرى على مستوى المنصة، عبر جميع المستأجرين — الأحدث أولًا.'
+            : 'What happened at platform level, across every tenant — newest first.'}
+        </p>
+      </header>
+
+      {query.isPending && <div className="grid gap-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16" />)}</div>}
+
+      {query.isError && (
+        <ErrorState title={ar ? 'تعذّر تحميل السجل.' : 'The audit trail could not be loaded.'} onRetry={() => void query.refetch()} />
+      )}
+
+      {query.data && query.data.entries.length === 0 && (
+        <p className="rounded-2xl border border-dashed border-border px-4 py-12 text-center text-sm text-text-muted">
+          {ar ? 'لا إدخالات بعد.' : 'No entries yet.'}
+        </p>
+      )}
+
+      {query.data && query.data.entries.length > 0 && (
+        <ul data-testid="audit-entries" className="grid gap-2">
+          {query.data.entries.map((e) => <Entry key={e.id} entry={e} ar={ar} />)}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function Entry({ entry, ar }: { entry: AuditEntry; ar: boolean }) {
+  const change = describe(entry)
+
+  return (
+    <li className="rounded-xl border border-border bg-surface px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="flex items-center gap-2 text-[13.5px] font-bold text-text-primary">
+          <ScrollText size={14} className="shrink-0 text-text-muted" aria-hidden />
+          <span dir="ltr">{entry.action}</span>
+        </span>
+        <span className="tnum text-[12px] text-text-muted" dir="ltr">
+          {entry.created_at ? entry.created_at.slice(0, 19).replace('T', ' ') : '—'}
+        </span>
+      </div>
+      {change && <p className="mt-1 text-[13px] text-text-secondary" dir="ltr">{change}</p>}
+      {entry.reason && (
+        <p className="mt-1.5 rounded-lg bg-surface-secondary px-3 py-2 text-[13px] text-text-primary">
+          {ar ? 'السبب: ' : 'Reason: '}{entry.reason}
+        </p>
+      )}
+    </li>
+  )
+}
+
+/** "active → suspended", when both sides are known. Never invented from one. */
+function describe(entry: AuditEntry): string | null {
+  const before = entry.before ?? {}
+  const after = entry.after ?? {}
+  const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])]
+
+  const parts = keys
+    .filter((k) => String(before[k] ?? '') !== String(after[k] ?? ''))
+    .map((k) => `${k}: ${String(before[k] ?? '—')} → ${String(after[k] ?? '—')}`)
+
+  return parts.length > 0 ? parts.join(' · ') : null
+}

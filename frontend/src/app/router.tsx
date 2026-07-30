@@ -11,7 +11,6 @@ import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { LeadsPage } from '@/features/crm/LeadsPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
-import { PublicPagesSettingsPage } from '@/features/settings/PublicPagesSettingsPage'
 import { PublicReport } from '@/features/reports/PublicReport'
 import { PrintReport } from '@/features/reports/PrintReport'
 import { DesignSystemPage } from '@/features/design/DesignSystemPage'
@@ -19,7 +18,6 @@ import { SettingsLayout } from '@/features/account/SettingsLayout'
 import { AccountSettingsLayout } from '@/features/account/AccountSettingsLayout'
 import { PreferencesPage } from '@/features/account/PreferencesPage'
 import { PersonalNotificationsPage } from '@/features/account/PersonalNotificationsPage'
-import { TaxonomyManagerPage } from '@/features/taxonomy/TaxonomyManagerPage'
 import { ProfilePage } from '@/features/account/ProfilePage'
 import { PasswordPage } from '@/features/account/PasswordPage'
 import { SecurityPage } from '@/features/account/SecurityPage'
@@ -72,6 +70,12 @@ import { FilesLibraryPage } from '@/features/files/FilesLibraryPage'
 import { BrandingCenterPage } from '@/features/branding/BrandingCenterPage'
 import { AppShell } from '@/layouts/AppShell'
 import { AgencyShell } from '@/layouts/AgencyShell'
+import { AdminShell } from '@/layouts/AdminShell'
+import { RequirePlatformAdmin } from '@/features/admin/RequirePlatformAdmin'
+import { PlatformOverviewPage } from '@/features/admin/PlatformOverviewPage'
+import { TenantsPage } from '@/features/admin/TenantsPage'
+import { SystemSettingsPage } from '@/features/admin/SystemSettingsPage'
+import { AuditPage } from '@/features/admin/AuditPage'
 import { AgencyDashboardPage } from '@/features/agency/AgencyDashboardPage'
 import { RequireAgencyPortal } from '@/features/agency/RequireAgencyPortal'
 import { AgencyTeamPage } from '@/features/agency/AgencyTeamPage'
@@ -219,12 +223,13 @@ export const router = createBrowserRouter([
               { index: true, element: <Navigate to="/app/settings/workspace" replace /> },
               { path: 'workspace', element: <SettingsPage only={['general', 'clients', 'projects', 'notifications', 'security']} /> },
               { path: 'permissions', element: <SettingsPage only={['team']} title="الصلاحيات والفريق" subtitle="أعضاء مساحة العمل وأدوارهم وصلاحياتهم" /> },
-              // Real CMS for the public homepage + the three external portals (draft → preview → publish).
-              { path: 'public-pages', element: <PublicPagesSettingsPage /> },
-              { path: 'portals', element: <SettingsPage only={['disclaimer']} title="ملاحظات البوابات" subtitle="الملاحظات والمنهجية التي يراها العملاء في البوابة والتقارير" /> },
+              // PLATFORM-level, moved to /admin/settings (ADMIN-001): the public marketing site is
+              // the platform's, not one tenant's, and a tenant administrator could edit it here.
+              { path: 'public-pages', element: <Navigate to="/admin/settings" replace /> },
+              { path: 'portals', element: <Navigate to="/admin/settings" replace /> },
               // Identity/Branding lives INSIDE Settings (canonical — not a standalone nav section).
               { path: 'branding', element: <BrandingCenterPage /> },
-              { path: 'taxonomies', element: <TaxonomyManagerPage /> },
+              { path: 'taxonomies', element: <Navigate to="/admin/settings" replace /> },
               // Personal settings moved to /account — keep old links working.
               { path: 'profile', element: <Navigate to="/account/profile" replace /> },
               { path: 'password', element: <Navigate to="/account/password" replace /> },
@@ -257,6 +262,22 @@ export const router = createBrowserRouter([
       // exist twice; the rows they show are narrowed on the server by the membership's client scope.
       // Their internal links resolve through `usePortalPath()`, so following one keeps the operator
       // inside /agency instead of dropping them into /app mid-journey.
+      // ADR 0002 / ADMIN-001: the platform owner's console. Not a tenant — it administers them.
+      // Gated on `is_platform_admin`, never on a membership: giving the owner a membership to reach
+      // this would place them inside one of the workspaces they administer.
+      {
+        path: 'admin',
+        element: <RequirePlatformAdmin />,
+        children: [{
+          element: <AdminShell />,
+          children: [
+            { index: true, element: <PlatformOverviewPage /> },
+            { path: 'tenants', element: <TenantsPage /> },
+            { path: 'settings', element: <SystemSettingsPage /> },
+            { path: 'audit', element: <AuditPage /> },
+          ],
+        }],
+      },
       {
         path: 'agency',
         element: <RequireAgencyPortal />,
