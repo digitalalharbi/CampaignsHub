@@ -185,7 +185,15 @@ which also carries the audit of what the codebase actually looked like at adopti
   - **PORTAL-AUTH-001 (the auth half)**: the client portal still runs its own OTP token-cookie
     session. `docs/PORTAL_AUTH_MIGRATION.md` has the reason it was not half-built and the order to
     do it in.
-  - **AGENCY-005**: agency white-label per client space.
+  - **AGENCY-005**: agency white-label per client space. The design is settled, so start from it
+    rather than re-deciding: the Branding Center ALREADY supports `scope = 'client'` with a
+    `scope_id`, and `BrandingService::resolve()` already falls back client → tenant → platform. What
+    is missing is (a) `GET /api/v1/client/branding`, resolving the space from the caller's OWN portal
+    session — it must NOT accept a client id, so asking for another agency's branding is not
+    expressible — and (b) the portal shell applying the returned colours and mark. Report the stored
+    flag as `white_label_requested`, never as a capability: whether an agency MAY hide the platform's
+    name is a subscription question decided upstream, and a reader must not mistake a stored
+    preference for an entitlement. Do NOT build a second branding engine.
   - **INFL-002**: a creator-facing portal (creators signing in to submit their own content). Blocked
     behind the same auth work — creators have no password either.
   - **Dropping `users.tenant_id`**: no decision reads it, but 46 test files and `UserFactory` still
