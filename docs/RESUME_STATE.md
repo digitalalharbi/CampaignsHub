@@ -96,6 +96,12 @@ writer AND in the database) — already-normalised data will show no further cha
 | Vite dev server (frontend) | `http://localhost:5173` | `npm run dev` in `frontend/` |
 | Laravel API | `http://127.0.0.1:8000` | `php artisan serve` in `backend/` |
 | PostgreSQL | `127.0.0.1:5432` | local service |
+| Redis | `127.0.0.1:6379` | local service (`QUEUE_CONNECTION=redis`) |
+| **Queue worker** | — | `php artisan queue:work --queue=reports,default` in `backend/` |
+
+**The queue worker is REQUIRED for the E2E suite.** Report generation is queued, so without a worker
+`report-pdf-download.spec.ts` waits 90s for a status that can never arrive and fails. That failure was
+mistaken for a product defect for several runs; it is purely a missing worker.
 
 All three were listening at handoff. A new session should re-check and restart rather than assume.
 Known trap: the dev API server can serve stale routes after new routes are added — restart it before a
