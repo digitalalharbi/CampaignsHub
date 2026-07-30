@@ -77,6 +77,7 @@ import { TenantsPage } from '@/features/admin/TenantsPage'
 import { SystemSettingsPage } from '@/features/admin/SystemSettingsPage'
 import { BillingPage as AdminBillingPage } from '@/features/admin/BillingPage'
 import { AuditPage } from '@/features/admin/AuditPage'
+import { CutoverPage } from '@/features/admin/CutoverPage'
 import { AgencyDashboardPage } from '@/features/agency/AgencyDashboardPage'
 import { RequireAgencyPortal } from '@/features/agency/RequireAgencyPortal'
 import { AgencyTeamPage } from '@/features/agency/AgencyTeamPage'
@@ -276,6 +277,7 @@ export const router = createBrowserRouter([
             { path: 'tenants', element: <TenantsPage /> },
             { path: 'billing', element: <AdminBillingPage /> },
             { path: 'settings', element: <SystemSettingsPage /> },
+            { path: 'cutover', element: <CutoverPage /> },
             { path: 'audit', element: <AuditPage /> },
           ],
         }],

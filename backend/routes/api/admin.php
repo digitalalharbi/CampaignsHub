@@ -52,6 +52,8 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/portal-conflicts', [PortalConflictController::class, 'index'])->name('portal-conflicts.index');
         Route::patch('/portal-conflicts/{conflict}', [PortalConflictController::class, 'resolve'])
             ->name('portal-conflicts.resolve');
+        // Evidence only. There is deliberately no endpoint that performs the cutover.
+        Route::get('/cutover-readiness', [PortalConflictController::class, 'readiness'])->name('cutover.readiness');
 
         Route::get('/audit', [PlatformTenantController::class, 'audit'])->name('audit.index');
     });

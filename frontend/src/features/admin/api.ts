@@ -190,3 +190,62 @@ export function fetchIntegrations(): Promise<PlatformIntegrations> {
 export function fetchStatus(): Promise<PlatformStatus> {
   return getData('/admin/status')
 }
+
+/* --------------------------------------- PORTAL-AUTH-001: cutover readiness & conflicts */
+
+export interface PortalConflict {
+  id: string
+  tenant_id: string
+  tenant_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  reason: string
+  /** What they WOULD be granted — shown so the resolver sees the consequence before choosing. */
+  client_ids: string[]
+  resolution: string | null
+  note: string | null
+  resolved_at: string | null
+}
+
+export interface CutoverReadiness {
+  /** A MEASUREMENT of three conditions, never a judgement that it "looks done". */
+  ready: boolean
+  blockers: string[]
+  open_conflicts: number
+  legacy_sessions: number
+  legacy_holders: {
+    contact: string
+    expires_at: string | null
+    last_used_at: string | null
+    /** With one, they upgrade on next sign-in. Without, a conflict must be resolved first. */
+    has_membership: boolean
+  }[]
+  parity: {
+    checked: number
+    mismatched: number
+    /** Named, with both sides — "3 disagreements" tells nobody whose portal would change. */
+    mismatches: { contact: string; membership: string[]; token: string[] }[]
+  }
+  last_checked_at: string | null
+}
+
+export function fetchCutoverReadiness(): Promise<CutoverReadiness> {
+  return getData('/admin/cutover-readiness')
+}
+
+export function fetchPortalConflicts(openOnly = true): Promise<{
+  conflicts: PortalConflict[]
+  open: number
+  safe_to_retire_legacy_engine: boolean
+}> {
+  return getData(`/admin/portal-conflicts?open_only=${openOnly ? 1 : 0}`)
+}
+
+/** `link` needs a reason; `separate` grants nothing. There is deliberately no bulk resolve. */
+export function resolvePortalConflict(
+  id: string,
+  resolution: 'link' | 'separate' | 'dismiss',
+  note?: string,
+): Promise<{ conflict: { id: string; resolution: string } }> {
+  return patchData(`/admin/portal-conflicts/${id}`, { resolution, note })
+}

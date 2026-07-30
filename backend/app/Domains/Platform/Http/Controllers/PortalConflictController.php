@@ -6,6 +6,7 @@ namespace App\Domains\Platform\Http\Controllers;
 
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Identity\Models\PortalIdentityConflict;
+use App\Domains\Identity\Services\CutoverReadiness;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\DTOs\MembershipGrant;
@@ -72,6 +73,20 @@ final class PortalConflictController extends Controller
             'open' => PortalIdentityConflict::query()->whereNull('resolution')->count(),
             'safe_to_retire_legacy_engine' => PortalIdentityConflict::query()->whereNull('resolution')->count() === 0,
         ], 'Portal identity conflicts.');
+    }
+
+    /**
+     * GET /api/v1/admin/cutover-readiness — the evidence, never the action.
+     *
+     * Read-only by construction. There is no endpoint here that performs the cutover: retiring the
+     * legacy engine is a code change with a review, not a button somebody presses because a light
+     * turned green. What this gives is the three conditions, each named, so "ready" is a measurement.
+     */
+    public function readiness(CutoverReadiness $readiness): JsonResponse
+    {
+        $this->tenants->enterPlatformScope();
+
+        return ApiResponse::success($readiness->check(), 'Cutover readiness.');
     }
 
     /**
