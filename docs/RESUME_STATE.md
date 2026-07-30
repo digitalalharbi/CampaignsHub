@@ -153,6 +153,9 @@ which also carries the audit of what the codebase actually looked like at adopti
 |---|---|---|
 | AUDIT-PORTALS-001 regression audit | `5698891` | **VERIFIED** — `docs/REGRESSION_AUDIT_PORTALS.md` |
 | ADMIN-001 `/admin/*` console | `5698891` | **VERIFIED** — overview, tenants, settings, audit |
+| ADMIN-002 plans, subscriptions, revenue | `d8de729` | **VERIFIED** — committed value per currency, never cash |
+| ADMIN-003 permissions, integrations, status | `c6ee5a1` | **VERIFIED** — three read tabs on `/admin/settings` |
+| SEC-ADMIN-001 `is_platform_admin` hardening | `d8de729` | **VERIFIED** — removed from `$fillable`; three routes closed |
 
 **What the audit actually found.** Nothing was lost in the `/app/*` move: 74 routes before, 90 now,
 every old path resolving; the advertiser rail has the same fifteen entries; all eight settings
@@ -174,6 +177,15 @@ workspace settings.
     see it happen without a decision. Tenant detail is a DRAWER, not a route.
 12. Suspending a tenant requires a reason (server-enforced) and is audited with an actor. It reports
     when the tenant serves public request intake rather than blocking the action.
+13. `is_platform_admin` is NOT in `User::$fillable`. Set it only with `forceFill`. It was mass-assignable,
+    which put the whole platform one `update($request->validated())` away from any customer.
+14. Platform revenue is COMMITTED subscription value, never cash. `invoices`/`payments` carry a NOT NULL
+    `client_workspace_id` — that ledger is an agency invoicing ITS client, and counting it would report
+    customers' money as the platform's own result.
+15. The permission catalogue is code (`PermissionSeeder`) and has NO write route. A key invented at
+    runtime grants nothing, because no `hasPermission()` call checks for it.
+16. Operational status reuses `DevStatusController::snapshot()`. Do not write a second status page —
+    two of them drift, and the one you are not looking at is the wrong one.
 
 **Where platform settings now live:** `/admin/settings`, as ONE tabbed page (public site, portal
 notes, taxonomies, services). `/app/settings/public-pages|portals|taxonomies` redirect there.
@@ -237,14 +249,13 @@ notes, taxonomies, services). `/app/settings/public-pages|portals|taxonomies` re
     notifications, opportunities. Reachable only by typing the URL; linked from nothing.
 
 ## Exact next task
-**ADMIN-002** — plans, subscriptions and payments from the owner's side. The billing engine already
-exists per tenant (`app/Domains/Billing`, `app/Domains/Subscriptions`); what is missing is the
-cross-tenant view, so build on those rather than a second engine. Then **ADMIN-003** (global
-permission catalogue, platform integrations, operational status — note `/dev/status` already exists
-but is dev-only and outside the console), then the menu-simplification pass across `/app` and
-`/agency` (two levels max, group near-duplicates, tabs and drawers instead of a page per option).
+**The menu-simplification pass across `/app` and `/agency`** — `/app` has 15 operational rail entries
+plus settings, `/agency` has 12. Rules: two levels maximum, group near-duplicate categories, no
+separate page for a simple option, tabs/drawers/progressive disclosure instead of branching, and show
+nothing outside the user's account type. Do NOT remove advanced capability — simplify how it is
+reached. `/admin` is the reference: 5 rail entries, one tabbed settings page, drawer detail.
 
-Then: **PORTAL-AUTH-001, the auth half** — follow the five steps in `docs/PORTAL_AUTH_MIGRATION.md` in
+Then: **AGENCY-005**, **PORTAL-AUTH-001 (the auth half)**, **INFL-002**, and dropping `users.tenant_id`. — follow the five steps in `docs/PORTAL_AUTH_MIGRATION.md` in
 order, starting with the contacts → users + ClientPortal membership backfill, and asserting the
 resulting scope matches `contactOwnedWorkspaceIds()` for every existing contact BEFORE anything
 reads from it. Then AGENCY-005, then INFL-002.
