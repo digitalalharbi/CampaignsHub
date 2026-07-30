@@ -65,14 +65,32 @@ final class EmailVerificationService
         $user = User::findOrFail($row->user_id);
         if ($user->email_verified_at === null) {
             $user->forceFill(['email_verified_at' => Carbon::now()])->save();
-            // Advance onboarding out of the email step (only if it was waiting there).
+            // Advance onboarding out of the email step (only if it was waiting there), landing on the first
+            // step the visitor has NOT already answered. Someone who picked their path on the public site
+            // arrives with account_type and modules set and must not be asked those questions again.
             $tenant = Tenant::find($user->tenant_id);
             if ($tenant !== null && $tenant->onboarding_step === 'verify_email') {
-                $tenant->forceFill(['onboarding_step' => 'account_type'])->save();
+                $tenant->forceFill(['onboarding_step' => self::firstUnansweredStep($tenant)])->save();
             }
         }
         DB::table('email_verifications')->where('id', $row->id)->update(['consumed_at' => Carbon::now()]);
 
         return $user->refresh();
+    }
+
+    /**
+     * The first onboarding question this tenant has not answered yet. Registration may have already
+     * recorded the account type and the modules from the path chosen on the public site.
+     */
+    private static function firstUnansweredStep(Tenant $tenant): string
+    {
+        if ($tenant->account_type === null) {
+            return 'account_type';
+        }
+        if (empty($tenant->enabled_modules)) {
+            return 'service';
+        }
+
+        return 'workspace';
     }
 }

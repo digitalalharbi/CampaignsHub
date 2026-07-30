@@ -19,6 +19,8 @@ final class LoginRequest extends FormRequest
         return [
             'email' => ['required', 'email', 'max:190'],
             'password' => ['required', 'string'],
+            // "Keep me signed in" — drives Auth::login($user, $remember) and the long-lived cookie.
+            'remember' => ['sometimes', 'boolean'],
             'device_name' => ['sometimes', 'string', 'max:120'],
         ];
     }

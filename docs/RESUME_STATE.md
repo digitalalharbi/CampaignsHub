@@ -45,6 +45,23 @@ closed on a green run.
 ## Work in progress
 **None.** Tree clean at HEAD.
 
+## Latest work unit — AUTH-003/004/005 (auth redesign)
+Login and register rebuilt around a shared `frontend/src/features/auth/AuthPanel.tsx`:
+green→teal→navy gradient (the near-black slab is gone), a large two-tone hook whose closing phrase
+«في مكان واحد» carries the accent, four **tinted feature cards** (capability + one plain sentence, at the
+same weight the InfluencerHub reference gives them), and a four-portal switcher on /login. On phones the
+panel is not beside the form: the form comes first and the panel collapses beneath it.
+
+Two real defects were found and fixed while wiring it, both of which had passing tests before:
+- **Remember me was decorative** — held in React state and never sent, so `Auth::login($user, $remember)`
+  always got `false`. Now submitted, validated, and covered by a persists / does-not-persist pair.
+- **The chosen journey died on refresh** — it travelled as router state that `/verify-email` never read,
+  so the wizard asked the visitor to pick the same path a second time. It is now stored on the tenant at
+  registration (`account_type` + `service`), and verification resumes at the first *unanswered* step.
+
+Google sign-in was **NOT** added: there is no Socialite package and no OAuth routes, so the button would
+be dead. It is left out rather than faked.
+
 ## Exact next task
 **PERF-CAMPAIGNS-001** — Firefox is **61/62**; the failing spec MOVES between runs
 (`campaigns-linking:24`, then `campaigns.spec:38`), so it is a load-dependent first-paint flake, not a

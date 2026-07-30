@@ -5,7 +5,7 @@ import { Building2, Check, LayoutDashboard, Users } from 'lucide-react'
 import { register } from './api'
 import { AuthShell } from './AuthShell'
 import { Button } from '@/components/ui/Button'
-import { EmailInput, FormField, PasswordInput, TextInput } from '@/components/ui/form'
+import { EmailInput, PasswordInput, TextInput } from '@/components/ui/form'
 import { controlClass } from '@/components/ui/Field'
 import { ErrorSummary, useFormDraft, type FieldError } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
@@ -34,7 +34,6 @@ const JOURNEY_COPY = {
     agency: 'أدير حملات عدة عملاء',
     accountTypeLabel: 'نوع الحساب',
     accountTypes: { freelancer: 'مستقل', brand: 'علامة تجارية', in_house_team: 'فريق تسويق داخلي' } as Record<SelfAccountType, string>,
-    selfSummary: 'وحدة الإعلانات المدفوعة مفعّلة افتراضيًا.',
     agencyType: 'حساب وكالة',
     agencySummary: 'إدارة العملاء والطلبات مفعّلة لمساحة الوكالة.',
   },
@@ -45,17 +44,26 @@ const JOURNEY_COPY = {
     agency: "I manage several clients' campaigns",
     accountTypeLabel: 'Account type',
     accountTypes: { freelancer: 'Freelancer', brand: 'Brand', in_house_team: 'In-house team' } as Record<SelfAccountType, string>,
-    selfSummary: 'Paid Advertising module enabled by default.',
     agencyType: 'Agency account',
     agencySummary: 'Clients and requests enabled for the agency workspace.',
   },
 } as const
 
-/** Error-summary title + module read-out copy — kept local so the shared i18n dictionary is untouched. */
+/** Error-summary title + service read-out copy — kept local so the shared i18n dictionary is untouched. */
 const REG_COPY = {
-  ar: { errTitle: 'يرجى تصحيح الأخطاء التالية', moduleLabel: 'الوحدة المطلوبة' },
-  en: { errTitle: 'Please fix the following errors', moduleLabel: 'Requested module' },
+  ar: { errTitle: 'يرجى تصحيح الأخطاء التالية', moduleLabel: 'الخدمة المطلوبة' },
+  en: { errTitle: 'Please fix the following errors', moduleLabel: 'Selected service' },
 } as const
+
+/**
+ * The `module` handed over by the public site is a slug. Visitors read this page, so it is shown as the
+ * service name they recognise — a raw `paid-media` on a public page is internal vocabulary leaking out.
+ */
+const SERVICE_LABELS: Record<string, { ar: string; en: string }> = {
+  paid_media: { ar: 'إدارة الحملات الإعلانية المدفوعة', en: 'Paid advertising management' },
+  influencer_marketing: { ar: 'حملات المؤثرين والمحتوى', en: 'Influencer & content campaigns' },
+  combined: { ar: 'الخدمتان معًا', en: 'Both services' },
+}
 
 /** Real sign-up — provisions a tenant + owner via POST /auth/register, then drops into the app. */
 export function RegisterPage() {
@@ -82,12 +90,20 @@ export function RegisterPage() {
   const setSecretField = (k: keyof typeof secret) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setSecret((s) => ({ ...s, [k]: e.target.value }))
 
-  // The onboarding intent presets carried into the app so the user never re-selects their path.
-  const onboarding = useMemo(() => {
-    if (journey === 'multi-client') return { journey, account_type: 'agency', modules: ['clients', 'requests'] }
-    if (journey === 'self-service') return { journey, account_type: selfType, modules: ['paid_media'] }
-    return null
-  }, [journey, selfType])
+  /**
+   * The chosen path, translated into the account fields the backend actually stores. It travels in the
+   * registration request itself — router state would not survive a refresh, and the wizard would then ask
+   * the visitor to pick the same path a second time.
+   */
+  const preset = useMemo(() => {
+    if (journey === null) return null
+    const account_type = journey === 'multi-client' ? 'agency' : selfType
+    const service =
+      moduleParam === 'influencer-marketing' || moduleParam === 'influencer_marketing'
+        ? ('influencer_marketing' as const)
+        : ('paid_media' as const)
+    return { account_type, service }
+  }, [journey, selfType, moduleParam])
 
   // Switch path in place — persisted to the query string so a refresh (or the submit) keeps it.
   const pickJourney = (next: Journey) => {
@@ -97,9 +113,8 @@ export function RegisterPage() {
   }
 
   const mutation = useMutation({
-    // Onboarding (module/account-type selection) lands in Phase 2; carry the preset via router state for now.
     mutationFn: register,
-    onSuccess: (user) => { draft.clear(); setUser(user); navigate('/verify-email', { replace: true, state: onboarding ? { onboarding } : undefined }) },
+    onSuccess: (user) => { draft.clear(); setUser(user); navigate('/verify-email', { replace: true }) },
   })
   const error = mutation.isError ? toApiError(mutation.error) : null
   const err = (k: string) => error?.errors?.[k]?.[0]
@@ -109,13 +124,13 @@ export function RegisterPage() {
     : []
 
   return (
-    <AuthShell>
-      <h2 className="font-[var(--font-heading)] text-2xl font-extrabold text-text-primary">{t('create_account_title')}</h2>
-      <p className="mt-1 text-[15px] text-text-secondary">{t('create_account_subtitle')}</p>
+    <AuthShell portal={journey === 'multi-client' ? 'agency' : 'default'}>
+      <h2 className="font-[var(--font-heading)] text-[22px] font-extrabold text-text-primary">{t('create_account_title')}</h2>
+      <p className="mt-1 text-[14px] text-text-secondary">{t('create_account_subtitle')}</p>
 
       {/* Journey preset — only when arriving from a decision-section card. Editable, not a forced re-pick. */}
       {journey && (
-        <section className="mt-5 rounded-2xl border border-border bg-surface-secondary p-4" aria-label={jc.heading}>
+        <section data-testid="register-journey" className="mt-3.5 rounded-2xl border border-border bg-surface-secondary p-3.5" aria-label={jc.heading}>
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-text-primary">{jc.heading}</span>
             <span className="text-xs text-text-muted">{jc.editable}</span>
@@ -139,45 +154,60 @@ export function RegisterPage() {
           </div>
 
           {journey === 'self-service' ? (
-            <div className="mt-3">
-              <FormField label={jc.accountTypeLabel} hint={jc.selfSummary}>
-                <select className={controlClass} value={selfType} onChange={(e) => setSelfType(e.target.value as SelfAccountType)}>
-                  {(['freelancer', 'brand', 'in_house_team'] as SelfAccountType[]).map((k) => (
-                    <option key={k} value={k}>{jc.accountTypes[k]}</option>
-                  ))}
-                </select>
-              </FormField>
+            /* Label beside the control rather than stacked above it: the same question in one row instead
+               of three, which is what keeps this page inside a 768px-tall screen. */
+            <div className="mt-3 flex flex-wrap items-center gap-2.5">
+              <label htmlFor="self-account-type" className="text-sm font-semibold text-text-primary">{jc.accountTypeLabel}</label>
+              <select
+                id="self-account-type"
+                className={`${controlClass} h-10 w-auto min-w-[9rem] flex-1 text-sm`}
+                value={selfType}
+                onChange={(e) => setSelfType(e.target.value as SelfAccountType)}
+              >
+                {(['freelancer', 'brand', 'in_house_team'] as SelfAccountType[]).map((k) => (
+                  <option key={k} value={k}>{jc.accountTypes[k]}</option>
+                ))}
+              </select>
             </div>
           ) : (
-            <div className="mt-3 flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-3 text-sm">
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm">
               <Building2 size={17} className="shrink-0 text-brand-600" />
               <span className="font-semibold text-text-primary">{jc.agencyType}</span>
               <span className="text-text-muted">— {jc.agencySummary}</span>
             </div>
           )}
 
-          {moduleParam && (
+          {preset && (
             <p className="mt-2 text-xs text-text-muted">
-              {rc.moduleLabel}: <span className="font-semibold text-text-secondary">{moduleParam}</span>
+              {rc.moduleLabel}:{' '}
+              <span className="font-semibold text-text-secondary">
+                {SERVICE_LABELS[preset.service][ar ? 'ar' : 'en']}
+              </span>
             </p>
           )}
         </section>
       )}
 
-      <form className="mt-6 space-y-[18px]" onSubmit={(e) => { e.preventDefault(); mutation.mutate(form) }}>
+      {/* Two columns where the fields are short, so every field and the submit button fit a 768px-tall
+          desktop screen without scrolling. */}
+      <form className="mt-4 space-y-3" onSubmit={(e) => { e.preventDefault(); mutation.mutate({ ...form, ...(preset ?? {}) }) }}>
         {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={rc.errTitle} />}
         <TextInput id="tenant_name" label={t('org_name')} value={form.tenant_name} onChange={setDraft('tenant_name')} required error={err('tenant_name')} />
-        <TextInput id="name" label={t('full_name')} value={form.name} onChange={setDraft('name')} autoComplete="name" required error={err('name')} />
-        <EmailInput id="email" label={t('email')} value={form.email} onChange={setDraft('email')} required error={err('email')} />
-        <PasswordInput id="password" label={t('password')} value={form.password} onChange={setSecretField('password')} autoComplete="new-password" required error={err('password')} showLabel={t('show_password')} hideLabel={t('hide_password')} />
-        <PasswordInput id="password_confirmation" label={t('confirm_password')} value={form.password_confirmation} onChange={setSecretField('password_confirmation')} autoComplete="new-password" required showLabel={t('show_password')} hideLabel={t('hide_password')} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <TextInput id="name" label={t('full_name')} value={form.name} onChange={setDraft('name')} autoComplete="name" required error={err('name')} />
+          <EmailInput id="email" label={t('email')} value={form.email} onChange={setDraft('email')} required error={err('email')} />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <PasswordInput id="password" label={t('password')} value={form.password} onChange={setSecretField('password')} autoComplete="new-password" required error={err('password')} showLabel={t('show_password')} hideLabel={t('hide_password')} />
+          <PasswordInput id="password_confirmation" label={t('confirm_password')} value={form.password_confirmation} onChange={setSecretField('password_confirmation')} autoComplete="new-password" required showLabel={t('show_password')} hideLabel={t('hide_password')} />
+        </div>
 
         {error && !error.errors && <p className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{error.message}</p>}
 
         <Button type="submit" loading={mutation.isPending} className="w-full" size="lg">{t('create_account')}</Button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-text-secondary">
+      <p className="mt-4 text-center text-sm text-text-secondary">
         {t('have_account')} <Link to="/login" className="font-semibold text-brand-600 hover:underline">{t('sign_in')}</Link>
       </p>
     </AuthShell>

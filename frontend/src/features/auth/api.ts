@@ -13,6 +13,9 @@ export interface RegisterInput {
   email: string
   password: string
   password_confirmation: string
+  /** The path chosen on the public site — stored on the tenant so onboarding never re-asks. */
+  account_type?: string
+  service?: 'paid_media' | 'influencer_marketing' | 'combined'
 }
 
 interface UserEnvelope {

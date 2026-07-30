@@ -125,4 +125,36 @@ final class AuthTest extends TestCase
 
         $this->postJson('/api/v1/auth/forgot-password', ['email' => 'not-an-email'])->assertStatus(422);
     }
+    /**
+     * "Keep me signed in" must actually do something. The flag reaches Auth::login($user, $remember),
+     * which mints the long-lived remember cookie and persists a remember_token on the user.
+     */
+    public function test_remember_me_issues_a_persistent_login(): void
+    {
+        $tenant = Tenant::create(['name' => 'R', 'slug' => 'r', 'status' => 'active']);
+        $user = User::create([
+            'tenant_id' => $tenant->id, 'name' => 'Rem', 'email' => 'rem@t.test', 'password' => 'secret123',
+        ]);
+
+        $this->withHeaders($this->spaHeaders)
+            ->postJson('/api/v1/auth/login', ['email' => 'rem@t.test', 'password' => 'secret123', 'remember' => true])
+            ->assertOk();
+
+        $this->assertNotNull($user->refresh()->remember_token, 'remember=true should persist a remember token');
+    }
+
+    /** Signing in without the flag must NOT leave a persistent login behind. */
+    public function test_login_without_remember_does_not_persist(): void
+    {
+        $tenant = Tenant::create(['name' => 'N', 'slug' => 'n', 'status' => 'active']);
+        $user = User::create([
+            'tenant_id' => $tenant->id, 'name' => 'NoRem', 'email' => 'norem@t.test', 'password' => 'secret123',
+        ]);
+
+        $this->withHeaders($this->spaHeaders)
+            ->postJson('/api/v1/auth/login', ['email' => 'norem@t.test', 'password' => 'secret123'])
+            ->assertOk();
+
+        $this->assertNull($user->refresh()->remember_token);
+    }
 }

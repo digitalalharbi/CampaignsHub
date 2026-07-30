@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { EmailInput, PasswordInput } from '@/components/ui/form'
 import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
+import { AuthPanel, AuthPanelMobile, type AuthPortal } from './AuthPanel'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 
@@ -91,7 +92,7 @@ function DemoCredentials({ c }: { c: (typeof COPY)[keyof typeof COPY] }) {
     </div>
   )
   return (
-    <div className="mt-6 rounded-xl border border-dashed border-border bg-surface-secondary p-3">
+    <div className="mt-4 rounded-xl border border-dashed border-border bg-surface-secondary p-3">
       <p className="mb-2 text-xs font-semibold text-text-muted">{c.demo}</p>
       <div className="space-y-1.5">
         <Row which="email" value={DEMO.email} />
@@ -100,6 +101,14 @@ function DemoCredentials({ c }: { c: (typeof COPY)[keyof typeof COPY] }) {
     </div>
   )
 }
+
+/** The portals a visitor can sign in through. Same auth engine; only the framing changes. */
+const PORTAL_TABS = [
+  { key: 'default' as const, ar: 'إدارة الحملات', en: 'Campaigns' },
+  { key: 'agency' as const, ar: 'وكالة', en: 'Agency' },
+  { key: 'influencer' as const, ar: 'المؤثرون وUGC', en: 'Influencers & UGC' },
+  { key: 'client' as const, ar: 'متابعة الطلبات', en: 'Track requests' },
+]
 
 export function LoginPage() {
   const t = useT()
@@ -110,18 +119,9 @@ export function LoginPage() {
   const c = COPY[locale]
   // AUTH-002: adapt ONLY the marketing panel copy to the portal/journey the user arrived from
   // (?portal, or a /client redirect) — same auth engine + destination logic, content only.
-  const portal = params.get('portal') ?? (params.get('redirect')?.startsWith('/client') ? 'client' : null)
-  const panel =
-    portal === 'influencer'
-      ? locale === 'ar'
-        ? { eyebrow: 'حملات المؤثرين والمحتوى', heroTitle: 'أدر حملات المؤثرين والمحتوى من مكان واحد', heroValue: 'من الطلب حتى التسليم — تابع المحتويات والموافقات والتسليمات ونتائج الحملة.' }
-        : { eyebrow: 'Influencer & content campaigns', heroTitle: 'Run influencer & content campaigns from one place', heroValue: 'From request to delivery — track content, approvals, deliverables and results.' }
-      : portal === 'client'
-        ? locale === 'ar'
-          ? { eyebrow: 'متابعة طلباتك', heroTitle: 'تابع طلباتك وعروضك وفواتيرك من مكان واحد', heroValue: 'حالة الطلب، وعروض الأسعار، والفواتير والمدفوعات، والرسائل والملفات في بوابة واحدة.' }
-          : { eyebrow: 'Track your requests', heroTitle: 'Track your requests, quotes and invoices', heroValue: 'Request status, quotes, invoices and payments, plus messages and files in one portal.' }
-        : { eyebrow: c.eyebrow, heroTitle: c.heroTitle, heroValue: c.heroValue }
-
+  const portalParam = params.get('portal') ?? (params.get('redirect')?.startsWith('/client') ? 'client' : null)
+  const portal: AuthPortal =
+    portalParam === 'influencer' ? 'influencer' : portalParam === 'client' ? 'client' : portalParam === 'agency' ? 'agency' : 'default'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
@@ -140,38 +140,10 @@ export function LoginPage() {
 
   return (
     <div className="grid min-h-screen grid-cols-1 bg-background lg:grid-cols-[1.05fr_1fr]">
-      {/* Brand / value panel — desktop only, single coherent emerald accent on a deep neutral. */}
-      <aside className="relative hidden overflow-hidden bg-gradient-to-br from-[var(--auth-panel-from)] via-[var(--auth-panel-via)] to-[var(--auth-panel-to)] p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
-        <div className="pointer-events-none absolute -end-24 -top-24 h-72 w-72 rounded-full bg-brand-500/15 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-28 -start-20 h-80 w-80 rounded-full bg-[var(--teal)]/10 blur-3xl" />
-
-        <div className="relative flex items-center gap-2.5">
-          <Logo className="h-10 w-10" />
-          <span className="text-xl font-extrabold tracking-tight">{c.app}</span>
-        </div>
-
-        <div className="relative max-w-xl">
-          <p className="text-[13px] font-semibold text-brand-300">{panel.eyebrow}</p>
-          <h1 className="mt-3 font-[var(--font-heading)] text-4xl font-extrabold leading-[1.15] xl:text-[44px]">{panel.heroTitle}</h1>
-          <p className="mt-4 text-lg leading-relaxed text-white/75">{panel.heroValue}</p>
-          <ul className="mt-9 space-y-3.5">
-            {c.benefits.map(({ icon: Icon, title, desc }) => (
-              <li key={title} className="flex items-start gap-3.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 backdrop-blur-sm">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-500/15 text-brand-300"><Icon size={18} /></span>
-                <span className="min-w-0">
-                  <span className="block text-[15px] font-bold">{title}</span>
-                  <span className="mt-0.5 block text-[13px] leading-snug text-white/60">{desc}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="relative text-xs text-white/40">© {new Date().getFullYear()} {c.app}</div>
-      </aside>
+      <AuthPanel locale={locale} portal={portal} />
 
       {/* Sign-in form column. */}
-      <main className="flex flex-col px-5 py-6 sm:px-8">
+      <main className="flex flex-col px-5 py-4 sm:px-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 lg:invisible">
             <Logo size={16} className="h-8 w-8 rounded-lg" />
@@ -183,11 +155,37 @@ export function LoginPage() {
           </div>
         </div>
 
-        <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col justify-center py-8">
-          <h2 className="font-[var(--font-heading)] text-3xl font-extrabold text-text-primary sm:text-[40px] sm:leading-tight">{c.formTitle}</h2>
-          <p className="mt-2 text-[17px] text-text-secondary">{c.formValue}</p>
+        <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col justify-center py-4">
+          <h2 className="font-[var(--font-heading)] text-[26px] font-extrabold text-text-primary sm:text-[30px] sm:leading-tight">{c.formTitle}</h2>
+          <p className="mt-1.5 text-[14.5px] text-text-secondary">{c.formValue}</p>
 
-          <form className="mt-8 space-y-5" onSubmit={(e) => { e.preventDefault(); mutation.mutate({ email, password }) }}>
+          {/* The portals, shown plainly. Choosing one rewrites the panel copy and carries through the
+              redirect — the authentication engine behind it is the same for all of them. */}
+          <div data-testid="login-portals" className="mt-4 flex flex-wrap gap-1.5">
+            {PORTAL_TABS.map((tab) => {
+              const on = portal === tab.key
+              const next = new URLSearchParams(params)
+              if (tab.key === 'default') next.delete('portal')
+              else next.set('portal', tab.key)
+              return (
+                <Link
+                  key={tab.key}
+                  to={{ pathname: '/login', search: next.toString() }}
+                  data-testid={`login-portal-${tab.key}`}
+                  aria-current={on ? 'page' : undefined}
+                  className={`rounded-full border px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                    on ? 'border-brand-500 bg-brand-primary-soft text-brand-700' : 'border-border text-text-secondary hover:border-brand-300 hover:bg-surface-hover'
+                  }`}
+                >
+                  {locale === 'ar' ? tab.ar : tab.en}
+                </Link>
+              )
+            })}
+          </div>
+
+          {/* `remember` is passed through: the backend calls Auth::login($user, $remember), which needs the
+              flag to issue the long-lived cookie. Holding it in local state only would make the checkbox a lie. */}
+          <form className="mt-5 space-y-4" onSubmit={(e) => { e.preventDefault(); mutation.mutate({ email, password, remember }) }}>
             <EmailInput label={t('email')} value={email} onChange={(e) => setEmail(e.target.value)} required error={error?.errors?.email?.[0]} />
             <PasswordInput
               label={t('password')} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required
@@ -207,21 +205,24 @@ export function LoginPage() {
             <Button type="submit" loading={mutation.isPending} className="w-full" size="lg">{t('sign_in')}</Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-text-secondary">
+          <p className="mt-4 text-center text-sm text-text-secondary">
             {c.noAccount} <Link to="/register" className="font-semibold text-brand-600 hover:underline">{c.register}</Link>
           </p>
 
-          <div className="mt-6 flex items-center gap-3 text-xs text-text-muted">
+          <div className="mt-4 flex items-center gap-3 text-xs text-text-muted">
             <span className="h-px flex-1 bg-border" />
             <span>{c.clientPrompt}</span>
             <span className="h-px flex-1 bg-border" />
           </div>
           <Link
             to="/client/login"
-            className="mt-4 flex h-11 w-full items-center justify-center rounded-xl border border-border-strong bg-surface text-sm font-semibold text-text-primary transition-colors hover:bg-surface-hover"
+            className="mt-3 flex h-11 w-full items-center justify-center rounded-xl border border-border-strong bg-surface text-sm font-semibold text-text-primary transition-colors hover:bg-surface-hover"
           >
             {c.clientLogin}
           </Link>
+
+          {/* On phones the value proposition lives here — under the form, collapsed by default. */}
+          <AuthPanelMobile locale={locale} portal={portal} />
 
           {/* Demo credentials — dev only, BELOW the form, separate card with copy buttons, never auto-filled. */}
           {import.meta.env.DEV && <DemoCredentials c={c} />}

@@ -21,6 +21,13 @@ use Illuminate\Support\Str;
  */
 final class RegisterTenantAction
 {
+    /** Mirrors OnboardingController::SERVICE_MODULES — one service choice, one module set. */
+    private const SERVICE_MODULES = [
+        'paid_media' => ['paid_media'],
+        'influencer_marketing' => ['influencer_marketing'],
+        'combined' => ['paid_media', 'influencer_marketing'],
+    ];
+
     public function __construct(private readonly TenantContext $context) {}
 
     public function execute(RegisterData $data): User
@@ -30,9 +37,12 @@ final class RegisterTenantAction
                 'name' => $data->tenantName,
                 'slug' => $this->uniqueSlug($data->tenantName),
                 'status' => 'trialing',
-                // Account type + modules are chosen during onboarding; email verification comes first.
+                // Email verification always comes first. Account type and modules are recorded here when the
+                // visitor already chose a path on the public site, so the wizard does not ask a second time.
                 'onboarding_step' => 'verify_email',
                 'subscription_plan' => 'trial',
+                'account_type' => $data->accountType,
+                'enabled_modules' => $data->service !== null ? self::SERVICE_MODULES[$data->service] : null,
             ]);
 
             // Make the new tenant the active scope so nested writes are correctly attributed.

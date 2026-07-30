@@ -171,4 +171,50 @@ final class RegistrationOnboardingTest extends TestCase
         // A bogus token fails.
         $this->postJson('/api/v1/auth/email/verify', ['token' => 'nope'])->assertStatus(422);
     }
+    /**
+     * AUTH-002: the path chosen on the public site must survive registration. It is stored on the tenant,
+     * so verification lands on the workspace step instead of asking the visitor to pick it a second time.
+     */
+    public function test_journey_chosen_on_the_public_site_is_preserved_through_registration(): void
+    {
+        $res = $this->withHeaders($this->spaHeaders)->postJson('/api/v1/auth/register', [
+            'tenant_name' => 'Journey WS', 'name' => 'Journey Owner', 'email' => 'journey@owner.test',
+            'password' => 'secret1234', 'password_confirmation' => 'secret1234',
+            'account_type' => 'agency', 'service' => 'paid_media',
+        ])->assertCreated();
+
+        // Recorded immediately — not held in browser state that a refresh would lose.
+        $res->assertJsonPath('data.user.account.account_type', 'agency')
+            ->assertJsonPath('data.user.account.onboarding.step', 'verify_email');
+
+        $token = explode('token=', (string) $res->json('data.email_verification.dev_link'))[1];
+
+        // Both questions were already answered, so onboarding resumes at the workspace step.
+        $this->postJson('/api/v1/auth/email/verify', ['token' => $token])->assertOk()
+            ->assertJsonPath('data.user.account.onboarding.step', 'workspace')
+            ->assertJsonPath('data.user.account.account_type', 'agency');
+
+        $this->assertSame(
+            ['paid_media'],
+            \App\Domains\Tenancy\Models\Tenant::where('name', 'Journey WS')->value('enabled_modules'),
+        );
+    }
+
+    /** Without a journey nothing is presumed — the wizard still asks for the account type. */
+    public function test_registration_without_a_journey_still_starts_at_account_type(): void
+    {
+        ['token' => $token] = $this->register('nojourney@owner.test');
+        $this->postJson('/api/v1/auth/email/verify', ['token' => $token])->assertOk()
+            ->assertJsonPath('data.user.account.onboarding.step', 'account_type');
+    }
+
+    /** An account type outside the enum is rejected rather than silently stored. */
+    public function test_registration_rejects_an_unknown_account_type(): void
+    {
+        $this->withHeaders($this->spaHeaders)->postJson('/api/v1/auth/register', [
+            'tenant_name' => 'Bad WS', 'name' => 'Bad', 'email' => 'bad@owner.test',
+            'password' => 'secret1234', 'password_confirmation' => 'secret1234',
+            'account_type' => 'not_a_type',
+        ])->assertStatus(422);
+    }
 }

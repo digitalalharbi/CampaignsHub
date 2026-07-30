@@ -14,6 +14,10 @@ final readonly class RegisterData
         public string $name,
         public string $email,
         public string $password,
+        /** Chosen on the public site; null when someone lands on /register directly. */
+        public ?string $accountType = null,
+        /** paid_media | influencer_marketing | combined — the service the visitor came for. */
+        public ?string $service = null,
     ) {}
 
     /** @param array<string,mixed> $data */
@@ -24,6 +28,8 @@ final readonly class RegisterData
             name: (string) $data['name'],
             email: (string) $data['email'],
             password: (string) $data['password'],
+            accountType: isset($data['account_type']) ? (string) $data['account_type'] : null,
+            service: isset($data['service']) ? (string) $data['service'] : null,
         );
     }
 }
