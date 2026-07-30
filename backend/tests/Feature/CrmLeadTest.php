@@ -44,6 +44,7 @@ final class CrmLeadTest extends TestCase
             'email' => 'owner@agency.test',
             'password' => 'secret123',
         ]);
+        $this->grantMembership($this->user, $this->tenant);
         $this->user->assignRole($role);
     }
 
@@ -120,6 +121,7 @@ final class CrmLeadTest extends TestCase
         app(TenantContext::class)->setTenantId($other->id);
         Lead::create(['name' => 'Theirs', 'source' => 'manual']);
         $otherUser = User::create(['tenant_id' => $other->id, 'name' => 'O', 'email' => 'o@other.test', 'password' => 'secret123']);
+        $this->grantMembership($otherUser, $other);
         $role = Role::create(['tenant_id' => $other->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo('leads.view');
         $otherUser->assignRole($role);
@@ -134,6 +136,7 @@ final class CrmLeadTest extends TestCase
     public function test_permission_is_required_to_create_a_lead(): void
     {
         $viewer = User::create(['tenant_id' => $this->tenant->id, 'name' => 'V', 'email' => 'v@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($viewer, $this->tenant);
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Viewer', 'slug' => 'viewer']);
         $role->givePermissionTo('leads.view');
         $viewer->assignRole($role);

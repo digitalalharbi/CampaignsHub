@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Identity\Services;
 
 use App\Domains\Requests\Services\ContactVerificationService;
+use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -68,7 +69,12 @@ final class EmailVerificationService
             // Advance onboarding out of the email step (only if it was waiting there), landing on the first
             // step the visitor has NOT already answered. Someone who picked their path on the public site
             // arrives with account_type and modules set and must not be asked those questions again.
-            $tenant = Tenant::find($user->tenant_id);
+            // The workspace being onboarded is the one the user's default membership points at —
+            // onboarding is per workspace, and the legacy column can only ever name one.
+            $tenant = Tenant::find(
+                Membership::query()->forUser($user->id)->active()
+                    ->orderByDesc('is_default')->value('tenant_id')
+            );
             if ($tenant !== null && $tenant->onboarding_step === 'verify_email') {
                 $tenant->forceFill(['onboarding_step' => self::firstUnansweredStep($tenant)])->save();
             }

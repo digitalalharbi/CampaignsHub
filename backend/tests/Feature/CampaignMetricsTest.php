@@ -65,6 +65,7 @@ final class CampaignMetricsTest extends TestCase
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'slug' => 'o']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($role);
         $ws = ClientWorkspace::create(['name' => 'C', 'slug' => 'c', 'mode' => 'managed']);
         $this->projectA = Project::create(['client_workspace_id' => $ws->id, 'name' => 'A', 'status' => 'active']);
@@ -126,6 +127,7 @@ final class CampaignMetricsTest extends TestCase
     public function test_requires_view_permission(): void
     {
         $stranger = User::create(['tenant_id' => $this->tenant->id, 'name' => 'S', 'email' => 's@a.test', 'password' => 'secret123']);
+        $this->grantMembership($stranger, $this->tenant);
         $this->actingAs($stranger)
             ->getJson($this->url($this->projectA, $this->campA1->id))
             ->assertForbidden();
@@ -203,6 +205,7 @@ final class CampaignMetricsTest extends TestCase
 
         // A user without reports.approve cannot change status.
         $editor = User::create(['tenant_id' => $this->tenant->id, 'name' => 'E', 'email' => 'e@a.test', 'password' => 'secret123']);
+        $this->grantMembership($editor, $this->tenant);
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'ed', 'slug' => 'ed']);
         $role->givePermissionTo(...Permission::whereIn('key', ['campaigns.view', 'campaigns.update'])->pluck('key')->all());
         $editor->assignRole($role);

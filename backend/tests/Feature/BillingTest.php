@@ -63,6 +63,7 @@ final class BillingTest extends TestCase
             'tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'owner-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
+        $this->grantMembership($user, $this->tenant);
         $user->assignRole($role);
 
         return $user;
@@ -276,6 +277,7 @@ final class BillingTest extends TestCase
         $role = Role::create(['tenant_id' => $tenantB->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $ownerB = User::create(['tenant_id' => $tenantB->id, 'name' => 'O', 'email' => 'o@b.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
+        $this->grantMembership($ownerB, $tenantB);
         $ownerB->assignRole($role);
 
         // B cannot see A's quote or invoice.
@@ -364,6 +366,7 @@ final class BillingTest extends TestCase
             'tenant_id' => $this->tenant->id, 'name' => 'V', 'email' => 'v-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
+        $this->grantMembership($viewer, $this->tenant);
 
         $this->actingAs($viewer, 'sanctum')->getJson('/api/v1/billing/overview')->assertForbidden();
         $this->actingAs($viewer, 'sanctum')->getJson('/api/v1/billing/payments')->assertForbidden();

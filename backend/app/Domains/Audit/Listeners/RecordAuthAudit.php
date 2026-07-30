@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Domains\Audit\Listeners;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Tenancy\Context\MembershipContext;
+use App\Domains\Tenancy\Models\Membership;
+use App\Models\User;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 
@@ -27,7 +30,7 @@ final class RecordAuthAudit
             entityType: $event->user::class,
             entityId: (string) $event->user->getAuthIdentifier(),
             userId: (int) $event->user->getAuthIdentifier(),
-            tenantId: $event->user->tenant_id ?? null,
+            tenantId: self::auditTenantId($event->user),
         );
     }
 
@@ -42,7 +45,29 @@ final class RecordAuthAudit
             entityType: $event->user::class,
             entityId: (string) $event->user->getAuthIdentifier(),
             userId: (int) $event->user->getAuthIdentifier(),
-            tenantId: $event->user->tenant_id ?? null,
+            tenantId: self::auditTenantId($event->user),
         );
+    }
+
+    /**
+     * Which workspace to stamp on a sign-in or sign-out record.
+     *
+     * The active membership if one is established (sign-out, mid-session), otherwise the user's
+     * default — read from the membership layer rather than from `users.tenant_id`, so an audit trail
+     * cannot name a workspace the person no longer belongs to.
+     */
+    private static function auditTenantId(mixed $user): ?string
+    {
+        $active = app(MembershipContext::class)->tenantId();
+        if ($active !== null) {
+            return $active;
+        }
+
+        if (! $user instanceof User) {
+            return null;
+        }
+
+        return Membership::query()->forUser($user->id)->active()
+            ->orderByDesc('is_default')->value('tenant_id');
     }
 }

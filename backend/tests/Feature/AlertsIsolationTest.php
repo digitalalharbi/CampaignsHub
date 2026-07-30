@@ -37,6 +37,7 @@ final class AlertsIsolationTest extends TestCase
         $role = Role::create(['tenant_id' => $tenant->id, 'name' => 'Owner', 'slug' => 'tenant-owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $user = User::create(['tenant_id' => $tenant->id, 'name' => 'O', 'email' => "o@{$slug}.test", 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
+        $this->grantMembership($user, $tenant);
         $user->assignRole($role);
 
         return [$tenant, $user];

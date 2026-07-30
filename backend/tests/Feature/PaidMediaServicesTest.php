@@ -282,6 +282,7 @@ final class PaidMediaServicesTest extends TestCase
         $roleB = Role::create(['tenant_id' => $tenantB->id, 'name' => 'Owner', 'slug' => 'owner']);
         $roleB->givePermissionTo(...Permission::pluck('key')->all());
         $userB = User::create(['tenant_id' => $tenantB->id, 'name' => 'B', 'email' => 'b@other.test', 'password' => 'secret123']);
+        $this->grantMembership($userB, $tenantB);
         $userB->assignRole($roleB);
 
         // Tenant B cannot see tenant A's request in the internal dashboard (scoped + 404 on direct id).
@@ -300,6 +301,7 @@ final class PaidMediaServicesTest extends TestCase
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($owner, $this->tenant);
         $owner->assignRole($role);
 
         $this->actingAs($owner, 'sanctum')->getJson("/api/v1/app/requests/{$reqA->id}")

@@ -35,6 +35,7 @@ final class ProjectManagementTest extends TestCase
         $role = Role::create(['tenant_id' => $tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $this->user = User::create(['tenant_id' => $tenant->id, 'name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($this->user, $tenant);
         $this->user->assignRole($role);
         $this->workspace = ClientWorkspace::create(['name' => 'Client', 'slug' => 'client', 'mode' => 'managed']);
         app(TenantContext::class)->forget();
@@ -73,6 +74,7 @@ final class ProjectManagementTest extends TestCase
     {
         $project = $this->makeProject();
         $member = User::create(['tenant_id' => $this->user->tenant_id, 'name' => 'M', 'email' => 'm@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($member, \App\Domains\Tenancy\Models\Tenant::findOrFail($this->user->tenant_id));
 
         $membershipId = $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$project->id}/team", [
             'user_id' => $member->id, 'role' => 'account_manager',
@@ -90,7 +92,9 @@ final class ProjectManagementTest extends TestCase
     {
         $project = $this->makeProject();
         $admin = User::create(['tenant_id' => $this->user->tenant_id, 'name' => 'A', 'email' => 'a@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($admin, \App\Domains\Tenancy\Models\Tenant::findOrFail($this->user->tenant_id));
         $member = User::create(['tenant_id' => $this->user->tenant_id, 'name' => 'M', 'email' => 'm@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($member, \App\Domains\Tenancy\Models\Tenant::findOrFail($this->user->tenant_id));
 
         $adminId = $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$project->id}/team", ['user_id' => $admin->id, 'role' => 'account_manager'])->json('data.id');
         $memberId = $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$project->id}/team", ['user_id' => $member->id, 'role' => 'analyst'])->json('data.id');

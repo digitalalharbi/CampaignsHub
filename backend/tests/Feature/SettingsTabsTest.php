@@ -35,6 +35,7 @@ final class SettingsTabsTest extends TestCase
         $this->ownerRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'tenant-owner']);
         $this->ownerRole->givePermissionTo(...Permission::pluck('key')->all());
         $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($this->ownerRole);
     }
 
@@ -66,6 +67,7 @@ final class SettingsTabsTest extends TestCase
     {
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'V', 'slug' => 'viewer2']);
         $viewer = User::create(['tenant_id' => $this->tenant->id, 'name' => 'V', 'email' => 'v@a.test', 'password' => 'secret123']);
+        $this->grantMembership($viewer, $this->tenant);
         $viewer->assignRole($role);
         Sanctum::actingAs($viewer);
         $this->getJson('/api/v1/settings/team')->assertForbidden();

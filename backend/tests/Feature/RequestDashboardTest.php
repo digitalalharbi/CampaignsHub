@@ -45,8 +45,10 @@ final class RequestDashboardTest extends TestCase
         $viewerRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Viewer', 'slug' => 'viewer']);
 
         $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'owner@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($ownerRole);
         $this->viewer = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Viewer', 'email' => 'viewer@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($this->viewer, $this->tenant);
         $this->viewer->assignRole($viewerRole);
     }
 
@@ -118,6 +120,7 @@ final class RequestDashboardTest extends TestCase
         $otherRole = Role::create(['tenant_id' => $other->id, 'name' => 'Owner', 'slug' => 'owner']);
         $otherRole->givePermissionTo(...Permission::pluck('key')->all());
         $otherOwner = User::create(['tenant_id' => $other->id, 'name' => 'O2', 'email' => 'o2@other.test', 'password' => 'secret123']);
+        $this->grantMembership($otherOwner, $other);
         $otherOwner->assignRole($otherRole);
 
         app(TenantContext::class)->setTenantId($other->id);

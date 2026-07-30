@@ -53,6 +53,7 @@ final class MetricsTest extends TestCase
         $owner = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $owner->givePermissionTo(...Permission::pluck('key')->all());
         $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($owner);
 
         $ws = ClientWorkspace::create(['name' => 'C', 'slug' => 'c', 'mode' => 'managed']);
@@ -237,6 +238,7 @@ final class MetricsTest extends TestCase
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'None', 'slug' => 'none']);
         $role->givePermissionTo('projects.view', 'projects.view.all');
         $nobody = User::create(['tenant_id' => $this->tenant->id, 'name' => 'N', 'email' => 'n@a.test', 'password' => 'secret123']);
+        $this->grantMembership($nobody, $this->tenant);
         $nobody->assignRole($role);
         app(TenantContext::class)->forget();
 

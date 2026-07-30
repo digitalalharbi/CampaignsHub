@@ -61,6 +61,7 @@ final class AuthTest extends TestCase
             'email' => 'ali@t.test',
             'password' => 'secret123',
         ]);
+        $this->grantMembership($user, $tenant);
 
         $this->withHeaders($this->spaHeaders)
             ->postJson('/api/v1/auth/login', ['email' => 'ali@t.test', 'password' => 'secret123'])
@@ -136,6 +137,7 @@ final class AuthTest extends TestCase
         $user = User::create([
             'tenant_id' => $tenant->id, 'name' => 'Rem', 'email' => 'rem@t.test', 'password' => 'secret123',
         ]);
+        $this->grantMembership($user, $tenant);
 
         $this->withHeaders($this->spaHeaders)
             ->postJson('/api/v1/auth/login', ['email' => 'rem@t.test', 'password' => 'secret123', 'remember' => true])
@@ -151,6 +153,7 @@ final class AuthTest extends TestCase
         $user = User::create([
             'tenant_id' => $tenant->id, 'name' => 'NoRem', 'email' => 'norem@t.test', 'password' => 'secret123',
         ]);
+        $this->grantMembership($user, $tenant);
 
         $this->withHeaders($this->spaHeaders)
             ->postJson('/api/v1/auth/login', ['email' => 'norem@t.test', 'password' => 'secret123'])

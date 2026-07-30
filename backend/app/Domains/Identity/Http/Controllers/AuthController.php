@@ -10,7 +10,7 @@ use App\Domains\Identity\Http\Requests\LoginRequest;
 use App\Domains\Identity\Http\Requests\RegisterRequest;
 use App\Domains\Identity\Resources\UserResource;
 use App\Domains\Identity\Services\EmailVerificationService;
-use App\Domains\Tenancy\Models\Tenant;
+use App\Domains\Identity\Support\AccountSuspension;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -68,8 +68,9 @@ final class AuthController extends Controller
     /** A suspended/disabled account (or suspended workspace) can never sign in or mint a token. Generic message. */
     private function assertActive(User $user): void
     {
+        // ADR 0002: suspension follows the memberships, not the legacy column — see AccountSuspension.
         $suspended = $user->disabled_at !== null
-            || ($user->tenant_id !== null && in_array(Tenant::whereKey($user->tenant_id)->value('status'), ['suspended', 'inactive'], true));
+            || (! $user->is_platform_admin && AccountSuspension::everyWorkspaceSuspendedFor($user));
         abort_if($suspended, 403, 'Your account is not available. Please contact support.');
     }
 

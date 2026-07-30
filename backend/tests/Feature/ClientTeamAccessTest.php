@@ -42,8 +42,10 @@ final class ClientTeamAccessTest extends TestCase
         $buyerRole->givePermissionTo('clients.view', 'clients.view_analytics');
 
         $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($ownerRole);
         $this->buyer = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Buyer', 'email' => 'b@a.test', 'password' => 'secret123']);
+        $this->grantMembership($this->buyer, $this->tenant);
         $this->buyer->assignRole($buyerRole);
     }
 
@@ -83,6 +85,7 @@ final class ClientTeamAccessTest extends TestCase
         $c = $this->client();
         $other = Tenant::create(['name' => 'Other', 'slug' => 'other', 'status' => 'active']);
         $foreign = User::create(['tenant_id' => $other->id, 'name' => 'F', 'email' => 'f@other.test', 'password' => 'secret123']);
+        $this->grantMembership($foreign, $other);
 
         $this->actingAs($this->owner, 'sanctum')->postJson("/api/v1/app/clients/{$c->id}/team", [
             'user_id' => $foreign->id, 'access_role' => 'analyst',

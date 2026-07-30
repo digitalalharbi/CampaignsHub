@@ -63,6 +63,7 @@ final class MilestoneAcceptanceTest extends TestCase
             ->givePermissionTo('campaigns.view', 'reports.view');
 
         $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'o@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
+        $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($ownerRole);
     }
 
@@ -70,6 +71,7 @@ final class MilestoneAcceptanceTest extends TestCase
     {
         // 1) SUSPENDED USER BLOCKED — a disabled user cannot log in, with a non-revealing message.
         $suspended = User::create(['tenant_id' => $this->tenant->id, 'name' => 'S', 'email' => 's@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
+        $this->grantMembership($suspended, $this->tenant);
         $suspended->forceFill(['disabled_at' => now()])->save();
         $this->withHeaders($this->spa)->postJson('/api/v1/auth/login', ['email' => 's@a.test', 'password' => 'secret1234'])
             ->assertForbidden();
@@ -163,6 +165,7 @@ final class MilestoneAcceptanceTest extends TestCase
         $role = Role::create(['tenant_id' => $company->id, 'name' => 'Owner', 'slug' => 'tenant-owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $user = User::create(['tenant_id' => $company->id, 'name' => 'B', 'email' => 'b@brand.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
+        $this->grantMembership($user, $company);
         $user->assignRole($role);
 
         $status = $this->actingAs($user, 'sanctum')->getJson('/api/v1/app/clients')->getStatusCode();

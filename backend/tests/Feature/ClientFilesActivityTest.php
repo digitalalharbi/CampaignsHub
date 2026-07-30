@@ -38,6 +38,7 @@ final class ClientFilesActivityTest extends TestCase
         $ownerRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $ownerRole->givePermissionTo(...Permission::pluck('key')->all());
         $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($ownerRole);
     }
 
@@ -117,6 +118,7 @@ final class ClientFilesActivityTest extends TestCase
         $limited = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Ltd', 'slug' => 'ltd']);
         $limited->givePermissionTo('clients.view', 'clients.view_all');
         $u = User::create(['tenant_id' => $this->tenant->id, 'name' => 'L', 'email' => 'l@a.test', 'password' => 'secret123']);
+        $this->grantMembership($u, $this->tenant);
         $u->assignRole($limited);
 
         $this->actingAs($u, 'sanctum')->getJson("/api/v1/app/clients/{$c->id}/files")->assertForbidden();

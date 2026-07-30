@@ -33,6 +33,7 @@ final class NotificationHardeningTest extends TestCase
         // between requests, so it holds its tenant for the whole test.
         $this->holdingTenant((string) $this->tenant->id);
         $this->user = User::create(['tenant_id' => $this->tenant->id, 'name' => 'U', 'email' => 'u@a.test', 'password' => 'secret123']);
+        $this->grantMembership($this->user, $this->tenant);
         $this->dispatcher = app(NotificationDispatcher::class);
     }
 
@@ -119,6 +120,7 @@ final class NotificationHardeningTest extends TestCase
     {
         $this->dispatcher->dispatch($this->payload());
         $other = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->grantMembership($other, $this->tenant);
         $this->actingAs($other, 'sanctum')->getJson('/api/v1/notifications/deliveries')
             ->assertOk()->assertJsonCount(0, 'data');
         $this->assertGreaterThan(0, NotificationDelivery::count());

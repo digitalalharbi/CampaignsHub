@@ -33,6 +33,7 @@ final class SuspendedAccountTest extends TestCase
             'tenant_id' => $this->tenant->id, 'name' => 'U', 'email' => 'u@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
+        $this->grantMembership($user, $this->tenant);
         // disabled_at is intentionally NOT mass-assignable — set it explicitly (as an admin action would).
         if (array_key_exists('disabled_at', $over)) {
             $user->forceFill(['disabled_at' => $over['disabled_at']])->save();

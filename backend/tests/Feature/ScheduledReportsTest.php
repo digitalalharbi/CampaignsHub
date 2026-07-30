@@ -123,6 +123,7 @@ final class ScheduledReportsTest extends TestCase
             'tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
+        $this->grantMembership($user, $this->tenant);
         $user->assignRole($role);
 
         return $user;
@@ -199,6 +200,7 @@ final class ScheduledReportsTest extends TestCase
             'tenant_id' => $this->tenant->id, 'name' => 'V', 'email' => 'v-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
+        $this->grantMembership($viewer, $this->tenant);
 
         $this->actingAs($viewer, 'sanctum')->getJson($this->api())->assertForbidden();
         $this->actingAs($viewer, 'sanctum')->postJson($this->api(), ['name' => 'X', 'type' => 'executive', 'frequency' => 'daily'])->assertForbidden();

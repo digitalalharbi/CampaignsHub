@@ -43,10 +43,12 @@ scope, and scans the source for the two places the fallback would most plausibly
 | Compatibility fallback | **REMOVED.** The column is not read for scope anywhere |
 | Automatic provisioning | `User::created` hook, idempotent, with an explicit opt-out |
 | Regression guard | `TenantIdDeprecationTest` — behavioural + source scan |
-| Account suspension | Still reads `users.tenant_id` — item 1 above |
-| Sign-in suspension check | Still reads `users.tenant_id` — same decision as item 1 |
-| Email verification / onboarding step | Still reads `users.tenant_id` — item 2 above |
-| Audit stamping | `RecordAuthAudit` records the origin tenant on a sign-in — legacy data, not a decision |
+| Granting access | **Explicit only.** `GrantMembership` + `MembershipGrant`, in a transaction. Creating a user grants nothing |
+| Account suspension | **Converted.** `AccountSuspension` asks the memberships; one suspended workspace no longer locks a person out of another they belong to |
+| Sign-in suspension check | **Converted** — same helper |
+| Email verification / onboarding step | **Converted** — advances the workspace of the membership being onboarded |
+| Audit stamping | **Converted** — stamps the active membership's tenant, or the default |
+| Remaining reads | **ONE**: `MembershipProvisioner`, which is the migration path itself |
 
 ## Removal steps, in order
 
@@ -61,14 +63,19 @@ scope, and scans the source for the two places the fallback would most plausibly
    point was still relying on the column.
 6. Drop the column, and with it `User::tenant()`.
 
-Steps 1–3 and 5 are DONE: the fallback is gone and provisioning is automatic. What remains before the
-column can be dropped physically:
+Steps 1, 2, 3 and 5 are DONE. Every consumer that made a DECISION from the column is converted, and
+the guard's allowlist is down to the single migration path.
 
-  - the three consumers in the table above (suspension ×2, onboarding step) must read the membership;
-  - **47 test files and `UserFactory` pass `tenant_id` when creating users.** Dropping the column
-    breaks every one of them at once, so converting them to grant a membership instead is its own
-    unit of work rather than a line in this one. Until that is done the column stays, deprecated and
-    guarded.
+What still blocks the physical drop:
+
+  - **46 test files and `UserFactory` pass `tenant_id` when creating a user**, to say which tenant the
+    fixture belongs to. Dropping the column breaks all of them at once, so converting them is its own
+    unit rather than a line in this one.
+  - `MembershipProvisioner::ensureForOwnWorkspace` reads it to migrate legacy rows. It goes when there
+    are none left to migrate.
+
+Until then the column stays: deprecated on the model, unread by any decision, and guarded by
+`TenantIdDeprecationTest`.
 
 Do not skip the "assert zero stranded users" step. Dropping the fallback while stranded rows existed
 would not have failed loudly — those users would simply have seen an empty workspace, the failure mode

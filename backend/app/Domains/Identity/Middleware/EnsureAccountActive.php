@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Identity\Middleware;
 
 use App\Domains\Audit\AuditLogger;
-use App\Domains\Tenancy\Models\Tenant;
+use App\Domains\Identity\Support\AccountSuspension;
 use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
@@ -32,11 +32,15 @@ final class EnsureAccountActive
         }
 
         $disabled = $user->disabled_at !== null;
-        $tenantSuspended = false;
-        if ($user->tenant_id !== null) {
-            $status = Tenant::whereKey($user->tenant_id)->value('status');
-            $tenantSuspended = in_array($status, ['suspended', 'inactive'], true);
-        }
+
+        /*
+         * ADR 0002: suspension is a property of the WORKSPACE a person is working in, not of the
+         * person. Reading it off `users.tenant_id` meant one suspended workspace locked them out of
+         * every other workspace they legitimately belong to. Blocked only when every workspace they
+         * can reach is suspended — otherwise the switcher will land them in one that still works.
+         */
+        $tenantSuspended = ! $user->is_platform_admin
+            && AccountSuspension::everyWorkspaceSuspendedFor($user);
 
         if ($disabled || $tenantSuspended) {
             $this->audit->log('auth.blocked_suspended', 'user', (string) $user->id,

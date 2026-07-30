@@ -49,8 +49,10 @@ final class RequestConversionTest extends TestCase
         $viewerRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Viewer', 'slug' => 'viewer']);
 
         $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'owner@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($ownerRole);
         $this->viewer = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Viewer', 'email' => 'viewer@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($this->viewer, $this->tenant);
         $this->viewer->assignRole($viewerRole);
     }
 

@@ -43,6 +43,7 @@ final class PublicPageSettingsTest extends TestCase
             'tenant_id' => $t->id, 'name' => 'Owner', 'email' => 'o-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
+        $this->grantMembership($user, $t);
         $user->assignRole($role);
 
         return $user;
@@ -115,6 +116,7 @@ final class PublicPageSettingsTest extends TestCase
             'tenant_id' => $this->tenant->id, 'name' => 'V', 'email' => 'v-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
+        $this->grantMembership($viewer, $this->tenant);
 
         $this->actingAs($viewer, 'sanctum')->getJson('/api/v1/settings/public-pages')->assertForbidden();
         $this->actingAs($viewer, 'sanctum')->putJson('/api/v1/settings/public-pages/home', ['draft' => []])->assertForbidden();

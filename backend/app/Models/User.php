@@ -7,7 +7,6 @@ namespace App\Models;
 use App\Domains\Access\Models\Concerns\HasRoles;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
-use App\Domains\Tenancy\Services\MembershipProvisioner;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -64,40 +63,8 @@ class User extends Authenticatable
         ];
     }
 
-    /**
-     * Escape hatch for the two situations that legitimately create a user without a membership:
-     * registration, which grants an `owner` membership itself a moment later, and the tests that
-     * exist to prove a membership-less user is refused everything.
-     */
-    private static bool $autoMembership = true;
-
-    /** @template T @param  callable():T  $callback @return T */
-    public static function withoutAutoMembership(callable $callback): mixed
-    {
-        self::$autoMembership = false;
-
-        try {
-            return $callback();
-        } finally {
-            self::$autoMembership = true;
-        }
-    }
-
     protected static function booted(): void
     {
-        /*
-         * ADR 0002: a tenant user without a membership has no portal and no scope — they would sit
-         * in onboarding forever. Guaranteeing it here rather than at each call site is deliberate:
-         * users are created in 47 test files, three seeders and several actions, and an invariant
-         * that depends on every one of them remembering is not an invariant.
-         *
-         * Idempotent, so re-running seeders or granting explicitly afterwards is a no-op.
-         */
-        static::created(function (User $user): void {
-            if (self::$autoMembership && $user->tenant_id !== null) {
-                app(MembershipProvisioner::class)->ensureForOwnWorkspace($user);
-            }
-        });
 
         static::creating(function (User $user): void {
             if (empty($user->uuid)) {

@@ -33,6 +33,7 @@ final class MeAccountTest extends TestCase
             'tenant_id' => $tenant->id, 'name' => 'Sara Ali', 'email' => 'sara@demo.test',
             'password' => 'secret123',
         ]);
+        $this->grantMembership($this->user, $tenant);
         // email_verified_at is guarded (not fillable); set it directly so status resolves to "active".
         $this->user->forceFill(['email_verified_at' => now()])->save();
         $this->user->assignRole($role);

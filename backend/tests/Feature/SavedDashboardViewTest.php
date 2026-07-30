@@ -30,6 +30,7 @@ final class SavedDashboardViewTest extends TestCase
         $role = Role::create(['tenant_id' => $tenant->id, 'name' => 'Owner', 'slug' => 'owner-'.uniqid()]);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $u = User::create(['tenant_id' => $tenant->id, 'name' => 'U', 'email' => $email, 'password' => 'secret123']);
+        $this->grantMembership($u, $tenant);
         $u->assignRole($role);
         app(TenantContext::class)->forget();
 

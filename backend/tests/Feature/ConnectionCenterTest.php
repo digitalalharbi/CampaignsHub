@@ -61,6 +61,7 @@ final class ConnectionCenterTest extends TestCase
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($role);
 
         $ws = ClientWorkspace::create(['name' => 'Client', 'slug' => 'client', 'mode' => 'managed']);
@@ -239,6 +240,7 @@ final class ConnectionCenterTest extends TestCase
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Viewer', 'slug' => 'viewer']);
         $role->givePermissionTo('projects.view', 'projects.view.all'); // can see the project, but not integrations
         $viewer = User::create(['tenant_id' => $this->tenant->id, 'name' => 'V', 'email' => 'v@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($viewer, $this->tenant);
         $viewer->assignRole($role);
         app(TenantContext::class)->forget();
 

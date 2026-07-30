@@ -42,6 +42,7 @@ final class ReportShareTest extends TestCase
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'slug' => 'o']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($role);
         $ws = ClientWorkspace::create(['name' => 'C', 'slug' => 'c', 'mode' => 'managed']);
         $project = Project::create(['client_workspace_id' => $ws->id, 'name' => 'A', 'status' => 'active']);
@@ -99,6 +100,7 @@ final class ReportShareTest extends TestCase
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'V', 'slug' => 'v']);
         $role->givePermissionTo('projects.view', 'projects.view.all', 'reports.view'); // no reports.share
         $viewer = User::create(['tenant_id' => $this->tenant->id, 'name' => 'V', 'email' => 'v@a.test', 'password' => 'secret123']);
+        $this->grantMembership($viewer, $this->tenant);
         $viewer->assignRole($role);
         app(TenantContext::class)->forget();
 

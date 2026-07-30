@@ -35,6 +35,7 @@ final class ClientWorkspaceTest extends TestCase
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $this->user = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($this->user, $this->tenant);
         $this->user->assignRole($role);
     }
 
@@ -77,6 +78,7 @@ final class ClientWorkspaceTest extends TestCase
         app(TenantContext::class)->setTenantId($other->id);
         ClientWorkspace::create(['name' => 'Theirs', 'slug' => 'theirs', 'mode' => 'managed']);
         $otherUser = User::create(['tenant_id' => $other->id, 'name' => 'O2', 'email' => 'o2@other.test', 'password' => 'secret123']);
+        $this->grantMembership($otherUser, $other);
         $role = Role::create(['tenant_id' => $other->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo('workspaces.view');
         $otherUser->assignRole($role);

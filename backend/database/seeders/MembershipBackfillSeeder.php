@@ -10,15 +10,17 @@ use App\Models\User;
 use Illuminate\Database\Seeder;
 
 /**
- * Guarantees every tenant user has a portal to land in (ADR 0002).
+ * Grants the demo and legacy users their membership (ADR 0002).
  *
- * The memberships migration backfills from `users`, but on a clean install the migration runs while
- * that table is still empty and the seeders create users afterwards — so a `migrate:fresh --seed`
- * produced users with no membership at all, every one of whom would have fallen through to onboarding.
+ * This is the MIGRATION PATH, and the one place `users.tenant_id` is still read on purpose: it takes
+ * users who predate the membership layer — seeded fixtures, rows created before the migration — and
+ * moves them into an explicit membership.
  *
- * Runs LAST and is idempotent, so it covers every seeder that creates users, including ones added
- * later, without each of them having to remember. Platform users (`tenant_id` null) are skipped on
- * purpose: they belong to no tenant and therefore to no portal.
+ * It is not a substitute for granting access properly. New code grants through `GrantMembership`,
+ * naming tenant, workspace, portal, role and scopes; this exists only until no unmigrated user
+ * remains. Platform users (`tenant_id` null) are skipped: they belong to no tenant, so no portal.
+ *
+ * Runs LAST and is idempotent.
  */
 final class MembershipBackfillSeeder extends Seeder
 {

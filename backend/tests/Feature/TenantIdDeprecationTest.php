@@ -35,10 +35,10 @@ final class TenantIdDeprecationTest extends TestCase
             ]));
 
         $tenant = Tenant::create(['name' => 'Legacy Co', 'slug' => 'legacy-co', 'status' => 'active']);
-        $user = User::withoutAutoMembership(fn () => User::create([
+        $user = User::create([
             'tenant_id' => $tenant->id, 'name' => 'Legacy', 'email' => 'legacy@test.dev',
             'password' => 'secret123', 'email_verified_at' => now(),
-        ]));
+        ]);
 
         $this->assertSame(0, $user->memberships()->count(), 'the fixture must have no membership');
 
@@ -48,8 +48,15 @@ final class TenantIdDeprecationTest extends TestCase
             ->assertJsonPath('tenant', null);
     }
 
-    /** Every ordinary creation path provisions a membership, so the case above cannot occur by accident. */
-    public function test_creating_a_tenant_user_provisions_a_membership_automatically(): void
+    /**
+     * Creating a user is NOT granting them access.
+     *
+     * A model hook used to provision a membership whenever a user row appeared. It made the fallback
+     * removable, and it was wrong: an imported contact, a half-finished admin form or a stray factory
+     * call would silently have handed someone a workspace. Access is granted only by an explicit
+     * grant, so a bare user row reaches nothing.
+     */
+    public function test_creating_a_user_grants_no_membership(): void
     {
         $tenant = Tenant::create([
             'name' => 'Auto Co', 'slug' => 'auto-co', 'status' => 'active', 'account_type' => 'agency',
@@ -59,9 +66,7 @@ final class TenantIdDeprecationTest extends TestCase
             'tenant_id' => $tenant->id, 'name' => 'Auto', 'email' => 'auto@test.dev', 'password' => 'secret123',
         ]);
 
-        $membership = $user->memberships()->firstOrFail();
-        $this->assertSame('agency', $membership->portal->value);
-        $this->assertTrue($membership->is_default);
+        $this->assertSame(0, $user->memberships()->count());
     }
 
     /** A platform user belongs to no tenant, so it gets no membership and that is correct. */
@@ -104,20 +109,15 @@ final class TenantIdDeprecationTest extends TestCase
         foreach ($this->phpFilesIn(app_path('Domains')) as $file) {
             $source = file_get_contents($file);
             if (str_contains($source, 'user()->tenant_id') || str_contains($source, 'user->tenant_id')) {
-                // The provisioner and the account guards read it as LEGACY DATA, which is allowed.
-                // Allowed: these read it as LEGACY DATA, never to decide what a request may reach.
-                //   MembershipProvisioner   — migrating a legacy user INTO a membership;
-                //   EnsureAccountActive     — account suspension, pending its move to the membership;
-                //   AuthController          — the same suspension check at sign-in;
-                //   EmailVerificationService— advancing the onboarding step on the legacy tenant;
-                //   RecordAuthAudit         — stamping which tenant a sign-in belonged to.
-                // See docs/TENANT_ID_MIGRATION.md for the order these come off the column.
-                $allowed = ['MembershipProvisioner.php', 'EnsureAccountActive.php',
-                    'AuthController.php', 'EmailVerificationService.php', 'RecordAuthAudit.php'];
-                foreach ($allowed as $name) {
-                    if (str_contains($file, $name)) {
-                        continue 2;
-                    }
+                /*
+                 * ONE exception, and it is the migration path itself: MembershipProvisioner reads
+                 * the column to move a legacy user INTO a membership. Everything else that used to
+                 * be excused here — suspension, the sign-in check, the onboarding step, the audit
+                 * stamp — now reads the membership, so the allowlist is a single named file rather
+                 * than a list that quietly grows.
+                 */
+                if (str_contains($file, 'MembershipProvisioner.php')) {
+                    continue;
                 }
                 $offenders[] = str_replace(app_path(), '', $file);
             }

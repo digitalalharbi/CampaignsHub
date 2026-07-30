@@ -31,12 +31,14 @@ final class NotificationTaskTest extends TestCase
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $this->user = User::create(['tenant_id' => $this->tenant->id, 'name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($this->user, $this->tenant);
         $this->user->assignRole($role);
     }
 
     public function test_notifications_are_scoped_to_the_recipient(): void
     {
         $other = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Other', 'email' => 'x@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($other, $this->tenant);
 
         app(TenantContext::class)->setTenantId($this->tenant->id);
         AppNotification::create(['user_id' => $this->user->id, 'type' => 'campaign.stopped', 'severity' => 'warning', 'title' => 'For me']);
@@ -70,6 +72,7 @@ final class NotificationTaskTest extends TestCase
         // Another tenant cannot see it.
         $other = Tenant::create(['name' => 'Other', 'slug' => 'other', 'status' => 'active']);
         $otherUser = User::create(['tenant_id' => $other->id, 'name' => 'O2', 'email' => 'o2@other.test', 'password' => 'secret123']);
+        $this->grantMembership($otherUser, $other);
         $role = Role::create(['tenant_id' => $other->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo('tasks.view');
         $otherUser->assignRole($role);

@@ -39,16 +39,12 @@ final class MembershipPortalTest extends TestCase
         ]);
     }
 
-    /**
-     * These tests grant memberships explicitly, so they opt out of the automatic one — otherwise
-     * the model hook would create a default membership and the assertions would be about that
-     * rather than about what the test set up.
-     */
+    /** Creating a user grants nothing; these tests grant explicitly, which is the point. */
     private function user(Tenant $tenant, string $email): User
     {
-        return User::withoutAutoMembership(fn () => User::create([
+        return User::create([
             'tenant_id' => $tenant->id, 'name' => 'U', 'email' => $email, 'password' => 'secret123',
-        ]));
+        ]);
     }
 
     private function clientWorkspace(Tenant $tenant, string $name): ClientWorkspace

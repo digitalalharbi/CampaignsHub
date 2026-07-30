@@ -51,13 +51,13 @@ final class PortalAccessTest extends TestCase
         ]);
     }
 
-    /** Memberships are granted explicitly here, so the automatic one is opted out of. */
+    /** Creating a user grants nothing; these tests grant explicitly, which is the point. */
     private function user(Tenant $tenant, string $email): User
     {
-        return User::withoutAutoMembership(fn () => User::create([
+        return User::create([
             'tenant_id' => $tenant->id, 'name' => 'U', 'email' => $email,
             'password' => 'secret123', 'email_verified_at' => now(),
-        ]));
+        ]);
     }
 
     private function grant(User $user, Tenant $tenant, Portal $portal): Membership

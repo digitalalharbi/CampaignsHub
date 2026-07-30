@@ -7,11 +7,12 @@ namespace App\Domains\Identity\Actions;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Identity\DTOs\RegisterData;
+use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\DTOs\MembershipGrant;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Models\Workspace;
-use App\Domains\Tenancy\Services\MembershipProvisioner;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -32,7 +33,7 @@ final class RegisterTenantAction
 
     public function __construct(
         private readonly TenantContext $context,
-        private readonly MembershipProvisioner $memberships,
+        private readonly GrantMembership $grants,
     ) {}
 
     public function execute(RegisterData $data): User
@@ -59,15 +60,13 @@ final class RegisterTenantAction
                 'slug' => 'default',
             ]);
 
-            // Created without the automatic membership so the OWNER membership below is the one
-            // that lands, rather than the generic 'member' the model hook would have granted first.
-            $user = User::withoutAutoMembership(fn () => User::create([
+            $user = User::create([
                 'tenant_id' => $tenant->id,
                 'name' => $data->name,
                 'email' => $data->email,
                 'password' => Hash::make($data->password),
                 'is_platform_admin' => false,
-            ]));
+            ]);
 
             $ownerRole = Role::firstOrCreate(
                 ['tenant_id' => $tenant->id, 'slug' => 'tenant-owner'],
@@ -78,16 +77,21 @@ final class RegisterTenantAction
             $ownerRole->givePermissionTo(...Permission::pluck('key')->all());
             $user->assignRole($ownerRole);
 
-            // ADR 0002: the membership is what routes the user to a portal after signing in. Granted
-            // through the same provisioner the seeders use, so there is one grant path rather than two
-            // that can drift. Inferring a portal from the account type at every login instead would
-            // make the portal a permanent property of the user, which it explicitly is not.
-            $this->memberships->ensure(
-                $user,
-                $tenant,
-                Portal::forAccountType($data->accountType),
+            /*
+             * ADR 0002: access is granted explicitly, inside this same transaction, so a workspace
+             * can never exist with an owner who cannot reach it — nor an owner without a workspace.
+             *
+             * The portal comes from the path the visitor chose on the way in, and is stated here
+             * once at creation. It is NOT re-derived from the account type on later requests: that
+             * would make the portal a permanent property of the person, which it is not.
+             */
+            $this->grants->execute(new MembershipGrant(
+                user: $user,
+                tenant: $tenant,
+                portal: Portal::forAccountType($data->accountType),
                 role: 'owner',
-            );
+                clientScopeIds: [],   // an owner is unrestricted within their own workspace
+            ));
 
             return $user;
         });

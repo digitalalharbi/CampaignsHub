@@ -45,12 +45,14 @@ final class ProjectScopingTest extends TestCase
         $ownerRole = Role::create(['tenant_id' => $tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $ownerRole->givePermissionTo(...Permission::pluck('key')->all()); // includes projects.view.all
         $this->agencyOwner = User::create(['tenant_id' => $tenant->id, 'name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($this->agencyOwner, $tenant);
         $this->agencyOwner->assignRole($ownerRole);
 
         // Client viewer: projects.view + campaigns.view, but NOT projects.view.all → scoped by membership.
         $viewerRole = Role::create(['tenant_id' => $tenant->id, 'name' => 'Client Viewer', 'slug' => 'client-viewer']);
         $viewerRole->givePermissionTo('projects.view', 'campaigns.view');
         $this->clientViewer = User::create(['tenant_id' => $tenant->id, 'name' => 'V', 'email' => 'v@client.test', 'password' => 'secret123']);
+        $this->grantMembership($this->clientViewer, $tenant);
         $this->clientViewer->assignRole($viewerRole);
 
         $ws = ClientWorkspace::create(['name' => 'Client', 'slug' => 'client', 'mode' => 'managed']);

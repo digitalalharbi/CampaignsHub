@@ -4,9 +4,12 @@ namespace Tests;
 
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Tests\Concerns\GrantsMemberships;
 
 abstract class TestCase extends BaseTestCase
 {
+    use GrantsMemberships;
+
     /**
      * Read persisted rows outside any request's tenant scope.
      *

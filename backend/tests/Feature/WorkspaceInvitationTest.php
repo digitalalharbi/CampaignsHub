@@ -40,6 +40,7 @@ final class WorkspaceInvitationTest extends TestCase
         $this->memberRole->givePermissionTo('campaigns.view', 'reports.view');
 
         $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'o@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
+        $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($ownerRole);
     }
 
@@ -109,6 +110,7 @@ final class WorkspaceInvitationTest extends TestCase
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'NoInvite', 'slug' => 'noinvite']);
         $role->givePermissionTo('campaigns.view');
         $u = User::create(['tenant_id' => $this->tenant->id, 'name' => 'X', 'email' => 'x@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
+        $this->grantMembership($u, $this->tenant);
         $u->assignRole($role);
 
         $this->actingAs($u, 'sanctum')->postJson('/api/v1/app/team/invitations', ['email' => 'z@a.test', 'role_slug' => 'analyst'])

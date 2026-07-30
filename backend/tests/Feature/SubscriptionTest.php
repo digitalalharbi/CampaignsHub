@@ -68,6 +68,7 @@ final class SubscriptionTest extends TestCase
             'tenant_id' => $tenant->id, 'name' => 'O', 'email' => 'o-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
+        $this->grantMembership($user, $tenant);
         $user->assignRole($role);
 
         return $user;
@@ -199,6 +200,7 @@ final class SubscriptionTest extends TestCase
             'tenant_id' => $tenant->id, 'name' => 'V', 'email' => 'v@c.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
+        $this->grantMembership($viewer, $tenant);
         $viewer->assignRole($role);
 
         $this->actingAs($viewer, 'sanctum')->postJson('/api/v1/subscriptions/change', ['plan_code' => 'growth'])

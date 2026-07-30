@@ -39,8 +39,10 @@ final class ClientManagementTest extends TestCase
         $viewRole->givePermissionTo('clients.view', 'clients.view_all');
 
         $this->owner = User::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'email' => 'o@a.test', 'password' => 'secret123']);
+        $this->grantMembership($this->owner, $this->tenant);
         $this->owner->assignRole($ownerRole);
         $this->readonly = User::create(['tenant_id' => $this->tenant->id, 'name' => 'RO', 'email' => 'ro@a.test', 'password' => 'secret123']);
+        $this->grantMembership($this->readonly, $this->tenant);
         $this->readonly->assignRole($viewRole);
     }
 
@@ -92,6 +94,7 @@ final class ClientManagementTest extends TestCase
         $c = $this->client();
         $other = Tenant::create(['name' => 'Other', 'slug' => 'other', 'status' => 'active']);
         $foreignUser = User::create(['tenant_id' => $other->id, 'name' => 'X', 'email' => 'x@other.test', 'password' => 'secret123']);
+        $this->grantMembership($foreignUser, $other);
 
         $this->actingAs($this->owner, 'sanctum')->patchJson("/api/v1/app/clients/{$c->id}/classification", [
             'owner_id' => $foreignUser->id,
