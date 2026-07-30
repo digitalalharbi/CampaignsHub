@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Domains\Access\Models\Concerns\HasRoles;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Domains\Tenancy\Services\MembershipProvisioner;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,8 +18,18 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
- * Platform user. Belongs to a tenant (or is a platform-level user when tenant_id is null).
- * The public identifier exposed over the API is `uuid`, never the auto-increment `id`.
+ * Platform user. The public identifier exposed over the API is `uuid`, never the auto-increment `id`.
+ *
+ * @deprecated-property `tenant_id` — LEGACY DATA ONLY (ADR 0002).
+ *
+ * It records which tenant a user was originally created under, and is still what factories, seeders
+ * and the migration path use to say so. It must NOT be used for authorisation, query scoping,
+ * validation or routing: scope comes from the active {@see Membership}, because a person may belong
+ * to several tenants and portals and this column can only ever name one.
+ *
+ * `TenantIdDeprecationTest` fails if that line is crossed. `docs/TENANT_ID_MIGRATION.md` lists the
+ * three consumers still to be moved (account suspension, sign-in suspension, onboarding step) and
+ * the order to remove them before the column itself can be dropped.
  */
 class User extends Authenticatable
 {
@@ -53,8 +64,41 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * Escape hatch for the two situations that legitimately create a user without a membership:
+     * registration, which grants an `owner` membership itself a moment later, and the tests that
+     * exist to prove a membership-less user is refused everything.
+     */
+    private static bool $autoMembership = true;
+
+    /** @template T @param  callable():T  $callback @return T */
+    public static function withoutAutoMembership(callable $callback): mixed
+    {
+        self::$autoMembership = false;
+
+        try {
+            return $callback();
+        } finally {
+            self::$autoMembership = true;
+        }
+    }
+
     protected static function booted(): void
     {
+        /*
+         * ADR 0002: a tenant user without a membership has no portal and no scope — they would sit
+         * in onboarding forever. Guaranteeing it here rather than at each call site is deliberate:
+         * users are created in 47 test files, three seeders and several actions, and an invariant
+         * that depends on every one of them remembering is not an invariant.
+         *
+         * Idempotent, so re-running seeders or granting explicitly afterwards is a no-op.
+         */
+        static::created(function (User $user): void {
+            if (self::$autoMembership && $user->tenant_id !== null) {
+                app(MembershipProvisioner::class)->ensureForOwnWorkspace($user);
+            }
+        });
+
         static::creating(function (User $user): void {
             if (empty($user->uuid)) {
                 $user->uuid = (string) Str::uuid();

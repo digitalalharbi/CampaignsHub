@@ -16,14 +16,21 @@ The column is still the anchor for three things that have to move first:
 3. **Legacy rows** — any user created by a code path not yet converted has no membership. The backfill
    seeder covers seeded and migrated data; the fallback below covers the rest until they are gone.
 
-## The compatibility fallback, and its exact limit
+## The compatibility fallback is GONE
 
-`ResolveMembership` grants a user with `tenant_id` but no membership their **tenant scope only** —
-never a membership, and therefore never a portal. `EnsurePortal` still refuses them every portal.
+`ResolveMembership` no longer reads the column at all. A user with `tenant_id` but no membership gets
+**no tenant scope**: every scoped query returns nothing rather than quietly returning another
+tenant's rows, and `EnsurePortal` refuses them every portal.
 
-This is deliberately the weakest possible fallback: it cannot widen data access beyond what that user
-already had before ADR 0002, and it cannot be used to enter a portal without a membership row. It is
-the difference between "keeps working" and "grants something new".
+Removing it was only safe because the invariant moved to where it cannot be forgotten: a `created`
+hook on `User` provisions the membership for any user with a tenant. Users are created in 47 test
+files, three seeders and several actions — an invariant that depends on every one of them remembering
+is not an invariant. `User::withoutAutoMembership()` is the deliberate opt-out, used by registration
+(which grants an `owner` membership itself) and by the tests that exist to prove a membership-less
+user is refused everything.
+
+`TenantIdDeprecationTest` keeps the line: it proves behaviourally that a membership-less user gets no
+scope, and scans the source for the two places the fallback would most plausibly reappear.
 
 ## Status of the conversion
 
@@ -33,8 +40,13 @@ the difference between "keeps working" and "grants something new".
 | Portal authorisation | **Membership-only.** `EnsurePortal`, fail-closed, covered by `PortalAccessTest` |
 | Foreign-key validation rules (`Rule::exists(...)->where('tenant_id', …)`) | **Converted** in 7 controllers. These were a live bug: a user switched into another workspace was validated against the tenant on their user row, not the one they were working in |
 | Workspace switcher | **Membership-only**, re-verified against the database on every request |
+| Compatibility fallback | **REMOVED.** The column is not read for scope anywhere |
+| Automatic provisioning | `User::created` hook, idempotent, with an explicit opt-out |
+| Regression guard | `TenantIdDeprecationTest` — behavioural + source scan |
 | Account suspension | Still reads `users.tenant_id` — item 1 above |
+| Sign-in suspension check | Still reads `users.tenant_id` — same decision as item 1 |
 | Email verification / onboarding step | Still reads `users.tenant_id` — item 2 above |
+| Audit stamping | `RecordAuthAudit` records the origin tenant on a sign-in — legacy data, not a decision |
 
 ## Removal steps, in order
 
@@ -49,5 +61,15 @@ the difference between "keeps working" and "grants something new".
    point was still relying on the column.
 6. Drop the column, and with it `User::tenant()`.
 
-Do not skip step 4. Dropping the fallback while stranded rows exist would not fail loudly — those users
-would simply see an empty workspace, which is the failure mode hardest to notice and worst to explain.
+Steps 1–3 and 5 are DONE: the fallback is gone and provisioning is automatic. What remains before the
+column can be dropped physically:
+
+  - the three consumers in the table above (suspension ×2, onboarding step) must read the membership;
+  - **47 test files and `UserFactory` pass `tenant_id` when creating users.** Dropping the column
+    breaks every one of them at once, so converting them to grant a membership instead is its own
+    unit of work rather than a line in this one. Until that is done the column stays, deprecated and
+    guarded.
+
+Do not skip the "assert zero stranded users" step. Dropping the fallback while stranded rows existed
+would not have failed loudly — those users would simply have seen an empty workspace, the failure mode
+hardest to notice and worst to explain.

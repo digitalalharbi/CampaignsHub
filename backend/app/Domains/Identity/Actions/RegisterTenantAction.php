@@ -59,13 +59,15 @@ final class RegisterTenantAction
                 'slug' => 'default',
             ]);
 
-            $user = User::create([
+            // Created without the automatic membership so the OWNER membership below is the one
+            // that lands, rather than the generic 'member' the model hook would have granted first.
+            $user = User::withoutAutoMembership(fn () => User::create([
                 'tenant_id' => $tenant->id,
                 'name' => $data->name,
                 'email' => $data->email,
                 'password' => Hash::make($data->password),
                 'is_platform_admin' => false,
-            ]);
+            ]));
 
             $ownerRole = Role::firstOrCreate(
                 ['tenant_id' => $tenant->id, 'slug' => 'tenant-owner'],

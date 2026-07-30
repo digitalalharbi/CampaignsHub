@@ -44,8 +44,10 @@ final class ResolveMembership
             return $next($request);
         }
 
-        // Platform staff legitimately operate across tenants and hold no membership.
-        if ($user->tenant_id === null && $user->is_platform_admin) {
+        // Platform staff legitimately operate across tenants and hold no membership. Identified by
+        // the flag alone — pairing it with `tenant_id === null` would make the legacy column part of
+        // an authorisation decision again.
+        if ($user->is_platform_admin) {
             $this->tenants->enterPlatformScope();
 
             return $next($request);
@@ -61,21 +63,17 @@ final class ResolveMembership
         }
 
         /*
-         * COMPATIBILITY (temporary — see docs/TENANT_ID_MIGRATION.md).
+         * No membership, no scope. FAIL-CLOSED, deliberately.
          *
-         * A user with `tenant_id` but no membership row predates ADR 0002. They still get their
-         * TENANT SCOPE so existing endpoints keep working, but deliberately NO membership context —
-         * which means no portal. `EnsurePortal` therefore still refuses them every portal, so this
-         * fallback can widen data access no further than the user already had, and can never be used
-         * to slip into a portal without a membership.
+         * `users.tenant_id` is NOT consulted here. It used to be, as a compatibility bridge, and that
+         * bridge is gone: every user-creation path now provisions a membership (guaranteed by the
+         * model hook on User), so a user reaching this point genuinely belongs nowhere. Falling back
+         * to the column would hand them a tenant the membership layer never granted — the exact
+         * coupling ADR 0002 removes.
          *
-         * Removed once every account is provisioned; the backfill seeder already covers seeded and
-         * migrated data, so this only catches rows created by code paths not yet converted.
+         * They keep no tenant scope at all, so every scoped query returns nothing rather than
+         * quietly returning someone else's rows, and `EnsurePortal` refuses them every portal.
          */
-        if ($user->tenant_id !== null) {
-            $this->tenants->setTenantId($user->tenant_id);
-        }
-
         return $next($request);
     }
 
