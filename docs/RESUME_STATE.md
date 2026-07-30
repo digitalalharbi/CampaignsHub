@@ -258,24 +258,34 @@ notes, taxonomies, services). `/app/settings/public-pages|portals|taxonomies` re
     notifications, opportunities. Reachable only by typing the URL; linked from nothing.
 
 ## Exact next task
-**INFL-002** — the creator-facing portal. It was blocked behind the auth work, and that block is now
-lifted: creators can be given `users` + a membership the same way clients were, and the OTP-opens-a-
-session path already exists (`ClientPortalController::loginVerify`). The data model is done
-(`d1317a2`): brief and feedback are already marked creator-shareable, `internal_notes` never-shared,
-and `influencer_fee`/`margin` behind `influencers.view_costs`.
+**Drop `users.tenant_id`.** The blocker is breadth, not design: 46 test files plus `UserFactory` and
+`MembershipProvisioner::ensureForOwnWorkspace` still write it. Order in
+`docs/TENANT_ID_MIGRATION.md`: migrate factories and tests off the column, prove Fresh AND Upgrade
+migrations, then drop it in a separate upgrade migration.
 
-Then: dropping `users.tenant_id`, and a full cross-browser E2E + `migrate:fresh --seed` +
-clean-install pass for closure.
+Then: a full cross-browser E2E + `migrate:fresh --seed` + clean-install pass (PORTAL-9) for closure.
 
 **PORTAL-AUTH-001c (step 5)** is deliberately NOT next: it is blocked on evidence from a real
-environment, not on code. Do not delete `ClientPortalToken` to tidy up.
+environment, not on code. `/admin/cutover` measures the three conditions; the last dev reading was
+0 conflicts, 0 parity mismatches, **14 live legacy sessions**. Do not delete `ClientPortalToken` to
+tidy up.
 
-Then: **INFL-002** (blocked behind the same auth work — creators have no password either), dropping
-`users.tenant_id`, and a full cross-browser E2E + `migrate:fresh --seed` + clean-install pass for
-closure. — follow the five steps in `docs/PORTAL_AUTH_MIGRATION.md` in
-order, starting with the contacts → users + ClientPortal membership backfill, and asserting the
-resulting scope matches `contactOwnedWorkspaceIds()` for every existing contact BEFORE anything
-reads from it. Then AGENCY-005, then INFL-002.
+### Decision 21 — the creator surface INVERTS the money, it does not narrow it (INFL-002)
+The agency sees `agreed_fee` (billed to the client) always, and `influencer_fee` + margin behind
+`influencers.view_costs`. The creator sees `influencer_fee` — their pay — and NEITHER of the other
+two, at any permission level. This is why `CreatorPresenter` is a separate class rather than a
+`hideCosts` flag on the agency's: a boolean cannot express an inversion, and reusing the agency
+presenter with costs hidden would have shown a creator the agency's markup on their own work.
+
+### Decision 22 — `terms_sent_at` is a timestamp, not a status value (INFL-002)
+It gates whether a creator can see a collaboration at all. A status can be set to anything by a form;
+"was an offer actually made?" needs an answer a dropdown cannot change. Without it the creator's
+surface would show every internal draft, including fees still being argued about.
+
+### Decision 23 — a creator is not a low-privilege operator (INFL-002)
+They hold NO `influencers.*` permission, so every agency endpoint refuses them by default rather than
+by a special case. What they may do follows from `CreatorAccess` and the agreement's state. They
+submit; only the agency approves — a creator who could set `approved` would sign off their own work.
 
 Deferred (still open, not superseded):
 **PERF-CAMPAIGNS-001** — Firefox is **61/62**; the failing spec MOVES between runs

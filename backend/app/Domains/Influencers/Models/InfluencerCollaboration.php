@@ -42,7 +42,34 @@ final class InfluencerCollaboration extends Model
         'ends_on' => 'date',
         'agreed_fee' => 'decimal:2',
         'influencer_fee' => 'decimal:2',
+        'terms_sent_at' => 'datetime',
+        'creator_responded_at' => 'datetime',
     ];
+
+    /*
+     * The agreement fields are absent from $fillable ON PURPOSE (INFL-002). `terms_sent_at` is the
+     * gate that decides whether a creator can see this row at all, and `creator_decision` is that
+     * person's answer. Neither is a field on the agency's edit form: one is set by sending terms,
+     * the other only by the creator themselves.
+     */
+
+    /**
+     * Has an offer actually been made? (INFL-002)
+     *
+     * This is the creator's visibility gate, and it is a timestamp rather than a status value
+     * because a status is whatever the last form set it to. "Did we offer this?" needs an answer
+     * that a dropdown cannot change — otherwise a fee still being argued about internally shows up
+     * on the creator's screen as an offer.
+     */
+    public function isOfferedToCreator(): bool
+    {
+        return $this->terms_sent_at !== null;
+    }
+
+    public function isAcceptedByCreator(): bool
+    {
+        return $this->creator_decision === 'accepted';
+    }
 
     /** @return BelongsTo<Influencer, $this> */
     public function influencer(): BelongsTo

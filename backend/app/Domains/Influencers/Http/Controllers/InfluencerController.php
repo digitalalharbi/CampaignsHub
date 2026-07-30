@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Domains\Influencers\Http\Controllers;
 
+use App\Domains\Influencers\Actions\LinkCreatorAccount;
 use App\Domains\Influencers\Models\Influencer;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use RuntimeException;
 
 /**
  * The creator roster (INFL-001).
@@ -117,6 +119,61 @@ final class InfluencerController extends Controller
     }
 
     /** @return array<string, mixed> */
+    /**
+     * POST /api/v1/influencers/roster/{influencer}/access — let this creator into their own portal.
+     *
+     * Reports honestly: `created_account` says whether a login was made, and nothing here claims an
+     * invitation was emailed, because none is sent. The creator reaches their portal through the
+     * ordinary password-reset flow, and telling the operator otherwise would have them waiting for a
+     * message that does not exist.
+     */
+    public function grantAccess(Request $request, string $influencer, LinkCreatorAccount $link): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user?->hasPermission('influencers.manage'), 403);
+
+        $model = Influencer::query()->whereKey($influencer)->first();
+        abort_if($model === null, 404);
+
+        $data = $request->validate([
+            'email' => ['required', 'email', 'max:255'],
+        ]);
+
+        try {
+            $result = $link->execute($model, $data['email'], $user);
+        } catch (RuntimeException $e) {
+            // 422 with the actual reason. A generic failure here would leave an operator retrying a
+            // link that will never succeed, with no way to learn that the address belongs to staff.
+            return ApiResponse::error($e->getMessage(), null, [], 422);
+        }
+
+        return ApiResponse::success([
+            'influencer' => $this->present($model->fresh()->loadCount('collaborations'), true),
+            'created_account' => $result['created_account'],
+            'sign_in_email' => $result['user']->email,
+            // Named for what actually happens rather than what an operator might assume.
+            'delivery' => 'not_sent',
+        ], 'Portal access granted.');
+    }
+
+    /** DELETE /api/v1/influencers/roster/{influencer}/access */
+    public function revokeAccess(Request $request, string $influencer, LinkCreatorAccount $link): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user?->hasPermission('influencers.manage'), 403);
+
+        $model = Influencer::query()->whereKey($influencer)->first();
+        abort_if($model === null, 404);
+
+        $link->unlink($model);
+
+        return ApiResponse::success(
+            ['influencer' => $this->present($model->fresh()->loadCount('collaborations'), true)],
+            'Portal access withdrawn.',
+        );
+    }
+
+    /** @return array<string, mixed> */
     private function present(Influencer $i, bool $canManage): array
     {
         return array_merge([
@@ -133,6 +190,9 @@ final class InfluencerController extends Controller
             'language' => $i->language,
             'status' => $i->status,
             'collaborations_count' => (int) ($i->collaborations_count ?? 0),
+            // Whether this creator can sign in and see their own work (INFL-002). A boolean, not the
+            // account: the roster list is not the place to publish someone's login address.
+            'has_portal_access' => $i->hasPortalAccess(),
         ], $canManage ? [
             // Contact details and private notes are for the people who run the roster, not everyone
             // who can read it.

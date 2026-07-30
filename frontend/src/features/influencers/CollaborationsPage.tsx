@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, ExternalLink, Handshake } from 'lucide-react'
-import { fetchCollaborations, type Collaboration } from './api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle, CheckCircle2, ExternalLink, Handshake, Send } from 'lucide-react'
+import { fetchCollaborations, sendTerms, type Collaboration } from './api'
+import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 
@@ -99,6 +100,86 @@ export function CollaborationsPage() {
   )
 }
 
+/**
+ * Where the agreement stands with the creator, and the one action that moves it (INFL-002).
+ *
+ * Deliberately states the BLOCKING reason rather than hiding the button. "Send terms" greyed out
+ * with no explanation sends an operator hunting through the roster for what is missing; naming it —
+ * no portal access, or no creator fee set — is the difference between a dead control and an
+ * instruction. `can_send_terms` is the server's own answer, so the button and the endpoint cannot
+ * disagree about whether it is allowed.
+ */
+function AgreementStrip({ c, ar }: { c: Collaboration; ar: boolean }) {
+  const queryClient = useQueryClient()
+  /*
+   * Defaulted rather than assumed present. A browser holding the new bundle can talk to an older
+   * backend for the length of a deploy, and reading `.decision` off an absent block threw — which
+   * took down the ENTIRE list, not just this strip. Fail-closed: no offer, and no button.
+   */
+  const a = c.agreement ?? {
+    offered_at: null, decision: null, responded_at: null,
+    decline_reason: null, creator_has_access: false, can_send_terms: false,
+  }
+
+  const send = useMutation({
+    mutationFn: () => sendTerms(c.id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['influencers', 'collaborations'] }),
+  })
+
+  if (a.decision === 'accepted') {
+    return (
+      <p data-testid="agreement-state" className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-success">
+        <CheckCircle2 size={14} aria-hidden />
+        {ar ? 'قبل المؤثر الشروط' : 'The creator accepted the terms'}
+      </p>
+    )
+  }
+
+  if (a.decision === 'declined') {
+    return (
+      <p data-testid="agreement-state" className="mt-3 text-[12.5px] font-semibold text-danger">
+        {ar ? 'اعتذر المؤثر' : 'The creator declined'}
+        {/* The reason they gave, in their own words — it is the whole value of a decline. */}
+        {a.decline_reason && <span dir="auto" className="ms-1.5 font-normal text-text-secondary">— {a.decline_reason}</span>}
+      </p>
+    )
+  }
+
+  if (a.offered_at !== null) {
+    return (
+      <p data-testid="agreement-state" className="mt-3 text-[12.5px] font-semibold text-warning">
+        {ar ? 'أُرسلت الشروط — بانتظار رد المؤثر' : 'Terms sent — awaiting the creator'}
+      </p>
+    )
+  }
+
+  return (
+    <div data-testid="agreement-state" className="mt-3 flex flex-wrap items-center gap-2">
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={!a.can_send_terms || send.isPending}
+        onClick={() => send.mutate()}
+      >
+        <Send size={13} aria-hidden />
+        {ar ? 'أرسل الشروط للمؤثر' : 'Send terms to the creator'}
+      </Button>
+      {!a.can_send_terms && (
+        <span className="text-[12px] text-text-muted">
+          {!a.creator_has_access
+            ? ar ? 'امنح المؤثر وصولًا إلى بوابته أولًا.' : 'Give the creator portal access first.'
+            : ar ? 'حدّد أجر المؤثر أولًا.' : 'Set what the creator is paid first.'}
+        </span>
+      )}
+      {send.isError && (
+        <span role="alert" className="text-[12px] font-semibold text-danger">
+          {ar ? 'تعذّر إرسال الشروط.' : 'The terms could not be sent.'}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function CollaborationCard({ c, ar, canSeeCosts }: { c: Collaboration; ar: boolean; canSeeCosts: boolean }) {
   const label = STATUS_LABELS[c.status]
 
@@ -120,6 +201,8 @@ function CollaborationCard({ c, ar, canSeeCosts }: { c: Collaboration; ar: boole
           {label ? (ar ? label.ar : label.en) : c.status}
         </span>
       </div>
+
+      <AgreementStrip c={c} ar={ar} />
 
       <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px]">
         <Figure label={ar ? 'قيمة العقد للعميل' : 'Billed to the client'} value={money(c.agreed_fee, c.currency)} ar={ar} />

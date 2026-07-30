@@ -1,4 +1,4 @@
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { fetchMemberships } from '@/features/auth/memberships'
@@ -19,6 +19,7 @@ import { useUi } from '@/stores/ui'
  */
 export function RequireInfluencerPortal() {
   const navigate = useNavigate()
+  const location = useLocation()
   const ar = useUi((s) => s.locale) === 'ar'
   const state = useQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
 
@@ -51,6 +52,21 @@ export function RequireInfluencerPortal() {
         </div>
       </div>
     )
+  }
+
+  /*
+   * A creator arriving at the portal root goes to their own side (INFL-002).
+   *
+   * Without this they land on the operator's collaborations page, which the API refuses — a 403 on
+   * first sight of the product, for someone who did nothing wrong. Routing only, never security:
+   * the creator's membership carries no `influencers.*` permission, so the operator endpoints
+   * refuse them whether or not this redirect runs, and editing it in the browser gains nothing.
+   */
+  const isCreator = state.data?.memberships.some((m) => m.portal === 'influencers' && m.role === 'creator') ?? false
+  const onOperatorRoot = location.pathname === '/influencers' || location.pathname === '/influencers/'
+
+  if (isCreator && onOperatorRoot) {
+    return <Navigate to="/influencers/me" replace />
   }
 
   return <Outlet />

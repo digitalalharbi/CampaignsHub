@@ -61,6 +61,20 @@ export interface Collaboration {
   client: { id: string; name: string } | null
   deliverables: Deliverable[]
   progress: { total: number; published: number; overdue: number }
+  /**
+   * Where this stands with the creator (INFL-002). NOT gated behind the costs permission: "have they
+   * said yes?" is a scheduling question, and an account manager who cannot see money still has to
+   * know whether the work is agreed.
+   */
+  agreement?: {
+    offered_at: string | null
+    decision: 'accepted' | 'declined' | null
+    responded_at: string | null
+    decline_reason: string | null
+    creator_has_access: boolean
+    /** The server's own answer, so no button is offered that the API would refuse. */
+    can_send_terms: boolean
+  }
   /** Costs are a SEPARATE permission — these keys are absent without it, never zeroed. */
   influencer_fee?: string | null
   margin?: string | null
@@ -102,6 +116,11 @@ export function updateDeliverable(
   body: { status: string; submitted_url?: string | null; feedback?: string | null },
 ): Promise<{ collaboration: Collaboration }> {
   return patchData(`/influencers/collaborations/${collaborationId}/deliverables/${deliverableId}`, body)
+}
+
+/** Turn an internal draft into an offer the creator can see and answer (INFL-002). */
+export function sendTerms(collaborationId: string): Promise<{ collaboration: Collaboration }> {
+  return postData(`/influencers/collaborations/${collaborationId}/send-terms`, {})
 }
 
 export function addDeliverable(

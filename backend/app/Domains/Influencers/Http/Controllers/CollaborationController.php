@@ -184,6 +184,55 @@ final class CollaborationController extends Controller
         );
     }
 
+    /**
+     * POST /api/v1/influencers/collaborations/{collaboration}/send-terms (INFL-002).
+     *
+     * The moment an internal draft becomes an OFFER. Until this is called the creator cannot see the
+     * collaboration at all — which is the point: fees get argued about internally, and a creator
+     * watching that happen would be reading a negotiation about themselves.
+     *
+     * Refuses when there is nobody to offer it to, and when there is no fee to offer. Both were
+     * silent failures worth naming: the first sends terms into a void and looks successful, and the
+     * second shows a creator an agreement with a blank where their pay should be.
+     */
+    public function sendTerms(Request $request, string $collaboration): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user?->hasPermission('influencers.manage'), 403);
+
+        $model = $this->reachable($request, $collaboration);
+
+        abort_unless(
+            $model->influencer?->hasPortalAccess() === true,
+            422,
+            'This creator has no portal access yet. Grant it from the roster first.',
+        );
+
+        abort_if(
+            $model->influencer_fee === null,
+            422,
+            'Set what the creator is paid before sending terms.',
+        );
+
+        // Re-sending is how revised terms reach someone who already answered, so the previous answer
+        // is cleared. Leaving a stale "declined" against new terms would hide the fresh offer.
+        $model->forceFill([
+            'terms_sent_at' => now(),
+            'creator_decision' => null,
+            'creator_responded_at' => null,
+            'creator_decline_reason' => null,
+            'status' => 'awaiting_creator',
+        ])->save();
+
+        return ApiResponse::success(
+            ['collaboration' => $this->present(
+                $model->fresh(['influencer', 'client', 'deliverables']),
+                (bool) $user->hasPermission('influencers.view_costs'),
+            )],
+            'Terms sent to the creator.',
+        );
+    }
+
     /** The collaboration, or 404 — including when it exists but sits outside the caller's client scope. */
     private function reachable(Request $request, string $id): InfluencerCollaboration
     {
@@ -243,6 +292,22 @@ final class CollaborationController extends Controller
             'client' => $c->client === null ? null : [
                 'id' => (string) $c->client->getKey(),
                 'name' => $c->client->name,
+            ],
+            /*
+             * Where this stands with the creator (INFL-002). Shown to every operator who may read
+             * collaborations, not gated behind `view_costs`: "have they said yes?" is a scheduling
+             * question, not a financial one, and an account manager who cannot see costs still needs
+             * to know whether the work is agreed.
+             */
+            'agreement' => [
+                'offered_at' => $c->terms_sent_at?->toIso8601String(),
+                'decision' => $c->creator_decision,
+                'responded_at' => $c->creator_responded_at?->toIso8601String(),
+                'decline_reason' => $c->creator_decline_reason,
+                'creator_has_access' => $c->influencer?->hasPortalAccess() ?? false,
+                // The backend's own answer to "may I press Send terms?", so the interface does not
+                // offer a button this controller would refuse.
+                'can_send_terms' => ($c->influencer?->hasPortalAccess() ?? false) && $c->influencer_fee !== null,
             ],
             'deliverables' => $deliverables->map(fn (InfluencerDeliverable $d) => [
                 'id' => (string) $d->getKey(),

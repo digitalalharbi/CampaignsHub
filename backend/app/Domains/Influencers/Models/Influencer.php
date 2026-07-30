@@ -31,6 +31,15 @@ final class Influencer extends Model
         'contact_email', 'contact_phone', 'status', 'internal_notes', 'owner_id',
     ];
 
+    /*
+     * `user_id` is absent from $fillable ON PURPOSE (INFL-002).
+     *
+     * That column decides whose collaborations, whose fee and whose brief a person sees when they
+     * sign in as a creator. Listing it above would make it a form field — a roster PATCH carrying
+     * `user_id` would hand one creator another creator's earnings. It is written only by
+     * LinkCreatorAccount, which checks the account is free first.
+     */
+
     protected $casts = [
         'categories' => 'array',
         'followers' => 'integer',
@@ -47,5 +56,23 @@ final class Influencer extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');
+    }
+
+    /**
+     * The creator's own login, if they have been given portal access (INFL-002).
+     *
+     * Distinct from `owner()`, which is the agency person responsible for the relationship. Confusing
+     * the two would let a creator read the account manager's view of themselves.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function account(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function hasPortalAccess(): bool
+    {
+        return $this->user_id !== null;
     }
 }

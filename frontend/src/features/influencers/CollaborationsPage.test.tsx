@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { CollaborationsPage } from './CollaborationsPage'
 import type { Collaboration, CollaborationsResult } from './api'
 import { renderWithProviders } from '@/test/utils'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, fetchCollaborations: vi.fn() }
+  return { ...actual, fetchCollaborations: vi.fn(), sendTerms: vi.fn() }
 })
 
-import { fetchCollaborations } from './api'
+import { fetchCollaborations, sendTerms } from './api'
 
 function collaboration(over: Partial<Collaboration> = {}): Collaboration {
   return {
@@ -25,6 +25,10 @@ function collaboration(over: Partial<Collaboration> = {}): Collaboration {
     client: { id: 'cl1', name: 'Acme' },
     deliverables: [],
     progress: { total: 0, published: 0, overdue: 0 },
+    agreement: {
+      offered_at: null, decision: null, responded_at: null,
+      decline_reason: null, creator_has_access: false, can_send_terms: false,
+    },
     ...over,
   }
 }
@@ -120,5 +124,98 @@ describe('CollaborationsPage', () => {
     await waitFor(() =>
       expect(screen.getByText('No collaborations within your scope yet.')).toBeInTheDocument(),
     )
+  })
+
+  /**
+   * The agreement step (INFL-002). An operator needs to know whether the creator has said yes
+   * before they schedule anything, so it is shown to anyone who may read collaborations — not
+   * gated behind the costs permission, which is a different question.
+   */
+  it('says when the creator has accepted', async () => {
+    vi.mocked(fetchCollaborations).mockResolvedValue(result({
+      collaborations: [collaboration({
+        agreement: {
+          offered_at: '2026-07-01T09:00:00+03:00', decision: 'accepted',
+          responded_at: '2026-07-02T09:00:00+03:00', decline_reason: null,
+          creator_has_access: true, can_send_terms: true,
+        },
+      })],
+    }))
+
+    renderWithProviders(<CollaborationsPage />)
+
+    await waitFor(() => expect(screen.getByTestId('agreement-state')).toHaveTextContent(/accepted the terms/i))
+  })
+
+  /** A decline is only useful with the reason attached, so the creator's own words are shown. */
+  it('shows the reason a creator gave for declining', async () => {
+    vi.mocked(fetchCollaborations).mockResolvedValue(result({
+      collaborations: [collaboration({
+        agreement: {
+          offered_at: '2026-07-01T09:00:00+03:00', decision: 'declined',
+          responded_at: '2026-07-02T09:00:00+03:00', decline_reason: 'Exclusivity clash',
+          creator_has_access: true, can_send_terms: true,
+        },
+      })],
+    }))
+
+    renderWithProviders(<CollaborationsPage />)
+
+    await waitFor(() => expect(screen.getByTestId('agreement-state')).toHaveTextContent(/Exclusivity clash/))
+  })
+
+  /**
+   * A blocked action NAMES what is missing. Greyed out with no explanation sends an operator
+   * hunting through the roster for a setting nobody told them about.
+   */
+  it('says why terms cannot be sent instead of only disabling the button', async () => {
+    vi.mocked(fetchCollaborations).mockResolvedValue(result({
+      collaborations: [collaboration({
+        agreement: {
+          offered_at: null, decision: null, responded_at: null, decline_reason: null,
+          creator_has_access: false, can_send_terms: false,
+        },
+      })],
+    }))
+
+    renderWithProviders(<CollaborationsPage />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Send terms/i })).toBeDisabled())
+    expect(screen.getByTestId('agreement-state')).toHaveTextContent(/portal access first/i)
+  })
+
+  it('sends the terms when the server says it may', async () => {
+    vi.mocked(fetchCollaborations).mockResolvedValue(result({
+      collaborations: [collaboration({
+        agreement: {
+          offered_at: null, decision: null, responded_at: null, decline_reason: null,
+          creator_has_access: true, can_send_terms: true,
+        },
+      })],
+    }))
+    vi.mocked(sendTerms).mockResolvedValue({ collaboration: collaboration() })
+
+    renderWithProviders(<CollaborationsPage />)
+
+    const button = await screen.findByRole('button', { name: /Send terms/i })
+    expect(button).toBeEnabled()
+    fireEvent.click(button)
+
+    await waitFor(() => expect(sendTerms).toHaveBeenCalledWith('c1'))
+  })
+
+  /**
+   * A browser on the new bundle can meet an older backend mid-deploy. Reading the agreement block
+   * off an absent field threw and took down the WHOLE list, not just this strip.
+   */
+  it('renders the list when the server omits the agreement block entirely', async () => {
+    const legacy = collaboration()
+    delete (legacy as { agreement?: unknown }).agreement
+    vi.mocked(fetchCollaborations).mockResolvedValue(result({ collaborations: [legacy] }))
+
+    renderWithProviders(<CollaborationsPage />)
+
+    await waitFor(() => expect(screen.getByTestId('collaborations')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /Send terms/i })).toBeDisabled()
   })
 })

@@ -1,4 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { NotFoundPage } from './NotFoundPage'
 import { PagePlaceholder } from '@/components/PagePlaceholder'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RegisterPage } from '@/features/auth/RegisterPage'
@@ -86,6 +87,9 @@ import { RequireInfluencerPortal } from '@/features/influencers/RequireInfluence
 import { CollaborationsPage } from '@/features/influencers/CollaborationsPage'
 import { RosterPage } from '@/features/influencers/RosterPage'
 import { DeliverablesPage } from '@/features/influencers/DeliverablesPage'
+import { CreatorShell } from '@/layouts/CreatorShell'
+import { CreatorWorkPage } from '@/features/influencers/creator/CreatorWorkPage'
+import { CreatorCollaborationPage } from '@/features/influencers/creator/CreatorCollaborationPage'
 import { WorkspaceSwitcherPage } from '@/features/auth/WorkspaceSwitcherPage'
 import { legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
 
@@ -315,16 +319,40 @@ export const router = createBrowserRouter([
       {
         path: 'influencers',
         element: <RequireInfluencerPortal />,
-        children: [{
-          element: <InfluencerShell />,
-          children: [
-            { index: true, element: <CollaborationsPage /> },
-            { path: 'roster', element: <RosterPage /> },
-            { path: 'deliverables', element: <DeliverablesPage /> },
-          ],
-        }],
+        children: [
+          /*
+           * The CREATOR's side (INFL-002) — its own shell, deliberately outside InfluencerShell.
+           *
+           * Same portal, opposite party to the agreement, so it is not the operator's tree with
+           * items hidden: a creator has one destination, and the shell here has no rail because
+           * there is nothing to navigate between. Reusing InfluencerShell would have put a roster
+           * link in front of every creator, leading to a page the API refuses.
+           */
+          {
+            path: 'me',
+            element: <CreatorShell />,
+            children: [
+              { index: true, element: <CreatorWorkPage /> },
+              { path: ':collaborationId', element: <CreatorCollaborationPage /> },
+            ],
+          },
+          {
+            element: <InfluencerShell />,
+            children: [
+              { index: true, element: <CollaborationsPage /> },
+              { path: 'roster', element: <RosterPage /> },
+              { path: 'deliverables', element: <DeliverablesPage /> },
+            ],
+          },
+        ],
       }],
       },
     ],
   },
+  /*
+   * The catch-all. Without it React Router rendered its default boundary for any unmatched URL —
+   * a blank white page with the error only in the console, which reads as the product being broken
+   * rather than as a wrong address. Last in the list, so it can only ever match what nothing else did.
+   */
+  { path: '*', element: <NotFoundPage />, errorElement: <NotFoundPage /> },
 ])

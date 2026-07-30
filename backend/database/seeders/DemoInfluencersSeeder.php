@@ -83,6 +83,7 @@ final class DemoInfluencersSeeder extends Seeder
         ]);
 
         $this->operators($tenant);
+        $this->creatorSide($tenant, $created[0]);
 
         $this->command?->info('Demo: influencer roster + collaborations seeded (one overdue on purpose).');
     }
@@ -126,6 +127,75 @@ final class DemoInfluencersSeeder extends Seeder
                 'submitted_url' => $d['status'] === 'pending' ? null : 'https://example.test/demo/'.$d['type'],
                 'submitted_at' => $d['status'] === 'pending' ? null : now()->subDays(2),
                 'published_at' => $d['status'] === 'published' ? now()->subDays(1) : null,
+            ]);
+        }
+    }
+
+    /**
+     * The other side of the agreement (INFL-002).
+     *
+     * Layla gets a login, so signing in as her next to `creators.finance@` shows the money boundary
+     * working in BOTH directions rather than only one: the finance operator sees the client's price
+     * and the margin, and Layla sees what she is paid and no trace of either.
+     *
+     * Two collaborations in different states, because a creator with nothing to answer demonstrates
+     * nothing: one offer waiting on her, and one already accepted with work owed. The third roster
+     * entry deliberately keeps no login, so the roster shows both cases side by side.
+     */
+    private function creatorSide(Tenant $tenant, Influencer $creator): void
+    {
+        if ($creator->hasPortalAccess()) {
+            return;
+        }
+
+        $user = User::firstOrCreate(
+            ['email' => 'layla@creators.demo'],
+            [
+                'name' => $creator->name,
+                'password' => Hash::make('password'),
+                'email_verified_at' => now(),
+            ],
+        );
+
+        app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $user, tenant: $tenant, portal: Portal::Influencers, role: 'creator',
+        ));
+
+        $creator->forceFill(['user_id' => $user->getKey()])->save();
+
+        // Already accepted — she has work owed, including one piece that is late.
+        InfluencerCollaboration::query()
+            ->where('tenant_id', $tenant->id)->where('influencer_id', $creator->id)
+            ->where('title', 'Ramadan lifestyle push')
+            ->update([
+                'terms_sent_at' => now()->subDays(21),
+                'creator_decision' => 'accepted',
+                'creator_responded_at' => now()->subDays(20),
+                'status' => 'active',
+            ]);
+
+        // …and an offer she has not answered, which is what her portal opens with.
+        $offer = InfluencerCollaboration::firstOrCreate(
+            ['tenant_id' => $tenant->id, 'influencer_id' => $creator->id, 'title' => 'Back-to-school teaser'],
+            [
+                'status' => 'awaiting_creator',
+                'currency' => 'SAR',
+                'agreed_fee' => 30_000,
+                'influencer_fee' => 21_000,
+                'starts_on' => now()->addDays(10)->toDateString(),
+                'ends_on' => now()->addDays(40)->toDateString(),
+                'brief' => 'Demo brief — two reels, product visible in the opening seconds.',
+                'internal_notes' => 'Demo record. Not a real agreement.',
+            ],
+        );
+        $offer->forceFill(['terms_sent_at' => now()->subDay()])->save();
+
+        if (! $offer->deliverables()->exists()) {
+            $offer->deliverables()->createMany([
+                ['tenant_id' => $tenant->id, 'type' => 'reel', 'platform' => 'instagram',
+                    'status' => 'pending', 'due_on' => now()->addDays(18)->toDateString()],
+                ['tenant_id' => $tenant->id, 'type' => 'story', 'platform' => 'instagram',
+                    'status' => 'pending', 'due_on' => now()->addDays(25)->toDateString()],
             ]);
         }
     }
