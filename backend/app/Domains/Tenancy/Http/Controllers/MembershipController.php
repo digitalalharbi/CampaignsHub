@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Tenancy\Http\Controllers;
 
 use App\Domains\Tenancy\Context\MembershipContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Services\MembershipSelector;
 use App\Domains\Tenancy\Services\PortalResolver;
@@ -37,11 +38,16 @@ final class MembershipController extends Controller
         $memberships = $this->resolver->membershipsFor($user);
         $active = $this->context->membership();
 
+        // The portal the visitor was heading for before they signed in. Honoured only if they hold
+        // it — `landingPathFor` refuses to invent a membership — so it can carry the journey through
+        // authentication without becoming a way to ask for a portal you do not have.
+        $requested = Portal::tryFrom((string) $request->query('portal', ''));
+
         return ApiResponse::success([
             'memberships' => $memberships->map(fn (Membership $m) => $this->present($m, $active))->all(),
             'current' => $active !== null ? $this->present($active, $active) : null,
             // Where the frontend should land this user right now.
-            'destination' => $this->resolver->landingPathFor($user),
+            'destination' => $this->resolver->landingPathFor($user, $requested),
             'needs_switcher' => $this->resolver->needsSwitcher($user),
         ], 'Memberships.');
     }

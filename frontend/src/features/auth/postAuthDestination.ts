@@ -1,0 +1,38 @@
+import { fetchMemberships, type PortalKey } from './memberships'
+import { safeRedirect } from './redirect'
+
+/**
+ * Where to send someone the moment they are authenticated (ADR 0002).
+ *
+ * Two rules, in order:
+ *
+ *   1. an explicit `?redirect=` they were bounced from — the page they actually wanted;
+ *   2. otherwise the destination the SERVER derives from their memberships.
+ *
+ * The destination is never computed here from an account type or a role. That rule lives in one place,
+ * on the server, where it cannot be edited by whoever is holding the browser — and where "does this
+ * user hold that portal?" can actually be answered.
+ *
+ * The portal a visitor asked for on the way in is passed along as a preference. The server honours it
+ * only if they hold a membership for it, so it carries the journey through sign-in without becoming a
+ * way to request a portal you do not have.
+ */
+export async function resolvePostAuthDestination(
+  params: URLSearchParams,
+  requestedPortal?: PortalKey | null,
+): Promise<string> {
+  const explicit = params.get('redirect')
+  if (explicit) {
+    const target = safeRedirect(explicit, '')
+    if (target !== '') return target
+  }
+
+  try {
+    const state = await fetchMemberships(requestedPortal ?? undefined)
+    return state.destination
+  } catch {
+    // The session is valid — we just could not read the memberships. Send them to the neutral
+    // switcher rather than guessing a portal they may not hold.
+    return '/switch'
+  }
+}

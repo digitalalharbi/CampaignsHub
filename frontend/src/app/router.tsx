@@ -69,6 +69,7 @@ import { CreativesPage } from '@/features/content/CreativesPage'
 import { FilesLibraryPage } from '@/features/files/FilesLibraryPage'
 import { BrandingCenterPage } from '@/features/branding/BrandingCenterPage'
 import { AppShell } from '@/layouts/AppShell'
+import { WorkspaceSwitcherPage } from '@/features/auth/WorkspaceSwitcherPage'
 
 export const router = createBrowserRouter([
   // Public marketing homepage — the primary conversion surface. The authenticated app lives under
@@ -118,12 +119,19 @@ export const router = createBrowserRouter([
     children: [
       // Onboarding runs authenticated but OUTSIDE the AppShell + entitlement gate (no redirect loop).
       { path: 'onboarding', element: <OnboardingWizard /> },
+      // ADR 0002: the portal/workspace switcher, for users who belong to more than one. Outside the
+      // AppShell because it is the screen that decides WHICH shell the user is about to enter.
+      { path: 'switch', element: <WorkspaceSwitcherPage /> },
       {
         element: <OnboardingGate />,
         children: [{
         element: <AppShell />,
         children: [
           { path: 'dashboard', element: <DashboardPage /> },
+          // ADR 0002 landing path. The portal route trees move here in PORTAL-3; until then this
+          // alias exists so the membership-derived destination is never a dead link. When the tree
+          // moves, the direction of this redirect inverts rather than the alias disappearing.
+          { path: 'app/dashboard', element: <Navigate to="/dashboard" replace /> },
           { path: 'analytics', element: <AnalyticsPage /> },
           { path: 'system', element: <SystemStatusPage /> },
           { path: 'projects', element: <ProjectsPage /> },

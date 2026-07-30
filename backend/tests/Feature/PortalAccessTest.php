@@ -223,4 +223,47 @@ final class PortalAccessTest extends TestCase
         $this->withHeaders($this->spaHeaders)
             ->postJson('/api/v1/auth/memberships/switch', ['membership_id' => 'x'])->assertUnauthorized();
     }
+    /**
+     * The portal chosen before signing in survives authentication — but only as a preference. A
+     * visitor who asks for a portal they do not hold lands on their own, not on someone else's.
+     */
+    public function test_the_requested_portal_is_carried_through_authentication_when_held(): void
+    {
+        $agency = $this->tenant('Carry Agency', 'agency');
+        $brand = $this->tenant('Carry Brand', 'brand');
+        $user = $this->user($agency, 'carry@test.dev');
+        $this->grant($user, $agency, Portal::Agency);
+        $this->grant($user, $brand, Portal::App);
+
+        $this->actingAs($user, 'sanctum')->withHeaders($this->spaHeaders)
+            ->getJson('/api/v1/auth/memberships?portal=app')
+            ->assertOk()->assertJsonPath('data.destination', '/app/dashboard');
+
+        $this->actingAs($user, 'sanctum')->withHeaders($this->spaHeaders)
+            ->getJson('/api/v1/auth/memberships?portal=agency')
+            ->assertOk()->assertJsonPath('data.destination', '/agency');
+    }
+
+    public function test_asking_for_an_unheld_portal_lands_on_your_own(): void
+    {
+        $tenant = $this->tenant('Unheld Co', 'brand');
+        $user = $this->user($tenant, 'unheld@test.dev');
+        $this->grant($user, $tenant, Portal::App);
+
+        $this->actingAs($user, 'sanctum')->withHeaders($this->spaHeaders)
+            ->getJson('/api/v1/auth/memberships?portal=agency')
+            ->assertOk()->assertJsonPath('data.destination', '/app/dashboard');
+    }
+
+    /** A junk portal value is ignored rather than erroring or opening anything. */
+    public function test_a_nonsense_portal_value_is_ignored(): void
+    {
+        $tenant = $this->tenant('Junk Co', 'brand');
+        $user = $this->user($tenant, 'junk@test.dev');
+        $this->grant($user, $tenant, Portal::App);
+
+        $this->actingAs($user, 'sanctum')->withHeaders($this->spaHeaders)
+            ->getJson('/api/v1/auth/memberships?portal=../../etc/passwd')
+            ->assertOk()->assertJsonPath('data.destination', '/app/dashboard');
+    }
 }

@@ -3,7 +3,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { BarChart3, Check, Copy, LayoutGrid, Megaphone, Moon, ShieldCheck, Sun } from 'lucide-react'
 import { login } from './api'
-import { safeRedirect } from './redirect'
+import { portalKeyFor } from './memberships'
+import { resolvePostAuthDestination } from './postAuthDestination'
 import { Button } from '@/components/ui/Button'
 import { EmailInput, PasswordInput } from '@/components/ui/form'
 import { toApiError } from '@/lib/api/client'
@@ -128,7 +129,17 @@ export function LoginPage() {
 
   const mutation = useMutation({
     mutationFn: login,
-    onSuccess: (user) => { setUser(user); navigate(safeRedirect(params.get('redirect')), { replace: true }) },
+    // ADR 0002: the destination comes from the user's memberships (server-derived), carrying through
+    // the portal they were heading for. It is not computed here from an account type — the browser
+    // is the one place that rule must not live.
+    onSuccess: async (user) => {
+      setUser(user)
+      // Only an EXPLICIT portal choice is passed as a preference. Sending the 'default' tab as
+      // 'app' would mean a plain /login always claimed the advertiser portal, and a user who
+      // belongs to several would never be offered the switcher.
+      const to = await resolvePostAuthDestination(params, portalParam ? portalKeyFor(portal) : null)
+      navigate(to, { replace: true })
+    },
   })
   const error = mutation.isError ? toApiError(mutation.error) : null
 

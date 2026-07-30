@@ -5,6 +5,7 @@ import { ArrowRight, Building2, Check, Loader2, Rocket, User, Users } from 'luci
 import { completeOnboarding, setAccountType, setFirstClient, setFirstProject, setService, setWorkspace } from './api'
 import { OnboardingShell } from './OnboardingShell'
 import { fetchCurrentUser } from '@/features/auth/api'
+import { resolvePostAuthDestination } from '@/features/auth/postAuthDestination'
 import { ErrorSummary, FormStepper, ReviewList, type FieldError, type FormStep } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
@@ -52,7 +53,14 @@ export function OnboardingWizard() {
   // All mutations are declared unconditionally (hooks rules) before any step branch returns.
   const accountType = useMutation({ mutationFn: setAccountType, onSuccess: refresh })
   const service = useMutation({ mutationFn: setService, onSuccess: refresh })
-  const finish = useMutation({ mutationFn: completeOnboarding, onSuccess: async () => { await refresh(); navigate('/dashboard', { replace: true }) } })
+  // ADR 0002: land in the portal the membership implies, not a hard-coded dashboard path.
+  const finish = useMutation({
+    mutationFn: completeOnboarding,
+    onSuccess: async () => {
+      await refresh()
+      navigate(await resolvePostAuthDestination(new URLSearchParams()), { replace: true })
+    },
+  })
 
   const label = 'text-xs font-semibold text-text-secondary'
   const field = 'h-11 w-full rounded-xl border border-border bg-surface px-3.5 text-sm outline-none focus:border-brand-500'

@@ -7,6 +7,7 @@ import { OnboardingShell } from './OnboardingShell'
 import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
+import { resolvePostAuthDestination } from '@/features/auth/postAuthDestination'
 
 /** Accept a workspace invitation: set name + password → join the existing workspace → dashboard. */
 export function InviteAcceptPage() {
@@ -24,7 +25,12 @@ export function InviteAcceptPage() {
   const accept = useMutation({
     mutationFn: () => acceptInvite(token, name, password),
     // Use the user returned by accept directly — no second /auth/me round-trip to race the session cookie.
-    onSuccess: (user) => { setUser(user); navigate('/dashboard', { replace: true }) },
+    // ADR 0002: an invitation grants a membership, so the destination follows from it — an invited
+    // agency client must not land in the advertiser dashboard.
+    onSuccess: async (user) => {
+      setUser(user)
+      navigate(await resolvePostAuthDestination(new URLSearchParams()), { replace: true })
+    },
     onError: (e) => setError(toApiError(e).message),
   })
 
