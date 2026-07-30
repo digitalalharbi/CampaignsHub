@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { FileText, Globe, Layers, MessageSquareQuote } from 'lucide-react'
+import { Activity, FileText, Globe, Layers, MessageSquareQuote, Plug, ShieldCheck } from 'lucide-react'
 import { PublicPagesSettingsPage } from '@/features/settings/PublicPagesSettingsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { TaxonomyManagerPage } from '@/features/taxonomy/TaxonomyManagerPage'
+import { IntegrationsTab, PermissionsTab, StatusTab } from './PlatformOpsTabs'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -19,13 +20,18 @@ import { useUi } from '@/stores/ui'
  * The engines behind each tab are the existing ones, mounted here — not reimplemented.
  */
 
-type TabKey = 'public-site' | 'portals' | 'taxonomies' | 'services'
+type TabKey = 'public-site' | 'portals' | 'taxonomies' | 'services' | 'permissions' | 'integrations' | 'status'
 
 const TABS: { key: TabKey; ar: string; en: string; icon: typeof Globe }[] = [
   { key: 'public-site', ar: 'الموقع العام', en: 'Public site', icon: Globe },
   { key: 'portals', ar: 'ملاحظات البوابات', en: 'Portal notes', icon: MessageSquareQuote },
   { key: 'taxonomies', ar: 'التصنيفات', en: 'Taxonomies', icon: Layers },
   { key: 'services', ar: 'الخدمات', en: 'Services', icon: FileText },
+  // ADMIN-003 — three read surfaces. Tabs rather than rail entries: the structure rule is two levels,
+  // and three read-only lists do not each warrant a place in the navigation.
+  { key: 'permissions', ar: 'الصلاحيات العامة', en: 'Permissions', icon: ShieldCheck },
+  { key: 'integrations', ar: 'التكاملات', en: 'Integrations', icon: Plug },
+  { key: 'status', ar: 'الحالة التشغيلية', en: 'Operational status', icon: Activity },
 ]
 
 export function SystemSettingsPage() {
@@ -77,6 +83,9 @@ export function SystemSettingsPage() {
           />
         )}
         {tab === 'taxonomies' && <TaxonomyManagerPage />}
+        {tab === 'permissions' && <PermissionsTab />}
+        {tab === 'integrations' && <IntegrationsTab />}
+        {tab === 'status' && <StatusTab />}
         {tab === 'services' && (
           <div className="rounded-2xl border border-border bg-surface p-5">
             <p className="text-sm text-text-secondary">

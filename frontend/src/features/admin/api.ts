@@ -145,3 +145,48 @@ export function fetchSubscriptions(status?: string): Promise<{ subscriptions: Pl
 export function fetchRevenue(): Promise<PlatformRevenue> {
   return getData('/admin/revenue')
 }
+
+/* ------------------------------------------------------- ADMIN-003: access, integrations, status */
+
+export interface PermissionCatalogue {
+  groups: {
+    group: string
+    permissions: { id: string; key: string; description: string | null; granted_by_roles: number }[]
+  }[]
+  total: number
+  roles: number
+  /** Always false. The catalogue is code — a key invented at runtime would grant nothing. */
+  editable: boolean
+  note: string
+}
+
+export interface PlatformIntegrations {
+  /** States are counted verbatim, never collapsed into connected/not-connected. */
+  providers: { provider: string; tenants: number; by_status: Record<string, number> }[]
+  note: string
+}
+
+export interface PlatformStatus {
+  backend: { state: string }
+  database: { state: string; connection?: string }
+  redis?: { state: string }
+  queue_worker?: { state: string }
+  scheduler?: { state: string }
+  storage?: { state: string }
+  last_migration?: string | null
+  branch?: string | null
+  commit?: string | null
+  [key: string]: unknown
+}
+
+export function fetchPermissions(): Promise<PermissionCatalogue> {
+  return getData('/admin/permissions')
+}
+
+export function fetchIntegrations(): Promise<PlatformIntegrations> {
+  return getData('/admin/integrations')
+}
+
+export function fetchStatus(): Promise<PlatformStatus> {
+  return getData('/admin/status')
+}

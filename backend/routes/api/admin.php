@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
+use App\Http\Controllers\Dev\DevStatusController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -36,6 +38,13 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::patch('/plans/{plan}', [PlatformBillingController::class, 'updatePlan'])->name('plans.update');
         Route::get('/subscriptions', [PlatformBillingController::class, 'subscriptions'])->name('subscriptions.index');
         Route::get('/revenue', [PlatformBillingController::class, 'revenue'])->name('revenue.index');
+
+        // ADMIN-003 — read surfaces. The permission catalogue is code (PermissionSeeder), the
+        // integration view counts what tenants have connected, and the status check is the SAME one
+        // `/dev/status` runs rather than a second implementation.
+        Route::get('/permissions', [PlatformAccessController::class, 'permissions'])->name('permissions.index');
+        Route::get('/integrations', [PlatformAccessController::class, 'integrations'])->name('integrations.index');
+        Route::get('/status', [DevStatusController::class, 'platform'])->name('status');
 
         Route::get('/audit', [PlatformTenantController::class, 'audit'])->name('audit.index');
     });

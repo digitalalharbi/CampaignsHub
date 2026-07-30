@@ -22,7 +22,26 @@ final class DevStatusController
     {
         abort_if(app()->environment('production'), 404);
 
-        return ApiResponse::success([
+        return ApiResponse::success($this->snapshot(), 'dev status');
+    }
+
+    /**
+     * GET /api/v1/admin/status — the same checks, for the platform owner (ADMIN-003).
+     *
+     * Reuses `snapshot()` rather than growing a second status page. There is no production block
+     * here because the `platform` middleware already restricts it to `is_platform_admin`, and an
+     * owner who cannot see whether the queue is running in PRODUCTION has the check exactly where it
+     * is least useful.
+     */
+    public function platform(): JsonResponse
+    {
+        return ApiResponse::success($this->snapshot(), 'platform status');
+    }
+
+    /** @return array<string, mixed> */
+    private function snapshot(): array
+    {
+        return [
             'backend' => ['state' => 'running'],
             'database' => $this->db(),
             'redis' => $this->redis(),
@@ -37,7 +56,7 @@ final class DevStatusController
             // DEVSTATUS-001: the requirement board, parsed from the traceability matrix so it can never
             // drift from the document that governs the work.
             'requirements' => $this->requirements(),
-        ], 'dev status');
+        ];
     }
 
     private function db(): array
