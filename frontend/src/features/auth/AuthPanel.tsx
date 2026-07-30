@@ -187,13 +187,18 @@ export function AuthPanel({ locale, portal }: { locale: Locale; portal: AuthPort
   return (
     <aside
       data-testid="auth-panel"
-      className="relative hidden overflow-hidden border-e border-border bg-surface-secondary p-8 lg:flex lg:flex-col lg:justify-center xl:p-12"
+      className="relative hidden overflow-hidden border-e border-border bg-surface-secondary px-8 py-8 lg:flex lg:flex-col lg:justify-center xl:px-10"
     >
       {/* A soft brand wash, the same green the homepage carries — not a slab of colour. */}
       <div aria-hidden className="pointer-events-none absolute -end-24 -top-28 h-72 w-72 rounded-full bg-brand-primary-soft blur-3xl" />
       <div aria-hidden className="pointer-events-none absolute -bottom-32 -start-24 h-80 w-80 rounded-full bg-brand-primary-soft/70 blur-3xl" />
 
-      <div className="relative">
+      {/*
+        Held to a readable measure and pushed toward the divider (`ms-auto` = margin-inline-start, so it
+        works in both directions). Left to fill the column, the promise and the form drifted to opposite
+        edges of a wide screen and stopped reading as one composition.
+      */}
+      <div className="relative w-full max-w-[560px] ms-auto">
         {/* A real way back to the site the visitor came from. */}
         <Link to="/" className="flex w-fit items-center gap-2.5">
           <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-[var(--shadow-small)]">
@@ -205,29 +210,37 @@ export function AuthPanel({ locale, portal }: { locale: Locale; portal: AuthPort
           </span>
         </Link>
 
-        <p className="mt-7 inline-flex w-fit items-center gap-2 rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[12px] font-semibold text-brand-700">
+        <p className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[12px] font-semibold text-brand-700">
           <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
           {c.eyebrow}
         </p>
 
-        {/* The hook. Deliberately the largest thing on the page — it is what the product promises, and the
-            closing phrase carries the brand green so the promise lands rather than reading as one block. */}
-        <h1 className="mt-4 font-heading text-[34px] font-extrabold leading-[1.14] tracking-tight text-text-primary sm:text-[40px] xl:text-[46px]">
-          {c.title}{' '}
+        {/* The hook. Deliberately the largest thing on the page — it is what the product promises. The
+            closing phrase gets its own line, the brand green and a larger size, so «في مكان واحد» is the
+            part that lands rather than being buried in the middle of a sentence. */}
+        {/* The two halves are block-level for the layout, which would otherwise run them together into
+            one word for assistive tech. The label is the same sentence a sighted visitor reads. */}
+        <h1
+          aria-label={`${c.title} ${c.titleAccent}`}
+          className="mt-3 font-heading font-extrabold leading-[1.12] tracking-tight text-text-primary"
+        >
+          <span className="block text-[32px] sm:text-[36px] xl:text-[42px]">{c.title}</span>
           {/* Kept unbreakable: "in one place" split across two lines reads as a typo, not a promise. */}
-          <span className="whitespace-nowrap text-brand-600">{c.titleAccent}</span>
+          <span className="mt-0.5 block whitespace-nowrap text-[40px] text-brand-600 sm:text-[46px] xl:text-[54px]">
+            {c.titleAccent}
+          </span>
         </h1>
-        <p className="mt-4 max-w-xl text-[14.5px] leading-relaxed text-text-secondary">{c.body}</p>
+        <p className="mt-3.5 text-[14.5px] leading-relaxed text-text-secondary">{c.body}</p>
 
         {/* Feature cards, at the same weight the rest of the product gives them: an icon tile, the
             capability, and one plain sentence saying what it does. */}
-        <ul className="mt-6 grid max-w-xl gap-2.5">
+        <ul className="mt-5 grid gap-2">
           {c.features.map((f, i) => {
             const Icon = FEATURE_ICONS[i] ?? Check
             return (
               <li
                 key={f.title}
-                className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)]"
+                className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3 shadow-[var(--shadow-small)]"
               >
                 <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${FEATURE_TINTS[i] ?? 'bg-brand-primary-soft text-brand-600'}`}>
                   <Icon size={17} />

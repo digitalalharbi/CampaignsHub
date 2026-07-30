@@ -155,7 +155,13 @@ export function LoginPage() {
           </div>
         </div>
 
-        <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col justify-center py-4">
+        {/*
+          Centred by default. Only from `lg` — where the panel actually appears beside it — is the form
+          pulled toward the divider, by fixing margin-inline-start and leaving margin-inline-end auto
+          (correct in both LTR and RTL). Applying that pull at every width is what threw the form against
+          one edge of a phone, with the whole other half of the screen left empty.
+        */}
+        <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col justify-center py-4 xl:ms-14">
           <h2 className="font-[var(--font-heading)] text-[26px] font-extrabold text-text-primary sm:text-[30px] sm:leading-tight">{c.formTitle}</h2>
           <p className="mt-1.5 text-[14.5px] text-text-secondary">{c.formValue}</p>
 

@@ -37,7 +37,18 @@ async function docHeightWithoutDevOnlyBlocks(page: Page) {
   })
 }
 
-for (const [name, size] of [['1366x768', DESKTOP], ['1440x900', LAPTOP], ['375x812', PHONE]] as const) {
+/** 1024 is the exact width the two-column layout switches on — the tightest desktop case, and the one
+ *  a pull toward the divider overflows first. 1280 is the next breakpoint. Both are covered on purpose. */
+const LG_EDGE = { width: 1024, height: 768 }
+const XL_EDGE = { width: 1280, height: 800 }
+
+for (const [name, size] of [
+  ['1024x768', LG_EDGE],
+  ['1280x800', XL_EDGE],
+  ['1366x768', DESKTOP],
+  ['1440x900', LAPTOP],
+  ['375x812', PHONE],
+] as const) {
   test(`login has no horizontal scroll and a reachable submit at ${name}`, async ({ page }) => {
     await page.setViewportSize(size)
     await page.goto('/login')
@@ -45,6 +56,13 @@ for (const [name, size] of [['1366x768', DESKTOP], ['1440x900', LAPTOP], ['375x8
 
     const m = await metrics(page)
     expect(m.hScroll, 'the page must never scroll sideways').toBe(false)
+
+    // Nothing may sit outside the viewport. A pull toward the divider that is wider than the column
+    // silently clips the fields rather than scrolling, so "no h-scroll" alone would not catch it.
+    const form = (await page.locator('form').boundingBox())!
+    expect(Math.round(form.x), 'the form is clipped at the leading edge').toBeGreaterThanOrEqual(0)
+    const layoutWidth = await page.evaluate(() => document.documentElement.clientWidth)
+    expect(Math.round(form.x + form.width), 'the form runs past the trailing edge').toBeLessThanOrEqual(layoutWidth)
 
     // The primary action is on the first screen — the visitor never hunts for it.
     const submit = page.locator('button[type="submit"]')
@@ -59,6 +77,11 @@ for (const [name, size] of [['1366x768', DESKTOP], ['1440x900', LAPTOP], ['375x8
     await page.waitForLoadState('networkidle')
 
     expect((await metrics(page)).hScroll).toBe(false)
+
+    const regForm = (await page.locator('form').boundingBox())!
+    expect(Math.round(regForm.x), 'the form is clipped at the leading edge').toBeGreaterThanOrEqual(0)
+    const regLayoutWidth = await page.evaluate(() => document.documentElement.clientWidth)
+    expect(Math.round(regForm.x + regForm.width), 'the form runs past the trailing edge').toBeLessThanOrEqual(regLayoutWidth)
 
     // Every field the account needs is present — the compact layout dropped none of them.
     await expect(page.locator('form input#tenant_name')).toBeVisible()
@@ -114,6 +137,46 @@ test('every login portal rewrites the panel, by real clicks', async ({ page }) =
   // The influencer and client portals speak differently from the campaign ones.
   expect(seen.size).toBeGreaterThan(1)
 })
+
+/**
+ * Below `lg` there is no second column, so the form must be CENTRED. Pulling it toward a divider that
+ * is not being rendered leaves half the screen empty — which is exactly what happened when the desktop
+ * alignment was written without a breakpoint. Checked at every width where the panel is hidden, and in
+ * both writing directions, because the pull is expressed in logical (inline) properties.
+ */
+// 1023 is the last width below Tailwind's `lg` (1024) — the exact boundary the bug lived on.
+for (const width of [375, 414, 640, 768, 1023]) {
+  test(`the form is centred at ${width}px, where no panel is beside it`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('/login')
+    await page.waitForLoadState('networkidle')
+
+    await expect(page.getByTestId('auth-panel'), 'the panel must not be rendered below lg').toBeHidden()
+
+    for (const dir of ['rtl', 'ltr'] as const) {
+      await expect(page.locator('html')).toHaveAttribute('dir', dir)
+
+      const box = (await page.locator('form').boundingBox())!
+      // Measure against the LAYOUT viewport, not the configured width: Firefox reserves space for a
+      // classic scrollbar, so `width` overstates the usable area and a perfectly centred form would
+      // read as ~7px off. This is about how the page is measured, not how it is laid out.
+      const layoutWidth = await page.evaluate(() => document.documentElement.clientWidth)
+      const leftGap = box.x
+      const rightGap = layoutWidth - (box.x + box.width)
+      expect(
+        Math.abs(leftGap - rightGap),
+        `form is off-centre in ${dir} at ${width}px: ${Math.round(leftGap)}px vs ${Math.round(rightGap)}px`,
+      ).toBeLessThanOrEqual(2)
+
+      expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false)
+
+      if (dir === 'rtl') {
+        await page.getByRole('button', { name: 'Toggle language' }).click()
+        await page.waitForTimeout(150)
+      }
+    }
+  })
+}
 
 test('on a phone the form comes first and the panel collapses below it', async ({ page }) => {
   await page.setViewportSize(PHONE)

@@ -57,6 +57,16 @@ Two earlier attempts were rejected and are recorded so they are not retried: a n
 saturated green→teal→navy gradient. Neither appears anywhere on the homepage, which is what the auth
 pages have to continue.
 
+**Responsive lesson, learned the hard way.** Tightening the desktop composition (pulling the form toward
+the divider with a logical `margin-inline-start`) was written *without a breakpoint*, so it also applied
+where there is no second column: on phones and tablets the form was thrown against one edge with half the
+screen empty, and at exactly 1024px — where the two-column layout switches on — the form overflowed its
+own column and clipped. Both are now covered by `e2e/auth-redesign.spec.ts`:
+  - the form must be centred (±2px) at 375 / 414 / 640 / 768 / **1023**, in RTL *and* LTR;
+  - the form's box must lie fully inside the viewport at **1024** / **1280** / 1366 / 1440 / 375.
+A layout pull that only makes sense beside a second column must be scoped to the breakpoint that renders
+that column — and "no horizontal scroll" alone does not catch it, because the clip does not scroll.
+
 Two real defects were found and fixed while wiring it, both of which had passing tests before:
 - **Remember me was decorative** — held in React state and never sent, so `Auth::login($user, $remember)`
   always got `false`. Now submitted, validated, and covered by a persists / does-not-persist pair.

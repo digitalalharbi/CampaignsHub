@@ -10,7 +10,8 @@ export function AuthShell({ children, portal = 'default' }: { children: React.Re
   const { theme, locale, toggleTheme, toggleLocale } = useUi()
 
   return (
-    <div className="grid min-h-screen grid-cols-1 bg-background lg:grid-cols-[1.3fr_1fr]">
+    // Same split as LoginPage — the two pages share a panel, so they must share its proportions too.
+    <div className="grid min-h-screen grid-cols-1 bg-background lg:grid-cols-[1.05fr_1fr]">
       <AuthPanel locale={locale as Locale} portal={portal} />
 
       <main className="flex flex-col px-5 py-4 sm:px-8">
@@ -25,7 +26,9 @@ export function AuthShell({ children, portal = 'default' }: { children: React.Re
           </div>
         </div>
 
-        <div className="mx-auto flex w-full max-w-[460px] flex-1 flex-col justify-center py-4">
+        {/* Centred below `lg`; only pulled toward the divider once the panel is actually beside it.
+            See the note in LoginPage — the pull must never apply where there is no second column. */}
+        <div className="mx-auto flex w-full max-w-[460px] flex-1 flex-col justify-center py-4 xl:ms-14">
           {children}
           {/* Phones get the value proposition here, collapsed, after the form. */}
           <AuthPanelMobile locale={locale as Locale} portal={portal} />
