@@ -18,11 +18,11 @@ import { CLIENT_SPACE_PREFIX, clientSpaceSlugOf, getData } from '@/lib/api/clien
 
 export { clientSpaceSlugOf }
 
-/** `/portal/clients/acme` inside a space, `/client` outside one. */
+/** `/portal/clients/acme` inside a space, `/portal` outside one. */
 export function clientSpaceBaseOf(pathname: string): string {
   const slug = clientSpaceSlugOf(pathname)
 
-  return slug === null ? '/client' : `${CLIENT_SPACE_PREFIX}${encodeURIComponent(slug)}`
+  return slug === null ? '/portal' : `${CLIENT_SPACE_PREFIX}${encodeURIComponent(slug)}`
 }
 
 export function useClientSpaceSlug(): string | null {

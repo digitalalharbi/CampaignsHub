@@ -22,7 +22,7 @@ test('guest submits a verified request then tracks it in the client portal', asy
   expect(reference).toMatch(/REQ-\d{4}-[A-Z0-9]{6}/)
 
   // 2) Sign into the client portal via email OTP (dev auto-fills the code).
-  await page.goto('/client/login')
+  await page.goto('/portal/login')
   await switchToEnglish(page)
   await page.getByRole('button', { name: /^Email$|^البريد$/ }).click()
   await page.getByLabel(/Contact|وسيلة التواصل/).fill(email)
@@ -32,13 +32,15 @@ test('guest submits a verified request then tracks it in the client portal', asy
   await expect(signIn).toBeEnabled()
   await signIn.click()
 
-  // 3) The dashboard lists the request.
-  await expect(page).toHaveURL(/\/client$/)
+  // 3) The dashboard lists the request. A contact named on exactly one of the agency's clients is
+  //    sent straight into that space rather than shown a picker with one option (PORTAL-CLIENT-001),
+  //    so the landing URL is the space itself. A contact with no client space yet stays at /portal.
+  await expect(page).toHaveURL(/\/portal(\/clients\/[^/]+)?$/)
   await expect(page.getByText(reference)).toBeVisible()
 
   // 4) Open it → reply → the message persists after a reload.
   await page.getByText(reference).click()
-  await expect(page).toHaveURL(/\/client\/requests\/REQ-/)
+  await expect(page).toHaveURL(/\/portal(\/clients\/[^/]+)?\/requests\/REQ-/)
   await expect(page.getByText(/Timeline|المسار/)).toBeVisible()
   const msg = `Any update on ${tag}?`
   await page.getByLabel(/Message|رسالة/).fill(msg)

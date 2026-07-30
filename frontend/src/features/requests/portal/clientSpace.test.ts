@@ -30,9 +30,14 @@ describe('clientSpaceBaseOf', () => {
     expect(clientSpaceBaseOf('/portal/clients/acme/quotes')).toBe('/portal/clients/acme')
   })
 
-  /** The shared view still works untouched, so no existing link or bookmark breaks. */
-  it('falls back to the shared client view outside a space', () => {
-    expect(clientSpaceBaseOf('/client/quotes')).toBe('/client')
+  /**
+   * Outside a space the portal still means "everything this contact reaches", and after the move to
+   * `/portal/*` that view is at `/portal`. Pre-move `/client/*` URLs redirect there, so a bookmark
+   * still lands somewhere real.
+   */
+  it('falls back to the merged portal view outside a space', () => {
+    expect(clientSpaceBaseOf('/portal/quotes')).toBe('/portal')
+    expect(clientSpaceBaseOf('/client/quotes')).toBe('/portal')
   })
 
   it('re-encodes a slug that needed encoding', () => {

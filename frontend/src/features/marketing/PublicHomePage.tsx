@@ -124,7 +124,7 @@ export function PublicHomePage() {
               <Link to="/app/dashboard"><Button size="sm" className="whitespace-nowrap">{c.nav.dashboard}</Button></Link>
             ) : (
               <>
-                <Link to="/client/login" className="hidden lg:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.clientLogin}</Button></Link>
+                <Link to="/portal/login" className="hidden lg:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.clientLogin}</Button></Link>
                 <Link to={cta('hero', 'secondary_cta', { label: c.nav.request, to: '/requests/new' }).to} className="hidden md:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{cta('hero', 'secondary_cta', { label: c.nav.request, to: '/requests/new' }).label}</Button></Link>
                 <Link to="/login" className="hidden sm:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.login}</Button></Link>
                 <Link to={cta('hero', 'primary_cta', { label: c.nav.start, to: '/register' }).to}><Button size="sm" className="whitespace-nowrap">{cta('hero', 'primary_cta', { label: c.nav.start, to: '/register' }).label}</Button></Link>
@@ -372,7 +372,7 @@ export function PublicHomePage() {
                 <Link to="/requests/new">
                   <Button variant="secondary" size="lg">{c.finalCta.request}</Button>
                 </Link>
-                <Link to="/client/login" className="text-[13px] font-semibold text-brand-700 underline-offset-4 hover:underline">
+                <Link to="/portal/login" className="text-[13px] font-semibold text-brand-700 underline-offset-4 hover:underline">
                   {c.nav.clientLogin}
                 </Link>
               </div>

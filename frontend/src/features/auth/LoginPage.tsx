@@ -232,7 +232,7 @@ export function LoginPage() {
             <span className="h-px flex-1 bg-border" />
           </div>
           <Link
-            to="/client/login"
+            to="/portal/login"
             className="mt-3 flex h-11 w-full items-center justify-center rounded-xl border border-border-strong bg-surface text-sm font-semibold text-text-primary transition-colors hover:bg-surface-hover"
           >
             {c.clientLogin}

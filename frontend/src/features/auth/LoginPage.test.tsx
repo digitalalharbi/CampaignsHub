@@ -103,6 +103,6 @@ describe('LoginPage — the controls actually work', () => {
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
     expect(screen.getByRole('link', { name: /Forgot/i })).toHaveAttribute('href', '/forgot-password')
     expect(screen.getByRole('link', { name: /Create an account/i })).toHaveAttribute('href', '/register')
-    expect(screen.getByRole('link', { name: /Track my requests/i })).toHaveAttribute('href', '/client/login')
+    expect(screen.getByRole('link', { name: /Track my requests/i })).toHaveAttribute('href', '/portal/login')
   })
 })

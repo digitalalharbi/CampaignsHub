@@ -70,3 +70,44 @@ export const legacyAppRedirects = MOVED_TO_APP.map((path) => ({
   path: `/${path}`,
   element: <PrefixWithApp />,
 }))
+
+/**
+ * The external client portal moved from `/client/*` to `/portal/*` (ADR 0002), so all four portals
+ * are addressed the same way.
+ *
+ * These paths are in clients' bookmarks and in emails already sent — a client who follows a link
+ * from a quote notification and lands on a blank page has no way to recover, and no login of their
+ * own to retry with. Each old path therefore still resolves and says where it went.
+ *
+ * Note this is a rename of the URL space only: the portal still runs its own OTP cookie session
+ * (PORTAL-AUTH-001 is not done), and nothing here changes who can see what.
+ */
+function ClientPathToPortal() {
+  const { pathname, search, hash } = useLocation()
+
+  // `/client` → `/portal`, `/client/invoices/1` → `/portal/invoices/1`. Slicing rather than
+  // replacing so a stray "client" later in the path is left alone.
+  return <Navigate to={`/portal${pathname.slice('/client'.length)}${search}${hash}`} replace />
+}
+
+const MOVED_TO_PORTAL = [
+  '',
+  'login',
+  'requests',
+  'requests/:reference',
+  'quotes',
+  'quotes/:id',
+  'invoices',
+  'invoices/:id',
+  'messages',
+  'messages/:id',
+  'profile',
+  'files',
+  'campaigns',
+  'reports',
+]
+
+export const legacyClientPortalRedirects = MOVED_TO_PORTAL.map((path) => ({
+  path: `/client${path === '' ? '' : `/${path}`}`,
+  element: <ClientPathToPortal />,
+}))

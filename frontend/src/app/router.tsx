@@ -48,6 +48,7 @@ import { ClientFilesPage } from '@/features/requests/portal/ClientFilesPage'
 import { ClientCampaignsPage } from '@/features/requests/portal/ClientCampaignsPage'
 import { ClientReportsPage } from '@/features/requests/portal/ClientReportsPage'
 import { ClientSpacePickerPage } from '@/features/requests/portal/ClientSpacePickerPage'
+import { ClientPortalHomePage } from '@/features/requests/portal/ClientPortalHomePage'
 import { VerifyEmailPage } from '@/features/onboarding/VerifyEmailPage'
 import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate'
@@ -80,7 +81,7 @@ import { CollaborationsPage } from '@/features/influencers/CollaborationsPage'
 import { RosterPage } from '@/features/influencers/RosterPage'
 import { DeliverablesPage } from '@/features/influencers/DeliverablesPage'
 import { WorkspaceSwitcherPage } from '@/features/auth/WorkspaceSwitcherPage'
-import { legacyAppRedirects } from './legacyRedirects'
+import { legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
 
 export const router = createBrowserRouter([
   // Public marketing homepage — the primary conversion surface. The authenticated app lives under
@@ -100,30 +101,34 @@ export const router = createBrowserRouter([
   // Public services catalogue, read from the taxonomy engine (never a bundled array).
   { path: '/services', element: <PublicServicesPage /> },
   { path: '/services/:category', element: <PublicServicesPage /> },
-  // External Client Portal (own cookie session; not the staff app). Each page guards itself: a 401 from the
-  // portal endpoints redirects to /client/login. The section nav lives in PortalShell.
-  { path: '/client/login', element: <ClientPortalLoginPage /> },
-  { path: '/client', element: <ClientDashboardPage /> },
-  { path: '/client/requests', element: <ClientRequestsPage /> },
-  { path: '/client/requests/:reference', element: <ClientRequestDetailPage /> },
-  { path: '/client/quotes', element: <ClientQuotesPage /> },
-  { path: '/client/quotes/:id', element: <ClientQuoteDetailPage /> },
-  { path: '/client/invoices', element: <ClientInvoicesPage /> },
-  { path: '/client/invoices/:id', element: <ClientInvoiceDetailPage /> },
-  { path: '/client/messages', element: <ClientMessagesPage /> },
-  { path: '/client/messages/:id', element: <ClientThreadPage /> },
-  { path: '/client/profile', element: <ClientProfilePage /> },
-  // Client-facing content backed by real endpoints (files / campaigns / reports), each self-guarding on 401.
-  { path: '/client/files', element: <ClientFilesPage /> },
-  { path: '/client/campaigns', element: <ClientCampaignsPage /> },
-  { path: '/client/reports', element: <ClientReportsPage /> },
+  // ADR 0002: the request-tracking portal lives at /portal/*. It still runs its own OTP cookie
+  // session (see PORTAL-AUTH-001 — the auth engines are not merged yet); what moved is the URL
+  // space, so all four portals are addressed the same way. Each page guards itself: a 401 from the
+  // portal endpoints returns to the portal login. The section nav lives in PortalShell.
+  { path: '/portal/login', element: <ClientPortalLoginPage /> },
+  { path: '/portal/requests', element: <ClientRequestsPage /> },
+  { path: '/portal/requests/:reference', element: <ClientRequestDetailPage /> },
+  { path: '/portal/quotes', element: <ClientQuotesPage /> },
+  { path: '/portal/quotes/:id', element: <ClientQuoteDetailPage /> },
+  { path: '/portal/invoices', element: <ClientInvoicesPage /> },
+  { path: '/portal/invoices/:id', element: <ClientInvoiceDetailPage /> },
+  { path: '/portal/messages', element: <ClientMessagesPage /> },
+  { path: '/portal/messages/:id', element: <ClientThreadPage /> },
+  { path: '/portal/profile', element: <ClientProfilePage /> },
+  { path: '/portal/files', element: <ClientFilesPage /> },
+  { path: '/portal/campaigns', element: <ClientCampaignsPage /> },
+  { path: '/portal/reports', element: <ClientReportsPage /> },
+  // Pre-ADR-0002 paths. Kept alive rather than deleted: these are in clients' bookmarks and in
+  // emails already sent, and a dead link there costs a support conversation.
+  ...legacyClientPortalRedirects,
 
   // PORTAL-CLIENT-001: the isolated agency-client space. `/client/*` above still means "everything
   // this contact reaches"; a space narrows every read to ONE of the agency's clients, so a person
   // named on two brands sees two separate spaces rather than one merged list. The pages are the same
   // components — the boundary is the slug in the URL, which the server checks against the spaces the
   // contact actually owns.
-  { path: '/portal', element: <ClientSpacePickerPage /> },
+  { path: '/portal', element: <ClientPortalHomePage /> },
+  { path: '/portal/spaces', element: <ClientSpacePickerPage /> },
   { path: '/portal/clients/:clientSlug', element: <ClientDashboardPage /> },
   { path: '/portal/clients/:clientSlug/requests', element: <ClientRequestsPage /> },
   { path: '/portal/clients/:clientSlug/requests/:reference', element: <ClientRequestDetailPage /> },

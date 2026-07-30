@@ -18,8 +18,8 @@ export function usePortalGuard(isError: boolean, error: unknown): void {
     // dropping them at the merged view and making them find their way back.
     const intended = `${location.pathname}${location.search}`
     const to = intended.startsWith('/portal/')
-      ? `/client/login?redirect=${encodeURIComponent(intended)}`
-      : '/client/login'
+      ? `/portal/login?redirect=${encodeURIComponent(intended)}`
+      : '/portal/login'
 
     navigate(to, { replace: true })
   }, [isError, error, navigate, location.pathname, location.search])

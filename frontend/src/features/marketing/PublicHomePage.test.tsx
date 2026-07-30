@@ -80,7 +80,7 @@ describe('PublicHomePage — v5 journeys & header', () => {
     expect(link(/إنشاء حساب/)).toHaveAttribute('href', '/register')
     expect(link(/تسجيل الدخول/)).toHaveAttribute('href', '/login')
     expect(link(/اطلب خدمة/)).toHaveAttribute('href', '/requests/new')
-    expect(link(/متابعة طلباتي/)).toHaveAttribute('href', '/client/login')
+    expect(link(/متابعة طلباتي/)).toHaveAttribute('href', '/portal/login')
     // No internal/admin login is ever exposed on public surfaces (internal admin reuses the same /login).
     expect(within(header).queryByText(/تسجيل دخول النظام/)).not.toBeInTheDocument()
     expect(within(header).queryByText(/دخول العميل/)).not.toBeInTheDocument()
@@ -119,10 +119,10 @@ describe('PublicHomePage — v5 journeys & header', () => {
     renderWithProviders(<PublicHomePage />, { locale: 'ar' })
     const hrefs = linkHrefs()
     expect(hrefs).toContain('/login')
-    expect(hrefs).toContain('/client/login')
+    expect(hrefs).toContain('/portal/login')
     // Every «تسجيل الدخول» instance points at /login; every «متابعة طلباتي» at /client/login.
     screen.getAllByRole('link', { name: /تسجيل الدخول/ }).forEach((l) => expect(l).toHaveAttribute('href', '/login'))
-    screen.getAllByRole('link', { name: /متابعة طلباتي/ }).forEach((l) => expect(l).toHaveAttribute('href', '/client/login'))
+    screen.getAllByRole('link', { name: /متابعة طلباتي/ }).forEach((l) => expect(l).toHaveAttribute('href', '/portal/login'))
     // The below-card helper line, in customer language (no «دخول مساحة العمل»).
     expect(screen.getByText(/سجّل الدخول لإدارة حملاتك/)).toBeInTheDocument()
   })

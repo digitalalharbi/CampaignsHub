@@ -40,6 +40,8 @@ export function clientSpaceSlugOf(pathname: string): string | null {
  * contact actually owns and refuses anything else with a 404.
  */
 api.interceptors.request.use((config) => {
+  // The API prefix is still `/client/*`; it is the BROWSER paths that moved to `/portal/*`
+  // (ADR 0002). Matching on the API prefix keeps this correct either way.
   if (!config.url?.startsWith('/client/') || typeof window === 'undefined') return config
 
   const slug = clientSpaceSlugOf(window.location.pathname)

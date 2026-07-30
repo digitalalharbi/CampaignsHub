@@ -99,7 +99,7 @@ test.describe('homepage journeys route somewhere real', () => {
   test('track-my-requests opens the client portal login', async ({ page }) => {
     await home(page)
     await page.getByTestId('hero-track-requests').click()
-    await expect(page).toHaveURL(/\/client\/login$/)
+    await expect(page).toHaveURL(/\/portal\/login$/)
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   })
 

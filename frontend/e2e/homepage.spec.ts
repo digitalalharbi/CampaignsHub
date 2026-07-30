@@ -19,7 +19,7 @@ test('homepage: hero, language/theme, preview, journeys and CTAs into real route
   await expect(header.getByRole('link', { name: /إنشاء حساب|Create account/ })).toHaveAttribute('href', '/register')
   await expect(header.getByRole('link', { name: /^تسجيل الدخول$|^Log in$/ })).toHaveAttribute('href', '/login')
   await expect(header.getByRole('link', { name: /اطلب خدمة|Request a service/ })).toHaveAttribute('href', '/requests/new')
-  await expect(header.getByRole('link', { name: /متابعة طلباتي|Track my requests/ })).toHaveAttribute('href', '/client/login')
+  await expect(header.getByRole('link', { name: /متابعة طلباتي|Track my requests/ })).toHaveAttribute('href', '/portal/login')
 
   // Language toggle switches copy (ar → en).
   await page.getByRole('button', { name: 'Toggle language' }).click()
@@ -60,7 +60,7 @@ test('homepage: hero, language/theme, preview, journeys and CTAs into real route
   // Below the card: returning-user actions point at the client + user logins.
   const optionsCard = page.locator('div').filter({ has: page.getByRole('heading', { name: 'How do you want to start?' }) }).last()
   await expect(optionsCard.getByRole('link', { name: /^Log in$/ })).toHaveAttribute('href', '/login')
-  await expect(optionsCard.getByRole('link', { name: /Track my requests/ })).toHaveAttribute('href', '/client/login')
+  await expect(optionsCard.getByRole('link', { name: /Track my requests/ })).toHaveAttribute('href', '/portal/login')
 
   // Service-request CTA opens the real /requests/new route.
   await header.getByRole('link', { name: /Request a service/ }).click()
