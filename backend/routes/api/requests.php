@@ -60,6 +60,11 @@ Route::prefix('client')->name('client.')->group(function (): void {
     Route::post('/logout', [ClientPortalController::class, 'logout'])->name('logout');
     Route::get('/session', [ClientPortalController::class, 'session'])->name('session');
 
+    // PORTAL-CLIENT-001: the client spaces this contact may enter. A contact named on two of an
+    // agency's clients gets two isolated spaces, never one merged view.
+    Route::get('/spaces', [ClientPortalController::class, 'spaces'])->name('spaces.index')
+        ->middleware('throttle:120,1');
+
     Route::get('/requests', [ClientPortalController::class, 'index'])->name('requests.index')
         ->middleware('throttle:120,1');
     Route::get('/requests/{reference}', [ClientPortalController::class, 'show'])->name('requests.show')

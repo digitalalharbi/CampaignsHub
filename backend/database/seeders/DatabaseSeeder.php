@@ -68,6 +68,9 @@ class DatabaseSeeder extends Seeder
         //    the ceiling instead of showing three accounts that all see everything.
         if (App::environment(['local', 'demo'])) {
             $this->call(DemoAgencyScopeSeeder::class);
+            // And a client contact named on two brands, so the isolated client space has something
+            // to isolate — otherwise the picker never appears and the boundary is never seen.
+            $this->call(DemoClientSpacesSeeder::class);
         }
     }
 }

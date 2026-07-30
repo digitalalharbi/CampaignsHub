@@ -10,6 +10,7 @@ use App\Domains\Billing\Models\Quote;
 use App\Domains\Billing\Providers\PaymentProviderRegistry;
 use App\Domains\Billing\Services\BillingService;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Drive\Models\DriveFile;
 use App\Domains\Drive\Models\DriveLink;
 use App\Domains\Messaging\Models\Message;
@@ -52,6 +53,16 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 final class ClientPortalController
 {
     private const COOKIE = 'client_portal';
+
+    /**
+     * Memoised per request, KEYED BY SLUG. `contactScope()` runs many times within one call, so the
+     * lookup must not repeat — but keying it by slug matters as much: a bare `??=` would pin the
+     * first space resolved and hand it back for every later slug, which is the isolation failing
+     * silently in the direction that leaks.
+     *
+     * @var array<string, string>
+     */
+    private array $resolvedSpaceIds = [];
 
     public function __construct(
         private readonly ContactVerificationService $verification,
@@ -883,8 +894,104 @@ final class ClientPortalController
         return $token;
     }
 
-    /** @return Builder<ExternalRequest> */
+    /**
+     * @return Builder<ExternalRequest>
+     *
+     * The single choke point every client-portal read flows through — requests, and through
+     * `ownedWorkspaceIds()` the quotes, invoices, messages, files, campaigns and reports as well.
+     *
+     * Narrowing the SELECTED CLIENT SPACE here rather than at each of those call sites is deliberate:
+     * a contact can be named on more than one of an agency's clients (a marketing lead covering two
+     * brands), and merging their spaces would show one client's invoices beside another's. One filter
+     * in one place cannot be forgotten in the eighth reader someone adds later.
+     */
     private function contactScope(ClientPortalToken $token)
+    {
+        $space = $this->selectedSpaceId($token);
+
+        return ExternalRequest::query()
+            ->where('tenant_id', $token->tenant_id)
+            ->when($space !== null, fn ($q) => $q->where('client_id', $space))
+            ->where(function ($q) use ($token) {
+                if ($token->contact_email) {
+                    $q->orWhereRaw('lower(contact_email) = ?', [Str::lower($token->contact_email)]);
+                }
+                if ($token->contact_phone) {
+                    $q->orWhere('contact_phone', $token->contact_phone);
+                }
+            });
+    }
+
+    /**
+     * The client space this request is confined to, or null for "everything this contact reaches".
+     *
+     * The slug arrives from the caller, so it is resolved against the spaces the CONTACT actually
+     * owns — never trusted. An unknown or unowned slug aborts with 404 rather than falling back to
+     * the unfiltered view: silently widening on a bad slug is how one client ends up reading another's
+     * space, and a 404 tells a prober nothing about whether that space exists.
+     */
+    private function selectedSpaceId(ClientPortalToken $token): ?string
+    {
+        $slug = trim((string) (request()->header('X-Client-Space') ?? request()->query('space', '')));
+
+        if ($slug === '') {
+            return null;
+        }
+
+        // Memoised per request: contactScope() is called many times and this must not re-query, nor
+        // recurse (ownedSpaces() reads requests directly, not through contactScope()).
+        return $this->resolvedSpaceIds[$slug] ??= (function () use ($token, $slug): string {
+            // `ClientWorkspace` carries the tenant global scope, and not every portal endpoint has
+            // bound the tenant by the time the FIRST read runs. Without this the lookup matched
+            // nothing and a space the contact genuinely owns came back 404 — the isolation failing
+            // in the safe direction, but failing all the same. Live review caught it; the tests did
+            // not, because their setUp had already bound a tenant for the whole case.
+            $this->bindTenant($token);
+
+            $space = ClientWorkspace::query()
+                ->where('tenant_id', $token->tenant_id)
+                ->where('slug', $slug)
+                ->whereIn('id', $this->contactOwnedWorkspaceIds($token))
+                ->first();
+
+            abort_if($space === null, 404);
+
+            return (string) $space->getKey();
+        })();
+    }
+
+    /**
+     * GET /client/spaces — the client spaces this contact may enter.
+     *
+     * A contact with one space is not asked to choose; a contact with several must be, because the
+     * alternative is a merged view in which they cannot tell which brand a figure belongs to.
+     */
+    public function spaces(Request $request): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+
+        $ids = $this->contactOwnedWorkspaceIds($token);
+
+        $spaces = $ids === [] ? collect() : ClientWorkspace::query()
+            ->whereIn('id', $ids)->whereNull('archived_at')->orderBy('name')->get();
+
+        return response()->json(['data' => [
+            'spaces' => $spaces->map(fn (ClientWorkspace $c) => [
+                'id' => (string) $c->getKey(),
+                'slug' => (string) $c->slug,
+                'name' => (string) $c->name,
+            ])->values()->all(),
+        ]]);
+    }
+
+    /**
+     * Every client workspace this contact owns, IGNORING the selected space — the list a space can be
+     * chosen from. Kept separate from `ownedWorkspaceIds()`, which is narrowed by that selection.
+     *
+     * @return list<string>
+     */
+    private function contactOwnedWorkspaceIds(ClientPortalToken $token): array
     {
         return ExternalRequest::query()
             ->where('tenant_id', $token->tenant_id)
@@ -895,7 +1002,9 @@ final class ClientPortalController
                 if ($token->contact_phone) {
                     $q->orWhere('contact_phone', $token->contact_phone);
                 }
-            });
+            })
+            ->whereNotNull('client_id')
+            ->pluck('client_id')->map(fn ($id): string => (string) $id)->unique()->values()->all();
     }
 
     private function resolveOwnedRequest(ClientPortalToken $token, string $reference): ExternalRequest

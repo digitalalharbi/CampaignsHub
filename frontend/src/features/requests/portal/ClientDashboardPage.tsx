@@ -7,6 +7,7 @@ import { listPortalInvoices, listPortalQuotes, listPortalThreads, formatDate } f
 import { PortalShell } from './PortalShell'
 import { usePortalGuard } from './usePortalGuard'
 import { useUi } from '@/stores/ui'
+import { useClientSpacePath } from './clientSpace'
 
 const COPY = {
   ar: {
@@ -26,6 +27,7 @@ const COPY = {
 const OPEN_REQUEST_CLOSED = ['completed', 'delivered', 'rejected', 'cancelled']
 
 export function ClientDashboardPage() {
+  const spaceTo = useClientSpacePath()
   const ar = useUi((s) => s.locale) === 'ar'
   const t = ar ? COPY.ar : COPY.en
 
@@ -54,16 +56,16 @@ export function ClientDashboardPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard to="/client/requests" icon={FileText} label={t.open_requests} value={openRequests} loading={loading} />
-        <StatCard to="/client/quotes" icon={ScrollText} label={t.pending_quotes} value={pendingQuotes} loading={loading} tone={pendingQuotes > 0 ? 'warning' : undefined} />
-        <StatCard to="/client/invoices" icon={Receipt} label={t.unpaid_invoices} value={unpaidInvoices} loading={loading} tone={unpaidInvoices > 0 ? 'warning' : undefined} />
-        <StatCard to="/client/messages" icon={MessagesSquare} label={t.unread_messages} value={unreadMessages} loading={loading} tone={unreadMessages > 0 ? 'brand' : undefined} />
+        <StatCard to={spaceTo('/requests')} icon={FileText} label={t.open_requests} value={openRequests} loading={loading} />
+        <StatCard to={spaceTo('/quotes')} icon={ScrollText} label={t.pending_quotes} value={pendingQuotes} loading={loading} tone={pendingQuotes > 0 ? 'warning' : undefined} />
+        <StatCard to={spaceTo('/invoices')} icon={Receipt} label={t.unpaid_invoices} value={unpaidInvoices} loading={loading} tone={unpaidInvoices > 0 ? 'warning' : undefined} />
+        <StatCard to={spaceTo('/messages')} icon={MessagesSquare} label={t.unread_messages} value={unreadMessages} loading={loading} tone={unreadMessages > 0 ? 'brand' : undefined} />
       </div>
 
       <section className="mt-6 rounded-2xl border border-border bg-surface p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold text-text-primary">{t.recent}</h2>
-          <Link to="/client/requests" className="flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700">{t.view_all} <ArrowRight size={13} className="rtl:rotate-180" /></Link>
+          <Link to={spaceTo('/requests')} className="flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700">{t.view_all} <ArrowRight size={13} className="rtl:rotate-180" /></Link>
         </div>
         {requests.isLoading ? (
           <div className="space-y-2">{[0, 1, 2].map((i) => <div key={i} className="h-14 animate-pulse rounded-xl bg-surface-secondary" />)}</div>
@@ -94,9 +96,10 @@ function StatCard({ to, icon: Icon, label, value, loading, tone }: {
 }
 
 function RecentRow({ r, ar, details }: { r: PortalRequestCard; ar: boolean; details: string }) {
+  const spaceTo = useClientSpacePath()
   return (
     <li>
-      <Link to={`/client/requests/${r.reference}`} className="flex items-center justify-between gap-3 py-3 hover:opacity-80">
+      <Link to={spaceTo(`/requests/${r.reference}`)} className="flex items-center justify-between gap-3 py-3 hover:opacity-80">
         <div className="min-w-0">
           <div className="font-mono text-[11px] font-semibold text-brand-600" dir="ltr">{r.reference}</div>
           <div className="truncate text-sm font-semibold text-text-primary">{ar ? r.type_ar : r.type}</div>

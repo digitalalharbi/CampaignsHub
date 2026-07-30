@@ -7,6 +7,7 @@ import { getPortalJourney, isOfframpStage, journeySteps, type PortalJourney } fr
 import { PortalShell } from './PortalShell'
 import { usePortalGuard } from './usePortalGuard'
 import { useUi } from '@/stores/ui'
+import { useClientSpacePath } from './clientSpace'
 
 /** Bilingual labels for the main-line journey stages (keys mirror the backend RequestStage enum). */
 const STAGE_LABELS: Record<string, { ar: string; en: string }> = {
@@ -32,6 +33,7 @@ const ACTION_META: Record<string, { ar: string; en: string; to?: string }> = {
 }
 
 export function ClientRequestDetailPage() {
+  const spaceTo = useClientSpacePath()
   const ar = useUi((s) => s.locale) === 'ar'
   const qc = useQueryClient()
   const { reference = '' } = useParams()
@@ -65,7 +67,7 @@ export function ClientRequestDetailPage() {
 
   return (
     <PortalShell title={ar ? 'تفاصيل الطلب' : 'Request details'} nav showLogout>
-      <Link to="/client/requests" className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {ar ? 'طلباتي' : 'My requests'}</Link>
+      <Link to={spaceTo('/requests')} className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {ar ? 'طلباتي' : 'My requests'}</Link>
 
       <div className="rounded-2xl border border-border bg-surface p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">

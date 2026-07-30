@@ -5,6 +5,7 @@ import { LogOut, Megaphone, Moon, Sun } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import { portalLogout } from '../clientPortalApi'
 import { PortalNav } from './portalNav'
+import { useClientSpacePath } from './clientSpace'
 
 /**
  * Minimal, mobile-first, RTL/LTR + light/dark shell for the public client portal.
@@ -32,6 +33,7 @@ export function PortalShell({
   const ar = locale === 'ar'
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const spaceTo = useClientSpacePath()
 
   const signOut = async () => {
     try { await portalLogout() } catch { /* clearing the local session is enough to sign the user out */ }
@@ -43,7 +45,7 @@ export function PortalShell({
     <div dir={ar ? 'rtl' : 'ltr'} className="min-h-screen bg-background text-text-primary">
       <header className="border-b border-border bg-surface">
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between gap-2.5 px-4 sm:px-6">
-          <Link to="/client" className="flex items-center gap-2.5">
+          <Link to={spaceTo("")} className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={18} /></span>
             <span className="font-heading text-base font-extrabold">CampaignsHub</span>
             <span className="hidden text-xs text-text-muted sm:inline">· {title}</span>

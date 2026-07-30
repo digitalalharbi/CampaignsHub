@@ -6,6 +6,7 @@ import { getPortalThread, postPortalThreadMessage, type PortalMessage } from './
 import { PortalShell } from './PortalShell'
 import { usePortalGuard } from './usePortalGuard'
 import { useUi } from '@/stores/ui'
+import { useClientSpacePath } from './clientSpace'
 
 const COPY = {
   ar: {
@@ -19,6 +20,7 @@ const COPY = {
 }
 
 export function ClientThreadPage() {
+  const spaceTo = useClientSpacePath()
   const ar = useUi((s) => s.locale) === 'ar'
   const t = ar ? COPY.ar : COPY.en
   const qc = useQueryClient()
@@ -43,7 +45,7 @@ export function ClientThreadPage() {
 
   return (
     <PortalShell title={t.title} nav showLogout>
-      <Link to="/client/messages" className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {t.back}</Link>
+      <Link to={spaceTo('/messages')} className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {t.back}</Link>
 
       <div className="rounded-2xl border border-border bg-surface p-5 sm:p-6">
         <h1 className="font-heading text-lg font-extrabold text-text-primary">{thread.subject}</h1>

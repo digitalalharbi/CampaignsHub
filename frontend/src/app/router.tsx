@@ -47,6 +47,7 @@ import { ClientProfilePage } from '@/features/requests/portal/ClientProfilePage'
 import { ClientFilesPage } from '@/features/requests/portal/ClientFilesPage'
 import { ClientCampaignsPage } from '@/features/requests/portal/ClientCampaignsPage'
 import { ClientReportsPage } from '@/features/requests/portal/ClientReportsPage'
+import { ClientSpacePickerPage } from '@/features/requests/portal/ClientSpacePickerPage'
 import { VerifyEmailPage } from '@/features/onboarding/VerifyEmailPage'
 import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate'
@@ -111,6 +112,27 @@ export const router = createBrowserRouter([
   { path: '/client/files', element: <ClientFilesPage /> },
   { path: '/client/campaigns', element: <ClientCampaignsPage /> },
   { path: '/client/reports', element: <ClientReportsPage /> },
+
+  // PORTAL-CLIENT-001: the isolated agency-client space. `/client/*` above still means "everything
+  // this contact reaches"; a space narrows every read to ONE of the agency's clients, so a person
+  // named on two brands sees two separate spaces rather than one merged list. The pages are the same
+  // components — the boundary is the slug in the URL, which the server checks against the spaces the
+  // contact actually owns.
+  { path: '/portal', element: <ClientSpacePickerPage /> },
+  { path: '/portal/clients/:clientSlug', element: <ClientDashboardPage /> },
+  { path: '/portal/clients/:clientSlug/requests', element: <ClientRequestsPage /> },
+  { path: '/portal/clients/:clientSlug/requests/:reference', element: <ClientRequestDetailPage /> },
+  { path: '/portal/clients/:clientSlug/quotes', element: <ClientQuotesPage /> },
+  { path: '/portal/clients/:clientSlug/quotes/:id', element: <ClientQuoteDetailPage /> },
+  { path: '/portal/clients/:clientSlug/invoices', element: <ClientInvoicesPage /> },
+  { path: '/portal/clients/:clientSlug/invoices/:id', element: <ClientInvoiceDetailPage /> },
+  { path: '/portal/clients/:clientSlug/messages', element: <ClientMessagesPage /> },
+  { path: '/portal/clients/:clientSlug/messages/:id', element: <ClientThreadPage /> },
+  { path: '/portal/clients/:clientSlug/campaigns', element: <ClientCampaignsPage /> },
+  { path: '/portal/clients/:clientSlug/files', element: <ClientFilesPage /> },
+  { path: '/portal/clients/:clientSlug/reports', element: <ClientReportsPage /> },
+  { path: '/portal/clients/:clientSlug/profile', element: <ClientProfilePage /> },
+
   { path: '/reports/share/:token', element: <PublicReport /> },
   { path: '/reports/print/:token', element: <PrintReport /> },
   // Email verification is public (the link can be opened on any device; the token verify endpoint is public).

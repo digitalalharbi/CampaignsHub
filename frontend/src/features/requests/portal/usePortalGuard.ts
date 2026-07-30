@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { toApiError } from '@/lib/api/client'
 
 /**
@@ -9,7 +9,18 @@ import { toApiError } from '@/lib/api/client'
  */
 export function usePortalGuard(isError: boolean, error: unknown): void {
   const navigate = useNavigate()
+  const location = useLocation()
+
   useEffect(() => {
-    if (isError && toApiError(error).status === 401) navigate('/client/login', { replace: true })
-  }, [isError, error, navigate])
+    if (!isError || toApiError(error).status !== 401) return
+
+    // Carry where they were heading, so signing in returns them to THAT client space rather than
+    // dropping them at the merged view and making them find their way back.
+    const intended = `${location.pathname}${location.search}`
+    const to = intended.startsWith('/portal/')
+      ? `/client/login?redirect=${encodeURIComponent(intended)}`
+      : '/client/login'
+
+    navigate(to, { replace: true })
+  }, [isError, error, navigate, location.pathname, location.search])
 }

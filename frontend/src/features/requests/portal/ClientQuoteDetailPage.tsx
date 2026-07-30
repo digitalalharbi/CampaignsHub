@@ -10,6 +10,7 @@ import { PortalShell } from './PortalShell'
 import { usePortalGuard } from './usePortalGuard'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { useClientSpacePath } from './clientSpace'
 
 const COPY = {
   ar: {
@@ -37,6 +38,7 @@ const COPY = {
 }
 
 export function ClientQuoteDetailPage() {
+  const spaceTo = useClientSpacePath()
   const ar = useUi((s) => s.locale) === 'ar'
   const t = ar ? COPY.ar : COPY.en
   const navigate = useNavigate()
@@ -74,7 +76,7 @@ export function ClientQuoteDetailPage() {
 
   return (
     <PortalShell title={t.title} nav showLogout>
-      <Link to="/client/quotes" className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {t.back}</Link>
+      <Link to={spaceTo('/quotes')} className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {t.back}</Link>
 
       <div className="rounded-2xl border border-border bg-surface p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">

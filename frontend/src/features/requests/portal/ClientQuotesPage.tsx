@@ -5,6 +5,7 @@ import { listPortalQuotes, formatDate, formatMoney, type PortalQuote } from './p
 import { PortalShell } from './PortalShell'
 import { usePortalGuard } from './usePortalGuard'
 import { useUi } from '@/stores/ui'
+import { useClientSpacePath } from './clientSpace'
 
 const COPY = {
   ar: {
@@ -64,9 +65,10 @@ export function ClientQuotesPage() {
 }
 
 function QuoteCard({ quote, ar, t }: { quote: PortalQuote; ar: boolean; t: typeof COPY.ar }) {
+  const spaceTo = useClientSpacePath()
   const status = quoteStatusMeta(quote.status, ar)
   return (
-    <Link to={`/client/quotes/${quote.id}`} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 hover:border-brand-400">
+    <Link to={spaceTo(`/quotes/${quote.id}`)} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 hover:border-brand-400">
       <div className="flex items-start justify-between gap-2">
         <div className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{quote.number}</div>
         <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${status.tone}`}>{status.label}</span>

@@ -14,6 +14,40 @@ export const api = axios.create({
   headers: { Accept: 'application/json' },
 })
 
+/** `/portal/clients/<slug>/...` — the URL segment that names an isolated client space. */
+export const CLIENT_SPACE_PREFIX = '/portal/clients/'
+
+/**
+ * The client space named in a path, or null when the path is not inside one.
+ *
+ * Read from the URL rather than held in a store: the URL is what the user shares, bookmarks and
+ * reloads, so it is the only thing that cannot drift out of step with the space they are looking at.
+ * A cached copy would survive a navigation and address the previous space.
+ */
+export function clientSpaceSlugOf(pathname: string): string | null {
+  if (!pathname.startsWith(CLIENT_SPACE_PREFIX)) return null
+  const slug = pathname.slice(CLIENT_SPACE_PREFIX.length).split('/')[0]
+
+  return slug === '' ? null : decodeURIComponent(slug)
+}
+
+/**
+ * Client-portal requests carry the space the user is currently in (PORTAL-CLIENT-001).
+ *
+ * Attached here, once, rather than threaded through every `/client/*` call site: there are more than
+ * twenty of them, and the one that gets forgotten is the one that shows another brand's data. The
+ * server treats the slug as a claim to check, not a fact — it resolves it against the spaces the
+ * contact actually owns and refuses anything else with a 404.
+ */
+api.interceptors.request.use((config) => {
+  if (!config.url?.startsWith('/client/') || typeof window === 'undefined') return config
+
+  const slug = clientSpaceSlugOf(window.location.pathname)
+  if (slug !== null) config.headers.set('X-Client-Space', slug)
+
+  return config
+})
+
 /** Prime the CSRF cookie before the first unsafe (POST/PUT/DELETE) request. */
 export async function ensureCsrfCookie(): Promise<void> {
   await axios.get('/sanctum/csrf-cookie', { withCredentials: true })

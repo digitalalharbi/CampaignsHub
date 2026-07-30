@@ -7,6 +7,7 @@ import { PortalShell } from './PortalShell'
 import { usePortalGuard } from './usePortalGuard'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { useClientSpacePath } from './clientSpace'
 
 const COPY = {
   ar: {
@@ -96,9 +97,10 @@ export function ClientMessagesPage() {
 }
 
 function ThreadRow({ th, unreadLabel }: { th: PortalThread; unreadLabel: string }) {
+  const spaceTo = useClientSpacePath()
   return (
     <li>
-      <Link to={`/client/messages/${th.id}`} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4 hover:border-brand-400">
+      <Link to={spaceTo(`/messages/${th.id}`)} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4 hover:border-brand-400">
         <div className="flex min-w-0 items-center gap-3">
           {th.unread > 0 && <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-brand-500" aria-hidden />}
           <div className="min-w-0">

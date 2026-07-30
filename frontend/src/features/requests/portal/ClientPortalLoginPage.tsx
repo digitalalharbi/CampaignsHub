@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Loader2, LogIn, Mail, Phone } from 'lucide-react'
 import { portalLoginStart, portalLoginVerify } from '../clientPortalApi'
@@ -20,6 +20,16 @@ export function ClientPortalLoginPage() {
   // can never appear in production. It lets a local reviewer copy the OTP without touching the API by hand.
   const [devCode, setDevCode] = useState<string | null>(null)
 
+  /**
+   * Where to land after signing in. A `redirect` is honoured ONLY when it is a portal path on this
+   * site — an absolute or protocol-relative URL here would turn the login page into an open redirect,
+   * and the server would not be the one to catch it.
+   */
+  const requested = new URLSearchParams(useLocation().search).get('redirect') ?? ''
+  const afterLogin = /^\/(portal|client)(\/|$)/.test(requested) && !requested.startsWith('//')
+    ? requested
+    : '/portal'
+
   const start = useMutation({
     mutationFn: () => portalLoginStart(channel, destination.trim()),
     onSuccess: (r) => { setVid(r.verification_id); setError(null); if (r.dev_code) { setCode(r.dev_code); setDevCode(r.dev_code) } },
@@ -27,7 +37,7 @@ export function ClientPortalLoginPage() {
   })
   const verify = useMutation({
     mutationFn: () => portalLoginVerify(vid!, code),
-    onSuccess: () => navigate('/client'),
+    onSuccess: () => navigate(afterLogin),
     onError: (e) => setError(toApiError(e).message),
   })
 

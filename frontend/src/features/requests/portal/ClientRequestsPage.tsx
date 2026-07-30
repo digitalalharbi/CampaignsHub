@@ -6,6 +6,7 @@ import { PortalShell } from './PortalShell'
 import { usePortalGuard } from './usePortalGuard'
 import { formatDate } from './portalAccountApi'
 import { useUi } from '@/stores/ui'
+import { useClientSpacePath } from './clientSpace'
 
 function statusTone(s: string): string {
   if (['completed', 'delivered'].includes(s)) return 'bg-success/15 text-success'
@@ -45,8 +46,9 @@ export function ClientRequestsPage() {
 }
 
 function RequestCard({ r, ar }: { r: PortalRequestCard; ar: boolean }) {
+  const spaceTo = useClientSpacePath()
   return (
-    <Link to={`/client/requests/${r.reference}`} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 hover:border-brand-400">
+    <Link to={spaceTo(`/requests/${r.reference}`)} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 hover:border-brand-400">
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{r.reference}</div>
