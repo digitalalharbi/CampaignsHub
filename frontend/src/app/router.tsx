@@ -177,8 +177,6 @@ export const router = createBrowserRouter([
           { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
           { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
                     { path: 'design', element: <DesignSystemPage /> },
-          // Media-buying operational sections (built incrementally; honest placeholders for now).
-          { path: 'clients', element: <PagePlaceholder title="Clients" /> },
           { path: 'campaigns', element: <CampaignsPage /> },
           { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
           // Internal requests inbox (external requests converted into operational work).
@@ -203,6 +201,9 @@ export const router = createBrowserRouter([
           { path: 'drive', element: <Navigate to="/app/integrations/drive" replace /> },
           { path: 'branding', element: <Navigate to="/app/settings/branding" replace /> },
           { path: 'content', element: <CreativesPage /> },
+          // Not built, and NOT linked from any nav or page — reachable only by typing the URL.
+          // The placeholder says plainly that the module is a later phase rather than showing an
+          // empty screen that reads as a broken feature. See the matrix rows of the same names.
           { path: 'approvals', element: <PagePlaceholder title="Approvals" /> },
           { path: 'tracking', element: <PagePlaceholder title="Tracking" /> },
           { path: 'reports', element: <ReportsPage /> },

@@ -11,7 +11,7 @@ const REDIRECTS: { from: string; to: RegExp }[] = [
   { from: '/integrations', to: /\/app\/integrations/ },
   { from: '/app/connections', to: /\/app\/integrations/ },
   { from: '/app/drive', to: /\/app\/integrations\/drive/ },
-  { from: '/app/branding', to: /\/settings\/branding/ },
+  { from: '/app/branding', to: /\/app\/settings\/branding/ },
 ]
 
 for (const r of REDIRECTS) {

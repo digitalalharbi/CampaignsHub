@@ -59,6 +59,26 @@ const MOVED_TO_APP = [
   'account/notifications',
   'leads',
   'opportunities',
+  // Sections that existed at the root before the move but were missed the first time round, so a
+  // pre-move bookmark to any of them was a dead link. Found by comparing the /app child routes with
+  // this list rather than by waiting for someone to report one.
+  'requests',
+  'requests/:requestId',
+  'clients/:clientId',
+  'alerts',
+  'integrations',
+  'integrations/drive',
+  'connections',
+  'drive',
+  'branding',
+  'billing',
+  'billing/quotes',
+  'billing/invoices',
+  'billing/payments',
+  'finance',
+  'messages',
+  'subscriptions',
+  'request-journey',
 ] as const
 
 /**

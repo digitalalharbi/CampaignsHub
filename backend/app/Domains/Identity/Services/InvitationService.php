@@ -7,6 +7,9 @@ namespace App\Domains\Identity\Services;
 use App\Domains\Access\Models\Role;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Requests\Services\ContactVerificationService;
+use App\Domains\Tenancy\Actions\GrantMembership;
+use App\Domains\Tenancy\DTOs\MembershipGrant;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -123,6 +126,24 @@ final class InvitationService
                     'role' => 'member', 'status' => 'active',
                 ]);
             }
+
+            // Accepting an invitation IS the grant of access, so it says so explicitly rather than
+            // relying on `users.tenant_id` (ADR 0002). Without this the invitee had a row and a role
+            // but no membership — and since membership is the only source of portal and tenant, they
+            // signed in to nothing: no workspace, no portal, straight back to onboarding.
+            //
+            // The portal comes from the TENANT's account type, because an invitation is always into
+            // an existing workspace whose kind is already settled. Scopes are deliberately absent:
+            // this grant confers no client access of its own, and an agency's client is invited
+            // through `MembershipGrant::forAgencyClient()` instead.
+            $tenant = Tenant::findOrFail($inv->tenant_id);
+            app(GrantMembership::class)->execute(new MembershipGrant(
+                user: $user,
+                tenant: $tenant,
+                portal: Portal::forAccountType($tenant->account_type),
+                role: $inv->role_slug,
+                grantedBy: User::find($inv->invited_by),
+            ));
 
             DB::table('workspace_invitations')->where('id', $inv->id)
                 ->update(['accepted_at' => Carbon::now(), 'accepted_user_id' => $user->id, 'updated_at' => Carbon::now()]);

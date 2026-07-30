@@ -12,7 +12,7 @@ test('change display name → persists and reflects in the shell; then reset', a
   // Personal settings moved out of the system settings section into the account menu (dac07f2):
   // /settings/profile now redirects to /account/profile.
   await page.goto('/account/profile')
-  await expect(page).toHaveURL(/\/login\?redirect=%2Faccount%2Fprofile/)
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fapp%2Faccount%2Fprofile/)
   await page.locator('input[type="email"]').fill('owner@demo-agency.local')
   await page.locator('input[type="password"]').fill('password')
   await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()

@@ -7,6 +7,8 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
+use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -75,6 +77,35 @@ final class WorkspaceInvitationTest extends TestCase
         $this->assertNotNull($member->email_verified_at);               // verified by accepting the link
         $this->assertSame(1, Tenant::count());                          // NO new workspace was created
         $this->assertDatabaseHas('workspace_invitations', ['email' => 'member@a.test', 'accepted_user_id' => $member->id]);
+    }
+
+    /**
+     * The regression this exists for: accepting created the user and the role but no membership, and
+     * since membership is the only source of portal and tenant (ADR 0002), the invitee signed in to
+     * nothing — no workspace, no portal, straight back to onboarding. A row and a role are not access.
+     */
+    public function test_accepting_grants_a_membership_in_the_inviting_tenant(): void
+    {
+        $token = $this->invite();
+
+        $this->postJson('/api/v1/invitations/accept', [
+            'token' => $token, 'name' => 'New Member', 'password' => 'secret1234',
+        ])->assertCreated();
+
+        $member = User::where('email', 'member@a.test')->firstOrFail();
+        $membership = Membership::query()->where('user_id', $member->id)->first();
+
+        $this->assertNotNull($membership, 'accepting an invitation must grant a membership');
+        $this->assertSame((string) $this->tenant->id, (string) $membership->tenant_id);
+        // The portal follows the TENANT's account type — an invitation is always into an existing
+        // workspace whose kind is already settled, so it is never inferred from the invitee.
+        $this->assertSame(Portal::forAccountType($this->tenant->account_type), $membership->portal);
+        $this->assertSame('analyst', $membership->role);
+        // Recorded, so "who let this person in?" has an answer that is not a guess.
+        $this->assertNotNull($membership->invited_by);
+
+        // And no client scope: an invitation confers none of its own. Fail-closed.
+        $this->assertSame([], $membership->load('scopes')->clientScopeIds());
     }
 
     public function test_duplicate_pending_invite_is_rejected(): void

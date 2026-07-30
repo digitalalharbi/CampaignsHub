@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { screen } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
-import { legacyClientPortalRedirects } from './legacyRedirects'
+import { legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
 import { renderWithProviders } from '@/test/utils'
 
 /**
@@ -54,5 +54,36 @@ describe('the /client → /portal redirects', () => {
     renderAt('/client/invoices?from=email')
     expect(screen.getByText('portal:invoices')).toBeInTheDocument()
     expect(window.location.search === '' || window.location.search === '?from=email').toBe(true)
+  })
+})
+
+/**
+ * Fifteen pre-move root paths were missing from the redirect list, so a bookmark to `/integrations`
+ * or `/billing/invoices` was a dead link — found by comparing the two lists, not by waiting for a
+ * report. This keeps them compared: every section the advertiser portal serves must be reachable
+ * from the path it lived at before the move.
+ */
+describe('the /* → /app/* redirect list', () => {
+  const covered = new Set(legacyAppRedirects.map((r) => r.path))
+
+  it.each([
+    '/integrations',
+    '/integrations/drive',
+    '/connections',
+    '/drive',
+    '/alerts',
+    '/billing',
+    '/billing/quotes',
+    '/billing/invoices',
+    '/billing/payments',
+    '/finance',
+    '/messages',
+    '/subscriptions',
+    '/branding',
+    '/requests',
+    '/requests/:requestId',
+    '/clients/:clientId',
+  ])('still serves %s', (path) => {
+    expect(covered.has(path)).toBe(true)
   })
 })
