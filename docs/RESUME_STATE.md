@@ -147,22 +147,57 @@ which also carries the audit of what the codebase actually looked like at adopti
 | `manager@demo-agency.local` | agency portal, confined to ONE client — the ceiling in action |
 | `owner@demo-company.local` | advertiser only — `/agency/*` gives the honest denial screen + API 403 |
 
+### The other three portals
+
+| Unit | Commit | State |
+|---|---|---|
+| PORTAL-CLIENT-001 isolated client spaces | `ef774fe` | **VERIFIED** — two brands, two spaces, unowned slug 404 |
+| INFL-001 influencers & UGC portal | `d1317a2` | **VERIFIED** — roster / collaborations / deliverables, cost behind its own permission |
+| PORTAL-AUTH-001 | `f38c09d` | **PARTIAL** — URL space unified; auth engines NOT merged. See `docs/PORTAL_AUTH_MIGRATION.md` |
+| ROUTE-002 legacy redirect sweep | `98ddc18` | **VERIFIED** — 15 missing root paths added |
+| BUG-CLIENTS-001 / BUG-INVITE-001 | `98ddc18` | **VERIFIED** — both found by running the suite, not by reading |
+
+**More decisions to keep:**
+
+5. Client-portal reads narrow at ONE choke point, `ClientPortalController::contactScope()`, and the
+   space header is attached by ONE axios interceptor. There are 20+ `/client/*` call sites; the one
+   that forgets the filter is the one that shows another brand's data.
+6. The influencers portal has TWO different boundaries on purpose: the roster is agency-wide (a
+   creator is not owned by a client), collaborations are client-scoped. Do not "fix" the roster to
+   match — it would only make an account manager re-add creators the agency already has terms with.
+7. Withheld money is ABSENT, never zeroed. A zero or a dash can be read as the real figure, and a
+   rounded one can be worked backwards into a margin.
+8. Nothing goes in a nav rail before it works — this now holds for all four portals.
+
+**Live-review accounts** (dev seed, password `password`; client portal is OTP, dev auto-fills):
+
+| Account | Shows |
+|---|---|
+| `owner@demo-agency.local` | agency portal, unrestricted — 5 clients |
+| `manager@demo-agency.local` | agency portal, ONE client — the ceiling in action |
+| `creators@demo-agency.local` | influencers portal, cost withheld |
+| `creators.finance@demo-agency.local` | influencers portal, cost + margin visible |
+| `owner@demo-company.local` | advertiser only — `/agency/*` and `/influencers/*` deny honestly |
+| `customer@demo-client.local` (OTP) | client portal with TWO isolated spaces |
+
 ### NOT done — do not mark these complete
 
-  - **PORTAL-CLIENT-001**: the isolated agency-client space at `/portal/clients/:clientSlug`. Not started.
-  - **AGENCY-005**: agency white-label per client space. Depends on PORTAL-CLIENT-001.
-  - **INFL-001**: `/influencers/*`. Not started.
-  - **PORTAL-AUTH-001 (PORTAL-7)**: the client portal still runs its own OTP token-cookie session at
-    `/client/*`. It has NOT been unified onto the shared auth engine, and has not moved to `/portal/*`.
+  - **PORTAL-AUTH-001 (the auth half)**: the client portal still runs its own OTP token-cookie
+    session. `docs/PORTAL_AUTH_MIGRATION.md` has the reason it was not half-built and the order to
+    do it in.
+  - **AGENCY-005**: agency white-label per client space.
+  - **INFL-002**: a creator-facing portal (creators signing in to submit their own content). Blocked
+    behind the same auth work — creators have no password either.
   - **Dropping `users.tenant_id`**: no decision reads it, but 46 test files and `UserFactory` still
     pass it at creation. See `docs/TENANT_ID_MIGRATION.md`.
-  - **Cross-browser E2E for `/agency/*`**: the portal has been live-reviewed in one browser
-    (desktop + mobile 375, RTL + LTR, light + dark). No Playwright spec covers it yet.
+  - **Five unlinked placeholder routes** under `/app`: approvals, tracking, optimization,
+    notifications, opportunities. Reachable only by typing the URL; linked from nothing.
 
 ## Exact next task
-**PORTAL-CLIENT-001** — the isolated agency-client space at `/portal/clients/:clientSlug`: what a
-client of the agency sees, hiding internal notes, costs, margins and every other client. Then INFL-001,
-then PORTAL-AUTH-001.
+**PORTAL-AUTH-001, the auth half** — follow the five steps in `docs/PORTAL_AUTH_MIGRATION.md` in
+order, starting with the contacts → users + ClientPortal membership backfill, and asserting the
+resulting scope matches `contactOwnedWorkspaceIds()` for every existing contact BEFORE anything
+reads from it. Then AGENCY-005, then INFL-002.
 
 Deferred (still open, not superseded):
 **PERF-CAMPAIGNS-001** — Firefox is **61/62**; the failing spec MOVES between runs
