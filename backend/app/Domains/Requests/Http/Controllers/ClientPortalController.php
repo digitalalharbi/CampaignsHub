@@ -30,17 +30,22 @@ use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestComment;
 use App\Domains\Requests\Models\RequestEvent;
 use App\Domains\Requests\Models\RequestFile;
+use App\Domains\Requests\Services\ClientPortalIdentity;
 use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestJourneyService;
 use App\Domains\Requests\Services\RequestUploadAttacher;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
+use App\Domains\Tenancy\Models\Membership;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -79,6 +84,7 @@ final class ClientPortalController
         private readonly TenantContext $tenant,
         private readonly MetricsAggregator $metrics,
         private readonly PaidServiceCatalog $paidServices,
+        private readonly ClientPortalIdentity $identity,
     ) {}
 
     /** POST /client/login/start — send an OTP to the client's phone or email (portal login). */
@@ -121,6 +127,30 @@ final class ClientPortalController
             'expires_at' => Carbon::now()->addDays((int) config('requests.verification.portal_session_days', 14)),
         ]);
 
+        // PORTAL-AUTH-001 step 2: the same OTP now also opens the SHARED session, when this contact
+        // has a client-portal membership. Both are issued during the cutover — the token keeps
+        // pre-existing sessions alive, and the session is what the product is moving to. A contact
+        // the backfill could not resolve simply gets the token, and nothing about their day changes.
+        $identityEmail = $v->channel === 'email' ? $v->destination : null;
+        if ($identityEmail !== null) {
+            $user = User::query()->where('email', Str::lower($identityEmail))->first();
+
+            $holdsPortalMembership = $user !== null && Membership::query()
+                ->where('user_id', $user->getKey())
+                ->where('tenant_id', $tenant->id)
+                ->where('portal', Portal::ClientPortal->value)
+                ->active()->exists();
+
+            // `hasSession()` because these routes are also called without one: the dev token header
+            // path and any non-browser client. Those keep the token engine and lose nothing — the
+            // shared session is an ADDITION for browsers, not a new requirement.
+            if ($holdsPortalMembership && $request->hasSession()) {
+                // Regenerated so an OTP login cannot be fixed to a session id an attacker planted.
+                $request->session()->regenerate();
+                Auth::guard('web')->login($user);
+            }
+        }
+
         $minutes = (int) config('requests.verification.portal_session_days', 14) * 24 * 60;
 
         // The browser uses the httpOnly cookie (auto-sent, never in JS/localStorage). Non-production ONLY also
@@ -149,6 +179,17 @@ final class ClientPortalController
     {
         $token = $this->resolveSession($request);
         $token?->forceFill(['revoked_at' => Carbon::now()])->save();
+
+        // Both engines end together. Revoking one and leaving the other is how "I signed out" stops
+        // being true while still looking like it worked.
+        if (Auth::guard('web')->check()) {
+            Auth::guard('web')->logout();
+
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
+        }
 
         return response()->json(['data' => ['ok' => true]])->withoutCookie(self::COOKIE);
     }
@@ -913,15 +954,35 @@ final class ClientPortalController
     {
         $space = $this->selectedSpaceId($token);
 
+        // PORTAL-AUTH-001 step 3. The reach now comes from the identity resolver, which prefers the
+        // MEMBERSHIP and falls back to the token for sessions opened before the cutover. Filtering on
+        // the resulting client ids — rather than re-deriving them from contact columns — is what
+        // makes membership scope the single source of isolation.
+        //
+        // `whereIn` on an EMPTY list matches nothing, which is the correct fail-closed answer: a
+        // membership with no scope reaches nothing, and must never be read as "everything".
+        $reach = $this->identity->reach(request(), $token);
+
         return ExternalRequest::query()
             ->where('tenant_id', $token->tenant_id)
-            ->when($space !== null, fn ($q) => $q->where('client_id', $space))
-            ->where(function ($q) use ($token) {
-                if ($token->contact_email) {
-                    $q->orWhereRaw('lower(contact_email) = ?', [Str::lower($token->contact_email)]);
-                }
-                if ($token->contact_phone) {
-                    $q->orWhere('contact_phone', $token->contact_phone);
+            ->where(function ($q) use ($reach, $space, $token): void {
+                $q->whereIn('client_id', $space !== null ? [$space] : $reach['ids']);
+
+                // A request submitted but not yet converted has NO client space, and scope alone
+                // would hide it — from the person who submitted it. That is the "no lost requests"
+                // line: it is theirs by the contact detail they used, and always has been. Inside a
+                // chosen space it stays hidden, because it belongs to no space yet.
+                if ($space === null) {
+                    $q->orWhere(function ($inner) use ($token): void {
+                        $inner->whereNull('client_id')->where(function ($c) use ($token): void {
+                            if ($token->contact_email) {
+                                $c->orWhereRaw('lower(contact_email) = ?', [Str::lower($token->contact_email)]);
+                            }
+                            if ($token->contact_phone) {
+                                $c->orWhere('contact_phone', $token->contact_phone);
+                            }
+                        });
+                    });
                 }
             });
     }

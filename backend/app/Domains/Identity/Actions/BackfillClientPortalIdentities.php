@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Actions;
 
+use App\Domains\Identity\Models\PortalIdentityConflict;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -60,11 +61,42 @@ final class BackfillClientPortalIdentities
                 'granted' => $granted++,
                 'updated' => $updated++,
                 'unchanged' => $unchanged++,
-                default => $skipped[] = ['contact' => $contact['email'] ?? $contact['phone'] ?? '?', 'reason' => $result['outcome']],
+                default => $skipped[] = $this->record($contact, $result['outcome'], $dryRun),
             };
         }
 
         return ['granted' => $granted, 'updated' => $updated, 'unchanged' => $unchanged, 'skipped' => $skipped];
+    }
+
+    /**
+     * Log a refusal as a row a human resolves.
+     *
+     * A skip with no trace leaves someone stranded: their portal keeps working on the old engine, and
+     * on the day it is retired they cannot get in with nobody having been told. `updateOrCreate` on
+     * the open row means re-running the backfill refreshes the same conflict rather than piling up
+     * copies of it — which is how a register becomes unreadable and then ignored.
+     *
+     * @param  array{email: ?string, phone: ?string, tenant_id: string, client_ids: list<string>}  $contact
+     * @return array{contact: string, reason: string}
+     */
+    private function record(array $contact, string $reason, bool $dryRun): array
+    {
+        if (! $dryRun) {
+            PortalIdentityConflict::updateOrCreate(
+                [
+                    'tenant_id' => $contact['tenant_id'],
+                    'contact_email' => $contact['email'],
+                    'reason' => $reason,
+                    'resolution' => null,
+                ],
+                [
+                    'contact_phone' => $contact['phone'],
+                    'client_ids' => $contact['client_ids'],
+                ],
+            );
+        }
+
+        return ['contact' => $contact['email'] ?? $contact['phone'] ?? '?', 'reason' => $reason];
     }
 
     /**

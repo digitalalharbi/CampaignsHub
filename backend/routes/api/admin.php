@@ -6,6 +6,7 @@ use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
+use App\Domains\Platform\Http\Controllers\PortalConflictController;
 use App\Http\Controllers\Dev\DevStatusController;
 use Illuminate\Support\Facades\Route;
 
@@ -45,6 +46,12 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/permissions', [PlatformAccessController::class, 'permissions'])->name('permissions.index');
         Route::get('/integrations', [PlatformAccessController::class, 'integrations'])->name('integrations.index');
         Route::get('/status', [DevStatusController::class, 'platform'])->name('status');
+
+        // PORTAL-AUTH-001: the identities the backfill refused to guess at, and the safe way to
+        // settle each one. No bulk resolve — see the controller for why.
+        Route::get('/portal-conflicts', [PortalConflictController::class, 'index'])->name('portal-conflicts.index');
+        Route::patch('/portal-conflicts/{conflict}', [PortalConflictController::class, 'resolve'])
+            ->name('portal-conflicts.resolve');
 
         Route::get('/audit', [PlatformTenantController::class, 'audit'])->name('audit.index');
     });
