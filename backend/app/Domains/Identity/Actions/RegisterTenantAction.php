@@ -65,7 +65,6 @@ final class RegisterTenantAction
                 'name' => $data->name,
                 'email' => $data->email,
                 'password' => Hash::make($data->password),
-                'is_platform_admin' => false,
             ]);
 
             $ownerRole = Role::firstOrCreate(

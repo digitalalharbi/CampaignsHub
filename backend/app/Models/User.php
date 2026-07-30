@@ -40,8 +40,16 @@ class User extends Authenticatable
     use HasRoles;
     use Notifiable;
 
+    /**
+     * NOTE the absence of `is_platform_admin`. It is deliberately NOT mass-assignable: it is the only
+     * key to the platform console, and a single `update($request->validated())` that happened to
+     * carry the field would hand a customer the ability to suspend every tenant. Setting it requires
+     * `forceFill`, which cannot happen by accident from request data.
+     *
+     * `PlatformAdminFlagTest` holds this line.
+     */
     protected $fillable = [
-        'name', 'email', 'password', 'tenant_id', 'is_platform_admin',
+        'name', 'email', 'password', 'tenant_id',
         'first_name', 'last_name', 'job_title', 'phone', 'avatar_path', 'bio',
         'locale', 'timezone', 'date_format', 'number_format', 'theme',
     ];

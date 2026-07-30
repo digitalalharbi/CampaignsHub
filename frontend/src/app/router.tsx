@@ -75,6 +75,7 @@ import { RequirePlatformAdmin } from '@/features/admin/RequirePlatformAdmin'
 import { PlatformOverviewPage } from '@/features/admin/PlatformOverviewPage'
 import { TenantsPage } from '@/features/admin/TenantsPage'
 import { SystemSettingsPage } from '@/features/admin/SystemSettingsPage'
+import { BillingPage as AdminBillingPage } from '@/features/admin/BillingPage'
 import { AuditPage } from '@/features/admin/AuditPage'
 import { AgencyDashboardPage } from '@/features/agency/AgencyDashboardPage'
 import { RequireAgencyPortal } from '@/features/agency/RequireAgencyPortal'
@@ -273,6 +274,7 @@ export const router = createBrowserRouter([
           children: [
             { index: true, element: <PlatformOverviewPage /> },
             { path: 'tenants', element: <TenantsPage /> },
+            { path: 'billing', element: <AdminBillingPage /> },
             { path: 'settings', element: <SystemSettingsPage /> },
             { path: 'audit', element: <AuditPage /> },
           ],

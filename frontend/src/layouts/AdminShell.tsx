@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import {
+  CreditCard,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -34,6 +35,7 @@ import { useUi } from '@/stores/ui'
 const adminNav = [
   { to: '/admin', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: Building2 },
+  { to: '/admin/billing', ar: 'الخطط والاشتراكات', en: 'Plans & subscriptions', icon: CreditCard },
   { to: '/admin/settings', ar: 'إعدادات النظام', en: 'System settings', icon: Settings },
   { to: '/admin/audit', ar: 'السجلات والتدقيق', en: 'Logs & audit', icon: ScrollText },
 ] as const

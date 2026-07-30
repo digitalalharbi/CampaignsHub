@@ -90,3 +90,58 @@ export function setTenantStatus(id: string, status: 'active' | 'suspended', reas
 export function fetchAudit(): Promise<{ entries: AuditEntry[]; meta: { total: number } }> {
   return getData('/admin/audit')
 }
+
+/* ------------------------------------------------------------------ ADMIN-002: plans & billing */
+
+export interface PlatformPlan {
+  id: string
+  code: string
+  name: string
+  price_monthly: string
+  currency: string
+  is_active: boolean
+  features: Record<string, unknown> | unknown[]
+  limits: Record<string, unknown> | unknown[]
+  /** Split by status: 40 cancelled subscribers is not 40 customers. */
+  subscribers: { active: number; total: number }
+}
+
+export interface PlatformSubscription {
+  id: string
+  tenant_id: string
+  tenant_name: string | null
+  plan: string | null
+  plan_code: string | null
+  status: string
+  seats: number | null
+  current_period_end: string | null
+}
+
+export interface PlatformRevenue {
+  /** Per currency, never blended. */
+  committed_monthly: { currency: string; monthly: string; subscriptions: number }[]
+  /**
+   * `not_implemented` — CampaignsHub has no charging path for tenants yet, and the invoices/payments
+   * ledger belongs to agencies invoicing THEIR clients. The figure above is a forward commitment,
+   * never cash received, and the UI must say so.
+   */
+  collection_status: string
+  note: string
+}
+
+export function fetchPlans(): Promise<{ plans: PlatformPlan[] }> {
+  return getData('/admin/plans')
+}
+
+/** Availability and name only — the price is deliberately not editable from the console. */
+export function updatePlan(id: string, body: { name?: string; is_active?: boolean }): Promise<{ plan: { id: string; name: string; is_active: boolean } }> {
+  return patchData(`/admin/plans/${id}`, body)
+}
+
+export function fetchSubscriptions(status?: string): Promise<{ subscriptions: PlatformSubscription[]; meta: { total: number } }> {
+  return getData(`/admin/subscriptions${status ? `?status=${encodeURIComponent(status)}` : ''}`)
+}
+
+export function fetchRevenue(): Promise<PlatformRevenue> {
+  return getData('/admin/revenue')
+}

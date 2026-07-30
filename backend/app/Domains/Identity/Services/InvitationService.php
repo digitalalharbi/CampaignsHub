@@ -110,7 +110,6 @@ final class InvitationService
                 'name' => $name,
                 'email' => $inv->email,
                 'password' => Hash::make($password),
-                'is_platform_admin' => false,
             ]);
             // email_verified_at is non-mass-assignable — set it explicitly (accepting the link proves ownership).
             $user->forceFill(['email_verified_at' => Carbon::now()])->save();

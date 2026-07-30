@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
 use Illuminate\Support\Facades\Route;
@@ -29,6 +30,12 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/tenants/{tenant}', [PlatformTenantController::class, 'show'])->name('tenants.show');
         Route::patch('/tenants/{tenant}/status', [PlatformTenantController::class, 'updateStatus'])
             ->name('tenants.status');
+
+        // ADMIN-002 — built on the existing Subscriptions and Billing engines, never a second one.
+        Route::get('/plans', [PlatformBillingController::class, 'plans'])->name('plans.index');
+        Route::patch('/plans/{plan}', [PlatformBillingController::class, 'updatePlan'])->name('plans.update');
+        Route::get('/subscriptions', [PlatformBillingController::class, 'subscriptions'])->name('subscriptions.index');
+        Route::get('/revenue', [PlatformBillingController::class, 'revenue'])->name('revenue.index');
 
         Route::get('/audit', [PlatformTenantController::class, 'audit'])->name('audit.index');
     });

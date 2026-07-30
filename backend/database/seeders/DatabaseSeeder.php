@@ -31,10 +31,15 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => 'Platform Admin',
                 'password' => Hash::make('password'),
-                'is_platform_admin' => true,
                 'tenant_id' => null,
             ],
         );
+
+        // `forceFill`, because `is_platform_admin` is not mass-assignable — provisioning the owner is
+        // the one place it is set, and it has to be deliberate.
+        if (! $platform->is_platform_admin) {
+            $platform->forceFill(['is_platform_admin' => true])->save();
+        }
 
         // Verified on creation, because this account is PROVISIONED by whoever installs the system,
         // not self-registered. Leaving it unverified put the platform owner behind a confirmation
