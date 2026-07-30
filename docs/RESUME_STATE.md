@@ -113,28 +113,58 @@ which also carries the audit of what the codebase actually looked like at adopti
   - Suspension read off the legacy column: one suspended agency locked its client out of an
     UNRELATED workspace they also belonged to.
 
-### Agency portal — started
+### Agency portal — `/agency/*` is live
 
 | Unit | Commit | State |
 |---|---|---|
 | AGENCY-001 scope grants + limits via `ClientAccess` | `94ee16c` | **VERIFIED** — one engine, not a duplicate |
-| AGENCY-002 `/agency/dashboard` | `14b888a` | **IMPLEMENTED_NOT_VERIFIED** — backend + 7 tests; no UI yet so not live-reviewed |
+| AGENCY-002 `/agency/dashboard` | `14b888a`, `c198f66` | **VERIFIED** — live: owner 5/5/19/1, scoped manager 1/1/1/0 |
+| AGENCY-003 `/agency/*` shell + 12 sections + entry gate | `c198f66` | **VERIFIED** — all sections render, zero console errors |
+| AGENCY-004 team & client scopes | `6b74658` | **VERIFIED** — add / remove / replace, live grant→narrow cycle |
+| DEMO-002 scoped demo manager | `6b74658` | **VERIFIED** — `manager@demo-agency.local`, one client |
+| UX-403-001 out-of-scope reads as a boundary | `6b74658` | **VERIFIED** — found by live id-tampering |
 
-Design decision to keep: the agency portal REUSES `/app` engines (clients, projects, campaigns,
-reports, finance) through the shared `ClientAccess`, which is now scope-aware. Do not create agency
-copies of them — two implementations of the same rules is what ADR 0002 forbids. `routes/api/agency.php`
-stays thin on purpose.
+**Design decisions to keep:**
+
+1. The agency portal REUSES `/app` engines (clients, projects, campaigns, reports, finance, files,
+   conversations) through the shared, scope-aware `ClientAccess`. They are MOUNTED under `/agency/*`,
+   not copied. Do not create agency copies — two implementations of the same rules is what ADR 0002
+   forbids. `routes/api/agency.php` stays thin on purpose: only genuinely agency-shaped reads
+   (dashboard, team) live there.
+2. Shared pages must never hard-code `/app/...` in a link. Use `usePortalPath()` (`src/app/portalPath.ts`),
+   which resolves against whichever portal the URL is in. Hard-coding it threw an agency operator into
+   the advertiser portal mid-journey.
+3. Nothing goes in the agency nav rail before it works. A nav entry that leads nowhere is a broken
+   promise, not a roadmap.
+4. React Query no longer retries any 4xx (`src/app/providers.tsx`). A 403 will not become a 200, and
+   retrying hid the honest answer behind a spinner.
+
+**Live-review accounts** (dev seed, password `password`):
+
+| Account | Shows |
+|---|---|
+| `owner@demo-agency.local` | agency portal, unrestricted — 5 clients |
+| `manager@demo-agency.local` | agency portal, confined to ONE client — the ceiling in action |
+| `owner@demo-company.local` | advertiser only — `/agency/*` gives the honest denial screen + API 403 |
 
 ### NOT done — do not mark these complete
 
-  - **PORTAL-3b**: `/agency/*`, `/influencers/*`, `/portal/*` route trees and their subsystems. The
-    membership/scope foundation they need is finished; the portals themselves are not started.
-  - **PORTAL-7**: the client portal still runs its own OTP token-cookie session at `/client/*`. It has
-    NOT been unified onto the shared auth engine, and `/client/*` has not moved to `/portal/*`.
+  - **PORTAL-CLIENT-001**: the isolated agency-client space at `/portal/clients/:clientSlug`. Not started.
+  - **AGENCY-005**: agency white-label per client space. Depends on PORTAL-CLIENT-001.
+  - **INFL-001**: `/influencers/*`. Not started.
+  - **PORTAL-AUTH-001 (PORTAL-7)**: the client portal still runs its own OTP token-cookie session at
+    `/client/*`. It has NOT been unified onto the shared auth engine, and has not moved to `/portal/*`.
   - **Dropping `users.tenant_id`**: no decision reads it, but 46 test files and `UserFactory` still
     pass it at creation. See `docs/TENANT_ID_MIGRATION.md`.
+  - **Cross-browser E2E for `/agency/*`**: the portal has been live-reviewed in one browser
+    (desktop + mobile 375, RTL + LTR, light + dark). No Playwright spec covers it yet.
 
 ## Exact next task
+**PORTAL-CLIENT-001** — the isolated agency-client space at `/portal/clients/:clientSlug`: what a
+client of the agency sees, hiding internal notes, costs, margins and every other client. Then INFL-001,
+then PORTAL-AUTH-001.
+
+Deferred (still open, not superseded):
 **PERF-CAMPAIGNS-001** — Firefox is **61/62**; the failing spec MOVES between runs
 (`campaigns-linking:24`, then `campaigns.spec:38`), so it is a load-dependent first-paint flake, not a
 broken assertion — each passes when its file runs alone. Next step: profile the campaign DETAIL page,
