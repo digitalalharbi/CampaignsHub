@@ -15,6 +15,7 @@ import {
   type PaidService, type PaidServiceCatalog,
 } from '@/features/paid-media/publicCatalog'
 import { MultiSelectField, SelectField, TagInput, type Option } from '@/components/forms'
+import { SERVICE_BUNDLES, bundleForSelection } from './serviceBundles'
 import { Button } from '@/components/ui/Button'
 import { FormField, TextInput, TextareaField } from '@/components/ui/form'
 import { controlClass } from '@/components/ui/Field'
@@ -75,6 +76,8 @@ export function PaidMediaIntake() {
   const [answers, setAnswers] = useState<Record<string, unknown>>({})
   const [customRequest, setCustomRequest] = useState('')
   const [serviceNotes, setServiceNotes] = useState<Record<string, string>>({})
+  // Goal-first: the full catalogue stays hidden until asked for (see the bundle section below).
+  const [showCatalog, setShowCatalog] = useState(false)
   const [applicant, setApplicant] = useState<Applicant>(EMPTY_APPLICANT)
   const [currency, setCurrency] = useState('SAR')
   const [notes, setNotes] = useState('')
@@ -204,6 +207,7 @@ export function PaidMediaIntake() {
   const back = () => setStep(Math.max(clampedStep - 1, 0))
 
   const removeService = (key: string) => setSelectedKeys((prev) => prev.filter((k) => k !== key))
+  const activeBundle = bundleForSelection(selectedKeys)
 
   const servicesSummary = resolved.map((s) => (ar ? s.label_ar : s.label_en)).join(ar ? '، ' : ', ')
 
@@ -373,6 +377,60 @@ export function PaidMediaIntake() {
 
               {!catalogQuery.isLoading && !catalogQuery.isError && (
                 <>
+                  {/* Goal-first entry. The catalogue has ~90 services; asking a prospect to translate their
+                      problem into our taxonomy makes them tick one box to get past the screen. Picking the
+                      situation they are actually in selects the right services for them, and the full list
+                      stays one click away underneath. */}
+                  <section className="rounded-2xl border border-border bg-surface-secondary p-3.5">
+                    <h3 className="text-sm font-bold text-text-primary">{ar ? 'ما وضعك الآن؟' : 'Where are you now?'}</h3>
+                    <p className="mt-0.5 text-xs text-text-secondary">
+                      {ar
+                        ? 'اختر ما يصفك وسنحدد لك الخدمات المناسبة — يمكنك تعديلها بعدها.'
+                        : 'Pick what describes you and we will select the right services — you can adjust them after.'}
+                    </p>
+
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {SERVICE_BUNDLES.map((b) => {
+                        const active = activeBundle?.key === b.key
+                        return (
+                          <button
+                            key={b.key}
+                            type="button"
+                            data-testid={`bundle-${b.key}`}
+                            aria-pressed={active}
+                            onClick={() => setSelectedKeys(b.services)}
+                            className={`flex h-full flex-col rounded-xl border p-3 text-start transition-colors ${
+                              active ? 'border-brand-500 bg-brand-primary-soft' : 'border-border bg-surface hover:border-brand-300'
+                            }`}
+                          >
+                            <span className="flex items-center gap-2">
+                              <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${active ? 'border-brand-600 bg-brand-600 text-white' : 'border-border-strong'}`}>
+                                {active && <Check size={9} strokeWidth={3.5} />}
+                              </span>
+                              <span className="text-[13px] font-bold text-text-primary">{ar ? b.titleAr : b.titleEn}</span>
+                            </span>
+                            <span className="mt-1 text-[11.5px] leading-snug text-text-secondary">{ar ? b.forAr : b.forEn}</span>
+                            <span className="mt-1.5 text-[11px] text-text-muted">
+                              {ar ? 'يشمل' : 'Includes'} <span className="tnum font-semibold">{b.services.length}</span> {ar ? 'خدمات' : 'services'}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {/* The long list is opt-in, for the minority who know exactly what they want. */}
+                    <button
+                      type="button"
+                      data-testid="toggle-full-catalog"
+                      onClick={() => setShowCatalog((v) => !v)}
+                      className="mt-3 text-[12.5px] font-semibold text-brand-600 hover:underline"
+                    >
+                      {showCatalog
+                        ? (ar ? 'إخفاء القائمة الكاملة' : 'Hide the full list')
+                        : (ar ? 'أعرف ما أريد بالضبط — اعرض كل الخدمات' : 'I know exactly what I need — show all services')}
+                    </button>
+                  </section>
+
                   {resolved.length === 0 && (
                     <p className="rounded-lg bg-surface-secondary px-3 py-2.5 text-sm text-text-muted">{copy.servicesEmpty}</p>
                   )}
@@ -403,7 +461,9 @@ export function PaidMediaIntake() {
                   </ul>
 
                   {/* Add-only picker (value stays empty; picked services surface as the cards above, never
-                      duplicated as trigger chips). Removal is via each card's × control. */}
+                      duplicated as trigger chips). Removal is via each card's × control. Shown only when
+                      the visitor asked for the full catalogue, or already has a selection to fine-tune. */}
+                  {(showCatalog || selectedKeys.length > 0) && (
                   <MultiSelectField
                     label={copy.editServices}
                     options={serviceOptions.filter((o) => !selectedKeys.includes(o.value))}
@@ -411,6 +471,7 @@ export function PaidMediaIntake() {
                     onChange={(vals) => setSelectedKeys((prev) => Array.from(new Set([...prev, ...vals])))}
                     placeholder={copy.editServices} searchable bulkActions={false}
                   />
+                  )}
                   {errors.services && <p className="text-sm text-danger">{errors.services}</p>}
 
                   {hasCustom && (
