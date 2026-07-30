@@ -10,9 +10,9 @@ import { FinanceOverviewPage } from './FinanceOverviewPage'
  */
 export const billingRoutes: { path: string; element: ReactElement }[] = [
   // FINANCE-001: the consolidated overview is the entry point; the three lists live beneath it.
-  { path: 'app/finance', element: <FinanceOverviewPage /> },
-  { path: 'app/billing', element: <FinanceOverviewPage /> },
-  { path: 'app/billing/quotes', element: <QuotesPage /> },
-  { path: 'app/billing/invoices', element: <InvoicesPage /> },
-  { path: 'app/billing/payments', element: <PaymentsPage /> },
+  { path: 'finance', element: <FinanceOverviewPage /> },
+  { path: 'billing', element: <FinanceOverviewPage /> },
+  { path: 'billing/quotes', element: <QuotesPage /> },
+  { path: 'billing/invoices', element: <InvoicesPage /> },
+  { path: 'billing/payments', element: <PaymentsPage /> },
 ]

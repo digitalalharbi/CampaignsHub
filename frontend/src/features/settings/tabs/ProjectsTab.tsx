@@ -57,7 +57,7 @@ export function ProjectsTab() {
                     <td className="p-3">{p.status === 'archived' ? <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-muted">مؤرشف</span> : <span className="rounded-full bg-[var(--positive-background)] px-2 py-0.5 text-xs text-success">{p.status}</span>}</td>
                     <td className="p-3 tnum text-text-secondary">{Math.round((p.setup_completion ?? 0) * 100)}%</td>
                     <td className="p-3 text-end">
-                      <Link to="/campaigns" className="me-3 text-xs font-semibold text-brand-600 hover:underline">فتح</Link>
+                      <Link to="/app/campaigns" className="me-3 text-xs font-semibold text-brand-600 hover:underline">فتح</Link>
                       {p.status === 'archived'
                         ? <button onClick={() => act.mutate({ id: p.id, action: 'restore' })} className="inline-flex items-center gap-1 text-xs font-semibold text-text-secondary hover:text-text-primary"><RotateCcw size={13} /> استعادة</button>
                         : <button onClick={() => { if (confirm('أرشفة هذا المشروع؟')) act.mutate({ id: p.id, action: 'archive' }) }} className="inline-flex items-center gap-1 text-xs font-semibold text-danger hover:underline"><Archive size={13} /> أرشفة</button>}

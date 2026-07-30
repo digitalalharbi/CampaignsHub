@@ -252,7 +252,7 @@ function ThreadDetailPanel({
                 </Link>
               )}
               {thread.project_id && (
-                <Link to="/projects"
+                <Link to="/app/projects"
                   className="rounded-md bg-surface-hover px-1.5 py-0.5 text-[11px] font-semibold text-text-secondary hover:text-brand-600">
                   {c.ctx_project}
                 </Link>

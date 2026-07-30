@@ -70,6 +70,7 @@ import { FilesLibraryPage } from '@/features/files/FilesLibraryPage'
 import { BrandingCenterPage } from '@/features/branding/BrandingCenterPage'
 import { AppShell } from '@/layouts/AppShell'
 import { WorkspaceSwitcherPage } from '@/features/auth/WorkspaceSwitcherPage'
+import { legacyAppRedirects } from './legacyRedirects'
 
 export const router = createBrowserRouter([
   // Public marketing homepage — the primary conversion surface. The authenticated app lives under
@@ -114,6 +115,9 @@ export const router = createBrowserRouter([
   { path: '/invite/accept', element: <InviteAcceptPage /> },
   // Development-only environment status (backend hard-blocks it in production).
   { path: '/dev/status', element: <DevStatusPage /> },
+  // Pre-ADR-0002 paths, kept alive after the advertiser portal moved under /app/*.
+  ...legacyAppRedirects,
+
   {
     element: <RequireAuth />,
     children: [
@@ -125,32 +129,30 @@ export const router = createBrowserRouter([
       {
         element: <OnboardingGate />,
         children: [{
+        // ADR 0002: the advertiser portal owns /app/*. Every section below is relative to it, so the
+        // tree can no longer be half at the root and half prefixed.
+        path: 'app',
         element: <AppShell />,
         children: [
           { path: 'dashboard', element: <DashboardPage /> },
-          // ADR 0002 landing path. The portal route trees move here in PORTAL-3; until then this
-          // alias exists so the membership-derived destination is never a dead link. When the tree
-          // moves, the direction of this redirect inverts rather than the alias disappearing.
-          { path: 'app/dashboard', element: <Navigate to="/dashboard" replace /> },
           { path: 'analytics', element: <AnalyticsPage /> },
           { path: 'system', element: <SystemStatusPage /> },
           { path: 'projects', element: <ProjectsPage /> },
           { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
           { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
-          { path: 'integrations', element: <Navigate to="/app/integrations" replace /> },
-          { path: 'design', element: <DesignSystemPage /> },
+                    { path: 'design', element: <DesignSystemPage /> },
           // Media-buying operational sections (built incrementally; honest placeholders for now).
           { path: 'clients', element: <PagePlaceholder title="Clients" /> },
           { path: 'campaigns', element: <CampaignsPage /> },
           { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
           // Internal requests inbox (external requests converted into operational work).
-          { path: 'app/requests', element: <RequestsDashboardPage /> },
-          { path: 'app/requests/:requestId', element: <RequestDetailPage /> },
+          { path: 'requests', element: <RequestsDashboardPage /> },
+          { path: 'requests/:requestId', element: <RequestDetailPage /> },
           // Client portfolio + command center (converted from requests).
-          { path: 'app/clients', element: <ClientsPortfolioPage /> },
-          { path: 'app/clients/:clientId', element: <ClientCommandCenterPage /> },
+          { path: 'clients', element: <ClientsPortfolioPage /> },
+          { path: 'clients/:clientId', element: <ClientCommandCenterPage /> },
           // Alerts management (the alerts engine's operator surface).
-          { path: 'app/alerts', element: <AlertsPage /> },
+          { path: 'alerts', element: <AlertsPage /> },
           // Expansion internal surfaces. Integrations is CANONICAL at /app/integrations and absorbs the
           // Connection Center + the Google Drive connector; Branding lives under Settings. Legacy/duplicate
           // routes redirect (see docs/ROUTE_REDIRECT_MAP.md) — no dead links, one engine per function.
@@ -158,12 +160,12 @@ export const router = createBrowserRouter([
           ...messagingRoutes,
           ...requestJourneyRoutes,
           ...subscriptionsRoutes,
-          { path: 'app/integrations', element: <ConnectionCenterPage /> },
-          { path: 'app/integrations/drive', element: <DrivePage /> },
+          { path: 'integrations', element: <ConnectionCenterPage /> },
+          { path: 'integrations/drive', element: <DrivePage /> },
           { path: 'files', element: <FilesLibraryPage /> },
-          { path: 'app/connections', element: <Navigate to="/app/integrations" replace /> },
-          { path: 'app/drive', element: <Navigate to="/app/integrations/drive" replace /> },
-          { path: 'app/branding', element: <Navigate to="/settings/branding" replace /> },
+          { path: 'connections', element: <Navigate to="/app/integrations" replace /> },
+          { path: 'drive', element: <Navigate to="/app/integrations/drive" replace /> },
+          { path: 'branding', element: <Navigate to="/app/settings/branding" replace /> },
           { path: 'content', element: <CreativesPage /> },
           { path: 'approvals', element: <PagePlaceholder title="Approvals" /> },
           { path: 'tracking', element: <PagePlaceholder title="Tracking" /> },
@@ -177,7 +179,7 @@ export const router = createBrowserRouter([
             path: 'settings',
             element: <SettingsLayout />,
             children: [
-              { index: true, element: <Navigate to="/settings/workspace" replace /> },
+              { index: true, element: <Navigate to="/app/settings/workspace" replace /> },
               { path: 'workspace', element: <SettingsPage only={['general', 'clients', 'projects', 'notifications', 'security']} /> },
               { path: 'permissions', element: <SettingsPage only={['team']} title="الصلاحيات والفريق" subtitle="أعضاء مساحة العمل وأدوارهم وصلاحياتهم" /> },
               // Real CMS for the public homepage + the three external portals (draft → preview → publish).
@@ -199,7 +201,7 @@ export const router = createBrowserRouter([
             path: 'account',
             element: <AccountSettingsLayout />,
             children: [
-              { index: true, element: <Navigate to="/account/profile" replace /> },
+              { index: true, element: <Navigate to="/app/account/profile" replace /> },
               { path: 'profile', element: <ProfilePage /> },
               { path: 'password', element: <PasswordPage /> },
               { path: 'security', element: <SecurityPage /> },

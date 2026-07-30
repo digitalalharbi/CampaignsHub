@@ -38,23 +38,23 @@ type NavItem = { to: string; key: TranslationKey; icon: typeof LayoutDashboard; 
 // Connection Center + the Google Drive connector; Branding lives under Settings; Finance is one backend
 // surfaced as المالية (Ops, ent:billing) or الاشتراك (SaaS, ent:subscriptions) via entitlements.
 const operationalNav: NavItem[] = [
-  { to: '/dashboard', key: 'dashboard', icon: LayoutDashboard, ent: 'dashboard' },
+  { to: '/app/dashboard', key: 'dashboard', icon: LayoutDashboard, ent: 'dashboard' },
   { to: '/app/requests', key: 'requests_inbox', icon: Inbox, ent: 'requests' },
   { to: '/app/clients', key: 'clients_portfolio', icon: Building2, ent: 'clients' },
-  { to: '/projects', key: 'projects', icon: FolderKanban, ent: 'projects' },
-  { to: '/campaigns', key: 'campaigns', icon: Megaphone, ent: 'campaigns' },
-  { to: '/content', key: 'content', icon: Images, ent: 'content' },
-  { to: '/analytics', key: 'analytics', icon: TrendingUp, ent: 'analytics' },
-  { to: '/reports', key: 'reports', icon: BarChart3, ent: 'reports' },
-  { to: '/tasks', key: 'tasks', icon: ListChecks, ent: 'tasks' },
+  { to: '/app/projects', key: 'projects', icon: FolderKanban, ent: 'projects' },
+  { to: '/app/campaigns', key: 'campaigns', icon: Megaphone, ent: 'campaigns' },
+  { to: '/app/content', key: 'content', icon: Images, ent: 'content' },
+  { to: '/app/analytics', key: 'analytics', icon: TrendingUp, ent: 'analytics' },
+  { to: '/app/reports', key: 'reports', icon: BarChart3, ent: 'reports' },
+  { to: '/app/tasks', key: 'tasks', icon: ListChecks, ent: 'tasks' },
   { to: '/app/integrations', key: 'integrations', icon: Plug, ent: 'connections' },
-  { to: '/files', key: 'files', icon: FolderOpen, ent: 'connections' },
+  { to: '/app/files', key: 'files', icon: FolderOpen, ent: 'connections' },
   { to: '/app/alerts', key: 'alerts', icon: BellRing, ent: 'alerts' },
   { to: '/app/messages', key: 'messages', icon: MessageSquare, ent: 'messaging' },
   { to: '/app/billing', key: 'billing', icon: Receipt, ent: 'billing' },
   { to: '/app/subscriptions', key: 'subscriptions', icon: CreditCard, ent: 'subscriptions' },
 ]
-const utilityNav: NavItem[] = [{ to: '/settings', key: 'settings', icon: Settings, ent: 'settings' }]
+const utilityNav: NavItem[] = [{ to: '/app/settings', key: 'settings', icon: Settings, ent: 'settings' }]
 
 function NavItems({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
   const t = useT()

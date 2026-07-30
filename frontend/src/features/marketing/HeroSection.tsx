@@ -134,7 +134,7 @@ export function HeroSection({
           {/* Account actions: continue on the chosen path, log in, or track existing requests. */}
           <div className="mt-3 space-y-2 border-t border-border pt-3">
             {authed ? (
-              <Link to="/dashboard" className="block"><Button className="w-full">{c.nav.dashboard} <Arrow size={15} /></Button></Link>
+              <Link to="/app/dashboard" className="block"><Button className="w-full">{c.nav.dashboard} <Arrow size={15} /></Button></Link>
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-2">

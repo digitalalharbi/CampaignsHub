@@ -7,5 +7,5 @@ import { JourneyDemoPage } from './JourneyDemoPage'
  * array and mounts it under the authenticated AppShell (it also owns the nav). Paths are absolute under /app.
  */
 export const requestJourneyRoutes: { path: string; element: ReactElement }[] = [
-  { path: 'app/request-journey', element: <JourneyDemoPage /> },
+  { path: 'request-journey', element: <JourneyDemoPage /> },
 ]

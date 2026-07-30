@@ -180,7 +180,7 @@ export function DashboardPage() {
         <div className="flex items-center gap-2">
           <RangeTabs value={days} onChange={setDays} />
           <Link
-            to="/campaigns"
+            to="/app/campaigns"
             className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border-strong bg-surface px-3 text-sm font-semibold text-text-primary hover:bg-surface-hover"
           >
             الحملات <ArrowUpRight size={16} />
@@ -245,7 +245,7 @@ export function DashboardPage() {
       <UnifiedCampaignOverview
         vm={vm}
         headerRight={
-          <Link to="/analytics" className="inline-flex items-center gap-1 font-semibold text-text-secondary hover:text-text-primary">
+          <Link to="/app/analytics" className="inline-flex items-center gap-1 font-semibold text-text-secondary hover:text-text-primary">
             التحليلات <ArrowUpRight size={14} />
           </Link>
         }

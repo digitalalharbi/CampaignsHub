@@ -11,11 +11,11 @@ import type { AuthUser } from '@/lib/api/types'
  * the sidebar (/settings) and are deliberately NOT repeated here; each entry is one distinct route.
  */
 const OPTIONS = [
-  { key: 'menu_profile', to: '/account/profile', icon: UserIcon },
-  { key: 'menu_password', to: '/account/password', icon: KeyRound },
-  { key: 'menu_security', to: '/account/security', icon: Shield },
-  { key: 'menu_preferences', to: '/account/preferences', icon: Palette },
-  { key: 'menu_notifications', to: '/account/notifications', icon: Bell },
+  { key: 'menu_profile', to: '/app/account/profile', icon: UserIcon },
+  { key: 'menu_password', to: '/app/account/password', icon: KeyRound },
+  { key: 'menu_security', to: '/app/account/security', icon: Shield },
+  { key: 'menu_preferences', to: '/app/account/preferences', icon: Palette },
+  { key: 'menu_notifications', to: '/app/account/notifications', icon: Bell },
 ] as const
 
 function initialsOf(user: AuthUser | null): string {
