@@ -385,7 +385,7 @@ export function PaidMediaIntake() {
                     <h3 className="text-sm font-bold text-text-primary">{ar ? 'ما وضعك الآن؟' : 'Where are you now?'}</h3>
                     <p className="mt-0.5 text-xs text-text-secondary">
                       {ar
-                        ? 'اختر ما يصفك وسنحدد لك الخدمات المناسبة — يمكنك تعديلها بعدها.'
+                        ? 'اختر الوصف الأقرب لحالتك وسنحدد لك الخدمات المناسبة، ويمكنك تعديلها بعد ذلك.'
                         : 'Pick what describes you and we will select the right services — you can adjust them after.'}
                     </p>
 
@@ -427,7 +427,7 @@ export function PaidMediaIntake() {
                     >
                       {showCatalog
                         ? (ar ? 'إخفاء القائمة الكاملة' : 'Hide the full list')
-                        : (ar ? 'أعرف ما أريد بالضبط — اعرض كل الخدمات' : 'I know exactly what I need — show all services')}
+                        : (ar ? 'أعرف الخدمة التي أريدها — اعرض القائمة الكاملة' : 'I know the service I want — show the full list')}
                     </button>
                   </section>
 

@@ -1,35 +1,23 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { SERVICE_BUNDLES, bundleForSelection, findBundle } from './serviceBundles'
 
 /**
- * A bundle is only useful if every key it names really exists in the seeded catalogue — a typo would
- * silently select nothing and the client would submit an empty request believing they had chosen.
+ * Pure-logic guarantees for the goal-first bundles. That every service key really exists in the seeded
+ * catalogue is asserted on the backend (ServiceBundleCatalogTest), next to the seeder that defines them —
+ * a typo there would silently select nothing and let a client submit an empty request.
  */
-const seeder = readFileSync(
-  resolve(__dirname, '../../../../backend/database/seeders/TaxonomyEngineSeeder.php'),
-  'utf8',
-)
-const catalogueKeys = new Set([...seeder.matchAll(/'key' => '([a-z_]+)'/g)].map((m) => m[1]))
-
 describe('service bundles', () => {
-  it('references only services that exist in the seeded catalogue', () => {
-    for (const bundle of SERVICE_BUNDLES) {
-      for (const key of bundle.services) {
-        expect(catalogueKeys.has(key), `${bundle.key} → ${key}`).toBe(true)
-      }
-    }
-  })
-
   it('gives every bundle a distinct key and a non-trivial set of services', () => {
     const keys = SERVICE_BUNDLES.map((b) => b.key)
     expect(new Set(keys).size).toBe(keys.length)
+
     for (const b of SERVICE_BUNDLES) {
       expect(b.services.length).toBeGreaterThanOrEqual(3)
-      expect(new Set(b.services).size).toBe(b.services.length)
+      expect(new Set(b.services).size, `${b.key} repeats a service`).toBe(b.services.length)
       expect(b.titleAr.trim()).not.toBe('')
       expect(b.forAr.trim()).not.toBe('')
+      expect(b.titleEn.trim()).not.toBe('')
+      expect(b.forEn.trim()).not.toBe('')
     }
   })
 
