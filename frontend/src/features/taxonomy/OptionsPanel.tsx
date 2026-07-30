@@ -380,7 +380,10 @@ function OptionIcon({ name }: { name?: string | null }) {
   if (!name) return <span>●</span>
   const pascal = name.split(/[-_ ]/).filter(Boolean).map((p) => p[0].toUpperCase() + p.slice(1)).join('')
   const Icon = (LucideIcons as unknown as Record<string, unknown>)[pascal]
-  if (typeof Icon !== 'function') return <span>●</span>
+  // Lucide icons are forwardRef objects, not plain functions.
+  const isComponent =
+    typeof Icon === 'function' || (typeof Icon === 'object' && Icon !== null && '$$typeof' in (Icon as object))
+  if (!isComponent) return <span>●</span>
   const C = Icon as ComponentType<{ size?: number }>
   return <C size={15} />
 }

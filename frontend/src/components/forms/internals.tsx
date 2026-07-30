@@ -1,5 +1,6 @@
-import { forwardRef, type ReactNode } from 'react'
+import { forwardRef, type ComponentType, type ReactNode } from 'react'
 import { AlertTriangle, Loader2, RefreshCw, Search, X } from 'lucide-react'
+import * as LucideIcons from 'lucide-react'
 import { controlClass } from '@/components/ui/Field'
 import type { FormsCopy, Option } from './types'
 
@@ -16,7 +17,14 @@ export function Spinner({ size = 14 }: { size?: number }) {
   return <Loader2 size={size} className="animate-spin text-text-muted" aria-hidden />
 }
 
-/** Leading swatch: a color dot or an icon glyph, whichever the option carries. */
+/**
+ * Leading swatch: a colour dot, a resolved icon, or a short glyph — whichever the option carries.
+ *
+ * The taxonomy stores icons as LUCIDE NAMES ("rocket", "calendar-check"). Printing that string is what
+ * put raw words like "calendar-check" on top of the Arabic labels in the service picker, because the
+ * 16px box could not contain them. A name is now resolved to its icon; anything that is not a known
+ * icon is treated as a glyph and truncated to a single character so it can never overflow again.
+ */
 export function OptionSwatch({ option }: { option: Option }) {
   if (option.color) {
     return (
@@ -27,14 +35,32 @@ export function OptionSwatch({ option }: { option: Option }) {
       />
     )
   }
-  if (option.icon) {
+
+  if (!option.icon) return null
+
+  const pascal = option.icon.split(/[-_ ]/).filter(Boolean).map((part) => part[0].toUpperCase() + part.slice(1)).join('')
+  const Resolved = (LucideIcons as unknown as Record<string, unknown>)[pascal]
+  // Lucide icons are forwardRef objects, not plain functions — checking only for `function` silently
+  // dropped every icon to the fallback glyph.
+  const isComponent =
+    typeof Resolved === 'function' ||
+    (typeof Resolved === 'object' && Resolved !== null && '$$typeof' in (Resolved as object))
+
+  if (isComponent) {
+    const Icon = Resolved as ComponentType<{ size?: number }>
     return (
-      <span aria-hidden className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-[13px] leading-none">
-        {option.icon}
+      <span aria-hidden className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-text-muted">
+        <Icon size={14} />
       </span>
     )
   }
-  return null
+
+  // Not an icon name — render at most one character (an emoji or a single glyph).
+  return (
+    <span aria-hidden className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden text-[13px] leading-none">
+      {[...option.icon][0] ?? ''}
+    </span>
+  )
 }
 
 /** The in-panel search box (RTL-safe icon placement via logical padding). */
