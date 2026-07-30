@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
-use App\Domains\Metrics\Http\Controllers\SyncRunController;
 use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
+use App\Domains\Metrics\Http\Controllers\SyncRunController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\Projects\Http\Controllers\ProjectController;
 use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
 use App\Domains\Projects\Http\Controllers\ProjectOverviewController;
 use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
 use App\Domains\Reports\Http\Controllers\ReportController;
-use App\Domains\Reports\Http\Controllers\ReportScheduleController;
 use App\Domains\Reports\Http\Controllers\ReportPrintController;
+use App\Domains\Reports\Http\Controllers\ReportScheduleController;
 use App\Domains\Reports\Http\Controllers\ReportShareController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;

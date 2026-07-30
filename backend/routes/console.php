@@ -2,6 +2,7 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
@@ -20,7 +21,7 @@ Schedule::command('reports:dispatch-scheduled')->everyFiveMinutes();
 // DEV-only: scheduler liveness heartbeat consumed by /dev/status (never scheduled in production).
 if (! app()->environment('production')) {
     Schedule::call(function (): void {
-        \Illuminate\Support\Facades\Cache::put('dev:scheduler:heartbeat', now(), now()->addMinutes(10));
+        Cache::put('dev:scheduler:heartbeat', now(), now()->addMinutes(10));
     })->everyMinute()->name('dev-scheduler-heartbeat');
 }
 
