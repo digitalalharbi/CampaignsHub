@@ -22,12 +22,20 @@ The column is still the anchor for three things that have to move first:
 **no tenant scope**: every scoped query returns nothing rather than quietly returning another
 tenant's rows, and `EnsurePortal` refuses them every portal.
 
-Removing it was only safe because the invariant moved to where it cannot be forgotten: a `created`
-hook on `User` provisions the membership for any user with a tenant. Users are created in 47 test
-files, three seeders and several actions — an invariant that depends on every one of them remembering
-is not an invariant. `User::withoutAutoMembership()` is the deliberate opt-out, used by registration
-(which grants an `owner` membership itself) and by the tests that exist to prove a membership-less
-user is refused everything.
+An earlier version of this plan solved the "who remembers to grant?" problem with a `created` hook on
+`User`. **That was wrong and has been removed.** Creating a user is not granting them access: a hook
+grants a membership nobody decided, in a portal nobody named, and it silently manufactured access on
+every fixture and seeder that happened to create a row.
+
+Access is granted **explicitly**, by `GrantMembership` + `MembershipGrant`, which force every path to
+state tenant, portal, role, scopes and who granted them. The paths that grant are: registration,
+invitation acceptance, the demo seeders, and `MembershipProvisioner` (the migration path). A user
+created by anything else has no membership, and is refused everything — which is the correct answer,
+and a loud one.
+
+`BUG-INVITE-001` is what this costs when a path is missed: accepting an invitation created the user
+and the role but no membership, so the invitee signed in to no workspace at all. Adding a new
+user-creation path means adding an explicit grant to it.
 
 `TenantIdDeprecationTest` keeps the line: it proves behaviourally that a membership-less user gets no
 scope, and scans the source for the two places the fallback would most plausibly reappear.
@@ -41,9 +49,10 @@ scope, and scans the source for the two places the fallback would most plausibly
 | Foreign-key validation rules (`Rule::exists(...)->where('tenant_id', …)`) | **Converted** in 7 controllers. These were a live bug: a user switched into another workspace was validated against the tenant on their user row, not the one they were working in |
 | Workspace switcher | **Membership-only**, re-verified against the database on every request |
 | Compatibility fallback | **REMOVED.** The column is not read for scope anywhere |
-| Automatic provisioning | `User::created` hook, idempotent, with an explicit opt-out |
+| Automatic provisioning | **REMOVED.** Creating a user grants nothing; every path grants explicitly |
 | Regression guard | `TenantIdDeprecationTest` — behavioural + source scan |
 | Granting access | **Explicit only.** `GrantMembership` + `MembershipGrant`, in a transaction. Creating a user grants nothing |
+| Invitation acceptance | **Converted** (`98ddc18`) — grants tenant + portal + role + `invited_by`. It had been missed, and invitees landed in no workspace |
 | Account suspension | **Converted.** `AccountSuspension` asks the memberships; one suspended workspace no longer locks a person out of another they belong to |
 | Sign-in suspension check | **Converted** — same helper |
 | Email verification / onboarding step | **Converted** — advances the workspace of the membership being onboarded |
@@ -56,8 +65,8 @@ scope, and scans the source for the two places the fallback would most plausibly
    user continue to work. Requires deciding whether suspending a *workspace* suspends the person
    everywhere (it should not).
 2. Move the onboarding step to the membership being onboarded.
-3. Convert the remaining user-creation paths to go through `MembershipProvisioner`, so no new row can
-   appear without a membership.
+3. Convert the remaining user-creation paths to grant explicitly. Registration, invitation acceptance
+   and the seeders are done; a new path is only correct if it names its grant.
 4. Assert zero users with `tenant_id` and no membership, in a test rather than by inspection.
 5. Delete the fallback branch in `ResolveMembership`, and watch the suite: anything that fails at this
    point was still relying on the column.
