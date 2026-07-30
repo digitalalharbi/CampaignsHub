@@ -1,14 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Activity, ArrowLeft, ArrowRight, BarChart3, Bell, CheckCircle2, FileText, LayoutDashboard, LogIn,
-  Megaphone, MessageSquare, Moon, Sparkles, Sun, Target, UserCircle, Users, Wallet,
+  Megaphone, MessageSquare, Moon, ShieldCheck, Sun, Target, UserCircle, Wallet,
 } from 'lucide-react'
 import { HOME_COPY, type Locale } from './homeCopy'
-import { PaidServicesPanel } from './PaidServicesPanel'
-import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
-import { DEMO_OVERVIEW_VM } from '@/features/campaigns/overview/demoOverview'
+import { HeroSection } from './HeroSection'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/stores/auth'
 import { getPublishedPage, type PublicPageKey } from '@/features/settings/publicPagesApi'
@@ -21,11 +19,21 @@ const STATUS_TONE: Record<string, string> = {
   soon: 'bg-surface-secondary text-text-muted',
 }
 
+/** Accent colour per supported platform, so each card is recognisable at a glance. */
+const PLATFORM_BAR: Record<string, string> = {
+  'Meta (Facebook · Instagram)': '#1877F2',
+  'Google Ads': '#EA4335',
+  'TikTok Ads': '#25F4EE',
+  'Snapchat Ads': '#FFFC00',
+  'X (Twitter) Ads': '#9AA4B2',
+  'LinkedIn Ads': '#0A66C2',
+}
+
 const FEATURE_ICONS = [LayoutDashboard, BarChart3, FileText, Wallet, Megaphone, Bell]
 const SERVICE_AREA_ICONS = [Megaphone, Target, Activity, BarChart3, FileText, MessageSquare]
-/** One icon per start-option card, in the same order as `options.cards`. */
-const OPTION_ICONS = [LayoutDashboard, Users, Megaphone, Sparkles]
 const ACCOUNT_ICONS = [LogIn, UserCircle]
+/** One icon per hero benefit, in the same order as `hero.points`. */
+const BENEFIT_ICONS = [Activity, BarChart3, Target, Bell]
 
 
 
@@ -48,7 +56,6 @@ export function PublicHomePage() {
   // request-tracking portals are managed separately from the homepage in System Settings.
   const cmsPage: PublicPageKey =
     portal === 'influencer' ? 'portal_influencer' : portal === 'client' ? 'portal_tracking' : portalParam === 'paid' ? 'portal_paid' : 'home'
-  const [showServices, setShowServices] = useState(false)
   const authed = status === 'authenticated'
 
   // Tenant-editable public content (System Settings → الواجهة الرئيسية والبوابات). Published copy wins over
@@ -111,111 +118,55 @@ export function PublicHomePage() {
         </div>
       </header>
 
-      {/* Hero — two columns. RIGHT (~65%): value proposition + the CampaignsHub demo preview. LEFT (~35%):
-          the «كيف تريد البدء؟» options card, where «أحتاج خدمات إعلانية» reveals the paid-media services
-          inline. On mobile: value → options card (with services + login) → preview. The whole hero is
-          sized to fit one 1440×900 screen. */}
-      <section id="usage" className="relative overflow-hidden border-b border-border">
-        <div className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)] lg:py-10">
-          {/* Value proposition — right column, row 1 */}
-          <div className="order-1 flex flex-col lg:col-start-1 lg:row-start-1">
-            <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[13px] font-semibold text-brand-700">{txt('hero', 'eyebrow', hero.eyebrow)}</p>
-            <h1 className="mt-4 font-heading text-[28px] font-extrabold leading-[1.14] sm:text-[40px]">{txt('hero', 'title', hero.title)}</h1>
-            <p className="mt-3 max-w-xl text-[16px] leading-relaxed text-text-secondary">{txt('hero', 'desc', hero.desc)}</p>
-            <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-text-muted">{hero.support}</p>
-            <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-              {hero.points.map((pt) => (
-                <li key={pt} className="flex items-center gap-2 text-[14px] text-text-secondary"><CheckCircle2 size={16} className="shrink-0 text-brand-500" /> {pt}</li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Options card — left column, spanning both rows on desktop. */}
-          <div className="order-2 lg:col-start-2 lg:row-span-2 lg:row-start-1">
-            <div className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)]">
-              <h2 className="font-heading text-lg font-extrabold text-text-primary">{c.options.title}</h2>
-              <p className="mt-1 text-[13px] text-text-secondary">{c.options.subtitle}</p>
-
-              <div className="mt-4 flex flex-col gap-2.5">
-                {c.options.cards.map((card, i) => {
-                  const Icon = OPTION_ICONS[i] ?? LayoutDashboard
-                  const inner = (
-                    <>
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Icon size={18} /></span>
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="text-sm font-bold text-text-primary">{card.title}</span>
-                        <span className="mt-0.5 text-[12px] leading-snug text-text-secondary">{card.desc}</span>
-                      </span>
-                      <Arrow size={16} className="mt-0.5 shrink-0 text-text-muted" />
-                    </>
-                  )
-                  const rowBase = 'flex w-full items-start gap-3 rounded-xl border p-3 text-start transition-colors'
-                  if (card.action === 'reveal-services') {
-                    return (
-                      <button
-                        key={card.title}
-                        type="button"
-                        onClick={() => setShowServices((v) => !v)}
-                        aria-expanded={showServices}
-                        className={`${rowBase} ${showServices ? 'border-brand-500 bg-brand-primary-soft' : 'border-border bg-surface hover:border-border-strong hover:bg-surface-hover'}`}
-                      >
-                        {inner}
-                      </button>
-                    )
-                  }
+      {/* Hero — see HeroSection: the dark product panel + the interactive start card + the journey strip. */}
+      {portalPreview ? (
+        <section id="usage" className="border-b border-border bg-surface-secondary">
+          <div className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-6 px-4 py-9 sm:px-6 lg:grid-cols-2">
+            <div>
+              <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[13px] font-semibold text-brand-700">{txt('hero', 'eyebrow', hero.eyebrow)}</p>
+              <h1 className="mt-3.5 font-heading text-[28px] font-extrabold leading-[1.14] sm:text-[38px]">{txt('hero', 'title', hero.title)}</h1>
+              <p className="mt-3 max-w-xl text-[16px] leading-relaxed text-text-secondary">{txt('hero', 'desc', hero.desc)}</p>
+              <ul className="mt-5 grid gap-2.5 sm:grid-cols-2">
+                {hero.points.map((pt, i) => {
+                  const Icon = BENEFIT_ICONS[i] ?? CheckCircle2
                   return (
-                    <Link key={card.title} to={card.to!} className={`${rowBase} border-border bg-surface hover:border-border-strong hover:bg-surface-hover`}>
-                      {inner}
-                    </Link>
+                    <li key={pt} className="flex items-start gap-2.5 rounded-xl border border-border bg-surface p-2.5">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-primary-soft text-brand-600"><Icon size={14} /></span>
+                      <span className="text-[13.5px] font-medium leading-snug text-text-secondary">{pt}</span>
+                    </li>
                   )
                 })}
-              </div>
-
-              {/* Inline paid-media services — engine-fed, revealed within this same card (option 3). */}
-              {showServices && <PaidServicesPanel locale={locale as Locale} copy={c.services} />}
-
-              {/* Returning users — ONLY log in + track my requests. No internal/admin login is ever exposed. */}
-              <div className="mt-4 border-t border-border pt-4">
-                <div className="grid gap-2.5 sm:grid-cols-2">
-                  {c.options.login.actions.map((a, i) => {
-                    const Icon = ACCOUNT_ICONS[i] ?? LogIn
-                    return (
-                      <Link key={a.to} to={a.to}><Button variant="secondary" size="sm" className="w-full"><Icon size={15} /> {a.label}</Button></Link>
-                    )
-                  })}
-                </div>
-                <p className="mt-2.5 text-[11px] leading-snug text-text-muted">{c.options.login.helper}</p>
+              </ul>
+              <div className="mt-6 flex flex-wrap items-center gap-2.5">
+                <Link to={cta('hero', 'primary_cta', { label: c.nav.start, to: '/register' }).to}>
+                  <Button size="lg">{cta('hero', 'primary_cta', { label: c.nav.start, to: '/register' }).label} <Arrow size={16} /></Button>
+                </Link>
+                {c.options.login.actions.map((a, i) => {
+                  const Icon = ACCOUNT_ICONS[i] ?? LogIn
+                  return <Link key={a.to} to={a.to}><Button variant="secondary" size="lg"><Icon size={16} /> {a.label}</Button></Link>
+                })}
               </div>
             </div>
-          </div>
 
-          {/* CampaignsHub demo preview — right column, row 2 (below the value text). */}
-          <div id="preview" className="order-3 rounded-2xl border border-white/10 bg-gradient-to-br from-[var(--auth-panel-from)] via-[var(--auth-panel-via)] to-[var(--auth-panel-to)] p-4 shadow-[var(--shadow-large)] lg:col-start-1 lg:row-start-2">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="flex items-center gap-2 text-sm font-bold text-white"><LayoutDashboard size={15} className="text-brand-300" /> CampaignsHub</span>
-              <span className="flex items-center gap-1.5 text-[11px] text-white/50"><span className="h-1.5 w-1.5 rounded-full bg-warning" /> {c.hero.demoTag}</span>
-            </div>
-            {portalPreview ? (
-              <div data-testid="portal-preview" className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-white">{portalPreview.previewTitle}</span>
-                  <span className="flex items-center gap-1.5 text-[11px] text-white/50"><span className="h-1.5 w-1.5 rounded-full bg-warning" /> {c.hero.demoTag}</span>
-                </div>
-                <ul className="grid gap-2">
-                  {portalPreview.previewItems.map((item) => (
-                    <li key={item} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white/85">
-                      <span>{item}</span>
-                      <span className="h-2 w-2 rounded-full bg-brand-400" />
-                    </li>
-                  ))}
-                </ul>
+            <div data-testid="portal-preview" className="rounded-2xl border border-white/10 bg-gradient-to-br from-[var(--auth-panel-from)] via-[var(--auth-panel-via)] to-[var(--auth-panel-to)] p-4 shadow-[var(--shadow-large)]">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-white">{portalPreview.previewTitle}</span>
+                <span className="flex items-center gap-1.5 text-[10px] text-white/55"><span className="h-1.5 w-1.5 rounded-full bg-warning" /> {c.hero.demoTag}</span>
               </div>
-            ) : (
-              <UnifiedCampaignOverview variant="marketing" compact vm={DEMO_OVERVIEW_VM} />
-            )}
+              <ul className="mt-3 grid gap-2">
+                {portalPreview.previewItems.map((item) => (
+                  <li key={item} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white/85">
+                    <span>{item}</span>
+                    <span className="h-2 w-2 rounded-full bg-brand-400" />
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : (
+        <HeroSection c={c} locale={locale as Locale} authed={authed} txt={txt} cta={cta} />
+      )}
 
       {/* How it works — 4 steps */}
       {on('steps') && (
@@ -288,36 +239,68 @@ export function PublicHomePage() {
       </section>
       )}
 
-      {/* Supported platforms + reports & alerts — one combined band (التكاملات والتقارير) */}
+      {/* Supported platforms — one card per platform, each stating plainly what it brings and where it
+          honestly stands. A status is never dressed up: "awaiting connection details" says exactly that. */}
       {on('platforms') && (
       <section id="integrations" className="border-b border-border bg-surface-secondary">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-          <div className="grid auto-rows-fr gap-4 lg:grid-cols-2">
-            {/* Supported platforms */}
-            <div className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6">
-              <h2 className="font-heading text-xl font-extrabold text-text-primary">{c.platforms.title}</h2>
-              <p className="mt-2 text-sm text-text-secondary">{c.platforms.subtitle}</p>
-              <div className="mt-4 flex flex-1 flex-col justify-center gap-2">
-                {c.platforms.items.map((it) => (
-                  <div key={it.label} className="flex items-center justify-between gap-3 rounded-xl bg-surface-secondary px-3.5 py-2.5">
-                    <span className="text-sm font-semibold text-text-primary">{it.label}</span>
-                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[12px] font-semibold ${STATUS_TONE[it.tone]}`}>{it.status}</span>
-                  </div>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="font-heading text-2xl font-extrabold text-text-primary sm:text-[28px]">{txt('platforms', 'title', c.platforms.title)}</h2>
+              <p className="mt-2 max-w-2xl text-text-secondary">{txt('platforms', 'subtitle', c.platforms.subtitle)}</p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-[12px] font-semibold text-text-secondary">
+              <ShieldCheck size={13} className="text-brand-600" /> {c.platforms.note}
+            </span>
+          </div>
+
+          <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {c.platforms.items.map((it) => (
+              <li key={it.label} className="flex h-full flex-col rounded-2xl border border-border bg-surface p-4 transition-colors hover:border-brand-300">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="flex items-center gap-2.5">
+                    <span className="h-9 w-1.5 shrink-0 rounded-full" style={{ background: PLATFORM_BAR[it.label] ?? 'var(--brand-500)' }} />
+                    <span className="text-[15px] font-bold text-text-primary">{it.label}</span>
+                  </span>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_TONE[it.tone]}`}>{it.status}</span>
+                </div>
+                <p className="mt-2.5 text-[13px] leading-relaxed text-text-secondary">{it.desc}</p>
+              </li>
+            ))}
+          </ul>
+
+          {/* Reports & alerts — the two outputs the platform data feeds. */}
+          <div className="mt-8 grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border border-border bg-surface p-6">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><FileText size={17} /></span>
+                <div>
+                  <h3 className="font-heading text-lg font-extrabold text-text-primary">{txt('reports', 'title', c.reports.title)}</h3>
+                  <p className="text-[13px] text-text-secondary">{txt('reports', 'subtitle', c.reports.subtitle)}</p>
+                </div>
+              </div>
+              <div className="mt-4 text-[13px] font-bold text-text-secondary">{c.reports.formatsLabel}</div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {c.reports.formats.map((f) => (
+                  <span key={f} className="rounded-lg border border-border bg-surface-secondary px-2.5 py-1 text-[12.5px] font-medium text-text-secondary">{f}</span>
                 ))}
               </div>
-              <p className="mt-3 text-xs text-text-muted">{c.platforms.note}</p>
             </div>
-            {/* Reports & alerts */}
-            <div className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6">
-              <h2 className="font-heading text-xl font-extrabold text-text-primary">{c.reports.title}</h2>
-              <p className="mt-2 text-sm text-text-secondary">{c.reports.subtitle}</p>
-              <div className="mt-4 flex items-center gap-2 text-sm font-bold text-text-primary"><BarChart3 size={16} className="text-brand-600" /> {c.reports.formatsLabel}</div>
-              <div className="mt-2.5 flex flex-wrap gap-2">
-                {c.reports.formats.map((f) => <span key={f} className="rounded-lg bg-surface-secondary px-3 py-1.5 text-[13px] font-medium text-text-secondary">{f}</span>)}
+
+            <div className="rounded-2xl border border-border bg-surface p-6">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-600"><Bell size={17} /></span>
+                <div>
+                  <h3 className="font-heading text-lg font-extrabold text-text-primary">{c.reports.alertsLabel}</h3>
+                  <p className="text-[13px] text-text-secondary">{c.reports.subtitle}</p>
+                </div>
               </div>
-              <div className="mt-5 flex items-center gap-2 text-sm font-bold text-text-primary"><Bell size={16} className="text-brand-600" /> {c.reports.alertsLabel}</div>
-              <ul className="mt-2.5 grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
-                {c.reports.alerts.map((a) => <li key={a} className="flex items-center gap-1.5 text-sm text-text-secondary"><CheckCircle2 size={14} className="shrink-0 text-brand-500" /> {a}</li>)}
+              <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+                {c.reports.alerts.map((a) => (
+                  <li key={a} className="flex items-center gap-2 rounded-xl bg-surface-secondary px-3 py-2 text-[13px] text-text-secondary">
+                    <CheckCircle2 size={14} className="shrink-0 text-brand-500" /> {a}
+                  </li>
+                ))}
               </ul>
             </div>
           </div>
@@ -325,37 +308,80 @@ export function PublicHomePage() {
       </section>
       )}
 
-      {/* Final CTA */}
-      <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
-        <div className="rounded-3xl bg-gradient-to-br from-[var(--auth-panel-from)] via-[var(--auth-panel-via)] to-[var(--auth-panel-to)] p-10 text-center text-white">
-          <h2 className="font-heading text-2xl font-extrabold sm:text-3xl">{c.finalCta.title}</h2>
-          <p className="mx-auto mt-3 max-w-xl text-sm text-white/70">{c.finalCta.subtitle}</p>
-          <div className="mt-7 flex flex-wrap justify-center gap-3">
-            <Link to="/register"><Button size="lg">{c.finalCta.start}</Button></Link>
-            <Link to="/requests/new"><Button variant="secondary" size="lg">{c.finalCta.request}</Button></Link>
+      {/* Final CTA — deliberately the hero's sibling: the same dark panel, the same four journeys, the
+          same account actions, so the page closes on the decision it opened with. */}
+      <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+        <div className="overflow-hidden rounded-3xl border border-brand-200 bg-gradient-to-br from-brand-primary-soft via-surface to-surface p-6 sm:p-8">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)] lg:items-center">
+            <div>
+              <h2 className="font-heading text-[24px] font-extrabold leading-tight text-text-primary sm:text-[30px]">{c.finalCta.title}</h2>
+              <p className="mt-2.5 max-w-xl text-[14px] leading-relaxed text-text-secondary">{c.finalCta.subtitle}</p>
+
+              <div className="mt-5 flex flex-wrap items-center gap-2.5">
+                <Link to="/register"><Button size="lg">{c.finalCta.start} <Arrow size={16} /></Button></Link>
+                <Link to="/requests/new">
+                  <Button variant="secondary" size="lg">{c.finalCta.request}</Button>
+                </Link>
+                <Link to="/client/login" className="text-[13px] font-semibold text-brand-700 underline-offset-4 hover:underline">
+                  {c.nav.clientLogin}
+                </Link>
+              </div>
+
+              <p className="mt-4 text-[12.5px] text-text-muted">
+                {c.footer.contactLabel}:{' '}
+                <a href={`mailto:${c.footer.email}`} className="font-semibold text-brand-600 underline-offset-2 hover:underline" dir="ltr">{c.footer.email}</a>
+              </p>
+            </div>
+
+            {/* The four ways in, restated. These scroll back to the chooser rather than linking straight
+                to a route: the services path in particular must go through the selector so a visitor
+                picks services before the request form, and repeating the routes here would duplicate
+                every journey link on the page. */}
+            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+              {c.start.paths.map((p) => (
+                <li key={p.key}>
+                  <a
+                    href="#usage"
+                    className="flex items-center gap-2.5 rounded-xl border border-border bg-surface p-3 transition-colors hover:border-brand-300 hover:bg-surface-hover"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-bold text-text-primary">{p.title}</span>
+                      <span className="block truncate text-[11px] text-text-muted">{p.kicker}</span>
+                    </span>
+                    <Arrow size={15} className="shrink-0 text-text-muted" />
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
+      {/* Footer — grouped navigation, every link a real page. */}
       <footer className="border-t border-border bg-surface">
-        <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr]">
+        <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-[1.5fr_repeat(3,1fr)]">
           <div>
-            <div className="flex items-center gap-2.5"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={16} /></span><span className="font-heading font-extrabold">CampaignsHub</span></div>
-            <p className="mt-3 max-w-sm text-sm text-text-secondary">{c.footer.tagline}</p>
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={16} /></span>
+              <span className="font-heading font-extrabold">CampaignsHub</span>
+            </div>
+            <p className="mt-3 max-w-sm text-sm leading-relaxed text-text-secondary">{c.footer.tagline}</p>
+            <p className="mt-3 text-sm text-text-secondary">
+              {c.footer.contactLabel}:{' '}
+              <a href={`mailto:${c.footer.email}`} className="font-semibold text-brand-600 hover:underline" dir="ltr">{c.footer.email}</a>
+            </p>
           </div>
-          <div>
-            <div className="text-sm font-bold text-text-primary">{c.footer.product}</div>
-            <ul className="mt-3 space-y-2">
-              {c.footer.links.map((l) => <li key={l.label}><Link to={l.to} className="text-sm text-text-secondary hover:text-brand-600">{l.label}</Link></li>)}
-            </ul>
-          </div>
-          <div>
-            <div className="text-sm font-bold text-text-primary">&nbsp;</div>
-            <ul className="mt-3 space-y-2">
-              {c.footer.legal.map((l) => <li key={l}><span className="text-sm text-text-muted">{l}</span></li>)}
-            </ul>
-          </div>
+
+          {c.footer.groups.map((group) => (
+            <div key={group.title}>
+              <div className="text-sm font-bold text-text-primary">{group.title}</div>
+              <ul className="mt-3 space-y-2">
+                {group.links.map((l) => (
+                  <li key={l.to}><Link to={l.to} className="text-sm text-text-secondary hover:text-brand-600">{l.label}</Link></li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
         <div className="border-t border-border py-4 text-center text-xs text-text-muted">© {new Date().getFullYear()} CampaignsHub — {c.footer.rights}</div>
       </footer>

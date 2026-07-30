@@ -143,10 +143,15 @@ describe('PublicHomePage — v5 journeys & header', () => {
     expect(screen.getByText('Paid advertising management')).toBeInTheDocument()
   })
 
-  it('renders the Arabic options card «كيف تريد البدء؟» under RTL', () => {
+  it('renders the Arabic start panel «كيف تريد البدء؟» under RTL', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'ar' })
+    // The start block was rebuilt around a selector: the same heading, now with four selectable paths.
     expect(screen.getByText('كيف تريد البدء؟')).toBeInTheDocument()
+    expect(screen.getByTestId('hero-path-self-service')).toBeInTheDocument()
+    expect(screen.getByTestId('hero-path-multi-client')).toBeInTheDocument()
+    expect(screen.getByTestId('hero-path-services')).toBeInTheDocument()
+    expect(screen.getByTestId('hero-path-influencer')).toBeInTheDocument()
     expect(linkHrefs()).toContain('/register?journey=multi-client&module=paid-media')
     expect(document.querySelector('[dir="rtl"]')).not.toBeNull()
   })
@@ -232,7 +237,9 @@ describe('PublicHomePage — inline paid-media services', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'View all services' }))
 
-    const dialog = screen.getByRole('dialog')
+    // The services selector itself now lives in a dialog, so «View all services» opens a second one on
+    // top of it — assert against the topmost.
+    const dialog = screen.getAllByRole('dialog').at(-1)!
     expect(within(dialog).getByText('All paid-media services')).toBeInTheDocument()
     expect(within(dialog).getByPlaceholderText('Search services…')).toBeInTheDocument()
 

@@ -29,6 +29,7 @@ import { ProjectsPage } from '@/features/projects/ProjectsPage'
 import { ProjectTeamPage } from '@/features/projects/ProjectTeamPage'
 import { SystemStatusPage } from '@/features/system/SystemStatusPage'
 import { PublicHomePage } from '@/features/marketing/PublicHomePage'
+import { PublicInfoPage } from '@/features/marketing/PublicInfoPage'
 import { RequestIntakePage } from '@/features/requests/RequestIntakePage'
 import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
 import { ClientPortalLoginPage } from '@/features/requests/portal/ClientPortalLoginPage'
@@ -78,6 +79,10 @@ export const router = createBrowserRouter([
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/requests/new', element: <RequestIntakePage /> },
   { path: '/requests/track', element: <RequestTrackPage /> },
+  // Public policy + company pages behind the footer links. One route with a slug so adding a page is a
+  // content change, and an unknown slug renders a clear not-found state rather than a blank screen.
+  ...['privacy', 'terms', 'data-processing', 'cookies', 'security', 'about', 'contact', 'support', 'faq']
+    .map((slug) => ({ path: `/${slug}`, element: <PublicInfoPage /> })),
   // External Client Portal (own cookie session; not the staff app). Each page guards itself: a 401 from the
   // portal endpoints redirects to /client/login. The section nav lives in PortalShell.
   { path: '/client/login', element: <ClientPortalLoginPage /> },

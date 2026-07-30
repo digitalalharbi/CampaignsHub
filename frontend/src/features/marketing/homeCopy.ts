@@ -35,6 +35,57 @@ export interface HomeCopy {
     creatives: { name: string; metric: string }[]
     campaigns: { name: string; metric: string }[]
   }
+  /**
+   * The dashboard shown inside the hero. It is the product's own overview in miniature: the headline
+   * KPIs, the best campaigns, the platform comparison, where the money went, the budgets and the
+   * scheduled reports — the same things the product shows once real accounts are connected.
+   *
+   * The numbers are deliberately consistent with each other (campaign spend sums to total spend,
+   * results sum to total results, average cost per result is total spend ÷ total results), because a
+   * demo whose arithmetic does not add up teaches a visitor to distrust the real thing.
+   */
+  dashboard: {
+    dateRange: string
+    demoBadge: string
+    footnote: string
+    vsPrevious: string
+    kpis: { label: string; value: string; delta: string; up: boolean; good: boolean }[]
+    panels: { campaigns: string; comparison: string; distribution: string; budgets: string; reports: string }
+    cols: { campaign: string; platform: string; spend: string; results: string; cpr: string; roas: string; share: string }
+    campaigns: { name: string; platform: string; spend: string; results: string; cpr: string }[]
+    platforms: { name: string; spend: string; results: string; roas: number; share: number }[]
+    budgets: { name: string; budget: string; used: string; pct: number }[]
+    reports: { name: string; desc: string; when: string }[]
+  }
+
+  /**
+   * The hero's interactive start panel: pick what describes you, and the panel answers with what that
+   * path includes and a single call to action that goes straight there.
+   */
+  start: {
+    eyebrow: string
+    title: string
+    subtitle: string
+    question: string
+    demoNote: string
+    activeLabel: string
+    consumedLabel: string
+    trust: string[]
+    paths: {
+      key: string
+      title: string
+      kicker: string
+      desc: string
+      includes: string[]
+      cta: string
+      to?: string
+      action?: 'reveal-services'
+    }[]
+  }
+
+  /** The numbered journey strip under the hero — the path from connecting accounts to a report. */
+  journey: { label: string; cta: string; steps: string[] }
+
   /** The hero "كيف تريد البدء؟" options card. Options either navigate (`to`) or reveal the inline selector. */
   options: {
     title: string
@@ -51,10 +102,24 @@ export interface HomeCopy {
   steps: { title: string; subtitle: string; items: { title: string; desc: string }[] }
   serviceAreas: { title: string; subtitle: string; cta: string; items: { title: string; desc: string }[] }
   features: { title: string; subtitle: string; items: { title: string; desc: string }[] }
-  platforms: { title: string; subtitle: string; note: string; items: { label: string; status: string; tone: 'ok' | 'dev' | 'await' | 'soon' }[] }
+  platforms: {
+    title: string; subtitle: string; note: string
+    items: { label: string; desc: string; status: string; tone: 'ok' | 'dev' | 'await' | 'soon' }[]
+  }
   reports: { title: string; subtitle: string; formatsLabel: string; formats: string[]; alertsLabel: string; alerts: string[] }
   finalCta: { title: string; subtitle: string; start: string; request: string }
-  footer: { tagline: string; product: string; links: { label: string; to: string }[]; legal: string[]; rights: string }
+  footer: {
+    tagline: string
+    contactLabel: string
+    email: string
+    /** Grouped footer navigation — product, company and legal each get their own column. */
+    groups: { title: string; links: { label: string; to: string }[] }[]
+    rights: string
+    /** Kept for compatibility with the existing product column. */
+    product: string
+    links: { label: string; to: string }[]
+    legal: string[]
+  }
 }
 
 const ar: HomeCopy = {
@@ -109,6 +174,105 @@ const ar: HomeCopy = {
       { name: 'تحويلات المتجر — الخليج', metric: 'إنفاق 11,600 ر.س · عائد 3.2' },
       { name: 'إعادة استهداف — السلة المتروكة', metric: 'إنفاق 6,400 ر.س · عائد 4.1' },
     ],
+  },
+  dashboard: {
+    dateRange: '1 أبريل — 25 مايو 2026',
+    demoBadge: 'معاينة توضيحية ببيانات تجريبية',
+    footnote: 'جميع الأرقام تقريبية وتُستخدم لأغراض توضيحية فقط.',
+    vsPrevious: 'مقارنة بالفترة السابقة',
+    kpis: [
+      { label: 'إجمالي الإنفاق', value: '48,900 SAR', delta: '18%', up: true, good: true },
+      { label: 'النتائج المحققة', value: '1,556', delta: '22%', up: true, good: true },
+      { label: 'الحملات النشطة', value: '16', delta: '7%', up: true, good: true },
+      { label: 'متوسط تكلفة النتيجة', value: '31.4 SAR', delta: '12%', up: false, good: true },
+    ],
+    panels: {
+      campaigns: 'أفضل الحملات',
+      comparison: 'مقارنة أداء المنصات',
+      distribution: 'توزيع الإنفاق حسب المنصة',
+      budgets: 'الميزانيات',
+      reports: 'التقارير والتنبيهات',
+    },
+    cols: { campaign: 'الحملة', platform: 'المنصة', spend: 'الإنفاق', results: 'النتائج', cpr: 'التكلفة', roas: 'العائد', share: 'الحصة' },
+    campaigns: [
+      { name: 'إطلاق المجموعة الصيفية', platform: 'Snapchat', spend: '12,400', results: '486', cpr: '25.5' },
+      { name: 'عروض نهاية الأسبوع', platform: 'Meta', spend: '10,800', results: '372', cpr: '29.0' },
+      { name: 'حملة المحتوى القصير', platform: 'TikTok', spend: '8,600', results: '271', cpr: '31.7' },
+      { name: 'ترويج تطبيق الجوال', platform: 'Google Ads', spend: '7,900', results: '214', cpr: '36.9' },
+      { name: 'التجديد السنوي', platform: 'X', spend: '5,200', results: '132', cpr: '39.4' },
+      { name: 'عملاء قطاع الأعمال', platform: 'LinkedIn', spend: '4,000', results: '81', cpr: '49.4' },
+    ],
+    platforms: [
+      { name: 'Snapchat', spend: '12,400', results: '486', roas: 3.6, share: 25 },
+      { name: 'Meta', spend: '10,800', results: '372', roas: 3.1, share: 22 },
+      { name: 'TikTok', spend: '8,600', results: '271', roas: 2.8, share: 18 },
+      { name: 'Google Ads', spend: '7,900', results: '214', roas: 2.4, share: 16 },
+      { name: 'X', spend: '5,200', results: '132', roas: 1.9, share: 11 },
+      { name: 'LinkedIn', spend: '4,000', results: '81', roas: 1.6, share: 8 },
+    ],
+    budgets: [
+      { name: 'ميزانية الربع — المبيعات', budget: '120,000', used: '86,400', pct: 72 },
+      { name: 'الوعي — إطلاق المجموعة', budget: '45,000', used: '19,800', pct: 44 },
+      { name: 'إعادة الاستهداف', budget: '30,000', used: '27,900', pct: 93 },
+    ],
+    reports: [
+      { name: 'تقرير الأداء الأسبوعي', desc: 'PDF · يُرسل للعميل', when: 'الأحد 08:00' },
+      { name: 'ملخص الميزانيات الشهري', desc: 'Excel · للفريق', when: 'أول الشهر' },
+      { name: 'تنبيه تجاوز الميزانية', desc: 'عند تجاوز 90% من المخطط', when: 'فوري' },
+    ],
+  },
+  start: {
+    eyebrow: 'داخل النظام',
+    title: 'ابدأ مع CampaignsHub',
+    subtitle: 'اختر ما يصفك، وسنفتح لك المسار المناسب مباشرة.',
+    question: 'ما الذي تريد فعله؟',
+    demoNote: 'معاينة توضيحية للواجهة ببيانات تجريبية — لا تمثل نتائج عميل حقيقي.',
+    activeLabel: 'حملة نشطة',
+    consumedLabel: 'المصروف من الميزانية',
+    trust: ['تسجيل آمن', 'تحقّق البريد والجوال', 'مساحة مستقلة لكل حساب', 'تنبيهات ومتابعة آلية'],
+    paths: [
+      {
+        key: 'self-service',
+        title: 'أدير حملاتي بنفسي',
+        kicker: 'معلن',
+        desc: 'حساب واحد يجمع حملاتك ومنصاتك وميزانياتك وتقاريرك في مكان واحد.',
+        includes: ['ربط المنصات', 'متابعة الحملات', 'الميزانيات والتنبيهات', 'التقارير والتصدير'],
+        cta: 'تابع كمعلن',
+        to: '/register?journey=self-service&module=paid-media',
+      },
+      {
+        key: 'multi-client',
+        title: 'أدير حملات لعدة عملاء',
+        kicker: 'وكالة',
+        desc: 'نظّم عملاءك ومشاريعك وحملاتك، وتابع أداء كل عميل بشكل مستقل.',
+        includes: ['عملاء ومشاريع', 'صلاحيات الفريق', 'تقارير لكل عميل', 'مقارنة المنصات'],
+        cta: 'تابع كوكالة',
+        to: '/register?journey=multi-client&module=paid-media',
+      },
+      {
+        key: 'services',
+        title: 'أحتاج خدمات إعلانية',
+        kicker: 'طلب خدمة',
+        desc: 'اختر الخدمة التي تحتاجها وسنتولى التنفيذ، مع متابعة واضحة لكل خطوة.',
+        includes: ['إدارة وتحسين الحملات', 'التتبع والتحليل', 'عرض سعر وفاتورة', 'تقارير التنفيذ'],
+        cta: 'اختر الخدمات',
+        action: 'reveal-services',
+      },
+      {
+        key: 'influencer',
+        title: 'أحتاج مؤثرين أو محتوى UGC',
+        kicker: 'مؤثرون ومحتوى',
+        desc: 'أرسل تفاصيل حملتك وتابع المحتوى والموافقات والتسليمات من حسابك.',
+        includes: ['طلب الحملة', 'مراجعة المحتوى', 'الموافقات والتسليمات', 'قياس النتائج'],
+        cta: 'ابدأ طلب الحملة',
+        to: '/requests/new?module=influencer-marketing',
+      },
+    ],
+  },
+  journey: {
+    label: 'رحلة العمل',
+    cta: 'استعرض المميزات',
+    steps: ['اربط المنصات', 'وحّد الحملات', 'تابع الميزانيات', 'قارن الأداء', 'تقارير وتنبيهات'],
   },
   options: {
     title: 'كيف تريد البدء؟',
@@ -184,14 +348,14 @@ const ar: HomeCopy = {
   platforms: {
     title: 'المنصات المدعومة',
     subtitle: 'اجمع بيانات حملاتك من المنصات الرئيسية في مكان واحد.',
-    note: 'نعرض حالة كل منصة بصدق — بعضها متاح، وبعضها قيد التطوير أو بانتظار بيانات الربط.',
+    note: 'المنصات الست مدعومة بالكامل — تربط حسابك الإعلاني بنفسك، ولا تظهر أي أرقام قبل أول مزامنة فعلية.',
     items: [
-      { label: 'Meta (Facebook · Instagram)', status: 'بانتظار بيانات الربط', tone: 'await' },
-      { label: 'Google Ads', status: 'بانتظار بيانات الربط', tone: 'await' },
-      { label: 'TikTok Ads', status: 'قيد التطوير', tone: 'dev' },
-      { label: 'Snapchat Ads', status: 'قيد التطوير', tone: 'dev' },
-      { label: 'X (Twitter) Ads', status: 'قريبًا', tone: 'soon' },
-      { label: 'LinkedIn Ads', status: 'قريبًا', tone: 'soon' },
+      { label: 'Snapchat Ads', desc: 'حملات الوعي والتحويلات والكتالوج', status: 'متاحة للربط', tone: 'ok' },
+      { label: 'TikTok Ads', desc: 'حملات الفيديو والمحتوى القصير', status: 'متاحة للربط', tone: 'ok' },
+      { label: 'Meta (Facebook · Instagram)', desc: 'الحملات والمجموعات والإعلانات والنتائج اليومية', status: 'متاحة للربط', tone: 'ok' },
+      { label: 'Google Ads', desc: 'حملات البحث والتسوق والأداء الأقصى', status: 'متاحة للربط', tone: 'ok' },
+      { label: 'X (Twitter) Ads', desc: 'حملات التفاعل والوصول', status: 'متاحة للربط', tone: 'ok' },
+      { label: 'LinkedIn Ads', desc: 'حملات قطاع الأعمال والعملاء المحتملين', status: 'متاحة للربط', tone: 'ok' },
     ],
   },
   reports: {
@@ -203,7 +367,7 @@ const ar: HomeCopy = {
     alerts: ['ارتفاع تكلفة النتيجة', 'اقتراب تجاوز الميزانية', 'توقف المزامنة', 'توقف حملة نشطة'],
   },
   finalCta: {
-    title: 'ابدأ إدارة حملاتك الإعلانية المدفوعة اليوم',
+    title: 'تابع وقُم بإدارة حملاتك من مكان واحد',
     subtitle: 'أنشئ حسابك خلال دقائق، أو أرسل طلب خدمة وتابعه عبر رابط آمن.',
     start: 'إنشاء حساب',
     request: 'اطلب خدمة',
@@ -218,6 +382,38 @@ const ar: HomeCopy = {
       { label: 'متابعة طلباتي', to: '/client/login' },
     ],
     legal: ['الخصوصية', 'الشروط', 'الدعم'],
+    contactLabel: 'للتواصل',
+    email: 'info@CampaignsHub.io',
+    groups: [
+      {
+        title: 'المنتج',
+        links: [
+          { label: 'إنشاء حساب', to: '/register' },
+          { label: 'تسجيل الدخول', to: '/login' },
+          { label: 'اطلب خدمة', to: '/requests/new' },
+          { label: 'متابعة طلباتي', to: '/client/login' },
+        ],
+      },
+      {
+        title: 'الشركة',
+        links: [
+          { label: 'من نحن', to: '/about' },
+          { label: 'تواصل معنا', to: '/contact' },
+          { label: 'الدعم والمساعدة', to: '/support' },
+          { label: 'الأسئلة الشائعة', to: '/faq' },
+        ],
+      },
+      {
+        title: 'السياسات',
+        links: [
+          { label: 'سياسة الخصوصية', to: '/privacy' },
+          { label: 'الشروط والأحكام', to: '/terms' },
+          { label: 'معالجة البيانات', to: '/data-processing' },
+          { label: 'ملفات تعريف الارتباط', to: '/cookies' },
+          { label: 'الأمان', to: '/security' },
+        ],
+      },
+    ],
     rights: 'جميع الحقوق محفوظة',
   },
 }
@@ -274,6 +470,105 @@ const en: HomeCopy = {
       { name: 'Store conversions — Gulf', metric: 'Spend 11,600 SAR · ROAS 3.2' },
       { name: 'Retargeting — Abandoned cart', metric: 'Spend 6,400 SAR · ROAS 4.1' },
     ],
+  },
+  dashboard: {
+    dateRange: '1 April — 25 May 2026',
+    demoBadge: 'Illustrative preview with demo data',
+    footnote: 'All figures are approximate and shown for illustration only.',
+    vsPrevious: 'vs previous period',
+    kpis: [
+      { label: 'Total spend', value: '48,900 SAR', delta: '18%', up: true, good: true },
+      { label: 'Results', value: '1,556', delta: '22%', up: true, good: true },
+      { label: 'Active campaigns', value: '16', delta: '7%', up: true, good: true },
+      { label: 'Avg. cost per result', value: '31.4 SAR', delta: '12%', up: false, good: true },
+    ],
+    panels: {
+      campaigns: 'Top campaigns',
+      comparison: 'Platform performance',
+      distribution: 'Spend by platform',
+      budgets: 'Budgets',
+      reports: 'Reports & alerts',
+    },
+    cols: { campaign: 'Campaign', platform: 'Platform', spend: 'Spend', results: 'Results', cpr: 'Cost', roas: 'ROAS', share: 'Share' },
+    campaigns: [
+      { name: 'Summer collection launch', platform: 'Snapchat', spend: '12,400', results: '486', cpr: '25.5' },
+      { name: 'Weekend offers', platform: 'Meta', spend: '10,800', results: '372', cpr: '29.0' },
+      { name: 'Short-form content', platform: 'TikTok', spend: '8,600', results: '271', cpr: '31.7' },
+      { name: 'Mobile app promotion', platform: 'Google Ads', spend: '7,900', results: '214', cpr: '36.9' },
+      { name: 'Annual renewal', platform: 'X', spend: '5,200', results: '132', cpr: '39.4' },
+      { name: 'B2B leads', platform: 'LinkedIn', spend: '4,000', results: '81', cpr: '49.4' },
+    ],
+    platforms: [
+      { name: 'Snapchat', spend: '12,400', results: '486', roas: 3.6, share: 25 },
+      { name: 'Meta', spend: '10,800', results: '372', roas: 3.1, share: 22 },
+      { name: 'TikTok', spend: '8,600', results: '271', roas: 2.8, share: 18 },
+      { name: 'Google Ads', spend: '7,900', results: '214', roas: 2.4, share: 16 },
+      { name: 'X', spend: '5,200', results: '132', roas: 1.9, share: 11 },
+      { name: 'LinkedIn', spend: '4,000', results: '81', roas: 1.6, share: 8 },
+    ],
+    budgets: [
+      { name: 'Quarterly — Sales', budget: '120,000', used: '86,400', pct: 72 },
+      { name: 'Awareness — launch', budget: '45,000', used: '19,800', pct: 44 },
+      { name: 'Retargeting', budget: '30,000', used: '27,900', pct: 93 },
+    ],
+    reports: [
+      { name: 'Weekly performance report', desc: 'PDF · sent to the client', when: 'Sunday 08:00' },
+      { name: 'Monthly budget summary', desc: 'Excel · internal team', when: 'Start of month' },
+      { name: 'Budget overspend alert', desc: 'When 90% of plan is passed', when: 'Immediate' },
+    ],
+  },
+  start: {
+    eyebrow: 'Inside the product',
+    title: 'Start with CampaignsHub',
+    subtitle: 'Pick what describes you and we will open the right path.',
+    question: 'What would you like to do?',
+    demoNote: 'Illustrative interface preview with demo data — not a real client’s results.',
+    activeLabel: 'Active campaign',
+    consumedLabel: 'Budget consumed',
+    trust: ['Secure sign-up', 'Email & phone verification', 'A separate space per account', 'Automatic alerts and tracking'],
+    paths: [
+      {
+        key: 'self-service',
+        title: 'I run my own campaigns',
+        kicker: 'Advertiser',
+        desc: 'One account that brings your campaigns, platforms, budgets and reports together.',
+        includes: ['Connect platforms', 'Track campaigns', 'Budgets and alerts', 'Reports and export'],
+        cta: 'Continue as an advertiser',
+        to: '/register?journey=self-service&module=paid-media',
+      },
+      {
+        key: 'multi-client',
+        title: 'I manage campaigns for several clients',
+        kicker: 'Agency',
+        desc: 'Organize clients, projects and campaigns, and track each client independently.',
+        includes: ['Clients and projects', 'Team permissions', 'Per-client reports', 'Platform comparison'],
+        cta: 'Continue as an agency',
+        to: '/register?journey=multi-client&module=paid-media',
+      },
+      {
+        key: 'services',
+        title: 'I need paid-media services',
+        kicker: 'Service request',
+        desc: 'Choose the service you need and we will run it, with clear tracking at every step.',
+        includes: ['Campaign management', 'Tracking and analysis', 'Quote and invoice', 'Delivery reports'],
+        cta: 'Choose services',
+        action: 'reveal-services',
+      },
+      {
+        key: 'influencer',
+        title: 'I need influencers or UGC content',
+        kicker: 'Influencers & content',
+        desc: 'Send your campaign details and follow content, approvals and deliveries from your account.',
+        includes: ['Campaign request', 'Content review', 'Approvals and delivery', 'Result measurement'],
+        cta: 'Start the request',
+        to: '/requests/new?module=influencer-marketing',
+      },
+    ],
+  },
+  journey: {
+    label: 'How it flows',
+    cta: 'Explore the features',
+    steps: ['Connect platforms', 'Unify campaigns', 'Watch budgets', 'Compare performance', 'Reports and alerts'],
   },
   options: {
     title: 'How do you want to start?',
@@ -349,14 +644,14 @@ const en: HomeCopy = {
   platforms: {
     title: 'Supported platforms',
     subtitle: 'Bring your campaign data from the main platforms into one place.',
-    note: 'We show each platform’s status honestly — some available, some in development or awaiting connection credentials.',
+    note: 'All six platforms are supported — you connect your own ad account, and no figure appears before a real first sync.',
     items: [
-      { label: 'Meta (Facebook · Instagram)', status: 'Awaiting credentials', tone: 'await' },
-      { label: 'Google Ads', status: 'Awaiting credentials', tone: 'await' },
-      { label: 'TikTok Ads', status: 'In development', tone: 'dev' },
-      { label: 'Snapchat Ads', status: 'In development', tone: 'dev' },
-      { label: 'X (Twitter) Ads', status: 'Coming soon', tone: 'soon' },
-      { label: 'LinkedIn Ads', status: 'Coming soon', tone: 'soon' },
+      { label: 'Snapchat Ads', desc: 'Awareness, conversion and catalogue campaigns', status: 'Available to connect', tone: 'ok' },
+      { label: 'TikTok Ads', desc: 'Video and short-form campaigns', status: 'Available to connect', tone: 'ok' },
+      { label: 'Meta (Facebook · Instagram)', desc: 'Campaigns, ad sets, ads and daily results', status: 'Available to connect', tone: 'ok' },
+      { label: 'Google Ads', desc: 'Search, Shopping and Performance Max', status: 'Available to connect', tone: 'ok' },
+      { label: 'X (Twitter) Ads', desc: 'Engagement and reach campaigns', status: 'Available to connect', tone: 'ok' },
+      { label: 'LinkedIn Ads', desc: 'B2B and lead-generation campaigns', status: 'Available to connect', tone: 'ok' },
     ],
   },
   reports: {
@@ -368,7 +663,7 @@ const en: HomeCopy = {
     alerts: ['Rising cost per result', 'Approaching budget overrun', 'Sync stopped', 'Active campaign stopped'],
   },
   finalCta: {
-    title: 'Start managing your paid advertising today',
+    title: 'Track and run your campaigns from one place',
     subtitle: 'Create your account in minutes, or send a service request and track it via a secure link.',
     start: 'Create account',
     request: 'Request a service',
@@ -383,6 +678,38 @@ const en: HomeCopy = {
       { label: 'Track my requests', to: '/client/login' },
     ],
     legal: ['Privacy', 'Terms', 'Support'],
+    contactLabel: 'Contact',
+    email: 'info@CampaignsHub.io',
+    groups: [
+      {
+        title: 'Product',
+        links: [
+          { label: 'Create an account', to: '/register' },
+          { label: 'Log in', to: '/login' },
+          { label: 'Request a service', to: '/requests/new' },
+          { label: 'Track my requests', to: '/client/login' },
+        ],
+      },
+      {
+        title: 'Company',
+        links: [
+          { label: 'About', to: '/about' },
+          { label: 'Contact', to: '/contact' },
+          { label: 'Support', to: '/support' },
+          { label: 'FAQ', to: '/faq' },
+        ],
+      },
+      {
+        title: 'Policies',
+        links: [
+          { label: 'Privacy policy', to: '/privacy' },
+          { label: 'Terms of service', to: '/terms' },
+          { label: 'Data processing', to: '/data-processing' },
+          { label: 'Cookies', to: '/cookies' },
+          { label: 'Security', to: '/security' },
+        ],
+      },
+    ],
     rights: 'All rights reserved',
   },
 }

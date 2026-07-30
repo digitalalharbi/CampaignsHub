@@ -38,22 +38,27 @@ test('homepage: hero, language/theme, preview, journeys and CTAs into real route
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)
   expect(overflow).toBe(false)
 
-  // Options card «How do you want to start?» maps each journey to a real, param-carrying route.
-  await expect(page.getByRole('link', { name: /I run my own campaigns/ }))
-    .toHaveAttribute('href', '/register?journey=self-service&module=paid-media')
-  await expect(page.getByRole('link', { name: /I manage campaigns for several clients/ }))
-    .toHaveAttribute('href', '/register?journey=multi-client&module=paid-media')
-  await expect(page.getByRole('link', { name: /I need influencers or UGC content/ }))
-    .toHaveAttribute('href', '/requests/new?module=influencer-marketing')
+  // The start card «How do you want to start?» maps each journey to a real, param-carrying route. The
+  // journeys are a selector now, so a route is carried either by the card's call to action (the selected
+  // path) or by the always-present list of the others — what matters is that every route is reachable.
+  const hrefs = await page.locator('a[href]').evaluateAll((els) => els.map((e) => e.getAttribute('href')))
+  expect(hrefs).toContain('/register?journey=self-service&module=paid-media')
+  expect(hrefs).toContain('/register?journey=multi-client&module=paid-media')
+  expect(hrefs).toContain('/requests/new?module=influencer-marketing')
 
-  // «I need paid-media services» reveals the inline services selector (does not navigate).
+  // «I need paid-media services» opens the services selector in a dialog (it does not navigate). It is a
+  // long list, so it lives in a dialog rather than stretching the hero down the page.
   const reveal = page.getByRole('button', { name: /I need paid-media services/ })
   await expect(reveal).toHaveAttribute('aria-expanded', 'false')
   await reveal.click()
   await expect(reveal).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByRole('button', { name: /Continue your request/ })).toBeVisible()
+  // Close it again — the rest of this test drives the page behind the dialog.
+  await page.keyboard.press('Escape')
+  await expect(reveal).toHaveAttribute('aria-expanded', 'false')
 
   // Below the card: returning-user actions point at the client + user logins.
-  const optionsCard = page.getByRole('heading', { name: 'How do you want to start?' }).locator('xpath=ancestor::div[1]')
+  const optionsCard = page.locator('div').filter({ has: page.getByRole('heading', { name: 'How do you want to start?' }) }).last()
   await expect(optionsCard.getByRole('link', { name: /^Log in$/ })).toHaveAttribute('href', '/login')
   await expect(optionsCard.getByRole('link', { name: /Track my requests/ })).toHaveAttribute('href', '/client/login')
 
