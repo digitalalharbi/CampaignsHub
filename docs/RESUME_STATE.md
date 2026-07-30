@@ -113,6 +113,18 @@ which also carries the audit of what the codebase actually looked like at adopti
   - Suspension read off the legacy column: one suspended agency locked its client out of an
     UNRELATED workspace they also belonged to.
 
+### Agency portal — started
+
+| Unit | Commit | State |
+|---|---|---|
+| AGENCY-001 scope grants + limits via `ClientAccess` | `94ee16c` | **VERIFIED** — one engine, not a duplicate |
+| AGENCY-002 `/agency/dashboard` | `14b888a` | **IMPLEMENTED_NOT_VERIFIED** — backend + 7 tests; no UI yet so not live-reviewed |
+
+Design decision to keep: the agency portal REUSES `/app` engines (clients, projects, campaigns,
+reports, finance) through the shared `ClientAccess`, which is now scope-aware. Do not create agency
+copies of them — two implementations of the same rules is what ADR 0002 forbids. `routes/api/agency.php`
+stays thin on purpose.
+
 ### NOT done — do not mark these complete
 
   - **PORTAL-3b**: `/agency/*`, `/influencers/*`, `/portal/*` route trees and their subsystems. The
