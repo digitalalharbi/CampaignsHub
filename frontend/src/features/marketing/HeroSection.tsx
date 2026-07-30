@@ -7,6 +7,7 @@ import {
 import type { HomeCopy, Locale } from './homeCopy'
 import { PaidServicesPanel } from './PaidServicesPanel'
 import { HeroDashboard } from './HeroDashboard'
+import { ACCOUNT_ROUTES, journeyTo } from './journeys'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 
@@ -47,9 +48,11 @@ export function HeroSection({
   const Arrow = c.dir === 'rtl' ? ArrowLeft : ArrowRight
 
   // The button says what it will actually do: "create an account" only when the path really registers one.
-  const registers = Boolean(path.to?.startsWith('/register'))
-  const primaryLabel = registers ? cta('hero', 'primary_cta', { label: c.nav.start, to: '/register' }).label : path.cta
-  const primaryTo = path.to ?? cta('hero', 'secondary_cta', { label: c.nav.request, to: '/requests/new' }).to
+  // Destinations come from the shared journey table, so these cards can never disagree with the ones
+  // at the foot of the page.
+  const primaryTo = journeyTo(path.key)
+  const registers = primaryTo.startsWith('/register')
+  const primaryLabel = registers ? cta('hero', 'primary_cta', { label: c.nav.start, to: ACCOUNT_ROUTES.register }).label : path.cta
 
   return (
     <section id="usage" className="border-b border-border bg-surface-secondary">
@@ -135,10 +138,10 @@ export function HeroSection({
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-2">
-                  <Link to={primaryTo}><Button className="w-full"><UserPlus size={15} /> {primaryLabel}</Button></Link>
-                  <Link to="/login"><Button variant="secondary" className="w-full"><LogIn size={15} /> {c.nav.login}</Button></Link>
+                  <Link to={primaryTo} data-testid="hero-primary-cta"><Button className="w-full"><UserPlus size={15} /> {primaryLabel}</Button></Link>
+                  <Link to={ACCOUNT_ROUTES.login}><Button variant="secondary" className="w-full"><LogIn size={15} /> {c.nav.login}</Button></Link>
                 </div>
-                <Link to="/client/login" className="block">
+                <Link to={ACCOUNT_ROUTES.trackRequests} data-testid="hero-track-requests" className="block">
                   <Button variant="secondary" className="w-full"><FileText size={15} /> {c.nav.clientLogin}</Button>
                 </Link>
                 <p className="flex items-start gap-1.5 text-[11px] leading-snug text-text-muted">
@@ -152,8 +155,8 @@ export function HeroSection({
               (and any crawler) still finds all four routes. */}
           {!authed && (
             <nav aria-label={c.options.title} className="mt-auto flex flex-wrap gap-x-3 gap-y-1 pt-3 text-[10.5px]">
-              {c.start.paths.filter((o) => o.to && o.key !== pathKey).map((o) => (
-                <Link key={o.key} to={o.to!} className="text-text-muted hover:text-brand-600 hover:underline">{o.title}</Link>
+              {c.start.paths.filter((o) => o.key !== pathKey).map((o) => (
+                <Link key={o.key} to={journeyTo(o.key)} data-testid={`hero-journey-link-${o.key}`} className="text-text-muted hover:text-brand-600 hover:underline">{o.title}</Link>
               ))}
             </nav>
           )}

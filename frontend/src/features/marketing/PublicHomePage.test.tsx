@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { PublicHomePage } from './PublicHomePage'
+import { JOURNEYS } from './journeys'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 
 /** Toggled by the error-state test; the mock reads it so we can simulate a catalog load failure. */
@@ -126,12 +127,38 @@ describe('PublicHomePage — v5 journeys & header', () => {
     expect(screen.getByText(/سجّل الدخول لإدارة حملاتك/)).toBeInTheDocument()
   })
 
-  it('does not duplicate the options — each navigating route appears exactly once', () => {
+  /**
+   * The page offers each journey deliberately TWICE — once in the hero and once as the page closes —
+   * so the old "appears exactly once" rule no longer describes the product. What must hold is that
+   * both surfaces send the visitor to the SAME configured route, and that none of them is an anchor
+   * back to this page (which is exactly how the closing cards once bounced to the top).
+   */
+  it('routes every journey to its configured destination, identically in the hero and the closing section', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
-    const hrefs = linkHrefs()
-    for (const route of ['/register?journey=self-service&module=paid-media', '/register?journey=multi-client&module=paid-media', '/requests/new?module=influencer-marketing']) {
-      expect(hrefs.filter((h) => h === route)).toHaveLength(1)
+
+    for (const key of Object.keys(JOURNEYS) as Array<keyof typeof JOURNEYS>) {
+      const expected = JOURNEYS[key].to
+      const closing = screen.getByTestId(`closing-journey-${key}`)
+      expect(closing).toHaveAttribute('href', expected)
+      expect(expected.startsWith('/')).toBe(true)
+      expect(expected).not.toContain('#')
+
+      // The hero lists the unselected journeys as links; the selected one rides the primary CTA.
+      const heroLink = screen.queryByTestId(`hero-journey-link-${key}`)
+      const heroHref = heroLink?.getAttribute('href') ?? screen.getByTestId('hero-primary-cta').getAttribute('href')
+      expect(heroHref, `hero and closing disagree for ${key}`).toBe(expected)
+    }
+  })
+
+  it('has no dead anchors — every in-page link points at a section that exists', () => {
+    signOut()
+    const { container } = renderWithProviders(<PublicHomePage />, { locale: 'en' })
+    const hrefs = linkHrefs().filter((h): h is string => Boolean(h))
+
+    expect(hrefs.filter((h) => h === '#')).toHaveLength(0)
+    for (const h of hrefs.filter((x) => x.startsWith('#'))) {
+      expect(container.querySelector(h), `anchor ${h} has no target`).not.toBeNull()
     }
   })
 

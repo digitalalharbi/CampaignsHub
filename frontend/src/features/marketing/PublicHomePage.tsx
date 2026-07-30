@@ -8,6 +8,7 @@ import {
 import * as LucideIcons from 'lucide-react'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { HeroSection } from './HeroSection'
+import { journeyTo } from './journeys'
 import { usePaidMediaCatalog } from '@/features/paid-media/publicCatalog'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/stores/auth'
@@ -382,15 +383,14 @@ export function PublicHomePage() {
               </p>
             </div>
 
-            {/* The four ways in, restated. These scroll back to the chooser rather than linking straight
-                to a route: the services path in particular must go through the selector so a visitor
-                picks services before the request form, and repeating the routes here would duplicate
-                every journey link on the page. */}
-            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+            {/* The four ways in, restated — each going to its OWN destination from the shared journey
+                table, never back to the top of this page. */}
+            <ul data-testid="closing-journeys" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
               {c.start.paths.map((p) => (
                 <li key={p.key}>
-                  <a
-                    href="#usage"
+                  <Link
+                    to={journeyTo(p.key)}
+                    data-testid={`closing-journey-${p.key}`}
                     className="flex items-center gap-2.5 rounded-xl border border-border bg-surface p-3 transition-colors hover:border-brand-300 hover:bg-surface-hover"
                   >
                     <span className="min-w-0 flex-1">
@@ -398,7 +398,7 @@ export function PublicHomePage() {
                       <span className="block truncate text-[11px] text-text-muted">{p.kicker}</span>
                     </span>
                     <Arrow size={15} className="shrink-0 text-text-muted" />
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>
