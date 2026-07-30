@@ -147,6 +147,37 @@ which also carries the audit of what the codebase actually looked like at adopti
 | `manager@demo-agency.local` | agency portal, confined to ONE client — the ceiling in action |
 | `owner@demo-company.local` | advertiser only — `/agency/*` gives the honest denial screen + API 403 |
 
+### The platform owner's console — `/admin/*` (NEW, and the answer to the audit)
+
+| Unit | Commit | State |
+|---|---|---|
+| AUDIT-PORTALS-001 regression audit | `5698891` | **VERIFIED** — `docs/REGRESSION_AUDIT_PORTALS.md` |
+| ADMIN-001 `/admin/*` console | `5698891` | **VERIFIED** — overview, tenants, settings, audit |
+
+**What the audit actually found.** Nothing was lost in the `/app/*` move: 74 routes before, 90 now,
+every old path resolving; the advertiser rail has the same fifteen entries; all eight settings
+sections still registered. The real problem was a layer that was **never built** — the platform owner
+had nowhere to go (`PortalResolver` → `/onboarding`), and could not get there anyway because the
+seeded account was unverified. Platform functions had therefore settled inside the ADVERTISER's
+workspace settings.
+
+**Decisions to keep (9–12):**
+
+9.  `/admin` is gated on `is_platform_admin`, **never** on a membership or a permission. The owner
+    belongs to no tenant; a membership would place them inside a workspace they administer. A role or
+    permission would put the console one role edit away from any customer.
+10. `Portal::Admin` is a case of the enum but is **not** a membership portal. Iterate
+    `Portal::membershipPortals()`, never `cases()`, wherever a membership is being created —
+    `cases()` would quietly mint an `admin` membership in whatever tenant was at hand.
+11. The console shows **no customer work** — no campaigns, clients, reports or figures. Owning the
+    platform is not a reason to read a tenant's data, and a console that put it one click away would
+    see it happen without a decision. Tenant detail is a DRAWER, not a route.
+12. Suspending a tenant requires a reason (server-enforced) and is audited with an actor. It reports
+    when the tenant serves public request intake rather than blocking the action.
+
+**Where platform settings now live:** `/admin/settings`, as ONE tabbed page (public site, portal
+notes, taxonomies, services). `/app/settings/public-pages|portals|taxonomies` redirect there.
+
 ### The other three portals
 
 | Unit | Commit | State |
@@ -198,11 +229,22 @@ which also carries the audit of what the codebase actually looked like at adopti
     behind the same auth work — creators have no password either.
   - **Dropping `users.tenant_id`**: no decision reads it, but 46 test files and `UserFactory` still
     pass it at creation. See `docs/TENANT_ID_MIGRATION.md`.
+  - **`db:seed` over an existing database fails** in `DemoCreativesSeeder` — an FK violation on
+    `creative_daily_metrics` when external creatives are replaced. `migrate:fresh --seed` (the
+    documented path) is clean and verified: 9 users, 8 memberships, 0 stranded. Only the re-seed
+    path is affected.
   - **Five unlinked placeholder routes** under `/app`: approvals, tracking, optimization,
     notifications, opportunities. Reachable only by typing the URL; linked from nothing.
 
 ## Exact next task
-**PORTAL-AUTH-001, the auth half** — follow the five steps in `docs/PORTAL_AUTH_MIGRATION.md` in
+**ADMIN-002** — plans, subscriptions and payments from the owner's side. The billing engine already
+exists per tenant (`app/Domains/Billing`, `app/Domains/Subscriptions`); what is missing is the
+cross-tenant view, so build on those rather than a second engine. Then **ADMIN-003** (global
+permission catalogue, platform integrations, operational status — note `/dev/status` already exists
+but is dev-only and outside the console), then the menu-simplification pass across `/app` and
+`/agency` (two levels max, group near-duplicates, tabs and drawers instead of a page per option).
+
+Then: **PORTAL-AUTH-001, the auth half** — follow the five steps in `docs/PORTAL_AUTH_MIGRATION.md` in
 order, starting with the contacts → users + ClientPortal membership backfill, and asserting the
 resulting scope matches `contactOwnedWorkspaceIds()` for every existing contact BEFORE anything
 reads from it. Then AGENCY-005, then INFL-002.
