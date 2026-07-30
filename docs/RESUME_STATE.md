@@ -160,7 +160,8 @@ which also carries the audit of what the codebase actually looked like at adopti
 | AGENCY-005 white-label per client space | `3982fff` | **VERIFIED** — plus SEC-BRAND-001, the ownership check on branding writes |
 | PORTAL-AUTH-001a backfill | `40fb5a5` | **VERIFIED** — identities exist |
 | PORTAL-AUTH-001b steps 2–4 | `fd77ca7` | **VERIFIED** — both engines live, membership preferred, parity gate green |
-| PORTAL-AUTH-001c step 5 | — | **NOT_STARTED** — blocked on EVIDENCE (zero open conflicts + no token-served session), not on code |
+| PORTAL-AUTH-001c step 5 | — | **BLOCKED_OPERATIONAL_EVIDENCE** — measured by `/admin/cutover`; dev shows 14 live legacy sessions |
+| ADMIN-004 cutover-readiness board | `6c0c880` | **VERIFIED** — evidence only; there is no endpoint that performs the cutover |
 
 **What the audit actually found.** Nothing was lost in the `/app/*` move: 74 routes before, 90 now,
 every old path resolving; the advertiser rail has the same fifteen entries; all eight settings
@@ -197,7 +198,10 @@ workspace settings.
 18. Brand colour overrides must set BOTH `--brand-*` and `--color-brand-*`. Tailwind v4 utilities read
     the second; the hand-written CSS reads the first. Setting one looks applied in devtools and
     changes nothing on screen. Validate the value as hex before it reaches a style attribute.
-19. `navGrouping.test.ts` pins both rails BY PATH as they were before grouping. If a section is ever
+19. There is NO endpoint and NO button that performs the portal cutover, and there must not be.
+    Retiring the legacy engine is a reviewed code change. `/admin/cutover` reports evidence only; a
+    test asserts the POST is 405.
+20. `navGrouping.test.ts` pins both rails BY PATH as they were before grouping. If a section is ever
     dropped from a group it fails naming it. Do not relax it — grouping is exactly where a working
     feature becomes unreachable while its route still exists.
 
