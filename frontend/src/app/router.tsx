@@ -72,6 +72,7 @@ import { AppShell } from '@/layouts/AppShell'
 import { AgencyShell } from '@/layouts/AgencyShell'
 import { AgencyDashboardPage } from '@/features/agency/AgencyDashboardPage'
 import { RequireAgencyPortal } from '@/features/agency/RequireAgencyPortal'
+import { AgencyTeamPage } from '@/features/agency/AgencyTeamPage'
 import { WorkspaceSwitcherPage } from '@/features/auth/WorkspaceSwitcherPage'
 import { legacyAppRedirects } from './legacyRedirects'
 
@@ -244,6 +245,7 @@ export const router = createBrowserRouter([
             { path: 'reports', element: <ReportsPage /> },
             { path: 'tasks', element: <TasksPage /> },
             { path: 'files', element: <FilesLibraryPage /> },
+            { path: 'team', element: <AgencyTeamPage /> },
             ...messagingRoutes,
             ...billingRoutes,
           ],

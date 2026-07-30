@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Agency\Http\Controllers\AgencyDashboardController;
+use App\Domains\Agency\Http\Controllers\AgencyTeamController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -22,4 +23,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:agency'])
     ->prefix('agency')->name('agency.')
     ->group(function (): void {
         Route::get('/dashboard', AgencyDashboardController::class)->name('dashboard');
+
+        // Team & client scopes. Three verbs rather than one save, because "add a client" and
+        // "redefine what this person can see" are different decisions and must stay different calls.
+        Route::get('/team', [AgencyTeamController::class, 'index'])->name('team.index');
+        Route::post('/team/{membership}/scopes', [AgencyTeamController::class, 'addScopes'])->name('team.scopes.add');
+        Route::put('/team/{membership}/scopes', [AgencyTeamController::class, 'replaceScopes'])->name('team.scopes.replace');
+        Route::delete('/team/{membership}/scopes/{client}', [AgencyTeamController::class, 'removeScope'])->name('team.scopes.remove');
     });

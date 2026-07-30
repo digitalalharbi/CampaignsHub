@@ -16,6 +16,7 @@ import { TabTeam } from './TabTeam'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 import { usePortalPath } from '@/app/portalPath'
+import { toApiError } from '@/lib/api/client'
 
 type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'reports' | 'requests' | 'billing' | 'messages' | 'team' | 'files' | 'activity' | 'settings'
 
@@ -28,9 +29,42 @@ export function ClientCommandCenterPage() {
   const [editing, setEditing] = useState(false)
   const query = useQuery({ queryKey: ['app', 'client', clientId], queryFn: () => getClient(clientId) })
 
-  if (query.isLoading) return <div className="mx-auto max-w-5xl"><div className="h-64 animate-pulse rounded-2xl bg-surface-secondary" /></div>
-  if (query.isError) return <div className="mx-auto max-w-5xl rounded-2xl border border-danger/30 bg-[var(--negative-background)] p-6 text-center text-sm text-danger">{t('error_generic')}</div>
-  const d = query.data!
+  if (query.isPending) return <div className="mx-auto max-w-5xl"><div className="h-64 animate-pulse rounded-2xl bg-surface-secondary" /></div>
+
+  // A client outside this membership's scope answers 403, and that is the common case now that the
+  // same page serves the agency portal. It must READ as a boundary, not as a broken page — and the
+  // `!query.data` arm matters as much as `isError`: between retries neither pending nor error is
+  // true, and dereferencing the missing payload took the whole route down.
+  if (query.isError || !query.data) {
+    const status = toApiError(query.error).status
+    const denied = status === 403 || status === 404
+
+    return (
+      <div className="mx-auto max-w-5xl">
+        <Link to={portalTo('/clients')} className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary">
+          <ArrowLeft size={15} className="rtl:rotate-180" /> {t('clients_portfolio')}
+        </Link>
+        {denied ? (
+          <div data-testid="client-out-of-scope" className="rounded-2xl border border-border bg-surface p-8 text-center">
+            <p className="font-heading text-lg font-bold text-text-primary">
+              {lang === 'ar' ? 'هذا العميل خارج نطاقك' : 'This client is outside your access'}
+            </p>
+            <p className="mt-1.5 text-sm text-text-secondary">
+              {lang === 'ar'
+                ? 'عضويتك تشمل عملاء بعينهم. اطلب الوصول ممن يملك صلاحية أوسع.'
+                : 'Your membership covers specific clients. Ask someone with wider access to grant it.'}
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-danger/30 bg-[var(--negative-background)] p-6 text-center text-sm text-danger">
+            {t('error_generic')}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const d = query.data
 
   // Only tabs whose backend is live AND the user is permitted to see are shown — never a placeholder tab.
   const TABS: { key: Tab; label: string }[] = [

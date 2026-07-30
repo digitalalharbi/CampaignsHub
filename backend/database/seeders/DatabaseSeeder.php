@@ -62,5 +62,12 @@ class DatabaseSeeder extends Seeder
         // 4) LAST: every tenant user needs a membership, or they have no portal to land in. Runs after
         //    all the seeders above so it catches whatever they created, and is idempotent.
         $this->call(MembershipBackfillSeeder::class);
+
+        // 5) After the backfill, because this one grants a membership DELIBERATELY rather than
+        //    migrating one: a manager confined to a single client, so the demo actually exercises
+        //    the ceiling instead of showing three accounts that all see everything.
+        if (App::environment(['local', 'demo'])) {
+            $this->call(DemoAgencyScopeSeeder::class);
+        }
     }
 }

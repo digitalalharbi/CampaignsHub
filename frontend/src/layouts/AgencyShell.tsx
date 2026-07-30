@@ -49,6 +49,7 @@ const agencyNav = [
   { to: '/agency/files', ar: 'الملفات', en: 'Files', icon: FolderOpen },
   { to: '/agency/messages', ar: 'المحادثات', en: 'Conversations', icon: MessageSquare },
   { to: '/agency/billing', ar: 'المالية', en: 'Finance', icon: Receipt },
+  { to: '/agency/team', ar: 'الفريق والنطاقات', en: 'Team & scopes', icon: Users },
 ] as const
 
 type NavEntry = (typeof agencyNav)[number]
@@ -86,8 +87,8 @@ function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: bool
       <nav aria-label={ar ? 'أقسام الوكالة' : 'Agency sections'} className="flex flex-col gap-1">
         {render(agencyNav)}
       </nav>
-      {/* Nothing is listed here before it works. Team & scopes and the client portals join this rail
-          when their surfaces land — a nav entry that leads nowhere is a broken promise, not a roadmap. */}
+      {/* Nothing is listed here before it works. The client portals join this rail when their
+          surface lands — a nav entry that leads nowhere is a broken promise, not a roadmap. */}
       <div className="mt-auto" />
     </>
   )
