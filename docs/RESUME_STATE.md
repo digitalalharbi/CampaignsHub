@@ -158,6 +158,7 @@ which also carries the audit of what the codebase actually looked like at adopti
 | SEC-ADMIN-001 `is_platform_admin` hardening | `d8de729` | **VERIFIED** — removed from `$fillable`; three routes closed |
 | NAV-001 grouped rails | `c182e14`, `0c2204c` | **VERIFIED** — two levels, nothing hidden, portals stay distinct |
 | AGENCY-005 white-label per client space | `3982fff` | **VERIFIED** — plus SEC-BRAND-001, the ownership check on branding writes |
+| PORTAL-AUTH-001a backfill | `40fb5a5` | **VERIFIED** — identities exist; nothing reads them yet (that is step 3) |
 
 **What the audit actually found.** Nothing was lost in the `/app/*` move: 74 routes before, 90 now,
 every old path resolving; the advertiser rail has the same fifteen entries; all eight settings
@@ -251,9 +252,12 @@ notes, taxonomies, services). `/app/settings/public-pages|portals|taxonomies` re
     notifications, opportunities. Reachable only by typing the URL; linked from nothing.
 
 ## Exact next task
-**PORTAL-AUTH-001, the auth half** — follow `docs/PORTAL_AUTH_MIGRATION.md` in order, starting with
-the contacts → users + ClientPortal membership backfill, and asserting the resulting scope matches
-`contactOwnedWorkspaceIds()` for every existing contact BEFORE anything reads from it.
+**PORTAL-AUTH-001 step 2** — an OTP grant on the shared auth engine that issues a Sanctum session for
+the users the backfill created. Step 1 is done (`40fb5a5`); `docs/PORTAL_AUTH_MIGRATION.md` has the
+remaining order. Step 3 then switches `ClientPortalController` to resolve identity from
+`$request->user()` + membership scope — one method, because `contactScope()` is already the single
+choke point. Step 4 accepts BOTH sessions for a release; step 5 drops `ClientPortalToken` only once
+the log shows zero token-served requests.
 
 Then: **INFL-002** (blocked behind the same auth work — creators have no password either), dropping
 `users.tenant_id`, and a full cross-browser E2E + `migrate:fresh --seed` + clean-install pass for

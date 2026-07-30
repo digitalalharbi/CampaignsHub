@@ -1,6 +1,6 @@
 # PORTAL-AUTH-001 — unifying the client portal onto the single auth engine
 
-**State: PARTIAL.** The URL space is unified; the auth engines are not.
+**State: PARTIAL.** The URL space is unified and the identities exist. The auth engines are not merged: nothing reads the new memberships yet.
 
 ## What is done
 
@@ -44,9 +44,17 @@ a boundary that is written down and tested.
 
 ## The order it should be done in
 
-1. Migration + backfill: contacts → `users` (no password) + `ClientPortal` membership + client scope.
-   Idempotent, and re-runnable as new contacts verify. Assert the resulting scope matches
-   `contactOwnedWorkspaceIds()` for every existing contact **before** anything reads from it.
+1. ~~Migration + backfill: contacts → `users` (no password) + `ClientPortal` membership + client
+   scope.~~ **DONE — `40fb5a5`.** `BackfillClientPortalIdentities` + `php artisan
+   portal:backfill-identities [--dry-run]`. Idempotent, re-runnable as new contacts verify, and the
+   scope equality is asserted against the LIVE OTP session rather than a count
+   (`ClientPortalBackfillTest::test_the_granted_scope_equals_what_the_portal_reaches_today`).
+
+   Conflicts are fail-closed and reported for a human: an email belonging to staff is never merged;
+   the same person at two agencies gets two memberships; a shared phone does not merge two people. A
+   contact with no client space grants nothing.
+
+   Nothing reads from these memberships yet — that is step 3.
 2. Add an OTP grant to the shared auth engine that issues a Sanctum session for those users.
 3. Change `ClientPortalController` to resolve identity from `$request->user()` + membership scope.
    The choke point already exists — `contactScope()` — so this is one method, not twenty.
