@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Actions\ManageMembershipScopes;
@@ -290,5 +291,66 @@ final class MembershipGrantTest extends TestCase
         // having no scope rows — an empty set now means nothing, not everything.
         $this->assertTrue($user->hasPermission(ClientScopeResolver::ALL_CLIENTS));
         $this->assertNull(app(ClientScopeResolver::class)->reachableClientIds($user));
+    }
+
+    /**
+     * The ceiling in action through the real client API: an account manager scoped to one client
+     * cannot open another, even one they OWN. Ownership grants; the membership caps.
+     */
+    public function test_a_scoped_member_cannot_open_a_client_outside_their_scope(): void
+    {
+        $this->seed(PermissionSeeder::class);
+        $agency = $this->tenant('Ceiling Agency', 'agency');
+        $mine = $this->client($agency, 'Assigned');
+        $theirs = $this->client($agency, 'Not Assigned');
+
+        $user = $this->bareUser($agency, 'ceiling@test.dev');
+        // Deliberately made OWNER of the client they are not scoped to — ownership must not win.
+        $theirs->forceFill(['owner_id' => $user->id])->save();
+
+        $role = Role::create([
+            'tenant_id' => $agency->id, 'name' => 'AM', 'slug' => 'am-'.uniqid(),
+        ]);
+        $role->givePermissionTo('clients.view');
+        $user->assignRole($role);
+
+        app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $user, tenant: $agency, portal: Portal::Agency, role: 'account_manager',
+            clientScopeIds: [(string) $mine->id],
+        ));
+
+        $this->actingAs($user, 'sanctum')->getJson("/api/v1/app/clients/{$mine->id}")->assertOk();
+        // Owned, but outside the membership scope → refused.
+        $this->actingAs($user, 'sanctum')->getJson("/api/v1/app/clients/{$theirs->id}")->assertForbidden();
+
+        // And the portfolio listing shows only the assigned one.
+        $list = $this->actingAs($user, 'sanctum')->getJson('/api/v1/app/clients')->assertOk();
+        $ids = collect($list->json('data.items') ?? $list->json('data'))->pluck('id')->all();
+        $this->assertContains((string) $mine->id, $ids);
+        $this->assertNotContains((string) $theirs->id, $ids);
+    }
+
+    /** clients.view_all lifts the ceiling — the positive grant, and the only thing that does. */
+    public function test_the_all_clients_permission_lifts_the_ceiling(): void
+    {
+        $this->seed(PermissionSeeder::class);
+        $agency = $this->tenant('Unrestricted Agency', 'agency');
+        $a = $this->client($agency, 'One');
+        $b = $this->client($agency, 'Two');
+        $user = $this->bareUser($agency, 'allclients@test.dev');
+
+        $role = Role::create([
+            'tenant_id' => $agency->id, 'name' => 'Admin', 'slug' => 'admin-'.uniqid(),
+        ]);
+        $role->givePermissionTo('clients.view', ClientScopeResolver::ALL_CLIENTS);
+        $user->assignRole($role);
+
+        app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $user, tenant: $agency, portal: Portal::Agency, role: 'admin',
+            clientScopeIds: [(string) $a->id],   // scoped, but the permission outranks it
+        ));
+
+        $this->actingAs($user, 'sanctum')->getJson("/api/v1/app/clients/{$a->id}")->assertOk();
+        $this->actingAs($user, 'sanctum')->getJson("/api/v1/app/clients/{$b->id}")->assertOk();
     }
 }
