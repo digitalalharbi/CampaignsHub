@@ -88,6 +88,9 @@ class DatabaseSeeder extends Seeder
             // Influencer work in three states — published, owed, and late — because a demo where
             // everything is fine shows none of what the portal is for.
             $this->call(DemoInfluencersSeeder::class);
+            // SIGNUP-006 — one demo login per portal, so the five can actually be told apart.
+            // Development only; the seeder refuses in production.
+            $this->call(DemoPortalLoginsSeeder::class);
         }
 
         /*

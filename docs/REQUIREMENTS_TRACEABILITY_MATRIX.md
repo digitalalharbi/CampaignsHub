@@ -585,3 +585,35 @@ second check when the event lands carrying the payment method, which the applica
   suspension are all visible only by looking.
 - **Invoices, receipts and tax lines** are not generated for the subscription stream. The client-services
   stream has them (`Invoice`); the platform's own does not.
+
+## SIGNUP-006 — five demo accounts, one per portal
+
+| ID | Requirement | Status |
+| --- | --- | --- |
+| SIGNUP-006 | One demo login per portal, development-only, each reaching its own portal and refused everywhere else. | **VERIFIED** (5 tests) |
+
+| Portal | Account | Notes |
+| --- | --- | --- |
+| `/admin` | `admin@demo-campaignshub.local` | Platform admin flag, NO membership — the console is reached by the flag, and a membership would place the owner inside a workspace they administer. |
+| `/app` | `owner@demo-company.local` | |
+| `/agency` | `owner@demo-agency.local` | |
+| `/influencers` | `layla@creators.demo` | |
+| `/portal` | `client@demo-portal.local` | Confined to ONE client space. **The portal still authenticates by OTP** — see below. |
+
+Password `password`, and the seeder **refuses to run outside development**, with a test that calls it
+in a production environment and asserts nothing was touched. A deployed install must not carry an
+account whose password is published in a seeder.
+
+`admin@demo-campaignshub.local` was ADDED rather than renaming `platform@mediabuying.local`: renaming
+a provisioning account breaks every existing install that signs in with it.
+
+**The client portal is not faked.** `/portal` is still served by its own OTP token engine
+(PORTAL-AUTH-001), so `client@demo-portal.local` having a password does not by itself open it — the
+tracking link and the one-time code do. The account exists so the membership model is complete and the
+portal has a named identity, and the sign-in page's client tab links to `/portal/login` rather than
+offering a password box that would not work. Issuing a password login for an OTP portal is precisely
+what the contract forbids: «لا تزوّر دخول عميل البوابة بكلمة مرور بينما محركها ما زال OTP».
+
+The claim under test is not "five accounts exist" — it is that each reaches its own portal and is
+**refused at every other one**, through the real sign-in, with no session created and the refusal
+naming where that account should go instead.
