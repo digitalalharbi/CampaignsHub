@@ -14,6 +14,19 @@ async function openCardsView(page: import('@playwright/test').Page) {
   await page.getByTestId('view-cards').click()
 }
 
+/**
+ * A campaign carrying real demo data, rather than whichever card happens to sort first.
+ *
+ * The specs below read a campaign's PERFORMANCE and its linked platform campaigns, and the throwaway
+ * campaigns this file creates have neither — they are brand new and connected to nothing. Once the
+ * create spec has run, `.first()` is one of those, so the assertions were failing on a campaign that
+ * was never supposed to satisfy them. Excluding them by name keeps each spec pointed at what it is
+ * actually about.
+ */
+function seededCampaignCard(page: import('@playwright/test').Page) {
+  return page.getByTestId('campaign-card').filter({ hasNotText: 'E2E Campaign' }).first()
+}
+
 /*
  * The ADVERTISER account (LOGIN-002).
  *
@@ -48,7 +61,7 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
   await switchToEnglish(page)
 
   await openCardsView(page)
-  await page.getByTestId('campaign-card').first().click()
+  await seededCampaignCard(page).click()
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
 
   // Performance tab renders the real charts (Spend vs Revenue) from the campaign metrics API.
@@ -63,7 +76,7 @@ test('link-external modal opens and labels sandbox data as Demo', async ({ page 
   await page.goto('/app/campaigns')
   await switchToEnglish(page)
   await openCardsView(page)
-  await page.getByTestId('campaign-card').first().click()
+  await seededCampaignCard(page).click()
 
   await page.getByRole('tab', { name: /Platforms|المنصات/ }).click()
   await page.getByRole('button', { name: /Link external campaign|ربط حملة خارجية/ }).click()

@@ -25,12 +25,31 @@ async function selectFirstClientAndProject(page: import('@playwright/test').Page
   await expect(page.getByTestId('agency-scope')).toBeVisible({ timeout: 20000 })
 
   const client = page.getByTestId('agency-scope-client')
+  const project = page.getByTestId('agency-scope-project')
+
   if (await client.count()) {
-    await client.selectOption({ index: 1 })
+    /*
+     * Try clients until one of them HAS a project.
+     *
+     * `index: 1` was wrong, and wrong in a way that looked like a product bug: an agency may hold a
+     * client that has no projects yet, and the control correctly says so and leaves the project
+     * field disabled. Whether the alphabetically-first demo client happens to have a project is not
+     * what any test in this file is about — every one of them needs to be IN a project, so the
+     * helper's job is to get there rather than to assume the first attempt does.
+     */
+    const options = await client.locator('option').count()
+
+    for (let i = 1; i < options; i++) {
+      await client.selectOption({ index: i })
+      await expect(project).toBeAttached()
+      if (await project.isEnabled()) break
+    }
   }
 
-  const project = page.getByTestId('agency-scope-project')
-  await expect(project).toBeEnabled({ timeout: 20000 })
+  await expect(
+    project,
+    'no authorised client has a project — the fixture cannot put this operator inside one',
+  ).toBeEnabled({ timeout: 20000 })
   await project.selectOption({ index: 1 })
 }
 

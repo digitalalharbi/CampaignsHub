@@ -405,3 +405,21 @@ leave a live tenant sitting behind a `rejected` record.
 
 **Not yet true:** nothing notifies the applicant when a decision is made. No mail provider is
 configured, so the status page is where a decision becomes visible, and the applicant has to look.
+
+## XBROWSER — three pre-existing E2E failures, root-caused
+
+Found while gating SIGNUP-002d. All three predate this session: checked out at `e820720` with a fresh
+seed, `campaigns-roles` fails on **all three browsers**, which is worse than on the branch. They had
+been passing only because the database happened to hold different data.
+
+| Failure | Root cause | Fix |
+| --- | --- | --- |
+| `campaigns-roles` — AGENCY-006 | The helper picked client `index: 1` blindly. An agency may hold a client with no projects yet; the control correctly says so and leaves the project field disabled, so the test's precondition was never met. | The helper now tries clients until one HAS a project. Whether the alphabetically-first demo client happens to have one is not what any test in that file is about. |
+| `campaigns.spec` — detail tabs, link-external modal | `.first()` campaign card. Once the create spec has run, that card is one of the throwaway campaigns the file itself creates — brand new, no metrics, connected to nothing — so the assertions were failing on a campaign that was never supposed to satisfy them. | The specs now pick a seeded campaign, excluding the file's own `E2E Campaign …` rows. |
+| `campaigns-linking` — Firefox only | The related-entities panel sits between the header and the tab strip and renders when its counts arrive, pushing the strip down. Playwright checks that the TAB is stable, not that the PAGE is, so under full three-browser load the strip could still move between the hit-test and the mouse event. The click went nowhere, the page sat on Overview, and the next step waited thirty seconds for a button that only exists under Platforms. | Wait for the panel before touching the strip, then assert the URL actually carries `tab=platforms` rather than assuming the click landed. Firefox was simply the browser slow enough to lose the race; the layout shift is real in all three. |
+
+**Environment lesson, recorded because it cost a whole gate.** `playwright.config.ts` sets
+`reuseExistingServer: !CI`, so a hand-started `php artisan serve` is adopted instead of the configured
+one — losing `PHP_CLI_SERVER_WORKERS=4` and `--no-reload`. Single-worker PHP serving is the documented
+root cause of the signup and link/move specs timing out under load, and it produced four failures that
+looked like code regressions and were not. Stop any hand-started backend before running the gate.

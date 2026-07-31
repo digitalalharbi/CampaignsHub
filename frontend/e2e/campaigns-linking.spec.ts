@@ -26,7 +26,26 @@ async function openCampaignLinkedTab(page: Page, name: string) {
   await page.getByTestId('view-cards').click()
   await page.getByTestId('campaign-card').filter({ hasText: name }).first().click()
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
-  await page.getByRole('tab', { name: /Platforms|المنصات/ }).click()
+
+  /*
+   * Wait for everything ABOVE the tab strip before touching it.
+   *
+   * The related-entities panel sits between the header and the tabs and renders once its counts
+   * arrive, which pushes the strip down. Playwright checks that the TAB is stable, not that the page
+   * is — so under the full three-browser load, where that panel lands late, the strip could still
+   * move between the hit-test and the mouse event and the click went nowhere. The page then sat on
+   * Overview and the next step waited thirty seconds for a button that only exists under Platforms.
+   *
+   * Firefox only, because it was the browser slow enough to lose that race — the layout shift is
+   * real in all three.
+   */
+  await expect(page.getByTestId('related-entities')).toBeVisible({ timeout: 20000 })
+
+  const platforms = page.getByRole('tab', { name: /Platforms|المنصات/ })
+  await platforms.click()
+  // The tab lives in the query string, so this asserts the click actually took effect rather than
+  // assuming it did.
+  await expect(page).toHaveURL(/tab=platforms/)
 }
 
 test('link → 409 move-confirmation → confirm move → unlink (full path)', async ({ page }) => {
