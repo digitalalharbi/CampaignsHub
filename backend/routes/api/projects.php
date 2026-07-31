@@ -20,7 +20,7 @@ use App\Domains\Tasks\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
 
 // Project management (tenant-scoped; not project-context-bound).
-Route::middleware(['auth:sanctum', 'tenant'])->prefix('projects')->name('projects.')->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('projects')->name('projects.')->group(function (): void {
     Route::get('/', [ProjectController::class, 'index'])->name('index');
     Route::post('/', [ProjectController::class, 'store'])->name('store')
         ->middleware(EnsureWithinPlanLimit::class.':projects');
@@ -34,7 +34,7 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('projects')->name('project
 });
 
 // DASH-010-E: saved dashboard views (persisted per user + tenant; not project-scoped).
-Route::middleware(['auth:sanctum', 'tenant'])->prefix('dashboard/saved-views')->name('dashboard.saved-views.')->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('dashboard/saved-views')->name('dashboard.saved-views.')->group(function (): void {
     Route::get('/', [SavedDashboardViewController::class, 'index'])->name('index');
     Route::post('/', [SavedDashboardViewController::class, 'store'])->name('store');
     Route::get('{view}', [SavedDashboardViewController::class, 'show'])->name('show');
@@ -44,7 +44,7 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('dashboard/saved-views')->
 });
 
 // Project-scoped resources (ResolveProject enforces project isolation).
-Route::middleware(['auth:sanctum', 'tenant', 'project'])->prefix('projects/{project}')->name('projects.scoped.')->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->prefix('projects/{project}')->name('projects.scoped.')->group(function (): void {
     Route::get('overview', [ProjectOverviewController::class, 'show'])->name('overview');
 
     // Effective disclaimer/methodology copy for live surfaces (dashboard/analytics/live report).

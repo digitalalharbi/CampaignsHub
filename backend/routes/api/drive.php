@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Route;
 // controller (drive.view / drive.manage); tenant isolation is enforced by the models' global scope.
 //
 // NOTE: this file is intentionally NOT wired into routes/api.php here — the API orchestrator includes it.
-Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(function (): void {
     Route::get('drive/links', [DriveController::class, 'links'])->name('drive.links.index');
     Route::post('drive/links', [DriveController::class, 'linkFolder'])->name('drive.links.store');
     Route::get('drive/links/{link}/files', [DriveController::class, 'files'])->name('drive.links.files');

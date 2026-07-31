@@ -9,7 +9,7 @@ use App\Domains\Integrations\Http\Controllers\ProviderConnectionController;
 use Illuminate\Support\Facades\Route;
 
 // Tenant-level connector status board + provider connections.
-Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(function (): void {
     Route::prefix('integrations')->name('integrations.')->group(function (): void {
         Route::get('/', [IntegrationController::class, 'index'])->name('index');
         Route::get('{key}/health', [IntegrationController::class, 'health'])->name('health');
@@ -22,7 +22,7 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
 });
 
 // Per-project integrations (ResolveProject enforces project isolation).
-Route::middleware(['auth:sanctum', 'tenant', 'project'])
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
     ->prefix('projects/{project}/integrations')
     ->name('projects.integrations.')
     ->group(function (): void {

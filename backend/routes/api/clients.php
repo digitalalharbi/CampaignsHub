@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Route;
 /*
 | Client portfolio + command center (auth + tenant; permission + per-client access enforced in controllers).
 */
-Route::middleware(['auth:sanctum', 'tenant', 'entitlement:clients'])->prefix('app/clients')->name('app.clients.')->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'portal:agency', 'entitlement:clients'])->prefix('app/clients')->name('app.clients.')->group(function (): void {
     // Enum catalogue for classification/settings dropdowns.
     Route::get('/meta/taxonomy', ClientTaxonomyController::class)->name('taxonomy');
 

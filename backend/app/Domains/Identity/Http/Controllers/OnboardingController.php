@@ -8,7 +8,10 @@ use App\Domains\Accounts\Enums\AccountType;
 use App\Domains\Accounts\Services\AccountEntitlements;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
+use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -33,8 +36,19 @@ final class OnboardingController extends Controller
 
     public function __construct(
         private readonly TenantContext $context,
+        private readonly MembershipContext $memberships,
         private readonly AccountEntitlements $entitlements,
     ) {}
+
+    /**
+     * The portal these entitlements describe (REG-001) — read from the active membership, which is
+     * where the answer lives. Onboarding runs after registration has already granted one, so this is
+     * settled by the time the wizard asks.
+     */
+    private function portal(): ?Portal
+    {
+        return $this->memberships->membership()?->portal;
+    }
 
     /** GET /onboarding/state */
     public function state(Request $request): JsonResponse
@@ -43,13 +57,27 @@ final class OnboardingController extends Controller
 
         return ApiResponse::success([
             'email_verified' => $request->user()->email_verified_at !== null,
-            'account' => $this->entitlements->toArray($tenant),
+            'account' => $this->entitlements->toArray($tenant, $this->portal()),
             'account_types' => AccountType::values(),
             'services' => array_keys(self::SERVICE_MODULES),
         ], 'Onboarding state.');
     }
 
-    /** POST /onboarding/account-type */
+    /**
+     * POST /onboarding/account-type
+     *
+     * Answering "what kind of account is this?" also settles WHICH PORTAL the workspace opens in,
+     * so the membership moves with the answer (REG-001).
+     *
+     * Registration seeds a portal from whatever the visitor chose on the public site, and a visitor
+     * who arrived without choosing gets the advertiser portal. If they then say "agency" here, the
+     * tenant was reclassified and the membership was not — leaving an agency permanently inside the
+     * advertiser portal, with a rail that had no Clients in it and endpoints that refused them.
+     *
+     * Only the FOUNDING membership of a workspace still in onboarding is moved. A workspace that is
+     * already running has people in it whose portals were granted deliberately, and reclassifying
+     * the company must not silently relocate them.
+     */
     public function accountType(Request $request): JsonResponse
     {
         $this->requireVerified($request);
@@ -60,7 +88,35 @@ final class OnboardingController extends Controller
             'onboarding_step' => $this->stepAfter('account_type'),
         ])->save();
 
+        $this->realignFoundingPortal($request, $tenant);
+
         return $this->ok($tenant);
+    }
+
+    /** Point this workspace's sole membership at the portal its new account type implies. */
+    private function realignFoundingPortal(Request $request, Tenant $tenant): void
+    {
+        if ($tenant->onboarding_completed_at !== null) {
+            return;
+        }
+
+        $target = Portal::forAccountType($tenant->account_type);
+        $memberships = Membership::query()->where('tenant_id', $tenant->id)->get();
+
+        // More than one member means the workspace is no longer just its founder — leave them be.
+        if ($memberships->count() !== 1) {
+            return;
+        }
+
+        $membership = $memberships->first();
+        if ($membership->portal === $target) {
+            return;
+        }
+
+        $membership->forceFill(['portal' => $target->value])->save();
+        // The request is mid-flight with the old portal bound; re-bind so the payload this call
+        // returns describes where the user actually is now rather than where they just were.
+        $this->memberships->set($membership->refresh());
     }
 
     /** POST /onboarding/service */
@@ -99,7 +155,16 @@ final class OnboardingController extends Controller
         $tenant->forceFill([
             'name' => $data['name'],
             'settings' => $settings,
-            'onboarding_step' => $this->workspaceKind($tenant) === 'company' ? 'first_project' : 'first_client',
+            /*
+             * Whose work is this? The PORTAL answers it (REG-001).
+             *
+             * Only the agency portal manages other people's campaigns, so only it is asked for a
+             * first CLIENT. This branched on `workspaceKind` before, and `personal` — the branch a
+             * freelancer, an in-house team and every unset account type fell into — asked all of
+             * them to name a client. They then arrived in the advertiser portal, which has no
+             * clients section at all, having just been made to create one.
+             */
+            'onboarding_step' => $this->portal() === Portal::Agency ? 'first_client' : 'first_project',
         ])->save();
 
         return $this->ok($tenant);
@@ -163,11 +228,6 @@ final class OnboardingController extends Controller
         return Tenant::findOrFail((string) $this->context->tenantId());
     }
 
-    private function workspaceKind(Tenant $tenant): string
-    {
-        return $this->entitlements->workspaceKind($tenant);
-    }
-
     private function stepAfter(string $step): string
     {
         return match ($step) {
@@ -197,6 +257,6 @@ final class OnboardingController extends Controller
 
     private function ok(Tenant $tenant): JsonResponse
     {
-        return ApiResponse::success(['account' => $this->entitlements->toArray($tenant->refresh())], 'Saved.');
+        return ApiResponse::success(['account' => $this->entitlements->toArray($tenant->refresh(), $this->portal())], 'Saved.');
     }
 }

@@ -13,6 +13,7 @@ use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestConversion;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -49,10 +50,10 @@ final class RequestConversionTest extends TestCase
         $viewerRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Viewer', 'slug' => 'viewer']);
 
         $this->owner = User::create(['name' => 'Owner', 'email' => 'owner@agency.test', 'password' => 'secret123']);
-        $this->grantMembership($this->owner, $this->tenant);
+        $this->grantMembership($this->owner, $this->tenant, Portal::Agency);
         $this->owner->assignRole($ownerRole);
         $this->viewer = User::create(['name' => 'Viewer', 'email' => 'viewer@agency.test', 'password' => 'secret123']);
-        $this->grantMembership($this->viewer, $this->tenant);
+        $this->grantMembership($this->viewer, $this->tenant, Portal::Agency);
         $this->viewer->assignRole($viewerRole);
     }
 

@@ -258,6 +258,8 @@ notes, taxonomies, services). `/app/settings/public-pages|portals|taxonomies` re
     notifications, opportunities. Reachable only by typing the URL; linked from nothing.
 
 ## Exact next task
+**SIGNUP-001**, resumed — REG-001 interrupted it and is now closed (see Decision 25 below).
+
 **SIGNUP-001** — the account + subscription state machine. It is first because everything else in the
 2026-07-31 addendum hangs off it: plans cannot gate what has no state, payment cannot activate what
 has no state to move, and the admin review queue has nothing to review. The twelve states and the
@@ -606,3 +608,36 @@ No hardcoded unmanaged options · no multi-select without option management · n
 - Engine option keys for enum-backed fields MUST equal LIVE enum values (source of truth) — do NOT reintroduce aspirational keys (that was the blocker; fixed `5181773`).
 - Integrations canonical `/app/integrations` (absorbs Connection Center + Drive-under-Files); Branding under Settings; Finance one backend surfaced as المالية/الاشتراك/الفواتير. Do NOT re-split.
 - Migration policy: DEACTIVATE/merge, never delete used options.
+
+### Decision 25 — the portal decides the surface; the account type does not
+
+Reported as «جميع البوابات أصبحت تظهر كتجربة وكالة», reproduced live before touching any code: a
+`freelancer` registration — and a registration with no account type at all — landed in `/app` and was
+served the agency console.
+
+There were **two** portal systems. `Portal` decided the route tree; `AccountEntitlements::nav()`
+decided the menu, from `account_type`, through a `personal` / `company` fork. `personal` WAS the
+agency console, and it was also the fallback for an unknown type. `freelancer`, `in_house_team` and
+every self-registered account that skipped the question fell into it. Only `agency.php` and
+`influencers.php` carried `portal:` middleware, so the engines behind those menu items answered.
+
+What is true now:
+
+- **`Portal::sections()` is the single catalogue.** `AccountEntitlements` narrows it by plan and
+  module; it never chooses between menus, and a null portal yields `[]` rather than a default.
+- **Every tenant-scoped route group names its portal.** Zero groups are left on authentication alone.
+- **`clients`, `requests`, client invoicing and client conversations live in `/agency`.** Moved, not
+  deleted; old `/app` paths redirect there and the agency gate answers honestly.
+- **The account type still chooses the STARTING portal** (`Portal::forAccountType`) and now the
+  onboarding answer moves the founding membership with it. It decides nothing after that.
+
+Five further defects surfaced while proving it, each fixed and each with a test:
+`account_type` was stored twice and defaulted to `agency`; onboarding asked freelancers for a first
+client; `clients.view_all` erased an explicit client scope; `client-workspaces` applied no client
+ceiling at all; and `fetchCurrentUser` turned any failed probe into a logout — which on WebKit and
+Firefox left a `/login` entry in history that Back landed on.
+
+Deliberately left open, and recorded in the matrix rather than quietly skipped: `/app/*` has no
+portal guard of its own (REG-010), and `AlertEvaluator` writes a fixed `/app/alerts` action URL
+(REG-011). Closing REG-010 means moving the E2E suite off `owner@demo-agency.local` for advertiser
+surfaces, which is its own unit.

@@ -50,13 +50,13 @@ Route::prefix('invitations')->name('invitations.')->group(function (): void {
     Route::get('/{token}', [InvitationController::class, 'preview'])->name('preview')->middleware('throttle:30,1');
     Route::post('/accept', [InvitationController::class, 'accept'])->name('accept')->middleware('throttle:10,1');
 });
-Route::middleware(['auth:sanctum', 'tenant'])->prefix('app/team/invitations')->name('app.team.invitations.')->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('app/team/invitations')->name('app.team.invitations.')->group(function (): void {
     Route::get('/', [InvitationController::class, 'index'])->name('index');
     Route::post('/', [InvitationController::class, 'store'])->name('store')->middleware('throttle:20,1');
 });
 
 // Resumable onboarding wizard (authenticated + tenant-scoped).
-Route::middleware(['auth:sanctum', 'tenant'])->prefix('onboarding')->name('onboarding.')->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->prefix('onboarding')->name('onboarding.')->group(function (): void {
     Route::get('/state', [OnboardingController::class, 'state'])->name('state');
     Route::post('/account-type', [OnboardingController::class, 'accountType'])->name('account-type');
     Route::post('/service', [OnboardingController::class, 'service'])->name('service');
@@ -80,6 +80,6 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('me')->name('me.')->group(
 });
 
 // Tenant users (for member/team pickers).
-Route::middleware(['auth:sanctum', 'tenant'])
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])
     ->get('users', [UserController::class, 'index'])
     ->name('users.index');

@@ -12,7 +12,7 @@ use App\Domains\Settings\Http\Controllers\TeamController;
 use Illuminate\Support\Facades\Route;
 
 // Organization settings (tenant-scoped; individual actions enforce settings.manage where needed).
-Route::middleware(['auth:sanctum', 'tenant'])->prefix('settings')->name('settings.')->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->prefix('settings')->name('settings.')->group(function (): void {
     // General (organization profile + display defaults).
     Route::get('organization', [OrganizationSettingsController::class, 'show'])->name('organization.show');
     Route::match(['put', 'patch'], 'organization', [OrganizationSettingsController::class, 'update'])->name('organization.update');

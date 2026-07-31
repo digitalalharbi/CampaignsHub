@@ -151,3 +151,38 @@ exist before payment can activate anything.
 | INFL-003 | INFLUENCERS | Nominations, tracking links and discount codes, and results per deliverable | INFL-002 | **NOT_STARTED** | The remaining half of the influencers contract. |
 | PORTAL-PAY-001 | PORTAL | Payment on a client-portal invoice | PAY-001 | **NOT_STARTED** | The portal shows invoices; it cannot take money. |
 | REVIEW-001 | ALL | Per-portal audit against its stated purpose: own dashboard, own menu and taxonomy, own workspace settings, real isolation, loading/empty/error, working search-filters-views-details-actions, ≤2 menu levels, nothing copied between portals | — | **PARTIAL** | `docs/REGRESSION_AUDIT_PORTALS.md` covers /app and /agency; /admin, /influencers and /portal still need the same pass. |
+
+## REG-001 — the portal regression, and its root cause
+
+Reported as «جميع البوابات أصبحت تظهر كتجربة وكالة». Reproduced live before any code was changed:
+registering as a `freelancer` produced `nav = [dashboard, requests, clients, projects, campaigns,
+content, analytics, reports, tasks, connections, alerts, messaging, billing, team, settings]` — the
+agency console — inside `/app`. So did registering with no account type at all.
+
+The cause was a SECOND portal system competing with `Portal`. `AccountEntitlements::nav()` chose
+between two menus from the workspace's `account_type`: a `personal` menu, which was the agency
+console, and a `company` menu. `personal` was also the FALLBACK for an unknown or unset type. So
+`freelancer`, `in_house_team` and every self-registered account that skipped the question were
+handed the agency's sections; and because only `agency.php` and `influencers.php` carried the
+`portal:` middleware, the engines behind those sections answered them.
+
+| ID | Requirement | Status | Evidence |
+| --- | --- | --- | --- |
+| REG-001 | The PORTAL decides the surface. `Portal::sections()` is the single catalogue; `AccountEntitlements` narrows it by plan/module and never chooses between menus. No fallback reaches Agency. | **VERIFIED** | `EntitlementMatrixTest` (rewritten — it previously asserted the defect), `PortalDistinctnessTest`, live probe of all three personas. |
+| REG-002 | Every shared API route group names the portal(s) that own it; fail-closed. | **VERIFIED** | Route map: 0 tenant-scoped groups left on authentication alone. `PortalDistinctnessTest` 403s an advertiser on four agency endpoints. |
+| REG-003 | The multi-client tooling (clients, requests inbox, client invoicing, client conversations) MOVED to `/agency` — not deleted, not duplicated. Old `/app` paths redirect. | **VERIFIED** | `navGrouping.test.ts` (rewritten to "moved is not deleted"), `portal-distinctness.spec.ts` on three browsers. |
+| REG-004 | Explicit regression tests: each portal's declared surface differs; tampering with portal, membership id or client id grants nothing; reload/direct link/back keep the portal. | **VERIFIED** | `PortalDistinctnessTest` (11 cases), `portal-distinctness.spec.ts` (7 cases × 3 browsers). |
+| REG-005 | The founding membership follows the account type chosen during onboarding. | **VERIFIED** | Registering with no journey then choosing "agency" used to leave the owner in `/app` permanently, refused by their own agency endpoints. `RegistrationOnboardingTest`. |
+| REG-006 | Onboarding asks for a first CLIENT only in the agency portal. | **VERIFIED** | Branched on `workspaceKind`, so freelancers and in-house teams were made to create a client and then landed in a portal with no clients section. |
+| REG-007 | A membership that NAMES clients is a ceiling that outranks `clients.view_all`. | **VERIFIED** | The permission was checked first, so a scoped account manager saw every client the moment their role carried it. `PortalDistinctnessTest::test_a_client_id_outside_the_membership_scope_reaches_nothing`. |
+| REG-008 | `client-workspaces` applies the client ceiling on both list and show. | **VERIFIED** | Neither was scoped: any id in the tenant resolved. Found by REG-004, not by review. |
+| REG-009 | `account_type` lives on the tenant column only, and has no default. | **VERIFIED** | Settings wrote a second copy into `settings.general` and defaulted it to `agency`, so the form appeared to change the workspace type, changed nothing, and recorded "agency" for anyone who saved. |
+
+### Known and deliberately left open
+
+- `/app/*` has no portal guard of its own, so an agency operator can still open the advertiser tree
+  and see a rail filtered down to the sections their portal shares. The API refuses everything
+  outside those, so this is a coherence problem rather than an access one. Closing it means moving
+  the E2E suite off `owner@demo-agency.local` for advertiser surfaces — tracked as REG-010.
+- `AlertEvaluator` writes `action_url = '/app/alerts'` for every recipient. Correct for an
+  advertiser, coherent-but-odd for an agency operator. Tracked as REG-011.

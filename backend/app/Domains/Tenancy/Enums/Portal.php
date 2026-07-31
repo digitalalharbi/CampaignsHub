@@ -88,9 +88,84 @@ enum Portal: string
     }
 
     /**
+     * The sections this portal offers — the single vocabulary the rail, the entitlement guard and
+     * the route gates all read (REG-001).
+     *
+     * This lives on the PORTAL because a portal is what a section belongs to. It used to be derived
+     * from the workspace's account type, through a `personal` / `company` fork whose `personal`
+     * branch was the agency console and whose fallback for an unknown account type was that same
+     * agency console. The result was the regression this replaces: a freelancer, an in-house team,
+     * and anyone who registered without naming a type all landed in the advertiser portal and were
+     * handed the agency's menu — clients, a requests inbox, agency finance.
+     *
+     * Two rules the lists below encode, and which tests hold in place:
+     *
+     *  1. `clients` and `requests` — the multi-client tooling — belong to Agency and appear in no
+     *     other portal's list. An advertiser runs their own campaigns; they have no client roster.
+     *  2. There is no default. A portal that is not named here has no sections at all, which is the
+     *     fail-closed answer. Nothing falls back to Agency.
+     *
+     * @return list<string>
+     */
+    public function sections(): array
+    {
+        return match ($this) {
+            // The owner's console. Not entitlement-driven — it is gated by `is_platform_admin`, and
+            // it administers plans rather than consuming one.
+            self::Admin => [
+                'tenants', 'plans', 'subscriptions', 'payments', 'approvals',
+                'settings', 'taxonomies', 'integrations', 'audit', 'status',
+            ],
+
+            // «كل حملاتك الإعلانية المدفوعة في مكان واحد» — the advertiser's own paid media, and
+            // nothing about managing other people's. Money here is the workspace's own
+            // subscription, never agency invoicing.
+            self::App => [
+                'dashboard', 'projects', 'campaigns', 'content', 'analytics', 'reports',
+                'alerts', 'tasks', 'files', 'connections', 'subscriptions', 'team', 'settings',
+            ],
+
+            // The multi-client agency. `clients` is the axis the rest hangs off, and `messaging` and
+            // `billing` are here because both are client-facing: conversations with a client, and
+            // invoices raised TO a client.
+            //
+            // `subscriptions` is here as well as in App, and the two are not the same money: an
+            // agency is itself a paying tenant of CampaignsHub. What separates the portals is
+            // `billing` — raising invoices to a client is something only an agency does.
+            self::Agency => [
+                'dashboard', 'clients', 'requests', 'projects', 'campaigns', 'content',
+                'reports', 'alerts', 'tasks', 'files', 'messaging', 'billing', 'subscriptions',
+                'team', 'settings',
+            ],
+
+            // Influencer & UGC. Its own nouns — a roster and deliverables are not campaigns with
+            // different labels, and the creator's half of it is narrower again (see CreatorAccess).
+            self::Influencers => [
+                'collaborations', 'roster', 'deliverables', 'content', 'reports', 'files', 'settings',
+            ],
+
+            // Request tracking. Deliberately short: this portal follows work someone else runs, so
+            // it has no campaign tooling at all.
+            self::ClientPortal => [
+                'requests', 'quotes', 'invoices', 'campaigns', 'reports', 'files', 'messages', 'profile',
+            ],
+        };
+    }
+
+    /** Whether this portal offers a section at all, before any plan or permission narrows it. */
+    public function offers(string $section): bool
+    {
+        return in_array($section, $this->sections(), true);
+    }
+
+    /**
      * The portal a workspace's account type implies. Used to seed the first membership at
      * registration; it is a starting point, never a permanent property of the user — a user may
      * hold memberships in several portals at once.
+     *
+     * Only `agency` reaches the agency portal. Every other type — and an unnamed one — is an
+     * advertiser, because someone who has not said they run other people's campaigns does not.
+     * Making Agency the fallback here, or in `sections()`, is what REG-001 was.
      */
     public static function forAccountType(?string $accountType): self
     {

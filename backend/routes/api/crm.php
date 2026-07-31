@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Route;
 /*
 | CRM endpoints. All require an authenticated, tenant-resolved user.
 */
-Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(function (): void {
     Route::get('leads', [LeadController::class, 'index'])->name('leads.index');
     Route::post('leads', [LeadController::class, 'store'])->name('leads.store');
     Route::get('leads/{lead}', [LeadController::class, 'show'])->name('leads.show');

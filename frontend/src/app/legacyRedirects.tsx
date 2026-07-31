@@ -92,6 +92,26 @@ export const legacyAppRedirects = MOVED_TO_APP.map((path) => ({
 }))
 
 /**
+ * The multi-client surfaces moved from `/app/*` to `/agency/*` (REG-001).
+ *
+ * A client roster, an inbound requests inbox, client invoices and client conversations all presume
+ * you run campaigns for other people, and while they were mounted in the advertiser portal that
+ * portal looked like an agency console — the regression this fixes. They are not deleted, and not
+ * duplicated: they live in the agency portal, which is the one whose purpose they serve.
+ *
+ * Swaps only the leading segment, so `/app/clients/abc-123` keeps its id and `/app/billing/quotes`
+ * keeps its sub-path — no per-route list of parameter names to keep in step.
+ *
+ * The agency portal's own gate answers what happens next: an operator who holds an agency
+ * membership carries on to the page, and one who does not is told so plainly.
+ */
+export function LegacyAgencyRedirect() {
+  const { pathname, search, hash } = useLocation()
+
+  return <Navigate to={`/agency${pathname.slice('/app'.length)}${search}${hash}`} replace />
+}
+
+/**
  * The external client portal moved from `/client/*` to `/portal/*` (ADR 0002), so all four portals
  * are addressed the same way.
  *

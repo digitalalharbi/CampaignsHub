@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Accounts\Services\AccountEntitlements;
 use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
@@ -15,8 +16,8 @@ use Tests\TestCase;
 
 /**
  * Proves the DemoAccountsSeeder lands real, resolvable data for the THREE experiences after a full seed:
- *   1) Operations Console  — owner@demo-agency has the PERSONAL (agency) nav.
- *   2) SaaS Workspace      — the demo-company tenant has the COMPANY nav + a Growth subscription with usage.
+ *   1) Agency portal       — owner@demo-agency holds an AGENCY membership and sees the agency's sections.
+ *   2) Advertiser portal   — the demo-company tenant gets the ADVERTISER nav + a Growth subscription with usage.
  *   3) Client Portal       — the verified customer sees a request + quote + invoice + thread + file + campaign
  *                            + report through the real portal scoping (pre-seeded X-Client-Token).
  */
@@ -33,7 +34,7 @@ final class DemoAccountsSeederTest extends TestCase
         $this->seed(DatabaseSeeder::class);
     }
 
-    public function test_operations_console_owner_has_the_personal_nav(): void
+    public function test_the_demo_agency_owner_lands_in_the_agency_portal(): void
     {
         $tenant = Tenant::where('slug', 'demo-agency')->firstOrFail();
         $owner = User::where('email', 'owner@demo-agency.local')->firstOrFail();
@@ -43,22 +44,37 @@ final class DemoAccountsSeederTest extends TestCase
         $this->assertTrue($owner->hasPermission('campaigns.view'));
 
         $entitlements = app(AccountEntitlements::class);
-        $this->assertSame('personal', $entitlements->workspaceKind($tenant));
-        $nav = $entitlements->nav($tenant);
-        // Personal (Operations Console) menu includes the agency tools.
-        $this->assertContains('clients', $nav);
-        $this->assertContains('requests', $nav);
-        $this->assertContains('billing', $nav);
+
+        /*
+         * The demo agency is seeded into the AGENCY portal, and that — not its account type — is
+         * what puts the agency tools in front of it (REG-001). Asking for the same tenant's
+         * advertiser nav must produce a different menu, which is the whole claim: one workspace,
+         * two portals, two surfaces.
+         */
+        $agencyNav = $entitlements->nav($tenant, Portal::Agency);
+        $this->assertContains('clients', $agencyNav);
+        $this->assertContains('requests', $agencyNav);
+        $this->assertContains('billing', $agencyNav);
+
+        $advertiserNav = $entitlements->nav($tenant, Portal::App);
+        $this->assertNotContains('clients', $advertiserNav);
+        $this->assertNotContains('requests', $advertiserNav);
+
+        // The owner's membership is genuinely the agency one, so the seeded demo opens where the
+        // seeder's own instructions say it does.
+        $this->assertSame(
+            Portal::Agency,
+            $owner->memberships()->where('tenant_id', $tenant->id)->firstOrFail()->portal,
+        );
     }
 
-    public function test_saas_workspace_tenant_has_company_nav_and_growth_subscription_with_usage(): void
+    public function test_the_demo_company_gets_the_advertiser_nav_and_a_growth_subscription(): void
     {
         $tenant = Tenant::where('slug', 'demo-company')->firstOrFail();
 
         $entitlements = app(AccountEntitlements::class);
-        $this->assertSame('company', $entitlements->workspaceKind($tenant));
-        $nav = $entitlements->nav($tenant);
-        // Company (SaaS Workspace) menu: subscriptions, but NO agency tools.
+        $nav = $entitlements->nav($tenant, Portal::App);
+        // The advertiser portal: the workspace's own subscription, and no agency tools.
         $this->assertContains('subscriptions', $nav);
         $this->assertNotContains('clients', $nav);
         $this->assertNotContains('requests', $nav);

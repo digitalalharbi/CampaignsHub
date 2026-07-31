@@ -1,6 +1,6 @@
 import {
-  BarChart3, Building2, FolderKanban, FolderOpen, Images, Inbox, LayoutDashboard,
-  ListChecks, Megaphone, MessageSquare, Receipt, Users,
+  BarChart3, BellRing, Building2, CreditCard, FolderKanban, FolderOpen, Images, Inbox,
+  LayoutDashboard, ListChecks, Megaphone, MessageSquare, Receipt, Users,
 } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
@@ -49,12 +49,22 @@ export const agencyNavGroups: readonly NavGroup[] = [
       { to: '/agency/messages', ar: 'المحادثات', en: 'Conversations', icon: MessageSquare },
       { to: '/agency/files', ar: 'الملفات', en: 'Files', icon: FolderOpen },
       { to: '/agency/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3 },
+      // An agency watches spend and performance across every client it runs, so this is arguably
+      // more its section than the advertiser's. It was reachable only at `/app/alerts`, which an
+      // agency has no other reason to visit.
+      { to: '/agency/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing },
     ],
   },
   {
     key: 'finance',
+    // Two different pots, and confusing them is expensive: Finance is what the agency's CLIENTS pay
+    // it, Subscription is what the agency pays CampaignsHub. The advertiser portal has only the
+    // second, because an advertiser has nobody to invoice.
     ar: 'المالية', en: 'Finance', icon: Receipt,
-    leaves: [{ to: '/agency/billing', ar: 'المالية', en: 'Finance', icon: Receipt }],
+    leaves: [
+      { to: '/agency/billing', ar: 'فواتير العملاء', en: 'Client invoicing', icon: Receipt },
+      { to: '/agency/subscriptions', ar: 'اشتراك الوكالة', en: 'Agency subscription', icon: CreditCard },
+    ],
   },
   {
     key: 'team',

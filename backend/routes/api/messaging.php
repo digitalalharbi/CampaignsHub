@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Route;
 
 // Tenant-scoped messaging: client ⇄ internal-team threads. Permission-gated inside the controller
 // (messaging.view / messaging.manage); tenant isolation is enforced by the models' global scope.
-Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'portal:agency,influencers'])->group(function (): void {
     Route::get('messaging/threads', [MessagingController::class, 'threads'])->name('messaging.threads.index');
     Route::post('messaging/threads', [MessagingController::class, 'storeThread'])->name('messaging.threads.store');
     Route::get('messaging/threads/{messageThread}', [MessagingController::class, 'show'])->name('messaging.threads.show');

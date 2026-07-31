@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -102,10 +103,17 @@ final class RegistrationOnboardingTest extends TestCase
         $this->actingAs($user, 'sanctum')->postJson('/api/v1/onboarding/complete')
             ->assertOk()->assertJsonPath('data.account.onboarding.completed', true);
 
-        // /auth/me reflects the PERSONAL full menu.
-        $nav = $this->actingAs($user, 'sanctum')->getJson('/api/v1/auth/me')->assertOk()->json('data.user.account.nav');
-        foreach (['dashboard', 'clients', 'projects', 'requests', 'campaigns', 'analytics', 'reports', 'connections', 'alerts', 'team', 'settings'] as $k) {
-            $this->assertContains($k, $nav);
+        /*
+         * /auth/me reflects the AGENCY portal's menu — because answering "agency" at the account-type
+         * step moved the founding membership there (REG-001), not because the account type is read
+         * as a menu persona. `portal` is asserted alongside `nav` so the two cannot drift: a nav
+         * that still listed clients while the membership said `app` is exactly the state this
+         * regression consisted of.
+         */
+        $account = $this->actingAs($user, 'sanctum')->getJson('/api/v1/auth/me')->assertOk()->json('data.user.account');
+        $this->assertSame('agency', $account['portal']);
+        foreach (['dashboard', 'clients', 'projects', 'requests', 'campaigns', 'reports', 'team', 'settings'] as $k) {
+            $this->assertContains($k, $account['nav']);
         }
     }
 
@@ -147,15 +155,51 @@ final class RegistrationOnboardingTest extends TestCase
         $this->actingAs($user, 'sanctum')->getJson('/api/v1/app/requests')->assertForbidden();
     }
 
-    public function test_personal_workspace_can_reach_agency_endpoints(): void
+    /**
+     * Choosing "agency" during onboarding MOVES the founding membership into the agency portal
+     * (REG-001) — it does not merely relabel the tenant.
+     *
+     * This registration names no journey, so it is seeded into the advertiser portal, which is the
+     * case that was broken: the tenant became an agency, the membership stayed `app`, and the
+     * agency's own endpoints refused its owner forever. Both halves are asserted — where the
+     * membership now points, and that the endpoint follows.
+     */
+    public function test_choosing_agency_during_onboarding_moves_the_membership_to_the_agency_portal(): void
     {
         ['user' => $user, 'token' => $token] = $this->register('pers@owner.test');
         $this->postJson('/api/v1/auth/email/verify', ['token' => $token])->assertOk();
         $user->refresh();
+
+        $this->assertSame(
+            Portal::App,
+            $user->memberships()->firstOrFail()->portal,
+            'a registration with no journey starts in the advertiser portal',
+        );
+
+        $this->actingAs($user, 'sanctum')->postJson('/api/v1/onboarding/account-type', ['account_type' => 'agency'])
+            ->assertOk()->assertJsonPath('data.account.portal', 'agency');
+
+        $this->assertSame(Portal::Agency, $user->memberships()->firstOrFail()->refresh()->portal);
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/app/clients')->assertOk();
+    }
+
+    /**
+     * …and the move stops at the founder. A workspace that already has a second member is one whose
+     * portals were granted deliberately, so reclassifying the company must not relocate anyone.
+     */
+    public function test_the_portal_move_does_not_touch_a_workspace_that_already_has_a_team(): void
+    {
+        ['user' => $user, 'token' => $token] = $this->register('team@owner.test');
+        $this->postJson('/api/v1/auth/email/verify', ['token' => $token])->assertOk();
+        $user->refresh();
+
+        $tenant = $user->currentTenant();
+        $colleague = $this->userWithMembership($tenant, 'colleague@owner.test', Portal::App);
+
         $this->actingAs($user, 'sanctum')->postJson('/api/v1/onboarding/account-type', ['account_type' => 'agency'])->assertOk();
 
-        // Personal (agency) workspace is entitled to the full menu → clients endpoint is reachable.
-        $this->actingAs($user, 'sanctum')->getJson('/api/v1/app/clients')->assertOk();
+        $this->assertSame(Portal::App, $user->memberships()->firstOrFail()->refresh()->portal);
+        $this->assertSame(Portal::App, $colleague->memberships()->firstOrFail()->portal);
     }
 
     public function test_duplicate_email_is_rejected(): void

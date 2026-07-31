@@ -91,7 +91,7 @@ import { CreatorShell } from '@/layouts/CreatorShell'
 import { CreatorWorkPage } from '@/features/influencers/creator/CreatorWorkPage'
 import { CreatorCollaborationPage } from '@/features/influencers/creator/CreatorCollaborationPage'
 import { WorkspaceSwitcherPage } from '@/features/auth/WorkspaceSwitcherPage'
-import { legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
+import { LegacyAgencyRedirect, legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
 
 export const router = createBrowserRouter([
   // Public marketing homepage — the primary conversion surface. The authenticated app lives under
@@ -189,19 +189,27 @@ export const router = createBrowserRouter([
                     { path: 'design', element: <DesignSystemPage /> },
           { path: 'campaigns', element: <CampaignsPage /> },
           { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
-          // Internal requests inbox (external requests converted into operational work).
-          { path: 'requests', element: <RequestsDashboardPage /> },
-          { path: 'requests/:requestId', element: <RequestDetailPage /> },
-          // Client portfolio + command center (converted from requests).
-          { path: 'clients', element: <ClientsPortfolioPage /> },
-          { path: 'clients/:clientId', element: <ClientCommandCenterPage /> },
+          /*
+           * REG-001: the multi-client surfaces MOVED to /agency — they were never the advertiser's.
+           *
+           * A client roster, an inbound requests inbox, invoices raised TO a client, and client
+           * conversations all presuppose that you run campaigns for other people. Mounted here they
+           * turned «كل حملاتك الإعلانية المدفوعة في مكان واحد» into an agency console, which is what
+           * made all five portals feel like the same product.
+           *
+           * Redirects rather than deletions: these paths are in bookmarks and in links already sent,
+           * and the agency portal's own gate answers honestly — an operator who holds an agency
+           * membership carries on to the page, and one who does not is told plainly instead of
+           * meeting a blank screen. Nothing is removed from the product; it lives in one place now.
+           */
+          ...['requests', 'requests/:requestId', 'clients', 'clients/:clientId', 'messages',
+            'billing', 'billing/quotes', 'billing/invoices', 'billing/payments', 'finance',
+          ].map((path) => ({ path, element: <LegacyAgencyRedirect /> })),
           // Alerts management (the alerts engine's operator surface).
           { path: 'alerts', element: <AlertsPage /> },
           // Expansion internal surfaces. Integrations is CANONICAL at /app/integrations and absorbs the
           // Connection Center + the Google Drive connector; Branding lives under Settings. Legacy/duplicate
           // routes redirect (see docs/ROUTE_REDIRECT_MAP.md) — no dead links, one engine per function.
-          ...billingRoutes,
-          ...messagingRoutes,
           ...requestJourneyRoutes,
           ...subscriptionsRoutes,
           { path: 'integrations', element: <ConnectionCenterPage /> },
@@ -305,11 +313,15 @@ export const router = createBrowserRouter([
             { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
             { path: 'content', element: <CreativesPage /> },
             { path: 'reports', element: <ReportsPage /> },
+            { path: 'alerts', element: <AlertsPage /> },
             { path: 'tasks', element: <TasksPage /> },
             { path: 'files', element: <FilesLibraryPage /> },
             { path: 'team', element: <AgencyTeamPage /> },
             ...messagingRoutes,
             ...billingRoutes,
+            // The agency's own plan with CampaignsHub — distinct from the invoices it raises to its
+            // clients, which is what `billingRoutes` above is.
+            ...subscriptionsRoutes,
           ],
         }],
       },

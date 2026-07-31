@@ -17,6 +17,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportSchedule;
 use App\Domains\Reports\Services\ScheduledReportDispatcher;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -63,7 +64,7 @@ final class MilestoneAcceptanceTest extends TestCase
             ->givePermissionTo('campaigns.view', 'reports.view');
 
         $this->owner = User::create(['name' => 'Owner', 'email' => 'o@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
-        $this->grantMembership($this->owner, $this->tenant);
+        $this->grantMembership($this->owner, $this->tenant, Portal::Agency);
         $this->owner->assignRole($ownerRole);
     }
 
@@ -71,7 +72,7 @@ final class MilestoneAcceptanceTest extends TestCase
     {
         // 1) SUSPENDED USER BLOCKED — a disabled user cannot log in, with a non-revealing message.
         $suspended = User::create(['name' => 'S', 'email' => 's@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
-        $this->grantMembership($suspended, $this->tenant);
+        $this->grantMembership($suspended, $this->tenant, Portal::Agency);
         $suspended->forceFill(['disabled_at' => now()])->save();
         $this->withHeaders($this->spa)->postJson('/api/v1/auth/login', ['email' => 's@a.test', 'password' => 'secret1234'])
             ->assertForbidden();
@@ -104,9 +105,11 @@ final class MilestoneAcceptanceTest extends TestCase
         $this->assertContains('paid_media', $me->json('data.user.account.enabled_modules'));
         $this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/app/clients')->assertOk(); // module allowed
 
-        // 5) FORBIDDEN MODULE API DENIED — a company (brand) workspace is fail-closed on client-management APIs.
-        $companyDenied = $this->companyMemberDeniedClients();
-        $this->assertTrue($companyDenied, 'A company workspace member must be denied /app/clients.');
+        // 5) CROSS-PORTAL API DENIED — an ADVERTISER membership is fail-closed on the agency's
+        //    client-management APIs, however the workspace is classified and however complete the
+        //    member's permissions are (REG-001).
+        $advertiserDenied = $this->advertiserMemberDeniedClients();
+        $this->assertTrue($advertiserDenied, 'An advertiser-portal member must be denied /app/clients.');
 
         // 6) SCHEDULED REPORT CREATED — a due schedule for a real client/project.
         $client = ClientWorkspace::create(['tenant_id' => $this->tenant->id, 'name' => 'C', 'slug' => 'c-'.uniqid(), 'mode' => 'managed', 'status' => 'active', 'client_status' => 'active']);
@@ -156,7 +159,16 @@ final class MilestoneAcceptanceTest extends TestCase
     }
 
     /** A brand (company) workspace member must be denied client-management APIs (entitlement fail-closed). */
-    private function companyMemberDeniedClients(): bool
+    /**
+     * Was `companyMemberDeniedClients` — the same endpoint, a different reason (REG-001).
+     *
+     * The old claim was that a `brand` workspace is denied client management because it is a brand.
+     * That rule is gone, and it was the wrong rule: it left `freelancer`, `in_house_team` and every
+     * workspace with no account type set on the permissive side of the same fork, which is how the
+     * advertiser portal ended up serving the agency's console. The claim that survives is stronger
+     * and portal-shaped, and it is what this now asserts.
+     */
+    private function advertiserMemberDeniedClients(): bool
     {
         $company = Tenant::create(['name' => 'Brand', 'slug' => 'brand', 'status' => 'active',
             'account_type' => 'brand', 'enabled_modules' => ['paid_media'], 'onboarding_step' => 'done', 'onboarding_completed_at' => now()]);
@@ -166,7 +178,10 @@ final class MilestoneAcceptanceTest extends TestCase
         $role = Role::create(['tenant_id' => $company->id, 'name' => 'Owner', 'slug' => 'tenant-owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $user = User::create(['name' => 'B', 'email' => 'b@brand.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
-        $this->grantMembership($user, $company);
+        // Advertiser portal, and the FULL permission catalogue above. The refusal below must come
+        // from the portal alone (REG-001) — this user is a workspace owner who may do everything
+        // their portal offers, and `/app/clients` is not something it offers.
+        $this->grantMembership($user, $company, Portal::App);
         $user->assignRole($role);
 
         $status = $this->actingAs($user, 'sanctum')->getJson('/api/v1/app/clients')->getStatusCode();

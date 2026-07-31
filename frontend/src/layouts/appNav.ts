@@ -1,23 +1,26 @@
 import {
-  BarChart3, BellRing, Building2, CreditCard, FolderKanban, FolderOpen, Images, Inbox,
-  LayoutDashboard, ListChecks, MessageSquare, Megaphone, Plug, Receipt, Settings, TrendingUp,
+  BarChart3, BellRing, CreditCard, FolderKanban, FolderOpen, Images,
+  LayoutDashboard, ListChecks, Megaphone, Plug, Settings, TrendingUp,
 } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
 /**
- * The advertiser portal's navigation (`/app`), grouped.
+ * The advertiser portal's navigation (`/app`), grouped around its own purpose:
+ * «كل حملاتك الإعلانية المدفوعة في مكان واحد» — every paid campaign of YOUR OWN, in one place.
  *
- * Sixteen flat entries is a list you scan rather than read. These are the SAME sixteen — nothing was
- * removed, merged away or moved to another portal — arranged by the question the advertiser is
- * asking, under the portal's own purpose: every paid campaign in one place.
- *
- *   Work        — the things being run: requests in, clients, projects, campaigns, creative.
+ *   Work        — the things being run: projects, campaigns, creative.
  *   Performance — how they are doing: analytics, reports, and the alerts that interrupt you.
- *   Operations  — what keeps them running: tasks, files, conversations, data sources.
- *   Finance     — money.
+ *   Operations  — what keeps them running: tasks, files, data sources.
+ *   Finance     — this workspace's own subscription.
  *
- * `appNavLeafPaths` is exported so a test can assert this grouping still contains every path the flat
- * rail did. Grouping must never be how a section quietly disappears.
+ * What is ABSENT is the point of REG-001. Requests, Clients, agency Billing and Conversations were
+ * listed here, and they are the agency's: each of them presumes you run campaigns for other people.
+ * With them in place an advertiser signing in met a multi-client agency console, which is what made
+ * every portal feel like the same product. They moved to `/agency`, where that is the purpose —
+ * moved, not deleted, and not duplicated. Old `/app` paths redirect there.
+ *
+ * `appNavLeafPaths` is exported so a test can assert what this rail offers, and
+ * `frontend/src/layouts/portalNav.test.ts` asserts it is not the agency's.
  */
 export const appNavGroups: readonly NavGroup[] = [
   {
@@ -29,8 +32,6 @@ export const appNavGroups: readonly NavGroup[] = [
     key: 'work',
     ar: 'العمل', en: 'Work', icon: Megaphone,
     leaves: [
-      { to: '/app/requests', ar: 'الطلبات', en: 'Requests', icon: Inbox, ent: 'requests' },
-      { to: '/app/clients', ar: 'العملاء', en: 'Clients', icon: Building2, ent: 'clients' },
       { to: '/app/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban, ent: 'projects' },
       { to: '/app/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, ent: 'campaigns' },
       { to: '/app/content', ar: 'المحتوى', en: 'Content', icon: Images, ent: 'content' },
@@ -50,16 +51,16 @@ export const appNavGroups: readonly NavGroup[] = [
     ar: 'التشغيل', en: 'Operations', icon: ListChecks,
     leaves: [
       { to: '/app/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks, ent: 'tasks' },
-      { to: '/app/messages', ar: 'المحادثات', en: 'Conversations', icon: MessageSquare, ent: 'messaging' },
-      { to: '/app/files', ar: 'الملفات', en: 'Files', icon: FolderOpen, ent: 'connections' },
+      { to: '/app/files', ar: 'الملفات', en: 'Files', icon: FolderOpen, ent: 'files' },
       { to: '/app/integrations', ar: 'التكاملات', en: 'Integrations', icon: Plug, ent: 'connections' },
     ],
   },
   {
     key: 'finance',
-    ar: 'المالية', en: 'Finance', icon: Receipt,
+    // The advertiser's money is what they pay CampaignsHub. Invoices raised to a client are the
+    // agency's Finance, and live in the agency portal.
+    ar: 'الاشتراك', en: 'Subscription', icon: CreditCard,
     leaves: [
-      { to: '/app/billing', ar: 'الفواتير', en: 'Billing', icon: Receipt, ent: 'billing' },
       { to: '/app/subscriptions', ar: 'الاشتراك', en: 'Subscription', icon: CreditCard, ent: 'subscriptions' },
     ],
   },

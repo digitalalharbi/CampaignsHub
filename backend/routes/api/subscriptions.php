@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Route;
 | `require __DIR__.'/api/subscriptions.php';` line. Middleware mirrors routes/api/billing.php
 | (auth:sanctum, tenant) so the endpoints slot under the /api/v1 group unchanged.
 */
-Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(function (): void {
     Route::get('subscriptions/plans', [SubscriptionController::class, 'plans'])->name('subscriptions.plans');
     Route::get('subscriptions/current', [SubscriptionController::class, 'current'])->name('subscriptions.current');
     Route::post('subscriptions/change', [SubscriptionController::class, 'change'])->name('subscriptions.change');

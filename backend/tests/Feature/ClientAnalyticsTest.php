@@ -10,6 +10,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -44,10 +45,10 @@ final class ClientAnalyticsTest extends TestCase
         $limited->givePermissionTo('clients.view', 'clients.view_all');
 
         $this->owner = User::create(['name' => 'Owner', 'email' => 'o@a.test', 'password' => 'secret123']);
-        $this->grantMembership($this->owner, $this->tenant);
+        $this->grantMembership($this->owner, $this->tenant, Portal::Agency);
         $this->owner->assignRole($ownerRole);
         $this->noAnalytics = User::create(['name' => 'NoA', 'email' => 'na@a.test', 'password' => 'secret123']);
-        $this->grantMembership($this->noAnalytics, $this->tenant);
+        $this->grantMembership($this->noAnalytics, $this->tenant, Portal::Agency);
         $this->noAnalytics->assignRole($limited);
     }
 

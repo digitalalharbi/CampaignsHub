@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Route;
 | NOTE: This file is intentionally NOT required from routes/api.php — the orchestrator wires it.
 */
 
-Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->group(function (): void {
     Route::get('taxonomies', [TaxonomyController::class, 'index'])->name('taxonomies.index');
     Route::get('taxonomies/{key}/options', [TaxonomyController::class, 'options'])->name('taxonomies.options.index');
     Route::post('taxonomies/{key}/options', [TaxonomyController::class, 'storeOption'])->name('taxonomies.options.store');

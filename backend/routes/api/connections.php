@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Route;
 | (auth:sanctum, tenant, project) so the endpoints slot under the /api/v1 group unchanged.
 */
 
-Route::middleware(['auth:sanctum', 'tenant', 'project'])
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
     ->prefix('projects/{project}/connections')
     ->name('projects.connections.')
     ->group(function (): void {

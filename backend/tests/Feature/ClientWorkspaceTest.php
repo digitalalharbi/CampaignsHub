@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -35,7 +36,7 @@ final class ClientWorkspaceTest extends TestCase
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $this->user = User::create(['name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
-        $this->grantMembership($this->user, $this->tenant);
+        $this->grantMembership($this->user, $this->tenant, Portal::Agency);
         $this->user->assignRole($role);
     }
 
@@ -78,9 +79,13 @@ final class ClientWorkspaceTest extends TestCase
         app(TenantContext::class)->setTenantId($other->id);
         ClientWorkspace::create(['name' => 'Theirs', 'slug' => 'theirs', 'mode' => 'managed']);
         $otherUser = User::create(['name' => 'O2', 'email' => 'o2@other.test', 'password' => 'secret123']);
-        $this->grantMembership($otherUser, $other);
+        $this->grantMembership($otherUser, $other, Portal::Agency);
         $role = Role::create(['tenant_id' => $other->id, 'name' => 'Owner', 'slug' => 'owner']);
-        $role->givePermissionTo('workspaces.view');
+        // `clients.view_all` as well as `workspaces.view`, because this endpoint now applies the
+        // membership's client ceiling (REG-001) and this owner has no named clients — which is
+        // fail-closed and therefore zero, not all. Without the permission the list below would be
+        // empty for the WRONG reason and the tenant-isolation claim would pass vacuously.
+        $role->givePermissionTo('workspaces.view', 'clients.view_all');
         $otherUser->assignRole($role);
 
         app(TenantContext::class)->forget();

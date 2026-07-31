@@ -9,6 +9,7 @@ use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -42,10 +43,10 @@ final class ClientTeamAccessTest extends TestCase
         $buyerRole->givePermissionTo('clients.view', 'clients.view_analytics');
 
         $this->owner = User::create(['name' => 'Owner', 'email' => 'o@a.test', 'password' => 'secret123']);
-        $this->grantMembership($this->owner, $this->tenant);
+        $this->grantMembership($this->owner, $this->tenant, Portal::Agency);
         $this->owner->assignRole($ownerRole);
         $this->buyer = User::create(['name' => 'Buyer', 'email' => 'b@a.test', 'password' => 'secret123']);
-        $this->grantMembership($this->buyer, $this->tenant);
+        $this->grantMembership($this->buyer, $this->tenant, Portal::Agency);
         $this->buyer->assignRole($buyerRole);
     }
 
@@ -85,7 +86,7 @@ final class ClientTeamAccessTest extends TestCase
         $c = $this->client();
         $other = Tenant::create(['name' => 'Other', 'slug' => 'other', 'status' => 'active']);
         $foreign = User::create(['name' => 'F', 'email' => 'f@other.test', 'password' => 'secret123']);
-        $this->grantMembership($foreign, $other);
+        $this->grantMembership($foreign, $other, Portal::Agency);
 
         $this->actingAs($this->owner, 'sanctum')->postJson("/api/v1/app/clients/{$c->id}/team", [
             'user_id' => $foreign->id, 'access_role' => 'analyst',

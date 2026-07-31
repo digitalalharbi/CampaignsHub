@@ -16,7 +16,7 @@ use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use Illuminate\Support\Facades\Route;
 
 // Project-scoped campaigns (ResolveProject enforces tenant + project isolation; fail-closed 404).
-Route::middleware(['auth:sanctum', 'tenant', 'project'])
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
     ->prefix('projects/{project}')
     ->name('projects.campaigns.')
     ->group(function (): void {

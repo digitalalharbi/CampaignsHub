@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -39,10 +40,10 @@ final class ClientManagementTest extends TestCase
         $viewRole->givePermissionTo('clients.view', 'clients.view_all');
 
         $this->owner = User::create(['name' => 'Owner', 'email' => 'o@a.test', 'password' => 'secret123']);
-        $this->grantMembership($this->owner, $this->tenant);
+        $this->grantMembership($this->owner, $this->tenant, Portal::Agency);
         $this->owner->assignRole($ownerRole);
         $this->readonly = User::create(['name' => 'RO', 'email' => 'ro@a.test', 'password' => 'secret123']);
-        $this->grantMembership($this->readonly, $this->tenant);
+        $this->grantMembership($this->readonly, $this->tenant, Portal::Agency);
         $this->readonly->assignRole($viewRole);
     }
 
@@ -94,7 +95,7 @@ final class ClientManagementTest extends TestCase
         $c = $this->client();
         $other = Tenant::create(['name' => 'Other', 'slug' => 'other', 'status' => 'active']);
         $foreignUser = User::create(['name' => 'X', 'email' => 'x@other.test', 'password' => 'secret123']);
-        $this->grantMembership($foreignUser, $other);
+        $this->grantMembership($foreignUser, $other, Portal::Agency);
 
         $this->actingAs($this->owner, 'sanctum')->patchJson("/api/v1/app/clients/{$c->id}/classification", [
             'owner_id' => $foreignUser->id,

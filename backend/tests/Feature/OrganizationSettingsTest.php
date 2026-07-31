@@ -43,7 +43,41 @@ final class OrganizationSettingsTest extends TestCase
         $res->assertOk()
             ->assertJsonPath('data.name', 'Acme')
             ->assertJsonPath('data.general.default_currency', 'SAR')
-            ->assertJsonPath('data.general.account_type', 'agency');
+            // Null, not `agency` (REG-001). This tenant was created without an account type, and
+            // the form now says so instead of pre-answering the question with the type that
+            // unlocks the agency console — an answer the next save would have made permanent.
+            ->assertJsonPath('data.general.account_type', null);
+    }
+
+    /**
+     * The account type is stored on the tenant COLUMN, which is the one the portal layer reads.
+     *
+     * It used to be written into `settings.general` and read back from there, while
+     * `Portal::forAccountType` and the entitlement layer read the column — so this form appeared to
+     * change the workspace's type and changed nothing about the portal.
+     */
+    public function test_account_type_is_written_to_the_tenant_column(): void
+    {
+        Sanctum::actingAs($this->owner);
+
+        $this->putJson('/api/v1/settings/organization', [
+            'name' => 'Acme',
+            'general' => [
+                'account_type' => 'agency',
+                'country' => 'SA',
+                'default_locale' => 'ar',
+                'default_currency' => 'SAR',
+                'timezone' => 'Asia/Riyadh',
+                'date_format' => 'DD/MM/YYYY',
+                'number_format' => 'latin',
+                'fiscal_year_start_month' => 1,
+            ],
+        ])->assertOk();
+
+        $fresh = Tenant::findOrFail($this->tenant->id);
+        $this->assertSame('agency', $fresh->account_type);
+        // …and NOT left behind as a second copy that could drift from the column.
+        $this->assertArrayNotHasKey('account_type', (array) (($fresh->settings ?? [])['general'] ?? []));
     }
 
     public function test_update_persists_and_validates(): void

@@ -10,6 +10,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -43,10 +44,10 @@ final class ClientReportsTest extends TestCase
         $limitedRole->givePermissionTo('clients.view', 'clients.view_all');
 
         $this->owner = User::create(['name' => 'O', 'email' => 'o@a.test', 'password' => 'secret123']);
-        $this->grantMembership($this->owner, $this->tenant);
+        $this->grantMembership($this->owner, $this->tenant, Portal::Agency);
         $this->owner->assignRole($ownerRole);
         $this->limited = User::create(['name' => 'L', 'email' => 'l@a.test', 'password' => 'secret123']);
-        $this->grantMembership($this->limited, $this->tenant);
+        $this->grantMembership($this->limited, $this->tenant, Portal::Agency);
         $this->limited->assignRole($limitedRole);
     }
 

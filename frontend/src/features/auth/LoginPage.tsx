@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { BarChart3, Check, Copy, LayoutGrid, Megaphone, Moon, ShieldCheck, Sun } from 'lucide-react'
@@ -126,6 +126,32 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
+
+  /*
+   * Already signed in? Then this page is not for you — go where you belong.
+   *
+   * Reachable more often than it looks: pressing Back after signing in, a bookmarked `/login`, a
+   * second tab, or the brief guest state the session probe can pass through on reload, which
+   * replaces the current history entry with this one. In every case the visitor met a login form
+   * while holding a valid session, and the only way out was to sign in again.
+   *
+   * The destination comes from the server, exactly as it does after signing in — the browser does
+   * not get a second, different rule for the same question.
+   */
+  const status = useAuth((s) => s.status)
+  useEffect(() => {
+    if (status !== 'authenticated') return
+
+    let cancelled = false
+    resolvePostAuthDestination(params, portalParam ? portalKeyFor(portal) : null)
+      .then((to) => {
+        if (!cancelled) navigate(to, { replace: true })
+      })
+      // A failed probe is not a reason to strand someone on a login form they do not need.
+      .catch(() => undefined)
+
+    return () => { cancelled = true }
+  }, [status, params, portalParam, portal, navigate])
 
   const mutation = useMutation({
     mutationFn: login,

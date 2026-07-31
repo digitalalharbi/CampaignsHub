@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -38,7 +39,7 @@ final class ClientFilesActivityTest extends TestCase
         $ownerRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $ownerRole->givePermissionTo(...Permission::pluck('key')->all());
         $this->owner = User::create(['name' => 'Owner', 'email' => 'o@a.test', 'password' => 'secret123']);
-        $this->grantMembership($this->owner, $this->tenant);
+        $this->grantMembership($this->owner, $this->tenant, Portal::Agency);
         $this->owner->assignRole($ownerRole);
     }
 
@@ -118,7 +119,7 @@ final class ClientFilesActivityTest extends TestCase
         $limited = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Ltd', 'slug' => 'ltd']);
         $limited->givePermissionTo('clients.view', 'clients.view_all');
         $u = User::create(['name' => 'L', 'email' => 'l@a.test', 'password' => 'secret123']);
-        $this->grantMembership($u, $this->tenant);
+        $this->grantMembership($u, $this->tenant, Portal::Agency);
         $u->assignRole($limited);
 
         $this->actingAs($u, 'sanctum')->getJson("/api/v1/app/clients/{$c->id}/files")->assertForbidden();

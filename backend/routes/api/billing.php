@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Route;
 
 // Tenant-scoped billing: quotes, invoices, payments. Permission-gated inside the controller
 // (billing.view / billing.manage); tenant isolation is enforced by the models' global scope.
-Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'tenant', 'portal:agency'])->group(function (): void {
     Route::get('billing/quotes', [BillingController::class, 'quotes'])->name('billing.quotes.index');
     Route::post('billing/quotes', [BillingController::class, 'storeQuote'])->name('billing.quotes.store');
     Route::post('billing/quotes/{quote}/approve', [BillingController::class, 'approveQuote'])->name('billing.quotes.approve');

@@ -8,6 +8,7 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\ClientWorkspaces\Enums\WorkspaceMode;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Resources\ClientWorkspaceResource;
+use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -15,14 +16,30 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
+/**
+ * The agency's client workspaces.
+ *
+ * Tenant-scoped by the model's global scope, and CLIENT-scoped here by the membership's ceiling
+ * (REG-001). It was only the former: an account manager confined to three clients got the whole
+ * agency's roster from this endpoint, and could open any one of them by id — the narrowing existed
+ * on the portfolio surface next door and had never been applied to this one.
+ */
 final class ClientWorkspaceController extends Controller
 {
+    public function __construct(private readonly ClientScopeResolver $scope) {}
+
     public function index(Request $request): JsonResponse
     {
         abort_unless($request->user()->hasPermission('workspaces.view'), 403);
 
+        $query = $this->scope->constrain(
+            ClientWorkspace::withCount('projects')->latest(),
+            $request->user(),
+            'id', // the ceiling names client ids, and here the client IS the row
+        );
+
         return ApiResponse::success(
-            ClientWorkspaceResource::collection(ClientWorkspace::withCount('projects')->latest()->get()),
+            ClientWorkspaceResource::collection($query->get()),
             'Client workspaces retrieved.',
         );
     }
@@ -54,6 +71,8 @@ final class ClientWorkspaceController extends Controller
     public function show(Request $request, ClientWorkspace $clientWorkspace): JsonResponse
     {
         abort_unless($request->user()->hasPermission('workspaces.view'), 403);
+        // 404 rather than 403: an id outside the ceiling must not be confirmed to exist.
+        abort_unless($this->scope->canReach($request->user(), (string) $clientWorkspace->id), 404);
 
         return ApiResponse::success(
             new ClientWorkspaceResource($clientWorkspace->loadCount('projects')),

@@ -15,6 +15,7 @@ use App\Domains\Billing\Providers\PaymentProviderRegistry;
 use App\Domains\Billing\Services\BillingService;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -63,7 +64,7 @@ final class BillingTest extends TestCase
             'name' => 'Owner', 'email' => 'owner-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
-        $this->grantMembership($user, $this->tenant);
+        $this->grantMembership($user, $this->tenant, Portal::Agency);
         $user->assignRole($role);
 
         return $user;
@@ -277,7 +278,7 @@ final class BillingTest extends TestCase
         $role = Role::create(['tenant_id' => $tenantB->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $ownerB = User::create(['name' => 'O', 'email' => 'o@b.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
-        $this->grantMembership($ownerB, $tenantB);
+        $this->grantMembership($ownerB, $tenantB, Portal::Agency);
         $ownerB->assignRole($role);
 
         // B cannot see A's quote or invoice.
@@ -366,7 +367,7 @@ final class BillingTest extends TestCase
             'name' => 'V', 'email' => 'v-'.uniqid().'@a.test',
             'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
         ]);
-        $this->grantMembership($viewer, $this->tenant);
+        $this->grantMembership($viewer, $this->tenant, Portal::Agency);
 
         $this->actingAs($viewer, 'sanctum')->getJson('/api/v1/billing/overview')->assertForbidden();
         $this->actingAs($viewer, 'sanctum')->getJson('/api/v1/billing/payments')->assertForbidden();

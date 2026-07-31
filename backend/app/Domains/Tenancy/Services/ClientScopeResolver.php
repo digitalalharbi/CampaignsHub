@@ -46,13 +46,30 @@ final class ClientScopeResolver
      */
     public function reachableClientIds(?User $user, ?Membership $membership = null): ?array
     {
+        $membership ??= $this->context->membership();
+        $named = $membership?->clientScopeIds() ?? [];
+
+        /*
+         * A membership that NAMES clients is a ceiling, and it outranks the permission (REG-001).
+         *
+         * The permission check used to come first, so `clients.view_all` erased an explicit scope
+         * entirely — an account manager confined to three clients saw all of them the moment their
+         * role happened to include the permission, and the confinement did nothing. Putting the
+         * named list first makes the more specific, more deliberate statement win, which is also the
+         * fail-closed direction: the narrower of the two answers.
+         *
+         * Platform staff are the exception, above: they hold no membership at all, so there is no
+         * named list to be narrower, and they operate across tenants by design.
+         */
+        if ($named !== []) {
+            return $named;
+        }
+
         if ($this->hasUnrestrictedAccess($user)) {
             return null;
         }
 
-        $membership ??= $this->context->membership();
-
-        return $membership?->clientScopeIds() ?? [];
+        return [];
     }
 
     /**

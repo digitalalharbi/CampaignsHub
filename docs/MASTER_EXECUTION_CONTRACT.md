@@ -220,3 +220,32 @@ implemented, what is Demo, what is Awaiting Credentials, and what is Blocked Ope
 As context fills: do not stop mid-work and do not return — finish the current unit, test it, make a
 clean commit, update RESUME_STATE and the matrix precisely, compact, then resume from the first
 requirement that is not VERIFIED.
+
+---
+
+## ADDENDUM — the portal separation rule (REG-001, 2026-07-31)
+
+Added after the report «جميع البوابات أصبحت تظهر كتجربة وكالة». It does not replace anything above;
+it names the invariant whose absence caused that regression, so it cannot recur silently.
+
+**One question, one owner.** "What does this user see and reach?" is answered by the PORTAL of their
+active membership, and by nothing else. Specifically:
+
+1. `Portal::sections()` is the only catalogue of what a portal offers. Entitlements may NARROW it by
+   plan and module; nothing may widen it, and nothing else may choose between catalogues.
+2. **Agency is never a default, a fallback, a shared layout or a shared dashboard.** A portal that
+   cannot be determined yields nothing — not the agency's menu. This is the specific defect REG-001
+   consisted of: `personal` was both the agency console and the fallback for an unset account type.
+3. The account type chooses the STARTING portal at registration and moves the founding membership if
+   the answer changes during onboarding. After that it decides nothing about the interface.
+4. Every tenant-scoped route group names the portal(s) that own it. Authentication alone is not a
+   gate. A route reachable from a portal that does not offer its section is a bug.
+5. Sections may MOVE between portals to reach the one whose purpose they serve. They may not be
+   deleted, and they may not exist in two portals doing the same job. A moved path redirects.
+6. Two portals may share a visual component. They may not share a menu, a dashboard, a landing page
+   or a business rule expressed as "which portal am I in?" inside a shared component.
+
+**Closing condition for any portal work:** each portal proven distinct, live, with its own account
+and its own data — routes, interface, data, permissions and services, not names. A section list that
+differs while the rendered rail does not is not a pass; REG-001 was invisible to every unit test the
+project had and was found by driving the product.

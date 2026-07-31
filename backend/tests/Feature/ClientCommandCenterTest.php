@@ -10,6 +10,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -39,10 +40,10 @@ final class ClientCommandCenterTest extends TestCase
         $viewerRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Viewer', 'slug' => 'viewer']);
 
         $this->owner = User::create(['name' => 'Owner', 'email' => 'o@a.test', 'password' => 'secret123']);
-        $this->grantMembership($this->owner, $this->tenant);
+        $this->grantMembership($this->owner, $this->tenant, Portal::Agency);
         $this->owner->assignRole($ownerRole);
         $this->viewer = User::create(['name' => 'Viewer', 'email' => 'v@a.test', 'password' => 'secret123']);
-        $this->grantMembership($this->viewer, $this->tenant);
+        $this->grantMembership($this->viewer, $this->tenant, Portal::Agency);
         $this->viewer->assignRole($viewerRole);
     }
 

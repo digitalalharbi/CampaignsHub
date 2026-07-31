@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Settings\Http\Controllers;
 
+use App\Domains\Accounts\Enums\AccountType;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -20,15 +21,36 @@ use Illuminate\Validation\Rule;
  */
 final class OrganizationSettingsController extends Controller
 {
-    private const ACCOUNT_TYPES = ['agency', 'freelancer', 'in_house', 'brand'];
+    /**
+     * Read from the enum rather than restated here (REG-001).
+     *
+     * The hand-written list this replaces said `in_house` where the enum says `in_house_team`, and
+     * omitted `self_serve_company` entirely — so a self-serve workspace opening this form was shown
+     * a set of types that did not include its own, with `agency` preselected by the defaults below,
+     * and saving reclassified it as an agency.
+     *
+     * @return list<string>
+     */
+    private static function accountTypes(): array
+    {
+        return AccountType::values();
+    }
 
     private const DATE_FORMATS = ['DD/MM/YYYY', 'YYYY-MM-DD', 'MM/DD/YYYY', 'D MMM YYYY'];
 
     private const NUMBER_FORMATS = ['latin', 'grouped'];
 
+    /*
+     * `account_type` is deliberately ABSENT from these defaults (REG-001).
+     *
+     * It used to default to `agency`, so a workspace that had never chosen one was shown — and, on
+     * the next save, permanently recorded as — an agency. The current value now comes from the
+     * tenant's own column in `show()`, and is null when genuinely unset, which the form can present
+     * as an unanswered question instead of a wrong answer.
+     */
+
     /** @var array<string,mixed> */
     private const DEFAULTS = [
-        'account_type' => 'agency',
         'logo_url' => null,
         'contact_email' => null,
         'contact_phone' => null,
@@ -48,12 +70,22 @@ final class OrganizationSettingsController extends Controller
         $settings = (array) ($tenant->settings ?? []);
         $general = array_merge(self::DEFAULTS, (array) ($settings['general'] ?? []));
 
+        /*
+         * The account type comes from the tenant COLUMN, which is the one that matters (REG-001).
+         *
+         * It was previously stored a second time inside this JSONB blob, and only there: the form
+         * read and wrote the copy while `Portal::forAccountType` and the entitlement layer read the
+         * column. So changing "account type" in settings appeared to work and changed nothing about
+         * the portal, and the two answers drifted apart silently. One field, one home.
+         */
+        $general['account_type'] = $tenant->account_type;
+
         return ApiResponse::success([
             'name' => $tenant->name,
             'slug' => $tenant->slug,
             'general' => $general,
             'options' => [
-                'account_types' => self::ACCOUNT_TYPES,
+                'account_types' => self::accountTypes(),
                 'date_formats' => self::DATE_FORMATS,
                 'number_formats' => self::NUMBER_FORMATS,
             ],
@@ -67,7 +99,7 @@ final class OrganizationSettingsController extends Controller
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:160'],
-            'general.account_type' => ['required', Rule::in(self::ACCOUNT_TYPES)],
+            'general.account_type' => ['required', Rule::in(self::accountTypes())],
             'general.logo_url' => ['nullable', 'url', 'max:2048'],
             'general.contact_email' => ['nullable', 'email', 'max:180'],
             'general.contact_phone' => ['nullable', 'string', 'max:40'],
@@ -84,8 +116,18 @@ final class OrganizationSettingsController extends Controller
         $settings = (array) ($tenant->settings ?? []);
         $before = ['name' => $tenant->name, 'general' => $settings['general'] ?? null];
 
-        $settings['general'] = array_merge(self::DEFAULTS, $data['general']);
-        $tenant->forceFill(['name' => $data['name'], 'settings' => $settings])->save();
+        $general = $data['general'];
+        // Written to the column, not into the blob — see `show()`. Kept out of `settings.general`
+        // entirely so a stale copy cannot outlive this change and be read by something later.
+        $accountType = $general['account_type'];
+        unset($general['account_type']);
+
+        $settings['general'] = array_merge(self::DEFAULTS, $general);
+        $tenant->forceFill([
+            'name' => $data['name'],
+            'account_type' => $accountType,
+            'settings' => $settings,
+        ])->save();
 
         $audit->log(
             action: 'settings.organization.updated',

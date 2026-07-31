@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { AUTH, csrfHeaders, switchToEnglish } from './helpers'
 
 /**
- * Alerts management UI (/app/alerts) on Chromium/Firefox/WebKit: the page renders the operator surface for the
+ * Alerts management UI (/agency/alerts) on Chromium/Firefox/WebKit: the page renders the operator surface for the
  * alerts engine — Alerts (Active/Snoozed/Resolved), Rules (create), Preferences (channels + quiet hours), and
  * the honest Delivery log. A rule created through the UI persists; tab switching is console-clean.
  */
@@ -13,7 +13,7 @@ test('alerts page renders all sections and a rule created in the UI persists', a
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
   page.on('pageerror', (e) => errors.push(String(e)))
 
-  await page.goto('/app/alerts')
+  await page.goto('/agency/alerts')
   await switchToEnglish(page)
 
   // Page + entitlement nav link.
@@ -47,13 +47,17 @@ test('the notification bell links to the alerts page', async ({ browser, page })
   // Raise a tenant-wide alert via the API so the bell has something to link to.
   const ctx = await browser.newContext({ storageState: AUTH.owner, baseURL: 'http://localhost:5173' })
   const headers = await csrfHeaders(ctx.request)
-  // A rule is enough to prove the wiring; the bell action_url is '/app/alerts' for every alert notification.
+  // A rule is enough to prove the wiring. The bell's own action_url is still '/app/alerts' (see
+  // AlertEvaluator); what this asserts is the RAIL entry, which is per-portal — an agency operator's
+  // Alerts link stays inside /agency rather than dropping them into the advertiser portal.
   await ctx.request.post('/api/v1/alerts/rules', { headers, data: { type: 'no_results', name: `bell-${Date.now()}` } })
   await ctx.close()
 
-  await page.goto('/dashboard')
+  // Start in the operator's OWN portal. Going to `/dashboard` lands in the advertiser shell,
+  // whose Alerts leaf points at `/app/alerts` — a different portal's copy of the same page.
+  await page.goto('/agency')
   await switchToEnglish(page)
   // The alerts entry is reachable from the sidebar (the bell's items deep-link to the same page).
   await page.getByRole('link', { name: /^Alerts$|^التنبيهات$/ }).first().click()
-  await expect(page).toHaveURL(/\/app\/alerts/)
+  await expect(page).toHaveURL(/\/agency\/alerts/)
 })

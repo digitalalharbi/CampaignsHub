@@ -12,6 +12,7 @@ use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Taxonomy\Models\TaxonomyDefinition;
 use App\Domains\Taxonomy\Models\TaxonomyOption;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -282,7 +283,7 @@ final class PaidMediaServicesTest extends TestCase
         $roleB = Role::create(['tenant_id' => $tenantB->id, 'name' => 'Owner', 'slug' => 'owner']);
         $roleB->givePermissionTo(...Permission::pluck('key')->all());
         $userB = User::create(['name' => 'B', 'email' => 'b@other.test', 'password' => 'secret123']);
-        $this->grantMembership($userB, $tenantB);
+        $this->grantMembership($userB, $tenantB, Portal::Agency);
         $userB->assignRole($roleB);
 
         // Tenant B cannot see tenant A's request in the internal dashboard (scoped + 404 on direct id).
@@ -301,7 +302,7 @@ final class PaidMediaServicesTest extends TestCase
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $role->givePermissionTo(...Permission::pluck('key')->all());
         $owner = User::create(['name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
-        $this->grantMembership($owner, $this->tenant);
+        $this->grantMembership($owner, $this->tenant, Portal::Agency);
         $owner->assignRole($role);
 
         $this->actingAs($owner, 'sanctum')->getJson("/api/v1/app/requests/{$reqA->id}")

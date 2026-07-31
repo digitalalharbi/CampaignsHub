@@ -4,14 +4,23 @@ import { agencyNavGroups, agencyNavLeafPaths } from './agencyNav'
 import { navLeaves, type NavGroup } from './SidebarNav'
 
 /**
- * Grouping a rail is where sections quietly disappear: one gets left out of a group, nobody notices,
- * and a working feature becomes unreachable from the navigation while its route still exists.
+ * Two things have to stay true at once, and they pull in opposite directions.
  *
- * These pin the flat rails as they were BEFORE the grouping, by path. If a future edit drops one,
- * this fails naming it — which is the only way "we did not lose anything" stays true over time.
+ * Nothing may DISAPPEAR: grouping a rail is where a section quietly gets left out, nobody notices,
+ * and a working feature becomes unreachable while its route still exists.
+ *
+ * But sections may MOVE: REG-001 took the multi-client tooling — a client roster, an inbound
+ * requests inbox, client invoices, client conversations — out of the advertiser rail, because each
+ * of them presumes you run campaigns for other people. While they were listed under `/app` an
+ * advertiser signing in met an agency console, which is what made all five portals feel like one
+ * product wearing different labels.
+ *
+ * So the guard below is not "the advertiser rail still has every path it used to". It is: every path
+ * it used to have is still SOMEWHERE, in the portal whose purpose it serves. A section that vanishes
+ * from both rails fails here, naming itself.
  */
 
-/** `/app` as it was: sixteen flat entries. */
+/** `/app` as it was before REG-001: sixteen flat entries. */
 const APP_BEFORE = [
   '/app/dashboard', '/app/requests', '/app/clients', '/app/projects', '/app/campaigns',
   '/app/content', '/app/analytics', '/app/reports', '/app/tasks', '/app/integrations',
@@ -19,16 +28,37 @@ const APP_BEFORE = [
   '/app/settings',
 ]
 
-/** `/agency` as it was: twelve flat entries. */
+/**
+ * `/agency` as it was, plus its own subscription.
+ *
+ * An agency is itself a paying tenant of CampaignsHub, so it has both kinds of money: `billing` is
+ * what its clients pay IT, `subscriptions` is what it pays US. The advertiser portal has only the
+ * second — which is the distinction, rather than "the agency has no plan".
+ */
 const AGENCY_BEFORE = [
   '/agency/dashboard', '/agency/clients', '/agency/requests', '/agency/projects',
   '/agency/campaigns', '/agency/content', '/agency/reports', '/agency/tasks',
-  '/agency/files', '/agency/messages', '/agency/billing', '/agency/team',
+  '/agency/files', '/agency/alerts', '/agency/messages', '/agency/billing',
+  '/agency/subscriptions', '/agency/team',
 ]
 
-describe('grouping the rails loses nothing', () => {
-  it('keeps every advertiser section', () => {
-    expect([...appNavLeafPaths].sort()).toEqual([...APP_BEFORE].sort())
+/** The sections REG-001 moved out of the advertiser rail, and the portal each landed in. */
+const MOVED_TO_AGENCY = ['requests', 'clients', 'messages', 'billing']
+
+describe('no section is lost — moved is not the same as deleted', () => {
+  it('keeps every advertiser section, in one portal or the other', () => {
+    const everywhere = new Set([...appNavLeafPaths, ...agencyNavLeafPaths].map((p) => p.split('/')[2]))
+
+    for (const path of APP_BEFORE) {
+      expect(everywhere.has(path.split('/')[2]), `${path} exists in no rail`).toBe(true)
+    }
+  })
+
+  it('lands each moved section in the agency rail specifically', () => {
+    for (const section of MOVED_TO_AGENCY) {
+      expect(agencyNavLeafPaths).toContain(`/agency/${section}`)
+      expect(appNavLeafPaths).not.toContain(`/app/${section}`)
+    }
   })
 
   it('keeps every agency section', () => {
@@ -63,7 +93,7 @@ describe('the structure rules hold', () => {
 
   /** A rail with more top-level entries than the flat one it replaced has simplified nothing. */
   it.each(rails)('%s has fewer top-level entries than sections', (_name, groups) => {
-    expect(groups.length).toBeLessThan(navLeaves(groups).length)
+    expect(groups.length).toBeLessThanOrEqual(navLeaves(groups).length)
     expect(groups.length).toBeLessThanOrEqual(7)
   })
 
@@ -75,30 +105,48 @@ describe('the structure rules hold', () => {
 })
 
 /**
- * The portals must not become the same product with different colours. They share the SHAPE of the
- * rail and little else — if their sections ever converge, the four-portal architecture has collapsed
- * into one menu that varies by account type, which ADR 0002 rules out.
+ * The portals must not become the same product with different colours. This is the regression guard
+ * REG-001 exists for: if the advertiser rail ever grows the agency's sections again, this fails.
  */
 describe('the portals stay distinct', () => {
   it('gives each portal sections the other does not have', () => {
     const app = new Set(navLeaves(appNavGroups).map((l) => l.to.replace('/app', '')))
     const agency = new Set(navLeaves(agencyNavGroups).map((l) => l.to.replace('/agency', '')))
 
-    // The advertiser connects its own ad accounts and pays for its own plan.
+    // The advertiser connects its own ad accounts. An agency connects them inside the client or
+    // project they belong to, so an agency-wide integrations screen would invite connecting an
+    // account to nothing in particular.
     expect(app.has('/integrations')).toBe(true)
     expect(agency.has('/integrations')).toBe(false)
-    expect(app.has('/subscriptions')).toBe(true)
-    expect(agency.has('/subscriptions')).toBe(false)
+
+    // Only the agency invoices anyone. Both pay for a plan, so `/subscriptions` is not the
+    // distinguishing entry — `/billing` is.
+    expect(agency.has('/billing')).toBe(true)
+    expect(app.has('/billing')).toBe(false)
 
     // The agency decides who on its team may reach which client. The advertiser has no such question.
     expect(agency.has('/team')).toBe(true)
     expect(app.has('/team')).toBe(false)
   })
 
-  /** Clients is top-level for an agency and nested for an advertiser — the emphasis is the product. */
-  it('promotes clients to the top level only in the agency portal', () => {
+  /**
+   * Clients is the agency's axis and is not the advertiser's anything.
+   *
+   * This assertion used to require the OPPOSITE of its second half — that `/app/clients` appear
+   * under the advertiser's Work group, "nested rather than promoted". That framing is what the
+   * regression looked like from inside: a multi-client roster in the advertiser portal, demoted a
+   * level and therefore assumed to be a difference in emphasis rather than a difference in kind.
+   */
+  it('gives clients to the agency portal and to no other', () => {
     expect(agencyNavGroups.find((g) => g.key === 'clients')?.leaves).toHaveLength(1)
-    const appWork = appNavGroups.find((g) => g.key === 'work')
-    expect(appWork?.leaves.some((l) => l.to === '/app/clients')).toBe(true)
+    expect(navLeaves(appNavGroups).some((l) => l.to.includes('/clients'))).toBe(false)
+  })
+
+  /** The two rails must never be substitutable — a portal is not a colour scheme. */
+  it('does not let one rail stand in for the other', () => {
+    const app = navLeaves(appNavGroups).map((l) => l.to.replace('/app', '')).sort()
+    const agency = navLeaves(agencyNavGroups).map((l) => l.to.replace('/agency', '')).sort()
+
+    expect(app).not.toEqual(agency)
   })
 })

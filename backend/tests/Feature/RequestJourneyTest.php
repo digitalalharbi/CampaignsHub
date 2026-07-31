@@ -14,6 +14,7 @@ use App\Domains\Requests\Models\RequestStatus;
 use App\Domains\Requests\Models\RequestType;
 use App\Domains\Requests\Services\RequestJourneyService;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -40,7 +41,7 @@ final class RequestJourneyTest extends TestCase
         $ownerRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
         $ownerRole->givePermissionTo(...Permission::pluck('key')->all());
         $this->owner = User::create(['name' => 'Owner', 'email' => 'owner@agency.test', 'password' => 'secret123']);
-        $this->grantMembership($this->owner, $this->tenant);
+        $this->grantMembership($this->owner, $this->tenant, Portal::Agency);
         $this->owner->assignRole($ownerRole);
     }
 
