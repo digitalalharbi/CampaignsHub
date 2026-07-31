@@ -38,4 +38,18 @@ interface PaymentProvider
      *                                                                                                                           status ∈ paid|failed|refunded|pending|processing
      */
     public function verifyWebhook(string $rawBody, array $headers): array;
+
+    /**
+     * A stable identifier for the PAYMENT METHOD a verified event used, or null when the provider
+     * does not publish one (PAY-004).
+     *
+     * This is what makes "one trial per payment method" enforceable without the system ever seeing a
+     * card. Providers differ: Stripe publishes a fingerprint that is stable across customers, Moyasar
+     * publishes only the brand and last four digits. An adapter returns what it genuinely has, and
+     * null where it has nothing — a fabricated fingerprint would silently either block innocent
+     * customers or let the same card open trials forever.
+     *
+     * @param  array<string,mixed>  $payload  the verified event body
+     */
+    public function paymentMethodFingerprint(array $payload): ?string;
 }

@@ -37,6 +37,28 @@ final class SubscriptionService
         return $plan ?? $this->mostPermissivePlan();
     }
 
+    /**
+     * The cap that applies to this tenant RIGHT NOW (PLAN-001, PAY-003).
+     *
+     * A subscription inside its trial is capped by the plan's trial limits, which are tighter — a
+     * trial is a look at the product, not a week of the whole thing. Outside a trial it is the plan's
+     * own cap. Reading `limitFor` everywhere would have handed every trial the full plan, which is
+     * both a cost and an unpleasant surprise when the trial ends and the workspace suddenly exceeds
+     * what it is allowed.
+     */
+    public function effectiveLimit(Tenant $tenant, string $metric): ?int
+    {
+        $plan = $this->currentPlan($tenant);
+
+        if ($plan === null) {
+            return null;
+        }
+
+        return $this->subscriptionFor($tenant)?->isTrialing()
+            ? $plan->trialLimitFor($metric)
+            : $plan->limitFor($metric);
+    }
+
     public function subscriptionFor(Tenant $tenant): ?Subscription
     {
         /** @var Subscription|null $subscription */
@@ -92,7 +114,8 @@ final class SubscriptionService
             return true; // no catalogue → do not block
         }
 
-        $limit = $plan->limitFor($metric);
+        // The TRIAL cap while a trial is running, the plan's own after it — see effectiveLimit().
+        $limit = $this->effectiveLimit($tenant, $metric);
         if ($limit === null) {
             return true; // unlimited
         }
@@ -108,7 +131,9 @@ final class SubscriptionService
             return null;
         }
 
-        $limit = $plan->limitFor($metric);
+        // Trial-aware, so "remaining" is what is actually left rather than what the plan would allow
+        // once the trial ends.
+        $limit = $this->effectiveLimit($tenant, $metric);
         if ($limit === null) {
             return null; // unlimited
         }
@@ -158,7 +183,7 @@ final class SubscriptionService
         $summary = [];
         foreach ($metrics as $metric) {
             $summary[$metric] = [
-                'limit' => $this->currentPlan($tenant)?->limitFor($metric),
+                'limit' => $this->effectiveLimit($tenant, $metric),
                 'used' => $this->usage($tenant, $metric),
                 'remaining' => $this->remaining($tenant, $metric),
             ];

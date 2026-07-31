@@ -9,6 +9,8 @@ vi.mock('@/features/signup/api', async (orig) => {
   return {
     ...actual,
     fetchRegistration: vi.fn(),
+    fetchPaymentProviders: vi.fn(),
+    startCheckout: vi.fn(),
     verifyRegistrationEmail: vi.fn(),
     verifyRegistrationMobile: vi.fn(),
     resendRegistrationChallenge: vi.fn(),
@@ -16,7 +18,8 @@ vi.mock('@/features/signup/api', async (orig) => {
 })
 
 import {
-  fetchRegistration, resendRegistrationChallenge, verifyRegistrationEmail, verifyRegistrationMobile,
+  fetchPaymentProviders, fetchRegistration, resendRegistrationChallenge, startCheckout,
+  verifyRegistrationEmail, verifyRegistrationMobile,
 } from '@/features/signup/api'
 
 const envelope = (
@@ -41,7 +44,17 @@ const envelope = (
  * it offers an action exactly when there is one, and says so plainly when there is not.
  */
 describe('AccountStatusPage', () => {
-  beforeEach(() => { vi.clearAllMocks(); localStorage.clear() })
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    // No gateway by default — the shipped state, and the one the payment step must be honest about.
+    vi.mocked(fetchPaymentProviders).mockResolvedValue({
+      providers: [
+        { provider: 'moyasar', is_default: true, status: 'awaiting_credentials', available: false },
+        { provider: 'stripe', is_default: false, status: 'awaiting_credentials', available: false },
+      ],
+    })
+  })
   afterEach(() => { signOut(); localStorage.clear() })
 
   it('offers the confirmation actions while the email is outstanding', async () => {
@@ -76,7 +89,7 @@ describe('AccountStatusPage', () => {
     expect(screen.queryByTestId('registration-resend-email')).not.toBeInTheDocument()
   })
 
-  /** No pay button while no gateway exists, and the activation rule stated rather than implied. */
+  /** No pay button while no gateway exists — a control that cannot pay is a dead control. */
   it('does not offer a payment it cannot take', async () => {
     vi.mocked(fetchRegistration).mockResolvedValue(
       envelope('approved_awaiting_payment', { next_step: 'Complete payment to activate your workspace.' }, { requires_payment: true }),
@@ -84,9 +97,68 @@ describe('AccountStatusPage', () => {
 
     renderWithProviders(<AccountStatusPage />, { route: '/signup/status?request=reg-1', locale: 'en' })
 
-    await screen.findByTestId('registration-status')
-    expect(screen.getByTestId('registration-payment-note')).toHaveTextContent(/awaiting credentials/i)
-    expect(screen.getByTestId('registration-payment-note')).toHaveTextContent(/only once the provider confirms/i)
+    expect(await screen.findByTestId('registration-payment-note')).toHaveTextContent(/awaiting credentials/i)
+    expect(screen.queryByTestId('registration-pay')).not.toBeInTheDocument()
+    expect(startCheckout).not.toHaveBeenCalled()
+  })
+
+  /**
+   * The activation rule is stated whether or not a gateway exists.
+   *
+   * It is the rule, not a consolation for a missing provider: returning from a payment page is never
+   * what activates an account.
+   */
+  it('says that returning from the payment page is not what activates the account', async () => {
+    vi.mocked(fetchRegistration).mockResolvedValue(
+      envelope('approved_awaiting_payment', {}, { requires_payment: true }),
+    )
+
+    renderWithProviders(<AccountStatusPage />, { route: '/signup/status?request=reg-1', locale: 'en' })
+
+    expect(await screen.findByTestId('registration-payment-rule'))
+      .toHaveTextContent(/does not activate the account/i)
+  })
+
+  /** With a live gateway the button appears and opens a checkout — and still claims nothing. */
+  it('offers a checkout once a gateway is configured', async () => {
+    vi.mocked(fetchRegistration).mockResolvedValue(
+      envelope('approved_awaiting_payment', {}, { requires_payment: true }),
+    )
+    vi.mocked(fetchPaymentProviders).mockResolvedValue({
+      providers: [{ provider: 'moyasar', is_default: true, status: 'live', available: true }],
+    })
+    vi.mocked(startCheckout).mockResolvedValue({
+      payment: { id: 'p1', status: 'pending', amount: '9.00', currency: 'SAR', provider: 'moyasar' },
+      checkout_url: null, status: 'created', refused: [],
+    })
+
+    renderWithProviders(<AccountStatusPage />, { route: '/signup/status?request=reg-1', locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('registration-pay'))
+
+    await waitFor(() => expect(startCheckout).toHaveBeenCalledWith('reg-1'))
+    // The state does not move: only a webhook can do that.
+    expect(screen.getByTestId('registration-status')).toHaveAttribute('data-state', 'approved_awaiting_payment')
+  })
+
+  /** A refused trial is explained rather than left as a charge that silently never happened. */
+  it('explains a refused trial', async () => {
+    vi.mocked(fetchRegistration).mockResolvedValue(
+      envelope('approved_awaiting_payment', {}, { requires_payment: true }),
+    )
+    vi.mocked(fetchPaymentProviders).mockResolvedValue({
+      providers: [{ provider: 'moyasar', is_default: true, status: 'live', available: true }],
+    })
+    vi.mocked(startCheckout).mockResolvedValue({
+      payment: { id: 'p1', status: 'refused', amount: '0.00', currency: 'SAR', provider: 'moyasar' },
+      checkout_url: null, status: 'refused', refused: ['email'],
+    })
+
+    renderWithProviders(<AccountStatusPage />, { route: '/signup/status?request=reg-1', locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('registration-pay'))
+
+    expect(await screen.findByTestId('registration-trial-refused')).toHaveTextContent(/already been used/i)
   })
 
   /** The steps shown are the ones this plan actually requires — not a fixed list. */

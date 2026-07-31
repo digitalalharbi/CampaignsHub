@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Subscriptions\Http\Controllers\PublicPlanController;
 use App\Domains\Subscriptions\Http\Controllers\SubscriptionController;
+use App\Domains\Subscriptions\Http\Controllers\SubscriptionPaymentController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -28,6 +29,24 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('throttle:60,1')->group(function (): void {
     Route::get('plans', [PublicPlanController::class, 'index'])->name('plans.index');
     Route::get('plans/{code}/quote', [PublicPlanController::class, 'quote'])->name('plans.quote');
+});
+
+/*
+ * Paying for a subscription (PAY-002).
+ *
+ * `webhook` carries NO auth and no throttle: a gateway has no session, and rate-limiting the channel
+ * a payment confirmation arrives on is a way to lose one. The adapter's signature check is the whole
+ * of the authentication, and an unverified body reaches nothing.
+ *
+ * There is deliberately no endpoint a browser can call to declare itself paid.
+ */
+Route::post('payments/webhook/{provider}', [SubscriptionPaymentController::class, 'webhook'])
+    ->name('payments.webhook');
+
+Route::middleware('throttle:60,1')->group(function (): void {
+    Route::get('payments/providers', [SubscriptionPaymentController::class, 'providers'])->name('payments.providers');
+    Route::post('auth/registration/{registration}/checkout', [SubscriptionPaymentController::class, 'checkout'])
+        ->name('auth.registration.checkout');
 });
 
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(function (): void {

@@ -8,7 +8,9 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
+use App\Domains\Accounts\Services\RegistrationPolicy;
 use App\Domains\Accounts\Services\TransitionAccountState;
+use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\DTOs\MembershipGrant;
@@ -52,7 +54,23 @@ final class ProvisionWorkspace
         private readonly TenantContext $context,
         private readonly GrantMembership $grants,
         private readonly TransitionAccountState $transitions,
+        private readonly RegistrationPolicy $policy,
     ) {}
+
+    /**
+     * Has this application actually been paid for?
+     *
+     * `paid` and never reversed. A refund or a chargeback leaves the row saying `refunded`, and an
+     * application whose fee came back has not been paid for however it once looked.
+     */
+    private function hasSettledPayment(RegistrationRequest $request): bool
+    {
+        return SubscriptionPayment::query()
+            ->where('registration_request_id', $request->getKey())
+            ->where('status', 'paid')
+            ->whereNull('refunded_at')
+            ->exists();
+    }
 
     /**
      * @return array{tenant: Tenant, user: User}
@@ -79,6 +97,25 @@ final class ProvisionWorkspace
         if (! in_array($request->state, [AccountState::ApprovedAwaitingPayment, AccountState::PaymentPending], true)) {
             throw new RuntimeException(
                 "A workspace cannot be created from state {$request->state->value} — the account has not been approved."
+            );
+        }
+
+        /*
+         * The money, checked HERE rather than trusted from the caller (PAY-002).
+         *
+         * The state check above is not enough on its own, and that was a real hole: `PaymentPending`
+         * is a legal state to provision from — it is the anchor a webhook activates out of — so any
+         * caller could have handed this a request sitting in it and got a workspace without a penny
+         * having moved. `AdvanceRegistration` only reaches this after `paymentConfirmed()`, but "only
+         * one caller does the right thing" is a convention, not a guarantee.
+         *
+         * So the ledger is consulted directly: when the policy for this application requires payment,
+         * a SETTLED charge must exist for it. A refunded one does not count, because money that came
+         * back is money we do not have.
+         */
+        if ($this->policy->for($request)['requires_payment'] && ! $this->hasSettledPayment($request)) {
+            throw new RuntimeException(
+                'A workspace cannot be created for an application that owes payment: no settled charge exists for it.'
             );
         }
 

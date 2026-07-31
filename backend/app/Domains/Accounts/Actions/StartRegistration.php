@@ -36,9 +36,9 @@ final class StartRegistration
     /**
      * @return array{request: RegistrationRequest, verification: array<string, mixed>}
      */
-    public function execute(RegisterData $data, ?string $requestedPortal = null, ?string $planCode = null): array
+    public function execute(RegisterData $data, ?string $requestedPortal = null, ?string $planCode = null, ?string $billingInterval = null): array
     {
-        $request = DB::transaction(function () use ($data, $requestedPortal, $planCode): RegistrationRequest {
+        $request = DB::transaction(function () use ($data, $requestedPortal, $planCode, $billingInterval): RegistrationRequest {
             $existing = RegistrationRequest::query()
                 ->whereRaw('lower(email) = ?', [mb_strtolower($data->email)])
                 ->whereNull('tenant_id')
@@ -59,6 +59,7 @@ final class StartRegistration
                 'account_type' => $data->accountType,
                 'requested_portal' => $portal,
                 'plan_code' => $planCode,
+                'billing_interval' => $billingInterval,
                 'service' => $data->service,
                 'phone' => $data->phone,
             ];
@@ -96,6 +97,7 @@ final class StartRegistration
                 'email' => $request->email,
                 'requested_portal' => $request->requested_portal,
                 'plan_code' => $request->plan_code,
+                'billing_interval' => $request->billing_interval,
             ],
         );
 

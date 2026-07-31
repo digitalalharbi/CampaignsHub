@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Services\AdvanceRegistration;
+use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -53,6 +54,31 @@ final class RegistrationPolicyTest extends TestCase
     private function advance(): AdvanceRegistration
     {
         return app(AdvanceRegistration::class);
+    }
+
+    /**
+     * The settled charge a confirmed payment leaves behind (PAY-002).
+     *
+     * `paymentConfirmed()` is only ever reached from a verified webhook, and by the time it runs the
+     * webhook has already marked the charge paid. `ProvisionWorkspace` now checks that ledger
+     * directly rather than trusting its caller, so a test that skips straight to the confirmation has
+     * to leave the same trace a real payment would — otherwise it is asserting against a state the
+     * application can never actually be in.
+     */
+    private function settledCharge(RegistrationRequest $request): void
+    {
+        $payment = new SubscriptionPayment;
+        $payment->forceFill([
+            'registration_request_id' => $request->getKey(),
+            'purpose' => 'trial',
+            'plan_code' => $request->plan_code,
+            'provider' => 'moyasar',
+            'amount' => '9.00',
+            'currency' => 'SAR',
+            'status' => 'paid',
+            'paid_at' => now(),
+            'idempotency_key' => 'settled:'.$request->getKey(),
+        ])->save();
     }
 
     private function assertNothingGranted(): void
@@ -133,6 +159,7 @@ final class RegistrationPolicyTest extends TestCase
         $this->assertSame(AccountState::ApprovedAwaitingPayment, $request->state);
         $this->assertNothingGranted();
 
+        $this->settledCharge($request);
         $request = $this->advance()->paymentConfirmed($request);
         $this->assertSame(AccountState::Active, $request->state);
         $this->assertTrue($request->isProvisioned());
@@ -158,6 +185,7 @@ final class RegistrationPolicyTest extends TestCase
         $this->assertSame(AccountState::ApprovedAwaitingPayment, $request->state);
         $this->assertNothingGranted();
 
+        $this->settledCharge($request);
         $request = $a->paymentConfirmed($request);
         $this->assertSame(AccountState::Active, $request->state);
         $this->assertSame(1, Membership::count());

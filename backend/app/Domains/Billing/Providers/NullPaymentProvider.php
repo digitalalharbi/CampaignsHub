@@ -32,4 +32,11 @@ final class NullPaymentProvider implements PaymentProvider
     {
         return ['verified' => false];
     }
+
+    /** @param  array<string,mixed>  $payload */
+    public function paymentMethodFingerprint(array $payload): ?string
+    {
+        // No gateway, no payment method, nothing to fingerprint.
+        return null;
+    }
 }

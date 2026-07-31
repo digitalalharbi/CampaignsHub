@@ -64,4 +64,28 @@ return [
         ],
     ],
 
+    /*
+    |---------------------------------------------------------------------------
+    | Payment gateways (PAY-001)
+    |---------------------------------------------------------------------------
+    | Moyasar is the official, primary gateway; Stripe is the alternative. Neither
+    | has credentials on this install, so both report Awaiting Credentials: no
+    | session can be opened and no webhook can verify.
+    |
+    | BOTH values are required per provider. A secret key with no webhook secret
+    | could take money that nothing is able to confirm — the customer would be
+    | charged and no account would ever activate.
+    */
+    'moyasar' => [
+        'secret_key' => env('MOYASAR_SECRET_KEY'),
+        'publishable_key' => env('MOYASAR_PUBLISHABLE_KEY'),
+        'webhook_token' => env('MOYASAR_WEBHOOK_TOKEN'),
+    ],
+
+    'stripe' => [
+        'secret_key' => env('STRIPE_SECRET_KEY'),
+        'publishable_key' => env('STRIPE_PUBLISHABLE_KEY'),
+        'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
+    ],
+
 ];

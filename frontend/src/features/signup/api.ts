@@ -173,3 +173,37 @@ export function fetchPlans(): Promise<{ plans: Plan[] }> {
 export function fetchQuote(code: string, interval: BillingInterval): Promise<{ quote: PlanQuote }> {
   return getData(`/plans/${code}/quote?interval=${interval}`)
 }
+
+/*
+ * Paying for what was chosen (PAY-002).
+ *
+ * There is deliberately no function here that reports a payment as made. Returning from the gateway's
+ * page proves nothing — only a signed webhook does — so the browser's job ends at opening the
+ * checkout and asking the server what happened afterwards.
+ */
+
+export interface PaymentProviderState {
+  provider: string
+  is_default: boolean
+  /** `live` or `awaiting_credentials` — reported by the server, never guessed at here. */
+  status: string
+  available: boolean
+}
+
+export interface CheckoutResult {
+  payment: { id: string; status: string; amount: string; currency: string; provider: string }
+  /** Null whenever no gateway is configured, or the charge is already settled. */
+  checkout_url: string | null
+  status: 'created' | 'awaiting_credentials' | 'failed' | 'refused' | string
+  /** Which identities already had a trial, when one is refused (PAY-004). */
+  refused: string[]
+}
+
+export function fetchPaymentProviders(): Promise<{ providers: PaymentProviderState[] }> {
+  return getData('/payments/providers')
+}
+
+export async function startCheckout(registrationId: string): Promise<CheckoutResult> {
+  await ensureCsrfCookie()
+  return postData<CheckoutResult>(`/auth/registration/${registrationId}/checkout`, {})
+}

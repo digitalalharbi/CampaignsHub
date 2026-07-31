@@ -51,6 +51,7 @@ final class RegistrationController extends Controller
                 ? Portal::tryFrom((string) $validated['requested_portal'])?->value
                 : null,
             planCode: isset($validated['plan_code']) ? (string) $validated['plan_code'] : null,
+            billingInterval: isset($validated['billing_interval']) ? (string) $validated['billing_interval'] : null,
         );
 
         /** @var RegistrationRequest $registration */

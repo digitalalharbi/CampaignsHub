@@ -18,6 +18,16 @@ Schedule::command('requests:evaluate-sla')->everyTenMinutes();
 // Dispatch due scheduled reports (snapshot + honest delivery ledger) every 5 minutes.
 Schedule::command('reports:dispatch-scheduled')->everyFiveMinutes();
 
+/*
+ * The subscription lifecycle (PAY-003) — daily, early.
+ *
+ * Trials convert, renewals are charged, unpaid periods go past due and expired grace ends in
+ * suspension. `withoutOverlapping` because a slow run must not have a second one starting behind it:
+ * every step is idempotent, but two sweeps racing on the same subscription is a needless way to test
+ * that.
+ */
+Schedule::command('subscriptions:lifecycle')->dailyAt('01:00')->withoutOverlapping();
+
 // DEV-only: scheduler liveness heartbeat consumed by /dev/status (never scheduled in production).
 if (! app()->environment('production')) {
     Schedule::call(function (): void {

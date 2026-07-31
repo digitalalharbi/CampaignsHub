@@ -402,6 +402,13 @@ final class ConfiguredFakePaymentProvider implements PaymentProvider
         ];
     }
 
+    /** @param  array<string,mixed> $payload */
+    public function paymentMethodFingerprint(array $payload): ?string
+    {
+        // The client-services stream has no trial to protect, so no fake fingerprint is needed here.
+        return null;
+    }
+
     /** @param  array<string,string>  $headers */
     public function verifyWebhook(string $rawBody, array $headers): array
     {

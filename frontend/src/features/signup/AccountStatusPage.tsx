@@ -5,9 +5,9 @@ import {
   BadgeCheck, Clock, CreditCard, Loader2, MailCheck, RefreshCw, ShieldAlert, ShieldCheck, Smartphone,
 } from 'lucide-react'
 import {
-  fetchRegistration, forgetRegistration, recallRegistration, rememberRegistration,
-  resendRegistrationChallenge, verifyRegistrationEmail, verifyRegistrationMobile,
-  type RegistrationEnvelope, type RegistrationState, type VerificationIssued,
+  fetchPaymentProviders, fetchRegistration, forgetRegistration, recallRegistration, rememberRegistration,
+  resendRegistrationChallenge, startCheckout, verifyRegistrationEmail, verifyRegistrationMobile,
+  type CheckoutResult, type RegistrationEnvelope, type RegistrationState, type VerificationIssued,
 } from './api'
 import { AuthShell } from '@/features/auth/AuthShell'
 import { Button } from '@/components/ui/Button'
@@ -45,6 +45,10 @@ const COPY = {
     waitingOnUs: 'لا يوجد إجراء مطلوب منك الآن. سنبلغك فور اكتمال المراجعة.',
     payNow: 'إتمام الدفع',
     paymentSoon: 'بوابة الدفع غير مهيأة بعد (بانتظار بيانات الاعتماد). لن يُفعَّل الحساب إلا بعد تأكيد الدفع من المزوّد.',
+    paymentRule: 'لن يُفعَّل الحساب بمجرد رجوعك من صفحة الدفع، بل بعد تأكيد المزوّد للعملية.',
+    payAmount: 'المبلغ المستحق الآن',
+    trialRefused: 'لا يمكن بدء تجربة جديدة: سبق استخدام تجربة بهذه البيانات.',
+    provider: 'مزوّد الدفع',
     goToWorkspace: 'الانتقال إلى مساحة العمل',
     signIn: 'تسجيل الدخول',
     checkAgain: 'تحديث الحالة',
@@ -71,6 +75,10 @@ const COPY = {
     waitingOnUs: 'There is nothing for you to do right now. We will let you know as soon as the review is complete.',
     payNow: 'Complete payment',
     paymentSoon: 'No payment gateway is configured yet (awaiting credentials). The account is activated only once the provider confirms the payment.',
+    paymentRule: 'Returning from the payment page does not activate the account — the provider confirming the charge does.',
+    payAmount: 'Due now',
+    trialRefused: 'A new trial cannot be started: one has already been used with these details.',
+    provider: 'Payment provider',
     goToWorkspace: 'Go to your workspace',
     signIn: 'Sign in',
     checkAgain: 'Refresh status',
@@ -300,16 +308,7 @@ export function AccountStatusPage() {
         )}
 
         {reg.state === 'approved_awaiting_payment' && (
-          <div className="flex flex-col items-center gap-3">
-            {/*
-             * No "pay" button that cannot take a payment. Until a gateway is configured this states
-             * the position instead — and says the thing that matters most, which is that returning
-             * from a payment page is not what activates an account.
-             */}
-            <p data-testid="registration-payment-note" className="rounded-xl border border-border bg-surface-secondary px-4 py-3 text-center text-sm text-text-secondary">
-              {c.paymentSoon}
-            </p>
-          </div>
+          <PaymentStep id={reg.id} copy={c} onOpened={(r) => { if (r.checkout_url) window.location.href = r.checkout_url }} />
         )}
 
         {reg.provisioned && (
@@ -329,6 +328,69 @@ export function AccountStatusPage() {
         )}
       </div>
     </AuthShell>
+  )
+}
+
+/**
+ * Paying the fee this application owes (PAY-002).
+ *
+ * The button appears only when a gateway can actually take money. With none configured it says so and
+ * offers nothing, because a pay button that cannot pay is the definition of a dead control — and the
+ * rule that matters is stated either way: returning from a payment page is not what activates an
+ * account.
+ */
+function PaymentStep({
+  id, copy, onOpened,
+}: {
+  id: string
+  copy: typeof COPY['en'] | typeof COPY['ar']
+  onOpened: (result: CheckoutResult) => void
+}) {
+  const [result, setResult] = useState<CheckoutResult | null>(null)
+  const providers = useQuery({ queryKey: ['payment-providers'], queryFn: fetchPaymentProviders })
+
+  const checkout = useMutation({
+    mutationFn: () => startCheckout(id),
+    onSuccess: (r) => { setResult(r); onOpened(r) },
+  })
+
+  const live = providers.data?.providers.find((p) => p.available)
+
+  return (
+    <div data-testid="registration-payment" className="flex flex-col items-center gap-3">
+      {/* Said whether or not a gateway exists: it is the rule, not a consolation for a missing one. */}
+      <p data-testid="registration-payment-rule" className="text-center text-xs text-text-muted">{copy.paymentRule}</p>
+
+      {live ? (
+        <>
+          <Button
+            data-testid="registration-pay"
+            onClick={() => checkout.mutate()}
+            loading={checkout.isPending}
+            size="lg"
+          >
+            <CreditCard size={16} /> {copy.payNow}
+          </Button>
+          <p className="text-xs text-text-muted">{copy.provider}: {live.provider}</p>
+        </>
+      ) : (
+        <p data-testid="registration-payment-note" className="rounded-xl border border-border bg-surface-secondary px-4 py-3 text-center text-sm text-text-secondary">
+          {copy.paymentSoon}
+        </p>
+      )}
+
+      {result?.status === 'refused' && (
+        <p data-testid="registration-trial-refused" className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-center text-sm text-danger">
+          {copy.trialRefused}
+        </p>
+      )}
+
+      {result && result.status !== 'refused' && (
+        <p data-testid="registration-payment-amount" className="text-sm text-text-secondary" dir="ltr">
+          {copy.payAmount}: {result.payment.amount} {result.payment.currency}
+        </p>
+      )}
+    </div>
   )
 }
 

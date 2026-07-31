@@ -494,3 +494,94 @@ it in history would make Back inside the form behave like Back out of it.
 Choosing a plan stays optional, and the screen says so. An application with no plan follows the
 default registration policy; an empty string is never sent, because that would be the form answering a
 question the visitor did not.
+
+## PAY-001 … PAY-004 — the payment system
+
+| ID | Requirement | Status |
+| --- | --- | --- |
+| PAY-001 | Moyasar official + primary, Stripe alternative, both behind one adapter port. | **VERIFIED** — *Awaiting Credentials* |
+| PAY-002 | Checkout, signed webhooks, idempotency, no duplicate charge, activation only from a verified event. | **VERIFIED** (11 security tests) |
+| PAY-003 | Paid 7-day trial, explicit consent, auto-conversion, renewal, past due, grace, suspension, cancellation, refund, reactivation. | **VERIFIED** (15 tests) |
+| PAY-004 | One trial per user / mobile / company / payment method, per provider capability. | **VERIFIED** |
+| PAY-005 | Plan limits enforced in the backend, trial-aware. | **VERIFIED** |
+
+### The claim everything rests on
+
+**An account activates only from a payment the gateway cryptographically confirmed.**
+`PaymentActivationSecurityTest` is eleven attempts to activate some other way, and each one has to
+fail: a forged webhook, one with the wrong shared secret, a replayed event, a verified event for the
+wrong amount, calling the provisioner directly, advancing a `PaymentPending` application by
+re-verifying its email, a refunded charge, and asking for a checkout twice.
+
+`ApplySubscriptionPaymentEvent` is the **single call site of `paymentConfirmed()` in the entire
+application**. Everything the contract says about webhook-only activation reduces to that fact.
+
+**A real hole was found and closed while writing it.** `ProvisionWorkspace` checked the account's
+STATE, and `PaymentPending` is a legal state to provision from — it is the anchor a webhook activates
+out of. Any caller holding a request in it could therefore have got a workspace with no money having
+moved. The action now consults the payment ledger directly: when the policy requires payment, a
+settled charge must exist, and a refunded one does not count. "Only one caller does the right thing"
+was a convention; this is a guarantee, and two tests hold it.
+
+### Adapters
+
+Both are the real integrations, not placeholders, and both report **Awaiting Credentials** because no
+keys exist on this install. `isConfigured()` requires BOTH a secret key and a webhook secret: a key
+without one could open a checkout that nothing is able to confirm, and the customer would be charged
+while no account ever activated.
+
+- **Moyasar** (official, primary). Authenticates webhooks with the shared `secret_token` it carries in
+  the body, compared in constant time. That is weaker than a signature — it cannot prove the body is
+  unmodified — so the amount is re-checked against our own record before anything settles.
+- **Stripe** (alternative). Implements the real `Stripe-Signature` scheme: HMAC-SHA256 over
+  `timestamp.rawBody` with a five-minute tolerance. The tolerance is not optional; without it a
+  captured webhook stays valid forever and can be replayed to re-confirm a refunded payment.
+
+The webhook verifiers are written NOW rather than when credentials arrive, because a verifier first
+written on the day it goes live is a verifier nobody has ever tested.
+
+### Duplicate charges
+
+The idempotency key is derived from what is being charged, never from when it was asked for:
+`trial:{request}:{plan}:{interval}` and `{purpose}:{subscription}:{period}`. A double-submitted form,
+a retried request and an impatient customer all resolve to the same payment, enforced by a unique
+index rather than by remembering to check. Next month's renewal is a different key; this month's retry
+is not.
+
+### The lifecycle
+
+A trial that reaches its last day converts into a **charge**, not into an active subscription — the
+account becomes paid when the gateway says so, not because a date passed. A trial with no recorded
+`auto_convert_consent_at` is **cancelled rather than billed**: the contract requires consent to be
+explicit, and the only safe reading of a missing consent is that the charge was never authorised.
+
+A refused renewal enters `past_due` with a grace period stamped on the row, so a customer given longer
+keeps it even if the default changes. Past due is OPERATIONAL — a card that expired is not a customer
+who left. Grace that runs out suspends, and **suspension deletes nothing**: «عدم حذف بيانات العميل عند
+التعليق», with a test that counts the workspaces before and after.
+
+### Trial abuse
+
+Every identity is stored HASHED, keyed with the app secret — the question is "has this been seen
+before?", which needs no plaintext, and a table of customer emails, phones and card fingerprints is
+precisely the thing not to keep in recoverable form. Emails are normalised for dots and `+tags`;
+phones to digits without the country code. Both have tests, because `tri.alist+again@a.test` buying a
+second trial is the whole of the attack.
+
+The payment-method check is honest about the providers: **Stripe** publishes a card fingerprint stable
+across customers and the adapter returns it; **Moyasar** publishes only the brand and last four digits,
+which thousands of cards share, so its adapter returns **null** rather than a fingerprint that would
+block innocent customers. That is what "according to the provider's capabilities" means.
+
+The refusal happens BEFORE a charge is opened wherever possible — refusing beats refunding — with a
+second check when the event lands carrying the payment method, which the applicant never typed.
+
+### What is NOT true yet
+
+- **No money has ever moved.** No credentials, so no session opens and no webhook verifies. A checkout
+  records `awaiting_credentials`, which is neither `failed` (the gateway refused) nor `pending` (a
+  customer is on their way to pay).
+- **Nobody is notified.** No mail provider, so a failed renewal, an approaching trial end and a
+  suspension are all visible only by looking.
+- **Invoices, receipts and tax lines** are not generated for the subscription stream. The client-services
+  stream has them (`Invoice`); the platform's own does not.

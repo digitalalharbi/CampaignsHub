@@ -12,15 +12,27 @@ use InvalidArgumentException;
  * PaymentProvider class; by default the only entry is the NullPaymentProvider, which reports "not configured".
  * A real gateway is enabled by pointing a config entry at a configured implementation — no call-site changes.
  */
-final class PaymentProviderRegistry
+class PaymentProviderRegistry
 {
     public function __construct(private readonly Container $container) {}
+
+    /**
+     * Which config file this registry reads.
+     *
+     * The platform's own subscription revenue and what a tenant invoices its own clients are separate
+     * money with separate catalogues of providers — see `SubscriptionProviderRegistry`. Same port,
+     * same adapters, different configuration.
+     */
+    protected function namespace(): string
+    {
+        return 'billing';
+    }
 
     /** @return array<string,string> provider key => provider class */
     private function map(): array
     {
         /** @var array<string,string> $map */
-        $map = config('billing.providers', []);
+        $map = config($this->namespace().'.providers', []);
 
         return $map;
     }
@@ -33,7 +45,7 @@ final class PaymentProviderRegistry
     public function defaultKey(): string
     {
         /** @var string $key */
-        $key = config('billing.default', 'null');
+        $key = config($this->namespace().'.default', 'null');
 
         return $key;
     }
