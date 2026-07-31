@@ -20,7 +20,8 @@ function signInAtStep(step: string, extra: Partial<AuthUser['account'] & object>
     is_platform_admin: false, permissions: [], created_at: null,
     account: {
       account_type: 'agency', workspace_kind: 'company', enabled_modules: ['clients', 'requests'],
-      module_switcher: false, nav: [], subscription_plan: 'growth',
+      // The portal these entitlements describe (REG-001) — an agency tenant, in the agency portal.
+      portal: 'agency', module_switcher: false, nav: [], subscription_plan: 'growth',
       onboarding: { completed: false, step },
       ...extra,
     },

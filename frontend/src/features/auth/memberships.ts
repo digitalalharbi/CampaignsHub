@@ -35,6 +35,17 @@ export interface MembershipState {
   /** Where the server says this user should land right now. */
   destination: string
   needs_switcher: boolean
+  /**
+   * The portal the visitor asked for, and whether they hold it (LOGIN-001).
+   *
+   * `destination` cannot express "you chose Agency and you are not in one" — it simply returns the
+   * portal they DO hold, so someone who deliberately picked a tab lands somewhere else with no
+   * explanation. These two let the interface say so and offer the right portal instead.
+   *
+   * Both null when no portal was requested: a plain `/login` claims nothing.
+   */
+  requested_portal: PortalKey | null
+  requested_portal_held: boolean | null
 }
 
 /**

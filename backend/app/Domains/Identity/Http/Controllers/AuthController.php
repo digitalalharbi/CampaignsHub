@@ -11,6 +11,8 @@ use App\Domains\Identity\Http\Requests\RegisterRequest;
 use App\Domains\Identity\Resources\UserResource;
 use App\Domains\Identity\Services\EmailVerificationService;
 use App\Domains\Identity\Support\AccountSuspension;
+use App\Domains\Tenancy\Enums\Portal;
+use App\Domains\Tenancy\Services\PortalResolver;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -26,6 +28,8 @@ use Illuminate\Validation\ValidationException;
  */
 final class AuthController extends Controller
 {
+    public function __construct(private readonly PortalResolver $portals) {}
+
     public function register(RegisterRequest $request, RegisterTenantAction $action, EmailVerificationService $verification): JsonResponse
     {
         $user = $action->execute(RegisterData::fromArray($request->validated()));
@@ -55,6 +59,7 @@ final class AuthController extends Controller
             ]);
         }
         $this->assertActive($user);
+        $this->assertHoldsRequestedPortal($request, $user);
 
         Auth::guard('web')->login($user, (bool) $request->boolean('remember'));
         $request->session()->regenerate();
@@ -63,6 +68,42 @@ final class AuthController extends Controller
             ['user' => new UserResource($user)],
             'Signed in successfully.',
         );
+    }
+
+    /**
+     * Refuse the sign-in itself when the chosen portal is not one this account holds (LOGIN-003).
+     *
+     * This runs BEFORE `Auth::login`, and that placement is the whole point. The check used to
+     * happen after the session existed: you were signed in, moved to a portal, and only then shown a
+     * "not available" page — a wrong-portal choice behaved nothing like a wrong password, even
+     * though it is the same kind of mistake and belongs in the same place. Now no session is created
+     * and nothing is navigated; the form answers, exactly as it does for bad credentials.
+     *
+     * A 403 rather than a validation error, because the credentials were correct and saying
+     * otherwise would be false. The payload names where this account SHOULD go, so the form can
+     * offer a way through instead of leaving the person to guess.
+     */
+    private function assertHoldsRequestedPortal(LoginRequest $request, User $user): void
+    {
+        $requested = Portal::tryFrom((string) $request->string('portal'));
+
+        if ($requested === null || $this->portals->holds($user, $requested)) {
+            return;
+        }
+
+        abort(response()->json([
+            'success' => false,
+            'message' => 'This account is not authorised for that portal.',
+            'data' => null,
+            'errors' => null,
+            'meta' => [
+                // What the interface needs to say something useful: which portal was refused, and
+                // the one this account actually belongs to.
+                'portal_mismatch' => true,
+                'requested_portal' => $requested->value,
+                'destination' => $this->portals->landingPathFor($user),
+            ],
+        ], 403));
     }
 
     /** A suspended/disabled account (or suspended workspace) can never sign in or mint a token. Generic message. */

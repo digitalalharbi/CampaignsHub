@@ -21,7 +21,22 @@ export function VerifyEmailPage() {
 
   const verify = useMutation({
     mutationFn: (t: string) => verifyEmail(t),
-    onSuccess: async () => { const u = await fetchCurrentUser(); setUser(u); navigate('/onboarding', { replace: true }) },
+    /*
+     * Move on FIRST, refresh the profile after.
+     *
+     * This used to await `fetchCurrentUser()` before navigating, which made the redirect wait on a
+     * round trip that has nothing to do with whether verification worked — and since that probe
+     * gained a retry, a contended backend could hold the page on /verify-email for three requests
+     * while the user stared at a spinner. Verification has already succeeded by this point; there is
+     * nothing to wait for.
+     *
+     * `if (u)` matters as much as the ordering: a refresh that fails must not call `setUser(null)`
+     * and sign out someone who just proved their email.
+     */
+    onSuccess: () => {
+      navigate('/onboarding', { replace: true })
+      void fetchCurrentUser().then((u) => { if (u) setUser(u) })
+    },
     onError: () => setError(ar ? 'رابط التحقق غير صالح أو منتهٍ. أعد الإرسال.' : 'Invalid or expired link. Please resend.'),
   })
 

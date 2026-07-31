@@ -14,10 +14,18 @@ async function openCardsView(page: import('@playwright/test').Page) {
   await page.getByTestId('view-cards').click()
 }
 
-test.use({ storageState: AUTH.owner })
+/*
+ * The ADVERTISER account (LOGIN-002).
+ *
+ * This file exercises the advertiser portal's campaign surface — its project switcher, its view
+ * modes, its mobile rail. It used to sign in as the demo AGENCY and assert that chrome anyway,
+ * which only worked while `/app` had no portal guard: an agency operator now lands in `/agency`,
+ * where the same engine renders without a project switcher because an agency picks a CLIENT first.
+ */
+test.use({ storageState: AUTH.advertiser })
 
 test('create a unified campaign and see it in the list', async ({ page }) => {
-  await page.goto('/campaigns')
+  await page.goto('/app/campaigns')
   await switchToEnglish(page)
 
   // A demo project is auto-selected by the switcher. The page opens on the overview, which renders four
@@ -36,7 +44,7 @@ test('create a unified campaign and see it in the list', async ({ page }) => {
 })
 
 test('open a campaign detail and switch tabs', async ({ page }) => {
-  await page.goto('/campaigns')
+  await page.goto('/app/campaigns')
   await switchToEnglish(page)
 
   await openCardsView(page)
@@ -52,7 +60,7 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
 })
 
 test('link-external modal opens and labels sandbox data as Demo', async ({ page }) => {
-  await page.goto('/campaigns')
+  await page.goto('/app/campaigns')
   await switchToEnglish(page)
   await openCardsView(page)
   await page.getByTestId('campaign-card').first().click()

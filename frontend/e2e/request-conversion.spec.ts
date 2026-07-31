@@ -38,7 +38,7 @@ test('convert a request → client appears in portfolio and command center', asy
 
   // 4) Open the client command center via the conversion link.
   await page.getByRole('link', { name: /عرض العميل|View client/ }).click()
-  await expect(page).toHaveURL(/\/app\/clients\/[0-9A-Za-z-]+/)
+  await expect(page).toHaveURL(/\/agency\/clients\/[0-9A-Za-z-]+/)
   await expect(page.getByRole('heading', { name: company })).toBeVisible()
 
   // Campaigns tab shows the draft campaign; Requests tab shows the originating request.
@@ -47,7 +47,17 @@ test('convert a request → client appears in portfolio and command center', asy
   await page.getByRole('button', { name: /الطلبات|Requests/ }).click()
   await expect(page.getByText(reference!)).toBeVisible()
 
-  // 5) The client is in the portfolio.
+  /*
+   * 5) The client is in the portfolio.
+   *
+   * The portfolio renders both a table and a card list, showing one and hiding the other by
+   * breakpoint — so the name matches twice and one of the two matches is always `display: none`.
+   * Strict mode rejected the ambiguity, and `.first()` then picked whichever the DOM happened to
+   * order first, which on Firefox and WebKit was the hidden one.
+   *
+   * Asking for the VISIBLE match states the real claim — a person looking at this page can see the
+   * client — and is independent of which layout the viewport chose.
+   */
   await page.goto('/app/clients')
-  await expect(page.getByText(company)).toBeVisible()
+  await expect(page.getByText(company).locator('visible=true').first()).toBeVisible()
 })

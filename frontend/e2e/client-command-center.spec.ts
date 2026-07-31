@@ -43,7 +43,7 @@ test('owner drives a converted client through every command-center tab', async (
   await page.getByRole('link', { name: reference! }).click()
   await page.getByRole('button', { name: /^Convert$|^تحويل$/ }).click()
   await page.getByRole('link', { name: /View client|عرض العميل/ }).click()
-  await expect(page).toHaveURL(/\/app\/clients\/[0-9A-Za-z-]+/)
+  await expect(page).toHaveURL(/\/agency\/clients\/[0-9A-Za-z-]+/)
   await expect(page.getByRole('heading', { name: company })).toBeVisible()
 
   // 2) Update classification → Save.

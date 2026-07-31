@@ -41,6 +41,11 @@ export interface AuthUser {
 export interface AccountEntitlements {
   account_type: string | null
   workspace_kind: 'personal' | 'company'
+  /**
+   * Which portal these entitlements describe (REG-001). Null for the platform owner, who holds no
+   * membership — `/admin` is gated by a flag and is not entitlement-driven.
+   */
+  portal: 'app' | 'agency' | 'influencers' | 'portal' | null
   enabled_modules: string[]
   module_switcher: boolean
   nav: string[]

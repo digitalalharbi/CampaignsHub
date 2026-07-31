@@ -60,6 +60,16 @@ export interface ApiError {
   message: string
   status?: number
   errors: Record<string, string[]> | null
+  /**
+   * The envelope's `meta`, carried through (LOGIN-003).
+   *
+   * Some refusals are not failures the user should merely be told about — they come with the
+   * information needed to recover. A portal mismatch is the case that forced this: the response
+   * names the portal that was refused AND where this account actually belongs, so the form can
+   * offer a way through instead of a dead end. Dropping `meta` here meant the message was all the
+   * UI ever saw.
+   */
+  meta: Record<string, unknown> | null
 }
 
 export function toApiError(error: unknown): ApiError {
@@ -69,6 +79,7 @@ export function toApiError(error: unknown): ApiError {
     message: envelope?.message ?? 'A network error occurred. Please try again.',
     status: axiosError.response?.status,
     errors: envelope?.errors ?? null,
+    meta: (envelope as { meta?: Record<string, unknown> } | undefined)?.meta ?? null,
   }
 }
 

@@ -6,9 +6,13 @@ use App\Domains\Identity\Http\Controllers\AuthController;
 use App\Domains\Identity\Http\Controllers\EmailVerificationController;
 use App\Domains\Identity\Http\Controllers\InvitationController;
 use App\Domains\Identity\Http\Controllers\MeController;
+use App\Domains\Identity\Http\Controllers\OAuthController;
 use App\Domains\Identity\Http\Controllers\OnboardingController;
 use App\Domains\Identity\Http\Controllers\UserController;
 use App\Domains\Tenancy\Http\Controllers\MembershipController;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -25,6 +29,34 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
     // Personal Access Token issuance for non-browser API clients only.
     Route::post('/tokens', [AuthController::class, 'issueToken'])->name('tokens')
         ->middleware('throttle:6,1');
+
+    /*
+     * Social sign-in (LOGIN-004). `providers` is public so the sign-in page can render each one's
+     * real state — Live, or Awaiting Credentials — instead of offering a button that cannot work.
+     * `start` and `callback` are public too: they ARE the sign-in.
+     */
+    Route::get('/oauth/providers', [OAuthController::class, 'providers'])->name('oauth.providers');
+
+    /*
+     * `start` and `callback` need a SESSION of their own, stated explicitly here.
+     *
+     * The PKCE verifier, `state` and `nonce` are minted by `start` and read back by `callback`, and
+     * the session is where they live — anywhere else and they would have to travel through the
+     * browser, which defeats all three. Sanctum's stateful middleware is not enough on its own: it
+     * only engages for requests whose Origin matches the SPA, and the callback arrives as a
+     * top-level navigation FROM THE PROVIDER with no such header.
+     */
+    Route::middleware([
+        EncryptCookies::class,
+        AddQueuedCookiesToResponse::class,
+        StartSession::class,
+        'throttle:20,1',
+    ])->group(function (): void {
+        Route::post('/oauth/{provider}/start', [OAuthController::class, 'start'])->name('oauth.start');
+        // Apple posts the callback back as a form when scopes are requested; Google uses GET.
+        Route::match(['get', 'post'], '/oauth/{provider}/callback', [OAuthController::class, 'callback'])
+            ->name('oauth.callback');
+    });
 
     // Email verification — verify is public (the link carries the token); resend is authenticated.
     Route::post('/email/verify', [EmailVerificationController::class, 'verify'])->name('email.verify')

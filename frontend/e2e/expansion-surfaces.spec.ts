@@ -1,52 +1,83 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { AUTH, switchToEnglish } from './helpers'
 
 /**
- * Expansion internal surfaces (Operations Console) render for a staff owner, with a heading and no console
- * errors. Also asserts the consolidation redirects: the legacy/duplicate routes land on the canonical ones.
+ * The expansion surfaces render, with a heading and no console errors — each one signed in as an
+ * account that ACTUALLY HOLDS THE PORTAL it lives in (LOGIN-002).
+ *
+ * This whole file used one agency account for everything, including the advertiser portal's own
+ * pages. That only worked because `/app` had no portal guard: the agency operator walked into the
+ * advertiser tree and met a rail filtered down to whatever the two portals shared. Nothing here
+ * failed, and nothing here was testing what it claimed to.
+ *
+ * Also asserts the consolidation redirects still land on the canonical routes.
  */
-test.use({ storageState: AUTH.owner })
 
-const REDIRECTS: { from: string; to: RegExp }[] = [
-  { from: '/integrations', to: /\/app\/integrations/ },
-  { from: '/app/connections', to: /\/app\/integrations/ },
-  { from: '/app/drive', to: /\/app\/integrations\/drive/ },
-  { from: '/app/branding', to: /\/app\/settings\/branding/ },
-]
+/** One surface check, reused by both portals. */
+async function surfaceRenders(page: Page, path: string) {
+  const errors: string[] = []
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
+  page.on('pageerror', (e) => errors.push(String(e)))
 
-for (const r of REDIRECTS) {
-  test(`legacy route redirects to canonical: ${r.from}`, async ({ page }) => {
-    await page.goto(r.from)
-    await expect(page).toHaveURL(r.to, { timeout: 10_000 })
-  })
+  await page.goto(path)
+  await switchToEnglish(page)
+  await expect(page).toHaveURL(new RegExp(path.replace(/\//g, '\\/')))
+  await expect(page.getByRole('heading').first()).toBeVisible({ timeout: 10_000 })
+
+  const unexpected = errors.filter((e) => !/401|403|favicon|Unauthorized/i.test(e))
+  expect(unexpected, `console errors on ${path}:\n${unexpected.join('\n')}`).toHaveLength(0)
 }
 
-// Canonical surfaces (post-consolidation). Integrations is the single integrations surface; Branding lives
-// under Settings; Drive is a connector under Integrations.
-const SURFACES = [
-  { path: '/app/billing', name: 'finance' },
-  { path: '/app/billing/invoices', name: 'invoices' },
-  { path: '/app/billing/payments', name: 'payments' },
-  { path: '/app/messages', name: 'messages' },
-  { path: '/app/integrations', name: 'integrations' },
-  { path: '/app/integrations/drive', name: 'drive-connector' },
-  { path: '/settings/branding', name: 'branding' },
-  { path: '/app/subscriptions', name: 'subscription' },
-]
+test.describe('the advertiser portal', () => {
+  test.use({ storageState: AUTH.advertiser })
 
-for (const s of SURFACES) {
-  test(`operations console surface renders: ${s.name}`, async ({ page }) => {
-    const errors: string[] = []
-    page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
-    page.on('pageerror', (e) => errors.push(String(e)))
+  const REDIRECTS: { from: string; to: RegExp }[] = [
+    { from: '/integrations', to: /\/app\/integrations/ },
+    { from: '/app/connections', to: /\/app\/integrations/ },
+    { from: '/app/drive', to: /\/app\/integrations\/drive/ },
+    { from: '/app/branding', to: /\/app\/settings\/branding/ },
+  ]
 
-    await page.goto(s.path)
-    await switchToEnglish(page)
-    // The surface mounts inside the AppShell: a heading is present and the URL is correct.
-    await expect(page).toHaveURL(new RegExp(s.path.replace(/\//g, '\\/')))
-    await expect(page.getByRole('heading').first()).toBeVisible({ timeout: 10_000 })
+  for (const r of REDIRECTS) {
+    test(`legacy route redirects to canonical: ${r.from}`, async ({ page }) => {
+      await page.goto(r.from)
+      await expect(page).toHaveURL(r.to, { timeout: 10_000 })
+    })
+  }
 
-    const unexpected = errors.filter((e) => !/401|403|favicon|Unauthorized/i.test(e))
-    expect(unexpected, `console errors on ${s.path}:\n${unexpected.join('\n')}`).toHaveLength(0)
+  // Integrations is the single integrations surface; Branding lives under Settings; Drive is a
+  // connector under Integrations; Subscription is what this workspace pays CampaignsHub.
+  const SURFACES = [
+    { path: '/app/integrations', name: 'integrations' },
+    { path: '/app/integrations/drive', name: 'drive-connector' },
+    { path: '/app/settings/branding', name: 'branding' },
+    { path: '/app/subscriptions', name: 'subscription' },
+  ]
+
+  for (const s of SURFACES) {
+    test(`advertiser surface renders: ${s.name}`, async ({ page }) => surfaceRenders(page, s.path))
+  }
+})
+
+test.describe('the agency portal', () => {
+  test.use({ storageState: AUTH.owner })
+
+  // Client invoicing and client conversations are the AGENCY's, and live in its portal (REG-001).
+  const SURFACES = [
+    { path: '/agency/billing', name: 'client invoicing' },
+    { path: '/agency/billing/invoices', name: 'invoices' },
+    { path: '/agency/billing/payments', name: 'payments' },
+    { path: '/agency/messages', name: 'conversations' },
+    { path: '/agency/settings', name: 'agency settings' },
+  ]
+
+  for (const s of SURFACES) {
+    test(`agency surface renders: ${s.name}`, async ({ page }) => surfaceRenders(page, s.path))
+  }
+
+  /** A pre-move `/app` link still resolves for an agency operator — it must not meet the guard. */
+  test('a pre-move /app/billing link redirects into the agency portal', async ({ page }) => {
+    await page.goto('/app/billing')
+    await expect(page).toHaveURL(/\/agency\/billing/, { timeout: 10_000 })
   })
-}
+})

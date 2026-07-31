@@ -2,6 +2,12 @@ import { expect, type APIRequestContext, type Page } from '@playwright/test'
 
 export const AUTH = {
   owner: 'e2e/.auth/owner.json',
+  /**
+   * The ADVERTISER owner (LOGIN-002). `owner` above is an AGENCY account, and using it to drive
+   * `/app/*` was only ever possible because that tree had no portal guard — a spec that signs in as
+   * an agency and asserts an advertiser page proves nothing about either.
+   */
+  advertiser: 'e2e/.auth/advertiser.json',
   analyst: 'e2e/.auth/analyst.json',
   viewer: 'e2e/.auth/viewer.json',
 } as const

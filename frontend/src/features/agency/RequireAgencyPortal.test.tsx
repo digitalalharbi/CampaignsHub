@@ -28,7 +28,15 @@ function membership(portal: Membership['portal']): Membership {
 }
 
 function state(memberships: Membership[]): MembershipState {
-  return { memberships, current: memberships[0] ?? null, destination: '/switch', needs_switcher: memberships.length > 1 }
+  return {
+    memberships,
+    current: memberships[0] ?? null,
+    destination: '/switch',
+    needs_switcher: memberships.length > 1,
+    // No portal was requested, so there is nothing to have been refused (LOGIN-003).
+    requested_portal: null,
+    requested_portal_held: null,
+  }
 }
 
 function renderGate() {

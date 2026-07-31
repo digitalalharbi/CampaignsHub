@@ -10,7 +10,15 @@ import { API_HEADERS, AUTH, createCampaign, seedExternals, switchToEnglish, useP
  * Preconditions (a fresh project with imported Sandbox externals) are set up via API for determinism;
  * the LINK / 409 / MOVE / UNLINK behaviour itself is exercised through the real UI.
  */
-test.use({ storageState: AUTH.owner })
+/*
+ * The ADVERTISER account (LOGIN-002).
+ *
+ * This file exercises the advertiser portal's campaign surface — its project switcher, its view
+ * modes, its mobile rail. It used to sign in as the demo AGENCY and assert that chrome anyway,
+ * which only worked while `/app` had no portal guard: an agency operator now lands in `/agency`,
+ * where the same engine renders without a project switcher because an agency picks a CLIENT first.
+ */
+test.use({ storageState: AUTH.advertiser })
 
 async function openCampaignLinkedTab(page: Page, name: string) {
   // The rebuilt list navigates via clickable campaign cards (no "Open" button), and the page opens on
@@ -33,7 +41,7 @@ test('link → 409 move-confirmation → confirm move → unlink (full path)', a
   const campA = `E2E Link A ${stamp}`
   const campB = `E2E Link B ${stamp}`
 
-  await page.goto('/campaigns')
+  await page.goto('/app/campaigns')
   await switchToEnglish(page)
   await createCampaign(page, campA)
   await createCampaign(page, campB)
@@ -60,7 +68,7 @@ test('link → 409 move-confirmation → confirm move → unlink (full path)', a
   await expect(page.getByText(targetName).first()).toBeVisible()
 
   // --- Try to link the SAME external to campaign B → 409 → move-confirm ---
-  await page.goto('/campaigns')
+  await page.goto('/app/campaigns')
   await openCampaignLinkedTab(page, campB)
   await page.getByRole('button', { name: /Link external campaign|ربط حملة خارجية/ }).click()
   await page.getByRole('checkbox').click() // show linked-elsewhere too ("Unlinked only" off)

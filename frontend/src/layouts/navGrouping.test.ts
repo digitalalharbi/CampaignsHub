@@ -39,7 +39,7 @@ const AGENCY_BEFORE = [
   '/agency/dashboard', '/agency/clients', '/agency/requests', '/agency/projects',
   '/agency/campaigns', '/agency/content', '/agency/reports', '/agency/tasks',
   '/agency/files', '/agency/alerts', '/agency/messages', '/agency/billing',
-  '/agency/subscriptions', '/agency/team',
+  '/agency/subscriptions', '/agency/team', '/agency/settings',
 ]
 
 /** The sections REG-001 moved out of the advertiser rail, and the portal each landed in. */

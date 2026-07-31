@@ -35,7 +35,7 @@ test('external submit → owner dashboard → assign/status/internal-note → tr
 
   // 4) Open detail, assign to me, move to under_review, add an internal note.
   await row.click()
-  await expect(page).toHaveURL(/\/app\/requests\/[0-9A-Za-z]+/)
+  await expect(page).toHaveURL(/\/agency\/requests\/[0-9A-Za-z]+/)
   await page.getByRole('button', { name: /أسند إليّ|Assign to me/ }).click()
   await page.getByLabel(/تغيير الحالة|Change status/).selectOption('under_review')
   await expect(page.getByText(/تحت المراجعة|Under Review/).first()).toBeVisible()

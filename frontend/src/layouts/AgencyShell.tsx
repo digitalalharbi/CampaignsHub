@@ -12,6 +12,7 @@ import { AccountMenu } from '@/features/account/UserMenu'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { fetchMemberships } from '@/features/auth/memberships'
 import { useUi } from '@/stores/ui'
+import { AgencyScopeSwitcher } from '@/features/agency/AgencyScopeSwitcher'
 import { SidebarNav } from './SidebarNav'
 import { agencyNavGroups } from './agencyNav'
 
@@ -105,6 +106,9 @@ export function AgencyShell() {
             <PanelLeft size={17} className="rotate-180" />
           </button>
         )}
+        {/* Client → project, the agency's own scope control (AGENCY-006). Above the rail because
+            every section below it is read through that choice. */}
+        <AgencyScopeSwitcher collapsed={sidebarCollapsed} />
         <NavItems ar={ar} collapsed={sidebarCollapsed} />
         <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} />
       </aside>
@@ -123,6 +127,7 @@ export function AgencyShell() {
                 <X size={18} />
               </button>
             </div>
+            <AgencyScopeSwitcher />
             <NavItems ar={ar} onNavigate={() => setSidebarOpen(false)} />
             <AccountMenu variant="sidebar" />
           </aside>

@@ -163,6 +163,52 @@ final class PortalDistinctnessTest extends TestCase
             ->assertOk()->assertJsonPath('data.destination', '/app/dashboard');
     }
 
+    /**
+     * …and SAYS SO, rather than only routing around it (LOGIN-001).
+     *
+     * `destination` alone cannot express "you chose Agency and you are not in one" — it just returns
+     * the advertiser portal, so someone who deliberately picked a tab on the sign-in page arrives
+     * somewhere else with nothing to explain why. The interface needs both halves of the answer.
+     */
+    public function test_the_response_reports_whether_the_requested_portal_is_held(): void
+    {
+        $tenant = $this->tenant('report', 'brand');
+        $user = $this->member($tenant, 'report@a.test', Portal::App);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/auth/memberships?portal=agency')
+            ->assertOk()
+            ->assertJsonPath('data.requested_portal', 'agency')
+            ->assertJsonPath('data.requested_portal_held', false);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/auth/memberships?portal=app')
+            ->assertOk()
+            ->assertJsonPath('data.requested_portal', 'app')
+            ->assertJsonPath('data.requested_portal_held', true);
+
+        // Nothing requested is not a refusal — both fields stay null so the interface says nothing.
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/auth/memberships')
+            ->assertOk()
+            ->assertJsonPath('data.requested_portal', null)
+            ->assertJsonPath('data.requested_portal_held', null);
+    }
+
+    /** The platform owner holds `admin` through the flag, not a membership — and that counts. */
+    public function test_the_owner_console_counts_as_held_by_the_platform_owner(): void
+    {
+        $admin = User::create(['name' => 'Owner', 'email' => 'holds-admin@platform.test',
+            'password' => 'secret1234', 'email_verified_at' => now()]);
+        $admin->forceFill(['is_platform_admin' => true])->save();
+
+        $this->actingAs($admin, 'sanctum')->getJson('/api/v1/auth/memberships?portal=admin')
+            ->assertOk()->assertJsonPath('data.requested_portal_held', true);
+
+        $tenant = $this->tenant('not-admin', 'brand');
+        $user = $this->member($tenant, 'not-admin@a.test', Portal::App);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/auth/memberships?portal=admin')
+            ->assertOk()->assertJsonPath('data.requested_portal_held', false);
+    }
+
     /** Switching to a membership id you do not own is refused, not honoured. */
     public function test_switching_to_someone_elses_membership_is_refused(): void
     {

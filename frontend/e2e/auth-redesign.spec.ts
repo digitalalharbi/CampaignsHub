@@ -121,7 +121,15 @@ test('every login portal rewrites the panel, by real clicks', async ({ page }) =
   const heading = panel.getByRole('heading')
   const seen = new Set<string>()
 
-  for (const portal of ['agency', 'influencer', 'client', 'default'] as const) {
+  /*
+   * `client` is deliberately absent from this loop (LOGIN-001).
+   *
+   * The other three are contexts for THIS form — same engine, different copy. The client portal is a
+   * different door: it authenticates by one-time code and has no password, so its tab navigates to
+   * `/portal/login` rather than restyling a form that could never sign a client in. Asserting it
+   * stays here would be asserting the lie the tab used to tell.
+   */
+  for (const portal of ['agency', 'influencer', 'default'] as const) {
     await page.getByTestId(`login-portal-${portal}`).click();
     await expect(page.getByTestId(`login-portal-${portal}`)).toHaveAttribute('aria-current', 'page')
     const text = ((await heading.textContent()) ?? '').trim()
@@ -134,8 +142,12 @@ test('every login portal rewrites the panel, by real clicks', async ({ page }) =
     await expect(page.locator('button[type="submit"]')).toBeVisible()
   }
 
-  // The influencer and client portals speak differently from the campaign ones.
+  // The influencer portal speaks differently from the campaign ones.
   expect(seen.size).toBeGreaterThan(1)
+
+  // …and the client tab leads to the portal that actually serves clients.
+  await page.getByTestId('login-portal-client').click()
+  await expect(page).toHaveURL(/\/portal\/login/)
 })
 
 /**

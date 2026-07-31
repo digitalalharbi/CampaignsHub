@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, ChevronDown, KeyRound, LogOut, Palette, Shield, User as UserIcon } from 'lucide-react'
 import { logout } from '@/features/auth/api'
+import { usePortalPath } from '@/app/portalPath'
 import { useAuth } from '@/stores/auth'
 import { useT } from '@/lib/i18n'
 import type { AuthUser } from '@/lib/api/types'
@@ -9,13 +10,18 @@ import type { AuthUser } from '@/lib/api/types'
 /**
  * PERSONAL settings only — this menu is the single entry point for them. Workspace/system settings live in
  * the sidebar (/settings) and are deliberately NOT repeated here; each entry is one distinct route.
+ *
+ * Suffixes, not absolute paths (LOGIN-002). They used to be hard-coded to `/app/account/…`, so an
+ * agency operator opening their own profile was sent out of the agency portal into the advertiser
+ * one — and once `/app` was guarded, was refused outright. `usePortalPath` resolves each against the
+ * portal the menu is actually rendered in.
  */
 const OPTIONS = [
-  { key: 'menu_profile', to: '/app/account/profile', icon: UserIcon },
-  { key: 'menu_password', to: '/app/account/password', icon: KeyRound },
-  { key: 'menu_security', to: '/app/account/security', icon: Shield },
-  { key: 'menu_preferences', to: '/app/account/preferences', icon: Palette },
-  { key: 'menu_notifications', to: '/app/account/notifications', icon: Bell },
+  { key: 'menu_profile', to: '/account/profile', icon: UserIcon },
+  { key: 'menu_password', to: '/account/password', icon: KeyRound },
+  { key: 'menu_security', to: '/account/security', icon: Shield },
+  { key: 'menu_preferences', to: '/account/preferences', icon: Palette },
+  { key: 'menu_notifications', to: '/account/notifications', icon: Bell },
 ] as const
 
 function initialsOf(user: AuthUser | null): string {
@@ -117,7 +123,9 @@ export function AccountMenu({ variant, collapsed }: { variant: 'topbar' | 'sideb
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
   }, [open])
 
-  const go = (to: string) => { setOpen(false); navigate(to) }
+  // Resolved against the CURRENT portal, so the account menu never walks the user out of it.
+  const portalPath = usePortalPath()
+  const go = (to: string) => { setOpen(false); navigate(portalPath(to)) }
 
   return (
     <div ref={rootRef} className="relative">

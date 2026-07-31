@@ -49,6 +49,19 @@ final class MembershipController extends Controller
             // Where the frontend should land this user right now.
             'destination' => $this->resolver->landingPathFor($user, $requested),
             'needs_switcher' => $this->resolver->needsSwitcher($user),
+            /*
+             * What the visitor ASKED for, and whether they have it (LOGIN-001).
+             *
+             * `destination` alone cannot express "you chose Agency and you are not in one" — it just
+             * quietly returns the advertiser portal, and the person who deliberately picked a tab on
+             * the sign-in page arrives somewhere else with no explanation. These two fields let the
+             * interface say it plainly and offer the portal they DO hold, instead of dropping them
+             * into a dashboard that is not theirs and letting them work out why.
+             *
+             * Null when no portal was requested — a plain `/login` claims nothing.
+             */
+            'requested_portal' => $requested?->value,
+            'requested_portal_held' => $requested === null ? null : $this->resolver->holds($user, $requested),
         ], 'Memberships.');
     }
 

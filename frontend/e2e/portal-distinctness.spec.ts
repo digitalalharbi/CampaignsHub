@@ -178,3 +178,104 @@ test.describe('the owner console stands apart', () => {
     await expect(page.getByText(/لوحة المنصة|Platform overview/)).toHaveCount(0)
   })
 })
+
+/**
+ * The sign-in page is one engine with per-portal context (LOGIN-001).
+ *
+ * Every tab used to offer `owner@demo-agency.local`, so whichever portal a tester picked they signed
+ * in as the same agency operator and landed in the agency portal — which reads as the tabs being
+ * decorative. Each tab now names its own demo identity, and choosing a portal you do not hold is
+ * answered in words rather than by quietly routing you somewhere else.
+ */
+test.describe('signing in through a portal', () => {
+  test('each portal tab offers its own demo identity', async ({ page }) => {
+    await page.goto('/login')
+    await expect(page.getByTestId('demo-credentials')).toContainText('owner@demo-company.local')
+
+    await page.getByTestId('login-portal-agency').click()
+    await expect(page.getByTestId('demo-credentials')).toContainText('owner@demo-agency.local')
+
+    await page.getByTestId('login-portal-influencer').click()
+    await expect(page.getByTestId('demo-credentials')).toContainText('layla@creators.demo')
+
+    // …and each one says what kind of account it is, so a tester knows what they should then see.
+    await expect(page.getByTestId('demo-account-kind')).toBeVisible()
+  })
+
+  /** The client portal is a different door — one-time code, no password — so its tab leads there. */
+  test('the client tab leads to the portal login, not this form', async ({ page }) => {
+    await page.goto('/login')
+    await page.getByTestId('login-portal-client').click()
+
+    await expect(page).toHaveURL(/\/portal\/login/)
+  })
+
+  /**
+   * Choosing a portal you do not hold is EXPLAINED, not routed around.
+   *
+   * The agency owner signing in through the advertiser tab is a real person making a real mistake.
+   * Sending them to `/agency` silently is a correct destination and a confusing one: their choice
+   * was overridden with no indication it had been.
+   */
+  test('signing in through a portal you do not hold is refused in the form', async ({ page }) => {
+    await page.goto('/login?portal=agency')
+    await page.locator('input[type="email"]').fill('owner@demo-company.local')
+    await page.locator('input[type="password"]').fill('password')
+    await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
+
+    const notice = page.getByTestId('wrong-portal-notice')
+    await expect(notice).toBeVisible({ timeout: 20000 })
+    await expect(notice).toContainText(/غير مخول|not authorised/)
+    // Told, and still on the login page — not dropped into a dashboard that is not theirs.
+    await expect(page).toHaveURL(/\/login/)
+
+    // NO SESSION was created: this was a refused sign-in, not a redirect with a message.
+    const me = await page.request.get('/api/v1/auth/me', { headers: { Accept: 'application/json' } })
+    expect(me.status(), 'a refused sign-in must not leave a session behind').toBe(401)
+
+    // …and the way out works: it signs them in properly and lands them in their own portal.
+    await notice.getByRole('button').click()
+    await expect(page).toHaveURL(/\/app\//, { timeout: 20000 })
+  })
+
+  /** The tab is context, never a grant: picking "Agency" does not open the agency portal. */
+  test('choosing a portal tab grants nothing', async ({ page }) => {
+    await page.goto('/login?portal=agency')
+    await page.locator('input[type="email"]').fill('owner@demo-company.local')
+    await page.locator('input[type="password"]').fill('password')
+    await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
+
+    const notice = page.getByTestId('wrong-portal-notice')
+    await expect(notice).toBeVisible({ timeout: 20000 })
+    // Sign in properly, THEN try the agency portal by URL — it is still refused.
+    await notice.getByRole('button').click()
+    await expect(page).toHaveURL(/\/app\//, { timeout: 20000 })
+
+    await page.goto('/agency/clients')
+    await expect(page.getByTestId('agency-portal-denied')).toBeVisible({ timeout: 20000 })
+  })
+
+  /** Google and Apple are shown, and shown honestly, without credentials configured. */
+  test('social sign-in is offered but reports its real state', async ({ page }) => {
+    await page.goto('/login')
+
+    await expect(page.getByTestId('oauth-google')).toBeVisible()
+    await expect(page.getByTestId('oauth-apple')).toBeVisible()
+    // Not configured in this environment, so inert and saying why — never a button that fails.
+    await expect(page.getByTestId('oauth-google')).toBeDisabled()
+    await expect(page.getByTestId('oauth-apple')).toBeDisabled()
+    await expect(page.getByTestId('oauth-awaiting')).toContainText(/بانتظار|awaiting/i)
+  })
+
+  /** And the advertiser portal now refuses an agency operator the same way every other one does. */
+  test('the advertiser portal refuses an agency operator', async ({ page }) => {
+    await page.goto('/login')
+    await page.locator('input[type="email"]').fill('owner@demo-agency.local')
+    await page.locator('input[type="password"]').fill('password')
+    await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
+    await expect(page).toHaveURL(/\/agency/, { timeout: 20000 })
+
+    await page.goto('/app/dashboard')
+    await expect(page.getByTestId('app-portal-denied')).toBeVisible({ timeout: 20000 })
+  })
+})

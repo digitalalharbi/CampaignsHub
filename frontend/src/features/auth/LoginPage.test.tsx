@@ -82,7 +82,9 @@ describe('LoginPage — the controls actually work', () => {
     fireEvent.click(screen.getByRole('button', { name: /Sign in/i }))
 
     await waitFor(() => expect(login).toHaveBeenCalled())
-    expect(vi.mocked(login).mock.calls[0][0]).toEqual({ email: 't@t.dev', password: 'secret123', remember: true })
+    // `portal: null` because a plain /login claims no portal — the server then decides the
+    // destination from memberships alone (LOGIN-003).
+    expect(vi.mocked(login).mock.calls[0][0]).toEqual({ email: 't@t.dev', password: 'secret123', remember: true, portal: null })
   })
 
   it('sends remember: false once the box is cleared', async () => {
@@ -95,7 +97,7 @@ describe('LoginPage — the controls actually work', () => {
     fireEvent.click(screen.getByRole('button', { name: /Sign in/i }))
 
     await waitFor(() => expect(login).toHaveBeenCalled())
-    expect(vi.mocked(login).mock.calls[0][0]).toEqual({ email: 't@t.dev', password: 'secret123', remember: false })
+    expect(vi.mocked(login).mock.calls[0][0]).toEqual({ email: 't@t.dev', password: 'secret123', remember: false, portal: null })
   })
 
   /** Zero dead links: every secondary action points at a route that exists. */

@@ -10,6 +10,8 @@ const ROLES = [
   { email: 'owner@demo-agency.local', file: AUTH.owner },
   { email: 'analyst@demo-agency.local', file: AUTH.analyst },
   { email: 'viewer@demo-agency.local', file: AUTH.viewer },
+  // A real advertiser, for the advertiser portal's own surfaces.
+  { email: 'owner@demo-company.local', file: AUTH.advertiser },
 ]
 
 for (const role of ROLES) {

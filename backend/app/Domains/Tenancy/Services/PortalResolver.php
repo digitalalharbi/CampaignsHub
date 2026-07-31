@@ -62,6 +62,28 @@ final class PortalResolver
     }
 
     /**
+     * Does this user actually hold this portal?
+     *
+     * Asked so the interface can SAY SO when the answer is no (LOGIN-001). `resolve()` quietly falls
+     * back to the user's own portal when the requested one is not held, which is the right thing for
+     * routing and the wrong thing for explaining: someone who deliberately picked "Agency" on the
+     * sign-in page and arrived in the advertiser portal has been answered without being told.
+     *
+     * The platform owner holds `Admin` through the flag rather than a membership, so that case is
+     * answered here too — otherwise the console would report itself as a portal its owner lacks.
+     */
+    public function holds(User $user, Portal $portal): bool
+    {
+        if ($portal === Portal::Admin) {
+            return (bool) $user->is_platform_admin;
+        }
+
+        return $this->membershipsFor($user)->contains(
+            fn (Membership $m) => $m->portal === $portal,
+        );
+    }
+
+    /**
      * Where to send the user after authenticating. Falls back to onboarding rather than guessing a
      * portal: a user with no membership has nothing to be shown yet, and inventing one would put
      * them inside a workspace they do not belong to.

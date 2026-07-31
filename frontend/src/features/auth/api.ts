@@ -5,6 +5,15 @@ export interface LoginInput {
   email: string
   password: string
   remember?: boolean
+  /**
+   * The portal chosen on the sign-in page (LOGIN-003).
+   *
+   * A preference the SERVER checks, never a grant. Naming a portal here cannot open one; the only
+   * thing it can do is get the sign-in refused — before any session exists — when the account does
+   * not hold it, which is what makes a wrong-portal choice behave like a wrong password instead of
+   * like a page you reach and then cannot use.
+   */
+  portal?: string | null
 }
 
 export interface RegisterInput {
@@ -84,4 +93,32 @@ function isDefinitelyGuest(error: unknown): boolean {
 export async function requestPasswordReset(input: { email: string }): Promise<void> {
   await ensureCsrfCookie()
   await postData('/auth/forgot-password', input)
+}
+
+/** A social sign-in provider as the sign-in page needs to render it (LOGIN-004). */
+export interface OAuthProvider {
+  provider: string
+  label: { en: string; ar: string }
+  /** `live` or `awaiting_credentials` — reported, never guessed at in the browser. */
+  status: string
+  /** False when the provider has no credentials configured: render it, but inert. */
+  available: boolean
+}
+
+export async function fetchOAuthProviders(): Promise<OAuthProvider[]> {
+  const { providers } = await getData<{ providers: OAuthProvider[] }>('/auth/oauth/providers')
+  return providers
+}
+
+/**
+ * Begin an Authorization Code + PKCE flow. The server mints the verifier, `state` and `nonce` and
+ * keeps them in the session — none of the three passes through here, which is what makes them
+ * worth having.
+ */
+export async function startOAuth(
+  provider: string,
+  context: { portal?: string | null; redirect?: string | null },
+): Promise<{ authorize_url: string }> {
+  await ensureCsrfCookie()
+  return postData<{ authorize_url: string }>(`/auth/oauth/${provider}/start`, context)
 }

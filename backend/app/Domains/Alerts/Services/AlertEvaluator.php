@@ -173,7 +173,14 @@ final class AlertEvaluator
             'source' => 'alerts',
             'entity_type' => $b['entity_type'],
             'entity_id' => $b['entity_id'],
-            'action_url' => '/app/alerts', // clicking the bell item lands on the alerts page
+            /*
+             * PORTAL-RELATIVE (REG-011). An alert is tenant-wide and its recipients are not all in
+             * the same portal, so a fixed `/app/alerts` sent an agency operator into the advertiser
+             * portal — and once that tree was guarded, into a refusal. The client resolves this
+             * against whichever portal the reader is in; rows written before this still carry an
+             * absolute path and are left alone by that resolution.
+             */
+            'action_url' => '/alerts',
         ]);
 
         return $n?->id !== null ? (string) $n->id : null;

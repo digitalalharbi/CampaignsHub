@@ -1,4 +1,5 @@
 import { Navigate, useLocation } from 'react-router-dom'
+import { useAuth } from '@/stores/auth'
 
 /**
  * Keeps every pre-ADR-0002 path alive after the advertiser portal moved under `/app/*`.
@@ -14,8 +15,60 @@ import { Navigate, useLocation } from 'react-router-dom'
  */
 function PrefixWithApp() {
   const { pathname, search, hash } = useLocation()
+  const status = useAuth((s) => s.status)
+  const nav = useAuth((s) => s.user?.account?.nav)
+  const portal = useAuth((s) => s.user?.account?.portal)
 
-  return <Navigate to={`/app${pathname}${search}${hash}`} replace />
+  /*
+   * WAIT for the session probe before deciding (LOGIN-002).
+   *
+   * This component renders immediately on a cold load, while `status` is still `loading` and the
+   * user is not known — so reading the portal at that moment always yielded `undefined` and every
+   * legacy path fell back to `/app`, which is precisely the bug this redirect exists to avoid. It
+   * looked correct in a warm SPA and failed on every direct navigation, which is how people
+   * actually follow an old bookmark.
+   *
+   * Rendering nothing for the moment it takes is right: there is no page here, only a decision, and
+   * making it on incomplete information is worse than making it a beat later.
+   */
+  if (status === 'loading') return null
+
+  /*
+   * A GUEST cannot be given a portal yet, so do not pick one for them.
+   *
+   * Prefixing anonymously wrote `/app` into the sign-in redirect, and that stuck: after signing in,
+   * an agency operator was sent to the advertiser portal's copy of their own profile page and
+   * refused there. Bounce to sign-in carrying the ORIGINAL path instead — once they are known, this
+   * same component resolves it into their portal.
+   */
+  if (status === 'guest') {
+    const intended = `${pathname}${search}${hash}`
+    return <Navigate to={`/login?redirect=${encodeURIComponent(intended)}`} replace />
+  }
+
+  /*
+   * Into the reader's OWN portal when it offers this section (LOGIN-002).
+   *
+   * These paths are all pre-ADR-0002, from when there was one tree and it lived at the root, so
+   * `/campaigns` meant "campaigns" and not "the advertiser's campaigns". Sending every one of them
+   * to `/app` was harmless while that tree was ungated; once it was guarded, an agency operator
+   * following an old bookmark met a refusal for a section their own portal has.
+   *
+   * `/app` stays the fallback for a section the reader's portal does not offer — an agency has no
+   * Integrations screen, and `/agency/integrations` would be a 404 dressed up as a redirect. There
+   * the advertiser portal's guard gives the honest answer instead.
+   */
+  /*
+   * `account` is PERSONAL and belongs to the reader wherever they sign in, so it is portal-relative
+   * unconditionally — it is not in any portal's `sections()`, which lists WORKSPACE sections, and
+   * treating its absence there as "not offered" sent an agency operator's own profile link into the
+   * advertiser portal and then into a refusal.
+   */
+  const section = pathname.split('/')[1] ?? ''
+  const personal = section === 'account'
+  const base = portal && (personal || nav?.includes(section)) ? `/${portal}` : '/app'
+
+  return <Navigate to={`${base}${pathname}${search}${hash}`} replace />
 }
 
 /**
@@ -110,6 +163,33 @@ export function LegacyAgencyRedirect() {
 
   return <Navigate to={`/agency${pathname.slice('/app'.length)}${search}${hash}`} replace />
 }
+
+/** The `/app` paths whose sections moved to `/agency`. */
+const MOVED_TO_AGENCY = [
+  'requests',
+  'requests/:requestId',
+  'clients',
+  'clients/:clientId',
+  'messages',
+  'billing',
+  'billing/quotes',
+  'billing/invoices',
+  'billing/payments',
+  'finance',
+] as const
+
+/**
+ * Registered OUTSIDE the `/app` portal guard, and outside the authenticated tree (LOGIN-002).
+ *
+ * These have to resolve for people who do NOT hold the advertiser portal — an agency operator
+ * following an old `/app/clients` bookmark is the main case, and they are exactly who the guard
+ * would otherwise turn away at the door of a portal they were only passing through. The redirect
+ * happens first; the agency portal's own gate then answers for the destination.
+ */
+export const legacyAgencyRedirects = MOVED_TO_AGENCY.map((path) => ({
+  path: `/app/${path}`,
+  element: <LegacyAgencyRedirect />,
+}))
 
 /**
  * The external client portal moved from `/client/*` to `/portal/*` (ADR 0002), so all four portals

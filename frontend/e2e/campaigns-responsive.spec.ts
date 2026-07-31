@@ -2,7 +2,15 @@ import { expect, test } from '@playwright/test'
 import { AUTH } from './helpers'
 
 /** Responsive + RTL/LTR + light/dark + console-cleanliness checks for the campaigns surface. */
-test.use({ storageState: AUTH.owner })
+/*
+ * The ADVERTISER account (LOGIN-002).
+ *
+ * This file exercises the advertiser portal's campaign surface — its project switcher, its view
+ * modes, its mobile rail. It used to sign in as the demo AGENCY and assert that chrome anyway,
+ * which only worked while `/app` had no portal guard: an agency operator now lands in `/agency`,
+ * where the same engine renders without a project switcher because an agency picks a CLIENT first.
+ */
+test.use({ storageState: AUTH.advertiser })
 
 const VIEWPORTS = [
   { name: 'mobile-320', width: 320, height: 568 },
@@ -13,7 +21,7 @@ const VIEWPORTS = [
 for (const vp of VIEWPORTS) {
   test(`no unintended horizontal scroll @ ${vp.name}`, async ({ page }) => {
     await page.setViewportSize({ width: vp.width, height: vp.height })
-    await page.goto('/campaigns')
+    await page.goto('/app/campaigns')
     // The page H1 (not the summary-card H3s, which also contain "الحملات").
     await expect(page.getByRole('heading', { level: 1, name: /Campaigns|الحملات/ })).toBeVisible()
     await page.waitForLoadState('networkidle') // let the list settle before measuring layout
@@ -50,7 +58,7 @@ for (const vp of VIEWPORTS) {
 }
 
 test('theme + direction toggle: light/dark and RTL/LTR', async ({ page }) => {
-  await page.goto('/campaigns')
+  await page.goto('/app/campaigns')
   const html = page.locator('html')
 
   const themeBefore = await html.getAttribute('data-theme')
@@ -71,7 +79,7 @@ test('no console errors while using the campaigns surface', async ({ page }) => 
   })
   page.on('pageerror', (err) => errors.push(String(err)))
 
-  await page.goto('/campaigns')
+  await page.goto('/app/campaigns')
   await expect(page.getByRole('heading', { level: 1, name: /Campaigns|الحملات/ })).toBeVisible()
   // Each campaign row is itself the button (data-testid="campaign-card") — open the first one.
   await page.getByTestId('view-cards').click()

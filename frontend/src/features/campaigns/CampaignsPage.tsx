@@ -41,6 +41,7 @@ const VIEWS: Array<{ id: ViewMode; ar: string; icon: typeof LayoutGrid }> = [
 export function CampaignsPage() {
   const t = useT()
   const locale = useUi((s) => s.locale)
+  const ar = locale === 'ar'
   const navigate = useNavigate()
   const canCreate = useAuth((s) => s.hasPermission('campaigns.create'))
   const { currentProjectId: projectId } = useProject()
@@ -117,11 +118,26 @@ export function CampaignsPage() {
   const k = summary.data?.current
   const d = summary.data?.delta ?? {}
 
+  /*
+   * No project chosen yet — a CHOICE, not a broken page (AGENCY-006).
+   *
+   * Reached differently in each portal, which is why the copy names the control rather than the
+   * portal: an advertiser picks a project, an agency picks a client and then a project. What both
+   * must never see is the previous selection's campaigns still on screen, so this renders instead of
+   * the list rather than alongside an empty one.
+   */
   if (!projectId) {
     return (
       <div className="space-y-6">
-        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">الحملات</h1>
-        <EmptyState title="اختر مشروعًا" description="حملات كل مشروع مستقلة — اختر مشروعًا من المبدّل لعرض حملاته." />
+        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">
+          {ar ? 'الحملات' : 'Campaigns'}
+        </h1>
+        <EmptyState
+          title={ar ? 'اختر مشروعًا' : 'Select a project'}
+          description={ar
+            ? 'حملات كل مشروع مستقلة — اختر مشروعًا من المبدّل لعرض حملاته.'
+            : 'Each project has its own campaigns — pick one from the switcher to see them.'}
+        />
       </div>
     )
   }

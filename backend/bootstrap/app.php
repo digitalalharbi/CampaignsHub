@@ -59,6 +59,17 @@ return Application::configure(basePath: dirname(__DIR__))
         // Sanctum SPA cookie authentication for the decoupled React frontend.
         $middleware->statefulApi();
 
+        /*
+         * An unauthenticated API call is a 401, not a redirect (LOGIN-003).
+         *
+         * Laravel's default is to send a guest to a named `login` route. This application has no such
+         * route — it is an API with an SPA in front of it — so the redirect threw
+         * RouteNotFoundException, and the caller got a 500 with a stack trace instead of "you are not
+         * signed in". Only visible without an `Accept: application/json` header, which the SPA always
+         * sends and a curl or a mobile client easily does not.
+         */
+        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : '/login');
+
         // Every API request gets a correlation-friendly request id.
         $middleware->api(prepend: [
             AssignRequestId::class,

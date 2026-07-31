@@ -19,7 +19,7 @@ describe('resolvePostAuthDestination', () => {
   afterEach(() => vi.clearAllMocks())
 
   const state = (destination: string) => ({
-    memberships: [], current: null, destination, needs_switcher: false,
+    memberships: [], current: null, destination, needs_switcher: false, requested_portal: null, requested_portal_held: null,
   })
 
   it('uses the server destination when there is no explicit redirect', async () => {

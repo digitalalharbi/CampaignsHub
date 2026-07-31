@@ -73,6 +73,7 @@ import { AppShell } from '@/layouts/AppShell'
 import { AgencyShell } from '@/layouts/AgencyShell'
 import { AdminShell } from '@/layouts/AdminShell'
 import { RequirePlatformAdmin } from '@/features/admin/RequirePlatformAdmin'
+import { RequirePortal } from '@/features/auth/RequirePortal'
 import { PlatformOverviewPage } from '@/features/admin/PlatformOverviewPage'
 import { TenantsPage } from '@/features/admin/TenantsPage'
 import { SystemSettingsPage } from '@/features/admin/SystemSettingsPage'
@@ -91,7 +92,7 @@ import { CreatorShell } from '@/layouts/CreatorShell'
 import { CreatorWorkPage } from '@/features/influencers/creator/CreatorWorkPage'
 import { CreatorCollaborationPage } from '@/features/influencers/creator/CreatorCollaborationPage'
 import { WorkspaceSwitcherPage } from '@/features/auth/WorkspaceSwitcherPage'
-import { LegacyAgencyRedirect, legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
+import { legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
 
 export const router = createBrowserRouter([
   // Public marketing homepage — the primary conversion surface. The authenticated app lives under
@@ -163,6 +164,9 @@ export const router = createBrowserRouter([
   { path: '/dev/status', element: <DevStatusPage /> },
   // Pre-ADR-0002 paths, kept alive after the advertiser portal moved under /app/*.
   ...legacyAppRedirects,
+  // REG-001 paths: the sections that moved from /app to /agency. Ahead of the guarded /app tree on
+  // purpose — see `legacyAgencyRedirects`.
+  ...legacyAgencyRedirects,
 
   {
     element: <RequireAuth />,
@@ -177,7 +181,13 @@ export const router = createBrowserRouter([
         children: [{
         // ADR 0002: the advertiser portal owns /app/*. Every section below is relative to it, so the
         // tree can no longer be half at the root and half prefixed.
+        //
+        // LOGIN-002: gated like every other portal. This tree was the one without a guard, so an
+        // agency operator could open it and meet a rail filtered down to whatever the two portals
+        // shared — no menu item promised anything false, and the page was still not theirs.
         path: 'app',
+        element: <RequirePortal portal="app" />,
+        children: [{
         element: <AppShell />,
         children: [
           { path: 'dashboard', element: <DashboardPage /> },
@@ -202,9 +212,9 @@ export const router = createBrowserRouter([
            * membership carries on to the page, and one who does not is told plainly instead of
            * meeting a blank screen. Nothing is removed from the product; it lives in one place now.
            */
-          ...['requests', 'requests/:requestId', 'clients', 'clients/:clientId', 'messages',
-            'billing', 'billing/quotes', 'billing/invoices', 'billing/payments', 'finance',
-          ].map((path) => ({ path, element: <LegacyAgencyRedirect /> })),
+          // The moved sections' redirects are registered at the TOP LEVEL (see
+          // `legacyAgencyRedirects`), not here — they must resolve for someone who does not hold the
+          // advertiser portal, and inside this tree the guard above would turn them away first.
           // Alerts management (the alerts engine's operator surface).
           { path: 'alerts', element: <AlertsPage /> },
           // Expansion internal surfaces. Integrations is CANONICAL at /app/integrations and absorbs the
@@ -269,6 +279,7 @@ export const router = createBrowserRouter([
           { path: 'leads', element: <LeadsPage /> },
           { path: 'opportunities', element: <PagePlaceholder title="Opportunities" /> },
         ],
+        }],
       },
       // ADR 0002: the agency portal owns /agency/*. It is a portal, not a menu variant — its own
       // shell, its own landing, its own entry gate. Several sections below are the SAME engines the
@@ -322,6 +333,41 @@ export const router = createBrowserRouter([
             // The agency's own plan with CampaignsHub — distinct from the invoices it raises to its
             // clients, which is what `billingRoutes` above is.
             ...subscriptionsRoutes,
+            /*
+             * The agency's WORKSPACE settings (LOGIN-002).
+             *
+             * The agency portal had none: every settings link led to `/app/settings`, so configuring
+             * an agency meant leaving the agency portal for the advertiser one — and, once /app was
+             * guarded, meant being refused. Workspace settings belong inside the workspace's own
+             * portal, which is what the five-portal structure says.
+             *
+             * Same engine as the advertiser's, mounted here rather than copied. Personal and
+             * security settings are NOT here — those live under the account menu, in one place, for
+             * every portal.
+             */
+            {
+              path: 'settings',
+              element: <SettingsLayout />,
+              children: [
+                { index: true, element: <Navigate to="/agency/settings/workspace" replace /> },
+                { path: 'workspace', element: <SettingsPage only={['general', 'clients', 'projects', 'notifications', 'security']} /> },
+                { path: 'permissions', element: <SettingsPage only={['team']} title="الصلاحيات والفريق" subtitle="أعضاء الوكالة وأدوارهم وصلاحياتهم" /> },
+                { path: 'branding', element: <BrandingCenterPage /> },
+              ],
+            },
+            {
+              // Personal settings, reachable ONLY from the account menu — same rule in every portal.
+              path: 'account',
+              element: <AccountSettingsLayout />,
+              children: [
+                { index: true, element: <Navigate to="/agency/account/profile" replace /> },
+                { path: 'profile', element: <ProfilePage /> },
+                { path: 'password', element: <PasswordPage /> },
+                { path: 'security', element: <SecurityPage /> },
+                { path: 'preferences', element: <PreferencesPage /> },
+                { path: 'notifications', element: <PersonalNotificationsPage /> },
+              ],
+            },
           ],
         }],
       },
@@ -332,6 +378,26 @@ export const router = createBrowserRouter([
         path: 'influencers',
         element: <RequireInfluencerPortal />,
         children: [
+          /*
+           * Personal settings, in THIS portal (LOGIN-002).
+           *
+           * Both influencer shells render the account menu, and until now it had nowhere to go here:
+           * a creator clicking "Profile" was sent to `/app/account/profile`, another portal's copy,
+           * which the guard then refused. Personal settings belong to the person and must exist
+           * wherever that person signs in.
+           */
+          {
+            path: 'account',
+            element: <AccountSettingsLayout />,
+            children: [
+              { index: true, element: <Navigate to="/influencers/account/profile" replace /> },
+              { path: 'profile', element: <ProfilePage /> },
+              { path: 'password', element: <PasswordPage /> },
+              { path: 'security', element: <SecurityPage /> },
+              { path: 'preferences', element: <PreferencesPage /> },
+              { path: 'notifications', element: <PersonalNotificationsPage /> },
+            ],
+          },
           /*
            * The CREATOR's side (INFL-002) — its own shell, deliberately outside InfluencerShell.
            *

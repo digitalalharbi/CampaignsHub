@@ -186,3 +186,90 @@ handed the agency's sections; and because only `agency.php` and `influencers.php
   the E2E suite off `owner@demo-agency.local` for advertiser surfaces — tracked as REG-010.
 - `AlertEvaluator` writes `action_url = '/app/alerts'` for every recipient. Correct for an
   advertiser, coherent-but-odd for an agency operator. Tracked as REG-011.
+
+## LOGIN-001…004 — one sign-in engine, per-portal context, refusal inside the form
+
+Reported as: every login tab used `owner@demo-agency.local`, so all five portals were being tested
+with one agency account; and the portal check ran AFTER the session was created, so a wrong choice
+produced a "not available" page instead of behaving like a wrong password.
+
+| ID | Requirement | Status | Evidence |
+| --- | --- | --- | --- |
+| LOGIN-001 | One engine, per-portal copy and demo identity. Each tab names its own seeded account and what kind it is; the client tab links to `/portal/login` because that portal has no password. | **VERIFIED** | `portal-distinctness.spec.ts` — each tab's credentials, and the client tab's destination. |
+| LOGIN-002 | A real portal guard on every route tree. `/app` had none (was REG-010). | **VERIFIED** | `RequirePortal`; `app-portal-denied` asserted on three browsers. Closing it exposed three more defects — see below. |
+| LOGIN-003 | The portal check runs INSIDE the sign-in, before any session exists. Refusal renders in the form with the account's real portal and a button that signs them in there. | **VERIFIED** | `PortalLoginTest` (6 cases incl. "no session was created"); E2E asserts `/auth/me` → 401 after a refusal. |
+| LOGIN-004 | Google and Apple via Authorization Code + PKCE with `state` and `nonce`; providers report Live or Awaiting Credentials and are never rendered as working buttons without credentials. | **VERIFIED (Awaiting Credentials)** | `PortalLoginTest` (8 cases). No `GOOGLE_CLIENT_ID`/`APPLE_*` in any environment yet, so both render disabled with the reason. The flow, callback, `state`/`nonce` checks and linking rules are built and tested; the live round trip is externally blocked. |
+| REG-010 | `/app` portal guard. | **CLOSED** by LOGIN-002. |
+| REG-011 | `AlertEvaluator` wrote a fixed `/app/alerts` action URL for every recipient. | **CLOSED** — now portal-relative, resolved by the reader's portal; older absolute rows still work. |
+
+### Account-linking rules, stated because they are easy to get wrong
+
+- A returning provider account is matched on `provider_user_id` (`sub`), never on email.
+- **A matching email does NOT adopt an existing account.** Linking happens from inside an
+  authenticated session. Otherwise anyone who can make a provider assert an address takes over the
+  local account using it.
+- An unknown provider account does not create a user — signing in is not a way to register, and the
+  contract routes new accounts through the gated path.
+- One provider account links to at most one local account, enforced by a unique index, not by a check.
+
+### Found while closing LOGIN-002, each fixed with a test
+
+- The account menu hard-coded `/app/account/*`, so an agency operator opening their own profile left
+  their portal — and, once guarded, was refused.
+- **The agency portal had no settings page at all**; every settings link led into `/app/settings`.
+  `/agency/settings` and `/agency/account/*` now exist, with a rail entry.
+- The E2E suite tested advertiser surfaces with an agency account throughout, which only passed
+  because the tree was ungated. Split by portal, with a real advertiser storage state.
+- An unauthenticated API call without `Accept: application/json` returned **500**, not 401: Laravel
+  tried to redirect to a named `login` route this API does not have.
+
+### AGENCY-006 — `/agency/campaigns` has no project context (OPEN, found by LOGIN-002)
+
+Guarding `/app` surfaced a genuine gap rather than a test problem. `CampaignsPage`, `ProjectsPage`
+and the other project-scoped surfaces read the globally selected project, and that selector — the
+`ProjectSwitcher` in the topbar — exists only in `AppShell`. `AgencyShell` has none.
+
+So the agency portal mounts those pages with no way to choose a project: the list has no project
+context and "New campaign" cannot render. While `/app` was ungated nobody noticed, because an agency
+operator simply used the advertiser portal's copy of the page and its switcher.
+
+This is not a selector to copy across. An agency picks a **client** first and a project within it,
+which is a different control from the advertiser's flat project list — the client-scope ceiling
+already narrows what they may see, so the control has to respect it.
+
+Blocks: `campaigns-roles.spec.ts` (2 cases), which asserts an owner can create a campaign and that a
+scoped viewer sees exactly one project. Both claims are about RBAC and remain true at the API — the
+E2E cannot reach them through the agency portal's UI until this exists.
+
+| ID | Requirement | Status |
+| --- | --- | --- |
+| AGENCY-006 | A client → project selector in the agency portal, respecting the membership's client scope, feeding the shared project-scoped pages. | **VERIFIED** |
+
+**Built as `AgencyScopeSwitcher`.** Both lists come from endpoints the server already narrows by the
+membership (`portal:agency` + `ClientScopeResolver`), so the ceiling is applied in the query and not
+in the browser. The persisted selection is re-validated against those lists on every mount — a stored
+id cannot widen access because it is not the source of what is allowed. Changing client always clears
+the project, so the previous client's campaigns can never remain on screen. Nothing is auto-selected:
+defaulting to "whichever client came first" is how someone edits the wrong client's campaign
+believing it is theirs.
+
+**What building it revealed: client scope and project scope are SEPARATE grants.** The demo analyst
+and client-viewer hold specific projects and no client scope at all. A strictly client-first control
+reported "no clients" to people who demonstrably had work to do. So the client step appears only when
+there are clients to choose between; otherwise the operator picks straight from the projects they
+hold. That describes their access accurately rather than forcing it through a hierarchy they were
+never granted.
+
+### The cross-browser gate: 53 → 14 → 0, by root cause
+
+Every failure was diagnosed and fixed at its cause. No retries were enabled, nothing was skipped, and
+`retries: 0` still stands in `playwright.config.ts`.
+
+| Cause | Browsers | Fix |
+| --- | --- | --- |
+| Specs asserted advertiser chrome (project switcher, view modes, mobile rail) while signed in as an AGENCY. Only ever passed because `/app` was ungated. | all | The advertiser specs use the advertiser account; the agency specs use the agency's own flow. |
+| The legacy root redirect read the portal BEFORE the session probe resolved, so it always fell back to `/app`. Correct in a warm SPA, broken on every direct navigation — which is how people follow a bookmark. | all | Wait for `status`; render nothing for the moment it takes. |
+| A GUEST following a legacy link had `/app` written into their sign-in redirect. That guess stuck: after signing in, an agency operator was delivered to the advertiser portal's copy of their own profile and refused. | all | Carry the ORIGINAL path; resolve it once the user is known. |
+| `account` is personal and is in no portal's `sections()`, so it fell back to `/app`. The influencers portal never mounted account routes at all — a creator's own Profile link was a 404. | all | `account` is portal-relative unconditionally; `/influencers/account/*` mounted. |
+| The clients portfolio renders a table AND a card list, hiding one by breakpoint. The name matched twice, and `.first()` picked whichever the DOM ordered first — the hidden one on Firefox and WebKit. | firefox, webkit | Assert the VISIBLE match, which is the actual claim. |
+| `auth-visual` baselines predated the sign-in redesign. | chromium | Reviewed both renders live first — contrast, RTL, provider de-emphasis, layout all correct — then regenerated. Snapshots record an intended change; they were not used to bury a defect. |

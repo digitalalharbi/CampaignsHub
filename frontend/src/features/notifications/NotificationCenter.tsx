@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { usePortalPath } from '@/app/portalPath'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bell, CheckCheck } from 'lucide-react'
 import { listNotifications, markAllNotificationsRead, markNotificationRead, type AppNotification } from './api'
@@ -12,6 +13,7 @@ const severityDot: Record<AppNotification['severity'], string> = {
 export function NotificationCenter() {
   const t = useT()
   const navigate = useNavigate()
+  const portalPath = usePortalPath()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -32,7 +34,10 @@ export function NotificationCenter() {
 
   const openItem = (n: AppNotification) => {
     if (n.status === 'unread') markRead.mutate(n.id)
-    if (n.action_url) { setOpen(false); navigate(n.action_url) }
+    // Resolved against the CURRENT portal (REG-011): a notification is written once for a tenant
+    // whose readers may be in different portals, so it names a section rather than a full path.
+    // An action_url that already names a portal is returned untouched, so older rows still work.
+    if (n.action_url) { setOpen(false); navigate(portalPath(n.action_url)) }
   }
 
   return (

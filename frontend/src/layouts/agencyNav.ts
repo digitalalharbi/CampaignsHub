@@ -1,6 +1,6 @@
 import {
   BarChart3, BellRing, Building2, CreditCard, FolderKanban, FolderOpen, Images, Inbox,
-  LayoutDashboard, ListChecks, Megaphone, MessageSquare, Receipt, Users,
+  LayoutDashboard, ListChecks, Megaphone, MessageSquare, Receipt, Settings, Users,
 } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
@@ -14,10 +14,11 @@ import type { NavGroup } from './SidebarNav'
  *
  * What is absent is equally deliberate. No Integrations: connecting an ad account is done inside the
  * client or project it belongs to, and an agency-wide integrations screen would invite connecting an
- * account to nothing in particular. No Subscription: the agency's own plan is billing, and its
- * clients' money is Finance.
+ * account to nothing in particular.
  *
- * The same twelve sections the flat rail had, in the same portal, none moved elsewhere.
+ * Finance carries BOTH kinds of money, and keeping them apart is the point — Client invoicing is
+ * what the agency's clients pay it; Agency subscription is what the agency pays CampaignsHub. The
+ * advertiser portal has only the second, because an advertiser has nobody to invoice.
  */
 export const agencyNavGroups: readonly NavGroup[] = [
   {
@@ -71,6 +72,14 @@ export const agencyNavGroups: readonly NavGroup[] = [
     // The agency portal's own thing: who on the team may reach which client.
     ar: 'الفريق والنطاقات', en: 'Team & scopes', icon: Users,
     leaves: [{ to: '/agency/team', ar: 'الفريق والنطاقات', en: 'Team & scopes', icon: Users }],
+  },
+  {
+    key: 'settings',
+    // The AGENCY's workspace settings. Personal settings live in the account menu and nowhere else;
+    // platform settings live in /admin. Before this the agency portal had no settings at all and
+    // every link led into the advertiser portal.
+    ar: 'إعدادات الوكالة', en: 'Agency settings', icon: Settings,
+    leaves: [{ to: '/agency/settings', ar: 'إعدادات الوكالة', en: 'Agency settings', icon: Settings }],
   },
 ]
 

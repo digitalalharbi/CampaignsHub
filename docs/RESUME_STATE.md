@@ -11,7 +11,8 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
-`7722821` — *fix(portals): the portal decides the surface, not the account type*
+`LOGIN/AGENCY-006` — *feat(auth): refuse the wrong portal inside the sign-in, and give the agency its
+own client → project scope*
 
 Preceded by `a382e04` (INFL-002, the creator's side) → `2f88246` (users.tenant_id dropped) →
 `f1c2f49` (the paid-SaaS contract ratified) → `7722821` (the REG-001 regression closed).
@@ -261,7 +262,8 @@ notes, taxonomies, services). `/app/settings/public-pages|portals|taxonomies` re
     notifications, opportunities. Reachable only by typing the URL; linked from nothing.
 
 ## Exact next task
-**SIGNUP-001**, resumed — REG-001 interrupted it and is now closed (see Decision 25 below).
+**SIGNUP-001**, resumed. Two regressions interrupted it and are both closed — REG-001 (Decision 25)
+and LOGIN-001…004 (Decision 26).
 
 **SIGNUP-001** — the account + subscription state machine. It is first because everything else in the
 2026-07-31 addendum hangs off it: plans cannot gate what has no state, payment cannot activate what
@@ -644,3 +646,70 @@ Deliberately left open, and recorded in the matrix rather than quietly skipped: 
 portal guard of its own (REG-010), and `AlertEvaluator` writes a fixed `/app/alerts` action URL
 (REG-011). Closing REG-010 means moving the E2E suite off `owner@demo-agency.local` for advertiser
 surfaces, which is its own unit.
+
+### Decision 26 — a wrong portal is a failed sign-in, not a bad destination
+
+Reported twice, and the second report named the real problem: the portal check ran AFTER the session
+was created, so choosing the wrong portal signed you in, moved you somewhere, and then showed a "not
+available" page. It behaved nothing like a wrong password even though it is the same kind of mistake.
+
+The check now runs inside `POST /auth/login`, after the password is verified and **before**
+`Auth::login`. No session, no navigation; the form answers. The 403 carries `portal_mismatch`, the
+refused portal and the account's real destination, so the panel can name both and offer a button —
+which re-submits the same credentials claiming no portal, because their password was never wrong.
+
+Ordering that matters: **a bad password is never told about the portal.** Answering "wrong portal"
+to a failed password confirms the account exists and where it belongs, to someone who has just
+proved they do not have its password.
+
+**Demo identities are per portal.** Every tab used to offer `owner@demo-agency.local`, so all five
+portals were being exercised with one agency account — which is a large part of why the REG-001
+regression stayed invisible. Each tab now names its own seeded account and what kind it is, and the
+client tab links to `/portal/login` because that portal has no password to offer.
+
+**Social sign-in is built and honest.** Authorization Code + PKCE with `state` and `nonce`, all three
+server-side and single-use; `oauth_identities` with unique indexes in both directions. The linking
+rules are the part worth re-reading before touching it: matching is on `provider_user_id`, a matching
+EMAIL never adopts an account, and an unknown provider account never creates one. No credentials
+exist in any environment, so both providers render disabled with the reason and are classified
+**Awaiting Credentials** — the live round trip is externally blocked, and nothing claims otherwise.
+
+**REG-010 and REG-011 are closed.** Guarding `/app` surfaced three more defects, each fixed with a
+test: the account menu hard-coded `/app/account/*`; the agency portal had no settings page at all;
+and an unauthenticated API call without an `Accept` header returned 500 rather than 401, because
+Laravel tried to redirect to a named `login` route this API does not have.
+
+### Decision 27 — the agency picks a client before a project, and personal settings follow the person
+
+**AGENCY-006.** `AgencyShell` had no scope control at all, so every project-scoped page mounted in the
+agency portal with no project in context — invisible while `/app` was ungated, because agency
+operators simply used the advertiser portal's copy and its switcher. The agency's control is client
+first, then project: a project only means something once you know whose it is, and two clients
+routinely both have a "Launch". Both lists come from endpoints the server already narrows, the stored
+selection is re-validated on every mount, changing client always clears the project, and nothing is
+auto-selected.
+
+**Client scope and project scope are SEPARATE grants** — learned while building it. An analyst or
+client-viewer can hold specific projects with no client scope, and a strictly client-first control
+reported "no clients" to people who demonstrably had work. The client step now appears only when
+there are clients to choose between.
+
+**Personal settings follow the person.** `account` is in no portal's `sections()` (that list is
+workspace sections), so the legacy redirect sent it to `/app` and the guard refused it. It is now
+portal-relative unconditionally, and `/influencers/account/*` is mounted — a creator's own Profile
+link had been a 404 since the influencers portal was built.
+
+**A guest has no portal, so none is guessed.** The legacy redirect used to write `/app` into the
+sign-in redirect while nobody was signed in, and that guess stuck: after signing in, an agency
+operator was delivered to the advertiser portal's copy of their own profile and refused.
+
+### The gate: 53 → 14 → 2 → 0, every failure root-caused
+
+`retries: 0` untouched, nothing skipped, 0 flaky. Five of nine causes were product bugs rather than
+stale tests — the three above, the redirect reading the portal before the session probe resolved, and
+one I introduced myself: giving `fetchCurrentUser` a retry made `VerifyEmailPage`, which awaited it
+before navigating, hold the user on a spinner for three round trips under load. It navigates first
+now and guards `if (u)`, because a failed refresh must not sign out someone who just verified.
+
+The lesson worth keeping: adding latency to a function other code awaits in a critical path surfaces
+as a flake somewhere else entirely.

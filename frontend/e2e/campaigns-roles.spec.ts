@@ -10,12 +10,45 @@ import { API_HEADERS, AUTH, csrfHeaders, switchToEnglish } from './helpers'
  *   viewer  → campaigns.view only, NO projects.view (client viewer)
  */
 
+/**
+ * Walk the agency's scope control: client, then project. Written once because every UI assertion in
+ * this file needs a project in context, and the sequence IS the agency portal's model.
+ */
+async function selectFirstClientAndProject(page: import('@playwright/test').Page) {
+  /*
+   * The client step exists only for operators who hold CLIENT scope. Analyst and viewer hold
+   * project scope instead, so their control offers projects directly (AGENCY-006) — the sequence
+   * adapts to the grant rather than assuming one shape for everyone.
+   */
+  // Wait for the control to finish loading before asking what shape it has: `count()` does not
+  // wait, so checking it during the loading skeleton reports zero and silently skips the client.
+  await expect(page.getByTestId('agency-scope')).toBeVisible({ timeout: 20000 })
+
+  const client = page.getByTestId('agency-scope-client')
+  if (await client.count()) {
+    await client.selectOption({ index: 1 })
+  }
+
+  const project = page.getByTestId('agency-scope-project')
+  await expect(project).toBeEnabled({ timeout: 20000 })
+  await project.selectOption({ index: 1 })
+}
+
 test.describe('Admin (owner)', () => {
   test.use({ storageState: AUTH.owner })
 
-  test('can create — the New campaign action is available', async ({ page }) => {
-    await page.goto('/campaigns')
+  test('can create — after choosing a client and a project (AGENCY-006)', async ({ page }) => {
+    await page.goto('/agency/campaigns')
     await switchToEnglish(page)
+
+    /*
+     * The agency picks a CLIENT first. Before that there is no project, so there is nothing to
+     * create a campaign in — and the page says so rather than offering an action that would have
+     * to guess whose campaign it is.
+     */
+    await expect(page.getByRole('button', { name: /New campaign|حملة جديدة/ })).toHaveCount(0)
+
+    await selectFirstClientAndProject(page)
     await expect(page.getByRole('button', { name: /New campaign|حملة جديدة/ })).toBeVisible()
   })
 })
@@ -24,8 +57,11 @@ test.describe('Analyst (read-only)', () => {
   test.use({ storageState: AUTH.analyst })
 
   test('no create button, and a direct create API call is 403', async ({ page }) => {
-    await page.goto('/campaigns')
+    await page.goto('/agency/campaigns')
     await switchToEnglish(page)
+    // In context of a real project, so the absence of the button is about PERMISSION and not about
+    // there being nothing selected.
+    await selectFirstClientAndProject(page)
     await expect(page.getByRole('button', { name: /New campaign|حملة جديدة/ })).toHaveCount(0)
 
     // Server-side enforcement — a direct POST is rejected regardless of the UI (analyst has
@@ -74,10 +110,20 @@ test.describe('Client Viewer (scoped to one project)', () => {
     })
     expect(denied.status()).toBe(403)
 
-    // UI: the switcher exposes only the authorized project, and there is no create action.
-    await page.goto('/campaigns')
+    // UI: the agency scope control offers only what this membership may reach, and there is no
+    // create action. Each select carries its options plus one placeholder (AGENCY-006).
+    await page.goto('/agency/campaigns')
     await switchToEnglish(page)
     await expect(page.getByRole('button', { name: /New campaign|حملة جديدة/ })).toHaveCount(0)
-    await expect(page.locator('aside select option')).toHaveCount(1)
+
+    /*
+     * This viewer holds PROJECT scope and no client scope, so the control offers projects directly.
+     * The claim is unchanged and is the one that matters: it exposes exactly the one project their
+     * membership allows — plus the placeholder — and nothing from the other twenty.
+     */
+    const projectSelect = page.getByTestId('agency-scope-project')
+    await expect(projectSelect).toBeVisible({ timeout: 20000 })
+    await expect(projectSelect.locator('option')).toHaveCount(2)
+    await expect(page.getByTestId('agency-scope-client')).toHaveCount(0)
   })
 })
