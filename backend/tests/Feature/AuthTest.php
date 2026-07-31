@@ -9,10 +9,12 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\AppliesToRegister;
 use Tests\TestCase;
 
 final class AuthTest extends TestCase
 {
+    use AppliesToRegister;
     use RefreshDatabase;
 
     /** Requests from the SPA origin are treated as stateful (cookie session) by Sanctum. */
@@ -24,24 +26,44 @@ final class AuthTest extends TestCase
         $this->seed(PermissionSeeder::class);
     }
 
-    public function test_registration_provisions_tenant_and_starts_session(): void
+    /**
+     * Applying creates an APPLICATION and nothing else (SIGNUP-002).
+     *
+     * This test used to be called "registration provisions tenant and starts session", and it passed
+     * — that was the defect. Submitting the form produced a tenant, a workspace, a user, a membership
+     * and a live session in one step, which left no point in the journey at which verification,
+     * approval or payment could be required of anyone.
+     */
+    public function test_applying_creates_no_workspace_no_account_and_no_session(): void
     {
-        $response = $this->withHeaders($this->spaHeaders)->postJson('/api/v1/auth/register', [
-            'tenant_name' => 'Acme Media',
-            'name' => 'Sara',
-            'email' => 'sara@acme.test',
-            'password' => 'secret123',
-            'password_confirmation' => 'secret123',
+        $response = $this->apply([
+            'tenant_name' => 'Acme Media', 'name' => 'Sara', 'email' => 'sara@acme.test',
+            'password' => 'secret1234', 'password_confirmation' => 'secret1234',
         ]);
 
-        $response->assertCreated()
+        // 202: received, not created. Nothing exists yet that Sara can use.
+        $response->assertStatus(202)
             ->assertJson(['success' => true])
-            ->assertJsonStructure(['data' => ['user' => ['id', 'email', 'tenant_ids']]])
-            ->assertJsonMissingPath('data.token'); // SPA never receives a token
+            ->assertJsonPath('data.registration.state', 'email_verification_required')
+            ->assertJsonMissingPath('data.token')   // SPA never receives a token
+            ->assertJsonMissingPath('data.user');   // …nor an account it does not have
+
+        $this->assertDatabaseMissing('tenants', ['name' => 'Acme Media']);
+        $this->assertDatabaseMissing('users', ['email' => 'sara@acme.test']);
+        $this->assertGuest();
+    }
+
+    /** Proving the email is what creates the workspace, under the default (auto-activate) policy. */
+    public function test_verifying_the_email_is_what_creates_the_workspace(): void
+    {
+        ['user' => $user] = $this->applyAndVerify([
+            'tenant_name' => 'Acme Media', 'name' => 'Sara', 'email' => 'sara@acme.test',
+        ]);
 
         $this->assertDatabaseHas('tenants', ['name' => 'Acme Media']);
-        // Registration puts them IN the workspace it just created — a membership, not a column.
-        $this->assertTrue(User::where('email', 'sara@acme.test')->firstOrFail()->memberships()->exists());
+        // They are IN the workspace that was created for them — a membership, not a column.
+        $this->assertTrue($user->memberships()->exists());
+        $this->assertNotNull($user->email_verified_at);
     }
 
     public function test_registration_validates_input(): void

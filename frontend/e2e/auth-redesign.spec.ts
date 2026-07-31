@@ -265,5 +265,5 @@ test('signing in from a portal reaches the app', async ({ page }) => {
   await page.locator('input[type="password"]').fill('password')
   await page.locator('button[type="submit"]').click()
 
-  await expect(page).toHaveURL(/\/(dashboard|verify-email|onboarding)/, { timeout: 15_000 })
+  await expect(page).toHaveURL(/\/(dashboard|agency|onboarding)/, { timeout: 15_000 })
 })

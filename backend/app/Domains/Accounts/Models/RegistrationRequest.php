@@ -50,6 +50,7 @@ final class RegistrationRequest extends Model
         'email_verified_at' => 'datetime',
         'mobile_verified_at' => 'datetime',
         'reviewed_at' => 'datetime',
+        'info_requested_at' => 'datetime',
         'provisioned_at' => 'datetime',
         'state_changed_at' => 'datetime',
         'review_concessions' => 'array',
@@ -116,6 +117,18 @@ final class RegistrationRequest extends Model
     /** The one thing this applicant should do next, or null when they are waiting on us. */
     private function nextStep(bool $ar): ?string
     {
+        /*
+         * A reviewer asked for something (SIGNUP-003).
+         *
+         * This is the one case where an application in a queue DOES have a next step, and it takes
+         * precedence over the state's usual answer — the applicant is no longer waiting on us, and
+         * a screen still saying "there is nothing for you to do" would leave the queue stuck with
+         * neither side expecting to move.
+         */
+        if ($this->info_requested_at !== null && $this->state === AccountState::PendingApproval) {
+            return $this->review_note;
+        }
+
         return match ($this->state) {
             AccountState::EmailVerificationRequired => $ar
                 ? 'أكّد بريدك الإلكتروني من الرسالة المرسلة إليك.'

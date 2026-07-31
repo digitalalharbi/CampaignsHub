@@ -2,15 +2,14 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Building2, Check, LayoutDashboard, Users } from 'lucide-react'
-import { register } from './api'
 import { AuthShell } from './AuthShell'
+import { apply, rememberRegistration } from '@/features/signup/api'
 import { Button } from '@/components/ui/Button'
 import { EmailInput, PasswordInput, TextInput } from '@/components/ui/form'
 import { controlClass } from '@/components/ui/Field'
 import { ErrorSummary, useFormDraft, type FieldError } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
-import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -65,7 +64,13 @@ const SERVICE_LABELS: Record<string, { ar: string; en: string }> = {
   combined: { ar: 'الخدمتان معًا', en: 'Both services' },
 }
 
-/** Real sign-up — provisions a tenant + owner via POST /auth/register, then drops into the app. */
+/**
+ * Real sign-up — opens an APPLICATION via POST /auth/register (SIGNUP-002).
+ *
+ * It used to provision a tenant and an owner and drop straight into the app. It no longer can: what
+ * comes back is a registration that may still owe verification, a review or a payment, so the form
+ * hands over to the status page instead of to a workspace that might not exist.
+ */
 export function RegisterPage() {
   const t = useT()
   const { locale } = useUi()
@@ -73,7 +78,6 @@ export function RegisterPage() {
   const jc = JOURNEY_COPY[ar ? 'ar' : 'en']
   const rc = REG_COPY[ar ? 'ar' : 'en']
   const navigate = useNavigate()
-  const setUser = useAuth((s) => s.setUser)
   const [params, setParams] = useSearchParams()
 
   const journey = parseJourney(params.get('journey'))
@@ -113,8 +117,20 @@ export function RegisterPage() {
   }
 
   const mutation = useMutation({
-    mutationFn: register,
-    onSuccess: (user) => { draft.clear(); setUser(user); navigate('/verify-email', { replace: true }) },
+    mutationFn: apply,
+    onSuccess: (envelope) => {
+      draft.clear()
+      // The id travels in the URL AND is kept locally, so closing the tab is recoverable.
+      rememberRegistration(envelope.registration.id)
+      /*
+       * The whole envelope rides along in router state, because it carries the challenge that was
+       * just issued — and the dev link inside it is, until a mail provider exists, the only way to
+       * confirm the address. Router state rather than storage: a verification token is a credential,
+       * and it has no business outliving the navigation it was minted for. After a refresh the
+       * status page offers "resend", which is the honest recovery.
+       */
+      navigate(`/signup/status?request=${envelope.registration.id}`, { replace: true, state: { envelope } })
+    },
   })
   const error = mutation.isError ? toApiError(mutation.error) : null
   const err = (k: string) => error?.errors?.[k]?.[0]

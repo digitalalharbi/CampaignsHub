@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Accounts\Http\Controllers\RegistrationController;
 use App\Domains\Identity\Http\Controllers\AuthController;
 use App\Domains\Identity\Http\Controllers\EmailVerificationController;
 use App\Domains\Identity\Http\Controllers\InvitationController;
@@ -21,7 +22,30 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::prefix('auth')->name('auth.')->group(function (): void {
-    Route::post('/register', [AuthController::class, 'register'])->name('register');
+    /*
+     * SIGNUP-002 — applying is not the same as having an account.
+     *
+     * `register` no longer creates a tenant, a workspace, a user or a membership. It records an
+     * application and issues a verification challenge; everything downstream depends on the
+     * registration policy for the chosen plan. The endpoints below it are how an applicant, who by
+     * definition has no session, answers those challenges and reads where they stand.
+     *
+     * All public, all rate limited, and none of them able to advance an application on its own —
+     * each records a fact and lets `AdvanceRegistration` decide what follows.
+     */
+    Route::post('/register', [RegistrationController::class, 'store'])->name('register')
+        ->middleware('throttle:6,1');
+    Route::prefix('registration')->name('registration.')->group(function (): void {
+        Route::post('/verify-email', [RegistrationController::class, 'verifyEmail'])->name('verify-email')
+            ->middleware('throttle:otp-check');
+        Route::get('/{registration}', [RegistrationController::class, 'show'])->name('show')
+            ->middleware('throttle:60,1');
+        Route::post('/{registration}/verify-mobile', [RegistrationController::class, 'verifyMobile'])
+            ->name('verify-mobile')->middleware('throttle:otp-check');
+        Route::post('/{registration}/resend', [RegistrationController::class, 'resend'])->name('resend')
+            ->middleware('throttle:6,1');
+    });
+
     Route::post('/login', [AuthController::class, 'login'])->name('login')
         ->middleware('throttle:auth-login');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password')

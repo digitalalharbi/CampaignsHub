@@ -3,6 +3,7 @@ import { NotFoundPage } from './NotFoundPage'
 import { PagePlaceholder } from '@/components/PagePlaceholder'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RegisterPage } from '@/features/auth/RegisterPage'
+import { AccountStatusPage } from '@/features/signup/AccountStatusPage'
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { CampaignDetailPage } from '@/features/campaigns/CampaignDetailPage'
@@ -76,6 +77,7 @@ import { RequirePlatformAdmin } from '@/features/admin/RequirePlatformAdmin'
 import { RequirePortal } from '@/features/auth/RequirePortal'
 import { PlatformOverviewPage } from '@/features/admin/PlatformOverviewPage'
 import { TenantsPage } from '@/features/admin/TenantsPage'
+import { RegistrationsPage } from '@/features/admin/RegistrationsPage'
 import { SystemSettingsPage } from '@/features/admin/SystemSettingsPage'
 import { BillingPage as AdminBillingPage } from '@/features/admin/BillingPage'
 import { AuditPage } from '@/features/admin/AuditPage'
@@ -101,6 +103,14 @@ export const router = createBrowserRouter([
   { path: '/welcome', element: <MarketingPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
+  /*
+   * Where an application lives before it is an account (SIGNUP-002).
+   *
+   * Public, because an applicant has no session, and the same URL serves every pre-activation state:
+   * awaiting email confirmation, awaiting an OTP, in a review queue, or owing a payment. The
+   * confirmation link lands here too, with `?token=`.
+   */
+  { path: '/signup/status', element: <AccountStatusPage /> },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/requests/new', element: <RequestIntakePage /> },
   { path: '/requests/track', element: <RequestTrackPage /> },
@@ -298,6 +308,9 @@ export const router = createBrowserRouter([
           children: [
             { index: true, element: <PlatformOverviewPage /> },
             { path: 'tenants', element: <TenantsPage /> },
+            // SIGNUP-003 — applications that have NOT become tenants yet, which is why this is its
+            // own entry rather than a tab inside Tenants.
+            { path: 'registrations', element: <RegistrationsPage /> },
             { path: 'billing', element: <AdminBillingPage /> },
             { path: 'settings', element: <SystemSettingsPage /> },
             { path: 'cutover', element: <CutoverPage /> },

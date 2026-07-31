@@ -11,8 +11,11 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
-`LOGIN/AGENCY-006` — *feat(auth): refuse the wrong portal inside the sign-in, and give the agency its
-own client → project scope*
+`SIGNUP-002d + SIGNUP-003/004` — *feat(accounts): registration becomes an application, and the console
+gets a queue to decide it*
+
+Preceded this session by `e820720` (SIGNUP-002 policy) → `e076858` (SIGNUP-002 backbone) →
+`641cfef` (SIGNUP-001 state machine) → `d293707` (LOGIN + AGENCY-006).
 
 Preceded by `a382e04` (INFL-002, the creator's side) → `2f88246` (users.tenant_id dropped) →
 `f1c2f49` (the paid-SaaS contract ratified) → `7722821` (the REG-001 regression closed).
@@ -262,22 +265,36 @@ notes, taxonomies, services). `/app/settings/public-pages|portals|taxonomies` re
     notifications, opportunities. Reachable only by typing the URL; linked from nothing.
 
 ## Exact next task
-**SIGNUP-001**, resumed. Two regressions interrupted it and are both closed — REG-001 (Decision 25)
-and LOGIN-001…004 (Decision 26).
+**PLAN-001** — the central plans engine.
 
-**SIGNUP-001** — the account + subscription state machine. It is first because everything else in the
-2026-07-31 addendum hangs off it: plans cannot gate what has no state, payment cannot activate what
-has no state to move, and the admin review queue has nothing to review. The twelve states and the
-whole contract are in `docs/MASTER_EXECUTION_CONTRACT.md` under "ADDENDUM — Paid, self-serve SaaS",
-and the ordered rows are the new table at the end of the matrix.
+SIGNUP-001 through SIGNUP-005 are done, tested and live-reviewed. The binding rule they exist to
+enforce is now structurally true rather than a policy someone has to remember: **`POST /auth/register`
+answers 202 with an APPLICATION and creates no tenant, no workspace, no user, no membership and no
+session.** `AuthTest::test_applying_creates_no_workspace_no_account_and_no_session` asserts all five
+absences on the same request that used to produce all five.
 
-The binding rule to encode first: **no membership, permission or portal access before the activation
-conditions are met.** Today registration provisions a tenant and a membership immediately; that
-becomes the auto-activate branch of the new path, not the only path — and it must not be deleted,
-because self-serve trial signup stays a supported policy.
+What is next, and why in this order:
 
-Then in order: SIGNUP-002 → SIGNUP-003/004 → PLAN-001/002/003 → PAY-001/003/002/004 → OPS-001 →
-the rest.
+1. **PLAN-001** — plans as DATA, not fixed arrays: monthly and annual prices, and the paid 7-day
+   trial (fee, duration, features, limits) editable from `/admin`. Everything after this reads it.
+2. **PAY-001** — Moyasar as the official primary adapter, Stripe as the alternative, both behind the
+   existing `PaymentProvider` port. No credentials exist, so both ship **Awaiting Credentials** and
+   the sandbox path is what gets tested.
+3. **PAY-002** — checkout, signed webhooks, idempotency, no duplicate charge. The invariant to write
+   a test for BEFORE any payment code: nothing may call `TransitionAccountState::provision()` as a
+   shortcut out of `PaymentPending`. That state is the webhook-only activation anchor, and a
+   browser returning from a payment page must never be what clears it.
+4. **PAY-003** — trial auto-conversion, renewal, past due, grace, suspension (data preserved),
+   cancellation, refund, reactivation.
+5. **PAY-004** — trial-abuse prevention. "One trial per payment method" belongs in the ADAPTER: Moyasar
+   and Stripe expose different fingerprint semantics, and a shared assumption in the core would either
+   be wrong for one of them or silently unenforced. Each adapter reports what it can, with an honest
+   fallback when a provider supplies nothing.
+6. **SIGNUP-006** — the five independent demo accounts, then OPS-001, INTG-001, the remaining rows.
+
+**Do not simply delete `RegisterTenantAction`** when tidying: it is the named auto-activate branch the
+contract explicitly keeps supported for self-serve trials. It provisions nothing itself and throws
+when the policy has a gate configured, which is what makes keeping it safe.
 
 **PORTAL-AUTH-001c (step 5)** stays NOT next: blocked on evidence from a real environment, not on
 code. `/admin/cutover` measures the three conditions; last dev reading was 0 conflicts, 0 parity

@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import {
+  ClipboardCheck,
   CreditCard,
   ShieldAlert,
   ScrollText,
@@ -36,6 +37,8 @@ import { useUi } from '@/stores/ui'
 const adminNav = [
   { to: '/admin', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: Building2 },
+  // The queue in front of Tenants: applications that have not become one yet (SIGNUP-003).
+  { to: '/admin/registrations', ar: 'طلبات التسجيل', en: 'Registrations', icon: ClipboardCheck },
   { to: '/admin/billing', ar: 'الخطط والاشتراكات', en: 'Plans & subscriptions', icon: CreditCard },
   { to: '/admin/settings', ar: 'إعدادات النظام', en: 'System settings', icon: Settings },
   { to: '/admin/cutover', ar: 'انتقال بوابة العملاء', en: 'Portal cutover', icon: ShieldAlert },

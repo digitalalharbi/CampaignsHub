@@ -4,12 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Http\Controllers;
 
-use App\Domains\Identity\Actions\RegisterTenantAction;
-use App\Domains\Identity\DTOs\RegisterData;
 use App\Domains\Identity\Http\Requests\LoginRequest;
-use App\Domains\Identity\Http\Requests\RegisterRequest;
 use App\Domains\Identity\Resources\UserResource;
-use App\Domains\Identity\Services\EmailVerificationService;
 use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Services\PortalResolver;
@@ -30,23 +26,15 @@ final class AuthController extends Controller
 {
     public function __construct(private readonly PortalResolver $portals) {}
 
-    public function register(RegisterRequest $request, RegisterTenantAction $action, EmailVerificationService $verification): JsonResponse
-    {
-        $user = $action->execute(RegisterData::fromArray($request->validated()));
-
-        // Issue an email-verification challenge (delivery is honest — awaiting provider credentials).
-        $sent = $verification->send($user);
-
-        // Establish the SPA session (fires the Login event → audited).
-        Auth::guard('web')->login($user);
-        $request->session()->regenerate();
-
-        return ApiResponse::success(
-            ['user' => new UserResource($user), 'email_verification' => $sent],
-            'Account created. Please verify your email to continue.',
-            status: 201,
-        );
-    }
+    /*
+     * `register` used to live here and no longer does (SIGNUP-002).
+     *
+     * It created a tenant, a workspace, a user and a membership, then opened a session — so signing
+     * up and being granted an operating account were the same event, and there was no point at which
+     * verification, approval or payment could be required. Applying is now handled by
+     * `Accounts\Http\Controllers\RegistrationController`, which grants nothing; this class is left
+     * with what it was always about, which is authenticating an account that already exists.
+     */
 
     public function login(LoginRequest $request): JsonResponse
     {

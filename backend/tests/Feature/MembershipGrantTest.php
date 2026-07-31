@@ -18,6 +18,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Tests\Concerns\AppliesToRegister;
 use Tests\TestCase;
 
 /**
@@ -29,6 +30,7 @@ use Tests\TestCase;
  */
 final class MembershipGrantTest extends TestCase
 {
+    use AppliesToRegister;
     use RefreshDatabase;
 
     private function tenant(string $name, ?string $accountType = null): Tenant
@@ -289,19 +291,22 @@ final class MembershipGrantTest extends TestCase
         $this->assertFalse(app(ClientScopeResolver::class)->canReach($user, (string) $theirs->id));
     }
 
-    /** Registration grants the owner membership in the SAME transaction as the workspace. */
-    public function test_registration_grants_an_owner_membership_atomically(): void
+    /**
+     * Provisioning grants the owner membership in the SAME transaction as the workspace.
+     *
+     * The transaction moved with SIGNUP-002 — it is now the moment an APPLICATION becomes an
+     * account, not the moment a form is submitted — but the guarantee is unchanged and still the
+     * thing worth proving: a workspace can never exist with an owner who cannot reach it.
+     */
+    public function test_provisioning_grants_an_owner_membership_atomically(): void
     {
         $this->seed(PermissionSeeder::class);
 
-        $this->withHeaders(['Origin' => 'http://localhost:5173'])
-            ->postJson('/api/v1/auth/register', [
-                'tenant_name' => 'Atomic Signup', 'name' => 'Owner', 'email' => 'atomic.signup@test.dev',
-                'password' => 'secret1234', 'password_confirmation' => 'secret1234',
-                'account_type' => 'agency',
-            ])->assertCreated();
+        ['user' => $user] = $this->applyAndVerify([
+            'tenant_name' => 'Atomic Signup', 'name' => 'Owner', 'email' => 'atomic.signup@test.dev',
+            'account_type' => 'agency',
+        ]);
 
-        $user = User::where('email', 'atomic.signup@test.dev')->firstOrFail();
         $membership = $user->memberships()->firstOrFail();
 
         $this->assertSame('owner', $membership->role);

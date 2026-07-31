@@ -6,6 +6,10 @@ import { switchToEnglish } from './helpers'
  * first client + project → dashboard, with the PERSONAL full menu; a COMPANY (brand) account gets the
  * SIMPLIFIED menu and cross-tenant/agency capabilities are blocked. Persistence verified across reload.
  * Runs on Chromium/Firefox/WebKit. No mail provider → the dev verify link is used (hard-gated to non-prod).
+ *
+ * Since SIGNUP-002 the first half of that journey is the gated registration path: submitting the form
+ * opens an APPLICATION and lands on its status page, and it is confirming the email — not submitting
+ * the form — that creates the workspace under the default (auto-activate) policy.
  */
 test.use({ storageState: { cookies: [], origins: [] } })
 
@@ -19,9 +23,17 @@ async function registerAndVerify(page: import('@playwright/test').Page, email: s
   await page.locator('input[type="password"]').last().fill('secret1234')
   await page.getByRole('button', { name: /Create account|إنشاء حساب/ }).click()
 
-  // Lands on email verification; the dev link auto-loads → verify.
-  await expect(page).toHaveURL(/\/verify-email/)
-  await page.getByRole('link', { name: /Verify now|تأكيد الآن/ }).click()
+  /*
+   * Applying lands on the registration STATUS page, not in the app (SIGNUP-002).
+   *
+   * The state is read from the page's own attribute rather than from a translated string, so this
+   * assertion is about the application's actual state and not about the wording of a label.
+   */
+  await expect(page).toHaveURL(/\/signup\/status/)
+  await expect(page.getByTestId('registration-status')).toHaveAttribute('data-state', 'email_verification_required')
+
+  // No mail provider is configured, so the dev link is what stands in for the message.
+  await page.getByTestId('registration-dev-verify').click()
   await expect(page).toHaveURL(/\/onboarding/)
 }
 

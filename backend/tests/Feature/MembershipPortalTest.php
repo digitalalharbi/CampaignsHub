@@ -17,6 +17,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\AppliesToRegister;
 use Tests\TestCase;
 
 /**
@@ -28,6 +29,7 @@ use Tests\TestCase;
  */
 final class MembershipPortalTest extends TestCase
 {
+    use AppliesToRegister;
     use RefreshDatabase;
 
     private function tenant(string $name, ?string $accountType = null): Tenant
@@ -198,14 +200,11 @@ final class MembershipPortalTest extends TestCase
     {
         $this->seed(PermissionSeeder::class);
 
-        $this->withHeaders(['Origin' => 'http://localhost:5173'])
-            ->postJson('/api/v1/auth/register', [
-                'tenant_name' => 'Agency Signup', 'name' => 'Owner', 'email' => 'agency.signup@test.dev',
-                'password' => 'secret1234', 'password_confirmation' => 'secret1234',
-                'account_type' => 'agency', 'service' => 'paid_media',
-            ])->assertCreated();
+        ['user' => $user] = $this->applyAndVerify([
+            'tenant_name' => 'Agency Signup', 'name' => 'Owner', 'email' => 'agency.signup@test.dev',
+            'account_type' => 'agency', 'service' => 'paid_media',
+        ]);
 
-        $user = User::where('email', 'agency.signup@test.dev')->firstOrFail();
         $membership = $user->memberships()->firstOrFail();
 
         $this->assertSame(Portal::Agency, $membership->portal);
@@ -219,14 +218,11 @@ final class MembershipPortalTest extends TestCase
     {
         $this->seed(PermissionSeeder::class);
 
-        $this->withHeaders(['Origin' => 'http://localhost:5173'])
-            ->postJson('/api/v1/auth/register', [
-                'tenant_name' => 'Brand Signup', 'name' => 'Owner', 'email' => 'brand.signup@test.dev',
-                'password' => 'secret1234', 'password_confirmation' => 'secret1234',
-                'account_type' => 'brand',
-            ])->assertCreated();
+        ['user' => $user] = $this->applyAndVerify([
+            'tenant_name' => 'Brand Signup', 'name' => 'Owner', 'email' => 'brand.signup@test.dev',
+            'account_type' => 'brand',
+        ]);
 
-        $user = User::where('email', 'brand.signup@test.dev')->firstOrFail();
         $this->assertSame(Portal::App, $user->memberships()->firstOrFail()->portal);
     }
 

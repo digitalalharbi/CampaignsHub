@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
+use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
 use App\Http\Controllers\Dev\DevStatusController;
@@ -33,6 +34,25 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/tenants/{tenant}', [PlatformTenantController::class, 'show'])->name('tenants.show');
         Route::patch('/tenants/{tenant}/status', [PlatformTenantController::class, 'updateStatus'])
             ->name('tenants.status');
+
+        /*
+         * SIGNUP-003 — the registration review queue.
+         *
+         * The other end of the gated path. Approving clears the APPROVAL gate only; an application
+         * that also owes money waits at `approved_awaiting_payment` for a confirmed payment, so
+         * there is no action here that activates an account.
+         */
+        Route::get('/registrations', [PlatformRegistrationController::class, 'index'])->name('registrations.index');
+        Route::get('/registrations/{registration}', [PlatformRegistrationController::class, 'show'])
+            ->name('registrations.show');
+        Route::patch('/registrations/{registration}', [PlatformRegistrationController::class, 'updateTerms'])
+            ->name('registrations.terms');
+        Route::post('/registrations/{registration}/approve', [PlatformRegistrationController::class, 'approve'])
+            ->name('registrations.approve');
+        Route::post('/registrations/{registration}/reject', [PlatformRegistrationController::class, 'reject'])
+            ->name('registrations.reject');
+        Route::post('/registrations/{registration}/request-info', [PlatformRegistrationController::class, 'requestInfo'])
+            ->name('registrations.request-info');
 
         // ADMIN-002 — built on the existing Subscriptions and Billing engines, never a second one.
         Route::get('/plans', [PlatformBillingController::class, 'plans'])->name('plans.index');

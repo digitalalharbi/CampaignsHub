@@ -4,127 +4,94 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Actions;
 
-use App\Domains\Access\Models\Permission;
-use App\Domains\Access\Models\Role;
-use App\Domains\Accounts\Enums\AccountState;
-use App\Domains\Accounts\Services\TransitionAccountState;
+use App\Domains\Accounts\Actions\StartRegistration;
+use App\Domains\Accounts\Models\RegistrationRequest;
+use App\Domains\Accounts\Services\AdvanceRegistration;
+use App\Domains\Accounts\Services\RegistrationPolicy;
+use App\Domains\Audit\AuditLogger;
 use App\Domains\Identity\DTOs\RegisterData;
-use App\Domains\Tenancy\Actions\GrantMembership;
-use App\Domains\Tenancy\Context\TenantContext;
-use App\Domains\Tenancy\DTOs\MembershipGrant;
-use App\Domains\Tenancy\Enums\Portal;
-use App\Domains\Tenancy\Models\Tenant;
-use App\Domains\Tenancy\Models\Workspace;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
+use RuntimeException;
 
 /**
- * Self-serve signup: provisions a new tenant, its first workspace, and the owner user, then
- * assigns the tenant-owner role. Everything runs in a single transaction.
+ * The AUTO-ACTIVATE branch, and nothing else (SIGNUP-002).
+ *
+ * This class used to BE registration: it created the tenant, the workspace, the user and the
+ * membership in one transaction, so every signup was an immediate grant and there was no moment at
+ * which verification, approval or payment could be asked for. The contract still permits
+ * auto-activation — but as a policy a plan opts into, not as the only road in. So the class survives
+ * with its meaning narrowed to exactly that, and the public `/auth/register` endpoint no longer
+ * calls it.
+ *
+ * Two things make it safe to keep:
+ *
+ * 1. It provisions NOTHING itself. It opens a registration request like everyone else and lets
+ *    `AdvanceRegistration` walk the gates, so there is one provisioner in the system and one place
+ *    where the conditions are checked. If a plan later requires approval, callers of this class stop
+ *    at the queue instead of quietly bypassing it.
+ * 2. It refuses outright when the policy is not auto-activate. A caller cannot use it to skip a gate
+ *    that has been configured, which is the failure mode a retained shortcut would otherwise invite.
+ *
+ * The caller must be able to say WHY the email address is already proven — an OAuth provider that
+ * asserted it, an administrator creating a workspace by hand. That reason is required and audited,
+ * because it is the one step this branch skips.
  */
 final class RegisterTenantAction
 {
-    /** Mirrors OnboardingController::SERVICE_MODULES — one service choice, one module set. */
-    private const SERVICE_MODULES = [
-        'paid_media' => ['paid_media'],
-        'influencer_marketing' => ['influencer_marketing'],
-        'combined' => ['paid_media', 'influencer_marketing'],
-    ];
-
     public function __construct(
-        private readonly TenantContext $context,
-        private readonly GrantMembership $grants,
+        private readonly StartRegistration $start,
+        private readonly AdvanceRegistration $advance,
+        private readonly RegistrationPolicy $policy,
+        private readonly AuditLogger $audit,
     ) {}
 
-    public function execute(RegisterData $data): User
-    {
-        return DB::transaction(function () use ($data): User {
-            $tenant = Tenant::create([
-                'name' => $data->tenantName,
-                'slug' => $this->uniqueSlug($data->tenantName),
-                'status' => 'trialing',
-                // Email verification always comes first. Account type and modules are recorded here when the
-                // visitor already chose a path on the public site, so the wizard does not ask a second time.
-                'onboarding_step' => 'verify_email',
-                'subscription_plan' => 'trial',
-                'account_type' => $data->accountType,
-                'enabled_modules' => $data->service !== null ? self::SERVICE_MODULES[$data->service] : null,
-            ]);
+    /**
+     * @param  string  $emailAlreadyProvenBecause  why no email challenge is needed (audited)
+     */
+    public function execute(
+        RegisterData $data,
+        string $emailAlreadyProvenBecause,
+        ?string $requestedPortal = null,
+        ?string $planCode = null,
+    ): User {
+        $started = $this->start->execute($data, $requestedPortal, $planCode);
 
-            // Make the new tenant the active scope so nested writes are correctly attributed.
-            $this->context->setTenantId((string) $tenant->id);
+        /** @var RegistrationRequest $request */
+        $request = $started['request'];
 
-            Workspace::create([
-                'tenant_id' => $tenant->id,
-                'name' => 'Default Workspace',
-                'slug' => 'default',
-            ]);
-
-            $user = User::create([
-                'name' => $data->name,
-                'email' => $data->email,
-                'password' => Hash::make($data->password),
-            ]);
-
-            $ownerRole = Role::firstOrCreate(
-                ['tenant_id' => $tenant->id, 'slug' => 'tenant-owner'],
-                ['name' => 'Tenant Owner', 'is_system' => true],
-            );
-            // A self-registered owner must actually be able to operate their workspace — grant the full
-            // permission catalogue (previously the role was created empty, leaving new owners powerless).
-            $ownerRole->givePermissionTo(...Permission::pluck('key')->all());
-            $user->assignRole($ownerRole);
-
+        if (! $this->policy->isAutoActivate($request)) {
             /*
-             * ADR 0002: access is granted explicitly, inside this same transaction, so a workspace
-             * can never exist with an owner who cannot reach it — nor an owner without a workspace.
+             * Deliberately fatal rather than a silent fall-back to the gated path.
              *
-             * The portal comes from the path the visitor chose on the way in, and is stated here
-             * once at creation. It is NOT re-derived from the account type on later requests: that
-             * would make the portal a permanent property of the person, which it is not.
+             * A caller reaching for this class has told us it expects a usable account back. Quietly
+             * returning one that is sitting in a review queue would surface the failure somewhere
+             * far away from the decision that caused it; refusing here says so at the point of use.
              */
-            $this->grants->execute(new MembershipGrant(
-                user: $user,
-                tenant: $tenant,
-                portal: Portal::forAccountType($data->accountType),
-                role: 'owner',
-            ));
-            // The owner reaches every client through the clients.view_all permission granted with the
-            // full catalogue above — never through having no scope rows, which now means nothing.
-
-            /*
-             * The AUTO-ACTIVATE branch, stated explicitly (SIGNUP-001).
-             *
-             * This path grants a membership immediately, so the account is operating from the moment
-             * it is created and its state has to say so — a workspace running on `draft` would be a
-             * lie the admin queue and the entitlement layer both read.
-             *
-             * The contract permits auto-activation when a plan is configured for it, and self-serve
-             * trial signup remains supported. SIGNUP-002 puts the gated path in front of this and
-             * makes THIS the branch rather than the only route; recording the reason now means the
-             * audit trail can already tell the two apart.
-             */
-            app(TransitionAccountState::class)->provision(
-                $tenant,
-                AccountState::Active,
-                'Self-serve trial signup — auto-activated (no approval or payment gate configured).',
+            throw new RuntimeException(
+                'Auto-activation is not permitted for this application: the registration policy for plan ['
+                .($request->plan_code ?? 'default').'] requires verification, approval or payment. '
+                .'Use the gated registration path.'
             );
-
-            return $user;
-        });
-    }
-
-    private function uniqueSlug(string $name): string
-    {
-        $base = Str::slug($name) ?: 'tenant';
-        $slug = $base;
-        $i = 1;
-        while (Tenant::where('slug', $slug)->exists()) {
-            $slug = $base.'-'.(++$i);
         }
 
-        return $slug;
+        $this->audit->log(
+            action: 'registration.auto_activated',
+            entityType: RegistrationRequest::class,
+            entityId: (string) $request->getKey(),
+            after: ['email' => $request->email],
+            reason: $emailAlreadyProvenBecause,
+        );
+
+        // The email counts as proven for the reason given above; every other gate is off by policy,
+        // so this reaches Active through the same provisioner as any other application.
+        $request = $this->advance->emailVerified($request);
+
+        $user = User::where('email', $request->email)->first();
+
+        if ($user === null || ! $request->isProvisioned()) {
+            throw new RuntimeException('Auto-activation did not produce a workspace — see the registration request.');
+        }
+
+        return $user;
     }
 }

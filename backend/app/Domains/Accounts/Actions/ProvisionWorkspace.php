@@ -33,6 +33,21 @@ use RuntimeException;
  */
 final class ProvisionWorkspace
 {
+    /**
+     * Mirrors OnboardingController::SERVICE_MODULES — one service choice, one module set.
+     *
+     * `combined` is why this is a map and not `[$service]`: treating the choice as its own module
+     * name enabled a module called "combined" that nothing in the system knows about, so a workspace
+     * that asked for both services got neither.
+     *
+     * @var array<string, list<string>>
+     */
+    private const SERVICE_MODULES = [
+        'paid_media' => ['paid_media'],
+        'influencer_marketing' => ['influencer_marketing'],
+        'combined' => ['paid_media', 'influencer_marketing'],
+    ];
+
     public function __construct(
         private readonly TenantContext $context,
         private readonly GrantMembership $grants,
@@ -76,9 +91,17 @@ final class ProvisionWorkspace
                 // switched on.
                 'status' => 'inactive',
                 'account_type' => $request->account_type,
-                'subscription_plan' => $request->plan_code,
-                'onboarding_step' => 'workspace',
-                'enabled_modules' => $request->service !== null ? [$request->service] : null,
+                'subscription_plan' => $request->plan_code ?? 'trial',
+                /*
+                 * The wizard resumes at the first question this applicant has NOT answered.
+                 *
+                 * Never `verify_email`: by the time a workspace exists the address has been proven,
+                 * and re-asking would be the wizard contradicting the gate that let them in. Someone
+                 * who chose their path on the public site already answered the first two questions
+                 * and lands on `workspace`.
+                 */
+                'onboarding_step' => $this->firstUnansweredStep($request),
+                'enabled_modules' => self::SERVICE_MODULES[$request->service] ?? null,
             ]);
 
             $this->context->setTenantId((string) $tenant->id);
@@ -139,6 +162,19 @@ final class ProvisionWorkspace
 
             return ['tenant' => $tenant->refresh(), 'user' => $user];
         });
+    }
+
+    /** The first onboarding question this application has not already answered. */
+    private function firstUnansweredStep(RegistrationRequest $request): string
+    {
+        if ($request->account_type === null) {
+            return 'account_type';
+        }
+        if ($request->service === null) {
+            return 'service';
+        }
+
+        return 'workspace';
     }
 
     private function uniqueSlug(string $name): string

@@ -35,7 +35,17 @@ final class RegistrationPolicy
         // override it, because a plan is the more specific statement.
         $perType = (array) config('accounts.registration.account_types.'.(string) $request->account_type, []);
 
-        $merged = array_merge($default, $perType, $perPlan);
+        /*
+         * A reviewer's decision on THIS application (SIGNUP-003).
+         *
+         * The most specific statement there is, so it wins: waiving a payment for one customer, or
+         * insisting on a review for one that a plan would have let straight through. It is stored on
+         * the request as a record of what was granted and by whom, rather than applied silently to a
+         * state column where the reason would be lost.
+         */
+        $perRequest = (array) (($request->review_concessions ?? [])['policy'] ?? []);
+
+        $merged = array_merge($default, $perType, $perPlan, $perRequest);
 
         return [
             'requires_mobile' => (bool) ($merged['requires_mobile'] ?? false),

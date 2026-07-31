@@ -16,16 +16,13 @@ export interface LoginInput {
   portal?: string | null
 }
 
-export interface RegisterInput {
-  tenant_name: string
-  name: string
-  email: string
-  password: string
-  password_confirmation: string
-  /** The path chosen on the public site — stored on the tenant so onboarding never re-asks. */
-  account_type?: string
-  service?: 'paid_media' | 'influencer_marketing' | 'combined'
-}
+/*
+ * Registration does not live here (SIGNUP-002).
+ *
+ * It used to, because applying and being signed in were one call that returned a user. Applying now
+ * returns an APPLICATION that may still owe verification, a review or a payment, and modelling that
+ * as an auth call would invite exactly the assumption the unit removes. See `features/signup/api`.
+ */
 
 interface UserEnvelope {
   user: AuthUser
@@ -34,12 +31,6 @@ interface UserEnvelope {
 export async function login(input: LoginInput): Promise<AuthUser> {
   await ensureCsrfCookie()
   const { user } = await postData<UserEnvelope>('/auth/login', input)
-  return user
-}
-
-export async function register(input: RegisterInput): Promise<AuthUser> {
-  await ensureCsrfCookie()
-  const { user } = await postData<UserEnvelope>('/auth/register', input)
   return user
 }
 

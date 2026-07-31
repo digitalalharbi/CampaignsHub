@@ -3,12 +3,23 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { RegisterPage } from './RegisterPage'
 import { renderWithProviders, signOut } from '@/test/utils'
 
-vi.mock('./api', async (orig) => {
+vi.mock('@/features/signup/api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, register: vi.fn() }
+  return { ...actual, apply: vi.fn(), rememberRegistration: vi.fn() }
 })
 
-import { register } from './api'
+import { apply } from '@/features/signup/api'
+
+/** What POST /auth/register answers with now: an application, never a user (SIGNUP-002). */
+const anApplication = {
+  registration: {
+    id: 'reg-1', state: 'email_verification_required', label: 'Awaiting email confirmation',
+    email: 'new@test.dev', requested_portal: null, plan_code: null,
+    email_verified: false, mobile_verified: false, next_step: 'Confirm your email address.',
+    reason: null, provisioned: false,
+  },
+  policy: { requires_mobile: false, requires_approval: false, requires_payment: false },
+} as never
 
 describe('RegisterPage — journey handoff', () => {
   afterEach(() => { signOut(); localStorage.clear() })
@@ -69,28 +80,28 @@ describe('RegisterPage — the journey is submitted, not just displayed', () => 
   }
 
   it('submits the agency path as account_type + service', async () => {
-    vi.mocked(register).mockResolvedValue({ id: '1', name: 'T', email: 'new@test.dev' } as never)
+    vi.mocked(apply).mockResolvedValue(anApplication)
     renderWithProviders(<RegisterPage />, { route: '/register?journey=multi-client&module=paid-media', locale: 'en' })
     fill()
-    await waitFor(() => expect(register).toHaveBeenCalled())
-    expect(vi.mocked(register).mock.calls[0][0]).toMatchObject({ account_type: 'agency', service: 'paid_media' })
+    await waitFor(() => expect(apply).toHaveBeenCalled())
+    expect(vi.mocked(apply).mock.calls[0][0]).toMatchObject({ account_type: 'agency', service: 'paid_media' })
   })
 
   it('submits the self-managed path with the selected account type', async () => {
-    vi.mocked(register).mockResolvedValue({ id: '1', name: 'T', email: 'new@test.dev' } as never)
+    vi.mocked(apply).mockResolvedValue(anApplication)
     renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service&module=paid-media', locale: 'en' })
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'brand' } })
     fill()
-    await waitFor(() => expect(register).toHaveBeenCalled())
-    expect(vi.mocked(register).mock.calls[0][0]).toMatchObject({ account_type: 'brand', service: 'paid_media' })
+    await waitFor(() => expect(apply).toHaveBeenCalled())
+    expect(vi.mocked(apply).mock.calls[0][0]).toMatchObject({ account_type: 'brand', service: 'paid_media' })
   })
 
   it('presumes nothing when the visitor arrived without a journey', async () => {
-    vi.mocked(register).mockResolvedValue({ id: '1', name: 'T', email: 'new@test.dev' } as never)
+    vi.mocked(apply).mockResolvedValue(anApplication)
     renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
     fill()
-    await waitFor(() => expect(register).toHaveBeenCalled())
-    const payload = vi.mocked(register).mock.calls[0][0] as unknown as Record<string, unknown>
+    await waitFor(() => expect(apply).toHaveBeenCalled())
+    const payload = vi.mocked(apply).mock.calls[0][0] as unknown as Record<string, unknown>
     expect(payload).not.toHaveProperty('account_type')
     expect(payload).not.toHaveProperty('service')
   })
@@ -101,7 +112,7 @@ describe('RegisterPage — error summary + draft', () => {
   afterEach(() => { signOut(); localStorage.clear() })
 
   it('shows an ErrorSummary on a failed submit and focuses the field on click', async () => {
-    vi.mocked(register).mockRejectedValue({
+    vi.mocked(apply).mockRejectedValue({
       response: { status: 422, data: { message: 'Validation failed', errors: { email: ['The email has already been taken.'] } } },
     })
     renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })

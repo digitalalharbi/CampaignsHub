@@ -131,11 +131,11 @@ exist before payment can activate anything.
 
 | ID | Portal | Requirement | Depends on | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| SIGNUP-001 | PLATFORM | Account + subscription state machine — the twelve states, and no membership, permission or portal access before activation conditions are met | — | **NOT_STARTED** | The gate everything else hangs from. States: Draft, Email Verification Required, Mobile Verification Required, Pending Approval, Approved Awaiting Payment, Payment Pending, Active, Past Due, Suspended, Rejected, Cancelled, Expired. |
-| SIGNUP-002 | PLATFORM | Gated registration path: account type/portal → plan → inactive account → email → mobile → approval → payment → server-verified payment → tenant+workspace+membership → portal enabled → onboarding | SIGNUP-001 | **NOT_STARTED** | Existing registration provisions a tenant immediately; that becomes one branch of this, not the whole path. |
-| SIGNUP-003 | ADMIN | Approval policy configurable per account type and plan (manual-before-payment, pay-then-review, auto-on-verified-payment, manual-only, trial, request-documents, reject-with-reason, suspend/reactivate) | SIGNUP-001 | **NOT_STARTED** | Policy is data, not code branches. |
-| SIGNUP-004 | ADMIN | Registration review queue — accept / reject / request info, see plan, verification and payment state, change plan pre-activation, grant exceptional period or discount, decide who may self-register | SIGNUP-003 | **NOT_STARTED** | |
-| SIGNUP-005 | PLATFORM | Mobile verification (OTP) as a first-class account state | SIGNUP-001 | **NOT_STARTED** | Email verification exists; mobile does not. Delivery is Awaiting Credentials until a provider exists — the STATE must still be real. |
+| SIGNUP-001 | PLATFORM | Account + subscription state machine — the twelve states, and no membership, permission or portal access before activation conditions are met | — | **VERIFIED** (13 tests) | The gate everything else hangs from. States: Draft, Email Verification Required, Mobile Verification Required, Pending Approval, Approved Awaiting Payment, Payment Pending, Active, Past Due, Suspended, Rejected, Cancelled, Expired. |
+| SIGNUP-002 | PLATFORM | Gated registration path: account type/portal → plan → inactive account → email → mobile → approval → payment → server-verified payment → tenant+workspace+membership → portal enabled → onboarding | SIGNUP-001 | **VERIFIED** | `POST /auth/register` answers 202 with an application. The old immediate provisioning is now the named auto-activate BRANCH (`RegisterTenantAction`), which refuses when a gate is configured. |
+| SIGNUP-003 | ADMIN | Approval policy configurable per account type and plan (manual-before-payment, pay-then-review, auto-on-verified-payment, manual-only, trial, request-documents, reject-with-reason, suspend/reactivate) | SIGNUP-001 | **VERIFIED** | Policy is data, not code branches — `config/accounts.php`, merged default → account type → plan → this application's own concessions. |
+| SIGNUP-004 | ADMIN | Registration review queue — accept / reject / request info, see plan, verification and payment state, change plan pre-activation, grant exceptional period or discount, decide who may self-register | SIGNUP-003 | **VERIFIED** (11 tests + 8 UI tests) | `/admin/registrations`. Approving clears the APPROVAL gate only. |
+| SIGNUP-005 | PLATFORM | Mobile verification (OTP) as a first-class account state | SIGNUP-001 | **VERIFIED** | State, challenge and attempt budget are real; DELIVERY is Awaiting Credentials — no SMS provider exists. |
 | PLAN-001 | ADMIN | Central plans engine — portals, user/client/project/campaign/ad-account/integration/report/schedule counts, storage, advanced features, White Label, custom domain, retention, support level, usage and API limits, currencies, billing cycle, trial | — | **NOT_STARTED** | Replaces fixed arrays. Plans are rows, editable from /admin. |
 | PLAN-002 | PLATFORM | Entitlements + usage limits enforced in the BACKEND | PLAN-001 | **NOT_STARTED** | Hiding a button is not enforcement. |
 | PLAN-003 | ALL | Over-limit behaviour: block clearly, show usage against the limit, offer upgrade, never delete or abruptly hide the user's own data | PLAN-002 | **NOT_STARTED** | |
@@ -302,18 +302,19 @@ workspace came up OPERATING on `status` while its state still read `draft` — t
 drift this design exists to prevent, on any fresh install. Provisioned at the end of `DatabaseSeeder`
 where it catches whatever the seeders created, however they created it.
 
-Still open in this row's family: SIGNUP-002 (the gated path in front of registration, making today's
-immediate provisioning the auto-activate BRANCH rather than the only route), SIGNUP-003/004 (approval
-policy + admin review queue), SIGNUP-005 (mobile OTP as a first-class state).
+All of this row's family has since landed: SIGNUP-002 (the gated path, now what `/auth/register`
+actually calls), SIGNUP-003/004 (approval policy + the `/admin` review queue), SIGNUP-005 (mobile OTP
+as a first-class state). See the sections below.
 
-## SIGNUP-002 — the gated path (backbone landed; wiring still open)
+## SIGNUP-002 — the gated path (WIRED: registration no longer creates a workspace)
 
 | ID | Requirement | Status |
 | --- | --- | --- |
 | SIGNUP-002a | A registration is a REQUEST, not a workspace. `registration_requests` holds the application and grants nothing. | **VERIFIED** (12 tests) |
 | SIGNUP-002b | Provisioning happens only at the crossing, and refuses to run early. | **VERIFIED** |
 | SIGNUP-002c | Policy engine + the service that walks a request through the path. | **VERIFIED** (9 tests) |
-| SIGNUP-002d | Rewire `POST /auth/register` to create a request instead of a tenant; the account-status page; the `/admin` review queue. | **NOT_STARTED** |
+| SIGNUP-002d | `POST /auth/register` creates a REQUEST, not a tenant. Public status page. Email + mobile challenges against `registration_verifications`. | **VERIFIED** (9 endpoint tests + 10 UI tests, live-reviewed) |
+| SIGNUP-005 | Mobile verification (OTP) as a first-class state: five-guess budget on the challenge itself, honest `awaiting_provider_credentials` delivery. | **VERIFIED** (2 tests) |
 
 `RegistrationPolicy` merges default → account type → plan, so the plan is the most specific
 statement and wins. The default in `config/accounts.php` is EMAIL VERIFICATION ONLY, which is what
@@ -343,6 +344,64 @@ The unique index on a live application is PARTIAL — one in-flight request per 
 rejected applicant may still apply again and a provisioned one does not block a later, unrelated
 registration.
 
-**Important:** the public `POST /auth/register` still creates a tenant immediately (the auto-activate
-branch, recorded as such since SIGNUP-001). The new path exists and is tested but is not yet what the
-public endpoint calls — SIGNUP-002c. Nothing in the product behaves differently yet.
+**Wired (2026-07-31).** `POST /auth/register` now answers **202** with an APPLICATION — no tenant, no
+workspace, no user row, no membership, no session. `AuthTest` asserts all five absences on the same
+request that used to produce all five. Under the shipped default policy (email verification only)
+confirming the address is what creates the workspace, and the applicant is signed in at that moment
+because they have just proved control of the address — the same evidence a magic link carries.
+
+`RegisterTenantAction` survives with its meaning narrowed to the AUTO-ACTIVATE branch the contract
+permits. It provisions nothing itself: it opens a registration request like everyone else and lets
+`AdvanceRegistration` walk the gates, and it **throws** when the policy is not auto-activate, so a
+caller cannot use it to step around a gate that has been configured. The caller must also state WHY
+the email counts as already proven, and that reason is audited — it is the one step this branch skips.
+
+`registration_verifications` is a second verification table on purpose: `email_verifications` has a
+foreign key to `users`, and the whole point is that no user exists yet. Only the hash is stored. The
+mobile challenge carries its own attempt counter, because a six-digit code behind an IP-keyed rate
+limiter is a window in which a million guesses will certainly succeed.
+
+The public status page is `/signup/status`, reachable without a session and rendering every
+pre-activation state. It shows the ONE thing an applicant can do — and when the answer is "nothing,
+we are reviewing this", it says so rather than inventing a button. The activation steps it lists come
+from the policy, so a free plan is not shown a payment step and a paying one is not spared it.
+
+**Regression found and fixed while live-reviewing this:** the boot-time session probe in
+`app/providers.tsx` applied its result unconditionally, so a page that signed someone in WHILE the
+probe was in flight was immediately signed back out by the stale `null` — the route guard then
+bounced them to `/login`. The probe now applies its answer only if nothing else has moved the store
+off `loading`. This affected email verification and would have affected invitation accept.
+
+## SIGNUP-003 / SIGNUP-004 — the registration review queue
+
+| ID | Requirement | Status |
+| --- | --- | --- |
+| SIGNUP-003 | Approval policy is DATA: default → account type → plan → this application's own concessions. | **VERIFIED** |
+| SIGNUP-004a | `/admin/registrations` — the queue, with a count at each gate and a search. | **VERIFIED** (11 tests) |
+| SIGNUP-004b | Approve / reject-with-reason / request-information, and the decision history. | **VERIFIED** |
+| SIGNUP-004c | Change the terms of one application: plan, discount, trial days, and which gates it must clear. | **VERIFIED** |
+
+The claim this unit turns on is a negative one, and it has its own test: **approving does not
+activate**. A reviewer pressing approve on an application that also owes money leaves it at
+`approved_awaiting_payment` with no tenant, no user and no membership. That is the entire reason
+`PendingApproval` and `ApprovedAwaitingPayment` are two states rather than one, and it is why this
+controller never calls `ProvisionWorkspace` itself. If that test ever passes with `state: active`,
+the console has become a way to hand out unpaid access one click at a time.
+
+A reviewer's decision about one application is the most specific policy statement there is, so it
+outranks the plan — `RegistrationPolicy` merges it last. It is stored as a concession carrying its
+author and its justification rather than applied to a state column, so waiving a payment for one
+customer leaves a record of who did it and why. Both the API and the UI refuse a change with no
+reason: the browser will not send one, and the server will not accept one.
+
+"Request information" is deliberately NOT a thirteenth state. The application stays exactly where it
+was; what changes is who the queue is waiting on, and that is one timestamp. The visible difference
+is that the applicant's status screen stops saying "there is nothing for you to do" and shows the
+reviewer's note instead — otherwise the queue stalls with neither side expecting to move.
+
+A settled application — provisioned, rejected, cancelled or expired — cannot be reviewed again.
+Approving one that already has a workspace would run the whole path a second time; rejecting it would
+leave a live tenant sitting behind a `rejected` record.
+
+**Not yet true:** nothing notifies the applicant when a decision is made. No mail provider is
+configured, so the status page is where a decision becomes visible, and the applicant has to look.

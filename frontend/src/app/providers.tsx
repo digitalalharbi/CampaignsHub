@@ -31,9 +31,20 @@ export function Providers({ children }: { children: ReactNode }) {
     applyDocument(theme, locale)
   }, [theme, locale])
 
-  // Restore the session from the cookie on load (ADR 0001).
+  /*
+   * Restore the session from the cookie on load (ADR 0001).
+   *
+   * The result is applied ONLY if nothing has answered the question in the meantime. This probe says
+   * "who were you when the page loaded?", and a page that signs someone in while it is still in
+   * flight — email verification landing on a confirmation link, accepting an invitation — has a
+   * newer answer. Applying the stale one signed the person straight back out: the store went
+   * authenticated, then `setUser(null)` arrived from this line and the route guard bounced them to
+   * /login. Whoever moved the store off `loading` knows more than this does.
+   */
   useEffect(() => {
-    fetchCurrentUser().then(setUser)
+    void fetchCurrentUser().then((user) => {
+      if (useAuth.getState().status === 'loading') setUser(user)
+    })
   }, [setUser])
 
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>

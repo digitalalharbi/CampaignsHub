@@ -13,6 +13,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\AppliesToRegister;
 use Tests\TestCase;
 
 /**
@@ -28,6 +29,7 @@ use Tests\TestCase;
  */
 final class PlatformAdminFlagTest extends TestCase
 {
+    use AppliesToRegister;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -104,15 +106,13 @@ final class PlatformAdminFlagTest extends TestCase
     /** Registration creates a customer, never an owner — whatever the payload asks for. */
     public function test_registration_cannot_produce_a_platform_admin(): void
     {
-        $this->withHeaders(['Origin' => 'http://localhost:5173'])
-            ->postJson('/api/v1/auth/register', [
-                'tenant_name' => 'Sneaky Co', 'name' => 'Sneaky', 'email' => 'reg.sneaky@test.dev',
-                'password' => 'secret1234', 'password_confirmation' => 'secret1234',
-                'account_type' => 'brand', 'service' => 'paid_media',
-                'is_platform_admin' => true,
-            ])->assertCreated();
+        ['user' => $user] = $this->applyAndVerify([
+            'tenant_name' => 'Sneaky Co', 'name' => 'Sneaky', 'email' => 'reg.sneaky@test.dev',
+            'account_type' => 'brand', 'service' => 'paid_media',
+            'is_platform_admin' => true,
+        ]);
 
-        $this->assertFalse(User::where('email', 'reg.sneaky@test.dev')->firstOrFail()->is_platform_admin);
+        $this->assertFalse($user->is_platform_admin);
     }
 
     /**
@@ -144,16 +144,19 @@ final class PlatformAdminFlagTest extends TestCase
      */
     public function test_email_verification_is_still_required_of_customers(): void
     {
-        $this->withHeaders(['Origin' => 'http://localhost:5173'])
-            ->postJson('/api/v1/auth/register', [
-                'tenant_name' => 'Unverified Co', 'name' => 'New', 'email' => 'unverified@test.dev',
-                'password' => 'secret1234', 'password_confirmation' => 'secret1234',
-                'account_type' => 'brand', 'service' => 'paid_media',
-            ])->assertCreated();
+        $this->apply([
+            'tenant_name' => 'Unverified Co', 'name' => 'New', 'email' => 'unverified@test.dev',
+            'account_type' => 'brand', 'service' => 'paid_media',
+        ])->assertStatus(202);
 
+        /*
+         * Since SIGNUP-002 the requirement bites harder than it used to. An unverified customer no
+         * longer has an unverified USER ROW — they have no account at all, so there is nothing to
+         * sign in with and nothing an unverified-email check could be forgotten in front of.
+         */
         $this->assertNull(
-            User::where('email', 'unverified@test.dev')->firstOrFail()->email_verified_at,
-            'a self-registered customer must still confirm their email',
+            User::where('email', 'unverified@test.dev')->first(),
+            'a self-registered customer must not have an account before confirming their email',
         );
     }
 }

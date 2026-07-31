@@ -18,6 +18,11 @@ final readonly class RegisterData
         public ?string $accountType = null,
         /** paid_media | influencer_marketing | combined — the service the visitor came for. */
         public ?string $service = null,
+        /**
+         * Optional at application time and required only where a plan asks for mobile verification —
+         * collecting a number nobody is going to check is data held for no reason.
+         */
+        public ?string $phone = null,
     ) {}
 
     /** @param array<string,mixed> $data */
@@ -30,6 +35,7 @@ final readonly class RegisterData
             password: (string) $data['password'],
             accountType: isset($data['account_type']) ? (string) $data['account_type'] : null,
             service: isset($data['service']) ? (string) $data['service'] : null,
+            phone: isset($data['phone']) ? (string) $data['phone'] : null,
         );
     }
 }

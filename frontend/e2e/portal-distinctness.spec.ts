@@ -21,8 +21,8 @@ const FREELANCER = { email: `e2e-freelancer-${Date.now()}@probe.test`, password:
 test.describe('the portals are different products', () => {
   /**
    * Register and take the account all the way through the REAL gated path, because a half-onboarded
-   * account never reaches a portal at all — it sits on /verify-email, which would make every
-   * assertion below pass or fail for the wrong reason.
+   * account never reaches a portal at all — it sits on its registration status page, which would
+   * make every assertion below pass or fail for the wrong reason.
    */
   test.beforeAll(async ({ request }) => {
     /*
@@ -44,12 +44,14 @@ test.describe('the portals are different products', () => {
       account_type: 'freelancer',
       service: 'paid_media',
     })
-    expect(registered.status(), 'registration must succeed').toBe(201)
+    // 202, not 201: an application was received. Nothing has been created that anyone can sign in
+    // with, which is the point of SIGNUP-002 and the reason this beforeAll has a second step.
+    expect(registered.status(), 'the application must be accepted').toBe(202)
 
     // No mail provider is configured, so the token comes back on the response in non-production —
     // an honest dev link rather than a pretend "email sent".
-    const devLink = (await registered.json()).data.email_verification.dev_link as string
-    const verified = await post('/api/v1/auth/email/verify', { token: devLink.split('token=')[1] })
+    const devLink = (await registered.json()).data.verification.dev_link as string
+    const verified = await post('/api/v1/auth/registration/verify-email', { token: devLink.split('token=')[1] })
     expect(verified.status(), 'email verification must succeed').toBe(200)
 
     const type = await post('/api/v1/onboarding/account-type', { account_type: 'freelancer' })

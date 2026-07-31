@@ -1,4 +1,4 @@
-import { getData, patchData } from '@/lib/api/client'
+import { getData, patchData, postData } from '@/lib/api/client'
 
 /**
  * The platform owner's console (ADMIN-001).
@@ -248,4 +248,102 @@ export function resolvePortalConflict(
   note?: string,
 ): Promise<{ conflict: { id: string; resolution: string } }> {
   return patchData(`/admin/portal-conflicts/${id}`, { resolution, note })
+}
+
+/*
+ * The registration review queue (SIGNUP-003).
+ *
+ * The gated path's other end. Note what none of these calls can do: activate an account. `approve`
+ * clears the approval gate, and an application that also owes money stays at
+ * `approved_awaiting_payment` — the server decides that, not this module.
+ */
+
+export interface AdminRegistration {
+  id: string
+  state: string
+  /** Already translated by the server; the console does not own the vocabulary of account states. */
+  label: string
+  email: string
+  name: string
+  tenant_name: string
+  account_type: string | null
+  phone: string | null
+  requested_portal: string | null
+  plan_code: string | null
+  email_verified: boolean
+  mobile_verified: boolean
+  next_step: string | null
+  reason: string | null
+  provisioned: boolean
+  review_note: string | null
+  info_requested: boolean
+  reviewed_at: string | null
+  reviewed_by: number | null
+  concessions: Record<string, unknown> | null
+  created_at: string | null
+  tenant_id: string | null
+}
+
+export interface RegistrationGates {
+  requires_mobile: boolean
+  requires_approval: boolean
+  requires_payment: boolean
+}
+
+/** One recorded decision. The audit trail, read back — never a second log kept for the screen. */
+export interface RegistrationTransition {
+  action: string
+  at: string | null
+  user_id: number | null
+  reason: string | null
+  detail: Record<string, unknown> | null
+}
+
+export function fetchRegistrations(params: { state?: string; q?: string } = {}): Promise<{
+  registrations: AdminRegistration[]
+  meta: { total: number; per_page: number; current_page: number }
+  counts: Record<string, number>
+}> {
+  const query = new URLSearchParams()
+  if (params.state) query.set('state', params.state)
+  if (params.q) query.set('q', params.q)
+  return getData(`/admin/registrations?${query.toString()}`)
+}
+
+export function fetchRegistration(id: string): Promise<{
+  registration: AdminRegistration
+  policy: RegistrationGates
+  transitions: RegistrationTransition[]
+}> {
+  return getData(`/admin/registrations/${id}`)
+}
+
+export function approveRegistration(id: string, note?: string): Promise<{ registration: AdminRegistration }> {
+  return postData(`/admin/registrations/${id}/approve`, { note })
+}
+
+/** A reason is required — the applicant is shown it, and "rejected" alone is a dead end. */
+export function rejectRegistration(id: string, reason: string): Promise<{ registration: AdminRegistration }> {
+  return postData(`/admin/registrations/${id}/reject`, { reason })
+}
+
+export function requestRegistrationInfo(id: string, note: string): Promise<{ registration: AdminRegistration }> {
+  return postData(`/admin/registrations/${id}/request-info`, { note })
+}
+
+export interface RegistrationTerms {
+  plan_code?: string | null
+  requires_mobile?: boolean
+  requires_approval?: boolean
+  requires_payment?: boolean
+  discount_percent?: number | null
+  trial_days?: number | null
+  reason: string
+}
+
+export function updateRegistrationTerms(id: string, terms: RegistrationTerms): Promise<{
+  registration: AdminRegistration
+  policy: RegistrationGates
+}> {
+  return patchData(`/admin/registrations/${id}`, terms)
 }
