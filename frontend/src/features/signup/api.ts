@@ -74,6 +74,7 @@ export interface ApplyInput {
   service?: 'paid_media' | 'influencer_marketing' | 'combined'
   requested_portal?: string
   plan_code?: string
+  billing_interval?: BillingInterval
   phone?: string
 }
 
@@ -123,4 +124,52 @@ export const recallRegistration = (): string | null => {
 
 export const forgetRegistration = () => {
   try { localStorage.removeItem(KEY) } catch { /* nothing to clean up */ }
+}
+
+/*
+ * The plan catalogue, as the sign-up form needs it (PLAN-001).
+ *
+ * Read from the server rather than kept as a constant here, because the price a visitor is shown and
+ * the amount a checkout charges have to be the same statement. A catalogue duplicated into the
+ * browser is one that will eventually advertise a price nobody is billed.
+ */
+
+export type BillingInterval = 'monthly' | 'annual'
+
+export interface Plan {
+  code: string
+  name: string
+  name_ar: string
+  summary_ar: string | null
+  summary_en: string | null
+  currency: string
+  price_monthly: string
+  /** Null means the plan is not sold on an annual term — never a reason to show the monthly price. */
+  price_annual: string | null
+  trial_days: number
+  trial_fee: string
+  features: Record<string, unknown> | null
+  limits: Record<string, number | null> | null
+  trial_limits: Record<string, number | null> | null
+}
+
+export interface PlanQuote {
+  plan_code: string
+  currency: string
+  interval: BillingInterval
+  /** What is taken TODAY — the trial fee when the plan starts with one. */
+  due_now: string
+  /** What falls due when the trial converts, or null when there is no trial. */
+  due_later: string | null
+  renews_in_days: number
+  trial_days: number
+  trial_fee: string | null
+}
+
+export function fetchPlans(): Promise<{ plans: Plan[] }> {
+  return getData('/plans')
+}
+
+export function fetchQuote(code: string, interval: BillingInterval): Promise<{ quote: PlanQuote }> {
+  return getData(`/plans/${code}/quote?interval=${interval}`)
 }

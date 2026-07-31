@@ -25,15 +25,69 @@ final class SubscriptionPlan extends Model
     use HasUuidKey;
 
     protected $fillable = [
-        'code', 'name', 'price_monthly', 'currency', 'features', 'limits', 'is_active',
+        'code', 'name', 'name_ar', 'summary_ar', 'summary_en',
+        'price_monthly', 'price_annual', 'currency',
+        'trial_fee', 'trial_days', 'trial_limits',
+        'features', 'limits', 'is_active', 'is_public', 'sort_order',
     ];
 
     protected $casts = [
         'price_monthly' => 'decimal:2',
+        'price_annual' => 'decimal:2',
+        'trial_fee' => 'decimal:2',
+        'trial_days' => 'integer',
+        'trial_limits' => 'array',
         'features' => 'array',
         'limits' => 'array',
         'is_active' => 'boolean',
+        'is_public' => 'boolean',
+        'sort_order' => 'integer',
     ];
+
+    /** Is this plan sold on an annual term at all? */
+    public function hasAnnualTerm(): bool
+    {
+        return $this->price_annual !== null;
+    }
+
+    /** Does signing up for this plan begin with a paid trial? */
+    public function offersTrial(): bool
+    {
+        return $this->trial_days > 0;
+    }
+
+    /**
+     * The amount to charge for a term, in the plan's currency.
+     *
+     * Returns null when the plan is not sold on that term — a caller must not fall back to the other
+     * price, because charging a year's fee for a month (or the reverse) is exactly the kind of error
+     * a silent default produces.
+     */
+    public function priceFor(string $interval): ?string
+    {
+        return match ($interval) {
+            'monthly' => (string) $this->price_monthly,
+            'annual' => $this->price_annual === null ? null : (string) $this->price_annual,
+            default => null,
+        };
+    }
+
+    /**
+     * The cap for a metric while a subscription is in its TRIAL.
+     *
+     * Falls back to the plan's own cap, because a trial that does not narrow a metric is on the
+     * plan's terms for it — an absent trial limit is "same as the plan", not "unlimited".
+     */
+    public function trialLimitFor(string $metric): ?int
+    {
+        if ($this->trial_limits !== null && array_key_exists($metric, $this->trial_limits)) {
+            $value = $this->trial_limits[$metric];
+
+            return $value === null ? null : (int) $value;
+        }
+
+        return $this->limitFor($metric);
+    }
 
     /** The cap for a metric, or null when the plan does not limit it (unlimited). */
     public function limitFor(string $metric): ?int

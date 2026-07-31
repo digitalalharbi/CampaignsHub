@@ -3,7 +3,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Building2, Check, LayoutDashboard, Users } from 'lucide-react'
 import { AuthShell } from './AuthShell'
-import { apply, rememberRegistration } from '@/features/signup/api'
+import { apply, rememberRegistration, type BillingInterval } from '@/features/signup/api'
+import { PlanChooser } from '@/features/signup/PlanChooser'
 import { Button } from '@/components/ui/Button'
 import { EmailInput, PasswordInput, TextInput } from '@/components/ui/form'
 import { controlClass } from '@/components/ui/Field'
@@ -84,6 +85,11 @@ export function RegisterPage() {
   // Carried through unchanged from the decision-section handoff; surfaced read-only, never a forced re-pick.
   const moduleParam = params.get('module')
   const [selfType, setSelfType] = useState<SelfAccountType>('freelancer')
+  // The commercial half of the journey (PLAN-001): which plan, on which term. Both travel with the
+  // application, and both are validated against the catalogue server-side — naming a plan here
+  // cannot select one that is not on sale.
+  const [planCode, setPlanCode] = useState<string | null>(null)
+  const [interval, setInterval] = useState<BillingInterval>('monthly')
 
   // Non-secret fields autosave as a draft (survives refresh); passwords are kept in memory only, never persisted.
   const draft = useFormDraft('register', { tenant_name: '', name: '', email: '' })
@@ -206,7 +212,16 @@ export function RegisterPage() {
 
       {/* Two columns where the fields are short, so every field and the submit button fit a 768px-tall
           desktop screen without scrolling. */}
-      <form className="mt-4 space-y-3" onSubmit={(e) => { e.preventDefault(); mutation.mutate({ ...form, ...(preset ?? {}) }) }}>
+      <form className="mt-4 space-y-3" onSubmit={(e) => {
+        e.preventDefault()
+        mutation.mutate({
+          ...form,
+          ...(preset ?? {}),
+          // Omitted entirely when nothing was chosen — an empty string is not a plan, and sending one
+          // would be the form answering a question the visitor did not.
+          ...(planCode ? { plan_code: planCode, billing_interval: interval } : {}),
+        })
+      }}>
         {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={rc.errTitle} />}
         <TextInput id="tenant_name" label={t('org_name')} value={form.tenant_name} onChange={setDraft('tenant_name')} required error={err('tenant_name')} />
         <div className="grid gap-3 sm:grid-cols-2">
@@ -219,6 +234,8 @@ export function RegisterPage() {
         </div>
 
         {error && !error.errors && <p className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{error.message}</p>}
+
+        <PlanChooser value={planCode} interval={interval} onChange={setPlanCode} onIntervalChange={setInterval} />
 
         <Button type="submit" loading={mutation.isPending} className="w-full" size="lg">{t('create_account')}</Button>
       </form>

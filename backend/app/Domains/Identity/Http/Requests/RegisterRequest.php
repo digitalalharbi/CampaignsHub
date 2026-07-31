@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Domains\Identity\Http\Requests;
 
 use App\Domains\Accounts\Enums\AccountType;
+use App\Domains\Subscriptions\Services\PlanCatalogue;
 use App\Domains\Tenancy\Enums\Portal;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -44,7 +46,22 @@ final class RegisterRequest extends FormRequest
             'requested_portal' => ['sometimes', 'nullable', Rule::in([
                 Portal::App->value, Portal::Agency->value, Portal::Influencers->value,
             ])],
-            'plan_code' => ['sometimes', 'nullable', 'string', 'max:64'],
+            /*
+             * A plan may only be one that is actually on sale.
+             *
+             * Checked against the catalogue rather than a list of strings here, because "which plans
+             * may somebody sign up for?" is a question the platform owner answers from /admin — and
+             * a payload naming a withdrawn or private plan would otherwise decide it instead.
+             */
+            'plan_code' => [
+                'sometimes', 'nullable', 'string', 'max:64',
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    if ($value !== null && $value !== '' && ! app(PlanCatalogue::class)->isOffered((string) $value)) {
+                        $fail('That plan is not available.');
+                    }
+                },
+            ],
+            'billing_interval' => ['sometimes', 'nullable', 'in:monthly,annual'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:40'],
         ];
     }

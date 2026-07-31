@@ -423,3 +423,47 @@ been passing only because the database happened to hold different data.
 one — losing `PHP_CLI_SERVER_WORKERS=4` and `--no-reload`. Single-worker PHP serving is the documented
 root cause of the signup and link/move specs timing out under load, and it produced four failures that
 looked like code regressions and were not. Stop any hand-started backend before running the gate.
+
+## PLAN-001 — the central plans engine
+
+| ID | Requirement | Status |
+| --- | --- | --- |
+| PLAN-001a | Plans are data: monthly AND annual terms, per-plan trial fee / duration / limits, all editable from `/admin`. | **VERIFIED** (12 tests) |
+| PLAN-001b | One public catalogue, read by the pricing surface and the sign-up form before anyone has an account. | **VERIFIED** |
+| PLAN-001c | A plan may be withdrawn from SALE without being switched off for the customers already on it. | **VERIFIED** |
+| PLAN-001d | The plan chosen at sign-up is validated against the catalogue, not against a list of strings. | **VERIFIED** (6 UI tests, live-reviewed) |
+
+The engine exists so that four separate answers become one statement: the price a visitor is shown,
+the amount a checkout charges, the limits the backend enforces, and the date a renewal falls due.
+Where each reads its own literal they drift, and the first symptom is a customer charged an amount
+nobody quoted.
+
+Two refusals are deliberate and both have tests. A term a plan is not sold on has **no price** rather
+than the other term's price — `priceFor('annual')` returns null, `/plans/{code}/quote` answers 422,
+and the chooser disables the card. And a trial quotes the TRIAL fee as due now with the subscription
+price as due later, because quoting the subscription price as "due now" would misstate the charge the
+customer is about to authorise.
+
+Trial limits narrow the plan and fall back to it: an absent trial limit means "on the plan's terms
+for that metric", not "unlimited". The opposite reading would hand a trial account everything the
+plan does not happen to cap.
+
+**A decision was reversed here, and it is worth recording why.** `PlatformBillingTest` previously
+asserted that a plan's price is NOT editable from the console, on the reasoning that changing what
+people already pay is a decision with contractual consequences and one admin field would apply it
+silently to everyone. That reasoning was sound; the contract nonetheless requires the catalogue to be
+editable. The fix was not to keep the field read-only but to remove the consequence: `subscriptions`
+now records `unit_amount`, the price it was SOLD at, so the catalogue governs what new customers are
+quoted and the subscription governs what an existing one owes. The test now asserts that stronger
+guarantee instead.
+
+`subscriptions` also gained the columns the lifecycle will need — `billing_interval`, `trial_ends_at`,
+`grace_ends_at`, `auto_convert_consent_at`, `cancel_at_period_end` and the provider identifiers.
+**None of them is driven by anything yet**; they exist so PAY-002/003 have a place to write and so the
+schema does not have to change underneath a live payment integration. `auto_convert_consent_at` is a
+timestamp rather than a boolean because the contract requires consent to auto-conversion to be
+explicit, and a null there must mean no trial may convert — the charge would be one nobody agreed to.
+
+`provider`, `provider_customer_id` and `provider_subscription_id` are outside `$fillable`: they are
+written by the adapter that owns the subscription at the gateway, and a payload able to set them
+could point a subscription at somebody else's customer record.

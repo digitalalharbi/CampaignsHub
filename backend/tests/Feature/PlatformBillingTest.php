@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
+use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -88,18 +89,30 @@ final class PlatformBillingTest extends TestCase
     }
 
     /**
-     * The price is NOT editable from the console. Changing what people already pay is a decision with
-     * contractual consequences, and one field on an admin page would apply it silently to everyone.
+     * The price IS editable from the console now — and changing it does not touch what existing
+     * subscribers pay (PLAN-001).
+     *
+     * This test used to assert the opposite, and the reasoning behind it was sound: changing what
+     * people already pay is a decision with contractual consequences, and one field on an admin page
+     * would have applied it silently to everyone. The contract requires the catalogue to be editable,
+     * so the fix was not to keep the field read-only but to remove the consequence — a subscription
+     * now records the price it was sold at, and renewal reads that rather than the catalogue.
      */
-    public function test_a_plans_price_cannot_be_changed_from_the_console(): void
+    public function test_changing_a_catalogue_price_does_not_re_price_an_existing_subscriber(): void
     {
         $plan = $this->plan('growth', 100);
+        $subscription = app(SubscriptionService::class)->assignPlan($this->tenant('Priced Co'), $plan);
+
+        $this->assertSame('100.00', (string) $subscription->unit_amount, 'sold at the price of the day');
 
         $this->actingAs($this->owner(), 'sanctum')
-            ->patchJson("/api/v1/admin/plans/{$plan->id}", ['price_monthly' => 1])
+            ->patchJson("/api/v1/admin/plans/{$plan->id}", ['price_monthly' => 400])
             ->assertOk();
 
-        $this->assertSame('100.00', (string) $plan->fresh()->price_monthly);
+        // The catalogue moved…
+        $this->assertSame('400.00', (string) $plan->fresh()->price_monthly);
+        // …and this customer still owes what they agreed to.
+        $this->assertSame('100.00', (string) $subscription->fresh()->unit_amount);
     }
 
     public function test_changing_a_plan_is_audited(): void

@@ -52,17 +52,28 @@ final class SubscriptionService
     /**
      * Assign (or move) a tenant onto a plan. Idempotent: one subscription row per tenant is created or updated.
      */
-    public function assignPlan(Tenant $tenant, SubscriptionPlan $plan, string $status = 'active', ?Carbon $currentPeriodEnd = null, ?int $seats = null): Subscription
+    public function assignPlan(Tenant $tenant, SubscriptionPlan $plan, string $status = 'active', ?Carbon $currentPeriodEnd = null, ?int $seats = null, string $interval = 'monthly'): Subscription
     {
         /** @var Subscription $subscription */
         $subscription = Subscription::query()
             ->withoutGlobalScope(TenantScope::class)
             ->firstOrNew(['tenant_id' => $tenant->id]);
 
+        /*
+         * The price is captured HERE, not read from the plan at renewal (PLAN-001).
+         *
+         * A subscription that is only a pointer at a catalogue row means editing a price in /admin
+         * silently re-prices everyone already on that plan. The catalogue governs what new customers
+         * are quoted; this column governs what an existing one owes, and changing one does not move
+         * the other.
+         */
         $subscription->fill([
             'tenant_id' => $tenant->id,
             'plan_id' => $plan->id,
             'status' => $status,
+            'billing_interval' => $interval,
+            'unit_amount' => $plan->priceFor($interval) ?? $plan->price_monthly,
+            'currency' => $plan->currency,
             'current_period_end' => $currentPeriodEnd ?? $subscription->current_period_end,
             'seats' => $seats ?? $subscription->seats ?? 1,
         ])->save();

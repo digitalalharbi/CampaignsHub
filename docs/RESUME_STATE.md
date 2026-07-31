@@ -11,8 +11,10 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
-`SIGNUP-002d + SIGNUP-003/004` — *feat(accounts): registration becomes an application, and the console
-gets a queue to decide it*
+`PLAN-001` — *feat(plans): the catalogue becomes an engine — two terms, a paid trial, and one price*
+
+Preceded by `d4f57ff` (three cross-browser E2E failures root-caused) and `f71319d` (SIGNUP-002d +
+SIGNUP-003/004 — registration becomes an application).
 
 Preceded this session by `e820720` (SIGNUP-002 policy) → `e076858` (SIGNUP-002 backbone) →
 `641cfef` (SIGNUP-001 state machine) → `d293707` (LOGIN + AGENCY-006).
@@ -265,7 +267,12 @@ notes, taxonomies, services). `/app/settings/public-pages|portals|taxonomies` re
     notifications, opportunities. Reachable only by typing the URL; linked from nothing.
 
 ## Exact next task
-**PLAN-001** — the central plans engine.
+**PAY-001** — the Moyasar and Stripe adapters.
+
+PLAN-001 is done: plans are data, both terms, the paid 7-day trial per plan, editable from /admin and
+read by one public catalogue. `subscriptions` carries the lifecycle columns PAY-002/003 will need —
+`billing_interval`, `unit_amount`, `trial_ends_at`, `grace_ends_at`, `auto_convert_consent_at`,
+`cancel_at_period_end`, provider ids — and **none of them is driven by anything yet**.
 
 SIGNUP-001 through SIGNUP-005 are done, tested and live-reviewed. The binding rule they exist to
 enforce is now structurally true rather than a policy someone has to remember: **`POST /auth/register`
@@ -275,22 +282,20 @@ absences on the same request that used to produce all five.
 
 What is next, and why in this order:
 
-1. **PLAN-001** — plans as DATA, not fixed arrays: monthly and annual prices, and the paid 7-day
-   trial (fee, duration, features, limits) editable from `/admin`. Everything after this reads it.
-2. **PAY-001** — Moyasar as the official primary adapter, Stripe as the alternative, both behind the
+1. **PAY-001** — Moyasar as the official primary adapter, Stripe as the alternative, both behind the
    existing `PaymentProvider` port. No credentials exist, so both ship **Awaiting Credentials** and
    the sandbox path is what gets tested.
-3. **PAY-002** — checkout, signed webhooks, idempotency, no duplicate charge. The invariant to write
+2. **PAY-002** — checkout, signed webhooks, idempotency, no duplicate charge. The invariant to write
    a test for BEFORE any payment code: nothing may call `TransitionAccountState::provision()` as a
    shortcut out of `PaymentPending`. That state is the webhook-only activation anchor, and a
    browser returning from a payment page must never be what clears it.
-4. **PAY-003** — trial auto-conversion, renewal, past due, grace, suspension (data preserved),
+3. **PAY-003** — trial auto-conversion, renewal, past due, grace, suspension (data preserved),
    cancellation, refund, reactivation.
-5. **PAY-004** — trial-abuse prevention. "One trial per payment method" belongs in the ADAPTER: Moyasar
+4. **PAY-004** — trial-abuse prevention. "One trial per payment method" belongs in the ADAPTER: Moyasar
    and Stripe expose different fingerprint semantics, and a shared assumption in the core would either
    be wrong for one of them or silently unenforced. Each adapter reports what it can, with an honest
    fallback when a provider supplies nothing.
-6. **SIGNUP-006** — the five independent demo accounts, then OPS-001, INTG-001, the remaining rows.
+5. **SIGNUP-006** — the five independent demo accounts, then OPS-001, INTG-001, the remaining rows.
 
 **Do not simply delete `RegisterTenantAction`** when tidying: it is the named auto-activate branch the
 contract explicitly keeps supported for self-serve trials. It provisions nothing itself and throws

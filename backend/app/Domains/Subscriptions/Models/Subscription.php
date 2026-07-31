@@ -25,13 +25,43 @@ final class Subscription extends Model
     use HasUuidKey;
 
     protected $fillable = [
-        'tenant_id', 'plan_id', 'status', 'current_period_end', 'seats',
+        'tenant_id', 'plan_id', 'status', 'billing_interval', 'unit_amount', 'currency',
+        'current_period_end', 'trial_ends_at', 'grace_ends_at',
+        'auto_convert_consent_at', 'cancel_at_period_end', 'seats',
     ];
+
+    /*
+     * `provider`, `provider_customer_id` and `provider_subscription_id` are absent from $fillable on
+     * purpose: they are written by the payment adapter that owns the subscription at the gateway, and
+     * a payload able to set them could point a subscription at somebody else's customer record.
+     */
 
     protected $casts = [
         'current_period_end' => 'datetime',
+        'trial_ends_at' => 'datetime',
+        'grace_ends_at' => 'datetime',
+        'auto_convert_consent_at' => 'datetime',
+        'cancel_at_period_end' => 'boolean',
+        'unit_amount' => 'decimal:2',
         'seats' => 'integer',
     ];
+
+    /** Is this subscription still inside its paid trial? */
+    public function isTrialing(): bool
+    {
+        return $this->trial_ends_at !== null && $this->trial_ends_at->isFuture();
+    }
+
+    /**
+     * May this trial convert into a paid subscription?
+     *
+     * The contract requires consent to auto-conversion to be EXPLICIT, so the absence of a recorded
+     * agreement is a refusal — converting anyway would be a charge nobody authorised.
+     */
+    public function mayAutoConvert(): bool
+    {
+        return $this->auto_convert_consent_at !== null && ! $this->cancel_at_period_end;
+    }
 
     /** @return BelongsTo<SubscriptionPlan, $this> */
     public function plan(): BelongsTo

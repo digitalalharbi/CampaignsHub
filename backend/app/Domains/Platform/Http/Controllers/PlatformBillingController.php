@@ -46,15 +46,7 @@ final class PlatformBillingController extends Controller
             'plans' => $plans->map(function (SubscriptionPlan $p) use ($subscribers) {
                 $rows = $subscribers->where('plan_id', $p->getKey());
 
-                return [
-                    'id' => (string) $p->getKey(),
-                    'code' => $p->code,
-                    'name' => $p->name,
-                    'price_monthly' => (string) $p->price_monthly,
-                    'currency' => $p->currency,
-                    'is_active' => (bool) $p->is_active,
-                    'features' => $p->features ?? [],
-                    'limits' => $p->limits ?? [],
+                return ['id' => (string) $p->getKey()] + $this->planRow($p) + [
                     // Split by status: a plan with 40 cancelled subscribers is not a plan with 40
                     // customers, and one number would say it was.
                     'subscribers' => [
@@ -74,20 +66,76 @@ final class PlatformBillingController extends Controller
      * it silently to every existing subscriber. Deactivating stops new sign-ups and leaves existing
      * subscriptions alone, which is the safe half of the operation.
      */
+    /**
+     * A plan as the console reads and writes it — one shape, so the list and the save cannot drift.
+     *
+     * @return array<string, mixed>
+     */
+    private function planRow(SubscriptionPlan $p): array
+    {
+        return [
+            'code' => $p->code,
+            'name' => $p->name,
+            'name_ar' => $p->name_ar,
+            'summary_ar' => $p->summary_ar,
+            'summary_en' => $p->summary_en,
+            'currency' => $p->currency,
+            'price_monthly' => (string) $p->price_monthly,
+            // Null is a statement: this plan is not sold on an annual term.
+            'price_annual' => $p->price_annual === null ? null : (string) $p->price_annual,
+            'trial_fee' => (string) $p->trial_fee,
+            'trial_days' => $p->trial_days,
+            'trial_limits' => $p->trial_limits,
+            'features' => $p->features ?? [],
+            'limits' => $p->limits ?? [],
+            'is_active' => (bool) $p->is_active,
+            'is_public' => (bool) $p->is_public,
+            'sort_order' => $p->sort_order,
+        ];
+    }
+
     public function updatePlan(Request $request, string $plan): JsonResponse
     {
         $this->tenants->enterPlatformScope();
 
+        /*
+         * The commercial terms of a plan, editable from the console (PLAN-001).
+         *
+         * These were previously literals in a seeder, which meant changing a price or a trial length
+         * was a deploy. The contract requires the trial's fee, duration and limits to be manageable
+         * from /admin, and the same argument applies to the prices they convert into.
+         *
+         * `price_annual` accepts an explicit null — that is how a plan is withdrawn from the annual
+         * term, and it has to be distinguishable from "not mentioned in this request".
+         */
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:120'],
+            'name_ar' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'summary_ar' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'summary_en' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'price_monthly' => ['sometimes', 'numeric', 'min:0'],
+            'price_annual' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'trial_fee' => ['sometimes', 'numeric', 'min:0'],
+            'trial_days' => ['sometimes', 'integer', 'min:0', 'max:365'],
+            'trial_limits' => ['sometimes', 'nullable', 'array'],
+            'limits' => ['sometimes', 'nullable', 'array'],
+            'features' => ['sometimes', 'nullable', 'array'],
             'is_active' => ['sometimes', 'boolean'],
+            // Withdrawing a plan from SALE is not the same as switching it off: everyone already on
+            // it must keep working, which is why these are two fields and not one.
+            'is_public' => ['sometimes', 'boolean'],
+            'sort_order' => ['sometimes', 'integer', 'min:0', 'max:9999'],
         ]);
 
         /** @var SubscriptionPlan|null $model */
         $model = SubscriptionPlan::query()->whereKey($plan)->first();
         abort_if($model === null, 404);
 
-        $before = $model->only(['name', 'is_active']);
+        $tracked = [
+            'name', 'name_ar', 'price_monthly', 'price_annual', 'trial_fee', 'trial_days',
+            'trial_limits', 'limits', 'features', 'is_active', 'is_public', 'sort_order',
+        ];
+        $before = $model->only($tracked);
         $model->fill($data)->save();
 
         AuditLog::create([
@@ -96,15 +144,14 @@ final class PlatformBillingController extends Controller
             'entity_type' => SubscriptionPlan::class,
             'entity_id' => (string) $model->getKey(),
             'before' => $before,
-            'after' => $model->only(['name', 'is_active']),
+            'after' => $model->only($tracked),
             'ip_address' => $request->ip(),
         ]);
 
-        return ApiResponse::success(['plan' => [
-            'id' => (string) $model->getKey(),
-            'name' => $model->name,
-            'is_active' => (bool) $model->is_active,
-        ]], 'Plan updated.');
+        return ApiResponse::success(
+            ['plan' => ['id' => (string) $model->getKey()] + $this->planRow($model->refresh())],
+            'Plan updated.',
+        );
     }
 
     /** GET /api/v1/admin/subscriptions — who is on what, across tenants. */
