@@ -11,7 +11,13 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
-`PLAN-001` — *feat(plans): the catalogue becomes an engine — two terms, a paid trial, and one price*
+`PAY-001…004 + SIGNUP-006` — the payment system and the five demo logins.
+
+Session order: `f71319d` (SIGNUP-002d + review queue) → `d4f57ff` (3 E2E root causes) → `c5cc4e7`
+(PLAN-001) → `d4872d1` → `c143817` (PLAN-001e, sign-up in two steps) → `34f2831` (PAY-001…005) →
+`c909a33` (SIGNUP-006) → this one.
+
+**802 backend · 433 vitest · 339 E2E on chromium + firefox + webkit, 0 failed, retries: 0.**
 
 Preceded by `d4f57ff` (three cross-browser E2E failures root-caused) and `f71319d` (SIGNUP-002d +
 SIGNUP-003/004 — registration becomes an application).
@@ -282,7 +288,19 @@ absences on the same request that used to produce all five.
 
 What is next, and why in this order:
 
-1. **PAY-001** — Moyasar as the official primary adapter, Stripe as the alternative, both behind the
+~~1. PAY-001~~ … ~~5. SIGNUP-006~~ — all landed. What remains:
+
+1. **Notifications.** Nothing tells a customer their renewal failed, their trial is ending, or their
+   application was decided. No mail provider is configured, so the status page is the only place a
+   decision becomes visible and the customer has to look. This is the largest honest gap.
+2. **Invoices, receipts and tax lines for the SUBSCRIPTION stream.** The client-services stream has
+   them (`Invoice`); the platform's own revenue does not.
+3. **`/admin` surfaces for the new engines** — subscription payments, trial claims and the lifecycle
+   sweep are all readable only from the database.
+4. **PORTAL-AUTH-001c** stays BLOCKED_OPERATIONAL_EVIDENCE. Do not retire `ClientPortalToken`.
+
+Historical, for reference:
+1. ~~**PAY-001**~~ — Moyasar as the official primary adapter, Stripe as the alternative, both behind the
    existing `PaymentProvider` port. No credentials exist, so both ship **Awaiting Credentials** and
    the sandbox path is what gets tested.
 2. **PAY-002** — checkout, signed webhooks, idempotency, no duplicate charge. The invariant to write

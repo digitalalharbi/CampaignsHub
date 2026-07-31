@@ -14,8 +14,16 @@ import { expect, test, type Page } from '@playwright/test'
  * proved by something functional rather than by a headline that marketing may reword.
  */
 const JOURNEYS = [
-  { key: 'self-service', url: /\/register\?journey=self-service&module=paid-media/, marker: (p: Page) => p.getByRole('button', { name: /إنشاء حساب|Create account/i }) },
-  { key: 'multi-client', url: /\/register\?journey=multi-client&module=paid-media/, marker: (p: Page) => p.getByRole('button', { name: /إنشاء حساب|Create account/i }) },
+  /*
+   * The organisation field, not the submit button.
+   *
+   * Sign-up became two steps (PLAN-001e), so the button on the first screen says "Continue" and
+   * "Create account" now lives on the second — a marker that was really asserting a button LABEL
+   * rather than that the page rendered. The first field is the functional control that only exists
+   * here, and it does not move when the copy or the step order does.
+   */
+  { key: 'self-service', url: /\/register\?journey=self-service&module=paid-media/, marker: (p: Page) => p.locator('form input#tenant_name') },
+  { key: 'multi-client', url: /\/register\?journey=multi-client&module=paid-media/, marker: (p: Page) => p.locator('form input#tenant_name') },
   { key: 'services', url: /\/services$/, marker: (p: Page) => p.getByTestId('service-categories') },
   { key: 'influencer', url: /\/requests\/new\?module=influencer-marketing/, marker: (p: Page) => p.getByRole('heading', { level: 1 }) },
 ] as const

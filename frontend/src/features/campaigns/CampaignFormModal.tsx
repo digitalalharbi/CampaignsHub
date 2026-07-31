@@ -157,9 +157,21 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
     setConversionEvents([])
     setCreativeTypes([])
     setTags([])
-    // draft.value is intentionally read once on open, not tracked, to avoid clobbering live edits.
+    /*
+     * Keyed on the modal opening and on WHICH campaign — never on the `defaults` object.
+     *
+     * `defaults` is a memo over the `campaign` prop, so any render that hands this component a fresh
+     * campaign object produced a new identity and re-ran this effect, resetting every field. That is
+     * a form that empties itself while you are typing: harmless when nothing else is loading, and a
+     * lost campaign name when a query settles a moment after the modal opens. It showed up as an
+     * intermittent WebKit failure where the name field was empty and the form had already been
+     * submitted and refused.
+     *
+     * `draft.value` is intentionally read once on open, not tracked, so restoring a draft cannot
+     * clobber live edits either.
+     */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, defaults, reset, campaign, isEdit])
+  }, [open, campaign?.id, isEdit])
 
   // Persist new-campaign field changes to the draft (create only); cleared on a successful submit.
   useEffect(() => {

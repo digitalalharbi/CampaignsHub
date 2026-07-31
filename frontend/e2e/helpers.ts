@@ -65,7 +65,20 @@ export async function createCampaign(page: Page, name: string) {
   // The campaigns page opens on the chart-heavy overview; wait for it to be interactive first.
   await expect(page.getByTestId('view-overview')).toBeVisible({ timeout: 20000 })
   await page.getByRole('button', { name: /New campaign|حملة جديدة/ }).click()
-  await page.getByLabel(/Campaign name|اسم الحملة/).fill(name)
+
+  /*
+   * Assert the field actually HOLDS the name before saving.
+   *
+   * `fill` writes the DOM value and dispatches an input event, but React has to render before its
+   * own state carries it — and on WebKit under the full three-browser load that had not always
+   * happened by the time the click landed. The form then posted an empty name, the server refused
+   * it, and the modal stayed open showing a validation error on a field the test had just filled.
+   * Waiting on the value is waiting for the precondition the next line depends on.
+   */
+  const nameField = page.getByLabel(/Campaign name|اسم الحملة/)
+  await nameField.fill(name)
+  await expect(nameField).toHaveValue(name)
+
   const save = page.getByRole('button', { name: /^Save$|^حفظ$/ })
   await save.click()
   // Wait for the modal to actually close before touching the page behind it — clicking the view

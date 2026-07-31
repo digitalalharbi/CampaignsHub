@@ -617,3 +617,23 @@ what the contract forbids: «لا تزوّر دخول عميل البوابة ب
 The claim under test is not "five accounts exist" — it is that each reaches its own portal and is
 **refused at every other one**, through the real sign-in, with no session created and the refusal
 naming where that account should go instead.
+
+## XBROWSER-2 — two defects found by the gate, root-caused
+
+**The campaign form emptied itself while you were typing.** `CampaignFormModal`'s reset-on-open effect
+depended on `defaults`, a memo over the `campaign` prop — so any render handing the component a fresh
+campaign object produced a new identity and re-ran the reset, clearing every field. Harmless when
+nothing else is loading; a lost campaign name when a query settles a moment after the modal opens.
+It surfaced as an intermittent WebKit failure where the name field was empty and the form had already
+been submitted and refused, and the screenshot showed the validation error sitting above a field the
+test had just filled. The effect is now keyed on the modal opening and on WHICH campaign, which is
+what it always meant.
+
+**The homepage-journey markers were asserting a button label.** Both register journeys used the
+"Create account" button to prove the destination rendered; sign-up became two steps (PLAN-001e) and
+that button moved to the second. They now assert the organisation field — the functional control that
+only exists on that page and does not move when copy or step order does.
+
+The `createCampaign` helper also now asserts the name field HOLDS the value before saving. `fill`
+writes the DOM and dispatches an event, but React has to render before its state carries it; waiting
+on the value is waiting for the precondition the next line depends on, not a retry.
