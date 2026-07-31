@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Subscriptions\Http\Controllers\PublicPlanController;
 use App\Domains\Subscriptions\Http\Controllers\SubscriptionController;
+use App\Domains\Subscriptions\Http\Controllers\SubscriptionInvoiceController;
 use App\Domains\Subscriptions\Http\Controllers\SubscriptionPaymentController;
 use Illuminate\Support\Facades\Route;
 
@@ -49,7 +50,29 @@ Route::middleware('throttle:60,1')->group(function (): void {
         ->name('auth.registration.checkout');
 });
 
+/*
+ * A shared invoice, publicly (SUBINV-001).
+ *
+ * The token IS the authorisation — 48 random characters, minted deliberately and revocable by
+ * removing it. It exists so a customer can hand a document to an accountant who has no account here.
+ */
+Route::get('subscriptions/invoices/shared/{token}', [SubscriptionInvoiceController::class, 'shared'])
+    ->middleware('throttle:30,1')->name('subscriptions.invoices.shared');
+
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(function (): void {
+    // CampaignsHub's own invoices to this customer — NOT the agency's invoices to its clients,
+    // which live under /billing and answer to a different permission.
+    Route::get('subscriptions/invoices', [SubscriptionInvoiceController::class, 'index'])
+        ->name('subscriptions.invoices.index');
+    Route::get('subscriptions/invoices/{invoice}', [SubscriptionInvoiceController::class, 'show'])
+        ->name('subscriptions.invoices.show');
+    Route::get('subscriptions/invoices/{invoice}/download', [SubscriptionInvoiceController::class, 'download'])
+        ->name('subscriptions.invoices.download');
+    Route::post('subscriptions/invoices/{invoice}/share', [SubscriptionInvoiceController::class, 'share'])
+        ->name('subscriptions.invoices.share');
+    Route::delete('subscriptions/invoices/{invoice}/share', [SubscriptionInvoiceController::class, 'revokeShare'])
+        ->name('subscriptions.invoices.share.revoke');
+
     Route::get('subscriptions/plans', [SubscriptionController::class, 'plans'])->name('subscriptions.plans');
     Route::get('subscriptions/current', [SubscriptionController::class, 'current'])->name('subscriptions.current');
     Route::post('subscriptions/change', [SubscriptionController::class, 'change'])->name('subscriptions.change');

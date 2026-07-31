@@ -347,3 +347,66 @@ export function updateRegistrationTerms(id: string, terms: RegistrationTerms): P
 }> {
   return patchData(`/admin/registrations/${id}`, terms)
 }
+
+/*
+ * The payment gateways, from the console (PAYSET-001).
+ *
+ * Read and test only. There is deliberately no function here that writes a secret: a console able to
+ * change a gateway key is a console whose compromise redirects every customer payment. Keys live in
+ * the environment, and this surface reports what the environment supports.
+ */
+
+export interface PaymentProviderSetting {
+  provider: 'moyasar' | 'stripe' | string
+  label: { ar: string; en: string }
+  /** `primary` or `alternative` — a product decision, not a consequence of which keys exist. */
+  role: string
+  is_default: boolean
+  /** `live` or `awaiting_credentials`. */
+  status: string
+  available: boolean
+  /** `sandbox`, `live` or `unset` — read from the KEY, never from a separate toggle. */
+  environment: string
+  requires: { key: string; present: boolean }[]
+  webhook_url: string
+}
+
+export interface PaymentSettings {
+  default: string
+  currency: string
+  providers: PaymentProviderSetting[]
+  /** A payment system that cannot tell anybody a charge failed is only half configured. */
+  mail: { state: string; driver: string }
+}
+
+export function fetchPaymentSettings(): Promise<PaymentSettings> {
+  return getData('/admin/settings/integrations/payments')
+}
+
+export function fetchPaymentWebhook(provider: string): Promise<{
+  provider: string
+  url: string
+  authentication: string
+  events: string[]
+}> {
+  return getData(`/admin/settings/integrations/payments/${provider}/webhook`)
+}
+
+export function fetchSecretRotation(provider: string): Promise<{
+  provider: string
+  variables: string[]
+  steps: string[]
+  note: string
+}> {
+  return getData(`/admin/settings/integrations/payments/${provider}/rotation`)
+}
+
+/** A real round trip to the gateway. Nothing is charged — a session is an intent that expires unused. */
+export function testPaymentProvider(provider: string): Promise<{
+  provider: string
+  reachable: boolean
+  status: string
+  error: string | null
+}> {
+  return postData(`/admin/settings/integrations/payments/${provider}/test`, {})
+}

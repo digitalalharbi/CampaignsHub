@@ -31,6 +31,7 @@ final class SubscriptionCheckout
         private readonly SubscriptionProviderRegistry $providers,
         private readonly PlanCatalogue $catalogue,
         private readonly TrialEligibility $trials,
+        private readonly SubscriptionInvoicing $invoices,
     ) {}
 
     /**
@@ -188,6 +189,15 @@ final class SubscriptionCheckout
             'status' => $session['status'] === 'awaiting_credentials' ? 'awaiting_credentials' : $payment->status,
             'error' => $session['error'] ?? null,
         ])->save();
+
+        /*
+         * The document exists from the moment the charge does (SUBINV-001).
+         *
+         * Not when it is paid: a customer is entitled to the invoice that says what they were asked
+         * for whether or not they go on to pay it, and one conjured retrospectively from a payment
+         * can show no due date and no unpaid balance.
+         */
+        $this->invoices->issueFor($payment->refresh());
 
         return [
             'payment' => $payment->refresh(),

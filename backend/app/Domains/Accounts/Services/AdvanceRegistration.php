@@ -8,6 +8,7 @@ use App\Domains\Accounts\Actions\ProvisionWorkspace;
 use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Subscriptions\Notifications\SubscriptionNotifier;
 
 /**
  * Moves an application to the next thing it is actually waiting on (SIGNUP-002).
@@ -27,6 +28,7 @@ final class AdvanceRegistration
         private readonly RegistrationPolicy $policy,
         private readonly ProvisionWorkspace $provision,
         private readonly AuditLogger $audit,
+        private readonly SubscriptionNotifier $notify,
     ) {}
 
     /** The applicant proved their email address. */
@@ -64,6 +66,15 @@ final class AdvanceRegistration
             'review_note' => $note,
         ])->save();
 
+        /*
+         * The applicant hears about it (NOTIF-SUB-001).
+         *
+         * Before this, a decision was visible only if the applicant thought to reload their status
+         * page — an approval that nobody is told about is indistinguishable from one that never
+         * happened.
+         */
+        $this->tell($request, 'registration_approved', ['reason' => $note ?? '']);
+
         $this->audit->log(
             action: 'registration.approved',
             entityType: RegistrationRequest::class,
@@ -84,6 +95,10 @@ final class AdvanceRegistration
             'reviewed_by' => $reviewerId,
             'reviewed_at' => now(),
         ])->save();
+
+        // A refusal always carries its reason: "rejected" with no explanation is a support ticket
+        // nobody can answer either.
+        $this->tell($request, 'registration_rejected', ['reason' => $reason]);
 
         $this->audit->log(
             action: 'registration.rejected',
@@ -163,6 +178,24 @@ final class AdvanceRegistration
         $this->provision->execute($request);
 
         return $request->refresh();
+    }
+
+    /**
+     * Tell the applicant, without letting a message break the decision it accompanies.
+     *
+     * A notifier that threw here would roll back an approval, and an application stuck in a queue
+     * because a template was wrong is a worse failure than a message nobody received.
+     */
+    private function tell(RegistrationRequest $request, string $event, array $context): void
+    {
+        try {
+            $this->notify->notifyApplicant($request, $event, $context + [
+                'url' => rtrim((string) config('app.frontend_url', config('app.url')), '/')
+                    .'/signup/status?request='.$request->getKey(),
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     private function moveTo(RegistrationRequest $request, AccountState $state): RegistrationRequest

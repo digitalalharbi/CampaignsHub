@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react'
+import { InvoicesPage } from './InvoicesPage'
 import { SubscriptionsPage } from './SubscriptionsPage'
 
 /**
@@ -7,4 +8,7 @@ import { SubscriptionsPage } from './SubscriptionsPage'
  */
 export const subscriptionsRoutes: { path: string; element: ReactElement }[] = [
   { path: 'subscriptions', element: <SubscriptionsPage /> },
+  // CampaignsHub's own invoices to this customer — NOT the agency's invoices to its clients, which
+  // live under /billing and answer to a different permission (SUBINV-001).
+  { path: 'subscriptions/invoices', element: <InvoicesPage /> },
 ]

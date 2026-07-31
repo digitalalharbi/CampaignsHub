@@ -637,3 +637,80 @@ only exists on that page and does not move when copy or step order does.
 The `createCampaign` helper also now asserts the name field HOLDS the value before saving. `fill`
 writes the DOM and dispatches an event, but React has to render before its state carries it; waiting
 on the value is waiting for the precondition the next line depends on, not a retry.
+
+## NOTIF-SUB-001 · SUBINV-001 · PAYSET-001 — the three gaps, closed
+
+| ID | Requirement | Status |
+| --- | --- | --- |
+| NOTIF-SUB-001 | Operational notifications for trial, approval, payment, failed renewal, ending trial, past due, suspension and reactivation — email + in-app, AR/EN, queued, with a delivery ledger. | **VERIFIED** (13 tests) |
+| SUBINV-001 | CampaignsHub's own invoices — lines, discounts, tax, currency, payment state, download, share, audit — entirely separate from an agency's invoices to its clients. | **VERIFIED** (13 tests) |
+| PAYSET-001 | `/admin/settings/integrations/payments`: environment, webhooks, sandbox/live keys, connection test, secret rotation, and no incomplete provider shown as working. | **VERIFIED** (10 + 7 tests) |
+| JOURNEY-001 | The whole commercial journey in one run, through the real endpoints. | **VERIFIED** (2 tests) |
+
+### Three delivery states, kept apart
+
+The single most important thing in the notification work is that **`awaiting_credentials`, `sandbox`
+and `sent` are three different states**. All three look like success from the caller's side, and only
+one means a human being received anything — a system that recorded all three as "sent" would report a
+delivery rate that means nothing, and the first anybody would know is a customer saying they were
+never told.
+
+`MailTransportState` asks each driver for the credential it cannot work without, because Laravel ships
+`smtp` and `ses` in `mail.mailers` whether or not anybody supplied keys: the presence of a driver
+proves nothing. A test sets a real driver with empty credentials — what an untouched install actually
+looks like — and asserts `awaiting_credentials`.
+
+Notifications are **rendered at dispatch and stored on the row**, so "what did we actually tell them?"
+is answerable after the fact. Dedup is on the OCCASION (`renewal_failed:{subscription}:{payment}`), not
+the event: the sweep is safe to run twice by design, so without it a customer gets "your card was
+refused" every morning — and with the event alone they would never hear about next month's failure.
+Both directions have tests.
+
+An APPLICANT has no tenant, no user row and no bell, which is why this ledger is addressed by email
+rather than by membership and why it is not `app_notifications` — that table is tenant-scoped with a
+NOT NULL key, and making it nullable would have made every tenant-scoped read of it fail-open.
+
+### Two invoice ledgers, never one
+
+`subscription_invoices` is deliberately not `invoices`. The existing table is a TENANT's document to
+its own client; this one is ours to the tenant. Whose tax number appears on it, whose currency governs,
+who may read it, and which revenue figure it belongs to are all different answers — and one table for
+both would have put an agency's client invoices and its own subscription bills behind the same
+permission.
+
+An invoice is issued when the CHARGE is opened, not when it is paid: a customer is entitled to the
+document that says what they were asked for whether or not they pay it, and one conjured retrospectively
+from a payment can show no due date and no outstanding balance. Every money column is stored rather than
+derived, so a later VAT change cannot silently rewrite history — for a tax document, the kind of wrong
+that has consequences.
+
+**A defect was found here.** The first invoice a customer ever receives is issued before their tenant
+exists, and settlement originally ran before provisioning — so that invoice stayed attached to no
+tenant and never appeared in the customer's own list. They had been charged for something they could
+not see a document for. Settlement now runs after provisioning and stamps the workspace.
+
+### The gateway console has no field for a secret
+
+`/admin/settings/integrations/payments` reads and tests; it does not write. A console able to change a
+gateway secret is a console whose compromise redirects every customer payment, and the rotation an
+operator actually needs is at the provider, then in the environment, then a restart — which the page
+documents in four steps instead of offering a button.
+
+Sandbox or live is read from the KEY itself, never from a separate toggle: a toggle that can disagree
+with the key in use is how somebody ends up certain they are in test mode while taking real money. A
+half-configured provider — a secret key with no webhook secret — is shown as unusable, because it could
+open a checkout that nothing is able to confirm: the customer charged, and no account ever activated.
+The connection test is a real round trip, refused up front when there are no credentials, because "we
+could not reach the gateway" and "you have not given us a key" are different problems with different
+fixes.
+
+### Still not true
+
+- **No money has ever moved.** `CommercialJourneyTest` runs on a sandbox key with a sandbox webhook
+  secret and says so in its own name; a second test asserts the product's reporting agrees. An internal
+  test is not evidence of a live charge.
+- **No notification has reached a human being.** The mail transport is `log`, which the ledger records
+  as `sandbox` and never as `sent`.
+- **The invoice download is plain text, not PDF.** A PDF renderer that has never been proven on Arabic
+  is worse than none — this repository has already fixed one Arabic text-layer defect. The endpoint
+  changes shape, not meaning, when one is added.

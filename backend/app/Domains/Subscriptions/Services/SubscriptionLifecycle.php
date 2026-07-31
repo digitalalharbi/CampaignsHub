@@ -10,6 +10,7 @@ use App\Domains\Accounts\Services\TransitionAccountState;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
+use App\Domains\Subscriptions\Notifications\SubscriptionNotifier;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Scopes\TenantScope;
 use Illuminate\Database\Eloquent\Builder;
@@ -39,6 +40,7 @@ final class SubscriptionLifecycle
         private readonly SubscriptionService $subscriptions,
         private readonly TransitionAccountState $transitions,
         private readonly AuditLogger $audit,
+        private readonly SubscriptionNotifier $notify,
     ) {}
 
     // ── Starting ──────────────────────────────────────────────────────────────────────────────
@@ -80,6 +82,13 @@ final class SubscriptionLifecycle
             'provider' => $payment->provider,
         ])->save();
 
+        $this->tell($tenant, 'trial_started', $subscription->refresh(), [
+            'days' => $plan->trial_days,
+            'amount' => (string) $payment->amount,
+            'currency' => $payment->currency,
+            'date' => $trialEnds->toDateString(),
+        ]);
+
         $this->audit->log(
             action: 'subscription.trial.started',
             entityType: Subscription::class,
@@ -104,6 +113,9 @@ final class SubscriptionLifecycle
     public function runDueWork(?SubscriptionCheckout $checkout = null): array
     {
         return [
+            // BEFORE the conversion, deliberately: a warning that arrives after the charge is not a
+            // warning, and the whole point is that the customer can still cancel.
+            'trials_warned' => $this->warnEndingTrials(),
             'trials_converted' => $this->convertDueTrials($checkout),
             'renewals_charged' => $this->chargeDueRenewals($checkout),
             'marked_past_due' => $this->markPastDue(),
@@ -142,6 +154,8 @@ final class SubscriptionLifecycle
 
             $checkout?->chargeSubscription($subscription->refresh(), 'subscription');
 
+            $this->tell($this->tenantOf($subscription), 'trial_converted', $subscription->refresh());
+
             $this->audit->log(
                 action: 'subscription.trial.converted',
                 entityType: Subscription::class,
@@ -154,6 +168,43 @@ final class SubscriptionLifecycle
         }
 
         return $converted;
+    }
+
+    /**
+     * Trials close enough to their end that the customer should be told (PAY-003, NOTIF-SUB-001).
+     *
+     * The contract asks for a "قرب الانتهاء" warning, and its value is entirely in the timing: it must
+     * arrive while cancelling is still free. Two days is far enough ahead to act on and near enough
+     * that the trial is still fresh in mind.
+     *
+     * Only trials that WILL convert are warned. One with no recorded consent is going to be cancelled
+     * rather than billed, and telling that customer they are about to be charged would be false.
+     */
+    public function warnEndingTrials(int $daysAhead = 2): int
+    {
+        $ending = $this->query()
+            ->where('status', 'trialing')
+            ->whereNotNull('trial_ends_at')
+            ->where('trial_ends_at', '>', Carbon::now())
+            ->where('trial_ends_at', '<=', Carbon::now()->addDays($daysAhead))
+            ->get()
+            ->filter(fn (Subscription $s) => $s->mayAutoConvert());
+
+        foreach ($ending as $subscription) {
+            $this->tell(
+                $this->tenantOf($subscription),
+                'trial_ending',
+                $subscription,
+                [
+                    'days' => (int) ceil(Carbon::now()->diffInDays($subscription->trial_ends_at, absolute: true)),
+                    'date' => $subscription->trial_ends_at?->toDateString() ?? '',
+                ],
+                // Once per trial, not once per sweep — the warning window spans several days.
+                occasion: $subscription->getKey().':'.($subscription->trial_ends_at?->toDateString() ?? ''),
+            );
+        }
+
+        return $ending->count();
     }
 
     /** Active subscriptions whose period has ended: open the renewal charge, do not extend anything yet. */
@@ -234,6 +285,16 @@ final class SubscriptionLifecycle
         if ($tenant !== null) {
             // PastDue is OPERATIONAL — the account keeps working while the customer sorts the card out.
             $this->transitions->execute($tenant, AccountState::PastDue, $why);
+
+            /*
+             * Told once per GRACE PERIOD, not once per sweep.
+             *
+             * The sweep runs daily and is safe to run twice; without the occasion in the key a
+             * customer would receive "your card was refused" every morning until they fixed it.
+             */
+            $this->tell($tenant, 'past_due', $subscription->refresh(), [
+                'date' => $subscription->grace_ends_at?->toDateString() ?? '',
+            ], occasion: $subscription->getKey().':'.($subscription->grace_ends_at?->toDateString() ?? 'grace'));
         }
 
         return $subscription->refresh();
@@ -253,6 +314,8 @@ final class SubscriptionLifecycle
 
         if ($tenant !== null) {
             $this->transitions->execute($tenant, AccountState::Suspended, $why);
+            // Says explicitly that nothing was deleted — the first question anybody locked out asks.
+            $this->tell($tenant, 'suspended', $subscription->refresh());
         }
 
         return $subscription->refresh();
@@ -278,6 +341,11 @@ final class SubscriptionLifecycle
 
         if ($tenant !== null) {
             $this->transitions->execute($tenant, AccountState::Active, 'A renewal was confirmed by the gateway.');
+
+            $this->tell($tenant, 'payment_confirmed', $subscription->refresh(), [
+                'amount' => (string) $payment->amount,
+                'currency' => $payment->currency,
+            ], occasion: $subscription->getKey().':'.$payment->getKey());
         }
 
         $this->audit->log(
@@ -295,6 +363,15 @@ final class SubscriptionLifecycle
         $subscription = $this->find($payment->subscription_id);
 
         if ($subscription !== null) {
+            $tenant = $this->tenantOf($subscription);
+
+            if ($tenant !== null) {
+                $this->tell($tenant, 'renewal_failed', $subscription, [
+                    'amount' => (string) $payment->amount,
+                    'currency' => $payment->currency,
+                ], occasion: $subscription->getKey().':'.$payment->getKey());
+            }
+
             $this->enterPastDue($subscription, 'The gateway refused the renewal.');
         }
     }
@@ -357,6 +434,10 @@ final class SubscriptionLifecycle
             $this->transitions->execute($tenant, AccountState::Active, $why);
         }
 
+        if ($tenant !== null) {
+            $this->tell($tenant, 'reactivated', $subscription->refresh());
+        }
+
         $this->audit->log(
             action: 'subscription.reactivated',
             entityType: Subscription::class,
@@ -383,6 +464,31 @@ final class SubscriptionLifecycle
             ->whereNull('refunded_at')
             ->where('created_at', '>=', $subscription->current_period_end ?? Carbon::now()->subYear())
             ->exists();
+    }
+
+    /**
+     * Raise a lifecycle message, never letting it break the transition it accompanies.
+     *
+     * A notifier that throws would roll back a suspension, and an account left running because an
+     * email template was wrong is a worse failure than a message nobody received. The row and the
+     * queue are the durable part; this call is not.
+     */
+    private function tell(?Tenant $tenant, string $event, Subscription $subscription, array $extra = [], ?string $occasion = null): void
+    {
+        if ($tenant === null) {
+            return;
+        }
+
+        try {
+            $this->notify->notifyTenant(
+                $tenant,
+                $event,
+                $this->notify->contextFor($subscription, $extra),
+                $occasion,
+            );
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     private function tenantOf(Subscription $subscription): ?Tenant

@@ -78,6 +78,7 @@ import { RequirePortal } from '@/features/auth/RequirePortal'
 import { PlatformOverviewPage } from '@/features/admin/PlatformOverviewPage'
 import { TenantsPage } from '@/features/admin/TenantsPage'
 import { RegistrationsPage } from '@/features/admin/RegistrationsPage'
+import { PaymentSettingsPage } from '@/features/admin/PaymentSettingsPage'
 import { SystemSettingsPage } from '@/features/admin/SystemSettingsPage'
 import { BillingPage as AdminBillingPage } from '@/features/admin/BillingPage'
 import { AuditPage } from '@/features/admin/AuditPage'
@@ -313,6 +314,9 @@ export const router = createBrowserRouter([
             { path: 'registrations', element: <RegistrationsPage /> },
             { path: 'billing', element: <AdminBillingPage /> },
             { path: 'settings', element: <SystemSettingsPage /> },
+            // PAYSET-001 — the gateways. Its own page rather than a tab, because it is the surface an
+            // operator opens when money is not moving.
+            { path: 'settings/integrations/payments', element: <PaymentSettingsPage /> },
             { path: 'cutover', element: <CutoverPage /> },
             { path: 'audit', element: <AuditPage /> },
           ],

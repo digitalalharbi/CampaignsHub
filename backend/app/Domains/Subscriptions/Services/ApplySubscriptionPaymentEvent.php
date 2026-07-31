@@ -41,6 +41,7 @@ final class ApplySubscriptionPaymentEvent
         private readonly AdvanceRegistration $advance,
         private readonly TrialEligibility $trials,
         private readonly SubscriptionLifecycle $lifecycle,
+        private readonly SubscriptionInvoicing $invoices,
         private readonly TenantContext $tenants,
         private readonly AuditLogger $audit,
     ) {}
@@ -162,6 +163,20 @@ final class ApplySubscriptionPaymentEvent
                 'paid' => $this->settle($payment->refresh(), $fingerprint),
                 'refunded', 'disputed' => $this->reverse($payment->refresh()),
                 'failed' => $this->failed($payment->refresh()),
+                default => null,
+            };
+
+            /*
+             * The document follows the money — and follows the PROVISIONING too.
+             *
+             * Deliberately after `settle()`: the very first invoice a customer receives is issued
+             * before their workspace exists, and it is `settle()` that creates the workspace. Marking
+             * the document paid first left it attached to no tenant, so the customer had been charged
+             * for something they could not see a document for.
+             */
+            match ($status) {
+                'paid' => $this->invoices->settle($payment->refresh()),
+                'refunded' => $this->invoices->refund($payment->refresh(), 'The gateway reported a refund.'),
                 default => null,
             };
         });

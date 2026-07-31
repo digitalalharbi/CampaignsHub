@@ -288,16 +288,16 @@ absences on the same request that used to produce all five.
 
 What is next, and why in this order:
 
-~~1. PAY-001~~ … ~~5. SIGNUP-006~~ — all landed. What remains:
+All three of the gaps recorded here have since been closed — notifications (NOTIF-SUB-001),
+subscription invoices (SUBINV-001) and the gateway console (PAYSET-001). What remains is external or
+blocked:
 
-1. **Notifications.** Nothing tells a customer their renewal failed, their trial is ending, or their
-   application was decided. No mail provider is configured, so the status page is the only place a
-   decision becomes visible and the customer has to look. This is the largest honest gap.
-2. **Invoices, receipts and tax lines for the SUBSCRIPTION stream.** The client-services stream has
-   them (`Invoice`); the platform's own revenue does not.
-3. **`/admin` surfaces for the new engines** — subscription payments, trial claims and the lifecycle
-   sweep are all readable only from the database.
-4. **PORTAL-AUTH-001c** stays BLOCKED_OPERATIONAL_EVIDENCE. Do not retire `ClientPortalToken`.
+1. **Credentials.** Moyasar and Stripe both report Awaiting Credentials, and the mail transport is
+   `log` (recorded as `sandbox`, never as `sent`). Nothing here can be finished without real keys, and
+   nothing pretends otherwise.
+2. **A PDF renderer for the invoice download.** Currently plain text, deliberately: an untested Arabic
+   PDF path is worse than none — see the CampaignsHub PDF text-layer defect already fixed once.
+3. **PORTAL-AUTH-001c** stays BLOCKED_OPERATIONAL_EVIDENCE. Do not retire `ClientPortalToken`.
 
 Historical, for reference:
 1. ~~**PAY-001**~~ — Moyasar as the official primary adapter, Stripe as the alternative, both behind the

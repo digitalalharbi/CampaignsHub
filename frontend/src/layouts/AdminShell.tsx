@@ -41,6 +41,7 @@ const adminNav = [
   { to: '/admin/registrations', ar: 'طلبات التسجيل', en: 'Registrations', icon: ClipboardCheck },
   { to: '/admin/billing', ar: 'الخطط والاشتراكات', en: 'Plans & subscriptions', icon: CreditCard },
   { to: '/admin/settings', ar: 'إعدادات النظام', en: 'System settings', icon: Settings },
+  { to: '/admin/settings/integrations/payments', ar: 'وسائل الدفع', en: 'Payment methods', icon: CreditCard },
   { to: '/admin/cutover', ar: 'انتقال بوابة العملاء', en: 'Portal cutover', icon: ShieldAlert },
   { to: '/admin/audit', ar: 'السجلات والتدقيق', en: 'Logs & audit', icon: ScrollText },
 ] as const

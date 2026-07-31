@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
+use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
@@ -59,6 +60,23 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::patch('/plans/{plan}', [PlatformBillingController::class, 'updatePlan'])->name('plans.update');
         Route::get('/subscriptions', [PlatformBillingController::class, 'subscriptions'])->name('subscriptions.index');
         Route::get('/revenue', [PlatformBillingController::class, 'revenue'])->name('revenue.index');
+
+        /*
+         * PAYSET-001 — the payment gateways.
+         *
+         * READ and TEST only. There is deliberately no endpoint that writes a gateway secret: a
+         * console able to change one is a console whose compromise redirects every customer payment.
+         * Keys live in the environment; this surface says what the environment supports and what is
+         * missing, which is the question an operator actually has.
+         */
+        Route::prefix('/settings/integrations/payments')->name('payments.')->group(function (): void {
+            Route::get('/', [PlatformPaymentSettingsController::class, 'index'])->name('index');
+            Route::get('/{provider}/webhook', [PlatformPaymentSettingsController::class, 'webhook'])->name('webhook');
+            Route::get('/{provider}/rotation', [PlatformPaymentSettingsController::class, 'rotation'])->name('rotation');
+            // A real round trip to the gateway, rate limited because it leaves the building.
+            Route::post('/{provider}/test', [PlatformPaymentSettingsController::class, 'test'])
+                ->middleware('throttle:10,1')->name('test');
+        });
 
         // ADMIN-003 — read surfaces. The permission catalogue is code (PermissionSeeder), the
         // integration view counts what tenants have connected, and the status check is the SAME one

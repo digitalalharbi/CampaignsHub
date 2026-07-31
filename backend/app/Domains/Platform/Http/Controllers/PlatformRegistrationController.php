@@ -10,6 +10,7 @@ use App\Domains\Accounts\Services\AdvanceRegistration;
 use App\Domains\Accounts\Services\RegistrationPolicy;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Audit\Models\AuditLog;
+use App\Domains\Subscriptions\Notifications\SubscriptionNotifier;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -36,6 +37,7 @@ final class PlatformRegistrationController extends Controller
         private readonly AdvanceRegistration $advance,
         private readonly RegistrationPolicy $policy,
         private readonly AuditLogger $audit,
+        private readonly SubscriptionNotifier $notify,
     ) {}
 
     /** GET /api/v1/admin/registrations */
@@ -153,6 +155,18 @@ final class PlatformRegistrationController extends Controller
             'info_requested_at' => now(),
             'reviewed_by' => $request->user()?->id,
         ])->save();
+
+        // The applicant is told what is needed — otherwise the queue stalls with neither side
+        // expecting to move, which is the failure "request information" exists to avoid.
+        try {
+            $this->notify->notifyApplicant($registration->refresh(), 'registration_information_requested', [
+                'reason' => $data['note'],
+                'url' => rtrim((string) config('app.frontend_url', config('app.url')), '/')
+                    .'/signup/status?request='.$registration->getKey(),
+            ], occasion: $registration->getKey().':'.now()->toDateString());
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         $this->audit->log(
             action: 'registration.info_requested',
