@@ -11,13 +11,16 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
-`2919ec9` — *perf(campaigns): open on the card list, not the chart-heavy overview*
+`7722821` — *fix(portals): the portal decides the surface, not the account type*
+
+Preceded by `a382e04` (INFL-002, the creator's side) → `2f88246` (users.tenant_id dropped) →
+`f1c2f49` (the paid-SaaS contract ratified) → `7722821` (the REG-001 regression closed).
 
 Last work unit: `f0c813e` (CMS backend) → `320b569` (CMS editor + homepage rendering) → `fc90666` (docs).
 Frozen delivery tags, **never move or rewrite**: `v1.0.0-baseline`, `v1.1.0-expanded-final`.
 
 ## Working tree status
-**CLEAN** — `git status --porcelain` is empty at `fc90666`.
+**CLEAN** — `git status --porcelain` is empty at `7722821`.
 **No uncommitted work, no stash, no undocumented WIP.** Nothing was left half-edited; the last unit
 closed on a green run.
 
