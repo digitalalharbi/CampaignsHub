@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Domains\Billing\Providers\MoyasarPaymentProvider;
 use App\Domains\Billing\Providers\NullPaymentProvider;
+use App\Domains\Billing\Providers\StripePaymentProvider;
 
 return [
     /*
@@ -24,6 +26,16 @@ return [
     | real gateway by binding a configured class here; nothing else changes.
     */
     'providers' => [
+        /*
+         * The SAME adapters the platform's own revenue uses (PAY-001).
+         *
+         * One port, two money streams: an agency collecting from its clients and CampaignsHub
+         * collecting from the agency go through identical code with separate configuration. Adding a
+         * gateway is a line here and nothing else — no call site changes, which is what "unified
+         * payment adapter" has to mean to be worth anything.
+         */
+        'moyasar' => MoyasarPaymentProvider::class,
+        'stripe' => StripePaymentProvider::class,
         'null' => NullPaymentProvider::class,
     ],
 

@@ -299,6 +299,26 @@ blocked:
    PDF path is worse than none — see the CampaignsHub PDF text-layer defect already fixed once.
 3. **PORTAL-AUTH-001c** stays BLOCKED_OPERATIONAL_EVIDENCE. Do not retire `ClientPortalToken`.
 
+### The matrix was audited row by row, and several rows were STALE
+
+Four rows read NOT_STARTED for work that had in fact landed, which is its own kind of dishonesty — a
+matrix nobody trusts is a matrix nobody reads. Corrected with the evidence:
+
+- **PLAN-001/002/003** — the plans engine, backend enforcement, and over-limit behaviour.
+- **PAY-001/003/004**, **OPS-001** — the adapters, webhook-only activation, invoices, self-operation.
+- **APP-ADS-001** — `external_ad_sets` / `external_ads` landed in CAMPDET-010.
+- **PORTAL-PAY-001** — `POST /client/invoices/{invoice}/pay` already opens a charge through the same
+  `PaymentProvider` port, and Moyasar/Stripe are now registered in `config/billing.php` too.
+
+**PAY-002 is genuinely PARTIAL and stays that way.** Renewal, cancellation, refunds, chargebacks and
+retries are done. **Upgrade/downgrade mid-term and proration are not built** — changing plan re-prices
+from the next period and nothing computes a part-period credit. That is the single largest unbuilt
+piece of the commercial contract.
+
+**A real defect was found doing this audit**: the plan-limit refusal used `abort(Response)` from
+middleware, which this application's exception handler renders as a **500**. Customers hitting a plan
+cap saw a crash instead of "you have used 3 of 3". Middleware now returns the response.
+
 Historical, for reference:
 1. ~~**PAY-001**~~ — Moyasar as the official primary adapter, Stripe as the alternative, both behind the
    existing `PaymentProvider` port. No credentials exist, so both ship **Awaiting Credentials** and

@@ -16,6 +16,7 @@ use App\Domains\Subscriptions\Services\TrialEligibility;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Models\Workspace;
 use App\Domains\Tenancy\Scopes\TenantScope;
+use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\SubscriptionPlanSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -354,5 +355,44 @@ final class SubscriptionLifecycleTest extends TestCase
             SubscriptionPayment::query()->where('subscription_id', $subscription->getKey())->count(),
             'the second sweep must not open a second charge',
         );
+    }
+
+    // ── Over-limit behaviour (PLAN-003) ───────────────────────────────────────────────────────
+
+    /**
+     * A refusal that names the numbers, and takes nothing away.
+     *
+     * "You have reached your plan limit" leaves somebody to guess what the limit is, how close they
+     * were, and whether upgrading would help. Saying 3 of 3 answers all three — and the contract asks
+     * for the usage shown against the limit, not merely for the block.
+     */
+    public function test_hitting_a_plan_limit_is_refused_with_the_numbers_and_deletes_nothing(): void
+    {
+        $subscription = $this->paidTrial();
+        $tenant = Tenant::query()->withoutGlobalScopes()->findOrFail($subscription->tenant_id);
+        $user = User::where('email', 'trialist@a.test')->firstOrFail();
+
+        // The trial caps projects at three. Meter it to the cap.
+        $service = app(SubscriptionService::class);
+        for ($i = 0; $i < 3; $i++) {
+            $service->increment($tenant, 'projects');
+        }
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/projects', ['name' => 'One too many'])
+            ->assertForbidden();
+
+        $response->assertJsonPath('meta.plan_limit', true)
+            ->assertJsonPath('meta.metric', 'projects')
+            ->assertJsonPath('meta.used', 3)
+            ->assertJsonPath('meta.limit', 3)
+            // Named, so the interface offers the upgrade rather than inventing a route.
+            ->assertJsonPath('meta.upgrade_path', '/app/subscriptions');
+
+        $this->assertStringContainsString('3 of 3', (string) $response->json('message'));
+
+        // Nothing the customer already had was removed or hidden — the create was refused, and that
+        // is all that happened.
+        $this->assertSame(3, $service->usage($tenant, 'projects'));
     }
 }

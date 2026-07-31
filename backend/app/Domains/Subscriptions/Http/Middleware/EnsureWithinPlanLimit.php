@@ -35,7 +35,42 @@ final class EnsureWithinPlanLimit
         if ($tenantId !== null) {
             $tenant = Tenant::find((string) $tenantId);
             if ($tenant !== null && ! $this->subscriptions->withinLimit($tenant, $metric)) {
-                abort(403, "You have reached your plan limit for \"{$metric}\". Upgrade your plan to add more.");
+                /*
+                 * The refusal carries the NUMBERS (PLAN-003).
+                 *
+                 * "You have reached your plan limit" leaves somebody to guess what the limit is, how
+                 * close they were, and whether upgrading would even help. Saying 25 of 25 answers all
+                 * three in one line — and the contract asks for the usage shown against the limit,
+                 * not merely for the block.
+                 *
+                 * Nothing is deleted and nothing is hidden: the create is refused, and everything the
+                 * customer already has stays exactly where it is.
+                 */
+                $limit = $this->subscriptions->effectiveLimit($tenant, $metric);
+                $used = $this->subscriptions->usage($tenant, $metric);
+
+                /*
+                 * RETURNED, not thrown.
+                 *
+                 * `abort()` with a Response raises HttpResponseException, and this application's
+                 * exception handler renders that as a 500 — the refusal never reached the customer
+                 * and looked like a crash instead. Returning from middleware short-circuits the
+                 * pipeline with exactly this response.
+                 */
+                return response()->json([
+                    'success' => false,
+                    'message' => "You have reached your plan limit for \"{$metric}\" ({$used} of {$limit}). Upgrade your plan to add more.",
+                    'data' => null,
+                    'errors' => null,
+                    'meta' => [
+                        'plan_limit' => true,
+                        'metric' => $metric,
+                        'used' => $used,
+                        'limit' => $limit,
+                        // Named so the interface can offer the upgrade rather than inventing a route.
+                        'upgrade_path' => '/app/subscriptions',
+                    ],
+                ], 403);
             }
         }
 
