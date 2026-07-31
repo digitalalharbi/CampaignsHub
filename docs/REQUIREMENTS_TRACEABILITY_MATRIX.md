@@ -305,3 +305,28 @@ where it catches whatever the seeders created, however they created it.
 Still open in this row's family: SIGNUP-002 (the gated path in front of registration, making today's
 immediate provisioning the auto-activate BRANCH rather than the only route), SIGNUP-003/004 (approval
 policy + admin review queue), SIGNUP-005 (mobile OTP as a first-class state).
+
+## SIGNUP-002 — the gated path (backbone landed; wiring still open)
+
+| ID | Requirement | Status |
+| --- | --- | --- |
+| SIGNUP-002a | A registration is a REQUEST, not a workspace. `registration_requests` holds the application and grants nothing. | **VERIFIED** (12 tests) |
+| SIGNUP-002b | Provisioning happens only at the crossing, and refuses to run early. | **VERIFIED** |
+| SIGNUP-002c | Rewire `POST /auth/register` to create a request instead of a tenant; status page; verification → approval → payment wiring. | **NOT_STARTED** |
+
+`ProvisionWorkspace` now holds everything `RegisterTenantAction` used to do at form-submit time, and
+refuses unless the email is verified AND the state is Approved-Awaiting-Payment or Payment-Pending.
+That refusal IS the enforcement — a caller that has not been through the path cannot get a workspace
+out of it by asking.
+
+`tenant_id` on the request is the record of the crossing: null means no workspace exists for this
+person, whatever else the row says. `password`, `state` and `tenant_id` are outside `$fillable`,
+because an applicant able to set any of them grants themselves precisely what the gate withholds.
+
+The unique index on a live application is PARTIAL — one in-flight request per address, while a
+rejected applicant may still apply again and a provisioned one does not block a later, unrelated
+registration.
+
+**Important:** the public `POST /auth/register` still creates a tenant immediately (the auto-activate
+branch, recorded as such since SIGNUP-001). The new path exists and is tested but is not yet what the
+public endpoint calls — SIGNUP-002c. Nothing in the product behaves differently yet.
