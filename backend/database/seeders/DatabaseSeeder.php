@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Domains\Accounts\Enums\AccountState;
+use App\Domains\Accounts\Services\TransitionAccountState;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\App;
@@ -85,6 +88,28 @@ class DatabaseSeeder extends Seeder
             // Influencer work in three states — published, owed, and late — because a demo where
             // everything is fine shows none of what the portal is for.
             $this->call(DemoInfluencersSeeder::class);
+        }
+
+        /*
+         * 6) LAST: give every seeded workspace a real account state (SIGNUP-001).
+         *
+         * The seeders above write `status` directly, which was the only lifecycle column that
+         * existed when they were written. Left alone they produce workspaces that are OPERATING on
+         * `status` while their state still reads `draft` — the exact drift between the two columns
+         * that `TransitionAccountState` exists to prevent, visible on any fresh install.
+         *
+         * Done here rather than in each seeder because it must catch whatever they created, however
+         * they created it, and because the reason is the same for all of them.
+         */
+        $transitions = app(TransitionAccountState::class);
+        foreach (Tenant::whereIn('status', ['active', 'trialing'])->get() as $tenant) {
+            if ($transitions->stateOf($tenant) === AccountState::Draft) {
+                $transitions->provision(
+                    $tenant,
+                    AccountState::Active,
+                    'Demo workspace — provisioned active so the portals have something to show.',
+                );
+            }
         }
     }
 }

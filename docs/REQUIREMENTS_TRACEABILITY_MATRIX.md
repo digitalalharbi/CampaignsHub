@@ -273,3 +273,35 @@ Every failure was diagnosed and fixed at its cause. No retries were enabled, not
 | `account` is personal and is in no portal's `sections()`, so it fell back to `/app`. The influencers portal never mounted account routes at all — a creator's own Profile link was a 404. | all | `account` is portal-relative unconditionally; `/influencers/account/*` mounted. |
 | The clients portfolio renders a table AND a card list, hiding one by breakpoint. The name matched twice, and `.first()` picked whichever the DOM ordered first — the hidden one on Firefox and WebKit. | firefox, webkit | Assert the VISIBLE match, which is the actual claim. |
 | `auth-visual` baselines predated the sign-in redesign. | chromium | Reviewed both renders live first — contrast, RTL, provider de-emphasis, layout all correct — then regenerated. Snapshots record an intended change; they were not used to bury a defect. |
+
+## SIGNUP-001 — the account state machine
+
+| ID | Requirement | Status |
+| --- | --- | --- |
+| SIGNUP-001 | Twelve states with legal transitions only; `status` and `account_state` written together by one thing; every change audited. | **VERIFIED** (13 tests) |
+
+`AccountState` carries the twelve states and the transition table AS DATA, because the illegal moves
+are what matter: `Draft → Active` skips email verification, mobile verification, approval and payment
+in a single assignment, which is exactly what a well-meaning "just activate this account" helper does.
+
+Two judgements worth re-reading before changing anything here:
+
+- **`PaymentPending` is distinct from `ApprovedAwaitingPayment`.** Returning from a payment page
+  proves nothing. That state is where an account sits between "the customer pressed pay" and "a
+  signed webhook said it happened", and it must never be activated out of by the browser (PAY-003).
+- **`PastDue` is operational.** A failed renewal is a billing problem; locking someone out of their
+  own data the moment a card expires loses the customer AND the payment. `PastDue` IS the grace
+  period, and `Suspended` is what follows it.
+
+`provision()` is the only other writer and exists for two callers — the auto-activate policy, and
+demo seeding. It requires a reason and audits it, because "this account skipped the gated path" is
+precisely what someone will need to account for later.
+
+**Found by running `migrate:fresh --seed`:** the seeders write `status` directly, so every demo
+workspace came up OPERATING on `status` while its state still read `draft` — the exact two-column
+drift this design exists to prevent, on any fresh install. Provisioned at the end of `DatabaseSeeder`
+where it catches whatever the seeders created, however they created it.
+
+Still open in this row's family: SIGNUP-002 (the gated path in front of registration, making today's
+immediate provisioning the auto-activate BRANCH rather than the only route), SIGNUP-003/004 (approval
+policy + admin review queue), SIGNUP-005 (mobile OTP as a first-class state).

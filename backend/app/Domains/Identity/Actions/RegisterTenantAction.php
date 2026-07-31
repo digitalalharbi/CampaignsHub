@@ -6,6 +6,8 @@ namespace App\Domains\Identity\Actions;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Accounts\Enums\AccountState;
+use App\Domains\Accounts\Services\TransitionAccountState;
 use App\Domains\Identity\DTOs\RegisterData;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -91,6 +93,24 @@ final class RegisterTenantAction
             ));
             // The owner reaches every client through the clients.view_all permission granted with the
             // full catalogue above — never through having no scope rows, which now means nothing.
+
+            /*
+             * The AUTO-ACTIVATE branch, stated explicitly (SIGNUP-001).
+             *
+             * This path grants a membership immediately, so the account is operating from the moment
+             * it is created and its state has to say so — a workspace running on `draft` would be a
+             * lie the admin queue and the entitlement layer both read.
+             *
+             * The contract permits auto-activation when a plan is configured for it, and self-serve
+             * trial signup remains supported. SIGNUP-002 puts the gated path in front of this and
+             * makes THIS the branch rather than the only route; recording the reason now means the
+             * audit trail can already tell the two apart.
+             */
+            app(TransitionAccountState::class)->provision(
+                $tenant,
+                AccountState::Active,
+                'Self-serve trial signup — auto-activated (no approval or payment gate configured).',
+            );
 
             return $user;
         });
