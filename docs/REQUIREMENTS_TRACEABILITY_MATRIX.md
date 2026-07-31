@@ -312,7 +312,23 @@ policy + admin review queue), SIGNUP-005 (mobile OTP as a first-class state).
 | --- | --- | --- |
 | SIGNUP-002a | A registration is a REQUEST, not a workspace. `registration_requests` holds the application and grants nothing. | **VERIFIED** (12 tests) |
 | SIGNUP-002b | Provisioning happens only at the crossing, and refuses to run early. | **VERIFIED** |
-| SIGNUP-002c | Rewire `POST /auth/register` to create a request instead of a tenant; status page; verification → approval → payment wiring. | **NOT_STARTED** |
+| SIGNUP-002c | Policy engine + the service that walks a request through the path. | **VERIFIED** (9 tests) |
+| SIGNUP-002d | Rewire `POST /auth/register` to create a request instead of a tenant; the account-status page; the `/admin` review queue. | **NOT_STARTED** |
+
+`RegistrationPolicy` merges default → account type → plan, so the plan is the most specific
+statement and wins. The default in `config/accounts.php` is EMAIL VERIFICATION ONLY, which is what
+the product does today — the auto-activate branch the contract permits, written down so it is a
+choice with a name rather than the absence of a gate. Turning on approval or payment for a plan is a
+config change and nothing else; the path already honours them.
+
+`AdvanceRegistration` is the single answer to "what is this application waiting on now?", because
+working that out at each call site is how an account skips a step nobody noticed it was owed. It
+never activates anything itself — reaching Active means `ProvisionWorkspace` ran, and that refuses
+unless the conditions hold, so a mistake here cannot grant access.
+
+**`paymentConfirmed()` is the only thing that clears the payment gate**, and it is called from a
+signed webhook or a server-to-server check. A test proves that re-verifying an email cannot sneak an
+application past a payment gate, and that a rejected application ignores a late webhook entirely.
 
 `ProvisionWorkspace` now holds everything `RegisterTenantAction` used to do at form-submit time, and
 refuses unless the email is verified AND the state is Approved-Awaiting-Payment or Payment-Pending.
