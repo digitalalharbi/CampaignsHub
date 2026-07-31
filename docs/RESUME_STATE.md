@@ -282,20 +282,23 @@ absences on the same request that used to produce all five.
 
 What is next, and why in this order:
 
-1. **PAY-001** — Moyasar as the official primary adapter, Stripe as the alternative, both behind the
+1. **PLAN-001e** — mount `PlanChooser` on the account-status page (NOT on `/register`: it does not
+   fit the 768px budget the auth layout specs enforce, and the control is already built and tested).
+   Needs one endpoint that records a plan against a pending registration.
+2. **PAY-001** — Moyasar as the official primary adapter, Stripe as the alternative, both behind the
    existing `PaymentProvider` port. No credentials exist, so both ship **Awaiting Credentials** and
    the sandbox path is what gets tested.
-2. **PAY-002** — checkout, signed webhooks, idempotency, no duplicate charge. The invariant to write
+3. **PAY-002** — checkout, signed webhooks, idempotency, no duplicate charge. The invariant to write
    a test for BEFORE any payment code: nothing may call `TransitionAccountState::provision()` as a
    shortcut out of `PaymentPending`. That state is the webhook-only activation anchor, and a
    browser returning from a payment page must never be what clears it.
-3. **PAY-003** — trial auto-conversion, renewal, past due, grace, suspension (data preserved),
+4. **PAY-003** — trial auto-conversion, renewal, past due, grace, suspension (data preserved),
    cancellation, refund, reactivation.
-4. **PAY-004** — trial-abuse prevention. "One trial per payment method" belongs in the ADAPTER: Moyasar
+5. **PAY-004** — trial-abuse prevention. "One trial per payment method" belongs in the ADAPTER: Moyasar
    and Stripe expose different fingerprint semantics, and a shared assumption in the core would either
    be wrong for one of them or silently unenforced. Each adapter reports what it can, with an honest
    fallback when a provider supplies nothing.
-5. **SIGNUP-006** — the five independent demo accounts, then OPS-001, INTG-001, the remaining rows.
+6. **SIGNUP-006** — the five independent demo accounts, then OPS-001, INTG-001, the remaining rows.
 
 **Do not simply delete `RegisterTenantAction`** when tidying: it is the named auto-activate branch the
 contract explicitly keeps supported for self-serve trials. It provisions nothing itself and throws

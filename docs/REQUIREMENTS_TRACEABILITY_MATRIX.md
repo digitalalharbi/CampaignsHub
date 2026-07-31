@@ -431,7 +431,8 @@ looked like code regressions and were not. Stop any hand-started backend before 
 | PLAN-001a | Plans are data: monthly AND annual terms, per-plan trial fee / duration / limits, all editable from `/admin`. | **VERIFIED** (12 tests) |
 | PLAN-001b | One public catalogue, read by the pricing surface and the sign-up form before anyone has an account. | **VERIFIED** |
 | PLAN-001c | A plan may be withdrawn from SALE without being switched off for the customers already on it. | **VERIFIED** |
-| PLAN-001d | The plan chosen at sign-up is validated against the catalogue, not against a list of strings. | **VERIFIED** (6 UI tests, live-reviewed) |
+| PLAN-001d | The plan chosen at sign-up is validated against the catalogue, not against a list of strings. | **VERIFIED** (server-side) |
+| PLAN-001e | `PlanChooser` — the customer-facing control. Built, tested and live-reviewed, **not yet mounted**. | **PARTIAL** (6 UI tests) |
 
 The engine exists so that four separate answers become one statement: the price a visitor is shown,
 the amount a checkout charges, the limits the backend enforces, and the date a renewal falls due.
@@ -467,3 +468,26 @@ explicit, and a null there must mean no trial may convert — the charge would b
 `provider`, `provider_customer_id` and `provider_subscription_id` are outside `$fillable`: they are
 written by the adapter that owns the subscription at the gateway, and a payload able to set them
 could point a subscription at somebody else's customer record.
+
+### PLAN-001e — why the plan chooser is not on the sign-up form
+
+`PlanChooser` is built, reads the real catalogue, and has six tests including the two refusals that
+matter: it will not quote a term a plan is not sold on, and it announces a trial only where the plan
+has one. It was live-reviewed in RTL, correctly disabling the free plan on the annual term.
+
+It is **not mounted**. Putting it on `/register` broke `e2e/auth-redesign.spec.ts`, which asserts that
+the page fits a 1366x768 desktop without scrolling and keeps the submit button reachable at 1024x768.
+A three-card grid broke both at every desktop size; a single compact row of pills still broke them at
+1024x768 and 1366x768. Shrinking it further would have meant a choice nobody could read, and updating
+the visual baselines to accept a page that no longer fits would have been using snapshots to hide a
+layout defect.
+
+The endpoint already accepts `plan_code` and `billing_interval`, and both are validated against the
+catalogue. What is missing is only the place to ask the question. The next session should mount the
+chooser on the **account-status page**, which has the room and is arguably the more correct home: the
+plan governs the PAYMENT gate, and that falls after email verification. That needs one new endpoint —
+recording a plan against a pending registration — and the policy then follows the chosen plan for the
+remaining gates.
+
+Until then no plan is sent at sign-up and the default registration policy applies. Nothing claims
+otherwise in the interface.
