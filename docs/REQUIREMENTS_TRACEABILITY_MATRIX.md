@@ -432,7 +432,7 @@ looked like code regressions and were not. Stop any hand-started backend before 
 | PLAN-001b | One public catalogue, read by the pricing surface and the sign-up form before anyone has an account. | **VERIFIED** |
 | PLAN-001c | A plan may be withdrawn from SALE without being switched off for the customers already on it. | **VERIFIED** |
 | PLAN-001d | The plan chosen at sign-up is validated against the catalogue, not against a list of strings. | **VERIFIED** (server-side) |
-| PLAN-001e | `PlanChooser` — the customer-facing control. Built, tested and live-reviewed, **not yet mounted**. | **PARTIAL** (6 UI tests) |
+| PLAN-001e | Sign-up asks for the details, then the plan — two steps, mounted and wired to the application. | **VERIFIED** (13 UI tests + 3 E2E on three browsers, live-reviewed) |
 
 The engine exists so that four separate answers become one statement: the price a visitor is shown,
 the amount a checkout charges, the limits the backend enforces, and the date a renewal falls due.
@@ -469,25 +469,28 @@ explicit, and a null there must mean no trial may convert — the charge would b
 written by the adapter that owns the subscription at the gateway, and a payload able to set them
 could point a subscription at somebody else's customer record.
 
-### PLAN-001e — why the plan chooser is not on the sign-up form
+### PLAN-001e — the details, then the plan
 
-`PlanChooser` is built, reads the real catalogue, and has six tests including the two refusals that
-matter: it will not quote a term a plan is not sold on, and it announces a trial only where the plan
-has one. It was live-reviewed in RTL, correctly disabling the free plan on the annual term.
+Sign-up is two steps. The first collects the account details, the second asks for the plan, and the
+application is submitted from the second with `plan_code` and `billing_interval` — both validated
+server-side against the catalogue, so naming a plan in the payload cannot select one that is not on
+sale.
 
-It is **not mounted**. Putting it on `/register` broke `e2e/auth-redesign.spec.ts`, which asserts that
-the page fits a 1366x768 desktop without scrolling and keeps the submit button reachable at 1024x768.
-A three-card grid broke both at every desktop size; a single compact row of pills still broke them at
-1024x768 and 1366x768. Shrinking it further would have meant a choice nobody could read, and updating
-the visual baselines to accept a page that no longer fits would have been using snapshots to hide a
-layout defect.
+The split exists because one screen could not hold both. `e2e/auth-redesign.spec.ts` requires the page
+to fit a 1366x768 desktop without scrolling and to keep its submit reachable at 1024x768; a card grid
+broke both at every desktop size, and even a single compact row of pills still broke them at 1024x768
+and 1366x768. Shrinking the control until it fitted would have answered a layout budget with a price
+list nobody could read. Splitting the form gave the question its own screen — measured live at
+1366x768, the page is 768px on step one and 768px on step two, with the button at 697px and 667px.
 
-The endpoint already accepts `plan_code` and `billing_interval`, and both are validated against the
-catalogue. What is missing is only the place to ask the question. The next session should mount the
-chooser on the **account-status page**, which has the room and is arguably the more correct home: the
-plan governs the PAYMENT gate, and that falls after email verification. That needs one new endpoint —
-recording a plan against a pending registration — and the policy then follows the chosen plan for the
-remaining gates.
+Both panels live in ONE `<form>` and the fields stay mounted across the step, so going back to fix an
+email does not empty the password, and the browser's own `required` validation still guards step one.
+A test covers exactly that, and another proves that moving to step two is not applying: nothing is
+sent until the second submit.
 
-Until then no plan is sent at sign-up and the default registration policy applies. Nothing claims
-otherwise in the interface.
+The step is React state, not the URL. A half-filled form is not a place worth linking to, and putting
+it in history would make Back inside the form behave like Back out of it.
+
+Choosing a plan stays optional, and the screen says so. An application with no plan follows the
+default registration policy; an empty string is never sent, because that would be the form answering a
+question the visitor did not.

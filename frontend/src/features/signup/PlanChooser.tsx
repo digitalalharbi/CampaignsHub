@@ -76,46 +76,51 @@ export function PlanChooser({
   const anyAnnual = plans.data.plans.some((p) => p.price_annual !== null)
 
   /*
-   * One row, not three cards.
+   * Cards, because this is a step of its own now (PLAN-001e).
    *
-   * This page has to fit a 1366x768 desktop without scrolling — `e2e/auth-redesign.spec.ts` asserts
-   * it, and the first version of this control broke that at every desktop size by adding a card grid
-   * with per-plan blurbs. The blurbs belong on a pricing page; what a sign-up form needs is the
-   * choice and the number.
+   * An earlier attempt put this control on the same screen as the credentials, where the page's
+   * 768px budget left room for a row of pills and nothing else — a price list too small to read.
+   * Splitting the form gave the question its own screen, so each plan can state its price, its term
+   * and its trial in words.
    */
   return (
-    <section data-testid="plan-chooser" aria-label={c.heading} className="flex flex-wrap items-center gap-2">
-      <span className="text-sm font-bold text-text-primary">{c.heading}</span>
+    <section data-testid="plan-chooser" aria-label={c.heading} className="flex flex-col gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-bold text-text-primary">{c.heading}</span>
 
-      {plans.data.plans.map((plan) => (
-        <PlanPill
-          key={plan.code}
-          plan={plan}
-          interval={interval}
-          ar={ar}
-          copy={c}
-          selected={value === plan.code}
-          onSelect={() => onChange(plan.code)}
-        />
-      ))}
+        {/* The term toggle only exists when something is actually sold on an annual term. */}
+        {anyAnnual && (
+          <div className="flex rounded-lg border border-border p-0.5">
+            {(['monthly', 'annual'] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                data-testid={`plan-interval-${k}`}
+                aria-pressed={interval === k}
+                onClick={() => onIntervalChange(k)}
+                className={`rounded px-3 py-1 text-xs font-semibold ${interval === k ? 'bg-brand-primary-soft text-brand-700' : 'text-text-secondary hover:text-text-primary'}`}
+              >
+                {c[k]}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* The term toggle only exists when something is actually sold on an annual term. */}
-      {anyAnnual && (
-        <div className="flex rounded-lg border border-border p-0.5 ms-auto">
-          {(['monthly', 'annual'] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              data-testid={`plan-interval-${k}`}
-              aria-pressed={interval === k}
-              onClick={() => onIntervalChange(k)}
-              className={`rounded px-2.5 py-1 text-xs font-semibold ${interval === k ? 'bg-brand-primary-soft text-brand-700' : 'text-text-secondary hover:text-text-primary'}`}
-            >
-              {c[k]}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* One column on phones, three across from `sm` — a price list is unreadable side by side at 375px. */}
+      <div className="grid gap-2 sm:grid-cols-3">
+        {plans.data.plans.map((plan) => (
+          <PlanPill
+            key={plan.code}
+            plan={plan}
+            interval={interval}
+            ar={ar}
+            copy={c}
+            selected={value === plan.code}
+            onSelect={() => onChange(plan.code)}
+          />
+        ))}
+      </div>
     </section>
   )
 }
@@ -135,13 +140,7 @@ function PlanPill({
   const price = interval === 'annual' ? plan.price_annual : plan.price_monthly
   const unavailable = price === null
 
-  /*
-   * The trial is announced in the pill's TITLE rather than as a second line.
-   *
-   * It is real information — the plan starts with a paid trial at a stated fee — but a line of it
-   * under every pill is three extra rows on a page that has to fit 768px. The testid stays, so the
-   * claim is still asserted where it matters.
-   */
+  // Stated only where the plan actually offers one, and never on a term it is not sold on.
   const trial = plan.trial_days > 0 && !unavailable
     ? copy.trial(plan.trial_days, plan.trial_fee, plan.currency)
     : undefined
@@ -151,24 +150,35 @@ function PlanPill({
       type="button"
       data-testid={`plan-${plan.code}`}
       data-selected={selected}
-      data-trial={trial ?? ''}
       aria-pressed={selected}
       disabled={unavailable}
-      title={trial ?? (ar ? plan.summary_ar : plan.summary_en) ?? undefined}
       onClick={onSelect}
-      className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${selected ? 'border-brand-500 bg-brand-primary-soft text-brand-700' : 'border-border bg-surface text-text-secondary hover:border-brand-400'}`}
+      className={`flex flex-col gap-0.5 rounded-xl border p-2.5 text-start transition-colors disabled:opacity-50 ${selected ? 'border-brand-500 bg-brand-primary-soft' : 'border-border bg-surface hover:border-brand-400'}`}
     >
-      {selected && <Check size={13} className="shrink-0" />}
-      <span className="text-text-primary">{ar ? plan.name_ar : plan.name}</span>
+      <span className="flex items-center gap-1.5 text-sm font-bold text-text-primary">
+        {ar ? plan.name_ar : plan.name}
+        {selected && <Check size={14} className="shrink-0 text-brand-600" />}
+      </span>
+
       {unavailable ? (
-        <span className="text-text-muted">{copy.noAnnual}</span>
+        <span className="text-xs text-text-muted">{copy.noAnnual}</span>
       ) : (
-        <span dir="ltr" className="text-text-muted">
-          {price} {plan.currency}{interval === 'annual' ? copy.perYear : copy.perMonth}
+        <span className="text-sm font-semibold text-text-secondary" dir="ltr">
+          {price} {plan.currency}
+          <span className="text-xs font-normal text-text-muted">
+            {interval === 'annual' ? copy.perYear : copy.perMonth}
+          </span>
         </span>
       )}
+
       {trial && (
-        <span data-testid={`plan-${plan.code}-trial`} className="sr-only">{trial}</span>
+        <span data-testid={`plan-${plan.code}-trial`} className="text-xs font-semibold text-brand-600">
+          {trial}
+        </span>
+      )}
+
+      {(ar ? plan.summary_ar : plan.summary_en) && (
+        <span className="text-[11px] leading-snug text-text-muted">{ar ? plan.summary_ar : plan.summary_en}</span>
       )}
     </button>
   )

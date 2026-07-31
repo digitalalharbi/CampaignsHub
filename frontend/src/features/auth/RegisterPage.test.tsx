@@ -76,6 +76,9 @@ describe('RegisterPage — the journey is submitted, not just displayed', () => 
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'new@test.dev' } })
     fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
     fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'secret123' } })
+    // Step one collects the details; step two asks for the plan (PLAN-001e). The application is
+    // submitted from the second, so every test that expects a POST has to walk both.
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
     fireEvent.click(screen.getByRole('button', { name: /Create account/i }))
   }
 
@@ -122,6 +125,7 @@ describe('RegisterPage — error summary + draft', () => {
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'dup@test.dev' } })
     fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
     fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'secret123' } })
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
     fireEvent.click(screen.getByRole('button', { name: /Create account/i }))
 
     const summary = await screen.findByTestId('error-summary')
@@ -136,5 +140,64 @@ describe('RegisterPage — error summary + draft', () => {
     renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
     expect((screen.getByLabelText(/Organization|Org/i) as HTMLInputElement).value).toBe('Restored Co')
     expect((screen.getByLabelText(/Email/i) as HTMLInputElement).value).toBe('draft@test.dev')
+  })
+})
+
+/**
+ * The two-step form (PLAN-001e).
+ *
+ * The details and the plan are separate questions asked on separate screens, because one screen
+ * could not hold both and still fit the page's height budget. What matters is that the split loses
+ * nothing: the fields survive going back, and moving on is not the same as applying.
+ */
+describe('RegisterPage — details, then plan', () => {
+  beforeEach(() => { vi.clearAllMocks(); localStorage.clear() })
+  afterEach(() => { signOut(); localStorage.clear() })
+
+  const fillDetails = () => {
+    fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
+    fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'new@test.dev' } })
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
+    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'secret123' } })
+  }
+
+  it('does not submit the application from the first step', async () => {
+    vi.mocked(apply).mockResolvedValue(anApplication)
+    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+
+    fillDetails()
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+
+    // Moving on is not applying: nothing has been sent.
+    expect(apply).not.toHaveBeenCalled()
+    expect(await screen.findByTestId('register-panel-plan')).toBeInTheDocument()
+  })
+
+  /** Going back must not empty the form — the fields stay mounted across the step. */
+  it('keeps what was typed when the visitor goes back', () => {
+    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+
+    fillDetails()
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+    fireEvent.click(screen.getByTestId('register-back'))
+
+    expect((screen.getByLabelText(/Email/i) as HTMLInputElement).value).toBe('new@test.dev')
+    expect((screen.getByLabelText(/^Password/i) as HTMLInputElement).value).toBe('secret123')
+  })
+
+  /** An application carries no plan unless one was chosen — an empty string is not a plan. */
+  it('sends no plan when none was chosen', async () => {
+    vi.mocked(apply).mockResolvedValue(anApplication)
+    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+
+    fillDetails()
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Create account/i }))
+
+    await waitFor(() => expect(apply).toHaveBeenCalled())
+    const payload = vi.mocked(apply).mock.calls[0][0] as unknown as Record<string, unknown>
+    expect(payload).not.toHaveProperty('plan_code')
+    expect(payload).not.toHaveProperty('billing_interval')
   })
 })

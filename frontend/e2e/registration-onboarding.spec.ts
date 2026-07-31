@@ -21,6 +21,13 @@ async function registerAndVerify(page: import('@playwright/test').Page, email: s
   await page.getByLabel(/Email|البريد/).fill(email)
   await page.locator('input[type="password"]').first().fill('secret1234')
   await page.locator('input[type="password"]').last().fill('secret1234')
+  /*
+   * Two steps now (PLAN-001e): the details, then the plan. The application is submitted from the
+   * second, so the journey walks both. No plan is chosen here — that path is covered by the plan
+   * chooser's own tests, and this spec is about registration reaching onboarding.
+   */
+  await page.getByRole('button', { name: /Continue|التالي/ }).click()
+  await expect(page.getByTestId('register-panel-plan')).toBeVisible()
   await page.getByRole('button', { name: /Create account|إنشاء حساب/ }).click()
 
   /*
@@ -81,4 +88,39 @@ test('company (brand) account: register → onboard → simplified menu, no agen
   await expect(page.getByRole('link', { name: /Clients|العملاء/ })).toHaveCount(0)
   await expect(page.getByRole('link', { name: /Requests|الطلبات/ })).toHaveCount(0)
   // (The API also 403s /app/clients for a company workspace — proven in RegistrationOnboardingTest.)
+})
+
+/**
+ * The plan step is driven by the real catalogue (PLAN-001e).
+ *
+ * Not a screenshot of a price list: switching the term must change what each plan offers, and a plan
+ * that is not sold on that term must become unpickable rather than silently showing the other term's
+ * figure. Starter is free and has no annual price, so it is the case that proves it.
+ */
+test('the plan step reads the catalogue and refuses a term a plan is not sold on', async ({ page }, testInfo) => {
+  const tag = `${testInfo.project.name}-${Date.now()}`
+
+  await page.goto('/register')
+  await switchToEnglish(page)
+  await page.getByLabel(/Organization name|اسم المؤسسة/).fill(`Plans ${tag}`)
+  await page.getByLabel(/Full name|الاسم الكامل/).fill('Plan Picker')
+  await page.getByLabel(/Email|البريد/).fill(`plans.${tag}@example.com`.toLowerCase())
+  await page.locator('input[type="password"]').first().fill('secret1234')
+  await page.locator('input[type="password"]').last().fill('secret1234')
+  await page.getByRole('button', { name: /Continue|التالي/ }).click()
+
+  // Monthly: every plan is offered, including the free one.
+  await expect(page.getByTestId('plan-starter')).toBeEnabled()
+  await expect(page.getByTestId('plan-growth-trial')).toBeVisible()
+
+  // Annual: the free plan has no annual price, so it cannot be chosen.
+  await page.getByTestId('plan-interval-annual').click()
+  await expect(page.getByTestId('plan-starter')).toBeDisabled()
+  await expect(page.getByTestId('plan-growth')).toBeEnabled()
+
+  // A chosen plan travels with the application.
+  await page.getByTestId('plan-growth').click()
+  await expect(page.getByTestId('plan-growth')).toHaveAttribute('data-selected', 'true')
+  await page.getByRole('button', { name: /Create account|إنشاء حساب/ }).click()
+  await expect(page).toHaveURL(/\/signup\/status/)
 })

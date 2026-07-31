@@ -3,7 +3,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Building2, Check, LayoutDashboard, Users } from 'lucide-react'
 import { AuthShell } from './AuthShell'
-import { apply, rememberRegistration } from '@/features/signup/api'
+import { apply, rememberRegistration, type BillingInterval } from '@/features/signup/api'
+import { PlanChooser } from '@/features/signup/PlanChooser'
 import { Button } from '@/components/ui/Button'
 import { EmailInput, PasswordInput, TextInput } from '@/components/ui/form'
 import { controlClass } from '@/components/ui/Field'
@@ -50,8 +51,24 @@ const JOURNEY_COPY = {
 
 /** Error-summary title + service read-out copy — kept local so the shared i18n dictionary is untouched. */
 const REG_COPY = {
-  ar: { errTitle: 'يرجى تصحيح الأخطاء التالية', moduleLabel: 'الخدمة المطلوبة' },
-  en: { errTitle: 'Please fix the following errors', moduleLabel: 'Selected service' },
+  ar: {
+    errTitle: 'يرجى تصحيح الأخطاء التالية',
+    moduleLabel: 'الخدمة المطلوبة',
+    stepAccount: 'بيانات الحساب',
+    stepPlan: 'الباقة',
+    next: 'التالي',
+    back: 'رجوع',
+    planOptional: 'يمكنك المتابعة دون اختيار باقة الآن وتحديدها لاحقًا قبل التفعيل.',
+  },
+  en: {
+    errTitle: 'Please fix the following errors',
+    moduleLabel: 'Selected service',
+    stepAccount: 'Your account',
+    stepPlan: 'Plan',
+    next: 'Continue',
+    back: 'Back',
+    planOptional: 'You can continue without choosing a plan and pick one later, before activation.',
+  },
 } as const
 
 /**
@@ -85,19 +102,20 @@ export function RegisterPage() {
   const moduleParam = params.get('module')
   const [selfType, setSelfType] = useState<SelfAccountType>('freelancer')
   /*
-   * The plan is NOT chosen on this form (PLAN-001).
+   * Two steps, because one screen cannot hold both (PLAN-001e).
    *
-   * `PlanChooser` is built, tested and reads the real catalogue, and the application accepts
-   * `plan_code` + `billing_interval` — but mounting it here broke `e2e/auth-redesign.spec.ts`: this
-   * page must fit a 1366x768 desktop without scrolling and keep the submit button reachable at
-   * 1024x768, and even a single compact row of plan pills pushed it past both. Shrinking the control
-   * until it fitted would have meant a choice nobody could read.
+   * The details and the plan are separate questions, and trying to ask them together is what broke
+   * `e2e/auth-redesign.spec.ts` — this page must fit a 1366x768 desktop without scrolling and keep
+   * its submit reachable at 1024x768, and any plan control large enough to read pushed it past both.
+   * Shrinking the control until it fitted would have been answering a layout budget with an
+   * unreadable choice; splitting the form answers it with room to spare on each step.
    *
-   * The journey still puts the plan before activation, because the plan governs the PAYMENT gate and
-   * that comes after email verification. The next session mounts the chooser on the account-status
-   * page, which has the room, and adds the endpoint that records the choice against a pending
-   * registration. Until then no plan is sent and the default registration policy applies.
+   * The step lives in React state rather than the URL: a half-filled form is not a place worth
+   * linking to, and putting it in history would make Back inside the form behave like Back out of it.
    */
+  const [step, setStep] = useState<1 | 2>(1)
+  const [planCode, setPlanCode] = useState<string | null>(null)
+  const [interval, setInterval] = useState<BillingInterval>('monthly')
 
   // Non-secret fields autosave as a draft (survives refresh); passwords are kept in memory only, never persisted.
   const draft = useFormDraft('register', { tenant_name: '', name: '', email: '' })
@@ -160,7 +178,7 @@ export function RegisterPage() {
 
       {/* Journey preset — only when arriving from a decision-section card. Editable, not a forced re-pick. */}
       {journey && (
-        <section data-testid="register-journey" className="mt-3.5 rounded-2xl border border-border bg-surface-secondary p-3.5" aria-label={jc.heading}>
+        <section data-testid="register-journey" className="mt-3 rounded-2xl border border-border bg-surface-secondary p-2.5" aria-label={jc.heading}>
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-text-primary">{jc.heading}</span>
             <span className="text-xs text-text-muted">{jc.editable}</span>
@@ -218,29 +236,74 @@ export function RegisterPage() {
         </section>
       )}
 
-      {/* Two columns where the fields are short, so every field and the submit button fit a 768px-tall
-          desktop screen without scrolling. */}
-      <form className="mt-4 space-y-3" onSubmit={(e) => {
+      {/* Where the visitor is, in two words. Two steps do not need a progress bar. */}
+      <ol data-testid="register-steps" className="mt-2 flex items-center gap-2 text-xs font-semibold">
+        {([1, 2] as const).map((n) => (
+          <li key={n} data-testid={`register-step-${n}`} data-current={step === n} className={`flex items-center gap-1.5 ${step === n ? 'text-brand-600' : 'text-text-muted'}`}>
+            <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${step === n ? 'bg-brand-600 text-white' : 'bg-surface-secondary'}`}>{n}</span>
+            {n === 1 ? rc.stepAccount : rc.stepPlan}
+            {n === 1 && <span className="text-text-muted">·</span>}
+          </li>
+        ))}
+      </ol>
+
+      {/*
+        One <form>, two panels. The fields stay mounted across the step so a visitor who goes back to
+        change an email does not find the page has forgotten their password — and so the browser's own
+        `required` validation still guards step one.
+
+        Two columns where the fields are short, so every field and the button fit a 768px-tall desktop
+        screen without scrolling.
+      */}
+      <form className="mt-2 space-y-2" onSubmit={(e) => {
         e.preventDefault()
+        if (step === 1) { setStep(2); return }
         mutation.mutate({
           ...form,
           ...(preset ?? {}),
+          // Omitted entirely when nothing was chosen — an empty string is not a plan, and sending one
+          // would be the form answering a question the visitor did not.
+          ...(planCode ? { plan_code: planCode, billing_interval: interval } : {}),
         })
       }}>
         {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={rc.errTitle} />}
-        <TextInput id="tenant_name" label={t('org_name')} value={form.tenant_name} onChange={setDraft('tenant_name')} required error={err('tenant_name')} />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <TextInput id="name" label={t('full_name')} value={form.name} onChange={setDraft('name')} autoComplete="name" required error={err('name')} />
-          <EmailInput id="email" label={t('email')} value={form.email} onChange={setDraft('email')} required error={err('email')} />
+
+        <div className={step === 1 ? 'space-y-3' : 'hidden'} data-testid="register-panel-account">
+          <TextInput id="tenant_name" label={t('org_name')} value={form.tenant_name} onChange={setDraft('tenant_name')} required error={err('tenant_name')} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextInput id="name" label={t('full_name')} value={form.name} onChange={setDraft('name')} autoComplete="name" required error={err('name')} />
+            <EmailInput id="email" label={t('email')} value={form.email} onChange={setDraft('email')} required error={err('email')} />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <PasswordInput id="password" label={t('password')} value={form.password} onChange={setSecretField('password')} autoComplete="new-password" required error={err('password')} showLabel={t('show_password')} hideLabel={t('hide_password')} />
+            <PasswordInput id="password_confirmation" label={t('confirm_password')} value={form.password_confirmation} onChange={setSecretField('password_confirmation')} autoComplete="new-password" required showLabel={t('show_password')} hideLabel={t('hide_password')} />
+          </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <PasswordInput id="password" label={t('password')} value={form.password} onChange={setSecretField('password')} autoComplete="new-password" required error={err('password')} showLabel={t('show_password')} hideLabel={t('hide_password')} />
-          <PasswordInput id="password_confirmation" label={t('confirm_password')} value={form.password_confirmation} onChange={setSecretField('password_confirmation')} autoComplete="new-password" required showLabel={t('show_password')} hideLabel={t('hide_password')} />
-        </div>
+
+        {step === 2 && (
+          <div data-testid="register-panel-plan" className="space-y-3">
+            <PlanChooser value={planCode} interval={interval} onChange={setPlanCode} onIntervalChange={setInterval} />
+            <p className="text-xs text-text-muted">{rc.planOptional}</p>
+          </div>
+        )}
 
         {error && !error.errors && <p className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{error.message}</p>}
 
-        <Button type="submit" loading={mutation.isPending} className="w-full" size="lg">{t('create_account')}</Button>
+        <div className="flex gap-2">
+          {step === 2 && (
+            <button
+              type="button"
+              data-testid="register-back"
+              onClick={() => setStep(1)}
+              className="rounded-xl border border-border px-4 text-sm font-semibold text-text-secondary hover:text-text-primary"
+            >
+              {rc.back}
+            </button>
+          )}
+          <Button type="submit" loading={mutation.isPending} className="flex-1" size="lg">
+            {step === 1 ? rc.next : t('create_account')}
+          </Button>
+        </div>
       </form>
 
       <p className="mt-4 text-center text-sm text-text-secondary">
