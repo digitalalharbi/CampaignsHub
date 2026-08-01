@@ -119,9 +119,14 @@ const tooltip = {
   },
 }
 
-function StatusBadge({ status, variant }: { status: DataStatus; variant: OverviewVariant }) {
+function StatusBadge({ status, variant, words }: {
+  status: DataStatus
+  variant: OverviewVariant
+  /** Passed in rather than read here: this helper renders outside the component that knows the language. */
+  words: { demo: string; stale: string; live: string }
+}) {
   const label =
-    status === 'demo' ? 'معاينة توضيحية ببيانات تجريبية' : status === 'stale' ? 'بيانات قديمة' : 'بيانات فعلية'
+    status === 'demo' ? words.demo : status === 'stale' ? words.stale : words.live
   const cls =
     variant === 'marketing'
       ? 'bg-white/10 text-white/80'
@@ -146,19 +151,76 @@ const SEV: Record<OverviewAlert['severity'], string> = {
  * @param title    optional heading
  * @param headerRight optional CTA node in the header
  */
+
+/**
+ * The overview's own words, in both languages (APP-100).
+ *
+ * This component was Arabic-only, so the advertiser dashboard rendered Arabic headings under
+ * `dir="ltr"` the moment somebody chose English — the interface changed direction and the content
+ * did not, which reads as broken rather than as unfinished.
+ *
+ * `lang` defaults to `ar`: this is an Arabic-first product, and a caller that has not been taught
+ * about the switch yet keeps the behaviour it had.
+ */
+const OVERVIEW_COPY = {
+  ar: {
+    demo: 'معاينة توضيحية ببيانات تجريبية',
+    stale: 'بيانات قديمة',
+    live: 'بيانات فعلية',
+    lastSync: 'آخر مزامنة',
+    platformComparison: 'مقارنة أداء المنصات',
+    spendDistribution: 'توزيع الإنفاق',
+    topCampaigns: 'أفضل الحملات',
+    campaign: 'الحملة',
+    platform: 'المنصة',
+    spend: 'الإنفاق',
+    results: 'النتائج',
+    cost: 'التكلفة',
+    needsAttention: 'حملات تحتاج تدخلًا',
+    nothingNeedsAttention: 'لا شيء يحتاج تدخلًا الآن.',
+    topAlerts: 'أهم التنبيهات',
+    noCriticalAlerts: 'لا تنبيهات حرجة.',
+    topCreatives: 'أفضل المحتويات الإعلانية',
+    resultUnit: 'نتيجة',
+  },
+  en: {
+    demo: 'Illustrative preview with demo data',
+    stale: 'Data is out of date',
+    live: 'Live data',
+    lastSync: 'Last sync',
+    platformComparison: 'Platform performance',
+    spendDistribution: 'Where the spend went',
+    topCampaigns: 'Best campaigns',
+    campaign: 'Campaign',
+    platform: 'Platform',
+    spend: 'Spend',
+    results: 'Results',
+    cost: 'Cost',
+    needsAttention: 'Campaigns needing attention',
+    nothingNeedsAttention: 'Nothing needs attention right now.',
+    topAlerts: 'Top alerts',
+    noCriticalAlerts: 'No critical alerts.',
+    topCreatives: 'Best creatives',
+    resultUnit: 'results',
+  },
+} as const
+
 export function UnifiedCampaignOverview({
   vm,
   variant = 'dashboard',
   compact = false,
   title,
   headerRight,
+  lang = 'ar',
 }: {
   vm: OverviewVM
   variant?: OverviewVariant
   compact?: boolean
   title?: string
   headerRight?: ReactNode
+  lang?: 'ar' | 'en'
 }) {
+  const w = OVERVIEW_COPY[lang]
   const currency = vm.currency ?? 'SAR'
   const c = palette(variant)
   const isMarketing = variant === 'marketing'
@@ -177,10 +239,10 @@ export function UnifiedCampaignOverview({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           {title && <h2 className={`text-base font-extrabold tracking-tight ${c.title}`}>{title}</h2>}
-          <StatusBadge status={vm.dataStatus} variant={variant} />
+          <StatusBadge status={vm.dataStatus} variant={variant} words={w} />
         </div>
         <div className={`flex items-center gap-3 text-xs ${c.muted}`}>
-          <span>آخر مزامنة: {vm.lastSyncAt ? new Date(vm.lastSyncAt).toLocaleString('en-GB') : '—'}</span>
+          <span>{w.lastSync}: {vm.lastSyncAt ? new Date(vm.lastSyncAt).toLocaleString('en-GB') : '—'}</span>
           {headerRight}
         </div>
       </div>
@@ -204,7 +266,7 @@ export function UnifiedCampaignOverview({
       <div className={`grid gap-3 ${isMarketing ? 'sm:grid-cols-3' : compact ? '' : 'lg:grid-cols-3'}`}>
         {/* Platform comparison (spend bars + ROAS) */}
         <div className={`rounded-xl border p-3 ${c.card} ${isMarketing ? 'sm:col-span-2' : compact ? '' : 'lg:col-span-2'}`}>
-          <div className={`mb-2 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>مقارنة أداء المنصات</div>
+          <div className={`mb-2 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.platformComparison}</div>
           <div className="space-y-2">
             {vm.platforms.map((p) => (
               <div key={p.key} className="flex items-center gap-2">
@@ -224,7 +286,7 @@ export function UnifiedCampaignOverview({
 
         {/* Spend distribution donut */}
         <div className={`rounded-xl border p-3 ${c.card}`}>
-          <div className={`mb-1 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>توزيع الإنفاق</div>
+          <div className={`mb-1 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.spendDistribution}</div>
           <div style={{ height: donutH }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -240,19 +302,28 @@ export function UnifiedCampaignOverview({
         </div>
       </div>
 
+      {/*
+        `min-w-0` on the grid ITEM is what makes the scroller below work (APP-100).
+
+        A grid item defaults to `min-width: auto`, so it refuses to shrink under its content: the
+        table's `min-w-[420px]` pushed this column to 420px on a 375px phone, the whole page went
+        with it, and `overflow-x-auto` never got the chance to clip anything. The heading and the
+        two panels beside it were dragged along, which is why the offending element looked like a
+        title rather than a table.
+      */}
       <div className={`grid gap-3 ${compact ? '' : 'lg:grid-cols-3'}`}>
         {/* Top campaigns */}
-        <div className={`rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:col-span-2'}`}>
-          <div className={`mb-1 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>أفضل الحملات</div>
+        <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:col-span-2'}`}>
+          <div className={`mb-1 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.topCampaigns}</div>
           <div className="overflow-x-auto">
             <table className={`w-full min-w-[420px] ${lg ? 'text-sm' : 'text-xs'}`}>
               <thead>
                 <tr className={`border-b ${c.rowBorder} ${c.muted}`}>
-                  <th className="py-1.5 text-start font-semibold">الحملة</th>
-                  <th className="py-1.5 text-start font-semibold">المنصة</th>
-                  <th className="py-1.5 text-end font-semibold">الإنفاق</th>
-                  <th className="py-1.5 text-end font-semibold">النتائج</th>
-                  <th className="py-1.5 text-end font-semibold">التكلفة</th>
+                  <th className="py-1.5 text-start font-semibold">{w.campaign}</th>
+                  <th className="py-1.5 text-start font-semibold">{w.platform}</th>
+                  <th className="py-1.5 text-end font-semibold">{w.spend}</th>
+                  <th className="py-1.5 text-end font-semibold">{w.results}</th>
+                  <th className="py-1.5 text-end font-semibold">{w.cost}</th>
                   <th className="py-1.5 text-end font-semibold">ROAS</th>
                 </tr>
               </thead>
@@ -281,9 +352,9 @@ export function UnifiedCampaignOverview({
         {!isMarketing && (
         <div className="space-y-3">
           <div className={`rounded-xl border p-3 ${c.card}`}>
-            <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>حملات تحتاج تدخلًا</div>
+            <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.needsAttention}</div>
             {vm.needsAttention.length === 0 ? (
-              <p className={`text-xs ${c.muted}`}>لا شيء يحتاج تدخلًا الآن.</p>
+              <p className={`text-xs ${c.muted}`}>{w.nothingNeedsAttention}</p>
             ) : (
               <ul className="space-y-1.5">
                 {vm.needsAttention.slice(0, 3).map((n) => (
@@ -296,9 +367,9 @@ export function UnifiedCampaignOverview({
             )}
           </div>
           <div className={`rounded-xl border p-3 ${c.card}`}>
-            <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>أهم التنبيهات</div>
+            <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.topAlerts}</div>
             {vm.alerts.length === 0 ? (
-              <p className={`text-xs ${c.muted}`}>لا تنبيهات حرجة.</p>
+              <p className={`text-xs ${c.muted}`}>{w.noCriticalAlerts}</p>
             ) : (
               <ul className="space-y-1.5">
                 {vm.alerts.slice(0, 3).map((a, i) => (
@@ -312,7 +383,7 @@ export function UnifiedCampaignOverview({
           </div>
           {vm.topCreatives && vm.topCreatives.length > 0 && (
             <div className={`rounded-xl border p-3 ${c.card}`}>
-              <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>أفضل المحتويات الإعلانية</div>
+              <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.topCreatives}</div>
               <ul className="space-y-1.5">
                 {vm.topCreatives.slice(0, 3).map((cr) => (
                   <li key={cr.id} className="flex items-center justify-between gap-2 text-xs">
@@ -321,7 +392,7 @@ export function UnifiedCampaignOverview({
                       <span className="font-semibold">{cr.name}</span>
                       <span className={c.muted}>· {cr.kind}</span>
                     </span>
-                    <span className={`tnum ${c.sub}`}>{num(cr.results)} نتيجة</span>
+                    <span className={`tnum ${c.sub}`}>{num(cr.results)} {w.resultUnit}</span>
                   </li>
                 ))}
               </ul>

@@ -63,13 +63,45 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(Login::class, [RecordAuthAudit::class, 'handleLogin']);
         Event::listen(Logout::class, [RecordAuthAudit::class, 'handleLogout']);
 
-        // Login rate limiter. Production stays strict (6/min/IP, env-overridable); local & CI get
-        // headroom so automated suites that log in repeatedly (Playwright --repeat-each, seeded roles)
-        // don't trip the throttle. The production security control is unchanged.
+        /*
+         * Login rate limiter. Production stays strict (6/min/IP, env-overridable).
+         *
+         * Off-production the allowance is far larger, because the acceptance suite signs in six
+         * seeded roles at the start of EVERY run and those runs come back to back — a spot-check on
+         * one browser, then the full three-browser gate, is easily sixty logins inside a rolling
+         * minute from a single address. At 60 the sixty-first came back 429, the storage-state setup
+         * failed, and the whole gate reported `419 did not run` — a rate limit wearing the costume of
+         * a broken sign-in page.
+         *
+         * `otp-check` already carries an allowance of this shape for the same reason. The production
+         * control is untouched.
+         */
         RateLimiter::for('auth-login', function (Request $request): Limit {
             $perMinute = $this->app->environment('production')
                 ? (int) config('auth.login_throttle', 6)
-                : (int) config('auth.login_throttle_local', 60);
+                : (int) config('auth.login_throttle_local', 600);
+
+            return Limit::perMinute($perMinute)->by((string) $request->ip());
+        });
+
+        /*
+         * Registration — the last public endpoint still throttled inline (APP-100).
+         *
+         * `/register` carried a literal `throttle:6,1` while every other public route here had been
+         * given an environment-aware limiter. Six a minute is the right production number and stays
+         * exactly that; what it could not survive is the acceptance suite, which opens two accounts
+         * per browser project from one address and runs three projects back to back. The seventh
+         * registration in a rolling minute came back 429, the form stayed on `/register`, and the
+         * failure looked like a broken form rather than a rate limit — it appeared on whichever
+         * browser happened to run seventh, which is why it read as a Firefox problem.
+         *
+         * Raising the production limit or retrying the test would both have been wrong: the first
+         * weakens a real control, the second hides it.
+         */
+        RateLimiter::for('registration', function (Request $request): Limit {
+            $perMinute = $this->app->environment('production')
+                ? (int) config('accounts.registration_throttle', 6)
+                : 60;
 
             return Limit::perMinute($perMinute)->by((string) $request->ip());
         });

@@ -128,6 +128,10 @@ return [
 
     'login_throttle' => (int) env('AUTH_LOGIN_THROTTLE', 6),
 
-    'login_throttle_local' => (int) env('AUTH_LOGIN_THROTTLE_LOCAL', 60),
+    /*
+     * Off-production login allowance. Large on purpose: the acceptance suite signs in six seeded
+     * roles at the start of every run, and those runs come back to back. See `AppServiceProvider`.
+     */
+    'login_throttle_local' => (int) env('AUTH_LOGIN_THROTTLE_LOCAL', 600),
 
 ];

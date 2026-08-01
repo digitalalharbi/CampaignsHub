@@ -8,13 +8,20 @@ import { Textarea } from '@/components/ui/Textarea'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/States'
+import { useUi } from '@/stores/ui'
 
 type Section = 'short' | 'full' | 'freshness' | 'methodology'
-const SECTION_LABELS: Record<Section, string> = { short: 'المختصر', full: 'الكامل', freshness: 'تحديث البيانات', methodology: 'المنهجية' }
+const SECTION_LABELS: Record<Section, { ar: string; en: string }> = {
+  short: { ar: 'المختصر', en: 'Short' },
+  full: { ar: 'الكامل', en: 'Full' },
+  freshness: { ar: 'تحديث البيانات', en: 'Data freshness' },
+  methodology: { ar: 'المنهجية', en: 'Methodology' },
+}
 const SECTIONS: Section[] = ['short', 'full', 'freshness', 'methodology']
 
 /** Organization-level disclaimer editor: edit bilingual sections, preview, and restore defaults. */
 export function DisclaimerTab() {
+  const ar = useUi((u) => u.locale) === 'ar'
   const { data, isLoading } = useDisclaimerSettings()
   const save = useSaveDisclaimer()
   const [draft, setDraft] = useState<Record<Section, { ar: string; en: string }>>()
@@ -65,22 +72,24 @@ export function DisclaimerTab() {
     <div className="space-y-5">
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
         <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-text-primary">الملاحظات والمنهجية</h2>
-          {orgOverride && <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-muted">إصدار {orgOverride.version}</span>}
+          <h2 className="text-xl font-bold text-text-primary">{ar ? 'الملاحظات والمنهجية' : 'Notes & methodology'}</h2>
+          {orgOverride && <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-muted">{ar ? 'إصدار' : 'Version'} {orgOverride.version}</span>}
         </div>
         <p className="mb-4 text-sm text-text-secondary">
-          نص المؤسسة يتجاوز الافتراضي للنظام، ويمكن للمشروع أو العميل تجاوزه لاحقًا. الأولوية: مشروع ← عميل ← مؤسسة ← افتراضي.
+          {ar
+            ? 'نص المؤسسة يتجاوز الافتراضي للنظام، ويمكن للمشروع أو العميل تجاوزه لاحقًا. الأولوية: مشروع ← عميل ← مؤسسة ← افتراضي.'
+            : 'The organisation’s text overrides the system default, and a project or client may override it in turn. Order: project ← client ← organisation ← default.'}
         </p>
 
-        {save.isError && <div className="mb-4"><Alert severity="danger" title="تعذّر الحفظ">تأكد من صلاحية settings.manage.</Alert></div>}
-        {saved && <div className="mb-4"><Alert severity="positive" title="تم حفظ الملاحظات" /></div>}
+        {save.isError && <div className="mb-4"><Alert severity="danger" title={ar ? 'تعذّر الحفظ' : 'Could not save'}>{ar ? 'تأكد من صلاحية settings.manage.' : 'Check that you hold settings.manage.'}</Alert></div>}
+        {saved && <div className="mb-4"><Alert severity="positive" title={ar ? 'تم حفظ الملاحظات' : 'Notes saved'} /></div>}
 
         <div className="space-y-5">
           {SECTIONS.map((s) => (
             <div key={s}>
-              <h3 className="mb-2 text-sm font-bold text-text-primary">النص {SECTION_LABELS[s]}</h3>
+              <h3 className="mb-2 text-sm font-bold text-text-primary">{ar ? `النص ${SECTION_LABELS[s].ar}` : `${SECTION_LABELS[s].en} text`}</h3>
               <div className="grid gap-3 md:grid-cols-2">
-                <Field label="العربية" htmlFor={`${s}-ar`}>
+                <Field label={ar ? 'العربية' : 'Arabic'} htmlFor={`${s}-ar`}>
                   <Textarea id={`${s}-ar`} dir="rtl" rows={s === 'full' ? 4 : 2} value={draft[s].ar} onChange={(e) => setText(s, 'ar', e.target.value)} />
                 </Field>
                 <Field label="English" htmlFor={`${s}-en`}>
@@ -92,7 +101,7 @@ export function DisclaimerTab() {
         </div>
 
         <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
-          <Button type="button" variant="ghost" onClick={restore}><RotateCcw size={15} className="inline" /> استعادة الافتراضي</Button>
+          <Button type="button" variant="ghost" onClick={restore}><RotateCcw size={15} className="inline" /> {ar ? 'استعادة الافتراضي' : 'Restore the default'}</Button>
           <Button type="button" onClick={submit} disabled={save.isPending}>{save.isPending ? 'جارٍ الحفظ…' : 'حفظ'}</Button>
         </div>
       </div>

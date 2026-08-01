@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Area, AreaChart, ResponsiveContainer } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
 import { ErrorState, Skeleton } from '@/components/ui/States'
+import { useUi } from '@/stores/ui'
 import { compact, percent, trend } from './format'
 import type { Trend } from './format'
 
@@ -85,6 +86,9 @@ export function KpiCard({
 }
 
 /** Card shell for a chart/section with title, optional action, and loading/empty/error handling. */
+/** The reader's language, read at render time — these helpers are shared by several surfaces. */
+const ar = () => useUi.getState().locale === 'ar'
+
 export function Panel({
   title,
   description,
@@ -118,10 +122,13 @@ export function Panel({
           <Skeleton className="h-40 w-full" />
         </div>
       ) : error ? (
-        <ErrorState title="تعذّر تحميل البيانات" description="حدث خطأ أثناء جلب المقاييس. حاول مجدداً." />
+        <ErrorState
+          title={ar() ? 'تعذّر تحميل البيانات' : 'The data could not be loaded'}
+          description={ar() ? 'حدث خطأ أثناء جلب المقاييس. حاول مجدداً.' : 'Something went wrong fetching the metrics. Please try again.'}
+        />
       ) : empty ? (
         <div className="flex h-40 flex-col items-center justify-center rounded-xl border border-dashed border-border text-sm text-text-muted">
-          لا توجد بيانات لهذه الفترة
+          {ar() ? 'لا توجد بيانات لهذه الفترة' : 'No data for this period'}
         </div>
       ) : (
         children
@@ -130,10 +137,14 @@ export function Panel({
   )
 }
 
+/*
+ * Latin digits in both languages, per the product's standing rule — so «7 أيام» and «7 days» read
+ * the same number, and a screenshot in either language is comparable with the other.
+ */
 const RANGES = [
-  { days: 7, label: '7 أيام' },
-  { days: 30, label: '30 يوم' },
-  { days: 90, label: '90 يوم' },
+  { days: 7, ar: '7 أيام', en: '7 days' },
+  { days: 30, ar: '30 يوم', en: '30 days' },
+  { days: 90, ar: '90 يوم', en: '90 days' },
 ]
 
 export function RangeTabs({ value, onChange }: { value: number; onChange: (days: number) => void }) {
@@ -151,17 +162,23 @@ export function RangeTabs({ value, onChange }: { value: number; onChange: (days:
               : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
           }`}
         >
-          {r.label}
+          {ar() ? r.ar : r.en}
         </button>
       ))}
     </div>
   )
 }
 
+/**
+ * Demo data, labelled in the reader's language.
+ *
+ * The badge is the product's promise that these figures are not a customer's real spend, so it has
+ * to be legible to whoever is reading — a badge somebody cannot read is not a label.
+ */
 export function DemoBadge() {
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-[var(--warning-background)] px-2 py-0.5 text-xs font-semibold text-warning">
-      بيانات تجريبية · Demo
+      {ar() ? 'بيانات تجريبية · Demo' : 'Demo data'}
     </span>
   )
 }

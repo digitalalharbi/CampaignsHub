@@ -41,4 +41,11 @@ return [
         ],
     ],
 
+    /*
+     * Public registration attempts per minute per IP, in PRODUCTION (APP-100).
+     *
+     * Off-production the limiter grants headroom instead — the acceptance suite legitimately opens
+     * more accounts a minute from one address than any human would. See `AppServiceProvider`.
+     */
+    'registration_throttle' => (int) env('REGISTRATION_THROTTLE_PER_MINUTE', 6),
 ];

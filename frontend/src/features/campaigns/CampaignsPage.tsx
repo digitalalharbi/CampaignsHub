@@ -30,12 +30,12 @@ const STATUS_COLORS: Record<string, string> = {
 /** The five ways to look at a project's campaigns (CAMPAIGN-010). */
 type ViewMode = 'overview' | 'cards' | 'table' | 'compare' | 'attention'
 
-const VIEWS: Array<{ id: ViewMode; ar: string; icon: typeof LayoutGrid }> = [
-  { id: 'overview', ar: 'نظرة عامة', icon: BarChart3 },
-  { id: 'cards', ar: 'بطاقات', icon: LayoutGrid },
-  { id: 'table', ar: 'جدول', icon: Rows },
-  { id: 'compare', ar: 'مقارنة', icon: GitCompare },
-  { id: 'attention', ar: 'تحتاج تدخلًا', icon: TriangleAlert },
+const VIEWS: Array<{ id: ViewMode; ar: string; en: string; icon: typeof LayoutGrid }> = [
+  { id: 'overview', ar: 'نظرة عامة', en: 'Overview', icon: BarChart3 },
+  { id: 'cards', ar: 'بطاقات', en: 'Cards', icon: LayoutGrid },
+  { id: 'table', ar: 'جدول', en: 'Table', icon: Rows },
+  { id: 'compare', ar: 'مقارنة', en: 'Comparison', icon: GitCompare },
+  { id: 'attention', ar: 'تحتاج تدخلًا', en: 'Needs attention', icon: TriangleAlert },
 ]
 
 export function CampaignsPage() {
@@ -148,11 +148,11 @@ export function CampaignsPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">الحملات</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{ar ? 'الحملات' : 'Campaigns'}</h1>
             <DemoBadge />
           </div>
           <p className="mt-1 text-sm text-text-secondary">
-            <span className="tnum font-semibold text-text-primary">{counts.total}</span> حملة في المشروع الحالي — كل مشروع معزول عن غيره.
+            <span className="tnum font-semibold text-text-primary">{counts.total}</span>{ar ? ' حملة في المشروع الحالي — كل مشروع معزول عن غيره.' : ' campaigns in the current project — each project is isolated from the others.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -163,10 +163,10 @@ export function CampaignsPage() {
 
       {/* Summary cards — CURRENT PROJECT only */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="نشطة" value={String(counts.active ?? 0)} sub={`${counts.total} إجمالًا`} tone="success" />
-        <StatCard label="متوقفة" value={String(counts.paused ?? 0)} sub="تحتاج مراجعة" tone="warning" />
-        <StatCard label="الميزانية" value={compact(budgetTotals.total)} sub={`مصروف ${compact(budgetTotals.spent)}`} />
-        <StatCard label="النتائج" value={num(k?.conversions)} delta={d.conversions} />
+        <StatCard label={ar ? 'نشطة' : 'Active'} value={String(counts.active ?? 0)} sub={ar ? `${counts.total} إجمالًا` : `${counts.total} in total`} tone="success" />
+        <StatCard label={ar ? 'متوقفة' : 'Paused'} value={String(counts.paused ?? 0)} sub={ar ? 'تحتاج مراجعة' : 'Need a look'} tone="warning" />
+        <StatCard label={ar ? 'الميزانية' : 'Budget'} value={compact(budgetTotals.total)} sub={ar ? `مصروف ${compact(budgetTotals.spent)}` : `${compact(budgetTotals.spent)} spent`} />
+        <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={d.conversions} />
         <StatCard label="CPA" value={money(k?.cpa ?? null)} delta={d.cpa} invert />
         <StatCard label="ROAS" value={ratio(k?.roas ?? null)} delta={d.roas} />
       </div>
@@ -188,7 +188,7 @@ export function CampaignsPage() {
               }`}
             >
               <Icon size={15} className={v.id === 'attention' && attention.length > 0 ? 'text-warning' : undefined} />
-              {v.ar}
+              {ar ? v.ar : v.en}
               {count > 0 && <span className="tnum rounded-full bg-surface-secondary px-1.5 text-[11px] text-text-secondary">{count}</span>}
             </button>
           )
@@ -199,25 +199,25 @@ export function CampaignsPage() {
         <>
           {/* Charts — all from the project-scoped metrics API. */}
           <div className="grid gap-4 lg:grid-cols-3">
-            <ChartCard title="الإنفاق مقابل الإيرادات" subtitle="اتجاه المشروع" className="lg:col-span-2">
+            <ChartCard title={ar ? 'الإنفاق مقابل الإيرادات' : 'Spend vs revenue'} subtitle={ar ? 'اتجاه المشروع' : 'How the project is trending'} className="lg:col-span-2">
               {timeseries.isLoading ? <Skeleton className="h-[200px]" /> : <SpendRevenueAreaChart data={(timeseries.data ?? []) as unknown as Array<Record<string, unknown>>} height={200} />}
             </ChartCard>
-            <ChartCard title="توزيع الإنفاق" subtitle="حسب المنصة">
-              {platforms.isLoading ? <Skeleton className="h-[200px]" /> : <PlatformDonutChart data={platformDonut} centerLabel="الإجمالي" centerValue={compact(platformDonut.reduce((a, b) => a + b.value, 0))} height={200} />}
+            <ChartCard title={ar ? 'توزيع الإنفاق' : 'Where the spend went'} subtitle={ar ? 'حسب المنصة' : 'By platform'}>
+              {platforms.isLoading ? <Skeleton className="h-[200px]" /> : <PlatformDonutChart data={platformDonut} centerLabel={ar ? 'الإجمالي' : 'Total'} centerValue={compact(platformDonut.reduce((a, b) => a + b.value, 0))} height={200} />}
             </ChartCard>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
-            <ChartCard title="حالات الحملات" subtitle="توزيع الحالة">
-              {statusDonut.length ? <PlatformDonutChart data={statusDonut} colorBy="series" centerLabel="الحملات" centerValue={String(counts.total)} height={190} /> : <EmptyState title="لا حملات" />}
+            <ChartCard title={ar ? 'حالات الحملات' : 'Campaign statuses'} subtitle={ar ? 'توزيع الحالة' : 'How they break down'}>
+              {statusDonut.length ? <PlatformDonutChart data={statusDonut} colorBy="series" centerLabel={ar ? 'الحملات' : 'Campaigns'} centerValue={String(counts.total)} height={190} /> : <EmptyState title={ar ? 'لا حملات' : 'No campaigns'} />}
             </ChartCard>
-            <ChartCard title="أفضل الحملات" subtitle="حسب الإنفاق" className="lg:col-span-2">
-              {topCampaigns.length >= 2 ? <RankingBarChart data={topCampaigns} bars={[{ key: 'spend', name: 'الإنفاق', kind: 'money' }]} horizontal height={190} colorByPlatform /> : <div className="flex h-[190px] items-center justify-center"><ProgressRing value={budgetTotals.consumed} sublabel={`${compact(budgetTotals.spent)} / ${compact(budgetTotals.total)}`} size={140} tone={budgetTotals.consumed > 0.95 ? 'danger' : 'brand'} /></div>}
+            <ChartCard title={ar ? 'أفضل الحملات' : 'Best campaigns'} subtitle={ar ? 'حسب الإنفاق' : 'By spend'} className="lg:col-span-2">
+              {topCampaigns.length >= 2 ? <RankingBarChart data={topCampaigns} bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]} horizontal height={190} colorByPlatform /> : <div className="flex h-[190px] items-center justify-center"><ProgressRing value={budgetTotals.consumed} sublabel={`${compact(budgetTotals.spent)} / ${compact(budgetTotals.total)}`} size={140} tone={budgetTotals.consumed > 0.95 ? 'danger' : 'brand'} /></div>}
             </ChartCard>
           </div>
           {attention.length > 0 && (
             <button onClick={() => setView('attention')} className="flex w-full items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-start text-sm text-text-primary hover:bg-warning/15">
               <TriangleAlert size={16} className="shrink-0 text-warning" />
-              <span><span className="tnum font-bold">{attention.length}</span> حملة تحتاج تدخلًا — اعرض التفاصيل والأسباب.</span>
+              <span><span className="tnum font-bold">{attention.length}</span>{ar ? ' حملة تحتاج تدخلًا — اعرض التفاصيل والأسباب.' : ' campaigns need attention — open them for the detail and the reason.'}</span>
             </button>
           )}
         </>
@@ -238,14 +238,14 @@ export function CampaignsPage() {
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative flex-1">
                 <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث في حملات المشروع…" className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={ar ? 'ابحث في حملات المشروع…' : 'Search this project’s campaigns…'} className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
               </div>
-              <Select value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: 'كل الحالات' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
-              <Select value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: 'كل الأهداف' }, ...CAMPAIGN_OBJECTIVES.map((o) => ({ value: o, label: objectiveLabel(o, locale) }))]} />
+              <Select value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
+              <Select value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CAMPAIGN_OBJECTIVES.map((o) => ({ value: o, label: objectiveLabel(o, locale) }))]} />
             </div>
             {/* Taxonomy chips — the same taxonomy the selects use, one tap away, with live counts. */}
             <div className="flex flex-wrap gap-1.5">
-              <Chip active={status === '' && objective === ''} onClick={() => { setStatus(''); setObjective('') }}>الكل <span className="tnum">{counts.total}</span></Chip>
+              <Chip active={status === '' && objective === ''} onClick={() => { setStatus(''); setObjective('') }}>{ar ? 'الكل' : 'All'} <span className="tnum">{counts.total}</span></Chip>
               {CAMPAIGN_STATUSES.filter((s) => (counts[s] ?? 0) > 0).map((s) => (
                 <Chip key={s} active={status === s} onClick={() => setStatus(status === s ? '' : s)}>
                   {campaignStatusLabel(s, locale)} <span className="tnum">{counts[s]}</span>
@@ -266,7 +266,7 @@ export function CampaignsPage() {
             <EmptyState title={t('no_campaigns')} description={t('no_campaigns_hint')} />
           ) : view === 'attention' ? (
             attention.length === 0 ? (
-              <EmptyState title="لا توجد حملات تحتاج تدخلًا" description="كل حملات المشروع مرتبطة بمنصاتها وتنفق ضمن ميزانياتها وتحقق نتائج في الفترة المحددة." />
+              <EmptyState title={ar ? 'لا توجد حملات تحتاج تدخلًا' : 'Nothing needs attention'} description={ar ? 'كل حملات المشروع مرتبطة بمنصاتها وتنفق ضمن ميزانياتها وتحقق نتائج في الفترة المحددة.' : 'Every campaign in this project is linked to its platform, spending within budget and producing results in the selected period.'} />
             ) : (
               <div className="space-y-2">
                 {attention.map(({ c, flags }) => (
@@ -285,7 +285,7 @@ export function CampaignsPage() {
                       {flags.map((f) => (
                         <li key={f.code} className={`flex items-start gap-1.5 text-sm ${f.severity === 'high' ? 'text-danger' : 'text-warning'}`}>
                           <TriangleAlert size={14} className="mt-0.5 shrink-0" />
-                          <span className="text-text-secondary">{f.ar}</span>
+                          <span className="text-text-secondary">{ar ? f.ar : f.en}</span>
                         </li>
                       ))}
                     </ul>
@@ -300,7 +300,7 @@ export function CampaignsPage() {
           ) : (
             <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
               <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
-                <thead><tr className="border-b border-border text-text-muted"><th className="p-3 text-start">الحملة</th><th className="p-3 text-start">الهدف</th><th className="p-3 text-start">الحالة</th><th className="p-3 text-end">الميزانية</th><th className="p-3 text-end">مرتبطة</th></tr></thead>
+                <thead><tr className="border-b border-border text-text-muted"><th className="p-3 text-start">{ar ? 'الحملة' : 'Campaign'}</th><th className="p-3 text-start">{ar ? 'الهدف' : 'Objective'}</th><th className="p-3 text-start">{ar ? 'الحالة' : 'Status'}</th><th className="p-3 text-end">{ar ? 'الميزانية' : 'Budget'}</th><th className="p-3 text-end">{ar ? 'مرتبطة' : 'Linked'}</th></tr></thead>
                 <tbody>
                   {campaigns.map((c) => (
                     <tr key={c.id} data-testid="campaign-row" className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-hover" onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}>
@@ -364,10 +364,10 @@ function CampaignCard({ c, locale, onOpen }: { c: UnifiedCampaign; locale: 'ar' 
         <Badge tone="neutral">{objectiveLabel(c.objective, locale)}</Badge>
       </div>
       <div className="grid grid-cols-2 gap-1.5 text-xs">
-        <span className="rounded-lg bg-surface-secondary px-2 py-1.5">الميزانية <b className="tnum block text-text-primary">{money(c.total_budget, c.budget_currency)}</b></span>
-        <span className="rounded-lg bg-surface-secondary px-2 py-1.5">مرتبطة <b className="tnum block text-text-primary">{c.external_campaigns_count ?? 0}</b></span>
+        <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'الميزانية' : 'Budget'} <b className="tnum block text-text-primary">{money(c.total_budget, c.budget_currency)}</b></span>
+        <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'مرتبطة' : 'Linked'} <b className="tnum block text-text-primary">{c.external_campaigns_count ?? 0}</b></span>
       </div>
-      {unlinked && <div className="inline-flex items-center gap-1 text-[11px] text-warning"><TriangleAlert size={12} /> بلا حملات خارجية مرتبطة</div>}
+      {unlinked && <div className="inline-flex items-center gap-1 text-[11px] text-warning"><TriangleAlert size={12} /> {locale === 'ar' ? 'بلا حملات خارجية مرتبطة' : 'No linked platform campaign'}</div>}
     </button>
   )
 }

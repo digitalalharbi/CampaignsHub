@@ -8,16 +8,17 @@ import { SecurityTab } from './tabs/SecurityTab'
 import { BrandingTab } from './tabs/BrandingTab'
 import { ClientsTab } from './tabs/ClientsTab'
 import { ProjectsTab } from './tabs/ProjectsTab'
+import { useUi } from '@/stores/ui'
 
 const TABS = [
-  { id: 'general', label: 'عام', icon: Building2 },
-  { id: 'clients', label: 'العملاء', icon: Briefcase },
-  { id: 'projects', label: 'المشاريع', icon: FolderKanban },
-  { id: 'team', label: 'الفريق والصلاحيات', icon: Users },
-  { id: 'notifications', label: 'الإشعارات', icon: Bell },
-  { id: 'security', label: 'الأمان', icon: ShieldCheck },
-  { id: 'branding', label: 'الهوية', icon: Palette },
-  { id: 'disclaimer', label: 'الملاحظات والمنهجية', icon: FileText },
+  { id: 'general', ar: 'عام', en: 'General', icon: Building2 },
+  { id: 'clients', ar: 'العملاء', en: 'Clients', icon: Briefcase },
+  { id: 'projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban },
+  { id: 'team', ar: 'الفريق والصلاحيات', en: 'Team & permissions', icon: Users },
+  { id: 'notifications', ar: 'الإشعارات', en: 'Notifications', icon: Bell },
+  { id: 'security', ar: 'الأمان', en: 'Security', icon: ShieldCheck },
+  { id: 'branding', ar: 'الهوية', en: 'Branding', icon: Palette },
+  { id: 'disclaimer', ar: 'الملاحظات والمنهجية', en: 'Notes & methodology', icon: FileText },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export function SettingsPage({ only, title, subtitle }: Props = {}) {
+  const ar = useUi((u) => u.locale) === 'ar'
   const shown = only ? TABS.filter((t) => only.includes(t.id)) : TABS
   const [tab, setTab] = useState<TabId>(shown[0]?.id ?? 'general')
   const single = shown.length === 1
@@ -38,9 +40,9 @@ export function SettingsPage({ only, title, subtitle }: Props = {}) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{title ?? 'الإعدادات'}</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{title ?? (ar ? 'الإعدادات' : 'Settings')}</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          {subtitle ?? 'إعدادات مساحة العمل — المؤسسة والعملاء والمشاريع والإشعارات والأمان'}
+          {subtitle ?? (ar ? 'إعدادات مساحة العمل — المؤسسة والعملاء والمشاريع والإشعارات والأمان' : 'Workspace settings — the organisation, clients, projects, notifications and security')}
         </p>
       </div>
 
@@ -59,7 +61,7 @@ export function SettingsPage({ only, title, subtitle }: Props = {}) {
                   }`}
                 >
                   <Icon size={16} />
-                  {t.label}
+                  {ar ? t.ar : t.en}
                 </button>
               )
             })}

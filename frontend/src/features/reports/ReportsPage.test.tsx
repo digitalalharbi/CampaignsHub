@@ -48,11 +48,11 @@ describe('ReportsPage — engine-fed builder', () => {
   it('feeds the type & audience selects from the taxonomy engine (report.type / report.audience)', async () => {
     renderWithProviders(<ReportsPage />, { locale: 'en' })
 
-    fireEvent.click(screen.getByText('تقرير جديد'))
+    fireEvent.click(screen.getByText(/تقرير جديد|New report/))
     // Default keys come through the engine option labels — a value only present in the mocked hook.
-    const typeSelect = await screen.findByRole('combobox', { name: 'نوع التقرير' })
+    const typeSelect = await screen.findByRole('combobox', { name: /نوع التقرير|Report type/ })
     expect(typeSelect).toHaveTextContent('Executive')
-    expect(screen.getByRole('combobox', { name: 'هذا التقرير موجّه إلى' })).toHaveTextContent('Client')
+    expect(screen.getByRole('combobox', { name: /هذا التقرير موجّه إلى|This report is for/ })).toHaveTextContent('Client')
 
     // The engine's second option is selectable (proves the list is the mocked engine set).
     fireEvent.click(typeSelect)
@@ -64,9 +64,9 @@ describe('ReportsPage — engine-fed builder', () => {
     vi.mocked(createReport).mockResolvedValue({} as never)
     renderWithProviders(<ReportsPage />, { locale: 'en' })
 
-    fireEvent.click(screen.getByText('تقرير جديد'))
-    await screen.findByRole('combobox', { name: 'نوع التقرير' })
-    fireEvent.click(screen.getByText('إنشاء وتوليد'))
+    fireEvent.click(screen.getByText(/تقرير جديد|New report/))
+    await screen.findByRole('combobox', { name: /نوع التقرير|Report type/ })
+    fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
 
     await waitFor(() =>
       expect(createReport).toHaveBeenCalledWith(
@@ -82,9 +82,9 @@ describe('ReportsPage — engine-fed builder', () => {
     })
     renderWithProviders(<ReportsPage />, { locale: 'en' })
 
-    fireEvent.click(screen.getByText('تقرير جديد'))
-    await screen.findByRole('combobox', { name: 'نوع التقرير' })
-    fireEvent.click(screen.getByText('إنشاء وتوليد'))
+    fireEvent.click(screen.getByText(/تقرير جديد|New report/))
+    await screen.findByRole('combobox', { name: /نوع التقرير|Report type/ })
+    fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
 
     const summary = await screen.findByTestId('error-summary')
     expect(summary).toHaveTextContent('The end date is invalid.')
