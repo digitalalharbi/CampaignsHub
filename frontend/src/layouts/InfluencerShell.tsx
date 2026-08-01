@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Handshake,
   ListChecks,
+  ClipboardCheck,
   Menu,
   Moon,
   PanelLeft,
@@ -30,6 +31,9 @@ import { useUi } from '@/stores/ui'
 const influencerNav = [
   { to: '/influencers', ar: 'التعاونات', en: 'Collaborations', icon: Handshake, end: true },
   { to: '/influencers/roster', ar: 'قائمة المؤثرين', en: 'Creator roster', icon: Users },
+  // Sits between the roster and the work, which is where it sits in the actual process: you pick a
+  // creator from the roster, somebody answers, and only then is there anything to deliver.
+  { to: '/influencers/nominations', ar: 'الترشيحات', en: 'Nominations', icon: ClipboardCheck },
   { to: '/influencers/deliverables', ar: 'المخرجات', en: 'Deliverables', icon: ListChecks },
 ] as const
 

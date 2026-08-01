@@ -1,4 +1,4 @@
-import { getData, patchData, postData } from '@/lib/api/client'
+import { deleteData, getData, patchData, postData } from '@/lib/api/client'
 
 /**
  * Influencer & UGC marketing (INFL-001).
@@ -128,4 +128,136 @@ export function addDeliverable(
   body: { type: string; platform?: string | null; due_on?: string | null },
 ): Promise<{ collaboration: Collaboration }> {
   return postData(`/influencers/collaborations/${collaborationId}/deliverables`, body)
+}
+
+/* ── Nominations, attribution and per-post results (INFL-003) ─────────────────────────────── */
+
+export interface Nomination {
+  id: string
+  status: 'proposed' | 'approved' | 'rejected' | 'withdrawn'
+  campaign_id: string | null
+  client_workspace_id: string | null
+  proposed_fee: string | null
+  currency: string | null
+  rationale: string | null
+  proposed_at: string | null
+  decided_at: string | null
+  decision_note: string | null
+  /** True only for an approved nomination that has not already become work. */
+  is_convertible: boolean
+  collaboration_id: string | null
+  influencer: {
+    id: string
+    name: string
+    handle: string | null
+    primary_platform: string | null
+    followers: number | null
+    tier: string | null
+  } | null
+}
+
+export function fetchNominations(status?: string): Promise<Nomination[]> {
+  return getData<Nomination[]>(`/influencers/nominations${status ? `?status=${encodeURIComponent(status)}` : ''}`)
+}
+
+export function proposeNomination(body: {
+  influencer_id: string
+  campaign_id?: string | null
+  proposed_fee?: string | null
+  currency?: string | null
+  rationale?: string | null
+}): Promise<Nomination> {
+  return postData<Nomination>('/influencers/nominations', body)
+}
+
+/** Approve or reject. A rejection without a note is refused by the server, not just discouraged. */
+export function decideNomination(id: string, decision: 'approved' | 'rejected', note?: string): Promise<Nomination> {
+  return postData<Nomination>(`/influencers/nominations/${id}/decide`, { decision, note })
+}
+
+export function withdrawNomination(id: string): Promise<Nomination> {
+  return deleteData<Nomination>(`/influencers/nominations/${id}`)
+}
+
+export function convertNomination(id: string, body: { title: string }): Promise<{ collaboration_id: string; nomination: Nomination }> {
+  return postData(`/influencers/nominations/${id}/collaboration`, body)
+}
+
+export interface TrackingAsset {
+  id: string
+  kind: 'link' | 'discount_code'
+  code: string
+  deliverable_id: string | null
+  destination_url: string | null
+  /** Only a link has one — a discount code is not a URL this platform serves. */
+  share_url: string | null
+  discount_type: string | null
+  discount_value: string | null
+  clicks: number
+  last_clicked_at: string | null
+  redemptions: number
+  redemptions_source: 'awaiting_credentials' | 'manual' | 'platform'
+  /**
+   * Whether the number beside this row is something the platform KNOWS.
+   *
+   * A link's clicks always are — the platform serves the redirect. A discount code's redemptions
+   * only are once a person or a store supplied a figure; until then the zero is an absence of
+   * information, and rendering it like a measured zero would be the clearest possible lie.
+   */
+  count_is_measured: boolean
+  is_active: boolean
+}
+
+export function fetchTrackingAssets(collaborationId: string): Promise<TrackingAsset[]> {
+  return getData<TrackingAsset[]>(`/influencers/collaborations/${collaborationId}/tracking`)
+}
+
+export function issueTrackingAsset(
+  collaborationId: string,
+  body: {
+    kind: 'link' | 'discount_code'
+    deliverable_id?: string | null
+    destination_url?: string | null
+    code?: string | null
+    discount_type?: string | null
+    discount_value?: string | null
+  },
+): Promise<TrackingAsset> {
+  return postData<TrackingAsset>(`/influencers/collaborations/${collaborationId}/tracking`, body)
+}
+
+/** What the store reported. Stored as reported — never as something this platform measured. */
+export function recordRedemptions(assetId: string, redemptions: number): Promise<TrackingAsset> {
+  return patchData<TrackingAsset>(`/influencers/tracking/${assetId}/redemptions`, { redemptions })
+}
+
+export interface DeliverableResult {
+  id: string
+  source: 'manual' | 'platform'
+  impressions: number | null
+  reach: number | null
+  engagements: number | null
+  clicks: number | null
+  conversions: number | null
+  revenue: string | null
+  currency: string | null
+  /** Null when either side is unknown — never a 0% that would read as "nobody engaged". */
+  engagement_rate: number | null
+  measured_at: string | null
+  note: string | null
+}
+
+export function fetchDeliverableResults(deliverableId: string): Promise<DeliverableResult[]> {
+  return getData<DeliverableResult[]>(`/influencers/deliverables/${deliverableId}/results`)
+}
+
+export function recordDeliverableResult(
+  deliverableId: string,
+  body: Partial<Record<'impressions' | 'reach' | 'engagements' | 'clicks' | 'conversions', number>> & {
+    revenue?: string
+    currency?: string
+    note?: string
+  },
+): Promise<DeliverableResult> {
+  return postData<DeliverableResult>(`/influencers/deliverables/${deliverableId}/results`, body)
 }

@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Domains\Influencers\Http\Controllers\AttributionController;
 use App\Domains\Influencers\Http\Controllers\CollaborationController;
 use App\Domains\Influencers\Http\Controllers\CreatorController;
 use App\Domains\Influencers\Http\Controllers\InfluencerController;
+use App\Domains\Influencers\Http\Controllers\NominationController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -35,6 +37,38 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:influencers'])
             ->name('collaborations.deliverables.update');
         Route::post('/collaborations/{collaboration}/send-terms', [CollaborationController::class, 'sendTerms'])
             ->name('collaborations.send-terms');
+
+        /*
+         | Nominations — the decision, kept whichever way it went (INFL-003).
+         |
+         | Proposing needs `influencers.manage`; DECIDING needs `influencers.approve`, which is a
+         | separate permission so a shortlist is not a rubber stamp its own author holds.
+         */
+        Route::get('/nominations', [NominationController::class, 'index'])->name('nominations.index');
+        Route::post('/nominations', [NominationController::class, 'store'])->name('nominations.store');
+        Route::post('/nominations/{nomination}/decide', [NominationController::class, 'decide'])->name('nominations.decide');
+        Route::delete('/nominations/{nomination}', [NominationController::class, 'withdraw'])->name('nominations.withdraw');
+        Route::post('/nominations/{nomination}/collaboration', [NominationController::class, 'convert'])
+            ->name('nominations.convert');
+
+        /*
+         | Attribution — how one creator's traffic is told apart from another's (INFL-003).
+         |
+         | A link's clicks are counted by this platform, which serves the redirect. A discount code's
+         | redemptions happen in the brand's own store and are reported, never measured — the
+         | response says which is which on every row.
+         */
+        Route::get('/collaborations/{collaboration}/tracking', [AttributionController::class, 'index'])
+            ->name('collaborations.tracking.index');
+        Route::post('/collaborations/{collaboration}/tracking', [AttributionController::class, 'store'])
+            ->name('collaborations.tracking.store');
+        Route::patch('/tracking/{asset}/redemptions', [AttributionController::class, 'recordRedemptions'])
+            ->name('tracking.redemptions');
+
+        Route::get('/deliverables/{deliverable}/results', [AttributionController::class, 'results'])
+            ->name('deliverables.results.index');
+        Route::post('/deliverables/{deliverable}/results', [AttributionController::class, 'recordResult'])
+            ->name('deliverables.results.store');
 
         /*
          | The CREATOR's own surface (INFL-002).

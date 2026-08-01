@@ -46,7 +46,14 @@ final class PermissionSeeder extends Seeder
         // Influencer & UGC (INFL-001). `view_costs` is separate from `view` on purpose: what the
         // creator is paid, and the margin between that and what the client is billed, is not the
         // same secret as the roster itself.
-        'influencers' => ['view', 'manage', 'view_costs'],
+        /*
+         * `approve` is separate from `manage` on purpose (INFL-003).
+         *
+         * Anyone who may add a creator to the roster may put one forward for a campaign; committing
+         * the agency to them is a different call. Collapsing the two would make the shortlist a
+         * rubber stamp its own author holds.
+         */
+        'influencers' => ['view', 'manage', 'approve', 'view_costs'],
         'requests' => [
             'view', 'view_all', 'update', 'assign', 'change_status', 'change_priority',
             'comment_internal', 'comment_client', 'request_information', 'manage_files',

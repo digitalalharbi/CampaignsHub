@@ -89,6 +89,7 @@ import { AgencyTeamPage } from '@/features/agency/AgencyTeamPage'
 import { InfluencerShell } from '@/layouts/InfluencerShell'
 import { RequireInfluencerPortal } from '@/features/influencers/RequireInfluencerPortal'
 import { CollaborationsPage } from '@/features/influencers/CollaborationsPage'
+import { NominationsPage } from '@/features/influencers/NominationsPage'
 import { RosterPage } from '@/features/influencers/RosterPage'
 import { DeliverablesPage } from '@/features/influencers/DeliverablesPage'
 import { CreatorShell } from '@/layouts/CreatorShell'
@@ -436,6 +437,9 @@ export const router = createBrowserRouter([
             children: [
               { index: true, element: <CollaborationsPage /> },
               { path: 'roster', element: <RosterPage /> },
+              // The shortlist and its decisions (INFL-003) — the half of the contract that records
+              // what was ASKED, including the answers that were no.
+              { path: 'nominations', element: <NominationsPage /> },
               { path: 'deliverables', element: <DeliverablesPage /> },
             ],
           },

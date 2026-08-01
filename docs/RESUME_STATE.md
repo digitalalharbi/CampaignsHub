@@ -11,10 +11,11 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
-`PAY-002b` — mid-term upgrade/downgrade with proration, the last unbuilt piece of the commercial
-contract. Preceded by `883c40c` (I18N-001 + UI-MODAL-001).
+`INFL-003` — nominations, tracking links, discount codes and per-post results: the second half of
+the influencers contract and the last NOT_STARTED row. Preceded by `f00e7af` (PAY-002b) and
+`883c40c` (I18N-001 + UI-MODAL-001).
 
-**876 backend · 462 vitest · E2E on chromium + firefox + webkit, `retries: 0`.**
+**894 backend · 468 vitest · E2E on chromium + firefox + webkit, `retries: 0`.**
 
 Session order: `f71319d` (SIGNUP-002d + review queue) → `d4f57ff` (3 E2E root causes) → `c5cc4e7`
 (PLAN-001) → `d4872d1` → `c143817` (PLAN-001e, sign-up in two steps) → `34f2831` (PAY-001…005) →
@@ -340,6 +341,41 @@ asserted rather than inherited. The ~97 surplus Sandbox connections this created
 database were deleted (cascade removes their accounts and externals); the seeded demo connection was
 kept. Nothing outside those test-created connections was touched.
 
+## Latest work unit — INFL-003 (the second half of the influencers contract)
+
+Three things the roster and the collaboration could not express.
+
+**Nominations.** A collaboration records what was AGREED; nothing recorded what was asked and what
+came back, so a creator who was turned down left no trace and got proposed again next quarter by
+somebody who had not been in the room. A rejection now REQUIRES a reason, and deciding is a separate
+permission — `influencers.approve`, new — from proposing: anyone who may add a creator to the roster
+may suggest one, but committing the agency to them is somebody else's call, and collapsing the two
+makes the shortlist a rubber stamp its own author holds. An approved nomination converts to a
+collaboration once, idempotently, with the link kept so the trail runs idea → decision → contract.
+
+**Attribution, and the line that matters: a click is MEASURED, a redemption is REPORTED.** The
+platform serves `/t/{code}` itself — a web route, no session, no tenant, resolved by a globally
+unique code and counted with an atomic increment — so a link's clicks are as real as anything in the
+product. A discount code is redeemed in the brand's own store, which this platform has never seen; it
+carries `redemptions_source`, which reads `awaiting_credentials` until a person or a store supplies a
+figure. `count_is_measured` is on every row so the interface can tell two zeroes apart instead of
+showing them as the same fact. `source` on a result is set by the SERVER, never read from the
+request, or a hand-typed number could label itself as platform-measured.
+
+**Results per deliverable**, because «which post worked» is the only question that changes what you
+commission next. Keyed on (deliverable, source): a correction replaces rather than stacks, and a
+future platform sync sits beside the manual figure instead of overwriting somebody's work. An
+unknown reach yields a NULL engagement rate — never a 0% that would read as «nobody engaged».
+
+### Known gap this exposed, not closed here
+
+The influencers portal's only demo account, `layla@creators.demo`, is a **creator**. The agency side
+of that portal — roster, collaborations, and now nominations and attribution — has no demo login, so
+none of it can be demonstrated by signing in. The permission gate and the public redirect were
+verified live (403 for the creator; a stranger's unknown code redirected to the site); the manager
+path is proven by 17 backend tests through the real HTTP stack and 6 UI tests. Adding a sixth demo
+account belongs to SIGNUP-006, not here.
+
 ## Latest work unit — PAY-002b (changing plan part-way through a paid period)
 
 `SubscriptionProration` is the whole decision, kept apart from the lifecycle because it is the only
@@ -379,9 +415,9 @@ new price, −499.00 SAR credit, 1000.00 SAR due; confirming left `plan` at `gro
 withdrawal cleared it.
 
 ## Exact next task
-**PAY-005 / OPS-002 / INFL-003 / NORM-001 / PROJINT-001 / REVIEW-001** — the remaining PARTIAL and
-NOT_STARTED rows. `INFL-003` (nominations, tracking links, discount codes, per-deliverable results)
-is the largest of them and the only NOT_STARTED one.
+**PAY-005 / OPS-002 / NORM-001 / PROJINT-001 / REVIEW-001** — the remaining PARTIAL rows. Nothing is
+NOT_STARTED any more. Also open: a demo login for the AGENCY side of the influencers portal (see the
+gap recorded under INFL-003).
 
 Previously recorded here, and still true of the payment layer:
 
