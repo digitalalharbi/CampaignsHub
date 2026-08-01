@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios'
 import type { ApiEnvelope } from './types'
+import { describeFailure, isTimeout } from './errors'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -88,21 +89,64 @@ export interface ApiError {
    * UI ever saw.
    */
   meta: Record<string, unknown> | null
+  /**
+   * What KIND of failure this was, so callers can act and not only speak.
+   *
+   * `offline` is reserved for a request that got no answer at all; `http` means a server replied
+   * and the status is meaningful; `timeout` is us giving up waiting, which is not the same as the
+   * customer being disconnected.
+   */
+  kind: 'http' | 'offline' | 'timeout' | 'unexpected'
 }
 
+/**
+ * Normalise anything that was thrown into something the interface can say out loud.
+ *
+ * The failure this replaces: the client had two answers — the envelope's message, or «A network
+ * error occurred» — so every response it could not parse became a claim about the customer's
+ * internet. Verified against the running stack: with the API down the dev proxy returns 502 with an
+ * EMPTY `text/plain` body, which is a response, so `response.data` is `''` and the envelope lookup
+ * yields nothing. A gateway timeout, an HTML error page and a bug in our own code all landed in the
+ * same place.
+ *
+ * Three cases now, and they are genuinely different:
+ *   1. an envelope — the server said something specific, and it is already translated;
+ *   2. a status without a usable body — described from the status, because a status is a fact;
+ *   3. no response at all — the only thing that is really a network problem.
+ */
 export function toApiError(error: unknown): ApiError {
-  const axiosError = error as AxiosError<ApiEnvelope<unknown>>
-  const envelope = axiosError.response?.data
+  const locale = useUi.getState().locale
+  const axiosError = error as AxiosError<ApiEnvelope<unknown>> | undefined
+  const response = axiosError?.response
+  const envelope = response?.data
+
+  // A body that is not our envelope — an empty proxy response, an HTML error page — must not be
+  // read as one. `message` is only trusted when it is actually a string.
+  const envelopeMessage = typeof envelope?.message === 'string' && envelope.message !== ''
+    ? envelope.message
+    : undefined
+
+  /*
+   * `request` without `response` is axios saying it sent something and heard nothing back. A
+   * timeout is reported separately because "we gave up waiting" is not "you are offline".
+   */
+  const sentButUnanswered = response === undefined && Boolean(axiosError?.request)
+  const timedOut = isTimeout(axiosError?.code)
+
   return {
-    // No envelope means no response at all — the request never reached the server, so there is no
-    // translated message to use and this one has to be written on the client (I18N-001).
-    message: envelope?.message
-      ?? (useUi.getState().locale === 'ar'
-        ? 'تعذّر الاتصال بالخادم. الرجاء المحاولة مرة أخرى.'
-        : 'A network error occurred. Please try again.'),
-    status: axiosError.response?.status,
-    errors: envelope?.errors ?? null,
+    message: describeFailure({
+      status: response?.status,
+      sentButUnanswered: sentButUnanswered || timedOut,
+      envelopeMessage,
+    }, locale),
+    status: response?.status,
+    errors: (envelope?.errors as Record<string, string[]> | undefined) ?? null,
     meta: (envelope as { meta?: Record<string, unknown> } | undefined)?.meta ?? null,
+    /*
+     * Named so a caller can behave differently rather than only speak differently — a retry button
+     * makes sense when nothing answered, and makes no sense on a 403.
+     */
+    kind: timedOut ? 'timeout' : sentButUnanswered ? 'offline' : response ? 'http' : 'unexpected',
   }
 }
 

@@ -11,11 +11,10 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
-`INFL-003` — nominations, tracking links, discount codes and per-post results: the second half of
-the influencers contract and the last NOT_STARTED row. Preceded by `f00e7af` (PAY-002b) and
-`883c40c` (I18N-001 + UI-MODAL-001).
+`LOGIN-FINAL` — the network error root-caused, and five final sign-in doors on one engine.
+Preceded by `f8a1779` (INFL-003), `f00e7af` (PAY-002b), `883c40c` (I18N-001 + UI-MODAL-001).
 
-**894 backend · 468 vitest · E2E on chromium + firefox + webkit, `retries: 0`.**
+**894 backend · 476 vitest · E2E on chromium + firefox + webkit, `retries: 0`.**
 
 Session order: `f71319d` (SIGNUP-002d + review queue) → `d4f57ff` (3 E2E root causes) → `c5cc4e7`
 (PLAN-001) → `d4872d1` → `c143817` (PLAN-001e, sign-up in two steps) → `34f2831` (PAY-001…005) →
@@ -340,6 +339,50 @@ starts UNLINKED, which used to hold only because every run got a brand-new row �
 asserted rather than inherited. The ~97 surplus Sandbox connections this created on the local dev
 database were deleted (cascade removes their accounts and externals); the seeded demo connection was
 kept. Nothing outside those test-created connections was touched.
+
+## Latest work unit — LOGIN-FINAL
+
+### «A network error occurred» — diagnosed, not reworded
+
+The client had exactly two answers: the server's envelope message, or the network one. Everything
+that was not a well-formed envelope fell into the second, so a customer whose request reached a
+server and came back with a status was told their internet was down.
+
+**Reproduced against the running stack.** With the API unreachable the Vite dev proxy answers
+**502 with an empty `text/plain` body** — so axios HAS a `response`, `response.data` is `''`, the
+envelope lookup yields `undefined`, and the fallback fires. The same hole swallowed HTML error
+pages, gateway timeouts, and `TypeError`s thrown in our own code.
+
+`lib/api/errors.ts` now describes a failure from what is actually known: a status is a fact about
+the server and is described as one (401/403/404/419/422/429/408/502/503/504/5xx, AR + EN), and only
+a request that was **sent and got no answer** is called a network problem. `ApiError.kind` names
+which it was, so a caller can offer a retry where retrying makes sense. Live proof: with the API
+stopped, `/app/login` now says «الخدمة غير متاحة مؤقتًا» instead of blaming the connection.
+
+### Two more live defects the same investigation turned up
+
+- **The 419 branch was dead code.** Laravel's own `Handler::prepareException()` converts
+  `TokenMismatchException` into a plain `HttpException` BEFORE any render callback runs, so
+  `$e instanceof TokenMismatchException` never matched and the framework's English «CSRF token
+  mismatch.» reached Arabic customers. Matched on the status now.
+- **`ClientTaxonomyController` 500'd on every call.** It queried `users.tenant_id`, dropped in
+  `2f88246`, so the client classification / settings / team dropdowns were empty. The guard test for
+  that column only looked for a property read, never for a QUERY, so a whole endpoint sat broken
+  behind a green suite. The guard now scans for both — and it must distinguish a `tenant_id` clause
+  belonging to the user query from one belonging to a role, a membership subquery or a `whereHas`
+  closure, all of which are correct.
+
+### The five doors
+
+`/admin/login`, `/app/login`, `/agency/login`, `/influencers/login` render ONE component from one
+`PORTAL_DOORS` table: one `login()`, one destination resolver, one refusal path. The portal in the
+URL travels as a preference the server checks; it cannot open a portal, only get the sign-in refused
+before a session exists. `/portal/login` stays OTP — linked from every door with the method stated
+in words, never given a password field it does not have.
+
+Live after `migrate:fresh --seed`: all four password accounts land in their own portal
+(`/admin`, `/app/dashboard`, `/agency`, `/influencers`) and every foreign door answers 403 naming
+where the account belongs; the recovery button completes the sign-in and lands correctly.
 
 ## Latest work unit — INFL-003 (the second half of the influencers contract)
 

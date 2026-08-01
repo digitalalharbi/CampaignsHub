@@ -89,6 +89,7 @@ import { AgencyTeamPage } from '@/features/agency/AgencyTeamPage'
 import { InfluencerShell } from '@/layouts/InfluencerShell'
 import { RequireInfluencerPortal } from '@/features/influencers/RequireInfluencerPortal'
 import { CollaborationsPage } from '@/features/influencers/CollaborationsPage'
+import { PortalLoginPage } from '@/features/auth/PortalLoginPage'
 import { NominationsPage } from '@/features/influencers/NominationsPage'
 import { RosterPage } from '@/features/influencers/RosterPage'
 import { DeliverablesPage } from '@/features/influencers/DeliverablesPage'
@@ -129,6 +130,21 @@ export const router = createBrowserRouter([
   // space, so all four portals are addressed the same way. Each page guards itself: a 401 from the
   // portal endpoints returns to the portal login. The section nav lives in PortalShell.
   { path: '/portal/login', element: <ClientPortalLoginPage /> },
+
+  /*
+   * One door per portal (LOGIN-FINAL).
+   *
+   * All four render the SAME component with a different entry from `PORTAL_DOORS`: one `login()`,
+   * one destination resolver, one refusal path. `/login` stays as the neutral entry for anyone who
+   * does not know which door is theirs.
+   *
+   * `/portal/login` is above rather than here because it authenticates by one-time code — it is a
+   * different engine, and grouping it with these would invite somebody to add a password field.
+   */
+  { path: '/admin/login', element: <PortalLoginPage portal="admin" /> },
+  { path: '/app/login', element: <PortalLoginPage portal="app" /> },
+  { path: '/agency/login', element: <PortalLoginPage portal="agency" /> },
+  { path: '/influencers/login', element: <PortalLoginPage portal="influencers" /> },
   { path: '/portal/requests', element: <ClientRequestsPage /> },
   { path: '/portal/requests/:reference', element: <ClientRequestDetailPage /> },
   { path: '/portal/quotes', element: <ClientQuotesPage /> },

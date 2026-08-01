@@ -66,15 +66,18 @@ describe('an error with no response at all', () => {
   beforeEach(() => setLocale('ar'))
 
   /**
-   * The one message that cannot come from the server, because the request never reached it. It is
-   * the likeliest error a customer on a poor connection sees, so leaving it in English would undo
-   * the translation exactly where it is needed most.
+   * A request that was SENT and got nothing back — the only real network case.
+   *
+   * `request` present, `response` absent is exactly what axios reports when nothing answered.
    */
   it('is written in the interface language', () => {
-    expect(toApiError(new Error('Network Error')).message).toBe('تعذّر الاتصال بالخادم. الرجاء المحاولة مرة أخرى.')
+    const unanswered = { request: {}, response: undefined }
+
+    expect(toApiError(unanswered).message).toBe('تعذّر الاتصال بالخادم. تحقّق من اتصالك بالإنترنت وحاول مرة أخرى.')
+    expect(toApiError(unanswered).kind).toBe('offline')
 
     setLocale('en')
-    expect(toApiError(new Error('Network Error')).message).toBe('A network error occurred. Please try again.')
+    expect(toApiError(unanswered).message).toBe('The server could not be reached. Check your connection and try again.')
   })
 
   /** When the server DID answer, its message wins — it is already in the requested language. */

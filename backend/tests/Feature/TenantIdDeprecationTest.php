@@ -112,7 +112,45 @@ final class TenantIdDeprecationTest extends TestCase
 
         foreach ($this->phpFilesIn(app_path('Domains')) as $file) {
             $source = file_get_contents($file);
-            if (str_contains($source, 'user()->tenant_id') || str_contains($source, 'user->tenant_id')) {
+            /*
+             * Reads of the column AND queries against it.
+             *
+             * The first two patterns catch `$user->tenant_id`. They did NOT catch
+             * `User::query()->where('tenant_id', …)`, and `ClientTaxonomyController` sat behind that
+             * gap 500-ing on every call while this test stayed green — a whole endpoint broken by a
+             * migration, invisible because the guard only knew one shape of the mistake.
+             *
+             * Scanned rather than pattern-matched in one expression, because a `tenant_id` filter
+             * near a user query is usually SOMEBODY ELSE'S — a role, a membership subquery, a
+             * `whereHas` closure — and all three of those are correct. What is wrong is a
+             * `tenant_id` clause belonging to the user query itself, so the text between the two
+             * must contain no statement break, no other class reference and no closure.
+             */
+            $queriesTheColumn = false;
+            $offset = 0;
+
+            while (($start = strpos($source, 'User::query()', $offset)) !== false) {
+                $offset = $start + 13;
+                $clause = strpos($source, "where('tenant_id'", $start);
+
+                if ($clause === false) {
+                    break;
+                }
+
+                $between = substr($source, $start + 13, $clause - $start - 13);
+
+                $belongsToSomethingElse = str_contains($between, ';')
+                    || str_contains($between, '::')
+                    || str_contains($between, 'fn (')
+                    || str_contains($between, 'function (');
+
+                if (! $belongsToSomethingElse) {
+                    $queriesTheColumn = true;
+                    break;
+                }
+            }
+
+            if (str_contains($source, 'user()->tenant_id') || str_contains($source, 'user->tenant_id') || $queriesTheColumn) {
                 /*
                  * NO exceptions any more. MembershipProvisioner was the last one — it read the
                  * column to move a legacy user into a membership — and the upgrade migration took

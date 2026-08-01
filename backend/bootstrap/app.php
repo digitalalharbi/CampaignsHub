@@ -33,7 +33,6 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Session\Middleware\StartSession;
-use Illuminate\Session\TokenMismatchException;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -152,7 +151,17 @@ return Application::configure(basePath: dirname(__DIR__))
                 $e instanceof AuthorizationException => ApiResponse::error(
                     __('api.unauthorized'), status: 403,
                 ),
-                $e instanceof TokenMismatchException => ApiResponse::error(
+                /*
+                 * 419, matched on the STATUS rather than on the exception class.
+                 *
+                 * `$e instanceof TokenMismatchException` never fired: Laravel's own
+                 * `Handler::prepareException()` converts that exception into a plain `HttpException`
+                 * BEFORE any render callback sees it, keeping the framework's English message and
+                 * passing it through the `HttpExceptionInterface` branch below. So the branch was
+                 * dead code and an Arabic customer whose tab had been left open was told «CSRF token
+                 * mismatch.» — caught only by asking the running server what it actually answers.
+                 */
+                $e instanceof HttpExceptionInterface && $e->getStatusCode() === 419 => ApiResponse::error(
                     __('api.csrf'), status: 419,
                 ),
                 $e instanceof ModelNotFoundException,
