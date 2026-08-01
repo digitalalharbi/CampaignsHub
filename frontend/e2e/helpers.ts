@@ -47,9 +47,66 @@ export async function useProject(page: Page, projectId: string) {
   }, projectId)
 }
 
-/** Connect Sandbox + bind an ad account + sync → imports Sandbox external campaigns into `projectId`. */
+/**
+ * Put an external campaign back in the unlinked pool, whatever a previous run left behind.
+ *
+ * `campaigns-linking` starts by linking a named external to campaign A and only then expects the
+ * 409. That only holds if the external begins UNLINKED — which used to be true by accident, because
+ * every run minted a brand-new Sandbox account and therefore a brand-new external. Now that
+ * `seedExternals` reuses the project's binding, the precondition has to be stated rather than
+ * inherited from a fresh row.
+ */
+export async function unlinkExternalByName(request: APIRequestContext, projectId: string, name: string) {
+  const headers = await csrfHeaders(request)
+  const externals = (await (await request.get(`/api/v1/projects/${projectId}/external-campaigns`, { headers })).json())
+    .data as Array<{ id: string; name: string; unified_campaign_id: string | null }>
+
+  for (const e of externals.filter((x) => x.name === name && x.unified_campaign_id)) {
+    const res = await request.delete(
+      `/api/v1/projects/${projectId}/campaigns/${e.unified_campaign_id}/external/${e.id}`,
+      { headers },
+    )
+    // Asserted rather than hoped for: a precondition that silently fails to apply is how a test
+    // ends up exercising something other than what it claims.
+    expect(res.ok(), `unlinking ${name} failed with ${res.status()}`).toBeTruthy()
+  }
+
+  const unlinked = (await (await request.get(`/api/v1/projects/${projectId}/external-campaigns?linked=0`, { headers })).json())
+    .data as Array<{ name: string; project_id?: string | null }>
+  expect(
+    unlinked.filter((x) => x.name === name),
+    `${name} is not in the unlinked pool after unlinking; pool = ${JSON.stringify(unlinked.map((x) => x.name))}`,
+  ).not.toHaveLength(0)
+}
+
+/**
+ * Connect Sandbox + bind an ad account + sync → imports Sandbox external campaigns into `projectId`.
+ *
+ * REUSES an existing advertising binding when the project already has one.
+ *
+ * Connecting is genuinely not idempotent in the product — `EstablishSandboxConnection` mints a fresh
+ * credential, connection and set of accounts each time, because a person connecting twice means it —
+ * so calling this once per test accumulated one more Sandbox account on the same project every run.
+ * After enough runs the project held dozens of externals all named «Sandbox Awareness», and
+ * `campaigns-linking`, which finds its target by that name, started linking two DIFFERENT externals
+ * to campaigns A and B: no conflict, no 409, and the move-confirmation it asserts never appeared.
+ *
+ * A helper whose effect depends on how many times the suite has been run makes the suite's own
+ * behaviour depend on it. This one now leaves the project with exactly one Sandbox binding however
+ * often it is called.
+ */
 export async function seedExternals(request: APIRequestContext, projectId: string) {
   const headers = await csrfHeaders(request)
+
+  const existing = (await (await request.get(`/api/v1/projects/${projectId}/integrations`, { headers })).json())
+    .data as Array<{ id: string; purpose: string }>
+  const reusable = existing.find((b) => b.purpose === 'advertising')
+
+  if (reusable) {
+    await request.post(`/api/v1/projects/${projectId}/integrations/bindings/${reusable.id}/sync`, { headers })
+    return
+  }
+
   const connect = await request.post(`/api/v1/projects/${projectId}/integrations/connect`, { headers })
   const accounts = (await connect.json()).data.accounts as Array<{ id: string; account_type: string }>
   const adAccount = accounts.find((a) => a.account_type === 'ad_account')!

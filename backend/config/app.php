@@ -78,7 +78,15 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    /*
+     * Arabic by default (I18N-001).
+     *
+     * This is an Arabic-first product, so a request that expresses no preference — a webhook, a
+     * curl, a mobile client shipped without `Accept-Language` — is answered in the language its
+     * customers actually read. English remains the FALLBACK, which is what covers a key that has an
+     * English translation and no Arabic one: it renders in English rather than as the raw key.
+     */
+    'locale' => env('APP_LOCALE', 'ar'),
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 

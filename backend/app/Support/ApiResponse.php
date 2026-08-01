@@ -18,15 +18,22 @@ use Illuminate\Http\Request;
  */
 final class ApiResponse
 {
+    /**
+     * `$message` is nullable rather than a literal default (I18N-001).
+     *
+     * A default written into the signature is fixed at parse time, so it could only ever be one
+     * language; resolving it here means a caller that says nothing gets the language of the request
+     * being answered.
+     */
     public static function success(
         mixed $data = null,
-        string $message = 'Operation completed successfully.',
+        ?string $message = null,
         array $meta = [],
         int $status = 200,
     ): JsonResponse {
         return response()->json([
             'success' => true,
-            'message' => $message,
+            'message' => $message ?? __('api.ok'),
             'data' => $data,
             'meta' => self::withRequestId($meta),
             'errors' => null,
@@ -34,14 +41,14 @@ final class ApiResponse
     }
 
     public static function error(
-        string $message = 'The request could not be processed.',
+        ?string $message = null,
         ?array $errors = null,
         array $meta = [],
         int $status = 400,
     ): JsonResponse {
         return response()->json([
             'success' => false,
-            'message' => $message,
+            'message' => $message ?? __('api.failed'),
             'data' => null,
             'meta' => self::withRequestId($meta),
             'errors' => $errors,

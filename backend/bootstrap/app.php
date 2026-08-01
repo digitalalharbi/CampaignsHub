@@ -17,6 +17,7 @@ use App\Domains\Tenancy\Middleware\EnsurePortal;
 use App\Domains\Tenancy\Middleware\ResolveMembership;
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\ConditionalThrottle;
+use App\Http\Middleware\SetLocale;
 use App\Support\ApiResponse;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -70,9 +71,16 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : '/login');
 
-        // Every API request gets a correlation-friendly request id.
+        /*
+         * Every API request gets a correlation-friendly request id, and a language (I18N-001).
+         *
+         * `SetLocale` is prepended so it is in force before ANY other middleware can answer — the
+         * rate limiter, the auth gate and the account-suspension guard all produce customer-facing
+         * messages, and each of them refuses before a controller is ever reached.
+         */
         $middleware->api(prepend: [
             AssignRequestId::class,
+            SetLocale::class,
         ]);
 
         // Suspended/disabled accounts are denied on EVERY authenticated API request (guests pass through).
@@ -119,34 +127,53 @@ return Application::configure(basePath: dirname(__DIR__))
                 return null; // fall back to default rendering for web
             }
 
+            /*
+             * The messages are translated (I18N-001).
+             *
+             * This renderer is the single point every JSON error in the application passes through,
+             * so translating it here is what makes an expired session or a rate limit readable to an
+             * Arabic customer — the alternative was to catch each of them at hundreds of call sites.
+             *
+             * `SetLocale` runs as API middleware, which does NOT cover a failure raised before the
+             * pipeline (a malformed route, a 404 on a path no middleware group owns), so the locale
+             * is resolved here too rather than assumed. It is idempotent.
+             */
+            app()->setLocale(SetLocale::resolve($request));
+
             return match (true) {
                 $e instanceof ValidationException => ApiResponse::error(
-                    'The submitted data is invalid.',
+                    __('api.validation'),
                     $e->errors(),
                     status: 422,
                 ),
                 $e instanceof AuthenticationException => ApiResponse::error(
-                    'Unauthenticated.', status: 401,
+                    __('api.unauthenticated'), status: 401,
                 ),
                 $e instanceof AuthorizationException => ApiResponse::error(
-                    'This action is unauthorized.', status: 403,
+                    __('api.unauthorized'), status: 403,
                 ),
                 $e instanceof TokenMismatchException => ApiResponse::error(
-                    'CSRF token mismatch.', status: 419,
+                    __('api.csrf'), status: 419,
                 ),
                 $e instanceof ModelNotFoundException,
                 $e instanceof NotFoundHttpException => ApiResponse::error(
-                    'The requested resource was not found.', status: 404,
+                    __('api.not_found'), status: 404,
                 ),
                 $e instanceof TooManyRequestsHttpException => ApiResponse::error(
-                    'Too many requests.', status: 429,
+                    __('api.too_many_requests'), status: 429,
                 ),
+                /*
+                 * An `abort(403, '…')` carries a message written at the call site, and that message
+                 * is already in the language it was written in. Passing it through a translator
+                 * would render the sentence itself as a missing key, so it is used as-is and only
+                 * the fallback — an abort with no message at all — is translated.
+                 */
                 $e instanceof HttpExceptionInterface => ApiResponse::error(
-                    $e->getMessage() ?: 'Request failed.',
+                    $e->getMessage() ?: __('api.failed'),
                     status: $e->getStatusCode(),
                 ),
                 default => ApiResponse::error(
-                    app()->hasDebugModeEnabled() ? $e->getMessage() : 'Internal server error.',
+                    app()->hasDebugModeEnabled() ? $e->getMessage() : __('api.server_error'),
                     app()->hasDebugModeEnabled() ? ['exception' => [class_basename($e)]] : null,
                     status: 500,
                 ),

@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios'
 import type { ApiEnvelope } from './types'
+import { useUi } from '@/stores/ui'
 
 /**
  * Central Axios client for the SPA. Uses Sanctum cookie-session auth (ADR 0001):
@@ -12,6 +13,23 @@ export const api = axios.create({
   xsrfCookieName: 'XSRF-TOKEN',
   xsrfHeaderName: 'X-XSRF-TOKEN',
   headers: { Accept: 'application/json' },
+})
+
+/**
+ * Every request carries the language the interface is currently in (I18N-001).
+ *
+ * Read from the store AT REQUEST TIME rather than set once on the instance: the language toggle is
+ * on every screen, and a header fixed at module load would keep answering in the language the tab
+ * happened to open in. That is the failure this is written to avoid — someone switches to English,
+ * mistypes their password, and is told «بيانات الدخول غير صحيحة».
+ *
+ * `Accept-Language` rather than a custom header because it is the standard one, so a browser, a
+ * mobile client or a curl gets the same treatment without knowing anything about this application.
+ */
+api.interceptors.request.use((config) => {
+  config.headers.set('Accept-Language', useUi.getState().locale)
+
+  return config
 })
 
 /** `/portal/clients/<slug>/...` — the URL segment that names an isolated client space. */
@@ -76,7 +94,12 @@ export function toApiError(error: unknown): ApiError {
   const axiosError = error as AxiosError<ApiEnvelope<unknown>>
   const envelope = axiosError.response?.data
   return {
-    message: envelope?.message ?? 'A network error occurred. Please try again.',
+    // No envelope means no response at all — the request never reached the server, so there is no
+    // translated message to use and this one has to be written on the client (I18N-001).
+    message: envelope?.message
+      ?? (useUi.getState().locale === 'ar'
+        ? 'تعذّر الاتصال بالخادم. الرجاء المحاولة مرة أخرى.'
+        : 'A network error occurred. Please try again.'),
     status: axiosError.response?.status,
     errors: envelope?.errors ?? null,
     meta: (envelope as { meta?: Record<string, unknown> } | undefined)?.meta ?? null,

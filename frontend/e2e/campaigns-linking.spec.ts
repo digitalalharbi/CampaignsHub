@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { API_HEADERS, AUTH, createCampaign, seedExternals, switchToEnglish, useProject } from './helpers'
+import { API_HEADERS, AUTH, createCampaign, seedExternals, switchToEnglish, unlinkExternalByName, useProject } from './helpers'
 
 /**
  * Full external-linking E2E (the acceptance-critical path):
@@ -19,6 +19,9 @@ import { API_HEADERS, AUTH, createCampaign, seedExternals, switchToEnglish, useP
  * where the same engine renders without a project switcher because an agency picks a CLIENT first.
  */
 test.use({ storageState: AUTH.advertiser })
+
+/** The Sandbox external this test moves between two campaigns. */
+const TARGET_EXTERNAL = 'Sandbox Awareness'
 
 async function openCampaignLinkedTab(page: Page, name: string) {
   // The rebuilt list navigates via clickable campaign cards (no "Open" button), and the page opens on
@@ -54,6 +57,15 @@ test('link → 409 move-confirmation → confirm move → unlink (full path)', a
     .data as Array<{ id: string }>
   const projectId = projects[1].id
   await seedExternals(page.request, projectId)
+  /*
+   * State the precondition instead of inheriting it.
+   *
+   * This test links `Sandbox Awareness` to campaign A and only then expects the 409 from linking it
+   * to B, so it has to START unlinked. That used to be true by accident — every run minted a fresh
+   * Sandbox account and therefore a fresh, never-linked external — and stopped being true the moment
+   * `seedExternals` began reusing the project's binding. An earlier run's link is now cleared here.
+   */
+  await unlinkExternalByName(page.request, projectId, TARGET_EXTERNAL)
   await useProject(page, projectId)
 
   const stamp = Date.now()
@@ -65,7 +77,7 @@ test('link → 409 move-confirmation → confirm move → unlink (full path)', a
   await createCampaign(page, campA)
   await createCampaign(page, campB)
 
-  const targetName = 'Sandbox Awareness'
+  const targetName = TARGET_EXTERNAL
   const linkBtn = { name: /^Link$|^ربط$/ }
   // The modal row = the smallest div that contains BOTH the external's name AND its Link button.
   const modalRow = (name: string) =>

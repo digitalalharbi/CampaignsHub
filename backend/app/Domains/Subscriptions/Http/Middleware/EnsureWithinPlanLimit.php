@@ -9,6 +9,7 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Lang;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -59,7 +60,13 @@ final class EnsureWithinPlanLimit
                  */
                 return response()->json([
                     'success' => false,
-                    'message' => "You have reached your plan limit for \"{$metric}\" ({$used} of {$limit}). Upgrade your plan to add more.",
+                    'message' => __('billing.plan_limit_reached', [
+                        // A metric added later has no label yet, and its own key reads better in the
+                        // sentence than the missing-key string `billing.metrics.whatever` would.
+                        'metric' => Lang::has('billing.metrics.'.$metric) ? __('billing.metrics.'.$metric) : $metric,
+                        'used' => $used,
+                        'limit' => $limit,
+                    ]),
                     'data' => null,
                     'errors' => null,
                     'meta' => [

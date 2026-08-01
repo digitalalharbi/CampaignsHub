@@ -54,8 +54,21 @@ final class SuspendedAccountTest extends TestCase
         $this->user(['disabled_at' => now()]);
         $res = $this->withHeaders($this->spa)->postJson('/api/v1/auth/login', ['email' => 'u@a.test', 'password' => 'secret1234'])
             ->assertForbidden();
-        // Non-revealing: does not say "suspended" vs "wrong password".
-        $this->assertStringContainsString('not available', $res->json('message'));
+
+        /*
+         * Non-revealing, IN EVERY LANGUAGE (I18N-001).
+         *
+         * The claim is about what the message must not say, so it is asserted as an absence rather
+         * than by matching the English sentence — a translation is exactly the place a reassuring
+         * «حسابك موقوف» could be added without anyone noticing that the Arabic now discloses what
+         * the English deliberately withholds.
+         */
+        $message = (string) $res->json('message');
+        $this->assertSame(__('auth.unavailable'), $message);
+
+        foreach (['suspended', 'disabled', 'password', 'موقوف', 'معطّل', 'معطل', 'كلمة المرور'] as $tell) {
+            $this->assertStringNotContainsStringIgnoringCase($tell, $message);
+        }
     }
 
     public function test_disabled_user_cannot_mint_a_token(): void

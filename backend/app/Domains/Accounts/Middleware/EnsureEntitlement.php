@@ -41,7 +41,7 @@ final class EnsureEntitlement
             $portal = $this->memberships->membership()?->portal;
 
             if ($tenant !== null && ! $this->entitlements->allows($tenant, $navKey, $portal)) {
-                abort(403, 'This capability is not available in this portal.');
+                abort(403, __('accounts.portal_capability_unavailable'));
             }
         }
 

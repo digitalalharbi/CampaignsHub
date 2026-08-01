@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 /**
  * Public homepage journey (guest). Covers language + theme toggles, the interactive product preview,
@@ -79,15 +79,35 @@ test('homepage mobile (375): no horizontal scroll, hero + CTA reachable', async 
 test.describe('homepage visual regression @visual', () => {
   test.skip(({ browserName }) => browserName !== 'chromium', 'baselines are chromium-only')
 
+  /*
+   * Wait for the data-driven sections to have RENDERED, not merely for the network to go quiet.
+   *
+   * The services grid shows six pulse blocks while its catalogue loads and ten real cards once it
+   * arrives — about 320px taller. `networkidle` is 500ms of network silence, which under the full
+   * three-browser load can fall between the response and React committing it, so the full-page
+   * screenshot was taken while the page was still growing. Playwright then failed with «Failed to
+   * take two consecutive stable screenshots» — 3451px, then 3774px — and NOT with a pixel diff: the
+   * final render is byte-identical to the baseline.
+   *
+   * So this is a precondition the test was missing, not a visual defect, and it is fixed by waiting
+   * for the thing that arrives last rather than by loosening the comparison or updating the image.
+   */
+  async function homepageSettled(page: Page) {
+    await expect(page.getByTestId('home-service-categories')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('closing-journeys')).toBeVisible({ timeout: 20000 })
+    await page.waitForLoadState('networkidle')
+  }
+
   test('/ light matches baseline', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' })
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await homepageSettled(page)
     await expect(page).toHaveScreenshot('home-light.png', { fullPage: true, maxDiffPixelRatio: 0.02 })
   })
 
   test('/ dark matches baseline', async ({ page }) => {
     await page.goto('/')
+    await homepageSettled(page)
     await page.getByRole('button', { name: 'Toggle theme' }).click()
     await page.waitForTimeout(250)
     await expect(page).toHaveScreenshot('home-dark.png', { fullPage: true, maxDiffPixelRatio: 0.02 })

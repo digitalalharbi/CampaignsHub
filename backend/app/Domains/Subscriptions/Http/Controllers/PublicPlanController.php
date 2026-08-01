@@ -45,7 +45,7 @@ final class PublicPlanController extends Controller
         $plan = $this->catalogue->byCode($code);
 
         if ($plan === null || ! $plan->is_active || ! $plan->is_public) {
-            return ApiResponse::error('That plan is not available.', status: 404);
+            return ApiResponse::error(__('billing.plan_not_available'), status: 404);
         }
 
         $quote = $this->catalogue->quote($plan, $interval);
@@ -53,7 +53,7 @@ final class PublicPlanController extends Controller
         if ($quote === null) {
             // Not a 404: the plan exists, the TERM does not. Falling back to the other term's price
             // would quote a figure the customer did not ask for.
-            return ApiResponse::error('This plan is not sold on that term.', status: 422);
+            return ApiResponse::error(__('billing.plan_term_not_sold'), status: 422);
         }
 
         return ApiResponse::success(['quote' => $quote], 'Quote.');

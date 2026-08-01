@@ -28,17 +28,42 @@ export function Modal({
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
 
+  /*
+   * `onClose` is held in a ref so the effect below does not depend on its identity.
+   *
+   * Every caller passes an inline arrow — `onClose={() => setOpen(false)}` — which is a new function
+   * on each render of the parent. With `onClose` in the dependency list the effect therefore re-ran
+   * on EVERY re-render, and re-ran the focus call with it: any query settling behind an open modal
+   * pulled focus out of whatever the person was typing into. Keystrokes landing in that instant went
+   * nowhere, and the field they had just filled looked as though it had emptied itself.
+   *
+   * A ref keeps the handler current without making it a reason to re-run.
+   */
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') onCloseRef.current()
       if (e.key === 'Tab') trapFocus(e, panelRef.current)
     }
     document.addEventListener('keydown', onKey)
-    // Focus the first focusable element when opening.
-    panelRef.current?.querySelector<HTMLElement>('[data-autofocus],button,input,textarea,select')?.focus()
+
+    /*
+     * The field the modal's author designated, and only then the first focusable thing.
+     *
+     * A single comma-separated selector returns the first match in DOCUMENT order, so the close
+     * button in the title row always won and `data-autofocus` never did anything — every modal
+     * opened with focus on "close" no matter which field it was asking for.
+     */
+    const panel = panelRef.current
+    const target = panel?.querySelector<HTMLElement>('[data-autofocus]')
+      ?? panel?.querySelector<HTMLElement>('button,input,textarea,select')
+    target?.focus()
+
     return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 

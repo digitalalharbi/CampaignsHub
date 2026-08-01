@@ -43,7 +43,7 @@ final class AuthController extends Controller
 
         if ($user === null || ! Hash::check((string) $request->string('password'), $user->password)) {
             throw ValidationException::withMessages([
-                'email' => ['These credentials do not match our records.'],
+                'email' => [__('auth.failed')],
             ]);
         }
         $this->assertActive($user);
@@ -54,7 +54,7 @@ final class AuthController extends Controller
 
         return ApiResponse::success(
             ['user' => new UserResource($user)],
-            'Signed in successfully.',
+            __('auth.signed_in'),
         );
     }
 
@@ -81,7 +81,7 @@ final class AuthController extends Controller
 
         abort(response()->json([
             'success' => false,
-            'message' => 'This account is not authorised for that portal.',
+            'message' => __('auth.portal_mismatch'),
             'data' => null,
             'errors' => null,
             'meta' => [
@@ -100,7 +100,7 @@ final class AuthController extends Controller
         // ADR 0002: suspension follows the memberships, not the legacy column — see AccountSuspension.
         $suspended = $user->disabled_at !== null
             || (! $user->is_platform_admin && AccountSuspension::everyWorkspaceSuspendedFor($user));
-        abort_if($suspended, 403, 'Your account is not available. Please contact support.');
+        abort_if($suspended, 403, __('auth.unavailable'));
     }
 
     /** Current authenticated user — used by the SPA to restore its session on load. */
@@ -108,7 +108,7 @@ final class AuthController extends Controller
     {
         return ApiResponse::success(
             ['user' => new UserResource($request->user())],
-            'Current user.',
+            __('auth.current_user'),
         );
     }
 
@@ -118,7 +118,7 @@ final class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return ApiResponse::success(null, 'Signed out successfully.');
+        return ApiResponse::success(null, __('auth.signed_out'));
     }
 
     /**
@@ -136,7 +136,7 @@ final class AuthController extends Controller
             logger()->info('Password reset requested', ['email' => $data['email']]);
         }
 
-        return ApiResponse::success(null, 'If an account exists for that email, a reset link has been sent.');
+        return ApiResponse::success(null, __('api.password_reset_sent'));
     }
 
     /**
@@ -150,7 +150,7 @@ final class AuthController extends Controller
 
         if ($user === null || ! Hash::check((string) $request->string('password'), $user->password)) {
             throw ValidationException::withMessages([
-                'email' => ['These credentials do not match our records.'],
+                'email' => [__('auth.failed')],
             ]);
         }
         $this->assertActive($user);
@@ -159,7 +159,7 @@ final class AuthController extends Controller
 
         return ApiResponse::success(
             ['user' => new UserResource($user), 'token' => $token],
-            'Token issued successfully.',
+            __('auth.token_issued'),
         );
     }
 }

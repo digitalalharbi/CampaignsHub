@@ -70,7 +70,7 @@ final class SubscriptionPaymentController extends Controller
     public function checkout(Request $request, RegistrationRequest $registration): JsonResponse
     {
         if (! $this->checkout->owesPayment($registration)) {
-            return ApiResponse::error('This application is not waiting on a payment.', status: 422);
+            return ApiResponse::error(__('billing.no_payment_due'), status: 422);
         }
 
         $data = $request->validate(['provider' => ['sometimes', 'string', 'max:32']]);

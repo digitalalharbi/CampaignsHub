@@ -58,7 +58,7 @@ final class EnsureAccountActive
                 $token->delete();
             }
 
-            abort(403, 'Your account is not available. Please contact support.');
+            abort(403, __('auth.unavailable'));
         }
 
         return $next($request);

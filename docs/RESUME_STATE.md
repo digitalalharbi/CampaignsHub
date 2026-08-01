@@ -11,7 +11,10 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
-`PAY-001…004 + SIGNUP-006` — the payment system and the five demo logins.
+`I18N-001 + UI-MODAL-001` — the API answers in the customer's language, and an open modal stops
+taking the keyboard back.
+
+**860 backend · 456 vitest · E2E on chromium + firefox + webkit, `retries: 0`.**
 
 Session order: `f71319d` (SIGNUP-002d + review queue) → `d4f57ff` (3 E2E root causes) → `c5cc4e7`
 (PLAN-001) → `d4872d1` → `c143817` (PLAN-001e, sign-up in two steps) → `34f2831` (PAY-001…005) →
@@ -272,13 +275,79 @@ notes, taxonomies, services). `/app/settings/public-pages|portals|taxonomies` re
   - **Five unlinked placeholder routes** under `/app`: approvals, tracking, optimization,
     notifications, opportunities. Reachable only by typing the URL; linked from nothing.
 
+## Latest work unit — I18N-001 (the API answers in the customer's language)
+
+The backend had **no `lang/` directory at all**. An Arabic sign-in form labelled «البريد الإلكتروني»
+refused with "These credentials do not match our records."; every validation error, every expired
+session, every 404 and every rate limit came back in Laravel's English. The interface was translated
+and the answers were not — worst at exactly the moment something has gone wrong.
+
+- `app/Http/Middleware/SetLocale.php` reads `Accept-Language` as the **ranked list it actually is**
+  (`en;q=0.3,ar;q=0.9` is an Arabic preference, and taking the first tag got it backwards). Region
+  subtags are dropped; an unsupported language falls through to the next supported one.
+- `config/app.php` **and `.env`/`.env.example`** default to `ar`, with English as the FALLBACK so a
+  key translated on one side only renders in English rather than as the raw key.
+- `lang/ar/validation.php` is the highest-leverage file in the unit: every validated field in the
+  application draws its message from it, including `attributes` so a message reads «حقل كلمة المرور
+  مطلوب» rather than «حقل password مطلوب».
+- The exception renderer in `bootstrap/app.php` resolves the locale a **second** time, because a 404
+  on a path no middleware group owns never reaches `SetLocale`.
+- `ApiResponse::success/error` take a nullable message and resolve the default at call time — a
+  literal in the signature is fixed at parse time and can only ever be one language.
+- The SPA sends `Accept-Language` **from the store at request time**, not once at module load: a
+  header fixed when the client was constructed keeps answering in whichever language the tab opened
+  in, so switching to English and mistyping a password would still produce an Arabic refusal.
+
+**The whole PHPUnit suite had been exercising English only.** Symfony's `Request::create()` — which
+every `getJson`/`postJson` goes through — supplies `Accept-Language: en-us,en;q=0.5` whether or not
+the test asked for it, so 841 green tests said nothing about the product's own default. `Tests\TestCase`
+now clears it; an unstated language means the product default, which is also what a webhook or a curl
+actually sends. This was caught only because a message that should have changed did not.
+
+### UI-MODAL-001 — a real defect found by root-causing the E2E failure
+
+`campaigns-linking.spec.ts` failed on WebKit at ~25%: the campaign name field was empty immediately
+after `fill()`. Traced with an in-page probe on the value setter and a MutationObserver over eight
+then twenty-five repeats. The value setter was never called with the typed text at all, and the RHF
+stack (`updateValidAndValue` ← `ref`) showed the field being re-initialised to its default.
+
+**`Modal`'s focus effect listed `onClose` in its dependencies.** Every call site passes an inline
+arrow (`onClose={() => setOpen(false)}`), which is a new function on every render of the parent — so
+the effect re-ran on EVERY re-render and re-focused the panel. Any query settling behind an open
+modal (the taxonomy options, the user list) pulled the caret out of the field mid-typing, and the
+keystrokes landing in that instant went nowhere. Its selector,
+`'[data-autofocus],button,input,textarea,select'`, also returns the first match in **document** order
+— always the close button in the title row — so `data-autofocus` had never done anything anywhere in
+the product.
+
+`onClose` now lives in a ref, the effect depends on `[open]` alone, and `[data-autofocus]` is queried
+before the fallback. `Modal.test.tsx` fails without the fix and passes with it; the previously flaky
+spec then ran 12/12 on WebKit.
+
+### E2E hygiene — a helper that accumulated state on every run
+
+`seedExternals` called `POST /integrations/connect` on every test, and `EstablishSandboxConnection`
+correctly mints a fresh credential, connection and account set each time — a person connecting twice
+means it. So each run left one more Sandbox account bound to the same project. After ~100 runs the
+project held ~100 externals all named «Sandbox Awareness», and `campaigns-linking`, which finds its
+target by that name, began linking two DIFFERENT externals to campaigns A and B: no conflict, no 409,
+and the move-confirmation it asserts never appeared.
+
+The helper now reuses the project's existing advertising binding, so the project keeps exactly one
+Sandbox binding however often the suite runs. The spec's real precondition — the target external
+starts UNLINKED, which used to hold only because every run got a brand-new row — is now stated and
+asserted rather than inherited. The ~97 surplus Sandbox connections this created on the local dev
+database were deleted (cascade removes their accounts and externals); the seeded demo connection was
+kept. Nothing outside those test-created connections was touched.
+
 ## Exact next task
-**PAY-001** — the Moyasar and Stripe adapters.
+**PAY-002's remaining half** — mid-term upgrade/downgrade with proration, still the single largest
+unbuilt piece of the commercial contract. See the PAY-002 row in the matrix.
+
+Previously recorded here, and still true of the payment layer:
 
 PLAN-001 is done: plans are data, both terms, the paid 7-day trial per plan, editable from /admin and
-read by one public catalogue. `subscriptions` carries the lifecycle columns PAY-002/003 will need —
-`billing_interval`, `unit_amount`, `trial_ends_at`, `grace_ends_at`, `auto_convert_consent_at`,
-`cancel_at_period_end`, provider ids — and **none of them is driven by anything yet**.
+read by one public catalogue.
 
 SIGNUP-001 through SIGNUP-005 are done, tested and live-reviewed. The binding rule they exist to
 enforce is now structurally true rather than a policy someone has to remember: **`POST /auth/register`

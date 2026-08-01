@@ -124,7 +124,7 @@ final class RegistrationController extends Controller
         }
 
         if ($data['channel'] === 'mobile' && $registration->phone === null) {
-            return ApiResponse::error('No mobile number was given for this application.', status: 422);
+            return ApiResponse::error(__('accounts.no_mobile_on_file'), status: 422);
         }
 
         return ApiResponse::success(

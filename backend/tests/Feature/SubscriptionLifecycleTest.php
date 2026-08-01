@@ -389,7 +389,23 @@ final class SubscriptionLifecycleTest extends TestCase
             // Named, so the interface offers the upgrade rather than inventing a route.
             ->assertJsonPath('meta.upgrade_path', '/app/subscriptions');
 
-        $this->assertStringContainsString('3 of 3', (string) $response->json('message'));
+        /*
+         * The numbers, in the language the customer is being answered in (I18N-001).
+         *
+         * Asserted in BOTH, because the point of the message is the usage against the cap and a
+         * translation is exactly where "3 of 3" quietly becomes "you have reached your limit". The
+         * digits stay Latin in Arabic too — a cap in Eastern-Arabic numerals cannot be compared
+         * against the list the customer is looking at.
+         */
+        $this->assertStringContainsString('3 من 3', (string) $response->json('message'));
+        $this->assertStringContainsString('المشاريع', (string) $response->json('message'));
+
+        $english = $this->actingAs($user, 'sanctum')
+            ->withHeaders(['Accept-Language' => 'en'])
+            ->postJson('/api/v1/projects', ['name' => 'One too many'])
+            ->assertForbidden();
+
+        $this->assertStringContainsString('3 of 3', (string) $english->json('message'));
 
         // Nothing the customer already had was removed or hidden — the create was refused, and that
         // is all that happened.

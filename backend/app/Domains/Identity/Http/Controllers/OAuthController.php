@@ -49,7 +49,7 @@ final class OAuthController extends Controller
     /** GET /auth/oauth/providers — public; no secrets, only whether each provider can be used. */
     public function providers(): JsonResponse
     {
-        return ApiResponse::success(['providers' => $this->registry->forClient()], 'Sign-in providers.');
+        return ApiResponse::success(['providers' => $this->registry->forClient()], __('accounts.oauth_providers'));
     }
 
     /** POST /auth/oauth/{provider}/start */
@@ -59,7 +59,7 @@ final class OAuthController extends Controller
             // 503, not 400: the request is fine, the capability is not switched on. Saying
             // "bad request" would send an integrator looking for a mistake in their own call.
             return ApiResponse::error(
-                'This sign-in method is awaiting provider credentials.',
+                __('accounts.oauth_awaiting_credentials'),
                 null,
                 ['provider' => $provider, 'status' => OAuthProviderRegistry::AWAITING_CREDENTIALS],
                 503,

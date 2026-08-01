@@ -27,6 +27,26 @@ abstract class TestCase extends BaseTestCase
 
     protected ?string $heldTenantId = null;
 
+    /**
+     * Tests run in the application's OWN default language (I18N-001).
+     *
+     * Symfony's `Request::create()` — which every `getJson`/`postJson` goes through — supplies
+     * `Accept-Language: en-us,en;q=0.5` whether or not the test asked for it. So the whole suite was
+     * silently exercising the English path, and would have gone on reporting green over an Arabic
+     * default nobody had ever run: this was caught only because a message that should have changed
+     * did not.
+     *
+     * Clearing it makes an unstated language mean the product default, which is what a webhook or a
+     * curl actually sends. A test that cares about a specific language still says so with a header,
+     * and that is then a real statement rather than an accident of the test harness.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->withServerVariables(['HTTP_ACCEPT_LANGUAGE' => '']);
+    }
+
     protected function assertingAcrossTenants(): void
     {
         $this->readsAcrossTenants = true;
