@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { AUTH } from './helpers'
+import { AUTH, untranslatedChrome } from './helpers'
 
 /**
  * Every route in a portal leads somewhere real (REVIEW-001).
@@ -186,5 +186,66 @@ test.describe('the client portal', () => {
 
     await page.goBack()
     await expect(page).not.toHaveURL(/\/portal\/login/)
+  })
+})
+
+/**
+ * The client portal is held to the same standards as the other three (PORTAL-100).
+ *
+ * Its own language, its own phone layout, and a rail that offers a CLIENT's work — requests, quotes,
+ * invoices, files, conversations — and none of the agency's or advertiser's tooling.
+ */
+test.describe('the client portal, in depth', () => {
+  test.use({ storageState: AUTH.client })
+
+  test('no section is left in Arabic when the language is English', async ({ page }) => {
+    await page.goto('/portal')
+    await expect(page.getByRole('navigation').first()).toBeVisible()
+
+    const hrefs = await page.getByRole('navigation').first().locator('a[href^="/portal"]')
+      .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href')!))])
+
+    await page.getByRole('button', { name: 'Toggle language' }).first().click()
+    await expect(page.locator('html')).toHaveAttribute('dir', 'ltr')
+
+    const stillArabic: string[] = []
+    for (const href of hrefs) {
+      await page.goto(href)
+      await expect(page.locator('main')).toBeVisible({ timeout: 20000 })
+      await expect.poll(async () => (await page.locator('main').innerText()).trim().length, { timeout: 20000 })
+        .toBeGreaterThan(0)
+
+      const leftover = await untranslatedChrome(page)
+      if (leftover.length > 0) stillArabic.push(`${href}: ${leftover.join(' ')}`)
+    }
+
+    expect(stillArabic, `these sections are still Arabic under dir=ltr:\n${stillArabic.join('\n')}`).toEqual([])
+  })
+
+  /**
+   * A client sees their OWN work and nothing that belongs to the people serving them.
+   *
+   * The agency's client roster, the advertiser's campaign tooling and the platform console must not
+   * be reachable from this rail — a portal that offered them would be showing a customer the inside
+   * of the business they bought from.
+   */
+  test('the rail offers the client’s work and no operator tooling', async ({ page }) => {
+    await page.goto('/portal')
+    const rail = page.getByRole('navigation').first()
+
+    for (const foreign of ['/agency', '/app', '/admin', '/influencers']) {
+      await expect(rail.locator(`a[href^="${foreign}"]`), `${foreign} is offered in the client rail`).toHaveCount(0)
+    }
+  })
+
+  test('it holds together on a phone', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await page.goto('/portal')
+    await expect(page.locator('main')).toBeVisible()
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    )
+    expect(overflow, 'the client portal scrolls sideways on a phone').toBe(false)
   })
 })

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH } from './helpers'
+import { AUTH, untranslatedChrome } from './helpers'
 
 /**
  * `/admin` is a console the owner can actually run the platform from (ADMIN-100).
@@ -85,5 +85,39 @@ test.describe('the platform console', () => {
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
     )
     expect(overflow, 'the console scrolls sideways on a phone').toBe(false)
+  })
+})
+
+/**
+ * The console speaks the reader's language too (ADMIN-100 / APP-100 standard).
+ *
+ * Held to the same measurement as the other three portals: a walk of every rail link in English,
+ * asserting zero Arabic — so a section added later is checked without anybody remembering to.
+ */
+test.describe('the platform console, in English', () => {
+  test.use({ storageState: AUTH.admin })
+
+  test('no section is left in Arabic when the language is English', async ({ page }) => {
+    await page.goto('/admin')
+    await expect(page.getByRole('navigation').first()).toBeVisible()
+
+    const hrefs = await page.getByRole('navigation').first().locator('a[href^="/admin"]')
+      .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href')!))])
+
+    await page.getByRole('button', { name: 'Toggle language' }).first().click()
+    await expect(page.locator('html')).toHaveAttribute('dir', 'ltr')
+
+    const stillArabic: string[] = []
+    for (const href of hrefs) {
+      await page.goto(href)
+      await expect(page.locator('main')).toBeVisible({ timeout: 20000 })
+      await expect.poll(async () => (await page.locator('main').innerText()).trim().length, { timeout: 20000 })
+        .toBeGreaterThan(0)
+
+      const leftover = await untranslatedChrome(page)
+      if (leftover.length > 0) stillArabic.push(`${href}: ${leftover.join(' ')}`)
+    }
+
+    expect(stillArabic, `these sections are still Arabic under dir=ltr:\n${stillArabic.join('\n')}`).toEqual([])
   })
 })

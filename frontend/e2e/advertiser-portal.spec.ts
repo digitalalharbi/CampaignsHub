@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { AUTH } from './helpers'
+import { AUTH, untranslatedChrome } from './helpers'
 
 /**
  * `/app` is the advertiser's portal, and it speaks the reader's language (APP-100).
@@ -99,10 +99,7 @@ test.describe('the advertiser portal', () => {
       await expect.poll(async () => (await page.locator('main').innerText()).trim().length, { timeout: 20000 })
         .toBeGreaterThan(0)
 
-      const leftover = await page.locator('main').evaluate((el) => {
-        const text = (el as HTMLElement).innerText ?? ''
-        return (text.match(/[\u0600-\u06FF]+/g) ?? []).slice(0, 6)
-      })
+      const leftover = await untranslatedChrome(page)
       if (leftover.length > 0) stillArabic.push(`${href}: ${leftover.join(' ')}`)
     }
 

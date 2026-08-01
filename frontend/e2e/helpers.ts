@@ -194,3 +194,38 @@ export async function submitVerifiedRequest(
   const ref = (await refLocator.textContent())?.match(/REQ-\d{4}-[A-Z0-9]{6}/)?.[0]
   return ref!
 }
+
+/**
+ * Arabic left in a page's CHROME while the interface is in English (APP-100).
+ *
+ * The distinction matters: a tenant's own project called «متجر تجريبي» is DATA, and translating a
+ * customer's name would be a defect of its own. What must follow the language is the furniture —
+ * headings, labels, buttons, table headers, tabs and empty states — which is what was actually left
+ * behind when the product only flipped `dir`.
+ *
+ * An earlier version of this check read the whole of `main`, and duly failed on a demo client's
+ * Arabic name. That was the test being wrong, not the product.
+ */
+export async function untranslatedChrome(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const CHROME = 'h1, h2, h3, h4, label, button, th, [role="tab"], [data-testid$="-empty"]'
+    const out: string[] = []
+
+    for (const el of Array.from(document.querySelectorAll(`main ${CHROME}`))) {
+      // The language toggle says «ع» precisely BECAUSE the interface is in English — it is the way
+      // back to Arabic, and translating it would leave no way to find it.
+      if (el.getAttribute('aria-label') === 'Toggle language') continue
+
+      // Own text only: a heading that merely CONTAINS a data-bearing child is not itself untranslated.
+      const own = Array.from(el.childNodes)
+        .filter((n) => n.nodeType === Node.TEXT_NODE)
+        .map((n) => n.textContent ?? '')
+        .join(' ')
+
+      const arabic = own.match(/[؀-ۿ]+/g)
+      if (arabic) out.push(arabic.join(' '))
+    }
+
+    return [...new Set(out)].slice(0, 6)
+  })
+}

@@ -1092,6 +1092,45 @@ disabled with the reason, because an enabled button with nothing behind it claim
 platform does not have. `/admin/login` offers no sign-up at all — the platform owner is never created
 by a public form.
 
+### Decision 31 — the whole product was Arabic-only under `dir="ltr"`
+
+The advertiser dashboard was the worst of it: choosing English flipped the direction and left 118
+Arabic words on the page. An interface that changes direction while its content does not reads as
+broken rather than as unfinished, and it was the flagship page of that portal.
+
+Two things about how this was found are worth keeping.
+
+**A source grep gave the wrong answer.** Counting Arabic string literals per file said all eight
+`/app` sections were untranslated; five of them were already correct and the count was picking up the
+`ar:` half of their bilingual tables. The measurement that works is a WALK of each portal's rail in
+English asserting zero Arabic — it cannot be fooled by how the strings are stored, and it covers a
+section added next month without anybody remembering to add it to a list. All four portals now carry
+that test.
+
+**The manual check could not have found the persistence bug.** Language and theme were not
+remembered, while the sidebar's collapsed state was — so English lasted until the next full page
+load and then silently reverted. Clicking around inside the SPA kept it, which is exactly what a
+human check does; only the full navigations an automated walk performs exposed it.
+
+Three more defects came out of the same pass: a `useMemo` that built KPI labels without the language
+in its deps (heading translated, numbers beside it did not), a grid item that refused to shrink below
+its table's `min-w-[420px]` and dragged the phone layout sideways with it, and Arabic-Indic numerals
+in the finance ageing buckets against the product's Latin-digits rule.
+
+### Decision 32 — two rate limits, root-caused rather than retried away
+
+`/register` was the last public route still carrying a literal `throttle:6,1` while every other one
+had an environment-aware limiter. The suite opens two accounts per browser project and runs three
+projects back to back, so the seventh registration in a rolling minute came back 429 and the form
+stayed on `/register` — a rate limit wearing the costume of a broken form, on whichever browser
+happened to run seventh. The login allowance was too tight for the same reason: six seeded roles sign
+in at the start of every run, and back-to-back runs cleared sixty inside a minute, failing the
+storage-state setup and reporting `419 did not run`.
+
+Production stays at six a minute for both and remains env-overridable. Only the off-production
+allowance moved. Raising the production limit or adding retries would each have been the wrong fix:
+the first weakens a real control, the second hides it.
+
 ### Still open
 
 `ADMIN-100` · `APP-100` · `AGENCY-100` · `PORTAL-100` — per-portal development in that order:

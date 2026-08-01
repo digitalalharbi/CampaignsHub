@@ -195,3 +195,44 @@ test.describe('homepage → catalogue → intake → saved request', () => {
     expect(tracked.ok()).toBeTruthy()
   })
 })
+
+/**
+ * Each marketing card leads where the owner said it should (REVIEW-002).
+ *
+ * «إدارة حملاتي بنفسي» → the advertiser's registration, «إدارة عدة عملاء» → the agency's,
+ * «خدمات إعلانية» → the real services catalogue, «متابعة طلباتي» → the client portal's door.
+ * Influencers & UGC is withdrawn and must lead nowhere at all (INFL-OFF-001).
+ *
+ * Asserted on the DESTINATION rather than on the wording, so rephrasing a card cannot silently
+ * repoint it — and each destination is then opened, because a route that exists in a table and 404s
+ * in a browser is the failure this is for.
+ */
+test('every offered journey ends where the owner said it should', async ({ page }) => {
+  await home(page)
+
+  const expected: Record<string, RegExp> = {
+    'self-service': /\/register\?journey=self-service&module=paid-media$/,
+    'multi-client': /\/register\?journey=multi-client&module=paid-media$/,
+    services: /\/services$/,
+  }
+
+  const closing = await page.getByTestId('closing-journeys').locator('a').evaluateAll(
+    (els) => els.map((e) => ({ id: e.getAttribute('data-testid')!, href: e.getAttribute('href')! })),
+  )
+
+  // The withdrawn journey is absent — from the table AND from the page.
+  expect(closing.map((c) => c.id)).not.toContain('closing-journey-influencer')
+
+  for (const card of closing) {
+    const key = card.id.replace('closing-journey-', '')
+    expect(card.href, `the ${key} card points somewhere unexpected`).toMatch(expected[key])
+
+    await page.goto(card.href)
+    await expect(page.locator('main, form').first()).toBeVisible({ timeout: 20000 })
+    await home(page)
+  }
+
+  // …and the returning-visitor routes, which live in the same table.
+  await page.goto('/portal/login')
+  await expect(page.getByText(/رمز تحقق|verification code/i).first()).toBeVisible()
+})
