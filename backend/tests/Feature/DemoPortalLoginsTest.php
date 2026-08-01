@@ -178,6 +178,38 @@ final class DemoPortalLoginsTest extends TestCase
     }
 
     /**
+     * The influencers portal ships BOTH of its sides (REVIEW-001).
+     *
+     * `layla@creators.demo` is a creator and is correctly refused the agency surfaces, which meant
+     * the operational half of that portal — roster, collaborations, nominations, tracking — had no
+     * demo login at all and could not be demonstrated by signing in.
+     *
+     * Two accounts in one portal is not what `test_no_demo_account_spans_two_portals` forbids. That
+     * rule is about an account holding two PORTALS; these two are opposite sides of one agreement,
+     * and a portal that ships only one of them cannot show what it is for.
+     */
+    public function test_the_influencers_portal_ships_an_agency_side_login_as_well_as_a_creator(): void
+    {
+        $operator = User::where('email', 'talent@demo-agency.local')->first();
+
+        $this->assertNotNull($operator, 'the agency side of /influencers has no demo login');
+        $this->assertSame(
+            ['influencers'],
+            $operator->memberships()->get()->map(fn ($m) => $m->portal->value)->all(),
+        );
+
+        // The two sides differ where it matters: one may answer a nomination, the other may not.
+        $this->assertTrue($operator->hasPermission('influencers.approve'));
+        $this->assertTrue($operator->hasPermission('influencers.view_costs'));
+
+        $creator = User::where('email', 'layla@creators.demo')->firstOrFail();
+        $this->assertFalse(
+            $creator->hasPermission('influencers.view'),
+            'the creator must not hold the agency surfaces — that is what makes the two sides distinct',
+        );
+    }
+
+    /**
      * Demo accounts are development-only.
      *
      * A deployed install must not carry an account whose password is published in a seeder, and the

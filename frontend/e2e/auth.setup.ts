@@ -12,6 +12,10 @@ const ROLES = [
   { email: 'viewer@demo-agency.local', file: AUTH.viewer },
   // A real advertiser, for the advertiser portal's own surfaces.
   { email: 'owner@demo-company.local', file: AUTH.advertiser },
+  // The platform owner, and the agency side of the influencers portal. Without these two, `/admin`
+  // and the operational half of `/influencers` had no signed-in session to audit with.
+  { email: 'admin@demo-campaignshub.local', file: AUTH.admin },
+  { email: 'talent@demo-agency.local', file: AUTH.talent },
 ]
 
 for (const role of ROLES) {

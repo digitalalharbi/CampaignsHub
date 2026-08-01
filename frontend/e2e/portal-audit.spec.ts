@@ -93,3 +93,57 @@ test.describe('the agency portal', () => {
     }
   })
 })
+
+test.describe('the platform console', () => {
+  test.use({ storageState: AUTH.admin })
+
+  test('every rail link opens a page that is not empty', async ({ page }) => {
+    await page.goto('/admin')
+    await expect(page.getByRole('navigation').first()).toBeVisible()
+
+    const hrefs = await page.getByRole('navigation').first().locator('a[href^="/admin"]')
+      .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href')!))])
+
+    expect(hrefs.length, 'the admin rail has no links').toBeGreaterThan(3)
+
+    for (const href of hrefs) {
+      await page.goto(href)
+      await expect(page.getByText(/later phase/i), `${href} is a placeholder`).toHaveCount(0)
+      expect(await contentLength(page), `${href} rendered an empty page`).toBeGreaterThan(40)
+    }
+  })
+})
+
+test.describe('the influencers portal, from the agency side', () => {
+  test.use({ storageState: AUTH.talent })
+
+  /**
+   * This portal has two sides and only one of them had a login.
+   *
+   * The roster, collaborations, nominations and tracking could be built and tested but never
+   * demonstrated by signing in, because the only account in the portal was a creator who is
+   * correctly refused all of it.
+   */
+  test('every rail link opens a page that is not empty', async ({ page }) => {
+    await page.goto('/influencers')
+    await expect(page.getByRole('navigation').first()).toBeVisible()
+
+    const hrefs = await page.getByRole('navigation').first().locator('a[href^="/influencers"]')
+      .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href')!))])
+
+    expect(hrefs.length, 'the influencers rail has no links').toBeGreaterThan(2)
+
+    for (const href of hrefs) {
+      await page.goto(href)
+      await expect(page.getByText(/later phase/i), `${href} is a placeholder`).toHaveCount(0)
+      expect(await contentLength(page), `${href} rendered an empty page`).toBeGreaterThan(40)
+    }
+  })
+
+  /** The two sides of this portal are genuinely different, and the nominations queue proves it. */
+  test('the agency side reaches the shortlist the creator cannot', async ({ page }) => {
+    await page.goto('/influencers/nominations')
+    await expect(page.getByTestId('nominations-page')).toBeVisible()
+    await expect(page.getByText(/لا تملك صلاحية|do not have permission/)).toHaveCount(0)
+  })
+})

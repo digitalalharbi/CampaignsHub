@@ -483,10 +483,10 @@ loading/empty/error states, working search-filters-views-details-actions, ≤2 m
 copied between portals.
 
 Known specific gaps to fold in:
-- **Five unlinked placeholder routes** under `/app` — approvals, tracking, optimization,
-  notifications, opportunities. Reachable only by typing the URL; linked from nothing.
-- **No demo login for the AGENCY side of `/influencers`** (see the gap under INFL-003), so the
-  roster, collaborations, nominations and attribution cannot be demonstrated by signing in.
+- ~~Five unlinked placeholder routes under `/app`~~ — CLOSED by REVIEW-001a. Four deleted;
+  `notifications` now leads to the page that existed behind it. `PagePlaceholder` is gone.
+- ~~No demo login for the AGENCY side of `/influencers`~~ — CLOSED by REVIEW-001b
+  (`talent@demo-agency.local`).
 
 Then the remaining PARTIAL rows: **PAY-005, OPS-002, NORM-001, PROJINT-001**. Nothing is
 NOT_STARTED any more.

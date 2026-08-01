@@ -10,6 +10,16 @@ export const AUTH = {
   advertiser: 'e2e/.auth/advertiser.json',
   analyst: 'e2e/.auth/analyst.json',
   viewer: 'e2e/.auth/viewer.json',
+  /** The platform owner. Belongs to no tenant — `/admin` is held by a flag, not a membership. */
+  admin: 'e2e/.auth/admin.json',
+  /**
+   * The AGENCY side of the influencers portal (REVIEW-001).
+   *
+   * `layla@creators.demo` is a creator and sees only her own agreements, so the operational half of
+   * that portal — roster, collaborations, nominations, tracking — could not be reached by any
+   * signed-in session at all until this account existed.
+   */
+  talent: 'e2e/.auth/talent.json',
 } as const
 
 /**

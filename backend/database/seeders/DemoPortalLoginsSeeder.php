@@ -10,6 +10,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\DTOs\MembershipGrant;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -50,6 +51,7 @@ final class DemoPortalLoginsSeeder extends Seeder
         }
 
         $this->platformOwner();
+        $this->influencerOperator();
         $this->clientPortalCustomer();
 
         $this->report();
@@ -150,12 +152,73 @@ final class DemoPortalLoginsSeeder extends Seeder
         ));
     }
 
+    /**
+     * The AGENCY side of the influencers portal (REVIEW-001).
+     *
+     * `layla@creators.demo` is a CREATOR — she sees her own agreements and nothing else, which is
+     * the whole point of INFL-002. It also meant the operational half of that portal had no demo
+     * login at all: the roster, the collaborations, the nominations and the tracking assets could be
+     * built, tested and never once demonstrated by signing in.
+     *
+     * Two accounts in one portal is not the thing SIGNUP-006 forbids. That rule is that no account
+     * may span two PORTALS — a skeleton key. These two are opposite sides of the same agreement, and
+     * a portal that only ships one of them cannot show what it is for.
+     */
+    private function influencerOperator(): void
+    {
+        $tenant = Tenant::query()->withoutGlobalScopes()->where('slug', 'demo-agency')->first();
+
+        if ($tenant === null) {
+            $this->command?->warn('No demo-agency tenant — the influencer operator demo account was skipped.');
+
+            return;
+        }
+
+        app(TenantContext::class)->setTenantId((string) $tenant->getKey());
+
+        $user = User::firstOrNew(['email' => 'talent@demo-agency.local']);
+        $user->forceFill([
+            'name' => 'Talent Manager',
+            'password' => Hash::make(self::PASSWORD),
+            'email_verified_at' => now(),
+        ])->save();
+
+        /*
+         * Everything the influencer surface needs, and `influencers.approve` deliberately INCLUDED:
+         * a demo that can propose but never answer would leave the nomination queue permanently
+         * stuck at «awaiting a decision», which demonstrates the opposite of what it should.
+         *
+         * `influencers.view_costs` is included too — this is the operator who negotiates the fee.
+         */
+        $role = Role::firstOrCreate(
+            ['tenant_id' => $tenant->getKey(), 'slug' => 'talent-manager'],
+            ['name' => 'Talent Manager', 'is_system' => true],
+        );
+
+        $role->givePermissionTo(...Permission::query()
+            ->whereIn('key', [
+                'influencers.view', 'influencers.manage', 'influencers.approve', 'influencers.view_costs',
+                'campaigns.view', 'drive.view', 'messaging.view', 'reports.view',
+            ])
+            ->pluck('key')->all());
+
+        $user->assignRole($role);
+
+        app(GrantMembership::class)->execute(new MembershipGrant(
+            user: $user->refresh(),
+            tenant: $tenant,
+            portal: Portal::Influencers,
+            role: 'member',
+        ));
+    }
+
     private function report(): void
     {
         $this->command?->info('portal=/admin       | email=admin@demo-campaignshub.local | password=password');
         $this->command?->info('portal=/app         | email=owner@demo-company.local      | password=password');
         $this->command?->info('portal=/agency      | email=owner@demo-agency.local       | password=password');
-        $this->command?->info('portal=/influencers | email=layla@creators.demo           | password=password');
+        $this->command?->info('portal=/influencers | email=talent@demo-agency.local      | password=password (the AGENCY side — roster, nominations, tracking)');
+        $this->command?->info('portal=/influencers | email=layla@creators.demo           | password=password (the CREATOR side — her own agreements only)');
         $this->command?->info('portal=/portal      | email=client@demo-portal.local      | password=password (portal sign-in is still OTP — see the seeder)');
     }
 }
