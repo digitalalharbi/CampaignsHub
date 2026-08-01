@@ -457,10 +457,39 @@ new price, −499.00 SAR credit, 1000.00 SAR due; confirming left `plan` at `gro
 `scheduled_change.awaiting_payment = true` and the banner reading «باقتك الحالية لم تتغيّر»; the
 withdrawal cleared it.
 
+## STANDING DIRECTIVE (owner, 2026-08-02) — read before choosing the next unit
+
+The next phase is **visible, per-portal product work**, not backend or tests alone. Every portal is
+to be reviewed LIVE, page by page, and developed against its own purpose:
+
+| Portal | Its job |
+|---|---|
+| `/admin` | running the whole platform |
+| `/app` | the advertiser's own campaigns |
+| `/agency` | the agency and its clients |
+| `/influencers` | influencers and UGC |
+| `/portal` | requests, quotes, invoices, delivery |
+
+Also required: restore any page or feature that has disappeared, remove dead links, and simplify
+anything tangled or overlapping. Each unit ships frontend + backend + permissions, is reviewed live
+in the browser, is committed clean, and updates this file and the matrix before the next one starts.
+
 ## Exact next task
-**PAY-005 / OPS-002 / NORM-001 / PROJINT-001 / REVIEW-001** — the remaining PARTIAL rows. Nothing is
-NOT_STARTED any more. Also open: a demo login for the AGENCY side of the influencers portal (see the
-gap recorded under INFL-003).
+**REVIEW-001 (per-portal live audit)** is the one to take first — it is both an open matrix row and
+the directive above. `docs/REGRESSION_AUDIT_PORTALS.md` already covers `/app` and `/agency`;
+`/admin`, `/influencers` and `/portal` have never had the same pass. Walk each portal in the browser
+against its stated purpose: own dashboard, own menu and taxonomy, own settings, real isolation,
+loading/empty/error states, working search-filters-views-details-actions, ≤2 menu levels, nothing
+copied between portals.
+
+Known specific gaps to fold in:
+- **Five unlinked placeholder routes** under `/app` — approvals, tracking, optimization,
+  notifications, opportunities. Reachable only by typing the URL; linked from nothing.
+- **No demo login for the AGENCY side of `/influencers`** (see the gap under INFL-003), so the
+  roster, collaborations, nominations and attribution cannot be demonstrated by signing in.
+
+Then the remaining PARTIAL rows: **PAY-005, OPS-002, NORM-001, PROJINT-001**. Nothing is
+NOT_STARTED any more.
 
 Previously recorded here, and still true of the payment layer:
 
