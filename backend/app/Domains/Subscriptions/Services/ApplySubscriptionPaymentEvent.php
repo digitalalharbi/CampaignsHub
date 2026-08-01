@@ -232,9 +232,24 @@ final class ApplySubscriptionPaymentEvent
             return;
         }
 
-        if ($payment->subscription_id !== null) {
-            $this->lifecycle->renewalPaid($payment);
+        if ($payment->subscription_id === null) {
+            return;
         }
+
+        /*
+         * A plan change is not a renewal, and must not be treated as one.
+         *
+         * `renewalPaid` moves the period end forward a whole month or year — applying it to a
+         * part-period upgrade would hand the customer free time they did not buy, on top of the plan
+         * they did. This is the only place an upgrade takes effect.
+         */
+        if ($payment->purpose === 'plan_change') {
+            $this->lifecycle->planChangePaid($payment);
+
+            return;
+        }
+
+        $this->lifecycle->renewalPaid($payment);
     }
 
     private function reverse(SubscriptionPayment $payment): void

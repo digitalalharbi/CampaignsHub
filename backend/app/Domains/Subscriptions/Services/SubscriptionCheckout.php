@@ -9,6 +9,7 @@ use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
+use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -101,6 +102,44 @@ final class SubscriptionCheckout
             currency: (string) ($subscription->currency ?? config('subscriptions.currency')),
             planCode: $subscription->plan?->code,
             interval: (string) $subscription->billing_interval,
+            provider: $provider,
+            tenant: $tenant,
+            subscription: $subscription,
+        );
+    }
+
+    /**
+     * The prorated difference for a mid-term upgrade (PAY-002).
+     *
+     * Separate from `chargeSubscription` because the amount is NOT the subscription's agreed price:
+     * it is the part-period difference computed by {@see SubscriptionProration}, and passing it in
+     * is the whole point. Reading `unit_amount` here would charge a customer a full period for the
+     * days they have left.
+     *
+     * What it deliberately does not do is change the plan. That happens when the gateway confirms
+     * the money, through the same single call site as every other activation in this application.
+     *
+     * @return array{payment: SubscriptionPayment, status: string, checkout_url: ?string}
+     */
+    public function chargePlanChange(
+        Subscription $subscription,
+        SubscriptionPlan $newPlan,
+        string $interval,
+        string $amount,
+        ?string $provider = null,
+    ): array {
+        $tenant = Tenant::withoutGlobalScopes()->findOrFail($subscription->tenant_id);
+
+        if ((float) $amount <= 0) {
+            throw new RuntimeException('A plan change with nothing to pay must not open a charge.');
+        }
+
+        return $this->open(
+            purpose: 'plan_change',
+            amount: $amount,
+            currency: (string) ($subscription->currency ?? config('subscriptions.currency')),
+            planCode: $newPlan->code,
+            interval: $interval,
             provider: $provider,
             tenant: $tenant,
             subscription: $subscription,
@@ -222,6 +261,17 @@ final class SubscriptionCheckout
         // same charge and next month's renewal a different one.
         $period = $subscription?->current_period_end?->toDateString() ?? 'initial';
 
+        /*
+         * A plan change is identified by WHICH plan, within this period.
+         *
+         * Without the plan code a customer who upgrades, changes their mind before paying, and picks
+         * a different plan would be handed the first plan's charge back — the same amount for the
+         * wrong thing. With it, retrying the same choice is still one charge.
+         */
+        if ($purpose === 'plan_change') {
+            return "plan_change:{$subscription?->getKey()}:{$period}:{$planCode}:{$interval}";
+        }
+
         return "{$purpose}:{$subscription?->getKey()}:{$period}";
     }
 
@@ -230,6 +280,7 @@ final class SubscriptionCheckout
         return match ($purpose) {
             'trial' => "CampaignsHub trial — {$planCode}",
             'reactivation' => "CampaignsHub reactivation — {$planCode}",
+            'plan_change' => "CampaignsHub plan change — {$planCode}",
             default => "CampaignsHub subscription — {$planCode}",
         };
     }

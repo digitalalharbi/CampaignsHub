@@ -207,11 +207,32 @@ final class SubscriptionTest extends TestCase
             ->assertForbidden();
     }
 
+    /**
+     * A WORKSPACE OWNER cannot assign themselves a plan, however many permissions they hold.
+     *
+     * This endpoint used to be gated on `subscriptions.manage`, which every owner has — so one POST
+     * granted the largest plan for nothing, past the checkout, past the webhook, past the whole
+     * activation contract. Changing your own plan now costs money and goes through
+     * `/subscriptions/plan-change`, where an upgrade waits for a confirmed payment.
+     */
+    public function test_a_workspace_owner_cannot_grant_themselves_a_plan(): void
+    {
+        $owner = $this->ownerWithAllPermissions();
+
+        $this->actingAs($owner, 'sanctum')
+            ->postJson('/api/v1/subscriptions/change', ['plan_code' => 'growth', 'seats' => 5])
+            ->assertForbidden();
+
+        $this->assertNotSame('growth', $this->service()->currentPlan($this->tenant)->code);
+    }
+
     public function test_change_plan_assigns_the_subscription(): void
     {
         $user = $this->ownerWithAllPermissions();
+        // The operator's grant, from the platform console — not a customer action.
+        $user->forceFill(['is_platform_admin' => true])->save();
 
-        $this->actingAs($user, 'sanctum')->postJson('/api/v1/subscriptions/change', ['plan_code' => 'growth', 'seats' => 5])
+        $this->actingAs($user->refresh(), 'sanctum')->postJson('/api/v1/subscriptions/change', ['plan_code' => 'growth', 'seats' => 5])
             ->assertCreated()
             ->assertJsonPath('data.plan.code', 'growth')
             ->assertJsonPath('data.subscription.seats', 5);

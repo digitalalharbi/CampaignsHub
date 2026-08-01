@@ -1,9 +1,13 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, CreditCard, Gauge } from 'lucide-react'
+import { AlertTriangle, CalendarClock, CheckCircle2, CreditCard, Gauge } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { toApiError } from '@/lib/api/client'
-import { changePlan, getCurrent, getPlans, type CurrentSubscription, type SubscriptionPlan, type UsageMetric } from './api'
+import {
+  cancelPlanChange, getCurrent, getPlans, quotePlanChange, requestPlanChange,
+  type CurrentSubscription, type SubscriptionPlan, type UsageMetric,
+} from './api'
 
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 const COPY = {
@@ -21,6 +25,25 @@ const COPY = {
     features: 'المزايا',
     m_projects: 'المشاريع', m_team_members: 'أعضاء الفريق', m_connections: 'الربط', m_reports_per_month: 'التقارير / شهر',
     f_support: 'الدعم', f_ai_assist: 'مساعد الذكاء', f_white_label: 'العلامة البيضاء', yes: 'نعم', no: 'لا',
+    review: 'مراجعة التغيير', cancel: 'إلغاء',
+    quote_title: 'تفاصيل تغيير الباقة',
+    quote_loading: 'جارٍ حساب الفرق…',
+    days_left: 'الأيام المتبقية في الدورة الحالية',
+    credit: 'رصيد المدة غير المستخدمة',
+    new_price: 'سعر الباقة الجديدة للدورة',
+    prorated: 'قيمة الباقة الجديدة للمدة المتبقية',
+    due_now: 'المستحق الآن',
+    upgrade_note: 'لن تُفعَّل الباقة الجديدة إلا بعد تأكيد الدفع من بوابة الدفع.',
+    downgrade_note: 'لن يُخصم أو يُسترد أي مبلغ. تحتفظ بباقتك الحالية حتى نهاية الدورة المدفوعة، ثم يبدأ التغيير.',
+    confirm_upgrade: 'المتابعة إلى الدفع',
+    confirm_downgrade: 'تأكيد التغيير عند نهاية الدورة',
+    confirm_free: 'تأكيد التغيير',
+    pending_title: 'تغيير باقة قيد التنفيذ',
+    pending_at: 'يبدأ في',
+    pending_awaiting_payment: 'بانتظار تأكيد الدفع — باقتك الحالية لم تتغيّر.',
+    withdraw: 'سحب الطلب',
+    awaiting_credentials: 'بوابة الدفع غير مهيّأة بعد، لذلك لم يُفتح أي طلب دفع فعلي ولم يتغيّر شيء.',
+    pay_now: 'إتمام الدفع',
   },
   en: {
     title: 'Subscriptions', subtitle: 'See the tenant’s current plan and usage against limits, and change plan.',
@@ -36,6 +59,25 @@ const COPY = {
     features: 'Features',
     m_projects: 'Projects', m_team_members: 'Team members', m_connections: 'Connections', m_reports_per_month: 'Reports / month',
     f_support: 'Support', f_ai_assist: 'AI assist', f_white_label: 'White-label', yes: 'Yes', no: 'No',
+    review: 'Review this change', cancel: 'Cancel',
+    quote_title: 'What this change costs',
+    quote_loading: 'Working out the difference…',
+    days_left: 'Days left in the current period',
+    credit: 'Credit for the time you have not used',
+    new_price: 'New plan, per period',
+    prorated: 'New plan for the days that remain',
+    due_now: 'Due now',
+    upgrade_note: 'The new plan starts only once the gateway confirms the payment.',
+    downgrade_note: 'Nothing is charged and nothing is refunded. You keep your current plan until the period you paid for ends.',
+    confirm_upgrade: 'Continue to payment',
+    confirm_downgrade: 'Confirm the change at period end',
+    confirm_free: 'Confirm the change',
+    pending_title: 'A plan change is pending',
+    pending_at: 'Starts on',
+    pending_awaiting_payment: 'Waiting for the payment to be confirmed — your current plan has not changed.',
+    withdraw: 'Withdraw',
+    awaiting_credentials: 'No payment gateway is configured, so no real payment was opened and nothing has changed.',
+    pay_now: 'Complete the payment',
   },
 }
 type Copy = (typeof COPY)['ar']
@@ -85,11 +127,41 @@ export function SubscriptionsPage() {
   const currentQ = useQuery({ queryKey: ['subscriptions', 'current'], queryFn: getCurrent, retry: false, enabled: canView })
   const plansQ = useQuery({ queryKey: ['subscriptions', 'plans'], queryFn: getPlans, retry: false, enabled: canView })
 
+  /*
+   * Quote, then confirm — never one click (PAY-002).
+   *
+   * The numbers ARE the decision. A customer told «you will be charged 133.33 SAR now for the 20
+   * days left, and 300.00 SAR every month after that» is making one; a customer shown a Switch
+   * button and then a bank message is not. `chosen` holds the plan under review, and nothing is
+   * committed until they confirm it.
+   */
+  const [chosen, setChosen] = useState<SubscriptionPlan | null>(null)
+
+  const quoteQ = useQuery({
+    queryKey: ['subscriptions', 'plan-change-quote', chosen?.code],
+    queryFn: () => quotePlanChange(chosen!.code, 'monthly'),
+    enabled: chosen !== null,
+    retry: false,
+  })
+
   const changeM = useMutation({
-    mutationFn: (planCode: string) => changePlan(planCode),
-    onSuccess: () => {
+    mutationFn: (planCode: string) => requestPlanChange(planCode, 'monthly'),
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['subscriptions', 'current'] })
+      setChosen(null)
+      /*
+       * A real checkout is a page, not a fetch — so the browser goes there.
+       *
+       * When there is none (`checkout_url` is null because no gateway holds credentials) nothing is
+       * navigated and the pending banner says so, rather than sending somebody to a blank tab.
+       */
+      if (result.payment?.checkout_url) window.location.assign(result.payment.checkout_url)
     },
+  })
+
+  const withdrawM = useMutation({
+    mutationFn: cancelPlanChange,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['subscriptions', 'current'] }),
   })
 
   if (!canView) {
@@ -120,10 +192,21 @@ export function SubscriptionsPage() {
       ) : (
         <>
           <CurrentPlanCard current={current} c={c} />
+
+          {/* A change that is agreed but not in force. Never merged into the current plan above. */}
+          {current.subscription?.scheduled_change && (
+            <PendingChangeBanner
+              change={current.subscription.scheduled_change}
+              c={c}
+              canManage={canManage}
+              busy={withdrawM.isPending}
+              onWithdraw={() => withdrawM.mutate()}
+            />
+          )}
+
           <UsageTable usage={current.usage} c={c} />
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-bold text-text-primary">{c.catalogue}</h2>
-            {changeM.isSuccess && <span className="text-xs font-semibold text-success">{c.changed}</span>}
             {changeM.isError && <span className="text-xs font-semibold text-danger">{toApiError(changeM.error).message}</span>}
             {!canManage && <p className="text-xs text-text-tertiary">{c.manage_note}</p>}
             <div className="grid gap-3 md:grid-cols-3">
@@ -134,12 +217,25 @@ export function SubscriptionsPage() {
                   isCurrent={plan.code === currentCode}
                   canManage={canManage}
                   pending={changeM.isPending && changeM.variables === plan.code}
-                  onChange={() => changeM.mutate(plan.code)}
+                  onChange={() => setChosen(plan)}
                   c={c}
                 />
               ))}
             </div>
           </section>
+
+          {chosen && (
+            <ProrationReview
+              plan={chosen}
+              quote={quoteQ.data?.quote ?? null}
+              loading={quoteQ.isPending}
+              error={quoteQ.isError ? toApiError(quoteQ.error).message : null}
+              busy={changeM.isPending}
+              c={c}
+              onCancel={() => setChosen(null)}
+              onConfirm={() => changeM.mutate(chosen.code)}
+            />
+          )}
         </>
       )}
     </div>
@@ -235,6 +331,141 @@ function PlanCard({
           {isCurrent ? c.current_badge : pending ? c.changing : c.change}
         </button>
       )}
+    </div>
+  )
+}
+
+/**
+ * A change that has been agreed and is not in force yet (PAY-002).
+ *
+ * Two different situations wear the same shape and must not read the same: a downgrade waiting for
+ * the calendar, and an upgrade waiting for money. The second one says plainly that nothing has
+ * changed, because that is the thing a customer will otherwise assume wrong.
+ */
+function PendingChangeBanner({
+  change, c, canManage, busy, onWithdraw,
+}: {
+  change: NonNullable<NonNullable<CurrentSubscription['subscription']>['scheduled_change']>
+  c: Copy
+  canManage: boolean
+  busy: boolean
+  onWithdraw: () => void
+}) {
+  return (
+    <div
+      data-testid="pending-plan-change"
+      data-awaiting-payment={change.awaiting_payment}
+      role="status"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-secondary p-4"
+    >
+      <div className="flex items-start gap-2.5">
+        {change.awaiting_payment ? <AlertTriangle size={17} className="mt-0.5 shrink-0 text-warning" />
+          : <CalendarClock size={17} className="mt-0.5 shrink-0 text-info" />}
+        <div>
+          <p className="text-sm font-bold text-text-primary">{c.pending_title} — {change.plan_name}</p>
+          <p className="mt-0.5 text-[13px] text-text-secondary">
+            {change.awaiting_payment
+              ? c.pending_awaiting_payment
+              : `${c.pending_at} ${fmtDate(change.effective_at)}`}
+          </p>
+        </div>
+      </div>
+
+      {canManage && (
+        <button
+          type="button"
+          data-testid="withdraw-plan-change"
+          disabled={busy}
+          onClick={onWithdraw}
+          className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary disabled:opacity-50"
+        >
+          {c.withdraw}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The numbers, before anything is committed.
+ *
+ * Every line is shown rather than a single total: the credit for unused time is the part a customer
+ * would otherwise believe was taken from them, and a total that does not show it looks like being
+ * charged twice for the same month.
+ */
+function ProrationReview({
+  plan, quote, loading, error, busy, c, onCancel, onConfirm,
+}: {
+  plan: SubscriptionPlan
+  quote: import('./api').ProrationQuote | null
+  loading: boolean
+  error: string | null
+  busy: boolean
+  c: Copy
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const money = (value: string, currency: string) => `${value} ${currency}`
+  const isDowngrade = quote?.effective === 'period_end'
+  const owes = quote !== null && Number(quote.due_now) > 0
+
+  return (
+    <section data-testid="proration-review" className="flex flex-col gap-3 rounded-2xl border border-brand-500 bg-surface p-5">
+      <h2 className="text-sm font-bold text-text-primary">{c.quote_title} — {plan.name}</h2>
+
+      {loading && <p className="text-sm text-text-secondary">{c.quote_loading}</p>}
+      {error && <p className="text-sm font-semibold text-danger">{error}</p>}
+
+      {quote && (
+        <>
+          <dl className="flex flex-col gap-1.5 text-sm">
+            <Row label={c.days_left} value={`${quote.remaining_days} / ${quote.period_days}`} />
+            <Row label={c.new_price} value={money(quote.new_period_price, quote.currency)} />
+            <Row label={c.prorated} value={money(quote.prorated_new, quote.currency)} />
+            {/* Shown as a deduction, because that is what it is. */}
+            <Row label={c.credit} value={`− ${money(quote.credit, quote.currency)}`} />
+            <div className="mt-1 flex items-center justify-between border-t border-border pt-2">
+              <dt className="text-sm font-bold text-text-primary">{c.due_now}</dt>
+              <dd data-testid="due-now" className="tnum text-lg font-extrabold text-text-primary" dir="ltr">
+                {money(quote.due_now, quote.currency)}
+              </dd>
+            </div>
+          </dl>
+
+          {/* The honest sentence, and it differs by direction. */}
+          <p data-testid="proration-note" className="text-[13px] leading-relaxed text-text-secondary">
+            {isDowngrade ? c.downgrade_note : c.upgrade_note}
+          </p>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              data-testid="confirm-plan-change"
+              disabled={busy}
+              onClick={onConfirm}
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
+            >
+              {isDowngrade ? c.confirm_downgrade : owes ? c.confirm_upgrade : c.confirm_free}
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text-secondary hover:text-text-primary"
+            >
+              {c.cancel}
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <dt className="text-text-secondary">{label}</dt>
+      <dd className="tnum font-semibold text-text-primary" dir="ltr">{value}</dd>
     </div>
   )
 }

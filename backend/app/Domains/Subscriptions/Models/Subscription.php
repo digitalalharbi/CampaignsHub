@@ -26,7 +26,7 @@ final class Subscription extends Model
 
     protected $fillable = [
         'tenant_id', 'plan_id', 'status', 'billing_interval', 'unit_amount', 'currency',
-        'current_period_end', 'trial_ends_at', 'grace_ends_at',
+        'current_period_start', 'current_period_end', 'trial_ends_at', 'grace_ends_at',
         'auto_convert_consent_at', 'cancel_at_period_end', 'seats',
     ];
 
@@ -37,7 +37,10 @@ final class Subscription extends Model
      */
 
     protected $casts = [
+        'current_period_start' => 'datetime',
         'current_period_end' => 'datetime',
+        'scheduled_change_at' => 'datetime',
+        'scheduled_unit_amount' => 'decimal:2',
         'trial_ends_at' => 'datetime',
         'grace_ends_at' => 'datetime',
         'auto_convert_consent_at' => 'datetime',
@@ -67,5 +70,26 @@ final class Subscription extends Model
     public function plan(): BelongsTo
     {
         return $this->belongsTo(SubscriptionPlan::class, 'plan_id');
+    }
+
+    /**
+     * A plan change that has been agreed but is not in force yet (PAY-002).
+     *
+     * A downgrade takes effect when the period the customer has already paid for ends, so between
+     * agreeing it and applying it the subscription has two plans: the one being billed and the one
+     * coming. Separate columns rather than an early swap — swapping now would take away capability
+     * that has been paid for and quietly keep the money.
+     *
+     * @return BelongsTo<SubscriptionPlan, $this>
+     */
+    public function scheduledPlan(): BelongsTo
+    {
+        return $this->belongsTo(SubscriptionPlan::class, 'scheduled_plan_id');
+    }
+
+    /** True when a change is waiting for the current period to end. */
+    public function hasScheduledChange(): bool
+    {
+        return $this->scheduled_plan_id !== null;
     }
 }

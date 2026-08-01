@@ -6,6 +6,7 @@ use App\Domains\Subscriptions\Http\Controllers\PublicPlanController;
 use App\Domains\Subscriptions\Http\Controllers\SubscriptionController;
 use App\Domains\Subscriptions\Http\Controllers\SubscriptionInvoiceController;
 use App\Domains\Subscriptions\Http\Controllers\SubscriptionPaymentController;
+use App\Domains\Subscriptions\Http\Controllers\SubscriptionPlanChangeController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -76,4 +77,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     Route::get('subscriptions/plans', [SubscriptionController::class, 'plans'])->name('subscriptions.plans');
     Route::get('subscriptions/current', [SubscriptionController::class, 'current'])->name('subscriptions.current');
     Route::post('subscriptions/change', [SubscriptionController::class, 'change'])->name('subscriptions.change');
+
+    /*
+     * Changing plan MID-TERM, with the money worked out (PAY-002).
+     *
+     * `quote` is separate from the commit on purpose: the numbers are the decision, and a customer
+     * shown what a part-period upgrade actually costs before they agree to it is making one.
+     */
+    Route::post('subscriptions/plan-change/quote', [SubscriptionPlanChangeController::class, 'quote'])
+        ->name('subscriptions.plan-change.quote');
+    Route::post('subscriptions/plan-change', [SubscriptionPlanChangeController::class, 'store'])
+        ->name('subscriptions.plan-change.store');
+    Route::delete('subscriptions/plan-change', [SubscriptionPlanChangeController::class, 'destroy'])
+        ->name('subscriptions.plan-change.destroy');
 });

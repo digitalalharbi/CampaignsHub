@@ -31,6 +31,9 @@ final class SubscriptionNotificationTemplates
         $days = (int) ($c['days'] ?? 0);
         $reason = (string) ($c['reason'] ?? '');
         $url = (string) ($c['url'] ?? '');
+        // The plan being MOVED TO, and the date it starts — only a plan change carries these.
+        $planName = (string) ($c['plan_name'] ?? '');
+        $effectiveAt = (string) ($c['effective_at'] ?? '');
 
         return match ($event) {
             'trial_started' => $ar ? [
@@ -116,6 +119,42 @@ final class SubscriptionNotificationTemplates
                 'body' => "Your account is working again, and the current period runs until {$date}.\n{$url}",
             ],
 
+            /*
+             * A plan change that has taken effect (PAY-002).
+             *
+             * Says what they are on NOW, because that is the question a customer has after paying a
+             * part-period difference they may not have been expecting to see on a statement.
+             */
+            'plan_changed' => $ar ? [
+                'subject' => "تم تغيير باقتك إلى {$planName}",
+                'body' => "باقتك الحالية الآن {$planName}."
+                    .((float) ($c['amount'] ?? 0) > 0 ? " تم تحصيل فرق المدة المتبقية ({$amount})." : ' لم يُطلب أي مبلغ إضافي.')
+                    ."\nتنتهي الفترة الحالية في {$date}.\n{$url}",
+            ] : [
+                'subject' => "Your plan is now {$planName}",
+                'body' => "You are on {$planName}."
+                    .((float) ($c['amount'] ?? 0) > 0 ? " The difference for the remaining days was charged ({$amount})." : ' Nothing extra was charged.')
+                    ."\nThe current period runs until {$date}.\n{$url}",
+            ],
+
+            /*
+             * A downgrade, agreed and waiting.
+             *
+             * The date is the point of this message: the customer keeps everything they paid for
+             * until then, and saying so is what stops «I downgraded and lost my projects today».
+             */
+            'plan_change_scheduled' => $ar ? [
+                'subject' => "سيتم تحويلك إلى باقة {$planName} في {$effectiveAt}",
+                'body' => "سجّلنا طلب تغيير باقتك إلى {$planName}.\n"
+                    ."يبدأ التغيير في {$effectiveAt}، وحتى ذلك التاريخ تحتفظ بباقتك الحالية بالكامل لأنك دفعت ثمنها.\n"
+                    ."لم يُخصم أي مبلغ ولم يُسترد أي مبلغ.\n{$url}",
+            ] : [
+                'subject' => "You move to {$planName} on {$effectiveAt}",
+                'body' => "Your change to {$planName} is recorded.\n"
+                    ."It starts on {$effectiveAt}. Until then you keep your current plan in full, because you have paid for it.\n"
+                    ."Nothing has been charged and nothing has been refunded.\n{$url}",
+            ],
+
             'registration_approved' => $ar ? [
                 'subject' => 'تم اعتماد طلب تسجيلك',
                 'body' => "راجعنا طلبك واعتمدناه.\n"
@@ -164,6 +203,7 @@ final class SubscriptionNotificationTemplates
         return [
             'trial_started', 'trial_ending', 'trial_converted', 'payment_confirmed',
             'renewal_failed', 'past_due', 'suspended', 'reactivated',
+            'plan_changed', 'plan_change_scheduled',
             'registration_approved', 'registration_rejected', 'registration_information_requested',
         ];
     }

@@ -5,7 +5,13 @@ import { deleteData, getData, postData } from '@/lib/api/client'
  * App\Domains\Subscriptions\Http\Controllers\SubscriptionController:
  *  - GET  /subscriptions/plans    → the active plan catalogue (subscriptions.view).
  *  - GET  /subscriptions/current  → the tenant's subscription + honest per-metric usage/remaining.
- *  - POST /subscriptions/change   → move the tenant onto a plan by its `code` (subscriptions.manage).
+ *  - POST /subscriptions/plan-change/quote → what a mid-term change would cost, changing nothing.
+ *  - POST /subscriptions/plan-change       → commit to it (an upgrade opens a charge; a downgrade books a date).
+ *  - DELETE /subscriptions/plan-change     → withdraw a change that has not taken effect.
+ *
+ * `POST /subscriptions/change` is deliberately NOT here. It is the platform owner's grant — a plan
+ * assigned with no money — and it is now refused for everybody else. A customer changing their own
+ * plan pays the prorated difference, which is what the endpoints above are for.
  *
  * Honesty notes: a `limit`/`remaining` of `null` means UNLIMITED (the plan does not cap that metric). Plans
  * are identified by their string `code` (there is no numeric id in the client-safe shape) — so "changing plan"
@@ -32,10 +38,32 @@ export interface UsageMetric {
   remaining: number | null
 }
 
+export interface ScheduledPlanChange {
+  plan: string | null
+  plan_name: string | null
+  billing_interval: string | null
+  unit_amount: string | null
+  /** Null when the change is waiting on a PAYMENT rather than on the calendar. */
+  effective_at: string | null
+  awaiting_payment: boolean
+}
+
 export interface SubscriptionSummary {
   status: string
   seats: number
+  billing_interval?: string | null
+  unit_amount?: string | null
+  currency?: string | null
+  current_period_start?: string | null
   current_period_end: string | null
+  /**
+   * A change that is agreed but not in force.
+   *
+   * Reported apart from `plan` and never merged into it: until this takes effect the customer is
+   * entitled to what `plan` says, and showing the coming plan as the current one would describe a
+   * downgrade as already having happened.
+   */
+  scheduled_change?: ScheduledPlanChange | null
 }
 
 export interface CurrentSubscription {
@@ -48,14 +76,55 @@ export interface CurrentSubscription {
 
 export const getCurrent = () => getData<CurrentSubscription>('/subscriptions/current')
 
-export interface ChangePlanResult {
-  subscription: SubscriptionSummary
-  plan: SubscriptionPlan
+export type BillingInterval = 'monthly' | 'annual'
+
+/** The arithmetic behind a mid-term change. Every amount is a decimal STRING — money is not a float. */
+export interface ProrationQuote {
+  direction: 'upgrade' | 'downgrade' | 'lateral'
+  remaining_days: number
+  period_days: number
+  unused_fraction: number
+  /** The unused part of what they already paid, credited against the new plan. */
+  credit: string
+  new_period_price: string
+  prorated_new: string
+  /** What is owed right now. `0.00` on a downgrade — nothing is taken and nothing is refunded. */
+  due_now: string
+  currency: string
+  effective: 'immediate' | 'period_end'
+  effective_at: string | null
 }
 
-/** Move the tenant onto a plan, keyed by the plan's `code`. Requires subscriptions.manage server-side. */
-export const changePlan = (planCode: string) =>
-  postData<ChangePlanResult>('/subscriptions/change', { plan_code: planCode })
+export interface PlanChangeQuote {
+  from: { plan: string | null; plan_name: string | null; interval: string | null; unit_amount: string | null }
+  to: { plan: string; plan_name: string; interval: string }
+  quote: ProrationQuote
+}
+
+export interface PlanChangeResult {
+  quote: ProrationQuote
+  effective: 'immediate' | 'period_end'
+  effective_at: string | null
+  /**
+   * Present only when money is owed. `checkout_url` is null with no gateway configured, and the
+   * status then says `awaiting_credentials` rather than pretending a payment page exists.
+   */
+  payment: { status: string; checkout_url: string | null; amount: string; currency: string } | null
+  /** What the customer is entitled to RIGHT NOW — unchanged until a payment is confirmed. */
+  plan: string | null
+  scheduled_plan: string | null
+}
+
+/** What a change would cost. Opens no charge, writes no row, moves no plan — safe to call freely. */
+export const quotePlanChange = (planCode: string, interval: BillingInterval) =>
+  postData<PlanChangeQuote>('/subscriptions/plan-change/quote', { plan_code: planCode, billing_interval: interval })
+
+/** Commit. An upgrade answers with a charge to pay; a downgrade answers with the date it starts. */
+export const requestPlanChange = (planCode: string, interval: BillingInterval) =>
+  postData<PlanChangeResult>('/subscriptions/plan-change', { plan_code: planCode, billing_interval: interval })
+
+export const cancelPlanChange = () =>
+  deleteData<{ scheduled_plan: null }>('/subscriptions/plan-change')
 
 /*
  * CampaignsHub's own invoices to this customer (SUBINV-001).

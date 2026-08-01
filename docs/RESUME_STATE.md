@@ -11,10 +11,10 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
-`I18N-001 + UI-MODAL-001` — the API answers in the customer's language, and an open modal stops
-taking the keyboard back.
+`PAY-002b` — mid-term upgrade/downgrade with proration, the last unbuilt piece of the commercial
+contract. Preceded by `883c40c` (I18N-001 + UI-MODAL-001).
 
-**860 backend · 456 vitest · E2E on chromium + firefox + webkit, `retries: 0`.**
+**876 backend · 462 vitest · E2E on chromium + firefox + webkit, `retries: 0`.**
 
 Session order: `f71319d` (SIGNUP-002d + review queue) → `d4f57ff` (3 E2E root causes) → `c5cc4e7`
 (PLAN-001) → `d4872d1` → `c143817` (PLAN-001e, sign-up in two steps) → `34f2831` (PAY-001…005) →
@@ -340,9 +340,48 @@ asserted rather than inherited. The ~97 surplus Sandbox connections this created
 database were deleted (cascade removes their accounts and externals); the seeded demo connection was
 kept. Nothing outside those test-created connections was touched.
 
+## Latest work unit — PAY-002b (changing plan part-way through a paid period)
+
+`SubscriptionProration` is the whole decision, kept apart from the lifecycle because it is the only
+part that is pure arithmetic on money and therefore the part that must be provable without a
+database, a gateway or a webhook. The rule in one sentence: **the customer pays the difference for
+the time they have not used, and never pays twice for time they have already bought.**
+
+- **Upgrade** — the unused fraction of the paid period is credited against the new plan's prorated
+  price and only the difference is charged. The plan does NOT move when it is requested: a charge is
+  opened, and `planChangePaid()` applies it from `ApplySubscriptionPaymentEvent`, which is reached
+  only from a verified webhook.
+- **Downgrade** — booked for the period end. Nothing charged, nothing refunded, capability kept
+  until the period the customer paid for runs out. Applying it at once would take away what has been
+  bought and quietly keep the money, and no refund path exists in any case while both gateways hold
+  no credentials.
+- `plan_change` is routed APART from `renewalPaid` at the webhook, because `renewalPaid` pushes the
+  period end forward a whole month — a part-period upgrade going through it would hand out a free
+  month on top of the plan.
+- Direction comes from the PERIOD prices, not from the prorated difference: on the last day of a
+  period the difference rounds to nothing, and treating that as a downgrade would apply a more
+  expensive plan immediately for free.
+- Two new columns needed saying out loud: `current_period_start` (proration is a fraction of a
+  period, and a period with only an end has an assumed length that is wrong the moment one was ever
+  extended), and the `scheduled_*` set, which grants nothing — `plan_id` still names what the
+  customer is entitled to while a change waits.
+
+### A real hole, found by wiring it
+
+`POST /subscriptions/change` — the ops assignment that moves a tenant onto a plan with **no money** —
+was gated on `subscriptions.manage`, **which every workspace owner holds**. One POST granted the
+largest plan for nothing, straight past the checkout, the webhook and the entire activation
+contract. It is now `is_platform_admin` only, and `SubscriptionTest` asserts an owner is refused.
+
+Live-reviewed at `/app/subscriptions` on the demo advertiser: the review panel showed 1499.00 SAR
+new price, −499.00 SAR credit, 1000.00 SAR due; confirming left `plan` at `growth` with
+`scheduled_change.awaiting_payment = true` and the banner reading «باقتك الحالية لم تتغيّر»; the
+withdrawal cleared it.
+
 ## Exact next task
-**PAY-002's remaining half** — mid-term upgrade/downgrade with proration, still the single largest
-unbuilt piece of the commercial contract. See the PAY-002 row in the matrix.
+**PAY-005 / OPS-002 / INFL-003 / NORM-001 / PROJINT-001 / REVIEW-001** — the remaining PARTIAL and
+NOT_STARTED rows. `INFL-003` (nominations, tracking links, discount codes, per-deliverable results)
+is the largest of them and the only NOT_STARTED one.
 
 Previously recorded here, and still true of the payment layer:
 

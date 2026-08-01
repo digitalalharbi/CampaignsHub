@@ -10,6 +10,7 @@ use App\Domains\Accounts\Services\TransitionAccountState;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
+use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Notifications\SubscriptionNotifier;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Scopes\TenantScope;
@@ -41,6 +42,7 @@ final class SubscriptionLifecycle
         private readonly TransitionAccountState $transitions,
         private readonly AuditLogger $audit,
         private readonly SubscriptionNotifier $notify,
+        private readonly SubscriptionProration $proration,
     ) {}
 
     // ── Starting ──────────────────────────────────────────────────────────────────────────────
@@ -117,6 +119,9 @@ final class SubscriptionLifecycle
             // warning, and the whole point is that the customer can still cancel.
             'trials_warned' => $this->warnEndingTrials(),
             'trials_converted' => $this->convertDueTrials($checkout),
+            // BEFORE the renewal charge: a downgrade agreed last month is meant to take effect at
+            // this period's end, and charging first would bill the old price for the new period.
+            'plan_changes_applied' => $this->applyDueScheduledChanges(),
             'renewals_charged' => $this->chargeDueRenewals($checkout),
             'marked_past_due' => $this->markPastDue(),
             'suspended' => $this->suspendAfterGrace(),
@@ -334,6 +339,9 @@ final class SubscriptionLifecycle
             'status' => 'active',
             'grace_ends_at' => null,
             'trial_ends_at' => null,
+            // The START moves with the end. Proration is a fraction of a period, and a period whose
+            // start never advances makes every later change look as though almost none of it is left.
+            'current_period_start' => Carbon::now(),
             'current_period_end' => $this->nextPeriodEnd($subscription, Carbon::now()),
         ])->save();
 
@@ -425,6 +433,7 @@ final class SubscriptionLifecycle
         $subscription->forceFill([
             'status' => 'active',
             'grace_ends_at' => null,
+            'current_period_start' => Carbon::now(),
             'current_period_end' => $this->nextPeriodEnd($subscription, Carbon::now()),
         ])->save();
 
@@ -442,6 +451,272 @@ final class SubscriptionLifecycle
             action: 'subscription.reactivated',
             entityType: Subscription::class,
             entityId: (string) $subscription->getKey(),
+            reason: $why,
+            tenantId: (string) $subscription->tenant_id,
+        );
+
+        return $subscription->refresh();
+    }
+
+    // ── Changing plan mid-term (PAY-002) ──────────────────────────────────────────────────────
+
+    /**
+     * Move a subscription to another plan, part-way through a period it has already paid for.
+     *
+     * Two outcomes, and which one you get is decided by the prices rather than by what the customer
+     * calls it:
+     *
+     * - **Upgrade.** The unused part of the current period is credited against the new plan's
+     *   prorated price, and only the DIFFERENCE is charged. The plan itself does not move here — a
+     *   charge is opened and {@see planChangePaid()} applies it when the gateway confirms, exactly
+     *   as every other activation in this application works.
+     * - **Downgrade.** Nothing is charged and nothing is refunded; the change is recorded and takes
+     *   effect when the period ends. The customer keeps what they paid for. Applying it immediately
+     *   would take away capability that has been bought and keep the money for it, which is the one
+     *   thing a billing system must never quietly do.
+     *
+     * A lateral move — same price, different interval, a renamed plan — applies at once, because
+     * nothing is owed in either direction.
+     *
+     * @return array{quote: array<string, mixed>, subscription: Subscription, charge: ?array<string, mixed>}
+     */
+    public function changePlan(
+        Subscription $subscription,
+        SubscriptionPlan $newPlan,
+        string $interval,
+        ?SubscriptionCheckout $checkout = null,
+    ): array {
+        if (! in_array($interval, ['monthly', 'annual'], true)) {
+            throw new \InvalidArgumentException('A subscription is billed monthly or annually.');
+        }
+
+        if ($newPlan->priceFor($interval) === null) {
+            throw new \RuntimeException('That plan is not sold on that term.');
+        }
+
+        if ($subscription->plan_id === $newPlan->getKey() && $subscription->billing_interval === $interval) {
+            throw new \RuntimeException('This subscription is already on that plan and term.');
+        }
+
+        $quote = $this->proration->quote($subscription, $newPlan, $interval);
+
+        $this->audit->log(
+            action: 'subscription.plan_change.requested',
+            entityType: Subscription::class,
+            entityId: (string) $subscription->getKey(),
+            before: ['plan' => $subscription->plan?->code, 'interval' => $subscription->billing_interval],
+            after: ['plan' => $newPlan->code, 'interval' => $interval] + $quote,
+            tenantId: (string) $subscription->tenant_id,
+        );
+
+        if ($quote['effective'] === 'period_end') {
+            return [
+                'quote' => $quote,
+                'subscription' => $this->scheduleChange($subscription, $newPlan, $interval, $quote),
+                'charge' => null,
+            ];
+        }
+
+        /*
+         * An immediate change with nothing to pay is applied here.
+         *
+         * A lateral move, or an upgrade taken on the last day of a period where the prorated
+         * difference rounds to zero. Opening a charge for 0.00 would leave a customer at a payment
+         * page asking them for nothing.
+         */
+        if ((float) $quote['due_now'] <= 0) {
+            return [
+                'quote' => $quote,
+                'subscription' => $this->applyPlan($subscription, $newPlan, $interval, 'The change was owed nothing.'),
+                'charge' => null,
+            ];
+        }
+
+        $charge = ($checkout ?? app(SubscriptionCheckout::class))->chargePlanChange(
+            $subscription,
+            $newPlan,
+            $interval,
+            (string) $quote['due_now'],
+        );
+
+        /*
+         * Recorded as SCHEDULED even though it is meant to be immediate.
+         *
+         * Between opening the charge and the gateway confirming it, the customer has chosen a plan
+         * they have not paid for. Writing it here means the interface can say «awaiting payment»
+         * with the plan named, and — the part that matters — it is written to the `scheduled_*`
+         * columns, which grant nothing. `plan_id` still names what they are actually entitled to.
+         */
+        $this->scheduleChange($subscription, $newPlan, $interval, $quote, awaitingPayment: true);
+
+        return ['quote' => $quote, 'subscription' => $subscription->refresh(), 'charge' => $charge];
+    }
+
+    /**
+     * A confirmed plan-change payment applies the plan. The single place an upgrade takes effect.
+     *
+     * Reached only from `ApplySubscriptionPaymentEvent`, which is reached only from a verified
+     * webhook. There is deliberately no other way to move a subscription up a tier.
+     */
+    public function planChangePaid(SubscriptionPayment $payment): void
+    {
+        $subscription = $this->find($payment->subscription_id);
+        $plan = $this->catalogue->byCode($payment->plan_code);
+
+        if ($subscription === null || $plan === null) {
+            return;
+        }
+
+        $this->applyPlan(
+            $subscription,
+            $plan,
+            (string) ($payment->billing_interval ?: $subscription->billing_interval),
+            'The gateway confirmed the difference for a mid-term upgrade.',
+            paidAmount: (string) $payment->amount,
+        );
+    }
+
+    /**
+     * Apply a scheduled change once the period it was waiting for has ended.
+     *
+     * Called from the daily sweep and from the renewal path, so a downgrade lands whether the
+     * customer renews on time or the scheduler gets there first.
+     */
+    public function applyDueScheduledChanges(?Carbon $now = null): int
+    {
+        $now = $now ?? Carbon::now();
+        $applied = 0;
+
+        $due = $this->query()
+            ->whereNotNull('scheduled_plan_id')
+            ->whereNotNull('scheduled_change_at')
+            ->where('scheduled_change_at', '<=', $now)
+            ->get();
+
+        foreach ($due as $subscription) {
+            $plan = SubscriptionPlan::query()->find($subscription->scheduled_plan_id);
+
+            if ($plan === null) {
+                // The plan was deleted between agreeing the change and applying it. Clear the
+                // booking rather than leave a subscription pointing at nothing forever.
+                $this->clearScheduledChange($subscription);
+
+                continue;
+            }
+
+            $this->applyPlan(
+                $subscription,
+                $plan,
+                (string) ($subscription->scheduled_billing_interval ?: $subscription->billing_interval),
+                'A scheduled plan change reached the end of the period it was waiting for.',
+            );
+
+            $applied++;
+        }
+
+        return $applied;
+    }
+
+    /** Withdraw a change that has not taken effect yet. */
+    public function cancelScheduledChange(Subscription $subscription, string $why): Subscription
+    {
+        if (! $subscription->hasScheduledChange()) {
+            return $subscription;
+        }
+
+        $this->audit->log(
+            action: 'subscription.plan_change.cancelled',
+            entityType: Subscription::class,
+            entityId: (string) $subscription->getKey(),
+            before: ['plan' => $subscription->scheduledPlan?->code],
+            reason: $why,
+            tenantId: (string) $subscription->tenant_id,
+        );
+
+        return $this->clearScheduledChange($subscription);
+    }
+
+    private function scheduleChange(
+        Subscription $subscription,
+        SubscriptionPlan $plan,
+        string $interval,
+        array $quote,
+        bool $awaitingPayment = false,
+    ): Subscription {
+        $subscription->forceFill([
+            'scheduled_plan_id' => $plan->getKey(),
+            'scheduled_billing_interval' => $interval,
+            'scheduled_unit_amount' => $quote['new_period_price'],
+            // An upgrade waiting on payment has no date: it lands when the money does, not on a
+            // clock. A downgrade lands at the end of the period already paid for.
+            'scheduled_change_at' => $awaitingPayment ? null : $subscription->current_period_end,
+        ])->save();
+
+        $tenant = $this->tenantOf($subscription);
+
+        if ($tenant !== null && ! $awaitingPayment) {
+            $this->tell($tenant, 'plan_change_scheduled', $subscription->refresh(), [
+                'plan_name' => $plan->name,
+                'effective_at' => (string) $subscription->current_period_end?->toDateString(),
+            ], occasion: $subscription->getKey().':'.$plan->getKey().':'.$interval);
+        }
+
+        return $subscription->refresh();
+    }
+
+    private function clearScheduledChange(Subscription $subscription): Subscription
+    {
+        $subscription->forceFill([
+            'scheduled_plan_id' => null,
+            'scheduled_billing_interval' => null,
+            'scheduled_unit_amount' => null,
+            'scheduled_change_at' => null,
+        ])->save();
+
+        return $subscription->refresh();
+    }
+
+    /**
+     * Move the subscription onto the plan, for real.
+     *
+     * `unit_amount` becomes the new plan's price for the chosen term: it is what this customer is
+     * now sold, and every later renewal reads it rather than the catalogue — so a price edited in
+     * /admin tomorrow does not re-price them.
+     */
+    private function applyPlan(
+        Subscription $subscription,
+        SubscriptionPlan $plan,
+        string $interval,
+        string $why,
+        ?string $paidAmount = null,
+    ): Subscription {
+        $before = ['plan' => $subscription->plan?->code, 'interval' => $subscription->billing_interval];
+
+        $subscription->forceFill([
+            'plan_id' => $plan->getKey(),
+            'billing_interval' => $interval,
+            'unit_amount' => $plan->priceFor($interval),
+            'scheduled_plan_id' => null,
+            'scheduled_billing_interval' => null,
+            'scheduled_unit_amount' => null,
+            'scheduled_change_at' => null,
+        ])->save();
+
+        $tenant = $this->tenantOf($subscription);
+
+        if ($tenant !== null) {
+            $this->tell($tenant, 'plan_changed', $subscription->refresh(), [
+                'plan_name' => $plan->name,
+                'amount' => $paidAmount ?? '0.00',
+            ], occasion: $subscription->getKey().':'.$plan->getKey().':'.$interval);
+        }
+
+        $this->audit->log(
+            action: 'subscription.plan_changed',
+            entityType: Subscription::class,
+            entityId: (string) $subscription->getKey(),
+            before: $before,
+            after: ['plan' => $plan->code, 'interval' => $interval, 'paid' => $paidAmount],
             reason: $why,
             tenantId: (string) $subscription->tenant_id,
         );
