@@ -1,3 +1,5 @@
+import { features } from '@/lib/features'
+
 /**
  * Public homepage copy (ar + en) — v5 CUSTOMER-facing rebuild.
  *
@@ -718,4 +720,31 @@ const en: HomeCopy = {
   },
 }
 
-export const HOME_COPY: Record<Locale, HomeCopy> = { ar, en }
+/**
+ * The offers this page may actually make (INFL-OFF-001).
+ *
+ * The influencer/UGC card is removed from the hero's start paths and from the "how do you want to
+ * begin?" list while the sub-system is switched off. Filtered HERE, once, because the same card is
+ * rendered by three surfaces — the hero, its collapsed alternatives strip, and the options block
+ * further down the page — and a card removed from two of them is a card the visitor still finds.
+ *
+ * The wording stays in the file. It is not dead: it is the copy this card comes back with, and
+ * deleting it would mean writing it again from memory when the service reopens.
+ */
+function offeredCopy(copy: HomeCopy): HomeCopy {
+  if (features.influencersUgc) return copy
+
+  return {
+    ...copy,
+    start: {
+      ...copy.start,
+      paths: copy.start.paths.filter((p) => p.key !== 'influencer'),
+    },
+    options: {
+      ...copy.options,
+      cards: copy.options.cards.filter((c) => !c.to?.includes('influencer')),
+    },
+  }
+}
+
+export const HOME_COPY: Record<Locale, HomeCopy> = { ar: offeredCopy(ar), en: offeredCopy(en) }

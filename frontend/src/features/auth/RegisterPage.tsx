@@ -12,6 +12,7 @@ import { ErrorSummary, useFormDraft, type FieldError } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
+import { features } from '@/lib/features'
 
 /**
  * Journey handoff from the public homepage decision section. `?journey=self-service|multi-client` presets the
@@ -134,8 +135,18 @@ export function RegisterPage() {
   const preset = useMemo(() => {
     if (journey === null) return null
     const account_type = journey === 'multi-client' ? 'agency' : selfType
-    const service =
+    /*
+     * A `module` the product is not offering does not carry (INFL-OFF-001).
+     *
+     * The influencer cards are gone from the public site, but a bookmarked
+     * `/register?module=influencer-marketing` is still a live URL — and honouring it here would open
+     * an application for a service that has no portal to serve it. The backend refuses the value
+     * too; this stops the form reaching it with something it will reject.
+     */
+    const wantsInfluencer =
       moduleParam === 'influencer-marketing' || moduleParam === 'influencer_marketing'
+    const service =
+      wantsInfluencer && features.influencersUgc
         ? ('influencer_marketing' as const)
         : ('paid_media' as const)
     return { account_type, service }

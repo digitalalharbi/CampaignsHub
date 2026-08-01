@@ -13,6 +13,7 @@ return [
     'unauthorized' => 'This action is unauthorized.',
     'csrf' => 'This page has expired. Please refresh and try again.',
     'not_found' => 'The requested resource was not found.',
+    'portal_unavailable' => 'This service is not available yet. We will announce it when it opens.',
     'too_many_requests' => 'Too many requests. Please try again shortly.',
     'server_error' => 'Something went wrong. Please try again.',
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Requests\Models\ExternalRequest;
+use App\Domains\Requests\Models\RequestType;
 use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,13 +37,42 @@ final class RequestIntakeTest extends TestCase
         ], $overrides));
     }
 
+    /**
+     * The intake catalogue lists what is on OFFER.
+     *
+     * Ten rather than eleven, because the influencer/UGC type is withdrawn while its sub-system is
+     * off (INFL-OFF-001) — and withdrawn is not the same as gone: the assertion below reads the row
+     * straight from the table to prove it is still there, still active, and still available to every
+     * request already attached to it. A count alone could not tell those two apart.
+     */
     public function test_meta_exposes_active_service_types(): void
     {
         $this->getJson('/api/v1/requests/meta')
             ->assertOk()
             ->assertJsonPath('data.types.0.key', 'paid_campaign_launch')
             ->assertJsonPath('data.types.0.module', 'paid_media')
-            ->assertJsonCount(11, 'data.types');
+            ->assertJsonCount(10, 'data.types');
+    }
+
+    public function test_the_withdrawn_service_type_is_preserved_rather_than_deleted(): void
+    {
+        $offered = collect($this->getJson('/api/v1/requests/meta')->assertOk()->json('data.types'))
+            ->pluck('key');
+
+        $this->assertFalse($offered->contains('influencer_ugc'), 'a withdrawn service is still being offered');
+
+        $row = RequestType::query()->where('key', 'influencer_ugc')->first();
+
+        $this->assertNotNull($row, 'the influencer service type was deleted rather than withdrawn');
+        $this->assertTrue($row->is_active, 'the row must stay active — every existing request hangs off it');
+    }
+
+    /** …and a payload naming it is refused, rather than quietly opening a request nobody can serve. */
+    public function test_a_new_request_cannot_be_opened_for_a_withdrawn_service(): void
+    {
+        $this->postJson('/api/v1/requests', $this->payload(['type' => 'influencer_ugc']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('type');
     }
 
     public function test_public_intake_creates_request_reference_token_and_event(): void

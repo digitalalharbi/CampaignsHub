@@ -14,14 +14,14 @@ const DOORS = [
   { path: '/admin/login', ar: 'دخول إدارة المنصة', en: 'Platform administration' },
   { path: '/app/login', ar: 'دخول إدارة الحملات', en: 'Campaign management' },
   { path: '/agency/login', ar: 'دخول الوكالة', en: 'Agency' },
-  { path: '/influencers/login', ar: 'دخول المؤثرين وUGC', en: 'Influencers & UGC' },
+  // `/influencers/login` is deliberately absent: that portal is withdrawn (INFL-OFF-001) and its door
+  // now redirects to the services catalogue. It is covered by its own test below.
 ] as const
 
 /** Each account, and the ONE door it holds. */
 const ACCOUNTS = [
   { email: 'owner@demo-company.local', door: '/app/login', lands: /\/app\/dashboard/ },
   { email: 'owner@demo-agency.local', door: '/agency/login', lands: /\/agency/ },
-  { email: 'layla@creators.demo', door: '/influencers/login', lands: /\/influencers/ },
 ] as const
 
 async function signIn(page: Page, email: string) {
@@ -30,7 +30,17 @@ async function signIn(page: Page, email: string) {
   await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
 }
 
-test('each door names its own portal and offers the other four', async ({ page }) => {
+/** The withdrawn door still answers — with somewhere to go, not a 404 (INFL-OFF-001). */
+test('the withdrawn influencers door leads to the services catalogue', async ({ page }) => {
+  await page.goto('/influencers/login')
+
+  await expect(page).toHaveURL(/\/services\?unavailable=influencers/)
+  await expect(page.getByTestId('influencers-unavailable')).toBeVisible()
+  // Not a placeholder: the catalogue behind the notice is the real one.
+  await expect(page.getByTestId('service-categories')).toBeVisible()
+})
+
+test('each door names its own portal and offers the others', async ({ page }) => {
   for (const door of DOORS) {
     await page.goto(door.path)
     await expect(page.getByTestId('portal-login-title')).toHaveText(door.ar)

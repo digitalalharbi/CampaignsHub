@@ -44,7 +44,9 @@ test('homepage: hero, language/theme, preview, journeys and CTAs into real route
   const hrefs = await page.locator('a[href]').evaluateAll((els) => els.map((e) => e.getAttribute('href')))
   expect(hrefs).toContain('/register?journey=self-service&module=paid-media')
   expect(hrefs).toContain('/register?journey=multi-client&module=paid-media')
-  expect(hrefs).toContain('/requests/new?module=influencer-marketing')
+  // Withdrawn in this release (INFL-OFF-001) — and absent from the page, not merely unlinked in one
+  // of the three places this card used to appear.
+  expect(hrefs).not.toContain('/requests/new?module=influencer-marketing')
 
   // «I need paid-media services» opens the services selector in a dialog (it does not navigate). It is a
   // long list, so it lives in a dialog rather than stretching the hero down the page.

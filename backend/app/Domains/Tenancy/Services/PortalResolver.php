@@ -21,7 +21,21 @@ use Illuminate\Support\Collection;
  */
 final class PortalResolver
 {
-    /** @return Collection<int, Membership> */
+    /**
+     * @return Collection<int, Membership>
+     *
+     * Memberships for a WITHDRAWN portal are left out (INFL-OFF-001).
+     *
+     * This is the one place every routing decision reads — the destination after sign-in, whether the
+     * switcher is needed, and whether a requested portal is held — so filtering here is what stops
+     * the product delivering somebody to a portal that will then refuse them. An operator whose only
+     * membership is the influencers portal lands on `/onboarding` rather than on a redirect chain,
+     * and one who also holds the agency portal is taken straight there instead of being shown a
+     * switcher with a dead option in it.
+     *
+     * The rows are untouched and still active. Nothing was revoked: the day the flag flips back, the
+     * same membership resolves again with no migration and no re-grant.
+     */
     public function membershipsFor(User $user): Collection
     {
         return Membership::query()
@@ -30,7 +44,9 @@ final class PortalResolver
             ->with(['tenant:id,name,slug,account_type', 'scopes'])
             ->orderByDesc('is_default')
             ->orderByDesc('last_used_at')
-            ->get();
+            ->get()
+            ->filter(fn (Membership $m) => $m->portal->isEnabled())
+            ->values();
     }
 
     /**

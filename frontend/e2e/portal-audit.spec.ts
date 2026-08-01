@@ -114,24 +114,56 @@ test.describe('the platform console', () => {
   })
 })
 
-test.describe('the influencers portal, from the agency side', () => {
-  test.use({ storageState: AUTH.talent })
+/**
+ * The influencers portal is withdrawn (INFL-OFF-001).
+ *
+ * There is nothing to walk: every address in it redirects to the services catalogue. What is audited
+ * instead is that the redirect LANDS somewhere real — the failure this replaces would be a 404 or a
+ * blank page for everybody holding an old link.
+ */
+test.describe('the withdrawn influencers portal', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  test('every retired address lands on a real page that says why', async ({ page }) => {
+    for (const path of ['/influencers', '/influencers/login', '/influencers/roster', '/influencers/nominations', '/influencers/me']) {
+      await page.goto(path)
+
+      await expect(page, `${path} did not redirect`).toHaveURL(/\/services\?unavailable=influencers/)
+      await expect(page.getByTestId('influencers-unavailable')).toBeVisible()
+      expect(await contentLength(page), `${path} landed on an empty page`).toBeGreaterThan(40)
+    }
+  })
+})
+
+test.describe('the client portal', () => {
+  test.use({ storageState: AUTH.client })
 
   /**
-   * This portal has two sides and only one of them had a login.
+   * The portal its own customer could not open (REVIEW-001c).
    *
-   * The roster, collaborations, nominations and tracking could be built and tested but never
-   * demonstrated by signing in, because the only account in the portal was a creator who is
-   * correctly refused all of it.
+   * `client@demo-portal.local` signed in, the server answered `portal: "portal"` and routed them to
+   * `/portal` — where every endpoint returned 401, because the portal was gated on the OTP cookie
+   * ALONE. The identity resolver was consulted only to narrow a session the cookie had already
+   * opened, so the engine that "wins" could never be the one that let you in. Nothing in a status
+   * check could show it: each 401 was a correct answer to a request that was correctly authenticated.
    */
+  test('a client-portal membership opens the portal without a one-time code', async ({ page }) => {
+    await page.goto('/portal')
+
+    // Landed IN the portal, not bounced back to its door.
+    await expect(page).toHaveURL(/\/portal(\/clients\/[^/]+)?$/)
+    await expect(page).not.toHaveURL(/\/portal\/login/)
+    expect(await contentLength(page)).toBeGreaterThan(40)
+  })
+
   test('every rail link opens a page that is not empty', async ({ page }) => {
-    await page.goto('/influencers')
+    await page.goto('/portal')
     await expect(page.getByRole('navigation').first()).toBeVisible()
 
-    const hrefs = await page.getByRole('navigation').first().locator('a[href^="/influencers"]')
+    const hrefs = await page.getByRole('navigation').first().locator('a[href^="/portal"]')
       .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href')!))])
 
-    expect(hrefs.length, 'the influencers rail has no links').toBeGreaterThan(2)
+    expect(hrefs.length, 'the client rail has no links').toBeGreaterThan(3)
 
     for (const href of hrefs) {
       await page.goto(href)
@@ -140,10 +172,19 @@ test.describe('the influencers portal, from the agency side', () => {
     }
   })
 
-  /** The two sides of this portal are genuinely different, and the nominations queue proves it. */
-  test('the agency side reaches the shortlist the creator cannot', async ({ page }) => {
-    await page.goto('/influencers/nominations')
-    await expect(page.getByTestId('nominations-page')).toBeVisible()
-    await expect(page.getByText(/لا تملك صلاحية|do not have permission/)).toHaveCount(0)
+  /** Direct open, refresh and Back all land in the portal — not at its login. */
+  test('a deep link survives a refresh and a Back', async ({ page }) => {
+    await page.goto('/portal')
+    const space = new URL(page.url()).pathname
+
+    await page.goto(`${space}/invoices`)
+    expect(await contentLength(page)).toBeGreaterThan(40)
+
+    await page.reload()
+    await expect(page).toHaveURL(new RegExp(`${space}/invoices$`))
+    expect(await contentLength(page)).toBeGreaterThan(40)
+
+    await page.goBack()
+    await expect(page).not.toHaveURL(/\/portal\/login/)
   })
 })

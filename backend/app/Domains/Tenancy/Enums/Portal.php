@@ -66,6 +66,41 @@ enum Portal: string
         return $this !== self::Admin;
     }
 
+    /**
+     * Is this portal being OFFERED in this release? (INFL-OFF-001)
+     *
+     * Separate from whether it exists. `Influencers` is a real portal with real data behind it; it is
+     * simply not on sale while `brand.features.influencers_ugc_enabled` is false. Deleting the case
+     * would have been the other way to express that, and it would have orphaned every membership,
+     * request and collaboration row that names it — including the ones that must survive to be handed
+     * back when the sub-system returns.
+     *
+     * So the enum stays complete and this is the one question every OFFER asks: the doors, the
+     * registration options, the portal switcher, the rails and the demo logins. Reads of existing
+     * data ask nothing — a row that names a disabled portal is still a valid row.
+     */
+    public function isEnabled(): bool
+    {
+        return match ($this) {
+            self::Influencers => (bool) config('brand.features.influencers_ugc_enabled', false),
+            default => true,
+        };
+    }
+
+    /**
+     * The membership portals a visitor may actually be offered right now.
+     *
+     * Anywhere that presents a CHOICE — register as…, sign in at…, switch to… — reads this rather
+     * than `membershipPortals()`, so a portal that is switched off cannot be advertised by a surface
+     * that forgot about the flag.
+     *
+     * @return list<self>
+     */
+    public static function offeredMembershipPortals(): array
+    {
+        return array_values(array_filter(self::membershipPortals(), fn (self $p) => $p->isEnabled()));
+    }
+
     /** The route prefix this portal owns. The frontend router mirrors these exactly. */
     public function path(): string
     {

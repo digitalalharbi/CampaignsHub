@@ -12,10 +12,14 @@ const ROLES = [
   { email: 'viewer@demo-agency.local', file: AUTH.viewer },
   // A real advertiser, for the advertiser portal's own surfaces.
   { email: 'owner@demo-company.local', file: AUTH.advertiser },
-  // The platform owner, and the agency side of the influencers portal. Without these two, `/admin`
-  // and the operational half of `/influencers` had no signed-in session to audit with.
+  // The platform owner. Without it, `/admin` had no signed-in session to audit with. The influencer
+  // operator is deliberately absent: that portal is withdrawn (INFL-OFF-001), so its demo login is
+  // no longer seeded and signing in as it would authenticate nothing.
   { email: 'admin@demo-campaignshub.local', file: AUTH.admin },
-  { email: 'talent@demo-agency.local', file: AUTH.talent },
+  // The client portal's own customer (REVIEW-001c). Until the membership engine could OPEN the
+  // portal — rather than only narrow a session the OTP cookie had already opened — this account
+  // signed in, was told its portal was `/portal`, and met 401 on every page there.
+  { email: 'client@demo-portal.local', file: AUTH.client },
 ]
 
 for (const role of ROLES) {

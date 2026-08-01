@@ -13,13 +13,12 @@ export const AUTH = {
   /** The platform owner. Belongs to no tenant — `/admin` is held by a flag, not a membership. */
   admin: 'e2e/.auth/admin.json',
   /**
-   * The AGENCY side of the influencers portal (REVIEW-001).
+   * The client portal's customer (REVIEW-001c).
    *
-   * `layla@creators.demo` is a creator and sees only her own agreements, so the operational half of
-   * that portal — roster, collaborations, nominations, tracking — could not be reached by any
-   * signed-in session at all until this account existed.
+   * `/portal` was the one portal no signed-in session could reach: it was gated on the OTP cookie
+   * alone, so the account the product routes there was refused by every endpoint in it.
    */
-  talent: 'e2e/.auth/talent.json',
+  client: 'e2e/.auth/client.json',
 } as const
 
 /**

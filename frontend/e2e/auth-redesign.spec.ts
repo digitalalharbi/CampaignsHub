@@ -129,7 +129,7 @@ test('every login portal rewrites the panel, by real clicks', async ({ page }) =
    * `/portal/login` rather than restyling a form that could never sign a client in. Asserting it
    * stays here would be asserting the lie the tab used to tell.
    */
-  for (const portal of ['agency', 'influencer', 'default'] as const) {
+  for (const portal of ['agency', 'default'] as const) {
     await page.getByTestId(`login-portal-${portal}`).click();
     await expect(page.getByTestId(`login-portal-${portal}`)).toHaveAttribute('aria-current', 'page')
     const text = ((await heading.textContent()) ?? '').trim()
@@ -142,7 +142,8 @@ test('every login portal rewrites the panel, by real clicks', async ({ page }) =
     await expect(page.locator('button[type="submit"]')).toBeVisible()
   }
 
-  // The influencer portal speaks differently from the campaign ones.
+  // The agency and advertiser contexts speak differently from each other. (The influencer tab used
+  // to be the third; it is withdrawn with its portal — INFL-OFF-001.)
   expect(seen.size).toBeGreaterThan(1)
 
   // …and the client tab leads to the portal that actually serves clients.

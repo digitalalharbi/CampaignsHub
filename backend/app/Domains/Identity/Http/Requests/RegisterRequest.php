@@ -31,7 +31,13 @@ final class RegisterRequest extends FormRequest
             // The path chosen on the public site. Optional — a direct visit to /register has none — but when
             // present it is answered ONCE here instead of being asked again by the onboarding wizard.
             'account_type' => ['sometimes', 'nullable', Rule::in(AccountType::values())],
-            'service' => ['sometimes', 'nullable', Rule::in(['paid_media', 'influencer_marketing', 'combined'])],
+            // The influencer module is only offerable while its portal is (INFL-OFF-001). A form that
+            // cannot show the option must not accept it from a hand-written payload either.
+            'service' => ['sometimes', 'nullable', Rule::in(
+                Portal::Influencers->isEnabled()
+                    ? ['paid_media', 'influencer_marketing', 'combined']
+                    : ['paid_media']
+            )],
 
             /*
              * SIGNUP-002. All three are things the applicant ASKS for, and none of them grants
@@ -42,10 +48,17 @@ final class RegisterRequest extends FormRequest
              * `admin` is not one of them — the platform owner belongs to no tenant and is never
              * created by a public form — and `client_portal` accounts are opened by the workspace
              * that serves them, not by self-registration.
+             *
+             * A portal that is switched off drops out of this list too (INFL-OFF-001). Hiding the
+             * option in the form and still accepting it here is how a "removed" choice keeps being
+             * granted to whoever posts the payload directly.
              */
-            'requested_portal' => ['sometimes', 'nullable', Rule::in([
-                Portal::App->value, Portal::Agency->value, Portal::Influencers->value,
-            ])],
+            'requested_portal' => ['sometimes', 'nullable', Rule::in(
+                collect(Portal::offeredMembershipPortals())
+                    ->reject(fn (Portal $p) => $p === Portal::ClientPortal)
+                    ->map(fn (Portal $p) => $p->value)
+                    ->values()->all()
+            )],
             /*
              * A plan may only be one that is actually on sale.
              *

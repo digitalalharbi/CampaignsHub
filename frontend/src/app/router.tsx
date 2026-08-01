@@ -87,6 +87,8 @@ import { RequireAgencyPortal } from '@/features/agency/RequireAgencyPortal'
 import { AgencyTeamPage } from '@/features/agency/AgencyTeamPage'
 import { InfluencerShell } from '@/layouts/InfluencerShell'
 import { RequireInfluencerPortal } from '@/features/influencers/RequireInfluencerPortal'
+import { RequireInfluencersEnabled } from '@/features/influencers/RequireInfluencersEnabled'
+import { features } from '@/lib/features'
 import { CollaborationsPage } from '@/features/influencers/CollaborationsPage'
 import { PortalLoginPage } from '@/features/auth/PortalLoginPage'
 import { NominationsPage } from '@/features/influencers/NominationsPage'
@@ -143,7 +145,31 @@ export const router = createBrowserRouter([
   { path: '/admin/login', element: <PortalLoginPage portal="admin" /> },
   { path: '/app/login', element: <PortalLoginPage portal="app" /> },
   { path: '/agency/login', element: <PortalLoginPage portal="agency" /> },
-  { path: '/influencers/login', element: <PortalLoginPage portal="influencers" /> },
+  /*
+   * The influencers door, behind the same switch as the portal it opens (INFL-OFF-001).
+   *
+   * Kept mounted rather than deleted, so this address has somewhere to send the people who have it
+   * bookmarked instead of answering 404 — and so it comes back with the sub-system, untouched.
+   */
+  {
+    path: '/influencers/login',
+    element: <RequireInfluencersEnabled />,
+    children: [{ index: true, element: <PortalLoginPage portal="influencers" /> }],
+  },
+  /*
+   * …and the rest of the withdrawn tree, answered BEFORE authentication (INFL-OFF-001).
+   *
+   * The portal's pages live inside `RequireAuth`, so a signed-out visitor opening `/influencers`
+   * met the sign-in gate first and was sent to `/login?redirect=%2Finfluencers` — asked to
+   * authenticate for a portal that no longer exists, and, had they done so, delivered right back to
+   * a redirect. Found by the audit walking it signed OUT; every check while signed in had passed.
+   *
+   * Mounted only while the service is off, so switching it back on removes this route entirely
+   * rather than leaving a shadow that could swallow the real tree.
+   */
+  ...(features.influencersUgc
+    ? []
+    : [{ path: '/influencers/*', element: <RequireInfluencersEnabled /> }]),
   { path: '/portal/requests', element: <ClientRequestsPage /> },
   { path: '/portal/requests/:reference', element: <ClientRequestDetailPage /> },
   { path: '/portal/quotes', element: <ClientQuotesPage /> },
@@ -414,10 +440,30 @@ export const router = createBrowserRouter([
       // ADR 0002 / INFL-001: the influencers & UGC portal. Its two halves have different boundaries
       // and that is the point — the roster is agency-wide, while collaborations carry the client and
       // narrow with the same client-scope ceiling every other client-bound surface uses.
-      {
+      /*
+       * The influencers portal tree — MOUNTED ONLY while the service is offered (INFL-OFF-001).
+       *
+       * Guarding it from inside was not enough: these routes live under `RequireAuth`, and they are
+       * more specific than the `/influencers/*` catch above, so a signed-out visitor met the sign-in
+       * gate first and was sent to `/login?redirect=%2Finfluencers` — asked to authenticate for a
+       * portal that no longer exists. Unmounting the tree lets the catch answer instead.
+       *
+       * The tree itself is untouched below. Flipping the flag mounts it again, whole.
+       */
+      ...(features.influencersUgc ? [{
         path: 'influencers',
-        element: <RequireInfluencerPortal />,
-        children: [
+        /*
+         * INFL-OFF-001 wraps the portal guard rather than replacing it.
+         *
+         * The outer guard asks "is this service being offered?" and the inner one asks "does this
+         * person hold it?" — in that order, so a membership grants nothing while the sub-system is
+         * closed. Nothing below is deleted; flipping the flag restores the portal whole.
+         */
+        element: <RequireInfluencersEnabled />,
+        children: [{
+          path: '',
+          element: <RequireInfluencerPortal />,
+          children: [
           /*
            * Personal settings, in THIS portal (LOGIN-002).
            *
@@ -465,8 +511,10 @@ export const router = createBrowserRouter([
               { path: 'deliverables', element: <DeliverablesPage /> },
             ],
           },
-        ],
-      }],
+          ],
+        }],
+      }] : []),
+      ],
       },
     ],
   },

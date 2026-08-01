@@ -10,7 +10,7 @@ import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
-import { CLIENT_PORTAL_DOOR, PORTAL_DOORS, type PasswordPortal } from './portals'
+import { CLIENT_PORTAL_DOOR, PORTAL_DOORS, offeredDoors, type PasswordPortal } from './portals'
 
 /**
  * One sign-in engine, five doors (LOGIN-FINAL).
@@ -125,7 +125,7 @@ export function PortalLoginPage({ portal }: { portal: PasswordPortal }) {
         {/* The other doors, named. Somebody who arrived at the wrong one should not have to guess
             that the others exist. */}
         <nav data-testid="other-doors" className="flex flex-wrap gap-2">
-          {Object.entries(PORTAL_DOORS)
+          {offeredDoors()
             .filter(([key]) => key !== portal)
             .map(([key, other]) => (
               <Link
@@ -244,7 +244,7 @@ export function PortalLoginPage({ portal }: { portal: PasswordPortal }) {
 
           {/* The other doors again, for phones where the panel is not rendered. */}
           <nav className="mt-5 flex flex-wrap justify-center gap-2 lg:hidden">
-            {Object.entries(PORTAL_DOORS)
+            {offeredDoors()
               .filter(([key]) => key !== portal)
               .map(([key, other]) => (
                 <Link key={key} to={other.path} className="rounded-full border border-border px-3 py-1.5 text-[12px] font-semibold text-text-secondary">

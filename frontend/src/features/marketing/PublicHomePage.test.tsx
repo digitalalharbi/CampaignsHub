@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { PublicHomePage } from './PublicHomePage'
-import { JOURNEYS } from './journeys'
+import { offeredJourneys } from './journeys'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 
 /** Toggled by the error-state test; the mock reads it so we can simulate a catalog load failure. */
@@ -100,7 +100,9 @@ describe('PublicHomePage — v5 journeys & header', () => {
     const hrefs = linkHrefs()
     expect(hrefs).toContain('/register?journey=self-service&module=paid-media')
     expect(hrefs).toContain('/register?journey=multi-client&module=paid-media')
-    expect(hrefs).toContain('/requests/new?module=influencer-marketing')
+    // The influencer/UGC card is withdrawn (INFL-OFF-001) — it must not be reachable from anywhere
+    // on this page, which is the difference between removing a card and hiding one.
+    expect(hrefs).not.toContain('/requests/new?module=influencer-marketing')
     // The paid-media services option reveals the selector inline; no bare navigate to the intake exists.
     expect(hrefs).not.toContain('/requests/new?module=paid-media')
     expect(hrefs).not.toContain('/requests/new?service=paid-media')
@@ -137,8 +139,9 @@ describe('PublicHomePage — v5 journeys & header', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
 
-    for (const key of Object.keys(JOURNEYS) as Array<keyof typeof JOURNEYS>) {
-      const expected = JOURNEYS[key].to
+    for (const journey of offeredJourneys()) {
+      const key = journey.key
+      const expected = journey.to
       const closing = screen.getByTestId(`closing-journey-${key}`)
       expect(closing).toHaveAttribute('href', expected)
       expect(expected.startsWith('/')).toBe(true)
@@ -178,7 +181,8 @@ describe('PublicHomePage — v5 journeys & header', () => {
     expect(screen.getByTestId('hero-path-self-service')).toBeInTheDocument()
     expect(screen.getByTestId('hero-path-multi-client')).toBeInTheDocument()
     expect(screen.getByTestId('hero-path-services')).toBeInTheDocument()
-    expect(screen.getByTestId('hero-path-influencer')).toBeInTheDocument()
+    // Three paths, not four: influencer/UGC is withdrawn in this release (INFL-OFF-001).
+    expect(screen.queryByTestId('hero-path-influencer')).not.toBeInTheDocument()
     expect(linkHrefs()).toContain('/register?journey=multi-client&module=paid-media')
     expect(document.querySelector('[dir="rtl"]')).not.toBeNull()
   })
@@ -294,12 +298,19 @@ describe('PublicHomePage — inline paid-media services', () => {
     expect(screen.queryByRole('tab', { name: 'Popular' })).not.toBeInTheDocument()
   })
 
-  it('HOME-013: the influencer portal shows a differentiated hero + tailored preview', () => {
+  /**
+   * `?portal=influencer` no longer pitches a service we cannot deliver (INFL-OFF-001).
+   *
+   * It used to render a whole homepage variant — hero, points, preview and a CTA into an intake that
+   * now refuses the module. An old link falls back to the ordinary homepage instead, which sells
+   * something real rather than advertising a portal with no door.
+   */
+  it('the withdrawn influencer variant falls back to the ordinary homepage', () => {
     signOut()
     renderWithProviders(<PublicHomePage />, { route: '/?portal=influencer', locale: 'en' })
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/influencer & content campaigns/i)
-    expect(within(screen.getByTestId('portal-preview')).getByText('Deliverables')).toBeInTheDocument()
-    expect(screen.queryByTestId('campaign-overview')).not.toBeInTheDocument() // no paid overview for this portal
+    expect(screen.getByRole('heading', { level: 1 })).not.toHaveTextContent(/influencer & content campaigns/i)
+    expect(screen.queryByTestId('portal-preview')).not.toBeInTheDocument()
+    expect(screen.getByTestId('campaign-overview')).toBeInTheDocument()
   })
 
   it('HOME-013: the client portal shows request-tracking hero + preview', () => {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import * as LucideIcons from 'lucide-react'
 import { ArrowLeft, ArrowRight, Megaphone, RotateCcw, Search } from 'lucide-react'
 import { HOME_COPY, type Locale } from './homeCopy'
@@ -36,6 +36,9 @@ export function PublicServicesPage() {
   const c = HOME_COPY[locale as Locale]
   const ar = locale === 'ar'
   const { category: categoryKey } = useParams()
+  const [searchParams] = useSearchParams()
+  // Set by the retired-portal redirect, so this page can say why the visitor arrived here.
+  const cameFromInfluencers = searchParams.get('unavailable') === 'influencers'
   const [q, setQ] = useState('')
   const catalog = usePaidMediaCatalog()
   const Arrow = c.dir === 'rtl' ? ArrowLeft : ArrowRight
@@ -100,6 +103,31 @@ export function PublicServicesPage() {
             ? (ar ? 'اختر الخدمة التي تحتاجها وسننتقل بك إلى نموذج الطلب وهي محددة مسبقًا.' : 'Pick the service you need and we will take you to the request form with it pre-selected.')
             : c.serviceAreas.subtitle}
         </p>
+
+        {/*
+          Why they are HERE (INFL-OFF-001).
+
+          Somebody who followed a bookmark or an old link to `/influencers` was redirected to this
+          page, and a redirect with no explanation reads as the link having been wrong. This says
+          what happened, in one sentence, and leaves them on a page that has real services on it —
+          rather than on a "coming soon" card, which is the placeholder this product does not ship.
+        */}
+        {cameFromInfluencers && (
+          <div
+            data-testid="influencers-unavailable"
+            role="status"
+            className="mt-5 rounded-2xl border border-border bg-surface-secondary p-4"
+          >
+            <p className="text-sm font-bold text-text-primary">
+              {ar ? 'خدمة المؤثرين والمحتوى (UGC) غير متاحة حاليًا.' : 'Influencer & UGC is not available yet.'}
+            </p>
+            <p className="mt-1 text-[13.5px] leading-relaxed text-text-secondary">
+              {ar
+                ? 'نعمل على إطلاقها كخدمة مستقلة لاحقًا. في الوقت الحالي يمكنك اختيار أي من خدمات إدارة الحملات أدناه.'
+                : 'It is coming back later as its own service. In the meantime, any of the campaign services below is available now.'}
+            </p>
+          </div>
+        )}
 
         {catalog.isLoading && <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-28" />)}</div>}
 

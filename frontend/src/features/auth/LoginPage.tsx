@@ -12,6 +12,7 @@ import { useT } from '@/lib/i18n'
 import { AuthPanel, AuthPanelMobile, type AuthPortal } from './AuthPanel'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
+import { features } from '@/lib/features'
 
 /**
  * One demo identity PER PORTAL (LOGIN-001).
@@ -289,17 +290,27 @@ function ProviderMark({ provider }: { provider: string }) {
 const DESTINATION_LABELS = [
   { path: '/admin', ar: 'إدارة المنصة', en: 'Platform administration' },
   { path: '/agency', ar: 'الوكالة', en: 'Agency' },
+  // Kept even while the portal is withdrawn (INFL-OFF-001): this list NAMES a destination the server
+  // may still return, and dropping it would leave that notice showing a bare path.
   { path: '/influencers', ar: 'المؤثرون وUGC', en: 'Influencers & UGC' },
   { path: '/portal', ar: 'متابعة الطلبات', en: 'Request tracking' },
   { path: '/app', ar: 'إدارة الحملات', en: 'Campaign management' },
   { path: '/switch', ar: 'مساحات العمل', en: 'Your workspaces' },
 ]
 
-/** The portals a visitor can sign in through. Same auth engine; only the framing changes. */
+/**
+ * The portals a visitor can sign in through. Same auth engine; only the framing changes.
+ *
+ * The influencer tab drops out while its sub-system is off (INFL-OFF-001). A tab that names a demo
+ * identity and a portal, and then refuses both, is worse than no tab: it reads as the product being
+ * broken rather than as a service that has not opened yet.
+ */
 const PORTAL_TABS = [
   { key: 'default' as const, ar: 'إدارة الحملات', en: 'Campaigns' },
   { key: 'agency' as const, ar: 'وكالة', en: 'Agency' },
-  { key: 'influencer' as const, ar: 'المؤثرون وUGC', en: 'Influencers & UGC' },
+  ...(features.influencersUgc
+    ? [{ key: 'influencer' as const, ar: 'المؤثرون وUGC', en: 'Influencers & UGC' }]
+    : []),
   { key: 'client' as const, ar: 'متابعة الطلبات', en: 'Track requests' },
 ]
 
@@ -314,7 +325,9 @@ export function LoginPage() {
   // (?portal, or a /client redirect) — same auth engine + destination logic, content only.
   const portalParam = params.get('portal') ?? (params.get('redirect')?.startsWith('/client') ? 'client' : null)
   const portal: AuthPortal =
-    portalParam === 'influencer' ? 'influencer' : portalParam === 'client' ? 'client' : portalParam === 'agency' ? 'agency' : 'default'
+    portalParam === 'influencer' && features.influencersUgc ? 'influencer'
+      : portalParam === 'client' ? 'client'
+        : portalParam === 'agency' ? 'agency' : 'default'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)

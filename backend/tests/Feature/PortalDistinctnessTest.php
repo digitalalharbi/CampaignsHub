@@ -131,6 +131,9 @@ final class PortalDistinctnessTest extends TestCase
 
     public function test_the_influencer_portal_member_is_refused_the_agency_surfaces(): void
     {
+        // About isolation BETWEEN portals, so the portal under test has to be open (INFL-OFF-001).
+        $this->withInfluencersEnabled();
+
         $tenant = $this->tenant('ugc', 'agency');
         $user = $this->member($tenant, 'ugc@a.test', Portal::Influencers);
 

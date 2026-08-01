@@ -41,6 +41,9 @@ final class InfluencerPortalTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // The sub-system under test ships switched off (INFL-OFF-001). These tests are about whether
+        // it WORKS, not about whether the platform is currently selling it.
+        $this->withInfluencersEnabled();
         $this->seed(PermissionSeeder::class);
         $this->agency = Tenant::create([
             'name' => 'Creator Agency', 'slug' => 'creator-agency', 'status' => 'active', 'account_type' => 'agency',

@@ -7,6 +7,7 @@ import { EmptyState, Skeleton } from '@/components/ui/States'
 import { Button } from '@/components/ui/Button'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { features } from '@/lib/features'
 
 /**
  * `/switch` — the portal and workspace switcher (ADR 0002).
@@ -40,12 +41,26 @@ export function WorkspaceSwitcherPage() {
     onSuccess: (result) => navigate(result.destination, { replace: true }),
   })
 
+  /*
+   * Memberships for a portal that is not being offered are not shown (INFL-OFF-001).
+   *
+   * The row is still real and still returned by the server — nothing has been revoked — but this
+   * page's whole job is to offer a choice, and offering one that leads to a closed portal produces
+   * a card that signs you into a redirect. Filtered HERE rather than in the counts below, because
+   * "how many can I choose between?" and "how many do I hold?" are different questions: an operator
+   * holding one advertiser membership and one influencer membership has exactly one choice, and
+   * must be sent straight to it rather than shown a list with a single card in it.
+   */
+  const offered = (state.data?.memberships ?? []).filter(
+    (m: Membership) => m.portal !== 'influencers' || features.influencersUgc,
+  )
+
   // Nothing to choose between: send them straight through rather than showing a list of one.
   useEffect(() => {
-    if (state.data && state.data.memberships.length === 1) {
-      navigate(state.data.memberships[0].landing_path, { replace: true })
+    if (offered.length === 1) {
+      navigate(offered[0].landing_path, { replace: true })
     }
-  }, [state.data, navigate])
+  }, [offered, navigate])
 
   const error = pick.isError ? toApiError(pick.error) : null
 
@@ -89,7 +104,7 @@ export function WorkspaceSwitcherPage() {
           </p>
         )}
 
-        {state.data && state.data.memberships.length === 0 && (
+        {state.data && offered.length === 0 && (
           <div className="mt-6">
             <EmptyState
               title={ar ? 'لا توجد مساحة عمل بعد' : 'No workspace yet'}
@@ -100,9 +115,9 @@ export function WorkspaceSwitcherPage() {
           </div>
         )}
 
-        {state.data && state.data.memberships.length > 1 && (
+        {state.data && offered.length > 1 && (
           <ul data-testid="workspace-switcher" className="mt-6 grid gap-3">
-            {state.data.memberships.map((m: Membership) => {
+            {offered.map((m: Membership) => {
               const Icon = PORTAL_ICON[m.portal] ?? LayoutDashboard
               const label = PORTAL_LABELS[m.portal]
               return (

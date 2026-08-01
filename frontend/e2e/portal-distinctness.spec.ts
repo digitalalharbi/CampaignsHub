@@ -197,8 +197,9 @@ test.describe('signing in through a portal', () => {
     await page.getByTestId('login-portal-agency').click()
     await expect(page.getByTestId('demo-credentials')).toContainText('owner@demo-agency.local')
 
-    await page.getByTestId('login-portal-influencer').click()
-    await expect(page.getByTestId('demo-credentials')).toContainText('layla@creators.demo')
+    // The influencer tab is withdrawn with its portal (INFL-OFF-001): a tab that names a demo
+    // identity and then refuses it reads as the product being broken rather than as a closed service.
+    await expect(page.getByTestId('login-portal-influencer')).toHaveCount(0)
 
     // …and each one says what kind of account it is, so a tester knows what they should then see.
     await expect(page.getByTestId('demo-account-kind')).toBeVisible()

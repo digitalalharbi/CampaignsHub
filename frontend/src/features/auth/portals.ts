@@ -1,4 +1,5 @@
 import type { PortalKey } from './memberships'
+import { features } from '@/lib/features'
 
 /**
  * The five doors, in one place (LOGIN-FINAL).
@@ -111,6 +112,19 @@ export const CLIENT_PORTAL_DOOR = {
     method: 'You sign in with a one-time code sent to your email or phone — no password needed.',
   },
 } as const
+
+/**
+ * The doors a visitor may be SHOWN right now (INFL-OFF-001).
+ *
+ * `PORTAL_DOORS` above stays complete — it is the vocabulary, and `/influencers/login` still resolves
+ * through it so the address has copy to render the day the sub-system returns. This is the list every
+ * surface iterates when it OFFERS a choice, so a door that is closed cannot be advertised by a panel
+ * that forgot about the flag.
+ */
+export function offeredDoors(): Array<[PasswordPortal, PortalDoor]> {
+  return (Object.entries(PORTAL_DOORS) as Array<[PasswordPortal, PortalDoor]>)
+    .filter(([key]) => key !== 'influencers' || features.influencersUgc)
+}
 
 /** The door a path belongs to, or null when the path is not one. */
 export function doorFor(pathname: string): PasswordPortal | null {

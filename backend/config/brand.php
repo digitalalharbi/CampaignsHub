@@ -20,5 +20,20 @@ return [
         // Generic sales CRM (leads/opportunities/proposals) — OFF by default; the media-buying
         // operational nav is the primary experience.
         'sales_crm_enabled' => (bool) env('FEATURE_SALES_CRM', false),
+
+        /*
+         * Influencer & UGC — OFF (INFL-OFF-001).
+         *
+         * The service is not being offered in this release and will return later as its own
+         * sub-system. It is switched off rather than deleted: every table, row, model, service,
+         * controller and test stays exactly where it is, so turning this back on restores a portal
+         * rather than starting one.
+         *
+         * What the flag governs is what the product OFFERS — the portal gate, the doors, the
+         * registration options, the rails, the marketing page, the demo logins and new requests for
+         * the module. It governs nothing about what already exists: an influencer request already in
+         * the system keeps its service type, its history and its files, and stays readable.
+         */
+        'influencers_ugc_enabled' => (bool) env('FEATURE_INFLUENCERS_UGC', false),
     ],
 ];

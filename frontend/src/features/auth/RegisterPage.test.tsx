@@ -56,9 +56,18 @@ describe('RegisterPage — journey handoff', () => {
     expect(screen.queryByText('paid-media')).not.toBeInTheDocument()
   })
 
-  it('carries the influencer module through as its own service', () => {
+  /**
+   * A withdrawn module does not carry, even from a bookmarked link (INFL-OFF-001).
+   *
+   * The influencer cards are gone from the public site, but `/register?module=influencer-marketing`
+   * is still a live URL that people have. Honouring it would open an application for a service with
+   * no portal to serve it — so the form falls back to the paid-media path it can actually deliver,
+   * rather than showing a service name and then being refused by the backend on submit.
+   */
+  it('does not carry a withdrawn module through from an old link', () => {
     renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service&module=influencer-marketing', locale: 'en' })
-    expect(screen.getByText('Influencer & content campaigns')).toBeInTheDocument()
+    expect(screen.queryByText('Influencer & content campaigns')).not.toBeInTheDocument()
+    expect(screen.getByText('Paid advertising management')).toBeInTheDocument()
   })
 })
 

@@ -25,7 +25,6 @@ const JOURNEYS = [
   { key: 'self-service', url: /\/register\?journey=self-service&module=paid-media/, marker: (p: Page) => p.locator('form input#tenant_name') },
   { key: 'multi-client', url: /\/register\?journey=multi-client&module=paid-media/, marker: (p: Page) => p.locator('form input#tenant_name') },
   { key: 'services', url: /\/services$/, marker: (p: Page) => p.getByTestId('service-categories') },
-  { key: 'influencer', url: /\/requests\/new\?module=influencer-marketing/, marker: (p: Page) => p.getByRole('heading', { level: 1 }) },
 ] as const
 
 async function home(page: Page) {
@@ -91,11 +90,12 @@ test.describe('homepage journeys route somewhere real', () => {
     const closing = await page.getByTestId('closing-journeys').locator('a').evaluateAll(
       (els) => els.map((e) => ({ id: e.getAttribute('data-testid'), href: e.getAttribute('href') })),
     )
-    expect(closing).toHaveLength(4)
+    // Three, not four: the influencer/UGC journey is withdrawn with its portal (INFL-OFF-001).
+    expect(closing).toHaveLength(3)
 
     for (const c of closing) {
       const key = c.id!.replace('closing-journey-', '')
-      // The hero lists the other three as links; the selected one is carried by the primary CTA.
+      // The hero lists the unselected ones as links; the selected one is carried by the primary CTA.
       const heroLink = page.getByTestId(`hero-journey-link-${key}`)
       const heroHref = (await heroLink.count()) > 0
         ? await heroLink.getAttribute('href')

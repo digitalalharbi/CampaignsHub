@@ -47,6 +47,22 @@ abstract class TestCase extends BaseTestCase
         $this->withServerVariables(['HTTP_ACCEPT_LANGUAGE' => '']);
     }
 
+    /**
+     * Exercise the influencers & UGC sub-system, which ships switched off (INFL-OFF-001).
+     *
+     * The sub-system is intact — every table, service, controller and one of these tests. What the
+     * flag withdraws is the OFFER, and a test of the roster or the nomination queue is not a test of
+     * whether the platform is currently selling it. So those tests turn it on and go on proving the
+     * thing they were written to prove, which is exactly what makes turning it back on a decision
+     * rather than a rebuild: the day the flag flips, this suite already says whether it works.
+     *
+     * Tests that assert the sub-system is CLOSED deliberately do not call this.
+     */
+    protected function withInfluencersEnabled(): void
+    {
+        config()->set('brand.features.influencers_ugc_enabled', true);
+    }
+
     protected function assertingAcrossTenants(): void
     {
         $this->readsAcrossTenants = true;

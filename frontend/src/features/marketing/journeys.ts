@@ -1,3 +1,5 @@
+import { features } from '@/lib/features'
+
 /**
  * The single source of truth for where every public journey goes.
  *
@@ -38,6 +40,17 @@ export const ACCOUNT_ROUTES = {
   requestService: '/requests/new',
   servicesCatalogue: '/services',
 } as const
+
+/**
+ * The journeys this page may actually offer (INFL-OFF-001).
+ *
+ * `JOURNEYS` above stays complete — it is where the influencer card's destination comes back from —
+ * while this is what the page renders. The hero and closing sections read the copy, which is
+ * filtered at the same point; this exists so a test can state the offer without re-deriving it.
+ */
+export function offeredJourneys(): Journey[] {
+  return Object.values(JOURNEYS).filter((j) => j.key !== 'influencer' || features.influencersUgc)
+}
 
 export function journeyTo(key: string): string {
   return JOURNEYS[key as JourneyKey]?.to ?? ACCOUNT_ROUTES.requestService

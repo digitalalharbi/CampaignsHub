@@ -989,3 +989,77 @@ now and guards `if (u)`, because a failed refresh must not sign out someone who 
 
 The lesson worth keeping: adding latency to a function other code awaits in a critical path surfaces
 as a flake somewhere else entirely.
+
+### Decision 28 — the client portal's own account could not open the client portal
+
+`client@demo-portal.local` signed in, the server answered `portal: "portal"`, routed it to `/portal`
+— and every endpoint there returned 401. The portal was gated on the OTP cookie **alone**.
+`ClientPortalIdentity` was already consulted, and already preferred the membership, but only to
+narrow the reach of a session the cookie had already opened. The engine that "wins" could never be
+the one that let you in.
+
+Nothing in a status check could see it: each 401 was a correct answer to a request that was
+correctly authenticated. It took signing in as the demo account and pressing the link.
+
+The membership now opens the portal, as a **synthesised, never-persisted** `ClientPortalToken`, so
+the eighty-odd readers downstream keep one shape and the `client_portal_tokens` count that
+PORTAL-AUTH-001c is waiting to see reach zero cannot move. The tenant comes from the membership
+rather than from the request, and no membership still means no session — an advertiser, an agency
+operator and a guest are refused exactly as before.
+
+Second defect found in the same place: `spaces` derived the client list from `external_requests`
+rows carrying the contact's email, so an invited portal user saw an **empty portal** until somebody
+happened to submit a request under their address. The space they had been explicitly granted was
+simply not in the list. It now comes from the membership scope.
+
+Also root-caused rather than retried: `PaidMediaServicesTest` asserted the ten service categories in
+insertion order over a query with **no `ORDER BY`** — it was reading Postgres's physical row order,
+which held by luck and broke in the full suite. Ordered by `sort_order`, the column that means order
+and the one the catalogue itself reads.
+
+### Decision 29 — influencers & UGC is withdrawn, and nothing was lost doing it
+
+Four portals are offered in this release: `/admin`, `/app`, `/agency`, `/portal`. Influencers & UGC
+returns later as its own sub-system.
+
+**It is switched off, not deleted.** `brand.features.influencers_ugc_enabled=false`, read in exactly
+one place — `Portal::isEnabled()` — and asked by everything that OFFERS the portal. Every table,
+model, service, controller, permission and test stays where it is; the sub-system's own suite runs
+green with the flag on, and `PortalAccessTest` proves the same membership opens the portal again the
+moment it is flipped back. Turning it on is a decision, not a rebuild.
+
+Three things this shape gets right that a deletion would not:
+
+- **The enum keeps its case.** Removing it is the other way to say "withdrawn", and it would orphan
+  every membership, collaboration and nomination row that names the portal — including the ones that
+  have to survive to be handed back.
+- **The service type is preserved, not deactivated.** `RequestType::offered()` withholds the
+  influencer type from the intake while leaving the row active, because that row is what every
+  existing influencer request hangs off. Deactivating it would turn real requests into rows pointing
+  at a type the product no longer admits exists. A count alone cannot tell those apart, so the test
+  reads the row straight from the table.
+- **The addresses still answer.** `/influencers/*` redirects to `/services?unavailable=influencers`,
+  a real catalogue page carrying a one-sentence explanation. A 404 reads as "you typed it wrong" for
+  a URL that was correct last week; a blank page reads as broken; a "coming soon" card is the
+  placeholder this product does not ship.
+
+**The gate is the backend's.** `EnsurePortal` refuses the portal *before* reading any membership, so
+holding one grants nothing, and registration refuses both the portal and its service module however
+the payload is written. The interface not drawing a link has never stopped anybody typing a URL.
+
+`PortalResolver::membershipsFor()` also filters withdrawn portals, because it is the one place every
+routing decision reads: an operator whose only membership is the influencers portal is not delivered
+to a redirect chain, and one who also holds the agency portal is taken straight there instead of
+being shown a switcher with a dead option in it.
+
+### Still open
+
+`ADMIN-100` · `APP-100` · `AGENCY-100` · `PORTAL-100` — per-portal development in that order:
+professional door + own demo account, Google/Apple OAuth where credentials exist (otherwise Awaiting
+Credentials), a dashboard that is that portal's own, KPI cards, charts, smart tables, filters,
+drawers and rich clearly-labelled demo data. Then `REVIEW-002` (marketing homepage → real
+destinations) and `REVIEW-003` (desktop/mobile × RTL/LTR × light/dark × three browsers).
+
+Carried over: PAY-005 · OPS-002 · NORM-001 · PROJINT-001. `PORTAL-AUTH-001c` stays
+BLOCKED_OPERATIONAL_EVIDENCE. Six ad-platform integrations and both payment providers remain
+Awaiting Credentials.

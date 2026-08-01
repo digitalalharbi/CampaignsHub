@@ -79,10 +79,14 @@ final class PortalAccessTest extends TestCase
         $this->actingAs($user, 'sanctum')->getJson('/__probe/portal')->assertForbidden();
     }
 
-    /** All four portals are supported, not just app and agency. */
+    /** Every portal on offer is supported, not just app and agency. */
     public function test_every_portal_is_reachable_with_its_own_membership(): void
     {
         foreach (Portal::cases() as $portal) {
+            if (! $portal->isEnabled()) {
+                continue;   // covered by the two tests below, which are about being closed
+            }
+
             $tenant = $this->tenant('T '.$portal->value);
             $user = $this->user($tenant, $portal->value.'@test.dev');
             $this->grant($user, $tenant, $portal);
@@ -91,6 +95,38 @@ final class PortalAccessTest extends TestCase
                 ->assertOk()
                 ->assertJsonPath('portal', $portal->value);
         }
+    }
+
+    /**
+     * A portal that is switched off is closed to its own members too (INFL-OFF-001).
+     *
+     * The membership is real, active and correctly scoped — and it opens nothing. That is the whole
+     * claim: withdrawing a service must not depend on the interface choosing not to draw a link,
+     * because the interface is not what somebody typing the URL is talking to.
+     */
+    public function test_a_withdrawn_portal_refuses_the_membership_that_names_it(): void
+    {
+        $tenant = $this->tenant('Talent House');
+        $user = $this->user($tenant, 'operator@test.dev');
+        $this->grant($user, $tenant, Portal::Influencers);
+
+        $this->assertFalse(Portal::Influencers->isEnabled(), 'this test assumes the sub-system ships off');
+
+        $this->actingAs($user, 'sanctum')->getJson('/__probe/influencers')->assertForbidden();
+    }
+
+    /** …and opens again, for the same membership, the moment it is switched back on. */
+    public function test_the_same_membership_opens_the_portal_once_it_is_offered_again(): void
+    {
+        $tenant = $this->tenant('Talent House Later');
+        $user = $this->user($tenant, 'operator-later@test.dev');
+        $this->grant($user, $tenant, Portal::Influencers);
+
+        $this->withInfluencersEnabled();
+
+        $this->actingAs($user, 'sanctum')->getJson('/__probe/influencers')
+            ->assertOk()
+            ->assertJsonPath('portal', 'influencers');
     }
 
     /** Following a link into a portal you genuinely hold switches to it rather than refusing. */

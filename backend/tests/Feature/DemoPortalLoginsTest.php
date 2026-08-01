@@ -49,6 +49,16 @@ final class DemoPortalLoginsTest extends TestCase
          * reason. Listing the demo seeders by hand instead would drift from the real order the
          * moment one is added, so the environment is what changes, once, here.
          */
+        /*
+         * Seeded with the influencers sub-system ON (INFL-OFF-001).
+         *
+         * This class's claim is that the demo set can demonstrate every portal the product HAS, and
+         * each one only its own. That claim does not change when a portal is temporarily withdrawn —
+         * what changes is which of them are advertised, and `InfluencersRetiredTest` is where that is
+         * asserted, on a seed run with the flag off.
+         */
+        $this->withInfluencersEnabled();
+
         app()->detectEnvironment(fn () => 'local');
         $this->seed(DatabaseSeeder::class);
         app()->detectEnvironment(fn () => 'testing');

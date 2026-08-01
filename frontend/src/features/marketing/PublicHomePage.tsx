@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/stores/auth'
 import { getPublishedPage, type PublicPageKey } from '@/features/settings/publicPagesApi'
 import { useUi } from '@/stores/ui'
+import { features } from '@/lib/features'
 
 const STATUS_TONE: Record<string, string> = {
   ok: 'bg-success/15 text-success',
@@ -63,7 +64,18 @@ export function PublicHomePage() {
   // HOME-013: differentiated public experience per portal (?portal=influencer|client); paid-media is default.
   const [searchParams] = useSearchParams()
   const portalParam = searchParams.get('portal')
-  const portal = portalParam === 'influencer' || portalParam === 'client' ? portalParam : null
+  /*
+   * `?portal=influencer` is ignored while the service is off (INFL-OFF-001).
+   *
+   * It renders a whole homepage variant selling influencer campaigns — hero, points, preview and a
+   * CTA into an intake that now refuses the module. Falling back to `null` gives the visitor the
+   * ordinary homepage, which is a real page selling something we can actually deliver, instead of a
+   * pitch for a service with no door.
+   */
+  const portal =
+    portalParam === 'client' || (portalParam === 'influencer' && features.influencersUgc)
+      ? (portalParam as 'influencer' | 'client')
+      : null
   const hero = portal ? { ...c.hero, ...c.portals[portal] } : c.hero
   const portalPreview = portal ? c.portals[portal] : null
   // SITE-CMS-002: each public surface reads its OWN editable document, so the paid, influencer and

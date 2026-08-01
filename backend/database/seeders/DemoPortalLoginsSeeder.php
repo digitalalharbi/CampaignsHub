@@ -166,6 +166,18 @@ final class DemoPortalLoginsSeeder extends Seeder
      */
     private function influencerOperator(): void
     {
+        /*
+         * Not seeded while the sub-system is switched off (INFL-OFF-001).
+         *
+         * A demo login for a portal nobody can open is worse than none: it is an account that signs
+         * in, is told where it belongs, and is refused there. The account's DATA is untouched —
+         * `migrate:fresh` is what removes rows, not this guard, and on an existing install the row
+         * stays exactly where it is, ready for the day the flag flips back.
+         */
+        if (! Portal::Influencers->isEnabled()) {
+            return;
+        }
+
         $tenant = Tenant::query()->withoutGlobalScopes()->where('slug', 'demo-agency')->first();
 
         if ($tenant === null) {
@@ -217,8 +229,14 @@ final class DemoPortalLoginsSeeder extends Seeder
         $this->command?->info('portal=/admin       | email=admin@demo-campaignshub.local | password=password');
         $this->command?->info('portal=/app         | email=owner@demo-company.local      | password=password');
         $this->command?->info('portal=/agency      | email=owner@demo-agency.local       | password=password');
-        $this->command?->info('portal=/influencers | email=talent@demo-agency.local      | password=password (the AGENCY side — roster, nominations, tracking)');
-        $this->command?->info('portal=/influencers | email=layla@creators.demo           | password=password (the CREATOR side — her own agreements only)');
-        $this->command?->info('portal=/portal      | email=client@demo-portal.local      | password=password (portal sign-in is still OTP — see the seeder)');
+
+        // Only announced while the portal is being offered (INFL-OFF-001). Printing a login for a
+        // closed portal is how a demo script sends somebody to a door that will refuse them.
+        if (Portal::Influencers->isEnabled()) {
+            $this->command?->info('portal=/influencers | email=talent@demo-agency.local      | password=password (the AGENCY side — roster, nominations, tracking)');
+            $this->command?->info('portal=/influencers | email=layla@creators.demo           | password=password (the CREATOR side — her own agreements only)');
+        }
+
+        $this->command?->info('portal=/portal      | email=client@demo-portal.local      | password=password');
     }
 }

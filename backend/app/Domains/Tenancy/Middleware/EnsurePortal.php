@@ -47,6 +47,23 @@ final class EnsurePortal
         // A route asking for a portal that does not exist is a programming error, never an open door.
         abort_if($allowed === [], 500, 'Unknown portal for this route.');
 
+        /*
+         * A portal that is switched off is closed to everybody, membership or not (INFL-OFF-001).
+         *
+         * Enforced HERE rather than by deleting the route file, because the routes must come back
+         * intact when the sub-system returns — and because a route that quietly disappears answers
+         * 404, which reads as "you typed it wrong" instead of "this service is not available yet".
+         *
+         * `403` with a named message is what lets the interface redirect and SAY so. It is checked
+         * before the membership lookup so that holding one grants nothing: the influencer operator's
+         * membership is still a valid row, and it still opens nothing while the flag is false.
+         */
+        $offered = array_values(array_filter($allowed, fn (Portal $p) => $p->isEnabled()));
+
+        abort_if($offered === [], 403, __('api.portal_unavailable'));
+
+        $allowed = $offered;
+
         $active = $this->memberships->membership();
 
         if ($active !== null && in_array($active->portal, $allowed, true)) {

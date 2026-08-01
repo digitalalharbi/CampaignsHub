@@ -41,7 +41,10 @@ final class PublicRequestController
     /** GET /api/v1/requests/meta — public catalog for the intake form (active service types). */
     public function meta(): JsonResponse
     {
-        $types = RequestType::where('is_active', true)->orderBy('sort')
+        // `offered()` drops the modules whose service is switched off (INFL-OFF-001). The rows stay —
+        // every existing request of that type still reads normally — they simply stop being listed as
+        // something new can be opened against.
+        $types = RequestType::query()->offered()->where('is_active', true)->orderBy('sort')
             ->get(['key', 'module', 'name_ar', 'name_en'])
             ->map(fn (RequestType $t) => [
                 'key' => $t->key, 'module' => $t->module, 'name_ar' => $t->name_ar, 'name_en' => $t->name_en,
@@ -59,7 +62,19 @@ final class PublicRequestController
         }
 
         $data = $request->validate([
-            'type' => ['required', 'string', Rule::exists('request_types', 'key')->where('is_active', true)],
+            // Validated against what is OFFERED, not merely what exists. A type the form can no
+            // longer show must not still be accepted from a payload somebody typed by hand — that is
+            // how a withdrawn service keeps taking orders it cannot fulfil.
+            'type' => [
+                'required', 'string',
+                Rule::exists('request_types', 'key')->where('is_active', true),
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $offered = RequestType::query()->offered()->where('key', $value)->exists();
+                    if (! $offered) {
+                        $fail(__('api.portal_unavailable'));
+                    }
+                },
+            ],
             'contact_name' => ['required', 'string', 'min:2', 'max:120'],
             'contact_email' => ['required', 'email', 'max:160'],
             'contact_phone' => ['required', 'string', 'max:32', 'regex:/^\+[1-9]\d{7,14}$/'], // E.164 with country code
