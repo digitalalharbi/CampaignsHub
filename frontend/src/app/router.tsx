@@ -1,6 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { NotFoundPage } from './NotFoundPage'
-import { PagePlaceholder } from '@/components/PagePlaceholder'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RegisterPage } from '@/features/auth/RegisterPage'
 import { AccountStatusPage } from '@/features/signup/AccountStatusPage'
@@ -257,15 +256,23 @@ export const router = createBrowserRouter([
           { path: 'drive', element: <Navigate to="/app/integrations/drive" replace /> },
           { path: 'branding', element: <Navigate to="/app/settings/branding" replace /> },
           { path: 'content', element: <CreativesPage /> },
-          // Not built, and NOT linked from any nav or page — reachable only by typing the URL.
-          // The placeholder says plainly that the module is a later phase rather than showing an
-          // empty screen that reads as a broken feature. See the matrix rows of the same names.
-          { path: 'approvals', element: <PagePlaceholder title="Approvals" /> },
-          { path: 'tracking', element: <PagePlaceholder title="Tracking" /> },
           { path: 'reports', element: <ReportsPage /> },
-          { path: 'optimization', element: <PagePlaceholder title="Optimization" /> },
           { path: 'tasks', element: <TasksPage /> },
-          { path: 'notifications', element: <PagePlaceholder title="Notifications" /> },
+          /*
+           * `approvals`, `tracking`, `optimization` and `opportunities` are GONE (REVIEW-001).
+           *
+           * Each rendered a card saying the module was «part of a later phase» while claiming the
+           * foundation was in place — product copy about the roadmap, served as if it were a page.
+           * None was linked from any nav or any other page, so the only way to reach one was to type
+           * its URL, and what you got was a screen that looked built and did nothing.
+           *
+           * A route that does not exist now answers as a route that does not exist. That is the
+           * honest state of an unbuilt module, and it is what `NotFoundPage` is for.
+           */
+
+          // …but notifications DID have a real destination all along. The placeholder sat in front
+          // of a working page instead of leading to it.
+          { path: 'notifications', element: <Navigate to="/app/account/notifications" replace /> },
           // User account settings (self). Workspace/org settings live under /settings/workspace.
           {
             // SYSTEM settings (sidebar). Workspace-wide only — no personal settings here.
@@ -305,7 +312,6 @@ export const router = createBrowserRouter([
           },
           // Sales CRM (behind sales_crm_enabled; routes always exist, nav is gated).
           { path: 'leads', element: <LeadsPage /> },
-          { path: 'opportunities', element: <PagePlaceholder title="Opportunities" /> },
         ],
         }],
       },

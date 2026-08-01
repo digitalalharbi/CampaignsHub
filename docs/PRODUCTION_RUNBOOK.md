@@ -7,6 +7,14 @@ Operational requirements to run CampaignsHub in production. Verified against the
 | Process | Command | Purpose |
 |---|---|---|
 | Web | `php artisan serve` behind a real web server (nginx/php-fpm) | Serves the API |
+| SPA | nginx serving `frontend/dist` **with a `try_files … /index.html` fallback** — see `deploy/nginx-spa.conf` | Serves the app |
+
+> **The SPA fallback is not optional.** Every route in this product is a client-side route, so the
+> browser asks the server for `/admin/login` or `/agency/clients/acme` by name. A static server
+> without the fallback answers 404 — and neither `npm run dev` nor `vite preview` shows it, because
+> both have one built in. A deep link therefore works on every developer machine and fails the first
+> time a customer opens one from an email. `deploy/nginx-spa.conf` is the working configuration for
+> both origins, including the `SESSION_DOMAIN` leading dot that makes the shared cookie work.
 | Scheduler | `* * * * * php artisan schedule:run` (system cron) | Runs the timed jobs below |
 | Queue worker | `php artisan queue:work --tries=3 --timeout=120` (supervised) | Report generation + async work |
 
