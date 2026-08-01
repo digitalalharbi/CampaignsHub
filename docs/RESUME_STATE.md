@@ -1147,12 +1147,36 @@ Same shape as the two rate limits: the suite outgrew an assumption that was true
 
 ### Still open
 
-`ADMIN-100` · `APP-100` · `AGENCY-100` · `PORTAL-100` — per-portal development in that order:
-professional door + own demo account, Google/Apple OAuth where credentials exist (otherwise Awaiting
-Credentials), a dashboard that is that portal's own, KPI cards, charts, smart tables, filters,
-drawers and rich clearly-labelled demo data. Then `REVIEW-002` (marketing homepage → real
-destinations) and `REVIEW-003` (desktop/mobile × RTL/LTR × light/dark × three browsers).
+Measured from `/dev/status`, which parses the matrix rather than keeping a second list: **151 rows —
+125 VERIFIED · 12 IMPLEMENTED_NOT_VERIFIED · 5 PARTIAL · 1 NOT_STARTED · 6
+BLOCKED_EXTERNAL_CREDENTIALS · 2 CLOSED.**
 
-Carried over: PAY-005 · OPS-002 · NORM-001 · PROJINT-001. `PORTAL-AUTH-001c` stays
-BLOCKED_OPERATIONAL_EVIDENCE. Six ad-platform integrations and both payment providers remain
-Awaiting Credentials.
+**The four offered portals are done and committed.** `/admin`, `/app`, `/agency` and `/portal` each
+have their own door, dashboard and sections; all four are walked live in both languages, on three
+browsers, at three viewports, in both themes. Influencers & UGC is withdrawn behind
+`influencers_ugc_enabled=false` with nothing deleted.
+
+Genuinely open, in the order I would take them:
+
+1. **PROJINT-001 / INTEG-UI-001** — the integrations surfaces should lead with the six real ad
+   platforms rather than a generic connector card. The pages exist and are walked; the redesign is
+   not done.
+2. **NORM-001** — the normalisation layer exists in `NormalizedMetric`/`Aggregator`; what is missing
+   is surfacing raw-vs-normalised, the source and objective compatibility in the UI.
+3. **PAY-005** — `PlatformBillingController` already refuses to merge customers' money into platform
+   revenue. The other three streams (agency→client invoices, request service payments, creator
+   payouts) still need their own surfaces.
+4. **OPS-002** — operational status exists; the audit trail over every subscription, payment,
+   approval and permission change does not.
+5. The **IMPLEMENTED_NOT_VERIFIED** rows (CAMPAIGN-010/020, CAMPDET-010, REPORT-SCHEDULING,
+   FINANCE-001, SYNC-001, XREL-001, DEMO-001, HOME-GATEWAY-001, DEVSTATUS-001). Each of these pages
+   is now walked live by the portal specs — content, language, phone layout — so most need a
+   targeted acceptance test for their own behaviour rather than fresh building.
+
+**Blocked, honestly:** the six ad-platform integrations, Moyasar and Stripe are all Awaiting
+Credentials — no live round trip has been made and nothing claims otherwise. Mail transport is `log`
+and recorded as sandbox. `PORTAL-AUTH-001` stays PARTIAL: REVIEW-001c closed half of it, and retiring
+the OTP token engine waits on `/admin/cutover` reading zero on all three conditions.
+
+**The gate, as of the last run:** 922 backend · 483 vitest · 488 E2E on chromium, firefox and webkit.
+`retries: 0`, nothing skipped.
