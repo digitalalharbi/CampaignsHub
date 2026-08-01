@@ -229,3 +229,40 @@ export async function untranslatedChrome(page: Page): Promise<string[]> {
     return [...new Set(out)].slice(0, 6)
   })
 }
+
+/**
+ * The project a spec should work in, pinned by NAME rather than by position.
+ *
+ * `projects[1]` was how one spec chose its workspace, and the project list is neither ordered nor
+ * fixed: every registration-and-onboarding run adds one. So which project that index landed on
+ * depended on what had run before it — the spec passed alone and failed inside the full gate, on
+ * whichever browser happened to reach it after the list had grown.
+ *
+ * Creating (or reusing) a project the spec names itself makes the choice independent of everything
+ * else in the suite, which is the only version of this that stays true as the suite grows.
+ */
+export async function pinnedProject(request: APIRequestContext, name: string): Promise<string> {
+  const headers = await csrfHeaders(request)
+
+  const existing = (await (await request.get('/api/v1/projects', { headers: API_HEADERS })).json())
+    .data as Array<{ id: string; name: string; client_workspace_id: string }>
+  const found = existing.find((p) => p.name === name)
+  if (found) return found.id
+
+  /*
+   * The owning client comes from a project that already exists, not from `/client-workspaces`.
+   *
+   * That endpoint is agency-scoped and answers 403 — `data: null` — for the roles some specs run as,
+   * which turned a missing precondition into `Cannot read properties of null`. Every project already
+   * carries the id this needs.
+   */
+  const clientId = existing[0]?.client_workspace_id
+  if (!clientId) throw new Error('no existing project to take a client workspace from')
+
+  const created = await request.post('/api/v1/projects', {
+    headers,
+    data: { name, client_workspace_id: clientId },
+  })
+
+  return (await created.json()).data.id as string
+}

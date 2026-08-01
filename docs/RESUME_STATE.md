@@ -1131,6 +1131,20 @@ Production stays at six a minute for both and remains env-overridable. Only the 
 allowance moved. Raising the production limit or adding retries would each have been the wrong fix:
 the first weakens a real control, the second hides it.
 
+### Decision 33 — a test that picks by index is a test that passes alone
+
+`campaigns-linking` chose its workspace with `projects[1]`. The project list is neither ordered nor
+fixed — every registration-and-onboarding run adds one — so which project that index landed on
+depended on what had run before it. The spec passed in isolation and failed inside the full gate, on
+whichever browser reached it after the list had grown.
+
+It now creates (or reuses) a project it names itself. The first attempt at that took the owning
+client from `/client-workspaces`, which is agency-scoped and answers 403 for the roles some specs run
+as — turning a missing precondition into `Cannot read properties of null`. The client id comes from
+an existing project instead, which every caller already has.
+
+Same shape as the two rate limits: the suite outgrew an assumption that was true when it was written.
+
 ### Still open
 
 `ADMIN-100` · `APP-100` · `AGENCY-100` · `PORTAL-100` — per-portal development in that order:

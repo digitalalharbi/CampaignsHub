@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { API_HEADERS, AUTH, createCampaign, seedExternals, switchToEnglish, unlinkExternalByName, useProject } from './helpers'
+import { AUTH, createCampaign, pinnedProject, seedExternals, switchToEnglish, unlinkExternalByName, useProject } from './helpers'
 
 /**
  * Full external-linking E2E (the acceptance-critical path):
@@ -53,9 +53,14 @@ async function openCampaignLinkedTab(page: Page, name: string) {
 
 test('link → 409 move-confirmation → confirm move → unlink (full path)', async ({ page }) => {
   // Fresh project + imported Sandbox externals (set up via the authenticated page.request context).
-  const projects = (await (await page.request.get('/api/v1/projects', { headers: API_HEADERS })).json())
-    .data as Array<{ id: string }>
-  const projectId = projects[1].id
+  /*
+   * A project this spec names, not `projects[1]`.
+   *
+   * The list is neither ordered nor fixed — every registration run adds one — so that index landed
+   * on a different project depending on what had run before. The spec passed alone and failed inside
+   * the full gate, on whichever browser reached it after the list had grown.
+   */
+  const projectId = await pinnedProject(page.request, 'E2E Linking')
   await seedExternals(page.request, projectId)
   /*
    * State the precondition instead of inheriting it.
