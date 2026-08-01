@@ -22,11 +22,18 @@ describe('LoginPage — adaptive brand panel (AUTH-002)', () => {
     expect(screen.getByRole('heading', { name: 'All your paid ad campaigns in one place' })).toBeInTheDocument()
   })
 
-  it('?portal=influencer adapts the panel to influencer campaigns', () => {
+  /**
+   * `?portal=influencer` no longer dresses the page for a portal that is closed (INFL-OFF-001).
+   *
+   * The panel used to pitch influencer campaigns and the tab beside it named a demo identity — for a
+   * sub-system that now refuses every sign-in. The parameter falls back to the ordinary panel, which
+   * describes something a visitor can actually be signed in to.
+   */
+  it('ignores ?portal=influencer while that portal is withdrawn', () => {
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login?portal=influencer', locale: 'en' })
-    expect(screen.getByText('One platform for influencer campaigns')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /Influencer and content campaigns in one place/i })).toBeInTheDocument()
+    expect(screen.queryByText('One platform for influencer campaigns')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('login-portal-influencer')).not.toBeInTheDocument()
   })
 
   it('?portal=agency keeps the promise but speaks to multi-client work', () => {
@@ -45,15 +52,16 @@ describe('LoginPage — adaptive brand panel (AUTH-002)', () => {
   })
 
   /** Every portal must be reachable, and each one must be a real link — not a decorative pill. */
-  it('offers all four portals, marking the active one and linking the rest', () => {
+  it('offers every portal on sale, marking the active one and linking the rest', () => {
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login?portal=agency', locale: 'en' })
     const tabs = screen.getByTestId('login-portals')
-    expect(tabs.querySelectorAll('a')).toHaveLength(4)
+    // Three, not four: influencers & UGC is withdrawn in this release (INFL-OFF-001).
+    expect(tabs.querySelectorAll('a')).toHaveLength(3)
     expect(screen.getByTestId('login-portal-agency')).toHaveAttribute('aria-current', 'page')
     // Leaving a portal drops the parameter rather than inventing a "default" value.
     expect(screen.getByTestId('login-portal-default')).toHaveAttribute('href', '/login')
-    expect(screen.getByTestId('login-portal-influencer')).toHaveAttribute('href', '/login?portal=influencer')
+    expect(screen.getByTestId('login-portal-client')).toBeInTheDocument()
   })
 
   /** The panel never replaces the form: sign-in stays reachable from every portal. */

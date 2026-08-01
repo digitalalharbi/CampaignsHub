@@ -24,6 +24,19 @@ export interface PlatformOverview {
     without_membership: number
   }
   workload: { client_workspaces: number; open_requests: number; unpaid_invoices: number }
+  /** Tenants opened per month, twelve months back. Empty months are PRESENT, as zeros. */
+  growth: Array<{ month: string; opened: number; total: number }>
+  subscriptions: {
+    by_status: Record<string, number>
+    /**
+     * What active and trialing subscriptions are worth per month — what the platform has been
+     * PROMISED, not what it has collected. `collection_status` says which.
+     */
+    committed_monthly: Array<{ currency: string; monthly: number; subscriptions: number }>
+    collection_status: string
+  }
+  /** Counts worth acting on, each with the page that answers it. Zeros included on purpose. */
+  attention: Array<{ key: string; count: number; to: string; tone: 'warning' | 'danger' | 'info' }>
 }
 
 export interface PlatformTenant {

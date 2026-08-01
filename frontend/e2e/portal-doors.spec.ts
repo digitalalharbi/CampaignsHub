@@ -135,3 +135,38 @@ test('the doors work on a phone, in both directions', async ({ page }) => {
   await expect(page.locator('html')).toHaveAttribute('dir', 'ltr')
   await expect(page.getByTestId('portal-login-title')).toHaveText('Campaign management')
 })
+
+/**
+ * Every door offers Google and Apple, and neither pretends to work (ADMIN-100).
+ *
+ * The block existed only on the legacy `/login`, so the four per-portal doors — the ones the product
+ * actually sends people to — had no social sign-in at all. It is shown on all of them now, and a
+ * provider with no credentials is DISABLED and says why: an enabled button with nothing behind it
+ * sends somebody to an error page they cannot act on, and claims support the platform does not have.
+ */
+test('each door offers social sign-in, disabled and explained while credentials are missing', async ({ page }) => {
+  for (const door of DOORS) {
+    await page.goto(door.path)
+
+    const social = page.getByTestId('social-signin')
+    await expect(social, `${door.path} offers no social sign-in`).toBeVisible()
+    await expect(page.getByTestId('oauth-google')).toBeVisible()
+    await expect(page.getByTestId('oauth-apple')).toBeVisible()
+
+    // No credentials are configured in any environment yet, so both must be refused up front and
+    // the reason stated — never a button that looks live.
+    await expect(page.getByTestId('oauth-google')).toBeDisabled()
+    await expect(page.getByTestId('oauth-apple')).toBeDisabled()
+    await expect(page.getByTestId('oauth-awaiting')).toBeVisible()
+  }
+})
+
+/** The platform console is never opened by a public form, so it offers no way to create one. */
+test('the platform console door offers no sign-up', async ({ page }) => {
+  await page.goto('/admin/login')
+  await expect(page.locator('a[href="/register"]')).toHaveCount(0)
+
+  // …while the doors to a product somebody can buy do offer one.
+  await page.goto('/app/login')
+  await expect(page.locator('a[href="/register"]')).toHaveCount(1)
+})

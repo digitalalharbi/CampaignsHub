@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Building2, Search, ShieldOff, ShieldCheck } from 'lucide-react'
 import { fetchTenant, fetchTenants, setTenantStatus, type PlatformTenant } from './api'
+import { accountTypeLabel, planLabel } from './labels'
 import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { Modal } from '@/components/ui/Modal'
@@ -130,8 +131,10 @@ export function TenantsPage() {
                 </p>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12.5px] text-text-muted">
                   <span dir="ltr">{t.slug}</span>
-                  <span>· {t.account_type ?? (ar ? 'نوع غير محدّد' : 'type unset')}</span>
-                  <span>· {t.subscription_plan ?? (ar ? 'بلا خطة' : 'no plan')}</span>
+                  {/* Named, not printed. `self_serve_company` is a column value, not a word — and
+                      rendering it raw made half an Arabic-first page stop being Arabic. */}
+                  <span>· {accountTypeLabel(t.account_type ?? 'unset', ar)}</span>
+                  <span>· {planLabel(t.subscription_plan ?? 'none', ar)}</span>
                   <span className="tnum" dir="ltr">· {num(t.people)} {ar ? 'مستخدم' : 'people'}</span>
                   <span className="tnum" dir="ltr">· {num(t.client_workspaces)} {ar ? 'عميل' : 'clients'}</span>
                 </p>
@@ -210,8 +213,8 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
         <>
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <Fact label={ar ? 'الحالة' : 'Status'} value={detail.data.tenant.status} />
-            <Fact label={ar ? 'النوع' : 'Account type'} value={detail.data.tenant.account_type ?? '—'} />
-            <Fact label={ar ? 'الخطة' : 'Plan'} value={detail.data.tenant.subscription_plan ?? (ar ? 'بلا خطة' : 'No plan')} />
+            <Fact label={ar ? 'النوع' : 'Account type'} value={accountTypeLabel(detail.data.tenant.account_type ?? 'unset', ar)} />
+            <Fact label={ar ? 'الخطة' : 'Plan'} value={planLabel(detail.data.tenant.subscription_plan ?? 'none', ar)} />
             <Fact label={ar ? 'مساحات العملاء' : 'Client workspaces'} value={num(detail.data.client_workspaces)} />
           </dl>
 

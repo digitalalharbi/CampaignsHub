@@ -1052,6 +1052,46 @@ routing decision reads: an operator whose only membership is the influencers por
 to a redirect chain, and one who also holds the agency portal is taken straight there instead of
 being shown a switcher with a dead option in it.
 
+### Decision 30 — a console that can only show the happy path cannot be evaluated
+
+`/admin` was four counters and two bar-lists. It printed **database codes** at a reader —
+`self_serve_company`, `trialing`, `past_due` — into an Arabic-first interface, so half the page had
+quietly stopped being Arabic. And it could not answer the question an owner opens a console with:
+how is the platform doing, and what needs me today.
+
+Three decisions inside the rebuild are worth keeping:
+
+- **Committed is not collected.** The money card is priced from `subscriptions.unit_amount`, not from
+  the plan it names — deriving it from `subscription_plans` would silently re-price every existing
+  customer the next time the owner edits a plan, and there is now a test that proves it does not. The
+  card says «committed» and the note beside it says platform collection is not live and that the
+  invoices in this database are agency-to-client billing belonging to the agency.
+- **Empty months are zeros, not gaps.** A growth series that omits them draws a straight line through
+  the gap and turns a quiet quarter into apparent steady growth.
+- **The attention list returns zeros and displays none of them.** A row that vanishes from the API is
+  indistinguishable from one that was never computed; a strip of zeros on screen is wallpaper. So the
+  payload is complete and the page filters — and "nothing is pending" is said in words.
+
+Privacy held while adding charts, which is exactly the change that starts leaking customer work: a
+test asserts that `campaign`, `creative`, `impressions`, `clicks` and `roas` never reach the payload.
+
+**The demo had to grow with it.** A fresh install had two tenants created in the same second, so
+every chart was a single mark and the attention list was permanently empty.
+`DemoPlatformHistorySeeder` seeds ten workspaces across ten months, on three plans, in the states an
+operator actually deals with — paying, trialing, past due, cancelled, suspended. Every row is named
+`(Demo)`, the spread is deterministic, and only `created_at` moves: back-dating money would put
+figures in months where none were committed.
+
+One trap recorded because it looks like a bug until you know why: the seeder must `saveQuietly()` to
+stop observers stamping `created_at` back to now — which also skips the `creating` event that mints
+the UUID, so it supplies the key itself.
+
+**And the doors got their social sign-in.** `SocialSignIn` lived only on the legacy `/login`, so the
+four doors the product actually sends people to had none. It is shared now; both providers render
+disabled with the reason, because an enabled button with nothing behind it claims support the
+platform does not have. `/admin/login` offers no sign-up at all — the platform owner is never created
+by a public form.
+
 ### Still open
 
 `ADMIN-100` · `APP-100` · `AGENCY-100` · `PORTAL-100` — per-portal development in that order:

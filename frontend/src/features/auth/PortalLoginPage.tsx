@@ -11,6 +11,7 @@ import { useT } from '@/lib/i18n'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import { CLIENT_PORTAL_DOOR, PORTAL_DOORS, offeredDoors, type PasswordPortal } from './portals'
+import { SocialSignIn } from './SocialSignIn'
 
 /**
  * One sign-in engine, five doors (LOGIN-FINAL).
@@ -213,6 +214,17 @@ export function PortalLoginPage({ portal }: { portal: PasswordPortal }) {
 
             <Button type="submit" loading={mutation.isPending} className="w-full" size="lg">{t('sign_in')}</Button>
           </form>
+
+          {/*
+            Google and Apple, on every door rather than only the legacy one (ADMIN-100).
+            Both are always rendered so the page has the same shape in every environment; a provider
+            with no credentials is disabled and says why, because an enabled button with nothing
+            behind it claims support the platform does not have.
+
+            The portal travels with the request exactly as the password form's `door.claim` does — a
+            preference the server checks, never a grant.
+          */}
+          <SocialSignIn portalParam={door.claim} redirect={params.get('redirect')} ar={ar} />
 
           {/*
             The client portal, named honestly.
