@@ -178,7 +178,13 @@ final class ClientPortalController
     public function logout(Request $request): JsonResponse
     {
         $token = $this->resolveSession($request);
-        $token?->forceFill(['revoked_at' => Carbon::now()])->save();
+
+        // Only a token that came from the DATABASE can be revoked. A membership session is synthesised
+        // per request and saving it would write a brand-new, already-revoked row on every sign-out —
+        // inflating the very table the cutover is waiting to see empty.
+        if ($token !== null && $token->exists) {
+            $token->forceFill(['revoked_at' => Carbon::now()])->save();
+        }
 
         // Both engines end together. Revoking one and leaving the other is how "I signed out" stops
         // being true while still looking like it worked.
@@ -919,16 +925,68 @@ final class ClientPortalController
             $plain = $request->header('X-Client-Token');
         }
         if (! is_string($plain) || $plain === '') {
-            return null;
+            return $this->sessionFromMembership($request);
         }
         /** @var ClientPortalToken|null $token */
         $token = ClientPortalToken::where('token_hash', hash('sha256', $plain))->first();
         if ($token === null || ! $token->isActive()) {
-            return null;
+            return $this->sessionFromMembership($request);
         }
         $token->forceFill(['last_used_at' => Carbon::now()])->save();
 
         return $token;
+    }
+
+    /**
+     * The OTHER engine: a signed-in user who holds a `ClientPortal` membership (REVIEW-001c).
+     *
+     * The defect this closes was visible and total. `client@demo-portal.local` signs in, the server
+     * answers `portal: "portal"` and sends them to `/portal` — and every endpoint there answered 401,
+     * because the portal was gated on the OTP cookie ALONE. `ClientPortalIdentity` was already
+     * consulted, but only to narrow the scope of a session a token had already opened, so the engine
+     * that "wins" could never be the one that let you in. The product routed an account to a portal
+     * it then locked it out of, and no status check could see it: every endpoint was correctly
+     * returning 401 to a request that was correctly authenticated.
+     *
+     * The membership session is expressed as an UNSAVED `ClientPortalToken` so the eighty-odd readers
+     * downstream keep one shape to reason about. Three properties make that safe:
+     *
+     *   - it is never persisted (`exists` stays false), so it cannot appear in `client_portal_tokens`
+     *     and cannot move the cutover counter that PORTAL-AUTH-001c is waiting on;
+     *   - the tenant comes from the MEMBERSHIP, never from the request, so a portal customer cannot
+     *     address another agency's data by asking for it;
+     *   - no membership means no session, so this widens nothing for anyone else. A signed-in
+     *     advertiser or agency operator still gets 401 here, exactly as before.
+     */
+    private function sessionFromMembership(Request $request): ?ClientPortalToken
+    {
+        $user = $request->user();
+        if ($user === null) {
+            return null;
+        }
+
+        /** @var Membership|null $membership */
+        $membership = Membership::query()
+            ->where('user_id', $user->getKey())
+            ->where('portal', Portal::ClientPortal->value)
+            ->active()
+            ->with('scopes')
+            ->first();
+
+        if ($membership === null) {
+            return null;
+        }
+
+        $session = new ClientPortalToken;
+        $session->forceFill([
+            'tenant_id' => $membership->tenant_id,
+            'contact_email' => $user->email,
+            'contact_phone' => $user->phone,
+            'expires_at' => null,
+            'revoked_at' => null,
+        ]);
+
+        return $session;
     }
 
     private function requireSession(Request $request): ClientPortalToken
@@ -1097,6 +1155,15 @@ final class ClientPortalController
      */
     private function contactOwnedWorkspaceIds(ClientPortalToken $token): array
     {
+        // A membership session's spaces are the ones the MEMBERSHIP names, not the ones that happen to
+        // have a request carrying this person's email (REVIEW-001c). Deriving them from request rows
+        // showed an invited client-portal user an empty portal until somebody submitted a request
+        // under their address — the space they were explicitly granted was not in the list.
+        $reach = $this->identity->reach(request(), $token);
+        if ($reach['engine'] === 'membership') {
+            return $reach['ids'];
+        }
+
         return ExternalRequest::query()
             ->where('tenant_id', $token->tenant_id)
             ->where(function ($q) use ($token) {

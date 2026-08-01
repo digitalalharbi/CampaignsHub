@@ -66,12 +66,20 @@ final class PaidMediaServicesTest extends TestCase
         $this->assertTrue($def->allows_custom_options, 'request.paid_service must allow tenant custom options.');
         $this->assertSame('multi', $def->field_type);
 
+        /*
+         * Ordered by `sort_order`, which is the order the CATALOGUE presents (PaidServiceCatalog).
+         *
+         * Without it this read had no ORDER BY at all, so the assertion below was checking Postgres's
+         * physical row order — which held by luck and broke in the full suite, where enough earlier
+         * work had touched the table to return the ten categories alphabetically. Ordering by the
+         * column that means order turns a coincidence into the claim the test was always making.
+         */
         $options = TaxonomyOption::withoutGlobalScopes()->whereNull('tenant_id')
-            ->where('taxonomy_definition_id', $def->getKey())->get();
+            ->where('taxonomy_definition_id', $def->getKey())->orderBy('sort_order')->get();
         $categories = $options->whereNull('parent_option_id');
         $services = $options->whereNotNull('parent_option_id');
 
-        // 10 categories, exact keys.
+        // 10 categories, exact keys, in catalogue order.
         $this->assertSame([
             'launch_manage', 'optimization', 'audit_analysis', 'measurement_tracking', 'integrations',
             'strategy_planning', 'reporting_dashboards', 'creatives', 'objective_services', 'consulting_training',
