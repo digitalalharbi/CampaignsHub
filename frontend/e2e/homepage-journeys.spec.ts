@@ -30,19 +30,36 @@ const JOURNEYS = [
 
 async function home(page: Page) {
   await page.goto('/')
-  await expect(page.getByTestId('closing-journeys')).toBeAttached()
+  // VISIBLE, not merely attached: the section is far down a long page, and asserting only that it is
+  // in the DOM says nothing about whether it has finished laying out.
+  await expect(page.getByTestId('closing-journeys')).toBeVisible()
+}
+
+/**
+ * Open a journey card, having first made sure it is somewhere a click can actually land.
+ *
+ * These are real `<a href>` links, so a click that lands navigates — which means a click that did not
+ * navigate is one that landed somewhere else. The homepage is long and loads images above this
+ * section, so a card can still be moving when Playwright dispatches: it checks that the TAB is stable,
+ * not that the page is. Waiting for the card to be in the viewport is waiting for the precondition the
+ * click depends on, and asserting the URL afterwards proves it took effect rather than assuming so.
+ *
+ * WebKit under the full three-browser load was the one slow enough to lose that race.
+ */
+async function openJourney(page: Page, key: string, url: RegExp) {
+  const card = page.getByTestId(`closing-journey-${key}`)
+  await card.scrollIntoViewIfNeeded()
+  await expect(card).toBeInViewport()
+  await card.click()
+  await expect(page).toHaveURL(url)
 }
 
 test.describe('homepage journeys route somewhere real', () => {
   for (const j of JOURNEYS) {
     test(`closing card "${j.key}" opens its own path, not the top of the page`, async ({ page }) => {
       await home(page)
-      const card = page.getByTestId(`closing-journey-${j.key}`)
-      await card.scrollIntoViewIfNeeded()
-      await card.click()
-
       // The URL must actually change — the old bug left it on "/" with a #usage fragment.
-      await expect(page).toHaveURL(j.url)
+      await openJourney(page, j.key, j.url)
       expect(page.url()).not.toContain('#usage')
       await expect(j.marker(page).first()).toBeVisible()
 
@@ -54,10 +71,7 @@ test.describe('homepage journeys route somewhere real', () => {
 
     test(`"${j.key}" survives a reload and a cold open`, async ({ page }) => {
       await home(page)
-      const card = page.getByTestId(`closing-journey-${j.key}`)
-      await card.scrollIntoViewIfNeeded()
-      await card.click()
-      await expect(page).toHaveURL(j.url)
+      await openJourney(page, j.key, j.url)
 
       const deepLink = page.url()
       await page.reload()
