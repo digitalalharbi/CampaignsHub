@@ -279,6 +279,8 @@ final class SubscriptionLifecycle
     {
         $graceDays = (int) config('subscriptions.grace_days', 7);
 
+        // OPS-002: the reason was already computed and discarded. It rides to the audit observer now.
+        $subscription->auditReason = $why;
         $subscription->forceFill([
             'status' => 'past_due',
             // Stamped on the row, so a customer given longer keeps it even if the default changes.
@@ -313,6 +315,7 @@ final class SubscriptionLifecycle
      */
     public function suspend(Subscription $subscription, string $why): Subscription
     {
+        $subscription->auditReason = $why;
         $subscription->forceFill(['status' => 'suspended'])->save();
 
         $tenant = $this->tenantOf($subscription);
@@ -402,6 +405,8 @@ final class SubscriptionLifecycle
 
     public function cancel(Subscription $subscription, string $why, bool $atPeriodEnd = false): Subscription
     {
+        $subscription->auditReason = $why;
+
         if ($atPeriodEnd) {
             // The customer keeps what they paid for. Cancelling immediately would take away time
             // already bought.
@@ -430,6 +435,7 @@ final class SubscriptionLifecycle
      */
     public function reactivate(Subscription $subscription, string $why): Subscription
     {
+        $subscription->auditReason = $why;
         $subscription->forceFill([
             'status' => 'active',
             'grace_ends_at' => null,

@@ -1307,6 +1307,85 @@ The lesson is the same as SERVELOG-001 and QUEUE-WORKER-001, for the third time:
 before reading a wave of failures as regressions.** And an assertion that cannot distinguish two very
 different causes will eventually cost more than the minute it takes to write one that can.
 
+### Decision 41 — the reason was always computed, and always thrown away (OPS-002)
+
+`SubscriptionLifecycle` has sixteen public methods. A trial converts, a renewal fails, a grace period
+runs out, an account is suspended, a customer comes back. Four of them take a `$why` explaining the
+act — and **not one of the sixteen wrote an audit row**. An owner could see that a workspace had been
+suspended and had no way to find out when, by whom, or on what grounds.
+
+Recorded at the **model**, not the call site. The lifecycle mutates subscriptions from about ten
+places, most of them running unattended on a schedule, and payments are written by webhook handlers.
+An audit line per call site is one somebody eventually forgets to add when they write the eleventh —
+which is exactly how a trail develops holes nobody notices until it is needed. An observer is the
+difference between «we remembered everywhere» and «it cannot be missed».
+
+Three decisions inside it worth keeping:
+
+- **Only material columns.** `current_period_end` moves on every renewal and `updated_at` on every
+  write. Recording those buries the suspension that matters under a thousand rows that do not.
+- **Payment entries carry no gateway session.** `provider_session_id` and `checkout_url` are excluded,
+  with a test asserting the session id never appears in the log. An audit trail that leaks a payment
+  session is worse than the gap it was written to close.
+- **The four categories are prefix-matched**, so a `subscription.*` action added later is covered
+  without anybody editing a list — the same reasoning as the observer.
+
+And the page: `/admin/audit` now resolves the actor and workspace to NAMES. A trail that answers
+«who» with a UUID answers nobody, because the reader has to go and look it up somewhere else, which
+in practice means the question goes unanswered. Unattended lifecycle work has no actor at all and
+says «النظام» rather than leaving a blank, which would read as missing data.
+
+### Decision 42 — the fourth selector that guessed
+
+`campaigns.spec.ts` opened with a comment saying «a demo project is auto-selected by the switcher»
+and trusted it. That held while the seeded projects were the only ones. It stopped holding once
+`campaigns-linking` began creating a project of its own: the switcher's default landed there, the
+spec opened `E2E Link B <timestamp>` — a throwaway with no platform bindings — and timed out waiting
+for a Link button that campaign could never have shown. **Firefox only**, because the project did not
+exist yet when chromium ran, which is exactly the shape of every cross-test-order defect this suite
+has produced.
+
+Fixed by pinning the project by NAME, the same fix `pinnedProject` already applies elsewhere. A new
+`seededProject()` helper finds an existing project and **throws** when it is missing, rather than
+creating one: `pinnedProject` creating a project is right for a spec that needs somewhere to work and
+wrong for a spec that needs seeded data, because a fresh project has no campaigns, no metrics and no
+bindings, so the spec fails on assertions that were never about it.
+
+Fourth instance of the same lesson in this branch: **a selector that guesses will eventually guess
+wrong, and it will do it on whichever browser runs after the state changed.** Worth reading as a rule
+now rather than as four anecdotes — if a spec needs particular data, it should name that data.
+
+### Decision 43 — clicking before the app is awake
+
+`auth-redesign` clicked the «forgot password» link straight after `page.goto('/login')`. `goto`
+resolves on `load`, which on a single-page app is well before React has hydrated and bound the
+router — a click landing in that window hits an anchor whose handler has already called
+`preventDefault()` but whose navigation is not yet wired, and is simply lost. The URL sits on
+`/login` until the assertion gives up.
+
+It surfaced once, on firefox, in a full three-browser run: the browser that happened to be slowest
+that day. **The fix is to click a live app, not to give the assertion longer.** A raised timeout
+would have hidden the race and left the click still landing on a page that was not ready — and would
+have made the next occurrence, whenever the machine was busier, look like a new defect.
+
+Same shape as Decision 42, one layer down: there the spec assumed which project was selected, here it
+assumed the page was interactive. Both are assumptions about state nobody had established.
+
+### Decision 44 — a fixed clock for work that grows
+
+`portal-audit`'s rail walks open EVERY link in a portal — a dozen-odd full page loads — inside one
+test on the default 30s. That was already tight and got tighter with each section added to the
+product, so it expired on whichever portal firefox reached when the machine was busiest: the agency
+rail in one run, the advertiser's in the next, with nothing wrong on either page.
+
+The budget is now proportional to the number of links the walk actually found. **Nothing is relaxed
+except the clock** — every assertion still runs on every link, and a page that genuinely fails to
+render still fails. What changed is that a slow machine no longer looks like a broken page.
+
+Worth separating from the three environment findings above (SERVELOG-001, QUEUE-WORKER-001,
+Decision 40): those were the servers being wrong. This one is the test asking for more time than it
+allowed itself, and it would have kept getting worse as the product grew.
+
 ### Still open
 
 Measured from `/dev/status`, which parses the matrix rather than keeping a second list.
@@ -1320,9 +1399,7 @@ destinations, the responsive/theme sweep, and now PROJINT-001 + INTEG-UI-001.
 
 **Next, in order:**
 
-1. **OPS-002** — operational status exists; the audit over every subscription, payment, approval and
-   permission change does not.
-2. **VERIFY-100** — CAMPAIGN-010/020, CAMPDET-010, REPORT-SCHEDULING, FINANCE-001, SYNC-001,
+1. **VERIFY-100** — CAMPAIGN-010/020, CAMPDET-010, REPORT-SCHEDULING, FINANCE-001, SYNC-001,
    XREL-001, DEMO-001, HOME-GATEWAY-001, DEVSTATUS-001. Each needs a targeted acceptance test of its
    own behaviour plus live review — never a documentation-only status change. Most of these pages are
    already walked by the portal specs for content, language and phone layout, so what is missing is

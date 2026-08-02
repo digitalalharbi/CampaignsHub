@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ScrollText } from 'lucide-react'
-import { fetchAudit, type AuditEntry } from './api'
+import { fetchAudit, type AuditCategory, type AuditEntry } from './api'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 
@@ -13,10 +14,24 @@ import { useUi } from '@/stores/ui'
  * Entries are immutable and shown newest first, with the reason as first-class text rather than
  * buried in a diff — the reason is the part a person reads a year later, and an entry without one
  * explains nothing.
+ *
+ * OPS-002 added the four filters and the names. The trail runs to thousands of rows and `user.login`
+ * alone is over half of them, so «show me every subscription change» was a question the page could not
+ * answer by scrolling; and an entry that answered «who» with a UUID answered nobody, because the
+ * reader had to go and look it up somewhere else, which in practice means they did not.
  */
+const CATEGORIES: { key: AuditCategory | ''; ar: string; en: string }[] = [
+  { key: '', ar: 'الكل', en: 'All' },
+  { key: 'subscriptions', ar: 'الاشتراكات', en: 'Subscriptions' },
+  { key: 'payments', ar: 'المدفوعات', en: 'Payments' },
+  { key: 'approvals', ar: 'الموافقات', en: 'Approvals' },
+  { key: 'permissions', ar: 'الصلاحيات', en: 'Permissions' },
+]
+
 export function AuditPage() {
   const ar = useUi((s) => s.locale) === 'ar'
-  const query = useQuery({ queryKey: ['admin', 'audit'], queryFn: fetchAudit })
+  const [category, setCategory] = useState<AuditCategory | ''>('')
+  const query = useQuery({ queryKey: ['admin', 'audit', category], queryFn: () => fetchAudit(category) })
 
   return (
     <div className="w-full">
@@ -31,6 +46,23 @@ export function AuditPage() {
         </p>
       </header>
 
+      <div data-testid="audit-categories" className="mb-4 flex flex-wrap gap-2">
+        {CATEGORIES.map((c) => (
+          <button
+            key={c.key || 'all'}
+            type="button"
+            data-testid={`audit-category-${c.key || 'all'}`}
+            aria-pressed={category === c.key}
+            onClick={() => setCategory(c.key)}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+              category === c.key ? 'bg-brand-primary-soft text-brand-700' : 'text-text-secondary hover:bg-surface-hover'
+            }`}
+          >
+            {ar ? c.ar : c.en}
+          </button>
+        ))}
+      </div>
+
       {query.isPending && <div className="grid gap-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16" />)}</div>}
 
       {query.isError && (
@@ -39,7 +71,10 @@ export function AuditPage() {
 
       {query.data && query.data.entries.length === 0 && (
         <p className="rounded-2xl border border-dashed border-border px-4 py-12 text-center text-sm text-text-muted">
-          {ar ? 'لا إدخالات بعد.' : 'No entries yet.'}
+          {category === ''
+            ? (ar ? 'لا إدخالات بعد.' : 'No entries yet.')
+            : (ar ? 'لا إدخالات في هذا التصنيف. لم يحدث شيء منه بعد — وليس أن التصنيف معطّل.'
+                  : 'No entries in this category. Nothing of this kind has happened yet — the filter is not broken.')}
         </p>
       )}
 
@@ -66,6 +101,16 @@ function Entry({ entry, ar }: { entry: AuditEntry; ar: boolean }) {
           {entry.created_at ? entry.created_at.slice(0, 19).replace('T', ' ') : '—'}
         </span>
       </div>
+
+      {/*
+        Who, and in whose workspace. A name where there is one; the row is simply omitted where the
+        actor or workspace has since been deleted, rather than filled with «Unknown» — which reads as
+        a name and is not one. Unattended lifecycle work has no actor at all, and «النظام» says so.
+      */}
+      <p className="mt-1 text-[12.5px] text-text-muted">
+        <span className="font-semibold text-text-secondary">{entry.user_name ?? (ar ? 'النظام' : 'The system')}</span>
+        {entry.tenant_name && <span> · {entry.tenant_name}</span>}
+      </p>
       {change && <p className="mt-1 text-[13px] text-text-secondary" dir="ltr">{change}</p>}
       {entry.reason && (
         <p className="mt-1.5 rounded-lg bg-surface-secondary px-3 py-2 text-[13px] text-text-primary">

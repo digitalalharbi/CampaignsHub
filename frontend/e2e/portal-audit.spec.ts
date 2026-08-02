@@ -66,6 +66,20 @@ test.describe('the advertiser portal', () => {
 
     expect(hrefs.length, 'the advertiser rail has no links').toBeGreaterThan(3)
 
+    /*
+     * A budget proportional to the work, not a flat 30s.
+     *
+     * This test opens EVERY link in the rail — a dozen-odd full page loads — inside one test. The
+     * default was already tight and got tighter with each section added to the product, so it expired
+     * on whichever portal firefox reached when the machine was busiest: the agency rail in one run,
+     * the advertiser's in the next, with nothing wrong on either page.
+     *
+     * Nothing is relaxed except the clock. Every assertion below still runs on every link, and a page
+     * that genuinely fails to render still fails — the difference is that a slow machine no longer
+     * looks like a broken page.
+     */
+    test.setTimeout(15_000 + hrefs.length * 8_000)
+
     for (const href of hrefs) {
       await page.goto(href)
       await expect(page.getByText(/later phase/i), `${href} is a placeholder`).toHaveCount(0)
@@ -86,6 +100,9 @@ test.describe('the agency portal', () => {
 
     expect(hrefs.length, 'the agency rail has no links').toBeGreaterThan(3)
 
+    // Same reasoning as the advertiser walk above: budget the clock to the number of pages opened.
+    test.setTimeout(15_000 + hrefs.length * 8_000)
+
     for (const href of hrefs) {
       await page.goto(href)
       await expect(page.getByText(/later phase/i), `${href} is a placeholder`).toHaveCount(0)
@@ -105,6 +122,9 @@ test.describe('the platform console', () => {
       .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href')!))])
 
     expect(hrefs.length, 'the admin rail has no links').toBeGreaterThan(3)
+
+    // Same reasoning as the advertiser walk above: budget the clock to the number of pages opened.
+    test.setTimeout(15_000 + hrefs.length * 8_000)
 
     for (const href of hrefs) {
       await page.goto(href)
@@ -164,6 +184,9 @@ test.describe('the client portal', () => {
       .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href')!))])
 
     expect(hrefs.length, 'the client rail has no links').toBeGreaterThan(3)
+
+    // Same reasoning as the advertiser walk above: budget the clock to the number of pages opened.
+    test.setTimeout(15_000 + hrefs.length * 8_000)
 
     for (const href of hrefs) {
       await page.goto(href)

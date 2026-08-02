@@ -61,11 +61,18 @@ export interface TenantPerson {
   status: string
 }
 
+/** The four OPS-002 names, or null for everything else the platform records. */
+export type AuditCategory = 'subscriptions' | 'payments' | 'approvals' | 'permissions'
+
 export interface AuditEntry {
   id: string
   action: string
+  category: AuditCategory | null
   tenant_id: string | null
+  /** Null when the workspace has since been deleted — never «Unknown», which reads as a name. */
+  tenant_name: string | null
   user_id: string | null
+  user_name: string | null
   before: Record<string, unknown> | null
   after: Record<string, unknown> | null
   reason: string | null
@@ -100,8 +107,12 @@ export function setTenantStatus(id: string, status: 'active' | 'suspended', reas
   return patchData(`/admin/tenants/${id}/status`, { status, reason })
 }
 
-export function fetchAudit(): Promise<{ entries: AuditEntry[]; meta: { total: number } }> {
-  return getData('/admin/audit')
+export function fetchAudit(category?: AuditCategory | ''): Promise<{
+  entries: AuditEntry[]
+  categories: AuditCategory[]
+  meta: { total: number }
+}> {
+  return getData(`/admin/audit${category ? `?category=${encodeURIComponent(category)}` : ''}`)
 }
 
 /* ------------------------------------------------------------------ ADMIN-002: plans & billing */

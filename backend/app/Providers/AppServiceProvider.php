@@ -10,6 +10,10 @@ use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Models\Opportunity;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Subscriptions\Models\Subscription;
+use App\Domains\Subscriptions\Models\SubscriptionPayment;
+use App\Domains\Subscriptions\Observers\SubscriptionAuditObserver;
+use App\Domains\Subscriptions\Observers\SubscriptionPaymentAuditObserver;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Auth\Events\Login;
@@ -62,6 +66,17 @@ class AppServiceProvider extends ServiceProvider
         // Audit authentication lifecycle events.
         Event::listen(Login::class, [RecordAuthAudit::class, 'handleLogin']);
         Event::listen(Logout::class, [RecordAuthAudit::class, 'handleLogout']);
+
+        /*
+         * OPS-002 — money and entitlement changes are audited at the MODEL, not at the call site.
+         *
+         * The subscription lifecycle mutates from about ten places, most of them unattended on a
+         * schedule, and payments are written by webhook handlers and adapters. An audit line per call
+         * site is one someone eventually forgets to add; an observer cannot be forgotten. See
+         * `SubscriptionAuditObserver` for which columns are considered material and why.
+         */
+        Subscription::observe(SubscriptionAuditObserver::class);
+        SubscriptionPayment::observe(SubscriptionPaymentAuditObserver::class);
 
         /*
          * Login rate limiter. Production stays strict (6/min/IP, env-overridable).

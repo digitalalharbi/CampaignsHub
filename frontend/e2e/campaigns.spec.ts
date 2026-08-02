@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, switchToEnglish } from './helpers'
+import { AUTH, seededProject, switchToEnglish, useProject } from './helpers'
 
 /**
  * Core campaigns paths (authenticated as the demo owner via reused storage state).
@@ -15,16 +15,30 @@ async function openCardsView(page: import('@playwright/test').Page) {
 }
 
 /**
+ * The project whose campaigns carry real demo data.
+ *
+ * These specs used to trust that «a demo project is auto-selected by the switcher». That held while
+ * the seeded projects were the only ones, and stopped holding as the suite grew: `campaigns-linking`
+ * creates a project of its own, and once it exists the switcher's default can land there. The spec
+ * then opened `E2E Link B <timestamp>` — a throwaway with no platform bindings — and timed out
+ * waiting for a Link button that campaign could never have shown. Firefox only, because the project
+ * did not exist yet when chromium ran.
+ *
+ * Pinning by NAME makes each run independent of what has run before it, which is the same fix
+ * `pinnedProject` already applies elsewhere and the fourth time this suite has outgrown a selector
+ * that guessed.
+ */
+const SEEDED_PROJECT = 'Growth — Acquisition'
+
+/**
  * A campaign carrying real demo data, rather than whichever card happens to sort first.
  *
  * The specs below read a campaign's PERFORMANCE and its linked platform campaigns, and the throwaway
- * campaigns this file creates have neither — they are brand new and connected to nothing. Once the
- * create spec has run, `.first()` is one of those, so the assertions were failing on a campaign that
- * was never supposed to satisfy them. Excluding them by name keeps each spec pointed at what it is
- * actually about.
+ * campaigns this file creates have neither — they are brand new and connected to nothing. With the
+ * project pinned, the only throwaways that can appear here are this file's own.
  */
 function seededCampaignCard(page: import('@playwright/test').Page) {
-  return page.getByTestId('campaign-card').filter({ hasNotText: 'E2E Campaign' }).first()
+  return page.getByTestId('campaign-card').filter({ hasNotText: 'E2E ' }).first()
 }
 
 /*
@@ -57,6 +71,7 @@ test('create a unified campaign and see it in the list', async ({ page }) => {
 })
 
 test('open a campaign detail and switch tabs', async ({ page }) => {
+  await useProject(page, await seededProject(page.request, SEEDED_PROJECT))
   await page.goto('/app/campaigns')
   await switchToEnglish(page)
 
@@ -73,6 +88,7 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
 })
 
 test('link-external modal opens and labels sandbox data as Demo', async ({ page }) => {
+  await useProject(page, await seededProject(page.request, SEEDED_PROJECT))
   await page.goto('/app/campaigns')
   await switchToEnglish(page)
   await openCardsView(page)

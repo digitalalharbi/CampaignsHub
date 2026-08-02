@@ -266,3 +266,25 @@ export async function pinnedProject(request: APIRequestContext, name: string): P
 
   return (await created.json()).data.id as string
 }
+
+/**
+ * An EXISTING project, found by name and never created.
+ *
+ * `pinnedProject` creates one when it is missing, which is right for specs that only need somewhere
+ * to work. It is wrong for specs that need the SEEDED data — a freshly created project has no
+ * campaigns, no metrics and no external bindings, so a spec pointed at one fails on assertions that
+ * were never about it.
+ *
+ * Throws rather than falling back. A spec that silently ran against the wrong project is how
+ * `campaigns.spec.ts` came to open a throwaway campaign another spec had created and time out
+ * waiting for a button that campaign could not have.
+ */
+export async function seededProject(request: APIRequestContext, name: string): Promise<string> {
+  const projects = (await (await request.get('/api/v1/projects', { headers: API_HEADERS })).json())
+    .data as Array<{ id: string; name: string }> | null
+
+  const found = (projects ?? []).find((p) => p.name === name)
+  if (!found) throw new Error(`seeded project "${name}" is missing — run the demo seeder`)
+
+  return found.id
+}

@@ -6,8 +6,15 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Accounts\Enums\AccountState;
+use App\Domains\Accounts\Services\TransitionAccountState;
 use App\Domains\Audit\Models\AuditLog;
+use App\Domains\Subscriptions\Models\Subscription;
+use App\Domains\Subscriptions\Models\SubscriptionPayment;
+use App\Domains\Subscriptions\Models\SubscriptionPlan;
+use App\Domains\Subscriptions\Services\SubscriptionLifecycle;
 use App\Domains\Tenancy\Actions\GrantMembership;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\DTOs\MembershipGrant;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
@@ -252,5 +259,136 @@ final class PlatformConsoleTest extends TestCase
 
         $tenantIds = collect($entries)->pluck('tenant_id')->unique();
         $this->assertCount(2, $tenantIds);
+    }
+
+    // ---- OPS-002: the money and entitlement trail --------------------------------------------
+
+    /**
+     * A subscription change is recorded WITHOUT anybody writing an audit line at the call site.
+     *
+     * `SubscriptionLifecycle` mutates subscriptions from about ten places, most of them running
+     * unattended on a schedule. This asserts the guarantee is at the MODEL — suspend a subscription
+     * through the lifecycle, and the trail has the before, the after and the reason the lifecycle
+     * already computed and used to throw away.
+     */
+    public function test_a_subscription_change_is_audited_with_its_before_after_and_reason(): void
+    {
+        $tenant = $this->tenant('Payer Co');
+        $plan = SubscriptionPlan::create([
+            'code' => 'growth-'.uniqid(), 'name' => 'Growth', 'price_monthly' => 500,
+            'currency' => 'SAR', 'is_active' => true,
+        ]);
+
+        app(TransitionAccountState::class)->provision($tenant, AccountState::Active, 'Test fixture.');
+
+        app(TenantContext::class)->setTenantId($tenant->id);
+        $subscription = Subscription::create([
+            'tenant_id' => $tenant->id, 'plan_id' => $plan->id, 'status' => 'active', 'seats' => 1,
+            'billing_interval' => 'monthly', 'unit_amount' => 500, 'currency' => 'SAR',
+        ]);
+        app(SubscriptionLifecycle::class)->suspend($subscription, 'Card declined three times.');
+        app(TenantContext::class)->forget();
+
+        $entries = $this->actingAs($this->owner(), 'sanctum')
+            ->getJson('/api/v1/admin/audit?category=subscriptions')
+            ->assertOk()->json('data.entries');
+
+        $change = collect($entries)->firstWhere('action', 'subscription.status_changed');
+        $this->assertNotNull($change, 'a suspension must reach the trail');
+        $this->assertSame('active', $change['before']['status']);
+        $this->assertSame('suspended', $change['after']['status']);
+        $this->assertSame('Card declined three times.', $change['reason']);
+        $this->assertSame('subscriptions', $change['category']);
+    }
+
+    /**
+     * The trail answers «who» with a name.
+     *
+     * A UUID is not an answer: the reader has to look it up somewhere else, which in practice means
+     * the question goes unanswered. Both ids are kept — the name is for reading, the id for joining.
+     */
+    public function test_the_trail_names_the_actor_and_the_workspace(): void
+    {
+        $tenant = $this->tenant('Named Co');
+        $owner = $this->owner();
+
+        $this->actingAs($owner, 'sanctum')->patchJson("/api/v1/admin/tenants/{$tenant->id}/status", [
+            'status' => 'suspended', 'reason' => 'Test.',
+        ])->assertOk();
+
+        $entry = collect($this->actingAs($owner, 'sanctum')->getJson('/api/v1/admin/audit')
+            ->assertOk()->json('data.entries'))->firstWhere('tenant_id', $tenant->id);
+
+        $this->assertSame('Platform Owner', $entry['user_name']);
+        $this->assertSame('Named Co', $entry['tenant_name']);
+        $this->assertEquals($owner->id, $entry['user_id'], 'the id stays, for joining');
+    }
+
+    /**
+     * Each of the four categories OPS-002 names can actually be asked for.
+     *
+     * The platform log runs to thousands of rows and `user.login` alone is over half of them. A trail
+     * that cannot be narrowed to «subscriptions» or «payments» satisfies the requirement on paper and
+     * not at a desk.
+     */
+    public function test_each_of_the_four_categories_can_be_filtered_for(): void
+    {
+        $owner = $this->owner();
+
+        $categories = $this->actingAs($owner, 'sanctum')->getJson('/api/v1/admin/audit')
+            ->assertOk()->json('data.categories');
+
+        $this->assertSame(['subscriptions', 'payments', 'approvals', 'permissions'], $categories);
+
+        // A category returns only its own actions — never the whole log with a filter that did nothing.
+        $tenant = $this->tenant('Filter Co');
+        $this->actingAs($owner, 'sanctum')->patchJson("/api/v1/admin/tenants/{$tenant->id}/status", [
+            'status' => 'suspended', 'reason' => 'Test.',
+        ])->assertOk();
+
+        foreach (['subscriptions', 'payments'] as $category) {
+            $entries = $this->actingAs($owner, 'sanctum')
+                ->getJson("/api/v1/admin/audit?category={$category}")
+                ->assertOk()->json('data.entries');
+
+            foreach ($entries as $entry) {
+                $this->assertSame($category, $entry['category'], 'a filter must not let other categories through');
+            }
+        }
+    }
+
+    /**
+     * A payment's audit entry carries no way to reach the gateway.
+     *
+     * The trail says a charge of this amount moved to this state. It is not a place to keep a
+     * checkout session or a provider identifier — an audit log that leaks one is worse than the gap
+     * it was written to close.
+     */
+    public function test_a_payment_entry_records_the_money_and_not_the_gateway_session(): void
+    {
+        $tenant = $this->tenant('Charged Co');
+
+        app(TenantContext::class)->setTenantId($tenant->id);
+        $payment = SubscriptionPayment::create([
+            'tenant_id' => $tenant->id, 'purpose' => 'trial', 'plan_code' => 'growth',
+            'billing_interval' => 'monthly', 'provider' => 'moyasar', 'amount' => 500,
+            'currency' => 'SAR', 'idempotency_key' => uniqid(),
+            'provider_session_id' => 'sess_SECRET_DO_NOT_LOG',
+        ]);
+        // `status` is deliberately not fillable — a payload able to set it could mark itself paid —
+        // so the gateway adapters write it with forceFill, and so does this.
+        $payment->forceFill(['status' => 'failed', 'error' => 'Insufficient funds.'])->save();
+        app(TenantContext::class)->forget();
+
+        $entries = $this->actingAs($this->owner(), 'sanctum')
+            ->getJson('/api/v1/admin/audit?category=payments')
+            ->assertOk()->json('data.entries');
+
+        $changed = collect($entries)->firstWhere('action', 'payment.status_changed');
+        $this->assertNotNull($changed);
+        $this->assertSame('failed', $changed['after']['status']);
+        $this->assertSame('Insufficient funds.', $changed['reason'], 'the gateway’s own account of the refusal');
+
+        $this->assertStringNotContainsString('sess_SECRET_DO_NOT_LOG', json_encode($entries));
     }
 }

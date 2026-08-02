@@ -24,6 +24,16 @@ final class Subscription extends Model
     use BelongsToTenant;
     use HasUuidKey;
 
+    /**
+     * Why this subscription is being changed, for the audit trail (OPS-002).
+     *
+     * Transient and deliberately NOT a column: it describes one act, not the subscription. The
+     * lifecycle already computes a reason for every suspension, cancellation, past-due and
+     * reactivation and used to discard it; assigning it here carries it to
+     * `SubscriptionAuditObserver`, which writes it beside the before/after of the change.
+     */
+    public ?string $auditReason = null;
+
     protected $fillable = [
         'tenant_id', 'plan_id', 'status', 'billing_interval', 'unit_amount', 'currency',
         'current_period_start', 'current_period_end', 'trial_ends_at', 'grace_ends_at',

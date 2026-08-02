@@ -211,21 +211,39 @@ test('on a phone the form comes first and the panel collapses below it', async (
   expect((await metrics(page)).hScroll).toBe(false)
 })
 
-/** Zero dead links: each secondary action navigates to a page that actually renders. */
+/**
+ * Zero dead links: each secondary action navigates to a page that actually renders.
+ *
+ * Each hop waits for the login FORM before clicking. `page.goto()` resolves on `load`, which on a
+ * single-page app is well before React has hydrated and bound the router: a click that lands in that
+ * window hits an anchor whose handler has already called `preventDefault()` but whose navigation has
+ * not been wired, and is simply lost. The URL then sits on `/login` until the assertion gives up.
+ *
+ * It failed on firefox, once, in a full three-browser run — the browser that happened to be slowest
+ * on the day. The fix is to click a live app, not to give the assertion longer to wait: a longer
+ * timeout would have hidden the race instead of removing it, and left the same click landing on a
+ * page that was not ready.
+ */
 test('forgot password, create account and request tracking all lead somewhere real', async ({ page }) => {
   await page.setViewportSize(LAPTOP)
 
-  await page.goto('/login')
+  /** The login form is on screen, so React has hydrated and the router is bound. */
+  const loginReady = async () => {
+    await page.goto('/login')
+    await expect(page.locator('input[type="email"]')).toBeVisible({ timeout: 20000 })
+  }
+
+  await loginReady()
   await page.getByRole('link', { name: /Forgot|نسيت/ }).click()
   await expect(page).toHaveURL(/\/forgot-password/)
   await expect(page.locator('input[type="email"]')).toBeVisible()
 
-  await page.goto('/login')
+  await loginReady()
   await page.getByRole('link', { name: /Create an account|تسجيل حساب/ }).click()
   await expect(page).toHaveURL(/\/register/)
   await expect(page.locator('form input#tenant_name')).toBeVisible()
 
-  await page.goto('/login')
+  await loginReady()
   await page.getByRole('link', { name: /Track my requests|متابعة طلباتي/ }).click()
   await expect(page).toHaveURL(/\/portal\/login/)
   // The portal signs in by one-time code, not a password — assert its own control, not the staff form's.

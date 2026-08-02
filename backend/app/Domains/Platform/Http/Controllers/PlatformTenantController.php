@@ -10,6 +10,7 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -161,28 +162,91 @@ final class PlatformTenantController extends Controller
         ], 'Tenant.');
     }
 
-    /** GET /api/v1/admin/audit — the platform's own trail, newest first. */
+    /**
+     * The four categories OPS-002 names, as filters (OPS-002).
+     *
+     * The requirement is «an audit trail for every subscription change, payment, approval decision and
+     * permission grant». A trail with no way to ask those four questions satisfies it only on paper:
+     * the platform log runs to thousands of rows and `user.login` alone is over half of them, so the
+     * entries that matter are unfindable by scrolling.
+     *
+     * Prefix matching against the action name, so a new `subscription.*` or `payment.*` action written
+     * later is covered without anyone updating a list — which is the same reason the audit itself is an
+     * observer rather than a call at each site.
+     *
+     * @var array<string, list<string>>
+     */
+    private const CATEGORIES = [
+        'subscriptions' => ['subscription.', 'plan.'],
+        'payments' => ['payment.'],
+        'approvals' => ['registration.', 'account.state.', 'request.status_changed', 'request.converted'],
+        'permissions' => ['settings.team.', 'project.member.', 'client.team_access', 'access.'],
+    ];
+
+    /**
+     * GET /api/v1/admin/audit — the platform's own trail, newest first.
+     *
+     * Entries carry the actor's and workspace's NAMES, not only their ids. A trail that answers «who»
+     * with a UUID answers nobody: the reader has to go and look it up somewhere else, which in practice
+     * means the question goes unanswered. Resolved in two queries over the page, never per row.
+     */
     public function audit(Request $request): JsonResponse
     {
         $this->tenants->enterPlatformScope();
 
+        $category = (string) $request->query('category', '');
+        $prefixes = self::CATEGORIES[$category] ?? null;
+
         $page = AuditLog::query()
             ->when($request->query('action'), fn ($q, $a) => $q->where('action', 'like', $a.'%'))
+            ->when($prefixes !== null, fn ($q) => $q->where(function ($inner) use ($prefixes) {
+                foreach ($prefixes as $prefix) {
+                    $inner->orWhere('action', 'like', $prefix.'%');
+                }
+            }))
             ->orderByDesc('created_at')
             ->paginate(50);
 
+        $entries = collect($page->items());
+        $users = User::query()->whereIn('id', $entries->pluck('user_id')->filter()->unique())->pluck('name', 'id');
+        $tenants = Tenant::query()->whereIn('id', $entries->pluck('tenant_id')->filter()->unique())->pluck('name', 'id');
+
         return ApiResponse::success([
-            'entries' => collect($page->items())->map(fn (AuditLog $l) => [
+            'entries' => $entries->map(fn (AuditLog $l) => [
                 'id' => (string) $l->getKey(),
                 'action' => $l->action,
+                'category' => $this->categoryOf($l->action),
                 'tenant_id' => $l->tenant_id === null ? null : (string) $l->tenant_id,
+                // Null when the actor or workspace has since been deleted. Left null rather than
+                // filled with «Unknown», which reads as a name and is not one.
+                'tenant_name' => $l->tenant_id === null ? null : ($tenants[$l->tenant_id] ?? null),
                 'user_id' => $l->user_id === null ? null : (string) $l->user_id,
+                'user_name' => $l->user_id === null ? null : ($users[$l->user_id] ?? null),
                 'before' => $l->before,
                 'after' => $l->after,
                 'reason' => $l->reason,
                 'created_at' => $l->created_at?->toIso8601String(),
             ])->all(),
+            'categories' => array_keys(self::CATEGORIES),
             'meta' => ['total' => $page->total(), 'page' => $page->currentPage(), 'per_page' => $page->perPage()],
         ], 'Audit trail.');
+    }
+
+    /** Which of the four an action belongs to, or null for everything else. */
+    private function categoryOf(?string $action): ?string
+    {
+        if ($action === null) {
+            return null;
+        }
+
+        foreach (self::CATEGORIES as $name => $prefixes) {
+            foreach ($prefixes as $prefix) {
+                if (str_starts_with($action, $prefix)) {
+                    return $name;
+                }
+            }
+        }
+
+        return null;
     }
 }
