@@ -1386,6 +1386,39 @@ Worth separating from the three environment findings above (SERVELOG-001, QUEUE-
 Decision 40): those were the servers being wrong. This one is the test asking for more time than it
 allowed itself, and it would have kept getting worse as the product grew.
 
+### WHERE THIS STOPPED — read this first
+
+Committed and closed this session: **PROJINT-001 + INTEG-UI-001** (`6b758b8`), **NORM-001 +
+SERVELOG-001** (`1c7a032`), **PAY-005** (`90e7dba`), **OPS-002** (`a3955ed`). Each has backend,
+frontend, permissions, visible states, targeted acceptance tests and a live browser review, and each
+updated the matrix and this file.
+
+**The one thing left in the ordered plan is VERIFY-100** — turning the ten
+`IMPLEMENTED_NOT_VERIFIED` rows into VERIFIED with a targeted acceptance test plus live review each:
+CAMPAIGN-010, CAMPAIGN-020, CAMPDET-010, REPORT-SCHEDULING, FINANCE-001, SYNC-001, XREL-001,
+DEMO-001, HOME-GATEWAY-001, DEVSTATUS-001. **Not started.** Do not mark any of them VERIFIED from
+documentation — the whole point of the row is that the behaviour was never asserted.
+
+#### The gate, stated exactly
+
+Verified on this tree: **935 backend**, **483 vitest**, build and typecheck clean.
+
+The full three-browser E2E has NOT come back clean in the last few runs, and the failures move:
+`campaigns` (firefox), then `auth-redesign` (firefox), then `portal-audit` + `registration-onboarding`
+(firefox), then `alerts-ui` (chromium). **Three of those were real and are fixed** — a selector that
+guessed, a click before hydration, a flat timeout on a walk whose length grows with the product
+(Decisions 42, 43, 44). Each was re-run green in isolation afterwards.
+
+The `alerts-ui` one — a just-created alert not visible within 10s — is **NOT diagnosed**. It appeared
+in the confirming run started after the other three were fixed. It has not been reproduced in
+isolation, and it must be root-caused rather than re-run: it may be the same class as the others
+(a fixed window on a machine that is now heavily loaded — `uptime` showed a load average of 28 at one
+point tonight, against 2.8 earlier) or it may be a real persistence defect in alert creation.
+**Find out which before touching anything else.**
+
+Do not read a green run as proof until one full three-browser gate passes end to end with `retries: 0`
+after that is settled.
+
 ### Still open
 
 Measured from `/dev/status`, which parses the matrix rather than keeping a second list.
