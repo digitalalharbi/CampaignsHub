@@ -1388,33 +1388,50 @@ allowed itself, and it would have kept getting worse as the product grew.
 
 ### WHERE THIS STOPPED — read this first
 
-Committed and closed: **PROJINT-001 + INTEG-UI-001** (`6b758b8`), **NORM-001 + SERVELOG-001**
-(`1c7a032`), **PAY-005** (`90e7dba`), **OPS-002** (`a3955ed`). Each has backend, frontend,
-permissions, visible states, targeted acceptance tests and a live browser review.
+**VERIFY-100 is closed.** All ten `IMPLEMENTED_NOT_VERIFIED` rows now have an acceptance test in
+`e2e/verify-100.spec.ts`, green on chromium, firefox and webkit. Each asserts what its requirement is
+FOR rather than that a page returns 200. The matrix table now reads **79 VERIFIED · 1 PARTIAL
+(PORTAL-AUTH-001) · 6 BLOCKED_EXTERNAL_CREDENTIALS · 0 IMPLEMENTED_NOT_VERIFIED**.
 
-#### The four gate failures, diagnosed
+Two real findings came out of writing them:
 
-Three of the four did **not** reproduce in isolation and were host contention. The machine was
-running **another project's Playwright suite concurrently** (`Desktop/SpotlightHub/frontend`, three
-chromium instances), an `ffmpeg` encode at 290% CPU, and was swapping hard — 7M swapouts against
-4,421 free pages, load average 28 at its worst on 8 cores. The clean 524-test run took 18.8 minutes;
-the same suite under that load took 35.6.
+- **FINANCE-001 named a path that does not exist.** The row said `/app/finance`; `billingRoutes` is
+  mounted only under the agency tree, so an advertiser going there fell through to the agency guard
+  and was told the portal was not theirs — correct behaviour, wrong path in the row. Corrected to
+  `/agency/finance`, which is right: agency→client invoicing is the agency's money, the separation
+  PAY-005 draws.
+- **HOME-GATEWAY-001 needed no new test.** It was already covered end to end by `homepage.spec.ts`,
+  `homepage-journeys.spec.ts` and REVIEW-002. What was missing was the row saying so.
 
-- `[chromium] alerts-ui` — 8/8 green in isolation
-- `[firefox] advertiser-portal` + `registration-onboarding` — 16/16 green in isolation
+#### The simplification pass — STARTED, NOT FINISHED
 
-The fourth was **real, and it was mine**. `integrations.spec.ts` polled
-`main.innerText().length > 300` before reading the page — a length proxy the technical-bindings
-section satisfies on its own. On webkit, the slowest of the three, it stopped waiting while the
-platform panel's query was still in flight, read the page without it, and reported «a platform is
-missing: Meta» about a page that renders all six a moment later. It now waits for the panel itself.
+Only **`/app/dashboard`** has been done (SIMPLIFY-001). It opened with three bands of configuration —
+a saved-views bar, an objective row, a platform row — between the reader and any number. All three are
+now behind one «تخصيص العرض» button, with a line beside it stating what is applied in words so folding
+hides no state. Nothing was removed. Reviewed live on desktop and at 375px; 3 E2E on 3 browsers.
 
-Exactly the same mistake I had already made and fixed in `audit-trail.spec.ts` earlier the same
-night — **waiting on a proxy for the thing instead of on the thing**. Worth stating as a rule beside
-the selector one: if a test is about X, it must wait for X.
+**Not started**, against the brief's criteria (two-level menus, one primary action per page, advanced
+detail into drawers, no repeated cards, no status codes shown to users, no shared experience between
+portals):
 
-Also corrected on the way: the spec chose its project with `data[0]`, which is the positional-choice
-defect for the fifth time in this branch. Now pinned by name via `seededProject`.
+- `/app` — the other eleven pages. The rail is 6 groups / 12 leaves; already two levels, but
+  «المحتوى», «الملفات», «المهام» and «التكاملات» are candidates for folding into their parents.
+- `/agency` — **7 groups / 15 leaves, the widest rail in the product** and the most likely to
+  overwhelm. Start here.
+- `/admin` — 8 leaves.
+- `/portal` — not surveyed.
+
+The pattern SIMPLIFY-001 establishes is worth reusing rather than reinventing: **fold configuration
+behind one control, and state what is applied in words.** It satisfies «إجراء رئيسي واحد» and
+«نقل التفاصيل المتقدمة إلى Drawer» without deleting anything, and the three tests written for it are a
+template — the control exists, the folded thing still works, and it fits a phone.
+
+#### Discipline note
+
+I edited source while a full gate was running and invalidated it — the exact mistake recorded earlier
+in this file. Killed the run and discarded the result rather than reading it. **Do not edit under a
+running gate**; Vite HMR changes the page beneath the test and every failure after that point is
+meaningless.
 
 ### Still open
 

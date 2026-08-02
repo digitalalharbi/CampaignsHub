@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { ArrowUpRight } from 'lucide-react'
+import { ArrowUpRight, SlidersHorizontal } from 'lucide-react'
 import {
   useBudget,
   useCampaigns,
@@ -28,6 +28,7 @@ import type { MetricTotals } from '../analytics/api'
 import { SavedViewsBar } from './SavedViewsBar'
 import { useSavedViews, type SavedView } from './savedViews'
 import { OBJECTIVE_KEYS, dash, metricLabel, objectiveLabel } from '@/features/analytics/metricLabels'
+import { Modal } from '@/components/ui/Modal'
 import { useUi } from '@/stores/ui'
 
 /** The six paid platforms CampaignsHub unifies — the dashboard platform filter. */
@@ -85,6 +86,8 @@ export function DashboardPage() {
   const [providers, setProviders] = useState<string[]>([])
   // Default objective = Awareness (never "all" with blended KPIs); a saved default view can override it.
   const [objective, setObjective] = useState('awareness')
+  // The filters live in a dialog now; the page leads with answers. See the note by the button.
+  const [customising, setCustomising] = useState(false)
   const filters = useMemo(() => ({ provider: providers, objective: objective === 'all' ? [] : [objective] }), [providers, objective])
   const toggleProvider = (key: string) =>
     setProviders((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]))
@@ -186,8 +189,30 @@ export function DashboardPage() {
           </div>
           <p className="mt-1 text-sm text-text-secondary">{ar ? 'مركز قيادة موحّد لكل حملاتك الإعلانية المدفوعة عبر المنصات.' : 'One command centre for every paid campaign you run, across every platform.'}</p>
         </div>
-        <div className="flex items-center gap-2">
+        {/*
+          `flex-wrap` is load-bearing. Adding the Customise button made three controls sit in one
+          non-wrapping row; at 375px in ENGLISH — where «Customise» and «Campaigns» are wider than
+          their Arabic labels — the header pushed the page sideways, and content reachable only by
+          dragging is content a phone user will not know is there. Caught by the responsive sweep.
+        */}
+        <div className="flex flex-wrap items-center gap-2">
           <RangeTabs value={days} onChange={setDays} />
+          {/*
+            One control, not three rows of them.
+            The page used to open with a saved-views bar, an objective row and a platform row — three
+            bands of configuration between the reader and any answer. Somebody who has never used this
+            product met the settings before the numbers. They are all still here, unchanged and
+            server-backed; they are now behind one button, and the summary beside it says what is
+            currently applied so nothing is hidden, only folded.
+          */}
+          <button
+            type="button"
+            data-testid="dashboard-customise"
+            onClick={() => setCustomising(true)}
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border-strong bg-surface px-3 text-sm font-semibold text-text-primary hover:bg-surface-hover"
+          >
+            <SlidersHorizontal size={16} /> {ar ? 'تخصيص العرض' : 'Customise'}
+          </button>
           <Link
             to="/app/campaigns"
             className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border-strong bg-surface px-3 text-sm font-semibold text-text-primary hover:bg-surface-hover"
@@ -197,58 +222,78 @@ export function DashboardPage() {
         </div>
       </div>
 
+      {/* What is currently applied, in words — so folding the controls hides no state. */}
+      <p data-testid="dashboard-applied" className="-mt-2 text-[13px] text-text-secondary">
+        {ar ? 'المعروض: ' : 'Showing: '}
+        <span className="font-semibold text-text-primary">{objectives(ar).find((o) => o.key === objective)?.label ?? objective}</span>
+        {' · '}
+        {providers.length === 0
+          ? (ar ? 'كل المنصات' : 'every platform')
+          : providers.map((k) => providerName(k)).join('، ')}
+      </p>
+
+      <Modal
+        open={customising}
+        onClose={() => setCustomising(false)}
+        title={ar ? 'تخصيص العرض' : 'Customise this view'}
+        size="lg"
+      >
+        <div className="grid gap-5">
       {/* Saved views — server-persisted (DASH-010-E); save/apply/rename/default/delete the current filters. */}
-      <SavedViewsBar current={{ objective, providers, days }} onApply={applyView} />
+          <SavedViewsBar current={{ objective, providers, days }} onApply={applyView} />
 
-      {/* Objective filter — switches the KPI set AND filters all tiles by campaign objective (backend-supported). */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold text-text-muted">{ar ? 'الهدف:' : 'Objective:'}</span>
-        {objectives(ar).map((o) => {
-          const on = objective === o.key
-          return (
-            <button
-              key={o.key}
-              type="button"
-              onClick={() => setObjective(o.key)}
-              aria-pressed={on}
-              className={`rounded-full border px-2.5 py-1 text-sm font-semibold transition-colors ${on ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-text-secondary hover:bg-surface-hover'}`}
-            >
-              {o.label}
-            </button>
-          )
-        })}
-      </div>
+          {/* Objective filter — switches the KPI set AND filters all tiles by campaign objective (backend-supported). */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-text-muted">{ar ? 'الهدف:' : 'Objective:'}</span>
+            {objectives(ar).map((o) => {
+              const on = objective === o.key
+              return (
+                <button
+                  key={o.key}
+                  type="button"
+                  onClick={() => setObjective(o.key)}
+                  aria-pressed={on}
+                  className={`rounded-full border px-2.5 py-1 text-sm font-semibold transition-colors ${on ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-text-secondary hover:bg-surface-hover'}`}
+                >
+                  {o.label}
+                </button>
+              )
+            })}
+          </div>
 
-      {objective === 'all' && (
-        <div className="rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-[13px] text-text-secondary">
-          {ar ? 'تعرض هذه النظرة مؤشرات تشغيلية مشتركة فقط؛ اختر هدفًا محددًا لعرض مؤشرات الأداء المتخصصة.' : 'This view shows shared operational figures only. Pick one objective to see the metrics that belong to it.'}
+          {objective === 'all' && (
+            <div className="rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-[13px] text-text-secondary">
+              {ar ? 'تعرض هذه النظرة مؤشرات تشغيلية مشتركة فقط؛ اختر هدفًا محددًا لعرض مؤشرات الأداء المتخصصة.' : 'This view shows shared operational figures only. Pick one objective to see the metrics that belong to it.'}
+            </div>
+          )}
+
+          {/* Platform filter — backend-supported (?provider=…); affects every KPI, chart, table below. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-text-muted">{ar ? 'المنصات:' : 'Platforms:'}</span>
+            {PLATFORM_KEYS.map((key) => {
+              const on = providers.includes(key)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleProvider(key)}
+                  aria-pressed={on}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm font-semibold transition-colors ${on ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-text-secondary hover:bg-surface-hover'}`}
+                >
+                  <span className="h-2 w-2 rounded-full" style={{ background: providerColor(key) }} />
+                  {providerName(key)}
+                </button>
+              )
+            })}
+            {providers.length > 0 && (
+              <button type="button" onClick={() => setProviders([])} className="text-sm font-semibold text-text-muted underline underline-offset-2 hover:text-text-primary">
+                {ar ? 'إعادة ضبط' : 'Reset'}
+              </button>
+            )}
+          </div>
+
         </div>
-      )}
-
-      {/* Platform filter — backend-supported (?provider=…); affects every KPI, chart, table below. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold text-text-muted">{ar ? 'المنصات:' : 'Platforms:'}</span>
-        {PLATFORM_KEYS.map((key) => {
-          const on = providers.includes(key)
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => toggleProvider(key)}
-              aria-pressed={on}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm font-semibold transition-colors ${on ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-text-secondary hover:bg-surface-hover'}`}
-            >
-              <span className="h-2 w-2 rounded-full" style={{ background: providerColor(key) }} />
-              {providerName(key)}
-            </button>
-          )
-        })}
-        {providers.length > 0 && (
-          <button type="button" onClick={() => setProviders([])} className="text-sm font-semibold text-text-muted underline underline-offset-2 hover:text-text-primary">
-            {ar ? 'إعادة ضبط' : 'Reset'}
-          </button>
-        )}
-      </div>
+      </Modal>
 
       {/* Unified command center (shared with the marketing preview) */}
       <UnifiedCampaignOverview
