@@ -1388,58 +1388,33 @@ allowed itself, and it would have kept getting worse as the product grew.
 
 ### WHERE THIS STOPPED — read this first
 
-Committed and closed this session: **PROJINT-001 + INTEG-UI-001** (`6b758b8`), **NORM-001 +
-SERVELOG-001** (`1c7a032`), **PAY-005** (`90e7dba`), **OPS-002** (`a3955ed`). Each has backend,
-frontend, permissions, visible states, targeted acceptance tests and a live browser review, and each
-updated the matrix and this file.
+Committed and closed: **PROJINT-001 + INTEG-UI-001** (`6b758b8`), **NORM-001 + SERVELOG-001**
+(`1c7a032`), **PAY-005** (`90e7dba`), **OPS-002** (`a3955ed`). Each has backend, frontend,
+permissions, visible states, targeted acceptance tests and a live browser review.
 
-**The one thing left in the ordered plan is VERIFY-100** — turning the ten
-`IMPLEMENTED_NOT_VERIFIED` rows into VERIFIED with a targeted acceptance test plus live review each:
-CAMPAIGN-010, CAMPAIGN-020, CAMPDET-010, REPORT-SCHEDULING, FINANCE-001, SYNC-001, XREL-001,
-DEMO-001, HOME-GATEWAY-001, DEVSTATUS-001. **Not started.** Do not mark any of them VERIFIED from
-documentation — the whole point of the row is that the behaviour was never asserted.
+#### The four gate failures, diagnosed
 
-#### The gate, stated exactly
+Three of the four did **not** reproduce in isolation and were host contention. The machine was
+running **another project's Playwright suite concurrently** (`Desktop/SpotlightHub/frontend`, three
+chromium instances), an `ffmpeg` encode at 290% CPU, and was swapping hard — 7M swapouts against
+4,421 free pages, load average 28 at its worst on 8 cores. The clean 524-test run took 18.8 minutes;
+the same suite under that load took 35.6.
 
-Verified on this tree: **935 backend**, **483 vitest**, build and typecheck clean.
+- `[chromium] alerts-ui` — 8/8 green in isolation
+- `[firefox] advertiser-portal` + `registration-onboarding` — 16/16 green in isolation
 
-The full three-browser E2E has NOT come back clean in the last few runs, and the failures move:
-`campaigns` (firefox), then `auth-redesign` (firefox), then `portal-audit` + `registration-onboarding`
-(firefox), then `alerts-ui` (chromium). **Three of those were real and are fixed** — a selector that
-guessed, a click before hydration, a flat timeout on a walk whose length grows with the product
-(Decisions 42, 43, 44). Each was re-run green in isolation afterwards.
+The fourth was **real, and it was mine**. `integrations.spec.ts` polled
+`main.innerText().length > 300` before reading the page — a length proxy the technical-bindings
+section satisfies on its own. On webkit, the slowest of the three, it stopped waiting while the
+platform panel's query was still in flight, read the page without it, and reported «a platform is
+missing: Meta» about a page that renders all six a moment later. It now waits for the panel itself.
 
-The confirming run then finished **550 passed / 4 failed in 35.6 minutes** — against 18.8 minutes for
-the clean 524-test run earlier the same night, on the same machine. Nearly double the wall-clock for
-5% more tests.
+Exactly the same mistake I had already made and fixed in `audit-trail.spec.ts` earlier the same
+night — **waiting on a proxy for the thing instead of on the thing**. Worth stating as a rule beside
+the selector one: if a test is about X, it must wait for X.
 
-The four are on all three browsers and share no code path:
-
-- `[chromium] alerts-ui` — a rule created in the UI not visible within 10s
-- `[firefox] advertiser-portal` — leftover-Arabic walk
-- `[firefox] registration-onboarding` — the company account journey
-- `[webkit] integrations` — the platform list, a spec written and verified green earlier that night
-
-**None of these four is diagnosed.** Do not re-run hoping for green, and do not assume the machine.
-The runtime doubling and the spread across unrelated specs and browsers both point at host
-saturation (`uptime` read a load average of **28** at one point, against 2.8 earlier), but that is a
-hypothesis — and the first failure of this same shape tonight, `campaigns.spec` on firefox, looked
-exactly like host noise and turned out to be a genuine selector defect.
-
-**How to settle it, in this order:**
-
-1. Re-run on an idle machine (`uptime` under ~4) and see which of the four survive. That separates
-   contention from code without changing a line.
-2. For any that survive, reproduce the single spec in isolation and root-cause it — the `.data` being
-   null in the `integrations` failure is the same signature as SERVELOG-001, so check the response
-   bodies are not being corrupted before assuming the assertion is wrong.
-3. Only then decide whether anything needs fixing.
-
-The four fixes already landed (Decisions 42, 43, 44) were each verified green in isolation afterwards;
-what has never happened is one full three-browser gate passing end to end since them.
-
-Do not read a green run as proof until one full three-browser gate passes end to end with `retries: 0`
-after that is settled.
+Also corrected on the way: the spec chose its project with `data[0]`, which is the positional-choice
+defect for the fifth time in this branch. Now pinned by name via `seededProject`.
 
 ### Still open
 

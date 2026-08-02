@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH } from './helpers'
+import { AUTH, seededProject } from './helpers'
 
 /**
  * The integrations surfaces lead with the six real ad platforms (PROJINT-001, INTEG-UI-001).
@@ -90,15 +90,36 @@ test.describe('a project’s integrations', () => {
   test.use({ storageState: AUTH.advertiser })
 
   test('lead with the six platforms, each with its own state and capabilities', async ({ page }) => {
-    const projects = await page.request.get('/api/v1/projects', {
-      headers: { Accept: 'application/json', Origin: 'http://localhost:5173' },
-    })
-    const projectId = (await projects.json()).data[0].id as string
+    /*
+     * The SEEDED project, by name — not `projects[0]`.
+     *
+     * `data[0]` was whichever project sorted first, and the suite creates projects of its own
+     * (`campaigns-linking` makes «E2E Linking»). Once one of those led the list, this opened its
+     * integrations page, found the technical-bindings section and no platform panel, and reported
+     * «a platform is missing: Meta» — a page that was fine, for a project that was never the subject.
+     *
+     * Fifth time in this branch a spec has been bitten by choosing data positionally. `seededProject`
+     * throws when the project is absent rather than creating an empty one, so a missing fixture reads
+     * as a missing fixture instead of as a product defect.
+     */
+    const projectId = await seededProject(page.request, 'Growth — Retention')
 
     await page.goto(`/app/projects/${projectId}/integrations`)
     const main = page.locator('main')
     await expect(main).toBeVisible()
-    await expect.poll(async () => (await main.innerText()).length, { timeout: 20000 }).toBeGreaterThan(300)
+
+    /*
+     * Wait for the PANEL, not for the page to have some text on it.
+     *
+     * This polled `innerText().length > 300`, which the technical-bindings section satisfies on its
+     * own — so on webkit, the slowest of the three here, it stopped waiting while the platform panel's
+     * query was still in flight, read the page without it, and reported «a platform is missing: Meta»
+     * on a page that renders all six perfectly a moment later.
+     *
+     * Nothing is weakened: if the panel genuinely never renders, this still fails, and it now fails
+     * saying the panel never arrived rather than blaming one platform.
+     */
+    await expect(main.getByText(/ميتا|Meta/).first(), 'the platform panel never rendered').toBeVisible({ timeout: 20000 })
 
     const text = await main.innerText()
 
