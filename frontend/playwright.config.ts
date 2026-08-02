@@ -53,7 +53,17 @@ export default defineConfig({
        * the failures spreading as the run went on. Redirecting to a file guarantees a reader that never
        * stalls. STDERR stays on the pipe, so genuine startup errors still surface in the Playwright output.
        */
-      command: 'sh -c "php artisan queue:work --queue=reports,default --tries=3 --sleep=1 --quiet & php artisan serve --no-reload --port=8000 >> storage/logs/serve-requests.log"',
+      /*
+       * `trap "kill 0"` takes the whole process group down with the shell.
+       *
+       * Without it, `sh -c "worker & serve"` leaves orphans behind whenever a run is interrupted:
+       * Playwright signals the shell, the shell exits, and the two children carry on holding their
+       * ports. The next run then finds something already listening, `reuseExistingServer` adopts it,
+       * and the suite talks to a half-dead server from a previous run — which is how a login came back
+       * 502 (Vite proxying to a backend that was no longer there) and, on another attempt, 401.
+       * Both looked like authentication defects and neither was.
+       */
+      command: 'sh -c \'trap "kill 0" EXIT INT TERM; php artisan queue:work --queue=reports,default --tries=3 --sleep=1 --quiet & php artisan serve --no-reload --port=8000 >> storage/logs/serve-requests.log\'',
       cwd: '../backend',
       url: 'http://localhost:8000/up',
       reuseExistingServer: !process.env.CI,

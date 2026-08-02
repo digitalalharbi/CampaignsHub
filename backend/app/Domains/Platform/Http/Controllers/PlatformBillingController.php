@@ -13,6 +13,7 @@ use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Plans, subscriptions and payments from the owner's side (ADMIN-002).
@@ -228,5 +229,193 @@ final class PlatformBillingController extends Controller
                 .'the invoices/payments ledger is agency-to-client billing (client_workspace_id is '
                 .'NOT NULL) and is deliberately NOT counted here.',
         ], 'Platform revenue.');
+    }
+
+    /**
+     * GET /api/v1/admin/revenue-streams — the four streams, kept apart (PAY-005).
+     *
+     * Money moves through this product in four directions, and only ONE of them is the platform's:
+     *
+     * 1. **Platform subscriptions** — tenants owe CampaignsHub. The platform's own.
+     * 2. **Agency → client invoices** — an agency's clients owe the AGENCY. Passes through the
+     *    database and belongs to the tenant. `invoices.client_workspace_id` is NOT NULL, which is
+     *    what makes the distinction checkable rather than a matter of intent.
+     * 3. **Request service payments** — the subset of (2) raised from a service request. Same ledger,
+     *    identified by `quotes.request_id`; reported separately because it answers a different
+     *    question, NOT because it is separate money. Counting it beside (2) would double it.
+     * 4. **Creator payouts** — the platform paying influencers. No table exists: the sub-system is
+     *    withdrawn behind `influencers_ugc_enabled=false`. Reported as not implemented, never as
+     *    «0.00», because zero is a measurement and this has not been measured.
+     *
+     * There is no combined total, and `combined_total` is present and null with the reason attached,
+     * so a caller that wants one number is refused explicitly rather than left to add the parts up.
+     * Adding streams 1 and 2 would report customers' money as the platform's; adding 2 and 3 would
+     * count the same invoice twice.
+     */
+    public function revenueStreams(): JsonResponse
+    {
+        $this->tenants->enterPlatformScope();
+
+        return ApiResponse::success([
+            'streams' => [
+                $this->platformSubscriptionStream(),
+                $this->agencyClientStream(),
+                $this->requestServiceStream(),
+                $this->creatorPayoutStream(),
+            ],
+            'combined_total' => null,
+            'combined_total_reason' => 'These four are different people’s money. Adding platform '
+                .'subscriptions to agency invoices reports customers’ revenue as the platform’s; '
+                .'adding request payments to agency invoices counts the same invoice twice.',
+        ], 'Revenue streams, kept separate.');
+    }
+
+    /**
+     * Stream 1 — what tenants owe CampaignsHub.
+     *
+     * Priced from `subscriptions.unit_amount`, the amount actually agreed with that customer, and NOT
+     * from the plan's current price. `revenue()` above prices from the plan, which is why the two
+     * surfaces could disagree: raise a plan's price and the plan-based figure silently re-prices every
+     * existing subscriber who is still paying the old amount. The agreed price is the one on the
+     * subscription.
+     *
+     * @return array<string, mixed>
+     */
+    private function platformSubscriptionStream(): array
+    {
+        $rows = Subscription::query()
+            ->whereIn('status', ['active', 'trialing'])
+            ->get(['status', 'billing_interval', 'currency', 'unit_amount']);
+
+        $byCurrency = $rows
+            ->groupBy(fn (Subscription $s) => (string) ($s->currency ?? 'SAR'))
+            ->map(fn ($group, $currency) => [
+                'currency' => (string) $currency,
+                'monthly' => round($group->sum(fn (Subscription $s) => $s->billing_interval === 'yearly'
+                    ? ((float) $s->unit_amount) / 12
+                    : (float) $s->unit_amount), 2),
+                'subscriptions' => $group->count(),
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'key' => 'platform_subscriptions',
+            'direction' => 'tenants → CampaignsHub',
+            'belongs_to' => 'platform',
+            'basis' => 'committed',
+            'amounts' => $byCurrency,
+            'collected' => null,
+            'status' => 'awaiting_credentials',
+            'note' => 'Committed monthly value of active and trialing subscriptions, priced from the '
+                .'amount agreed on each subscription rather than the plan’s current price. No money '
+                .'has been collected: the platform has no live charging path.',
+        ];
+    }
+
+    /**
+     * Stream 2 — what an agency's clients owe the agency.
+     *
+     * Reported here so the owner can see the ledger EXISTS and is not theirs. Invoiced and collected
+     * are both given: a collected figure alone would read as platform income, and an invoiced figure
+     * alone hides that almost none of it has been paid.
+     *
+     * @return array<string, mixed>
+     */
+    private function agencyClientStream(): array
+    {
+        $rows = DB::table('invoices')
+            ->select('currency')
+            ->selectRaw('COUNT(*) AS invoices')
+            ->selectRaw('SUM(total) AS invoiced')
+            ->selectRaw('SUM(amount_paid) AS collected')
+            ->groupBy('currency')
+            ->get()
+            ->map(fn ($r) => [
+                'currency' => (string) ($r->currency ?? 'SAR'),
+                'invoiced' => round((float) $r->invoiced, 2),
+                'collected' => round((float) $r->collected, 2),
+                'invoices' => (int) $r->invoices,
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'key' => 'agency_client_invoices',
+            'direction' => 'clients → agency',
+            'belongs_to' => 'tenant',
+            'basis' => 'invoiced_and_collected',
+            'amounts' => $rows,
+            'status' => 'live',
+            'note' => 'An agency invoicing its own clients. This money is the tenant’s and is never '
+                .'counted as platform revenue; `invoices.client_workspace_id` is NOT NULL, which is '
+                .'what makes that checkable rather than a promise.',
+        ];
+    }
+
+    /**
+     * Stream 3 — the part of stream 2 that began as a service request.
+     *
+     * `subset_of` is the load-bearing field. This is the SAME invoices, filtered by origin; a reader
+     * who added it to stream 2 would count them twice, so the response says so rather than relying on
+     * the reader to notice.
+     *
+     * @return array<string, mixed>
+     */
+    private function requestServiceStream(): array
+    {
+        $rows = DB::table('invoices')
+            ->join('quotes', 'invoices.quote_id', '=', 'quotes.id')
+            ->whereNotNull('quotes.request_id')
+            ->select('invoices.currency')
+            ->selectRaw('COUNT(*) AS invoices')
+            ->selectRaw('SUM(invoices.total) AS invoiced')
+            ->selectRaw('SUM(invoices.amount_paid) AS collected')
+            ->groupBy('invoices.currency')
+            ->get()
+            ->map(fn ($r) => [
+                'currency' => (string) ($r->currency ?? 'SAR'),
+                'invoiced' => round((float) $r->invoiced, 2),
+                'collected' => round((float) $r->collected, 2),
+                'invoices' => (int) $r->invoices,
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'key' => 'request_service_payments',
+            'direction' => 'clients → agency, for a requested service',
+            'belongs_to' => 'tenant',
+            'basis' => 'invoiced_and_collected',
+            'subset_of' => 'agency_client_invoices',
+            'amounts' => $rows,
+            'status' => 'live',
+            'note' => 'Invoices raised from a service request. These are the SAME invoices as the '
+                .'stream above, filtered by where they came from — a view, not additional money.',
+        ];
+    }
+
+    /**
+     * Stream 4 — the platform paying creators.
+     *
+     * There is no payouts table and no payout has ever been made. Reported as not implemented rather
+     * than as a zero, because a zero is a measured result and this has not been measured: «0.00 SAR
+     * paid out» would read as «we owe nobody», which is not something this system knows.
+     *
+     * @return array<string, mixed>
+     */
+    private function creatorPayoutStream(): array
+    {
+        return [
+            'key' => 'creator_payouts',
+            'direction' => 'platform → creators',
+            'belongs_to' => 'platform',
+            'basis' => null,
+            'amounts' => [],
+            'status' => 'not_implemented',
+            'note' => 'No payout ledger exists, and the influencer/UGC sub-system is withdrawn behind '
+                .'`influencers_ugc_enabled=false`. Reported as not implemented rather than as zero: a '
+                .'zero would claim nothing is owed, and that is not something this system has measured.',
+        ];
     }
 }

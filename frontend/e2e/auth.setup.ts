@@ -27,8 +27,32 @@ for (const role of ROLES) {
     await page.goto('/login')
     await page.locator('input[type="email"]').fill(role.email)
     await page.locator('input[type="password"]').fill('password')
-    await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
-    await expect(page).not.toHaveURL(/\/login$/)
+
+    /*
+     * Wait on the login RESPONSE, then on the navigation — two separate facts.
+     *
+     * This used to be a bare `expect(page).not.toHaveURL(/\/login$/)` on the default 5s window, which
+     * could not tell «the server refused these credentials» from «the SPA has not finished booting
+     * yet». On a dev server Playwright has just started, the second is real: Vite answers the health
+     * URL as soon as it binds a port, long before it has transformed the module graph, so the first
+     * page load of a run is the slowest one anybody will ever see. Every so often a whole run died in
+     * setup with six identical timeouts and nothing to say which of the two had happened.
+     *
+     * Asserting the response first makes the refusal case fail LOUDLY and immediately — a 401 or 422
+     * here is a real defect and now reads as one — and leaves the navigation assertion measuring only
+     * what it is for. Nothing has been weakened: the credentials still have to be accepted and the
+     * browser still has to leave `/login`.
+     */
+    const [response] = await Promise.all([
+      page.waitForResponse((r) => r.url().includes('/api/v1/auth/login') && r.request().method() === 'POST'),
+      page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click(),
+    ])
+    // The body travels with the failure. A bare status tells you it was refused; the body tells you
+    // WHY, which is the difference between a five-minute diagnosis and an hour of guessing.
+    const body = await response.text().catch(() => '<unreadable>')
+    expect(response.status(), `login refused for ${role.email}: ${body.slice(0, 400)}`).toBe(200)
+
+    await expect(page).not.toHaveURL(/\/login$/, { timeout: 30_000 })
     await page.context().storageState({ path: role.file })
   })
 }

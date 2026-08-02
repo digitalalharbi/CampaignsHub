@@ -1261,6 +1261,52 @@ the product (the other was the missing queue worker, QUEUE-WORKER-001). Before r
 failures as regressions, check that the servers under them are sound: a defect that appears in
 alphabetical order and worsens over time is a property of the run, not of the code.
 
+### Decision 39 — four streams, and the refusal to add them up (PAY-005)
+
+Money moves through this product in four directions and only ONE of them is the platform's. Tenants
+owe CampaignsHub for subscriptions. An agency's clients owe the AGENCY for its invoices. The request
+payments are those same invoices filtered by where they came from. Creator payouts would be the
+platform paying out, except no payout ledger exists.
+
+Two additions would each be a lie, and the endpoint is shaped so neither is easy to make:
+
+- Platform subscriptions **+** agency invoices reports customers' money as the platform's business
+  result. `belongs_to` is on every stream, so the distinction travels with the figure.
+- Request payments **+** agency invoices counts the same invoice twice, because the first is a VIEW of
+  the second. `subset_of` says so on the stream that would cause it.
+
+`combined_total` is present and **null**, with the reason attached. An omission is something a reader
+fills in with a calculator; a stated refusal is not.
+
+Two things fixed while building it. The platform stream is priced from `subscriptions.unit_amount` —
+the amount actually agreed with that customer — where `revenue()` prices from the plan, so raising a
+plan's price would have made two surfaces in one console disagree about the same figure. And creator
+payouts report «not implemented» rather than «0.00»: a zero claims nothing is owed, which is a
+measured result this system has never measured.
+
+Live review caught what six passing tests did not: the cards printed the backend's English `note`
+under Arabic headings, beside Arabic chips and Arabic counts. A source grep could not have found it —
+the English lives in PHP. The copy is in the page now, in both languages, and an E2E WALKS the
+rendered panel asserting no Latin-only paragraph survives in Arabic. Also fixed «1 invoices».
+
+### Decision 40 — orphaned servers, and a setup that could not say why
+
+Two runs died in `auth.setup` with six identical timeouts. The assertion was a bare
+`not.toHaveURL(/\/login$/)` on the default 5s window, which cannot tell «the server refused these
+credentials» from «the SPA has not finished booting». Setup now waits on the login RESPONSE, asserts
+200, and puts the body in the failure message — and it immediately said what a day of guessing had
+not: **401**, then **502**.
+
+Neither was an auth defect. `sh -c "worker & serve"` left both children running whenever a run was
+interrupted, so `reuseExistingServer` kept adopting half-dead servers from previous runs — at one
+point three Vite instances were stacked on port 5173, proxying to a backend that no longer existed.
+The command now runs `trap "kill 0" EXIT INT TERM`, which takes the whole process group down with the
+shell.
+
+The lesson is the same as SERVELOG-001 and QUEUE-WORKER-001, for the third time: **check the servers
+before reading a wave of failures as regressions.** And an assertion that cannot distinguish two very
+different causes will eventually cost more than the minute it takes to write one that can.
+
 ### Still open
 
 Measured from `/dev/status`, which parses the matrix rather than keeping a second list.
@@ -1274,12 +1320,9 @@ destinations, the responsive/theme sweep, and now PROJINT-001 + INTEG-UI-001.
 
 **Next, in order:**
 
-1. **PAY-005** — `PlatformBillingController` already refuses to merge customers' money into platform
-   revenue. The other three streams (agency→client invoices, request service payments, creator
-   payouts) still need their own surfaces and a test that they cannot be summed.
-2. **OPS-002** — operational status exists; the audit over every subscription, payment, approval and
+1. **OPS-002** — operational status exists; the audit over every subscription, payment, approval and
    permission change does not.
-3. **VERIFY-100** — CAMPAIGN-010/020, CAMPDET-010, REPORT-SCHEDULING, FINANCE-001, SYNC-001,
+2. **VERIFY-100** — CAMPAIGN-010/020, CAMPDET-010, REPORT-SCHEDULING, FINANCE-001, SYNC-001,
    XREL-001, DEMO-001, HOME-GATEWAY-001, DEVSTATUS-001. Each needs a targeted acceptance test of its
    own behaviour plus live review — never a documentation-only status change. Most of these pages are
    already walked by the portal specs for content, language and phone layout, so what is missing is

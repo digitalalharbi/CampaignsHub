@@ -216,15 +216,107 @@ final class PlatformBillingTest extends TestCase
             'password' => 'secret123', 'email_verified_at' => now(),
         ]);
 
-        foreach (['/api/v1/admin/plans', '/api/v1/admin/subscriptions', '/api/v1/admin/revenue'] as $path) {
+        foreach (['/api/v1/admin/plans', '/api/v1/admin/subscriptions', '/api/v1/admin/revenue', '/api/v1/admin/revenue-streams'] as $path) {
             $this->actingAs($user, 'sanctum')->getJson($path)->assertForbidden();
         }
+    }
+
+    // ---- PAY-005: four streams, kept apart -----------------------------------------------------
+
+    /**
+     * The four streams are reported separately, each naming whose money it is, and there is no total.
+     *
+     * The failure this guards against is a single «revenue» figure on an owner's console. Adding the
+     * platform's subscriptions to an agency's client invoices reports customers' money as the
+     * platform's business result; adding request payments to agency invoices counts one invoice twice,
+     * because the first is a filtered VIEW of the second, not additional money. `combined_total` is
+     * present and null with its reason, so a caller that wants one number is refused rather than left
+     * to add the parts up itself.
+     */
+    public function test_the_four_revenue_streams_are_reported_apart_and_never_totalled(): void
+    {
+        $plan = $this->plan('growth', 500);
+        $tenant = $this->tenant('Agency A');
+        Subscription::create([
+            'tenant_id' => $tenant->id, 'plan_id' => $plan->id, 'status' => 'active', 'seats' => 1,
+            'billing_interval' => 'monthly', 'unit_amount' => 500, 'currency' => 'SAR',
+        ]);
+
+        $body = $this->actingAs($this->owner(), 'sanctum')
+            ->getJson('/api/v1/admin/revenue-streams')
+            ->assertOk()
+            ->json('data');
+
+        $keys = array_column($body['streams'], 'key');
+        $this->assertSame([
+            'platform_subscriptions', 'agency_client_invoices', 'request_service_payments', 'creator_payouts',
+        ], $keys);
+
+        $byKey = collect($body['streams'])->keyBy('key');
+
+        // Whose money each stream is, said in the payload rather than left to the reader.
+        $this->assertSame('platform', $byKey['platform_subscriptions']['belongs_to']);
+        $this->assertSame('tenant', $byKey['agency_client_invoices']['belongs_to']);
+        $this->assertSame('tenant', $byKey['request_service_payments']['belongs_to']);
+
+        // The double-counting trap is named on the stream that would cause it.
+        $this->assertSame('agency_client_invoices', $byKey['request_service_payments']['subset_of']);
+
+        // No total, and the refusal carries its reason.
+        $this->assertNull($body['combined_total']);
+        $this->assertNotEmpty($body['combined_total_reason']);
+    }
+
+    /**
+     * The platform stream is priced from the SUBSCRIPTION, not the plan.
+     *
+     * `revenue()` prices from `plan->price_monthly`, so raising a plan's price silently re-prices every
+     * existing subscriber who is still paying the old amount — two surfaces in one console reporting
+     * different figures for the same thing. The agreed price lives on the subscription.
+     */
+    public function test_the_platform_stream_uses_the_agreed_price_not_the_plan_s_current_one(): void
+    {
+        $plan = $this->plan('scale', 500);
+        $tenant = $this->tenant('Early Bird');
+        Subscription::create([
+            'tenant_id' => $tenant->id, 'plan_id' => $plan->id, 'status' => 'active', 'seats' => 1,
+            'billing_interval' => 'monthly', 'unit_amount' => 300, 'currency' => 'SAR',
+        ]);
+
+        // The list price doubles; the customer's agreed price does not.
+        $plan->update(['price_monthly' => 1000]);
+
+        $body = $this->actingAs($this->owner(), 'sanctum')
+            ->getJson('/api/v1/admin/revenue-streams')
+            ->assertOk()
+            ->json('data');
+
+        $platform = collect($body['streams'])->firstWhere('key', 'platform_subscriptions');
+        $this->assertEqualsWithDelta(300.0, $platform['amounts'][0]['monthly'], 0.01);
+    }
+
+    /**
+     * Creator payouts report as not implemented, never as zero.
+     *
+     * There is no payout ledger and the influencer sub-system is withdrawn. «0.00 SAR paid out» would
+     * read as «nothing is owed» — a measured result the system has never measured.
+     */
+    public function test_creator_payouts_are_not_implemented_rather_than_zero(): void
+    {
+        $body = $this->actingAs($this->owner(), 'sanctum')
+            ->getJson('/api/v1/admin/revenue-streams')
+            ->assertOk()
+            ->json('data');
+
+        $payouts = collect($body['streams'])->firstWhere('key', 'creator_payouts');
+        $this->assertSame('not_implemented', $payouts['status']);
+        $this->assertSame([], $payouts['amounts'], 'an empty list, not a zero amount');
     }
 
     /** Separate case: `actingAs` persists for the rest of a test method, so this needs its own. */
     public function test_the_billing_console_requires_a_session(): void
     {
-        foreach (['/api/v1/admin/plans', '/api/v1/admin/subscriptions', '/api/v1/admin/revenue'] as $path) {
+        foreach (['/api/v1/admin/plans', '/api/v1/admin/subscriptions', '/api/v1/admin/revenue', '/api/v1/admin/revenue-streams'] as $path) {
             $this->getJson($path)->assertUnauthorized();
         }
     }

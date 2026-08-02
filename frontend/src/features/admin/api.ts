@@ -159,6 +159,37 @@ export function fetchRevenue(): Promise<PlatformRevenue> {
   return getData('/admin/revenue')
 }
 
+/**
+ * PAY-005 — the four streams money moves through, and only one of them is the platform's.
+ *
+ * `belongs_to` and `subset_of` are the load-bearing fields. Without the first, an owner reads an
+ * agency's client invoices as their own business result; without the second, they add request
+ * payments to agency invoices and count the same invoice twice.
+ */
+export interface RevenueStream {
+  key: 'platform_subscriptions' | 'agency_client_invoices' | 'request_service_payments' | 'creator_payouts'
+  direction: string
+  belongs_to: 'platform' | 'tenant'
+  basis: string | null
+  /** Per currency, never blended. Empty means «nothing measured», not «zero money». */
+  amounts: Array<{ currency: string; monthly?: number; invoiced?: number; collected?: number; subscriptions?: number; invoices?: number }>
+  /** Present only on a stream that is a filtered VIEW of another — adding the two double-counts. */
+  subset_of?: string
+  status: 'live' | 'awaiting_credentials' | 'not_implemented'
+  note: string
+}
+
+export interface RevenueStreams {
+  streams: RevenueStream[]
+  /** Always null. The reason travels with it so the refusal is explicit, not an omission. */
+  combined_total: null
+  combined_total_reason: string
+}
+
+export function fetchRevenueStreams(): Promise<RevenueStreams> {
+  return getData('/admin/revenue-streams')
+}
+
 /* ------------------------------------------------------- ADMIN-003: access, integrations, status */
 
 export interface PermissionCatalogue {

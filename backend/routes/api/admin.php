@@ -60,6 +60,8 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::patch('/plans/{plan}', [PlatformBillingController::class, 'updatePlan'])->name('plans.update');
         Route::get('/subscriptions', [PlatformBillingController::class, 'subscriptions'])->name('subscriptions.index');
         Route::get('/revenue', [PlatformBillingController::class, 'revenue'])->name('revenue.index');
+        // PAY-005: the four streams, each with its owner, and no combined total.
+        Route::get('/revenue-streams', [PlatformBillingController::class, 'revenueStreams'])->name('revenue.streams');
 
         /*
          * PAYSET-001 — the payment gateways.

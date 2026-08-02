@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CreditCard, Info, Layers, Users } from 'lucide-react'
+import { CreditCard, GitBranch, Info, Layers, Users } from 'lucide-react'
 import {
-  fetchPlans, fetchRevenue, fetchSubscriptions, updatePlan,
-  type PlatformPlan, type PlatformSubscription,
+  fetchPlans, fetchRevenue, fetchRevenueStreams, fetchSubscriptions, updatePlan,
+  type PlatformPlan, type PlatformSubscription, type RevenueStream,
 } from './api'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { Switch } from '@/components/ui/Switch'
@@ -22,7 +22,7 @@ import { useUi } from '@/stores/ui'
  * number that reads like revenue.
  */
 
-type TabKey = 'plans' | 'subscriptions' | 'revenue'
+type TabKey = 'plans' | 'subscriptions' | 'revenue' | 'streams'
 
 const money = (amount: string, currency: string) => `${Number(amount).toLocaleString('en-US')} ${currency}`
 
@@ -34,6 +34,7 @@ export function BillingPage() {
     { key: 'plans', ar: 'الخطط', en: 'Plans', icon: Layers },
     { key: 'subscriptions', ar: 'الاشتراكات', en: 'Subscriptions', icon: Users },
     { key: 'revenue', ar: 'الإيراد', en: 'Revenue', icon: CreditCard },
+    { key: 'streams', ar: 'مسارات المال', en: 'Money streams', icon: GitBranch },
   ]
 
   return (
@@ -70,6 +71,7 @@ export function BillingPage() {
         {tab === 'plans' && <PlansTab ar={ar} />}
         {tab === 'subscriptions' && <SubscriptionsTab ar={ar} />}
         {tab === 'revenue' && <RevenueTab ar={ar} />}
+        {tab === 'streams' && <StreamsTab ar={ar} />}
       </div>
     </div>
   )
@@ -237,5 +239,160 @@ function RevenueTab({ ar }: { ar: boolean }) {
         </ul>
       )}
     </>
+  )
+}
+
+/**
+ * PAY-005 — the four streams money moves through, kept apart.
+ *
+ * Only one of them is the platform's. Tenants owe CampaignsHub for their subscriptions; an agency's
+ * clients owe the AGENCY for its invoices; the request payments are those same invoices filtered by
+ * where they came from; and creator payouts would be the platform paying out, except no payout ledger
+ * exists.
+ *
+ * Two mistakes this page is built to make impossible. Adding the platform's subscriptions to an
+ * agency's client invoices reports customers' money as the platform's business result — the single
+ * most expensive lie an owner's console could tell. And adding request payments to agency invoices
+ * counts the same invoice twice, because the first is a VIEW of the second, not additional money.
+ * Each card therefore says whose money it is, a subset card says what it is a subset OF, and the
+ * refusal to produce one total is written on the page rather than left as an omission a reader might
+ * fill in with a calculator.
+ */
+function StreamsTab({ ar }: { ar: boolean }) {
+  const q = useQuery({ queryKey: ['admin', 'revenue-streams'], queryFn: fetchRevenueStreams })
+
+  if (q.isPending) return <Skeleton className="h-64" />
+  if (q.isError || !q.data) {
+    return <ErrorState title={ar ? 'تعذّر تحميل مسارات المال.' : 'The money streams could not be loaded.'} onRetry={() => void q.refetch()} />
+  }
+
+  /*
+   * Name, direction AND explanation live here, in both languages.
+   *
+   * The backend returns its own `note`, and rendering it put a full English paragraph on an
+   * Arabic-first page under Arabic headings — the exact half-translated state REVIEW-003a exists to
+   * catch, and one a source grep would have missed because the English is in PHP. The API keeps its
+   * note for anyone reading the endpoint directly; what the reader sees is written for them.
+   */
+  const COPY: Record<RevenueStream['key'], { name: { ar: string; en: string }; direction: { ar: string; en: string }; note: { ar: string; en: string } }> = {
+    platform_subscriptions: {
+      name: { ar: 'اشتراكات المنصة', en: 'Platform subscriptions' },
+      direction: { ar: 'المستأجرون ← CampaignsHub', en: 'tenants → CampaignsHub' },
+      note: {
+        ar: 'القيمة الشهرية الملتزَم بها للاشتراكات النشطة والتجريبية، محسوبة من المبلغ المتفق عليه في كل اشتراك لا من سعر الخطة الحالي. لم يُحصَّل أي مبلغ: لا يوجد مسار تحصيل فعّال بعد.',
+        en: 'Committed monthly value of active and trialing subscriptions, priced from the amount agreed on each subscription rather than the plan’s current price. Nothing has been collected: there is no live charging path yet.',
+      },
+    },
+    agency_client_invoices: {
+      name: { ar: 'فواتير الوكالة لعملائها', en: 'Agency → client invoices' },
+      direction: { ar: 'العملاء ← الوكالة', en: 'clients → agency' },
+      note: {
+        ar: 'وكالة تُصدر فواتير لعملائها. هذا المال مِلك المستأجر ولا يُحتسب إيرادًا للمنصة أبدًا؛ وعمود client_workspace_id في الفواتير غير قابل للفراغ، وهو ما يجعل هذا الفصل قابلًا للتحقق لا مجرد وعد.',
+        en: 'An agency invoicing its own clients. This money is the tenant’s and is never counted as platform revenue; `invoices.client_workspace_id` is NOT NULL, which makes that checkable rather than a promise.',
+      },
+    },
+    request_service_payments: {
+      name: { ar: 'مدفوعات طلبات الخدمة', en: 'Request service payments' },
+      direction: { ar: 'العملاء ← الوكالة، مقابل خدمة مطلوبة', en: 'clients → agency, for a requested service' },
+      note: {
+        ar: 'فواتير صادرة عن طلب خدمة. هي نفسها فواتير المسار أعلاه، مُرشَّحة حسب مصدرها — عرضٌ لها لا مال إضافي.',
+        en: 'Invoices raised from a service request. These are the SAME invoices as the stream above, filtered by where they came from — a view, not additional money.',
+      },
+    },
+    creator_payouts: {
+      name: { ar: 'مستحقات صنّاع المحتوى', en: 'Creator payouts' },
+      direction: { ar: 'المنصة ← صنّاع المحتوى', en: 'platform → creators' },
+      note: {
+        ar: 'لا يوجد سجل مستحقات، ونظام المؤثرين وUGC معطَّل خلف influencers_ugc_enabled=false. يُعرض كغير منفَّذ لا كصفر: الصفر يعني أنه لا شيء مستحق، وهذا ما لم يقسه النظام أصلًا.',
+        en: 'No payout ledger exists, and the influencer/UGC sub-system is withdrawn behind `influencers_ugc_enabled=false`. Reported as not implemented rather than as zero: a zero would claim nothing is owed, and that is not something this system has measured.',
+      },
+    },
+  }
+
+  /** English needs the singular; Arabic reads correctly with the bare noun after a numeral. */
+  const count = (n: number, one: string, many: string) => `${n.toLocaleString('en-US')} ${n === 1 ? one : many}`
+
+  const OWNER: Record<RevenueStream['belongs_to'], { ar: string; en: string; cls: string }> = {
+    platform: { ar: 'مال المنصة', en: 'the platform’s money', cls: 'border-brand-500/40 bg-brand-primary-soft text-brand-700' },
+    tenant: { ar: 'مال العميل، لا المنصة', en: 'the customer’s money, not the platform’s', cls: 'border-warning/40 bg-warning/10 text-warning' },
+  }
+
+  const STATE: Record<RevenueStream['status'], { ar: string; en: string }> = {
+    live: { ar: 'يعمل', en: 'Live' },
+    awaiting_credentials: { ar: 'بانتظار بيانات اعتماد', en: 'Awaiting credentials' },
+    not_implemented: { ar: 'غير منفَّذ', en: 'Not implemented' },
+  }
+
+  return (
+    <div data-testid="revenue-streams" className="grid gap-3">
+      {/* The refusal, stated before the figures rather than under them. */}
+      <p data-testid="no-combined-total" className="flex items-start gap-2.5 rounded-xl border border-info/30 bg-info/10 px-4 py-3 text-sm text-text-primary">
+        <Info size={17} className="mt-0.5 shrink-0 text-info" aria-hidden />
+        {ar
+          ? 'لا يوجد مجموع واحد لهذه المسارات، وهذا مقصود: جمع اشتراكات المنصة مع فواتير الوكالة يحسب مال العملاء إيرادًا للمنصة، وجمع مدفوعات الطلبات مع فواتير الوكالة يحسب الفاتورة نفسها مرتين.'
+          : 'There is no single total across these, deliberately: adding platform subscriptions to agency invoices counts customers’ money as the platform’s revenue, and adding request payments to agency invoices counts the same invoice twice.'}
+      </p>
+
+      {q.data.streams.map((s) => (
+        <section key={s.key} data-testid={`stream-${s.key}`} className="rounded-2xl border border-border bg-surface p-5">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="font-heading text-lg font-bold text-text-primary">{ar ? COPY[s.key].name.ar : COPY[s.key].name.en}</h3>
+              <p className="mt-0.5 text-xs text-text-muted">{ar ? COPY[s.key].direction.ar : COPY[s.key].direction.en}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${OWNER[s.belongs_to].cls}`}>
+                {ar ? OWNER[s.belongs_to].ar : OWNER[s.belongs_to].en}
+              </span>
+              <span className="rounded-full border border-border bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-text-secondary">
+                {ar ? STATE[s.status].ar : STATE[s.status].en}
+              </span>
+            </div>
+          </div>
+
+          {/* A subset must announce itself, or a reader adds it to its parent. */}
+          {s.subset_of && (
+            <p data-testid={`subset-${s.key}`} className="mt-2 text-sm font-semibold text-warning">
+              {ar
+                ? 'هذه الفواتير جزء من «فواتير الوكالة لعملائها» أعلاه — عرض لها، وليست مالًا إضافيًا. لا تُجمع مع ما فوقها.'
+                : 'These invoices are part of «Agency → client invoices» above — a view of them, not extra money. Do not add the two together.'}
+            </p>
+          )}
+
+          {s.amounts.length > 0 ? (
+            <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+              {s.amounts.map((a) => (
+                <li key={a.currency} className="rounded-xl border border-border bg-surface-secondary px-4 py-3">
+                  <span className="tnum block font-heading text-xl font-extrabold text-text-primary" dir="ltr">
+                    {a.monthly !== undefined
+                      ? `${a.monthly.toLocaleString('en-US')} ${a.currency}`
+                      : `${(a.invoiced ?? 0).toLocaleString('en-US')} ${a.currency}`}
+                  </span>
+                  <span className="mt-0.5 block text-xs font-semibold text-text-secondary">
+                    {a.monthly !== undefined
+                      ? (ar ? `شهريًا · ${a.subscriptions} اشتراك` : `per month · ${count(a.subscriptions ?? 0, 'subscription', 'subscriptions')}`)
+                      : (ar ? `مُفوتر · ${a.invoices} فاتورة` : `invoiced · ${count(a.invoices ?? 0, 'invoice', 'invoices')}`)}
+                  </span>
+                  {a.collected !== undefined && (
+                    <span className="tnum mt-1 block text-xs text-text-muted" dir="ltr">
+                      {(a.collected).toLocaleString('en-US')} {a.currency} {ar ? 'محصَّل' : 'collected'}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            /* No figure at all rather than a zero — see the note, which says why. */
+            <p className="mt-3 rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-text-muted">
+              {s.status === 'not_implemented'
+                ? (ar ? 'لا يوجد سجل لهذا المسار بعد — لا رقم يُعرض، ولا صفر يُدّعى.' : 'No ledger exists for this stream yet — no figure is shown, and no zero is claimed.')
+                : (ar ? 'لا توجد حركة في هذا المسار.' : 'Nothing has moved through this stream.')}
+            </p>
+          )}
+
+          <p className="mt-3 text-[12.5px] leading-relaxed text-text-secondary">{ar ? COPY[s.key].note.ar : COPY[s.key].note.en}</p>
+        </section>
+      ))}
+    </div>
   )
 }
