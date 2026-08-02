@@ -1409,12 +1409,34 @@ The full three-browser E2E has NOT come back clean in the last few runs, and the
 guessed, a click before hydration, a flat timeout on a walk whose length grows with the product
 (Decisions 42, 43, 44). Each was re-run green in isolation afterwards.
 
-The `alerts-ui` one — a just-created alert not visible within 10s — is **NOT diagnosed**. It appeared
-in the confirming run started after the other three were fixed. It has not been reproduced in
-isolation, and it must be root-caused rather than re-run: it may be the same class as the others
-(a fixed window on a machine that is now heavily loaded — `uptime` showed a load average of 28 at one
-point tonight, against 2.8 earlier) or it may be a real persistence defect in alert creation.
-**Find out which before touching anything else.**
+The confirming run then finished **550 passed / 4 failed in 35.6 minutes** — against 18.8 minutes for
+the clean 524-test run earlier the same night, on the same machine. Nearly double the wall-clock for
+5% more tests.
+
+The four are on all three browsers and share no code path:
+
+- `[chromium] alerts-ui` — a rule created in the UI not visible within 10s
+- `[firefox] advertiser-portal` — leftover-Arabic walk
+- `[firefox] registration-onboarding` — the company account journey
+- `[webkit] integrations` — the platform list, a spec written and verified green earlier that night
+
+**None of these four is diagnosed.** Do not re-run hoping for green, and do not assume the machine.
+The runtime doubling and the spread across unrelated specs and browsers both point at host
+saturation (`uptime` read a load average of **28** at one point, against 2.8 earlier), but that is a
+hypothesis — and the first failure of this same shape tonight, `campaigns.spec` on firefox, looked
+exactly like host noise and turned out to be a genuine selector defect.
+
+**How to settle it, in this order:**
+
+1. Re-run on an idle machine (`uptime` under ~4) and see which of the four survive. That separates
+   contention from code without changing a line.
+2. For any that survive, reproduce the single spec in isolation and root-cause it — the `.data` being
+   null in the `integrations` failure is the same signature as SERVELOG-001, so check the response
+   bodies are not being corrupted before assuming the assertion is wrong.
+3. Only then decide whether anything needs fixing.
+
+The four fixes already landed (Decisions 42, 43, 44) were each verified green in isolation afterwards;
+what has never happened is one full three-browser gate passing end to end since them.
 
 Do not read a green run as proof until one full three-browser gate passes end to end with `retries: 0`
 after that is settled.
