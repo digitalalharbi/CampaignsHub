@@ -1145,38 +1145,87 @@ an existing project instead, which every caller already has.
 
 Same shape as the two rate limits: the suite outgrew an assumption that was true when it was written.
 
+### Decision 34 — the integrations page led with a fake provider
+
+`/app/integrations` ordered its grid by whatever the API returned, which put `sandbox` — a local
+fake provider that exists so the product can be demonstrated without credentials — at the head of
+the list, above Meta and Google, wearing a green «connected» chip. Somebody opening that page to
+connect their advertising met a connected generic connector first and the platforms they came for
+eleventh.
+
+Sorted rather than filtered: the other eleven connectors are real and stay reachable. What changed
+is which ones the page leads with, and that the fake provider is last of all. A second defect went
+with it — the «الحساب» line printed `connection.status`, the raw state enum, under a label promising
+an account, beside a chip already showing that state. There is no account identifier on that payload,
+so nothing is claimed now.
+
+**PROJINT-001 was stale, not unbuilt.** `PlatformOverviewController` and the panel above the
+technical bindings had both been written and never verified. What was missing was the acceptance
+test, which now asserts all six platforms are named with their own capability list and per-platform
+state, that no sync is claimed, and that «0 — لا توجد مفاتيح حقيقية بعد» is stated as a NUMBER rather
+than implied by an empty page — which would read as still loading.
+
+### Decision 35 — a selector that guessed, and the day a second row appeared
+
+`campaigns-linking` found its row with "the smallest div containing both the name and a Link button".
+That held while exactly one external carried a given name. The moment a second appeared — two
+projects each with a Sandbox binding is enough — `.last()` picked a container with no button in it,
+and the failure read as a missing row rather than as an ambiguous selector. It failed on whichever
+browser ran after the first had seeded its own.
+
+The row now carries `data-testid="link-external-row"` and `data-external-name`, so the component
+names it instead of the test guessing. Third instance in this branch of the same lesson: the suite
+outgrew an assumption that was true when it was written.
+
+### Decision 36 — the gate is only as honest as the servers under it
+
+A three-browser run came back **501 passed, 5 failed**, and every one of the five was mine.
+
+`playwright.config.ts` starts the backend as `sh -c "php artisan queue:work … & php artisan serve"`
+— the worker and the server together, because report generation is queued. I had started
+`php artisan serve` by hand first, and `reuseExistingServer: !CI` did exactly what it says: Playwright
+adopted my server and never started its own, so the suite ran with no queue worker at all.
+`report-pdf-download` then waited ninety seconds on all three browsers for a job nothing was draining,
+and the two `registration-onboarding` specs failed on chromium in the same run and passed the moment
+the configured servers were used.
+
+The matrix already carries this as **QUEUE-WORKER-001**, closed once before for the same spec. It cost
+a full 26-minute run to rediscover, so it is written here too: **do not hand-start the backend before
+a gate.** Let Playwright own both servers, or start the worker alongside `serve` exactly as the config
+does. A failure caused by a missing service is not a defect in the product, and reporting it as one —
+or, worse, re-running until it passes — would put a false red and then a false green in the record.
+
 ### Still open
 
-Measured from `/dev/status`, which parses the matrix rather than keeping a second list: **151 rows —
-125 VERIFIED · 12 IMPLEMENTED_NOT_VERIFIED · 5 PARTIAL · 1 NOT_STARTED · 6
-BLOCKED_EXTERNAL_CREDENTIALS · 2 CLOSED.**
+Measured from `/dev/status`, which parses the matrix rather than keeping a second list.
 
-**The four offered portals are done and committed.** `/admin`, `/app`, `/agency` and `/portal` each
-have their own door, dashboard and sections; all four are walked live in both languages, on three
-browsers, at three viewports, in both themes. Influencers & UGC is withdrawn behind
-`influencers_ugc_enabled=false` with nothing deleted.
+The transcribed «Open» paragraph under the matrix table had drifted badly — it still named ten rows
+that were closed, PROJINT-001 and INTEG-UI-001 among them. It has been recomputed from the table, and
+the table is what `/dev/status` reads.
 
-Genuinely open, in the order I would take them:
+**Done and committed:** the four offered portals, the influencers withdrawal, the marketing
+destinations, the responsive/theme sweep, and now PROJINT-001 + INTEG-UI-001.
 
-1. **PROJINT-001 / INTEG-UI-001** — the integrations surfaces should lead with the six real ad
-   platforms rather than a generic connector card. The pages exist and are walked; the redesign is
-   not done.
-2. **NORM-001** — the normalisation layer exists in `NormalizedMetric`/`Aggregator`; what is missing
-   is surfacing raw-vs-normalised, the source and objective compatibility in the UI.
-3. **PAY-005** — `PlatformBillingController` already refuses to merge customers' money into platform
+**Next, in order:**
+
+1. **NORM-001** — the normalisation layer exists in `NormalizedMetric`/`Aggregator`; surfacing
+   raw-vs-normalised, the source, and objective compatibility in the UI does not.
+2. **PAY-005** — `PlatformBillingController` already refuses to merge customers' money into platform
    revenue. The other three streams (agency→client invoices, request service payments, creator
-   payouts) still need their own surfaces.
-4. **OPS-002** — operational status exists; the audit trail over every subscription, payment,
-   approval and permission change does not.
-5. The **IMPLEMENTED_NOT_VERIFIED** rows (CAMPAIGN-010/020, CAMPDET-010, REPORT-SCHEDULING,
-   FINANCE-001, SYNC-001, XREL-001, DEMO-001, HOME-GATEWAY-001, DEVSTATUS-001). Each of these pages
-   is now walked live by the portal specs — content, language, phone layout — so most need a
-   targeted acceptance test for their own behaviour rather than fresh building.
+   payouts) still need their own surfaces and a test that they cannot be summed.
+3. **OPS-002** — operational status exists; the audit over every subscription, payment, approval and
+   permission change does not.
+4. **VERIFY-100** — CAMPAIGN-010/020, CAMPDET-010, REPORT-SCHEDULING, FINANCE-001, SYNC-001,
+   XREL-001, DEMO-001, HOME-GATEWAY-001, DEVSTATUS-001. Each needs a targeted acceptance test of its
+   own behaviour plus live review — never a documentation-only status change. Most of these pages are
+   already walked by the portal specs for content, language and phone layout, so what is missing is
+   the behaviour test.
 
-**Blocked, honestly:** the six ad-platform integrations, Moyasar and Stripe are all Awaiting
-Credentials — no live round trip has been made and nothing claims otherwise. Mail transport is `log`
-and recorded as sandbox. `PORTAL-AUTH-001` stays PARTIAL: REVIEW-001c closed half of it, and retiring
-the OTP token engine waits on `/admin/cutover` reading zero on all three conditions.
+**Blocked, honestly:** the six ad-platform integrations, Moyasar and Stripe are Awaiting Credentials
+— no live round trip has been made and nothing claims otherwise. Mail transport is `log`, recorded as
+sandbox. `PORTAL-AUTH-001` stays PARTIAL: REVIEW-001c closed half of it (a `ClientPortal` membership
+now opens the portal); retiring the OTP token engine waits on `/admin/cutover` reading zero on all
+three conditions — BLOCKED_OPERATIONAL_EVIDENCE, not code.
 
-**The gate, as of the last run:** 922 backend · 483 vitest · 488 E2E on chromium, firefox and webkit.
-`retries: 0`, nothing skipped.
+**The gate:** 922 backend · 483 vitest · 505+ E2E on chromium, firefox and webkit. `retries: 0`,
+nothing skipped.

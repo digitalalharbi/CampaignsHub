@@ -159,12 +159,37 @@ export function ConnectionCenterPage() {
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
-    return connectors.filter((x) => {
+    const matching = connectors.filter((x) => {
       if (category !== 'all' && providerCategory(x.provider) !== category) return false
       if (status && x.state !== status) return false
       if (term && !x.label.toLowerCase().includes(term) && !x.provider.toLowerCase().includes(term)) return false
       return true
     })
+
+    /*
+     * The six ad platforms come FIRST (INTEG-UI-001).
+     *
+     * The grid was ordered by whatever the API returned, which put `sandbox` — a local fake provider
+     * that exists so the product can be demonstrated without credentials — at the head of the list,
+     * above Meta and Google, with a green "connected" chip. Somebody opening this page to connect
+     * their advertising saw a connected generic connector first and the platforms they came for
+     * eleventh.
+     *
+     * Sorted rather than filtered: the other eleven connectors are real and stay reachable. What
+     * changes is which ones the page leads with, and that `sandbox` is last of all — it is the one
+     * entry that is not a customer's integration at all.
+     */
+    const AD_PLATFORM_ORDER = ['meta_ads', 'google_ads', 'tiktok_ads', 'snapchat_ads', 'x_ads', 'linkedin_ads']
+    const isSandbox = (provider: string) => connectors.find((c) => c.provider === provider)?.is_sandbox === true
+    const rank = (provider: string): number => {
+      const ad = AD_PLATFORM_ORDER.indexOf(provider)
+      if (ad !== -1) return ad
+      if (isSandbox(provider)) return 999
+
+      return 100
+    }
+
+    return [...matching].sort((a, b) => rank(a.provider) - rank(b.provider) || a.label.localeCompare(b.label))
   }, [connectors, category, status, search])
 
   const statusOptions: Option[] = CONNECTION_STATES_OPTIONS(locale)
@@ -338,8 +363,6 @@ function ConnectorCard({ c, locale, projectId, conn, onOpen }: {
   const stateLabel = STATE_LABEL[conn.state]?.[locale] ?? conn.state_label
   const Icon = CATEGORY_ICON[providerCategory(conn.provider)]
   const kind = primaryActionKind(conn.state)
-  const account = conn.connection?.status ?? null
-
   return (
     <li>
       <button
@@ -357,7 +380,11 @@ function ConnectorCard({ c, locale, projectId, conn, onOpen }: {
         </div>
 
         <div className="flex flex-col gap-0.5 text-[10px] text-text-tertiary">
-          {account && <span className="truncate">{c.account}: <span className="text-text-secondary">{account}</span></span>}
+          {/*
+              The «الحساب» line used to print `connection.status` — the raw state enum, under a label
+              that promised an account, next to a chip already showing that same state. There is no
+              account identifier on this payload to put here, so nothing is claimed.
+          */}
           <span className="truncate">{c.last_sync}: <span className="tnum">{fmt(conn.connection?.last_successful_sync_at ?? null) || c.never}</span></span>
         </div>
 

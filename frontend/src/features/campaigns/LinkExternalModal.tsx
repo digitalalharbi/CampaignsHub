@@ -154,8 +154,23 @@ export function LinkExternalModal({ open, onClose, projectId, campaignId }: Prop
           <div className="max-h-[46vh] space-y-2 overflow-y-auto pe-1">
             {rows.map((ext) => {
               const linkedElsewhere = ext.unified_campaign_id !== null
+
+              /*
+               * A row the tests can name (PROJINT-001 follow-up).
+               *
+               * The linking spec used to find this row with "the smallest div containing both the
+               * name and a Link button". That heuristic held while exactly one external carried a
+               * given name; the moment a second appeared — which happens as soon as two projects
+               * each have a Sandbox binding — `.last()` picked a container with no button in it, and
+               * the failure read as a missing row rather than as an ambiguous selector.
+               */
               return (
-                <div key={ext.id} className="flex items-center justify-between rounded-[9px] border border-border p-2.5">
+                <div
+                  key={ext.id}
+                  data-testid="link-external-row"
+                  data-external-name={ext.name ?? ''}
+                  className="flex items-center justify-between rounded-[9px] border border-border p-2.5"
+                >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate text-sm font-semibold">{ext.name}</span>

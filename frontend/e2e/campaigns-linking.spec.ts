@@ -84,13 +84,17 @@ test('link → 409 move-confirmation → confirm move → unlink (full path)', a
 
   const targetName = TARGET_EXTERNAL
   const linkBtn = { name: /^Link$|^ربط$/ }
-  // The modal row = the smallest div that contains BOTH the external's name AND its Link button.
+  /*
+   * The modal row, named by the component rather than guessed at.
+   *
+   * This used to be "the smallest div containing both the name and a Link button", which held while
+   * exactly one external carried a given name. As soon as a second appeared — two projects each with
+   * a Sandbox binding is enough — `.last()` picked a container with no button in it, and the failure
+   * read as a missing row rather than as an ambiguous selector. It failed on whichever browser ran
+   * after the first had seeded its own.
+   */
   const modalRow = (name: string) =>
-    page
-      .locator('div')
-      .filter({ hasText: name })
-      .filter({ has: page.getByRole('button', linkBtn) })
-      .last()
+    page.locator(`[data-testid="link-external-row"][data-external-name="${name}"]`).first()
 
   // --- Link a Sandbox external to campaign A ---
   await openCampaignLinkedTab(page, campA)
