@@ -18,6 +18,7 @@ import {
   useFreshness,
   useFunnel,
   useLastNDaysRange,
+  useNormalization,
   usePlatforms,
   useSummary,
   useTimeseries,
@@ -300,7 +301,8 @@ function QualityTab({ projectId, range }: TabProps) {
   const f = useFreshness(projectId, range)
   const rows = f.data ?? []
   return (
-    <Panel title={ar ? 'جودة البيانات والإسناد' : 'Data quality & attribution'} description={ar ? 'آخر مزامنة، حداثة البيانات، والأيام الناقصة لكل منصة' : 'Last sync, how fresh the data is, and the missing days per platform'} loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
+    <div>
+      <Panel title={ar ? 'جودة البيانات والإسناد' : 'Data quality & attribution'} description={ar ? 'آخر مزامنة، حداثة البيانات، والأيام الناقصة لكل منصة' : 'Last sync, how fresh the data is, and the missing days per platform'} loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
       <MetricTable
         head={ar ? ['المنصة', 'آخر تاريخ', 'آخر مزامنة', 'أيام ببيانات', 'أيام ناقصة', 'الحالة'] : ['Platform', 'Latest date', 'Last sync', 'Days with data', 'Missing days', 'Status']}
         rows={rows.map((r) => [
@@ -324,7 +326,205 @@ function QualityTab({ projectId, range }: TabProps) {
         ])}
       />
       <p className="mt-3 text-xs text-text-muted">{ar ? 'لا يتم جمع Reach عبر المنصات كوصول فريد — يُعرض لكل منصة على حدة.' : 'Reach is not summed across platforms as unique reach — it is shown per platform.'}</p>
+      </Panel>
+      <NormalizationPanel projectId={projectId} range={range} />
+    </div>
+  )
+}
+
+/**
+ * NORM-001 — the basis of every figure on this page.
+ *
+ * The normalisation layer has always existed: each `daily_metrics` row records the currency it arrived
+ * in, the one it was converted to and the rate used, the platform's timezone and the project's, the
+ * attribution window that counted its conversions, and whether it came from an API or from demo data.
+ * None of it was ever shown. Spend appeared converted with nothing saying a conversion had happened,
+ * and the API announced «SAR» as a constant.
+ *
+ * The point of this panel is the difference between a figure and a figure's basis. Two campaigns whose
+ * conversions were counted under different attribution windows are not comparable, and a dashboard
+ * that puts them side by side without saying so is not wrong in its arithmetic — it is wrong in what
+ * the reader will conclude. So each row states what is ACTUALLY in the range, and the awkward cases
+ * (a second currency, a second attribution window, demo rows among real ones) are called out rather
+ * than resolved quietly.
+ */
+function NormalizationPanel({ projectId, range }: TabProps) {
+  const ar = useAr()
+  const n = useNormalization(projectId, range)
+  const d = n.data
+
+  const converted = (d?.currencies ?? []).filter((c) => c.converted)
+  const shifted = (d?.timezones ?? []).filter((t) => t.shifted)
+  const windows = d?.attribution_windows ?? []
+  const demoRows = (d?.sources ?? []).filter((s) => s.is_demo).reduce((sum, s) => sum + s.rows, 0)
+  const objectives = d?.objectives
+
+  return (
+    <Panel
+      title={ar ? 'أساس الأرقام' : 'How these numbers were produced'}
+      description={ar
+        ? 'العملة والمنطقة الزمنية ونافذة الإسناد ومصدر كل رقم قبل عرضه'
+        : 'The currency, timezone, attribution window and source behind every figure above'}
+      loading={n.isLoading}
+      error={n.isError}
+      className="mt-4"
+    >
+      <div data-testid="normalization" className="grid gap-3 text-sm">
+        {/* Currency. Silence here is a claim: a converted figure that says nothing reads as native. */}
+        <Basis label={ar ? 'العملة' : 'Currency'}>
+          {converted.length > 0
+            ? converted.map((c) => (
+                <span key={`${c.from}-${c.to}`} className="block">
+                  {ar
+                    ? `حُوّل ${num(c.rows)} صفًا من ${c.from} إلى ${c.to}${c.rate_min !== null ? ` بسعر ${c.rate_min === c.rate_max ? c.rate_min : `${c.rate_min}–${c.rate_max}`}` : ''}`
+                    : `${num(c.rows)} rows converted from ${c.from} to ${c.to}${c.rate_min !== null ? ` at ${c.rate_min === c.rate_max ? c.rate_min : `${c.rate_min}–${c.rate_max}`}` : ''}`}
+                </span>
+              ))
+            : d?.project_currency
+              ? (ar ? `كل المبالغ بعملة ${d.project_currency} أصلًا — لم يُجرَ أي تحويل.` : `Every amount was already in ${d.project_currency}. Nothing was converted.`)
+              : (ar ? 'لا توجد مبالغ مالية في هذه الفترة.' : 'There are no money figures in this period.')}
+          {(d?.project_currencies.length ?? 0) > 1 && (
+            <span className="mt-1 block font-semibold text-warning">
+              {ar
+                ? `هذه الفترة تحتوي أكثر من عملة عرض (${d?.project_currencies.join(' · ')}) — لا تُجمع المبالغ كرقم واحد.`
+                : `This period holds more than one display currency (${d?.project_currencies.join(' · ')}) — the amounts are not one total.`}
+            </span>
+          )}
+        </Basis>
+
+        {/* Timezone — what "a day" means. A row dated by the platform's midnight is not the project's. */}
+        <Basis label={ar ? 'حدود اليوم' : 'Where a day starts'}>
+          {shifted.length > 0
+            ? shifted.map((t) => (
+                <span key={`${t.from}-${t.to}`} className="block">
+                  {ar
+                    ? `تُجمع الأيام بتوقيت ${t.to}، والمنصة تُبلّغ بتوقيت ${t.from}.`
+                    : `Days are counted in ${t.to}; the platform reports in ${t.from}.`}
+                </span>
+              ))
+            : (ar ? 'المنصة والمشروع على التوقيت نفسه.' : 'The platform and the project keep the same clock.')}
+        </Basis>
+
+        {/* Attribution — more than one window in a range is a comparability defect, not a detail. */}
+        <Basis label={ar ? 'نافذة الإسناد' : 'Attribution window'}>
+          {windows.length === 0
+            ? (ar ? 'لا توجد بيانات في هذه الفترة.' : 'There is no data in this period.')
+            : windows.map((w) => (
+                <span key={w.window} className="block">
+                  <code className="rounded bg-surface-secondary px-1.5 py-0.5 text-[12px]">{w.window}</code>
+                  <span className="ms-2 text-text-muted">{ar ? `${num(w.rows)} صف` : `${num(w.rows)} rows`}</span>
+                </span>
+              ))}
+          {windows.length > 1 && (
+            <span className="mt-1 block font-semibold text-warning">
+              {ar
+                ? 'أكثر من نافذة إسناد في الفترة نفسها — التحويلات هنا لا تُقارن مباشرة.'
+                : 'More than one attribution window in the same period — these conversions are not directly comparable.'}
+            </span>
+          )}
+        </Basis>
+
+        {/* Objective comparability: name the metrics that survive, rather than allow or refuse silently. */}
+        {objectives && objectives.present.length > 0 && (
+          <Basis label={ar ? 'المقارنة بين الأهداف' : 'Comparing across objectives'}>
+            {objectives.mixed ? (
+              <>
+                <span className="block">
+                  {ar
+                    ? `الفترة تضم ${num(objectives.present.length)} أهداف مختلفة. ما يقارن بينها: ${objectives.comparable_metrics.join('، ')}.`
+                    : `This period spans ${num(objectives.present.length)} different objectives. Comparable across all of them: ${objectives.comparable_metrics.join(', ')}.`}
+                </span>
+                <span className="mt-1 block text-text-muted">
+                  {ar
+                    ? 'أما التحويلات وتكلفتها فتعني حدثًا مختلفًا في كل هدف، فلا تُجمع ولا تُقارن.'
+                    : 'Conversions and their costs count a different event under each objective, so they are neither summed nor compared.'}
+                </span>
+              </>
+            ) : (
+              <span>
+                {ar
+                  ? `كل الحملات في هذه الفترة لهدف واحد (${objectives.present[0]?.objective}) — كل المؤشرات قابلة للمقارنة.`
+                  : `Every campaign in this period shares one objective (${objectives.present[0]?.objective}), so every metric compares.`}
+              </span>
+            )}
+          </Basis>
+        )}
+
+        {/* Demo rows are labelled here too, not only by a badge in the corner of the page. */}
+        <Basis label={ar ? 'المصدر' : 'Source'}>
+          {(d?.sources ?? []).length === 0
+            ? (ar ? 'لا توجد بيانات في هذه الفترة.' : 'There is no data in this period.')
+            : (d?.sources ?? []).map((s) => (
+                <span key={`${s.source_type}-${String(s.is_demo)}`} className="block">
+                  {ar
+                    ? `${num(s.rows)} صف — ${s.is_demo ? 'بيانات تجريبية' : sourceLabel(s.source_type, true)}`
+                    : `${num(s.rows)} rows — ${s.is_demo ? 'demo data' : sourceLabel(s.source_type, false)}`}
+                </span>
+              ))}
+          {demoRows > 0 && (
+            <span className="mt-1 block font-semibold text-warning">
+              {ar
+                ? `${num(demoRows)} صفًا من هذه الأرقام بيانات تجريبية، لا نتائج حقيقية.`
+                : `${num(demoRows)} of these rows are demo data, not real results.`}
+            </span>
+          )}
+        </Basis>
+
+        {/* Stored but read by nothing. An empty answer is stated, never left as an empty space. */}
+        <Basis label={ar ? 'مقاييس غير محسوبة' : 'Metrics nothing reads'}>
+          {(d?.unread_metric_keys.length ?? 0) === 0
+            ? (ar ? 'كل مقياس في بياناتك يدخل في مؤشر واحد على الأقل.' : 'Every metric key in your data feeds at least one KPI.')
+            : (ar
+                ? `مخزّنة ولا يقرؤها أي مؤشر: ${d?.unread_metric_keys.join('، ')}.`
+                : `Stored but read by no KPI: ${d?.unread_metric_keys.join(', ')}.`)}
+        </Basis>
+
+        {/* The catalogue: what a metric means and whether it may be summed at all. */}
+        {d?.catalogue.available && (
+          <details className="rounded-xl border border-border bg-surface-secondary px-4 py-3">
+            <summary className="cursor-pointer text-sm font-semibold text-text-primary">
+              {ar ? `تعريفات المقاييس (${num(d.catalogue.metrics.length)})` : `Metric definitions (${num(d.catalogue.metrics.length)})`}
+            </summary>
+            <p className="mt-2 text-xs text-text-muted">
+              {ar
+                ? 'المقاييس القابلة للجمع تُجمع عبر الأيام والحملات؛ أما النسب فتُحسب من مجاميعها في كل مرة ولا تُجمع أبدًا — مجموع تكلفة النقرة عبر ثلاثين يومًا ليس تكلفة النقرة للشهر.'
+                : 'Additive metrics are summed across days and campaigns; ratios are recomputed from their base sums every time and never summed — adding up thirty daily CPCs does not give you the month’s CPC.'}
+            </p>
+            <div className="mt-3 grid gap-1.5 sm:grid-cols-2">
+              {d.catalogue.metrics.map((m) => (
+                <div key={m.key} className="flex items-baseline justify-between gap-2 text-xs">
+                  <span className="font-semibold text-text-primary">{m.name}</span>
+                  <span className={m.is_additive ? 'text-text-muted' : 'font-semibold text-brand-600'}>
+                    {m.is_additive ? (ar ? 'قابل للجمع' : 'additive') : (ar ? 'يُعاد حسابه' : 'recomputed')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+      </div>
     </Panel>
+  )
+}
+
+/** `api | manual | estimated | modeled` — column values, given words. */
+function sourceLabel(source: string, ar: boolean): string {
+  const table: Record<string, { ar: string; en: string }> = {
+    api: { ar: 'مسحوبة من المنصة', en: 'pulled from the platform' },
+    manual: { ar: 'مُدخلة يدويًا', en: 'entered by hand' },
+    estimated: { ar: 'مقدَّرة', en: 'estimated' },
+    modeled: { ar: 'محسوبة بنموذج', en: 'modelled' },
+  }
+
+  return table[source] ? (ar ? table[source].ar : table[source].en) : source
+}
+
+function Basis({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid gap-0.5 border-b border-border pb-3 last:border-0 last:pb-0 sm:grid-cols-[180px_1fr] sm:gap-4">
+      <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{label}</span>
+      <div className="text-text-secondary">{children}</div>
+    </div>
   )
 }
 

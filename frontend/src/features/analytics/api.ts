@@ -82,6 +82,53 @@ export interface FreshnessRow {
   last_sync_error: string | null
 }
 
+/**
+ * NORM-001 — the basis of the figures, not the figures.
+ *
+ * Every field here answers "what was done to this number before I saw it": which currency it arrived
+ * in and what it was converted to, whose day boundary defines a day, which attribution window counted
+ * the conversions, and whether the row came from a platform or from demo data.
+ */
+export interface CurrencyBasis {
+  from: string
+  to: string
+  converted: boolean
+  rows: number
+  rate_min: number | null
+  rate_max: number | null
+  latest_date: string | null
+}
+export interface TimezoneBasis {
+  from: string
+  to: string
+  shifted: boolean
+  rows: number
+}
+export interface MetricDefinitionRow {
+  key: string
+  name: string
+  unit: string
+  aggregation: string
+  is_currency: boolean
+  is_additive: boolean
+}
+export interface Normalization {
+  project_currency: string | null
+  project_currencies: string[]
+  currencies: CurrencyBasis[]
+  timezones: TimezoneBasis[]
+  attribution_windows: Array<{ window: string; rows: number }>
+  sources: Array<{ source_type: string; is_demo: boolean; rows: number }>
+  objectives: {
+    present: Array<{ objective: string; campaigns: number }>
+    mixed: boolean
+    comparable_metrics: string[]
+    objective_specific_metrics: string[]
+  }
+  catalogue: { available: boolean; metrics: MetricDefinitionRow[] }
+  unread_metric_keys: string[]
+}
+
 export interface Range {
   from: string
   to: string
@@ -123,3 +170,4 @@ export const useCampaigns = (p: string | null, r: Range, f?: MetricFilters) => u
 export const useFunnel = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FunnelStage[]>('funnel', p, r, 'funnel', f)
 export const useBudget = (p: string | null, r: Range, f?: MetricFilters) => useMetric<BudgetRow[]>('budget', p, r, 'budget', f)
 export const useFreshness = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FreshnessRow[]>('freshness', p, r, 'freshness', f)
+export const useNormalization = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Normalization>('normalization', p, r, 'normalization', f)

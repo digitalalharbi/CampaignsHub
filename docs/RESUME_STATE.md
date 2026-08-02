@@ -1195,6 +1195,72 @@ a gate.** Let Playwright own both servers, or start the worker alongside `serve`
 does. A failure caused by a missing service is not a defect in the product, and reporting it as one —
 or, worse, re-running until it passes — would put a false red and then a false green in the record.
 
+### Decision 37 — a figure and a figure's basis are different things (NORM-001)
+
+The normalisation layer was never missing. Every `daily_metrics` row has always recorded the currency
+it arrived in, the one it was converted to and the rate used, the platform's timezone and the
+project's, the attribution window that counted its conversions, and whether it came from an API or
+from demo data. None of it reached a reader. Spend was displayed converted with nothing saying a
+conversion had happened, and `meta.currency` was the literal `'SAR'` on every metrics response —
+right for this installation, and a claim the data was never asked to support.
+
+What the new panel exists to prevent is not an arithmetic error. Two campaigns whose conversions were
+counted under different attribution windows are not comparable; a dashboard that shows them side by
+side without saying so computes correctly and leads the reader somewhere false. So each row reports
+what is ACTUALLY in the range, and the awkward answers — a second display currency, a second
+attribution window, demo rows among real ones — are called out rather than resolved quietly.
+
+Three defects found by reading the code:
+
+- **`MetricDefinitionSeeder` was never called.** `DatabaseSeeder` ran four structural catalogues and
+  not this one, so `metric_definitions` was EMPTY on every install. `DailyMetric::definition()` had
+  always returned null, and the table that says whether a metric may be summed had never been read.
+- **The catalogue named 15 of the 31 keys the aggregator emits.** It was written once and the
+  aggregator grew past it. A half-catalogue is worse than none: the gaps read as metrics the product
+  does not have. `MetricsTest` now fails if a metric is added without a definition.
+- **`meta.currency` was hardcoded.** It is read from the rows now, and is `null` for a range with no
+  money in it — which is an answer a caller can act on, where a confident «SAR» over an empty period
+  is not.
+
+And one found only by opening the page:
+
+- **The objectives query had no tenant scope.** It reached for `DB::table('daily_metrics')` inside a
+  subquery, which carries no global scopes, and answered with every objective in the installation.
+  The live review caught it because the page contradicted itself — every other row said «no data in
+  this period» while that one confidently named a campaign. On a project that HAD data it would not
+  have contradicted itself. It would have printed another tenant's campaigns as this project's, with
+  nothing to mark them. Fixed by reading through the model, and pinned by a regression test.
+
+That last one is the argument for live review in one example: six passing tests and a green build,
+and the defect was a cross-tenant read that only showed itself as a sentence not matching its
+neighbours.
+
+### Decision 38 — 135 failures that were all one broken pipe (SERVELOG-001)
+
+A gate came back with failures spreading as it ran: chromium clean, firefox failing in clumps, webkit
+worse, 135 by the time it was stopped. Specs across every area, all of them dying the same way —
+`TypeError: Cannot read properties of null (reading '0')` on `(await res.json()).data`.
+
+Laravel's dev-server router writes one request line to `php://stdout` for every request
+(`Illuminate/Foundation/resources/server.php:21`), unconditionally: there is no flag and no env var to
+switch it off. Over a 500-test three-browser run that is tens of thousands of writes into a pipe. When
+the reader on the other end stalls, the write fails with EPIPE, PHP emits
+`Notice: file_put_contents(): … Broken pipe`, and because the CLI server runs with `display_errors` on,
+**the notice is prepended to the HTTP response body**. From that moment every JSON response is
+malformed, `.data` is null, and the failure surfaces in whichever spec touches the API next.
+
+Proved both directions against the running server using the suite's own stored session: on a
+reader-less pipe the FIRST of 500 requests came back corrupted; with STDOUT redirected to a file,
+0 of 500 did. `playwright.config.ts` now redirects it, and keeps STDERR on the pipe so genuine startup
+errors still reach the Playwright output.
+
+Two things worth keeping from this. First, none of the 135 was an application defect, and a suite with
+retries enabled would have papered over a short run and left the real cause in place — this is the
+case `retries: 0` exists for. Second, both gate failures this session were the ENVIRONMENT rather than
+the product (the other was the missing queue worker, QUEUE-WORKER-001). Before reading a wave of
+failures as regressions, check that the servers under them are sound: a defect that appears in
+alphabetical order and worsens over time is a property of the run, not of the code.
+
 ### Still open
 
 Measured from `/dev/status`, which parses the matrix rather than keeping a second list.
@@ -1208,14 +1274,12 @@ destinations, the responsive/theme sweep, and now PROJINT-001 + INTEG-UI-001.
 
 **Next, in order:**
 
-1. **NORM-001** — the normalisation layer exists in `NormalizedMetric`/`Aggregator`; surfacing
-   raw-vs-normalised, the source, and objective compatibility in the UI does not.
-2. **PAY-005** — `PlatformBillingController` already refuses to merge customers' money into platform
+1. **PAY-005** — `PlatformBillingController` already refuses to merge customers' money into platform
    revenue. The other three streams (agency→client invoices, request service payments, creator
    payouts) still need their own surfaces and a test that they cannot be summed.
-3. **OPS-002** — operational status exists; the audit over every subscription, payment, approval and
+2. **OPS-002** — operational status exists; the audit over every subscription, payment, approval and
    permission change does not.
-4. **VERIFY-100** — CAMPAIGN-010/020, CAMPDET-010, REPORT-SCHEDULING, FINANCE-001, SYNC-001,
+3. **VERIFY-100** — CAMPAIGN-010/020, CAMPDET-010, REPORT-SCHEDULING, FINANCE-001, SYNC-001,
    XREL-001, DEMO-001, HOME-GATEWAY-001, DEVSTATUS-001. Each needs a targeted acceptance test of its
    own behaviour plus live review — never a documentation-only status change. Most of these pages are
    already walked by the portal specs for content, language and phone layout, so what is missing is

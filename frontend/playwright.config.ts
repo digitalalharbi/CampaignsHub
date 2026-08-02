@@ -34,9 +34,26 @@ export default defineConfig({
   ],
   webServer: [
     {
-      // Serve + a queue worker: report generation (GenerateReportJob) is queued, so the PDF/XLSX export E2E
-      // needs a worker draining it. The worker runs as a background child; serve owns the health URL.
-      command: 'sh -c "php artisan queue:work --queue=reports,default --tries=3 --sleep=1 --quiet & php artisan serve --no-reload --port=8000"',
+      /*
+       * Serve + a queue worker: report generation (GenerateReportJob) is queued, so the PDF/XLSX export E2E
+       * needs a worker draining it. The worker runs as a background child; serve owns the health URL.
+       *
+       * `serve`'s STDOUT is redirected to a file, and that redirect is load-bearing.
+       *
+       * Laravel's dev-server router (`Illuminate/Foundation/resources/server.php`, line 21) writes one
+       * request line to `php://stdout` for EVERY request, unconditionally — there is no flag or env var
+       * to turn it off. Over a 500-test three-browser run that is tens of thousands of writes into a
+       * pipe. When the reader on the other end stalls, the write fails with EPIPE, PHP emits
+       * `Notice: file_put_contents(): ... Broken pipe`, and because the CLI server has display_errors on,
+       * that notice is prepended TO THE RESPONSE BODY. Every JSON response after that point is malformed,
+       * `res.json().data` comes back null, and the suite collapses with `Cannot read properties of null`
+       * — dozens of failures that look like application defects and are not.
+       *
+       * That is exactly how it presented: chromium passed clean, then firefox degraded, then webkit, with
+       * the failures spreading as the run went on. Redirecting to a file guarantees a reader that never
+       * stalls. STDERR stays on the pipe, so genuine startup errors still surface in the Playwright output.
+       */
+      command: 'sh -c "php artisan queue:work --queue=reports,default --tries=3 --sleep=1 --quiet & php artisan serve --no-reload --port=8000 >> storage/logs/serve-requests.log"',
       cwd: '../backend',
       url: 'http://localhost:8000/up',
       reuseExistingServer: !process.env.CI,

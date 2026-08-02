@@ -60,6 +60,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/funnel', [MetricsController::class, 'funnel'])->name('metrics.funnel');
     Route::get('metrics/budget', [MetricsController::class, 'budget'])->name('metrics.budget');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
+    // NORM-001: what was done to the numbers before they were shown — currency, timezone, attribution,
+    // source, objective comparability, and the canonical metric catalogue.
+    Route::get('metrics/normalization', [MetricsController::class, 'normalization'])->name('metrics.normalization');
 
     // SYNC-001: the sync pipeline's operator surface — what ran, what it produced, what broke.
     Route::get('sync-runs', [SyncRunController::class, 'index'])->name('sync-runs.index');

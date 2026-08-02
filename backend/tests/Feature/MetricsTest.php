@@ -12,6 +12,7 @@ use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Metrics\Models\CurrencyRate;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Models\MetricDefinition;
 use App\Domains\Metrics\Services\CurrencyConverter;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\ValueObjects\Money;
@@ -20,6 +21,7 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
+use Database\Seeders\MetricDefinitionSeeder;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -335,5 +337,212 @@ final class MetricsTest extends TestCase
         $this->actingAs($this->owner, 'sanctum')
             ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/compare?campaign_ids[]={$mine->id}")
             ->assertStatus(422);
+    }
+
+    // ---- NORM-001: the basis of the figures ---------------------------------------------------
+
+    /**
+     * A converted amount reports BOTH sides and the rate.
+     *
+     * The conversion has always happened and has never been visible: a USD spend appeared as a SAR
+     * number with nothing saying it had been through an exchange rate. Somebody reconciling this
+     * dashboard against the platform's own console would find two different figures for the same day
+     * and no explanation on the page for why.
+     */
+    public function test_normalization_reports_the_conversion_that_produced_a_figure(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        CurrencyRate::create(['base_currency' => 'USD', 'quote_currency' => 'SAR', 'rate' => 3.75, 'rate_date' => '2026-06-01']);
+        app(TenantContext::class)->forget();
+
+        $usd = new NormalizedMetric(
+            tenantId: $this->tenant->id,
+            projectId: $this->projectA->id,
+            externalAccountId: $this->uid('acc-1'),
+            externalCampaignId: $this->uid('ext-usd'),
+            provider: 'meta',
+            metricKey: 'spend',
+            metricDate: Carbon::parse('2026-06-01'),
+            value: 375.0,
+            originalCurrency: 'USD',
+            projectCurrency: 'SAR',
+            originalAmount: 100.0,
+            convertedAmount: 375.0,
+            exchangeRate: 3.75,
+            originalTimezone: 'UTC',
+            projectTimezone: 'Asia/Riyadh',
+            attributionWindow: '7d_click_1d_view',
+        );
+        app(UpsertDailyMetrics::class)->handle([$usd]);
+
+        $body = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/normalization?from=2026-06-01&to=2026-06-02")
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame('SAR', $body['project_currency']);
+        $this->assertCount(1, $body['currencies']);
+        $this->assertSame('USD', $body['currencies'][0]['from']);
+        $this->assertSame('SAR', $body['currencies'][0]['to']);
+        $this->assertTrue($body['currencies'][0]['converted']);
+        $this->assertEqualsWithDelta(3.75, $body['currencies'][0]['rate_min'], 0.000001);
+
+        // The day boundary is stated, because a day counted in Riyadh is not the day UTC reported.
+        $this->assertSame('UTC', $body['timezones'][0]['from']);
+        $this->assertSame('Asia/Riyadh', $body['timezones'][0]['to']);
+        $this->assertTrue($body['timezones'][0]['shifted']);
+
+        $this->assertSame('7d_click_1d_view', $body['attribution_windows'][0]['window']);
+    }
+
+    /**
+     * Two attribution windows in one range are BOTH reported.
+     *
+     * Conversions counted under different windows are different measurements. Reporting only the
+     * commonest would leave a total that silently mixes them, which is the failure this exists to
+     * prevent — the arithmetic is fine and the conclusion is wrong.
+     */
+    public function test_normalization_reports_every_attribution_window_in_the_range(): void
+    {
+        $make = fn (string $window, string $camp) => new NormalizedMetric(
+            tenantId: $this->tenant->id,
+            projectId: $this->projectA->id,
+            externalAccountId: $this->uid('acc-1'),
+            externalCampaignId: $this->uid($camp),
+            provider: 'meta',
+            metricKey: 'conversions',
+            metricDate: Carbon::parse('2026-06-01'),
+            value: 5,
+            attributionWindow: $window,
+        );
+        app(UpsertDailyMetrics::class)->handle([$make('7d_click_1d_view', 'a'), $make('1d_click', 'b')]);
+
+        $body = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/normalization?from=2026-06-01&to=2026-06-02")
+            ->assertOk()
+            ->json('data');
+
+        $windows = array_column($body['attribution_windows'], 'window');
+        sort($windows);
+        $this->assertSame(['1d_click', '7d_click_1d_view'], $windows);
+    }
+
+    /**
+     * A metric key nothing reads is named; one that IS read is not falsely accused.
+     *
+     * `add_to_cart` and `checkout` are absent from the aggregator's pivot but ARE funnel stages, so a
+     * check written against the pivot alone would report two metrics as ignored while both are counted.
+     * That would be a fabricated defect on a page whose whole job is to be trusted about provenance.
+     */
+    public function test_normalization_names_only_the_metric_keys_no_kpi_reads(): void
+    {
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'add_to_cart', 12, '2026-06-01', ['camp' => 'atc']),
+            $this->metric($this->projectA->id, 'checkout', 6, '2026-06-01', ['camp' => 'chk']),
+            $this->metric($this->projectA->id, 'some_platform_only_metric', 3, '2026-06-01', ['camp' => 'odd']),
+        ]);
+
+        $body = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/normalization?from=2026-06-01&to=2026-06-02")
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame(['some_platform_only_metric'], $body['unread_metric_keys']);
+    }
+
+    /**
+     * Every metric the aggregator can emit has a catalogue entry.
+     *
+     * The catalogue existed and named fifteen of the thirty-one keys the engine produces, because the
+     * seeder was written once and the aggregator grew afterwards. A half-catalogue is worse than none:
+     * the gaps read as metrics the product does not have. This fails the moment a metric is added
+     * without a definition, which is the only way the two stay in step.
+     */
+    public function test_every_metric_the_aggregator_emits_is_defined_in_the_catalogue(): void
+    {
+        $this->seed(MetricDefinitionSeeder::class);
+
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        app(ProjectContext::class)->setProjectId($this->projectA->id);
+        $emitted = array_keys(app(MetricsAggregator::class)->totals(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-02')));
+        app(ProjectContext::class)->forget();
+        app(TenantContext::class)->forget();
+
+        $defined = MetricDefinition::pluck('key')->all();
+        $missing = array_values(array_diff($emitted, $defined));
+
+        $this->assertSame([], $missing, 'Every metric the dashboard computes needs a definition: '.implode(', ', $missing));
+
+        // Ratios must be marked non-additive, because that is what stops them being summed across days.
+        foreach (['ctr', 'cpc', 'cpm', 'cpa', 'roas', 'conversion_rate'] as $ratio) {
+            $this->assertFalse(
+                (bool) MetricDefinition::where('key', $ratio)->value('is_additive'),
+                "{$ratio} must be non-additive — summing it across days does not give the period's value",
+            );
+        }
+    }
+
+    /**
+     * The objectives reported are this project's, never the installation's.
+     *
+     * Found in live review, not by a test: the page said «no data in this period» in every section and
+     * then confidently named an objective. The subquery behind it read `daily_metrics` through the
+     * query builder, which carries no global scopes, so it answered with every objective in the
+     * database. On a project that HAD data it would not have contradicted itself — it would simply have
+     * printed another tenant's campaigns as this one's, with nothing to mark them.
+     */
+    public function test_normalization_objectives_do_not_leak_across_projects(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $mine = UnifiedCampaign::create(['project_id' => $this->projectA->id, 'name' => 'Mine', 'objective' => 'sales', 'status' => 'active']);
+        $theirs = UnifiedCampaign::create(['project_id' => $this->projectB->id, 'name' => 'Theirs', 'objective' => 'awareness', 'status' => 'active']);
+        app(TenantContext::class)->forget();
+
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'spend', 100, '2026-06-01', ['unified' => $mine->id, 'camp' => 'a']),
+            $this->metric($this->projectB->id, 'spend', 999, '2026-06-01', ['unified' => $theirs->id, 'camp' => 'b']),
+        ]);
+
+        $body = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/normalization?from=2026-06-01&to=2026-06-02")
+            ->assertOk()
+            ->json('data');
+
+        $objectives = array_column($body['objectives']['present'], 'objective');
+        $this->assertSame(['sales'], $objectives, 'project B’s awareness campaign must not appear here');
+        $this->assertFalse($body['objectives']['mixed'], 'one project, one objective — not a mixed range');
+    }
+
+    /** The currency in `meta` comes from the data. An empty range claims no currency at all. */
+    public function test_metrics_meta_currency_is_read_from_the_rows_not_assumed(): void
+    {
+        $empty = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/summary?from=2026-06-01&to=2026-06-02")
+            ->assertOk()
+            ->json('meta');
+
+        $this->assertNull($empty['currency'], 'a period with no money rows must not announce a currency');
+
+        app(UpsertDailyMetrics::class)->handle([
+            new NormalizedMetric(
+                tenantId: $this->tenant->id,
+                projectId: $this->projectA->id,
+                externalAccountId: $this->uid('acc-1'),
+                externalCampaignId: $this->uid('ext-aed'),
+                provider: 'meta',
+                metricKey: 'spend',
+                metricDate: Carbon::parse('2026-06-01'),
+                value: 50,
+                originalCurrency: 'AED',
+                projectCurrency: 'AED',
+            ),
+        ]);
+
+        $meta = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/summary?from=2026-06-01&to=2026-06-02")
+            ->assertOk()
+            ->json('meta');
+
+        $this->assertSame('AED', $meta['currency'], 'the response must report the project’s real currency, not SAR');
     }
 }

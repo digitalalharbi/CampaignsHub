@@ -37,6 +37,23 @@ final class MetricsAggregator
         'engagements' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'engagements'), 0)",
     ];
 
+    /** The funnel's stages. Two of them (`add_to_cart`, `checkout`) are read HERE and nowhere else. */
+    private const FUNNEL_STAGES = ['impressions', 'clicks', 'landing_page_views', 'add_to_cart', 'checkout', 'conversions'];
+
+    /**
+     * Every `metric_key` this engine reads (NORM-001).
+     *
+     * The union of the pivot and the funnel, not the pivot alone: `add_to_cart` and `checkout` are
+     * stored, are absent from `PIVOT`, and are funnel stages. A caller asking «which of my metrics does
+     * nothing read?» against `PIVOT` would be told those two are ignored when both are counted.
+     *
+     * @return list<string>
+     */
+    public static function readKeys(): array
+    {
+        return array_values(array_unique([...array_keys(self::PIVOT), ...self::FUNNEL_STAGES]));
+    }
+
     /** When set, every aggregation is scoped to this single unified campaign (command center). */
     private ?string $campaignId = null;
 
@@ -345,7 +362,7 @@ final class MetricsAggregator
     /** Conversion funnel with per-step transition rate, drop-off and cost per stage. */
     public function funnel(Carbon $from, Carbon $to): array
     {
-        $stages = ['impressions', 'clicks', 'landing_page_views', 'add_to_cart', 'checkout', 'conversions'];
+        $stages = self::FUNNEL_STAGES;
         $labels = [
             'impressions' => 'Impressions', 'clicks' => 'Clicks', 'landing_page_views' => 'Landing Page View',
             'add_to_cart' => 'Add to Cart', 'checkout' => 'Checkout', 'conversions' => 'Purchase',

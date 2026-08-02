@@ -28,6 +28,11 @@ class DatabaseSeeder extends Seeder
         // 1d) Canonical platform taxonomy (definitions + options) — structural, idempotent, all environments.
         $this->call(TaxonomyEngineSeeder::class);
 
+        // 1e) Canonical metric catalogue — what each metric means, its unit, and whether it may be
+        //     summed (NORM-001). Structural like the four above; it had been written and never called,
+        //     so `metric_definitions` was empty everywhere and no surface could explain a number.
+        $this->call(MetricDefinitionSeeder::class);
+
         // 2) Platform super-admin (idempotent).
         $platform = User::firstOrCreate(
             ['email' => 'platform@mediabuying.local'],
