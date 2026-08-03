@@ -105,7 +105,7 @@ function RecentRow({ r, ar, details }: { r: PortalRequestCard; ar: boolean; deta
           <div className="truncate text-sm font-semibold text-text-primary">{ar ? r.type_ar : r.type}</div>
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          <span className="whitespace-nowrap rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] font-semibold text-text-secondary">{r.status_label}</span>
+          <span className="whitespace-nowrap rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] font-semibold text-text-secondary">{ar ? r.status_label : r.status_label_en}</span>
           <span className="hidden text-[11px] text-text-muted sm:inline">{formatDate(r.updated_at)}</span>
           <ArrowRight size={14} className="text-text-muted rtl:rotate-180" aria-label={details} />
         </div>

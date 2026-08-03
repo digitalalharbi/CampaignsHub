@@ -8,6 +8,7 @@ use App\Domains\Billing\Models\Quote;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestConversion;
 use App\Domains\Requests\Services\RequestSla;
+use App\Domains\Requests\Support\RequestLabels;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Contracts\Database\Eloquent\Builder;
@@ -179,8 +180,21 @@ final class RequestsController
             'module' => $r->module,
             'services' => $r->services ?? [],
             'status' => $r->status->key,
-            'status_label' => $r->status->name_en,
+            /*
+             * REQ-LABELS-001 — both languages, and the reader picks.
+             *
+             * This served `name_en` only, in a product whose default locale is Arabic and whose status
+             * table has carried `name_ar` since it was created. The inbox therefore showed «Under
+             * Review» and «New» in an otherwise Arabic page — the untranslated code the operator was
+             * meant never to see. Serving both is the pattern the taxonomy engine already uses, and it
+             * has the second advantage that toggling language does not need a refetch.
+             */
+            'status_label' => $r->status->name_ar,
+            'status_label_en' => $r->status->name_en,
             'priority' => $r->priority,
+            // Priority had no Arabic AT ALL — the raw key («medium») was rendered straight into the table.
+            'priority_label' => RequestLabels::priority($r->priority, 'ar'),
+            'priority_label_en' => RequestLabels::priority($r->priority, 'en'),
             'contact' => $r->company_name ?: $r->contact_name,
             'assignee' => $r->assignee?->name,
             'assigned_to' => $r->assigned_to,

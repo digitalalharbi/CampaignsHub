@@ -26,6 +26,8 @@ export interface PortalRequestCard {
   type_ar: string
   status: string
   status_label: string
+  /** REQ-LABELS-001 — both languages travel together so a toggle needs no refetch. */
+  status_label_en: string
   progress: number
   submitted_at: string | null
   updated_at: string | null

@@ -55,6 +55,8 @@ export interface RequestTrackResult {
   type_ar: string
   status: string
   status_label: string
+  /** REQ-LABELS-001 — both languages travel together so a toggle needs no refetch. */
+  status_label_en: string
   submitted_at: string | null
   updated_at: string | null
   timeline: { type: string; status: string | null; message: string | null; at: string | null }[]

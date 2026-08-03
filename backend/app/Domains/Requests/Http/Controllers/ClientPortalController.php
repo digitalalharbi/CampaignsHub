@@ -212,7 +212,14 @@ final class ClientPortalController
                 'type' => $r->type->name_en,
                 'type_ar' => $r->type->name_ar,
                 'status' => $r->status->is_client_visible ? $r->status->key : 'in_progress',
-                'status_label' => $r->status->is_client_visible ? $r->status->name_en : 'In progress',
+                /*
+                 * REQ-LABELS-001 — the CLIENT was reading English status labels too.
+                 *
+                 * The masked value for an internal-only status is now translated as well: «قيد
+                 * التنفيذ» rather than a bare «In progress» dropped into an Arabic page.
+                 */
+                'status_label' => $r->status->is_client_visible ? $r->status->name_ar : 'قيد التنفيذ',
+                'status_label_en' => $r->status->is_client_visible ? $r->status->name_en : 'In progress',
                 'progress' => $this->progress($r->status->key),
                 'submitted_at' => optional($r->submitted_at)->toIso8601String(),
                 'updated_at' => optional($r->updated_at)->toIso8601String(),
@@ -245,7 +252,8 @@ final class ClientPortalController
             'type_ar' => $req->type->name_ar,
             'services' => $this->paidServices->resolve($this->selectedServiceKeys($req)),
             'status' => $req->status->is_client_visible ? $req->status->key : 'in_progress',
-            'status_label' => $req->status->is_client_visible ? $req->status->name_en : 'In progress',
+            'status_label' => $req->status->is_client_visible ? $req->status->name_ar : 'قيد التنفيذ',
+            'status_label_en' => $req->status->is_client_visible ? $req->status->name_en : 'In progress',
             'progress' => $this->progress($req->status->key),
             'submitted_at' => optional($req->submitted_at)->toIso8601String(),
             'updated_at' => optional($req->updated_at)->toIso8601String(),

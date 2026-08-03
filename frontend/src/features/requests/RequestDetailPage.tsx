@@ -59,8 +59,9 @@ export function RequestDetailPage() {
             <div className="text-sm text-text-secondary">{d.service_ar} · {d.contact}</div>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(d.status)}`}>{d.status_label}</span>
-            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${priorityTone(d.priority)}`}>{d.priority}</span>
+            {/* REQ-LABELS-001 — the name in the reader's language, not the stored key. */}
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(d.status)}`}>{lang === 'ar' ? d.status_label : d.status_label_en}</span>
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${priorityTone(d.priority)}`}>{lang === 'ar' ? d.priority_label : d.priority_label_en}</span>
             {d.sla.remaining_seconds !== null && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${d.sla.breached_at ? 'bg-danger/15 text-danger' : 'bg-surface-secondary text-text-muted'}`}>SLA {d.sla.paused_at ? t('sla_paused') : Math.round((d.sla.remaining_seconds ?? 0) / 3600) + 'h'}</span>}
           </div>
         </div>

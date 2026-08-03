@@ -104,17 +104,17 @@ export function RequestsDashboardPage() {
       ) : rows.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface p-12 text-center text-text-muted"><Inbox size={26} /> <span className="text-sm">{t('requests_empty')}</span></div>
       ) : view === 'table' ? (
-        <TableView rows={rows} t={t} />
+        <TableView rows={rows} t={t} ar={ar} />
       ) : view === 'cards' ? (
-        <CardsView rows={rows} t={t} />
+        <CardsView rows={rows} t={t} ar={ar} />
       ) : (
-        <KanbanView rows={rows} onMove={(id, to) => move.mutate({ id, to })} />
+        <KanbanView rows={rows} onMove={(id, to) => move.mutate({ id, to })} ar={ar} />
       )}
     </div>
   )
 }
 
-function TableView({ rows, t }: { rows: RequestRow[]; t: (k: TranslationKey) => string }) {
+function TableView({ rows, t, ar }: { rows: RequestRow[]; t: (k: TranslationKey) => string; ar: boolean }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-surface">
       <div className="overflow-x-auto">
@@ -130,8 +130,15 @@ function TableView({ rows, t }: { rows: RequestRow[]; t: (k: TranslationKey) => 
                 <td className="px-4 py-3"><Link to={`/app/requests/${r.id}`} className="font-mono font-semibold text-brand-600 hover:underline" dir="ltr">{r.reference}</Link></td>
                 <td className="px-4 py-3 text-text-secondary">{r.service_ar}</td>
                 <td className="px-4 py-3 text-text-primary">{r.contact}</td>
-                <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusTone(r.status)}`}>{r.status_label}</span></td>
-                <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${priorityTone(r.priority)}`}>{r.priority}</span></td>
+                {/*
+                  REQ-LABELS-001 — the name, not the key.
+                  This rendered `r.status_label` (English-only, from the API) and `r.priority` (the raw
+                  key), so an Arabic inbox read «Under Review» and «medium». Both labels now arrive in
+                  both languages and the locale chooses, which also means the language toggle does not
+                  need a refetch to take effect.
+                */}
+                <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusTone(r.status)}`}>{ar ? r.status_label : r.status_label_en}</span></td>
+                <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${priorityTone(r.priority)}`}>{ar ? r.priority_label : r.priority_label_en}</span></td>
                 <td className="px-4 py-3 text-text-secondary">{r.assignee ?? '—'}</td>
                 <td className="px-4 py-3">{r.sla_breached ? <span className="text-xs font-semibold text-danger">{t('sla_overdue')}</span> : <span className="tnum text-xs text-text-muted" dir="ltr">{r.sla_due_at?.slice(0, 10) ?? '—'}</span>}</td>
               </tr>
@@ -143,19 +150,19 @@ function TableView({ rows, t }: { rows: RequestRow[]; t: (k: TranslationKey) => 
   )
 }
 
-function CardsView({ rows, t }: { rows: RequestRow[]; t: (k: TranslationKey) => string }) {
+function CardsView({ rows, t, ar }: { rows: RequestRow[]; t: (k: TranslationKey) => string; ar: boolean }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {rows.map((r) => (
         <Link key={r.id} to={`/app/requests/${r.id}`} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 hover:border-brand-400">
           <div className="flex items-center justify-between">
             <span className="font-mono text-sm font-bold text-brand-600" dir="ltr">{r.reference}</span>
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone(r.status)}`}>{r.status_label}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone(r.status)}`}>{ar ? r.status_label : r.status_label_en}</span>
           </div>
           <div className="text-sm font-medium text-text-primary">{r.contact}</div>
           <div className="text-xs text-text-secondary">{r.service_ar}</div>
           <div className="mt-1 flex items-center justify-between">
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${priorityTone(r.priority)}`}>{r.priority}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${priorityTone(r.priority)}`}>{ar ? r.priority_label : r.priority_label_en}</span>
             <span className="text-[11px] text-text-muted">{r.assignee ?? t('col_assignee')}</span>
           </div>
         </Link>
@@ -164,7 +171,7 @@ function CardsView({ rows, t }: { rows: RequestRow[]; t: (k: TranslationKey) => 
   )
 }
 
-function KanbanView({ rows, onMove }: { rows: RequestRow[]; onMove: (id: string, to: string) => void }) {
+function KanbanView({ rows, onMove, ar }: { rows: RequestRow[]; onMove: (id: string, to: string) => void; ar: boolean }) {
   const [dragId, setDragId] = useState<string | null>(null)
   const byStatus = (s: string) => rows.filter((r) => r.status === s)
   const dragging = rows.find((r) => r.id === dragId)
@@ -181,7 +188,8 @@ function KanbanView({ rows, onMove }: { rows: RequestRow[]; onMove: (id: string,
             className={`w-64 shrink-0 rounded-xl border p-2.5 ${canDrop ? 'border-brand-400 bg-brand-primary-soft/40' : 'border-border bg-surface-secondary'}`}
           >
             <div className="mb-2 flex items-center justify-between px-1 text-xs font-bold text-text-secondary">
-              <span>{STATUS_LABELS[col]}</span><span className="tnum text-text-muted">{byStatus(col).length}</span>
+              {/* The column heading follows the reader too — it was pinned to Arabic while the cards were pinned to English. */}
+              <span>{ar ? STATUS_LABELS[col] : (rows.find((r) => r.status === col)?.status_label_en ?? STATUS_LABELS[col])}</span><span className="tnum text-text-muted">{byStatus(col).length}</span>
             </div>
             <div className="space-y-2">
               {byStatus(col).map((r) => (
@@ -195,7 +203,7 @@ function KanbanView({ rows, onMove }: { rows: RequestRow[]; onMove: (id: string,
                   <Link to={`/app/requests/${r.id}`} className="font-mono text-xs font-bold text-brand-600" dir="ltr">{r.reference}</Link>
                   <div className="mt-1 text-sm font-medium text-text-primary">{r.contact}</div>
                   <div className="mt-1.5 flex items-center justify-between">
-                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${priorityTone(r.priority)}`}>{r.priority}</span>
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${priorityTone(r.priority)}`}>{ar ? r.priority_label : r.priority_label_en}</span>
                     {r.sla_breached && <span className="text-[10px] font-semibold text-danger">SLA</span>}
                   </div>
                 </div>

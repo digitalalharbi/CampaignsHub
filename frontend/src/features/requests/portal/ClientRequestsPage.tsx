@@ -54,7 +54,7 @@ function RequestCard({ r, ar }: { r: PortalRequestCard; ar: boolean }) {
           <div className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{r.reference}</div>
           <div className="mt-0.5 font-bold text-text-primary">{ar ? r.type_ar : r.type}</div>
         </div>
-        <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone(r.status)}`}>{r.status_label}</span>
+        <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone(r.status)}`}>{ar ? r.status_label : r.status_label_en}</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-surface-secondary"><div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${r.progress}%` }} /></div>
       <div className="flex items-center justify-between text-[11px] text-text-muted">

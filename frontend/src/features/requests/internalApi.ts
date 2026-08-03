@@ -7,8 +7,12 @@ export interface RequestRow {
   service_ar: string
   module: string
   status: string
+  /** REQ-LABELS-001 — Arabic and English both arrive; the reader's locale picks. */
   status_label: string
+  status_label_en: string
   priority: string
+  priority_label: string
+  priority_label_en: string
   contact: string
   assignee: string | null
   assigned_to: number | null

@@ -75,7 +75,7 @@ export function ClientRequestDetailPage() {
             <div className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{d.reference}</div>
             <h1 className="mt-0.5 font-heading text-xl font-extrabold text-text-primary">{ar ? d.type_ar : d.type}</h1>
           </div>
-          <span className="rounded-full bg-brand-primary-soft px-3 py-1 text-xs font-semibold text-brand-700">{d.status_label}</span>
+          <span className="rounded-full bg-brand-primary-soft px-3 py-1 text-xs font-semibold text-brand-700">{ar ? d.status_label : d.status_label_en}</span>
         </div>
         <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-surface-secondary"><div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${d.progress}%` }} /></div>
         <div className="tnum mt-1 text-[11px] text-text-muted">{ar ? 'الجاهزية' : 'Progress'}: {d.progress}%</div>
