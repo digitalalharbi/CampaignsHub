@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ExternalLink, Image as ImageIcon, LayoutGrid, Play, Rows3, Search, Images, X } from 'lucide-react'
+import { FilterGroup, ViewCustomiser } from '@/components/ui/ViewCustomiser'
 import { useUi } from '@/stores/ui'
 import { fmtDate } from '@/lib/datetime'
 import { listCreatives, type Creative } from './api'
@@ -161,14 +162,38 @@ export function CreativesPage() {
               className={`flex items-center px-2.5 py-1.5 ${view === 'table' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}><Rows3 size={14} /></button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Chip active={provider === 'all'} onClick={() => setProvider('all')}>{c.provider}: {c.all}</Chip>
-          {providers.map((p) => <Chip key={p} active={provider === p} onClick={() => setProvider(p)}>{providerLabel(p)}</Chip>)}
-          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-          {formats.map((f) => <Chip key={f} tone="dark" active={format === f} onClick={() => setFormat(format === f ? 'all' : f)}>{formatLabel(f, ar)}</Chip>)}
-          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-          {statuses.map((s) => <Chip key={s} tone="dark" active={status === s} onClick={() => setStatus(status === s ? 'all' : s)}>{statusMeta(s)[ar ? 'ar' : 'en']}</Chip>)}
-        </div>
+        {/*
+          Three chip rows — platform, format, status — folded (SIMPLIFY-002). A creative library is
+          browsed by looking; it opened with more ways to narrow it than thumbnails on the first row.
+          Search and the grid/table switcher stay out: those are how it is looked AT.
+        */}
+        <ViewCustomiser
+          id="content"
+          ar={ar}
+          active={provider !== 'all' || format !== 'all' || status !== 'all'}
+          summary={
+            [
+              provider === 'all' ? null : providerLabel(provider),
+              format === 'all' ? null : formatLabel(format, ar),
+              status === 'all' ? null : statusMeta(status)[ar ? 'ar' : 'en'],
+            ].filter(Boolean).join(' · ')
+            || (ar ? 'كل المحتوى' : 'All content')
+          }
+          onClear={() => { setProvider('all'); setFormat('all'); setStatus('all') }}
+        >
+          <FilterGroup label={c.provider}>
+            <Chip active={provider === 'all'} onClick={() => setProvider('all')}>{c.all}</Chip>
+            {providers.map((p) => <Chip key={p} active={provider === p} onClick={() => setProvider(p)}>{providerLabel(p)}</Chip>)}
+          </FilterGroup>
+          <FilterGroup label={ar ? 'الشكل' : 'Format'}>
+            <Chip tone="dark" active={format === 'all'} onClick={() => setFormat('all')}>{c.all}</Chip>
+            {formats.map((f) => <Chip key={f} tone="dark" active={format === f} onClick={() => setFormat(format === f ? 'all' : f)}>{formatLabel(f, ar)}</Chip>)}
+          </FilterGroup>
+          <FilterGroup label={ar ? 'الحالة' : 'Status'}>
+            <Chip tone="dark" active={status === 'all'} onClick={() => setStatus('all')}>{c.all}</Chip>
+            {statuses.map((s) => <Chip key={s} tone="dark" active={status === s} onClick={() => setStatus(status === s ? 'all' : s)}>{statusMeta(s)[ar ? 'ar' : 'en']}</Chip>)}
+          </FilterGroup>
+        </ViewCustomiser>
       </div>
 
       {/* Body */}

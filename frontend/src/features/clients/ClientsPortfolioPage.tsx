@@ -7,6 +7,7 @@ import { CLIENT_STATUS_LABELS, INDUSTRY_LABELS, labelOf } from './labels'
 import { SearchableSelect } from '@/components/forms'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { useT } from '@/lib/i18n'
+import { ViewCustomiser } from '@/components/ui/ViewCustomiser'
 import { useUi } from '@/stores/ui'
 import { usePortalPath } from '@/app/portalPath'
 
@@ -48,6 +49,28 @@ export function ClientsPortfolioPage() {
   const rows = query.data?.data ?? []
   const ownerOptions = (taxonomy.data?.assignable_users ?? []).map((u) => ({ value: String(u.id), label: u.name }))
 
+  /*
+   * What the reader is looking at, in words (SIMPLIFY-002).
+   *
+   * Built from the same `filters` the query uses, so it can never drift from what the list actually
+   * shows. Labels come from the taxonomy options rather than the stored keys — «عميل مميز» is what
+   * somebody chose, `premium` is what the database calls it.
+   */
+  const labelOf = (opts: readonly { value: string; label?: string }[] | undefined, v: string | null | undefined) =>
+    v == null ? null : (opts?.find((o) => o.value === v)?.label ?? v)
+
+  const appliedFilters = [
+    labelOf(statusTax.options, filters.status),
+    labelOf(serviceLevelTax.options, filters.service_level),
+    labelOf(industryTax.options, filters.industry),
+    filters.owner_id != null ? labelOf(ownerOptions, String(filters.owner_id)) : null,
+    filters.needs_attention ? t('cc_needs_attention') : null,
+    filters.has_open_requests ? t('cc_has_open_requests') : null,
+    filters.has_active_campaigns ? t('cc_has_active_campaigns') : null,
+    filters.include_archived ? t('cc_include_archived') : null,
+  ].filter(Boolean) as string[]
+
+
   const patch = (p: Partial<ClientFilters>) => setFilters((f) => ({ ...f, ...p, page: 1 }))
 
   const summary = {
@@ -86,52 +109,71 @@ export function ClientsPortfolioPage() {
           <Search size={16} className="pointer-events-none absolute inset-y-0 my-auto ms-3 text-text-muted" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('search')} className="h-10 w-56 rounded-lg border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500" />
         </form>
+        {/*
+          Four dropdowns and four checkboxes folded behind one control (SIMPLIFY-002).
+          This band was the widest in the product: search, status, service level, industry, owner, and
+          four tick-boxes, all above the first client. Search stays — it is how somebody finds a client
+          they already have in mind — and everything that narrows the ROSTER moved into the dialog,
+          with the applied set spelled out beside the button.
+        */}
+        <ViewCustomiser
+          id="clients"
+          ar={ar}
+          active={appliedFilters.length > 0}
+          summary={appliedFilters.join(' · ') || (ar ? 'كل العملاء' : 'All clients')}
+          onClear={() => patch({
+            status: undefined, service_level: undefined, industry: undefined, owner_id: undefined,
+            needs_attention: undefined, has_open_requests: undefined, has_active_campaigns: undefined,
+            include_archived: undefined,
+          })}
+        >
         <div className="w-52">
-          <SearchableSelect
-            value={filters.status ?? null}
-            onChange={(v) => patch({ status: v ?? undefined })}
-            options={statusTax.options}
-            loading={statusTax.isPending}
-            optionsError={statusTax.isError ? t('error_generic') : null}
-            onRetry={() => statusTax.refetch()}
-            placeholder={`${t('cc_filter_status')}: ${t('cc_filter_all')}`}
-          />
-        </div>
-        <div className="w-52">
-          <SearchableSelect
-            value={filters.service_level ?? null}
-            onChange={(v) => patch({ service_level: v ?? undefined })}
-            options={serviceLevelTax.options}
-            loading={serviceLevelTax.isPending}
-            optionsError={serviceLevelTax.isError ? t('error_generic') : null}
-            onRetry={() => serviceLevelTax.refetch()}
-            placeholder={`${t('cc_filter_service')}: ${t('cc_filter_all')}`}
-          />
-        </div>
-        <div className="w-52">
-          <SearchableSelect
-            value={filters.industry ?? null}
-            onChange={(v) => patch({ industry: v ?? undefined })}
-            options={industryTax.options}
-            loading={industryTax.isPending}
-            optionsError={industryTax.isError ? t('error_generic') : null}
-            onRetry={() => industryTax.refetch()}
-            placeholder={`${t('cc_filter_industry')}: ${t('cc_filter_all')}`}
-          />
-        </div>
-        <div className="w-52">
-          <SearchableSelect
-            value={filters.owner_id != null ? String(filters.owner_id) : null}
-            onChange={(v) => patch({ owner_id: v ? Number(v) : undefined })}
-            options={ownerOptions}
-            loading={taxonomy.isPending}
-            placeholder={`${t('cc_filter_owner')}: ${t('cc_filter_all')}`}
-          />
-        </div>
-        <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ needs_attention: e.target.checked || undefined })} /> {t('cc_needs_attention')}</label>
-        <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ has_open_requests: e.target.checked || undefined })} /> {t('cc_has_open_requests')}</label>
-        <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ has_active_campaigns: e.target.checked || undefined })} /> {t('cc_has_active_campaigns')}</label>
-        <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ include_archived: e.target.checked || undefined })} /> {t('cc_include_archived')}</label>
+            <SearchableSelect
+              value={filters.status ?? null}
+              onChange={(v) => patch({ status: v ?? undefined })}
+              options={statusTax.options}
+              loading={statusTax.isPending}
+              optionsError={statusTax.isError ? t('error_generic') : null}
+              onRetry={() => statusTax.refetch()}
+              placeholder={`${t('cc_filter_status')}: ${t('cc_filter_all')}`}
+            />
+          </div>
+          <div className="w-52">
+            <SearchableSelect
+              value={filters.service_level ?? null}
+              onChange={(v) => patch({ service_level: v ?? undefined })}
+              options={serviceLevelTax.options}
+              loading={serviceLevelTax.isPending}
+              optionsError={serviceLevelTax.isError ? t('error_generic') : null}
+              onRetry={() => serviceLevelTax.refetch()}
+              placeholder={`${t('cc_filter_service')}: ${t('cc_filter_all')}`}
+            />
+          </div>
+          <div className="w-52">
+            <SearchableSelect
+              value={filters.industry ?? null}
+              onChange={(v) => patch({ industry: v ?? undefined })}
+              options={industryTax.options}
+              loading={industryTax.isPending}
+              optionsError={industryTax.isError ? t('error_generic') : null}
+              onRetry={() => industryTax.refetch()}
+              placeholder={`${t('cc_filter_industry')}: ${t('cc_filter_all')}`}
+            />
+          </div>
+          <div className="w-52">
+            <SearchableSelect
+              value={filters.owner_id != null ? String(filters.owner_id) : null}
+              onChange={(v) => patch({ owner_id: v ? Number(v) : undefined })}
+              options={ownerOptions}
+              loading={taxonomy.isPending}
+              placeholder={`${t('cc_filter_owner')}: ${t('cc_filter_all')}`}
+            />
+          </div>
+          <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ needs_attention: e.target.checked || undefined })} /> {t('cc_needs_attention')}</label>
+          <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ has_open_requests: e.target.checked || undefined })} /> {t('cc_has_open_requests')}</label>
+          <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ has_active_campaigns: e.target.checked || undefined })} /> {t('cc_has_active_campaigns')}</label>
+          <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ include_archived: e.target.checked || undefined })} /> {t('cc_include_archived')}</label>
+        </ViewCustomiser>
       </div>
 
       {query.isLoading ? (

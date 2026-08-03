@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, BellRing, CheckCircle2, Clock, ListChecks, Plus, Search, Settings2, Truck } from 'lucide-react'
+import { FilterGroup, ViewCustomiser } from '@/components/ui/ViewCustomiser'
 import { useUi } from '@/stores/ui'
 import {
   createAlertRule, createTaskFromAlert, listAlertEvents, listAlertRules,
@@ -187,6 +188,11 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
             className="w-full rounded-xl border border-border bg-surface-secondary py-2 pe-3 ps-9 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none"
           />
         </label>
+        {/*
+          Status stays out in the open — open / snoozed / resolved is how the queue is WORKED, the
+          same way tabs are. Severity and source are filters on top of that, and they were two more
+          chip rows before the first alert; they fold, with the applied set spelled out (SIMPLIFY-002).
+        */}
         <div className="flex flex-wrap items-center gap-2">
           {filters.map((f) => (
             <button
@@ -199,7 +205,23 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
               {f.label}
             </button>
           ))}
-          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+        </div>
+      </div>
+
+      <ViewCustomiser
+        id="alerts"
+        ar={locale === 'ar'}
+        active={sev !== sevFilters[0]?.id || type !== 'all'}
+        summary={
+          [
+            sev === sevFilters[0]?.id ? null : sevFilters.find((f) => f.id === sev)?.label,
+            type === 'all' ? null : (TYPE_LABEL[type as AlertType]?.[locale] ?? type),
+          ].filter(Boolean).join(' · ')
+          || (locale === 'ar' ? 'كل الأهميات وكل المصادر' : 'Every severity, every source')
+        }
+        onClear={() => { setSev(sevFilters[0]!.id); setType('all') }}
+      >
+        <FilterGroup label={c.severity}>
           {sevFilters.map((f) => (
             <button
               key={f.id}
@@ -211,24 +233,22 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
               {f.label}
             </button>
           ))}
-        </div>
-      </div>
-
-      {/* Category (type) filter — only types present in the data. */}
-      {presentTypes.length > 1 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button onClick={() => setType('all')}
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${type === 'all' ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
-            {c.source}: {c.all}
-          </button>
-          {presentTypes.map((tp) => (
-            <button key={tp} onClick={() => setType(type === tp ? 'all' : tp)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${type === tp ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
-              {TYPE_LABEL[tp as AlertType]?.[locale] ?? tp}
+        </FilterGroup>
+        {presentTypes.length > 1 && (
+          <FilterGroup label={c.source}>
+            <button onClick={() => setType('all')}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${type === 'all' ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
+              {c.all}
             </button>
-          ))}
-        </div>
-      )}
+            {presentTypes.map((tp) => (
+              <button key={tp} onClick={() => setType(type === tp ? 'all' : tp)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${type === tp ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
+                {TYPE_LABEL[tp as AlertType]?.[locale] ?? tp}
+              </button>
+            ))}
+          </FilterGroup>
+        )}
+      </ViewCustomiser>
 
       {events.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">

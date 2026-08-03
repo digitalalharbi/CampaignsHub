@@ -138,7 +138,15 @@ describe('the portals stay distinct', () => {
    * level and therefore assumed to be a difference in emphasis rather than a difference in kind.
    */
   it('gives clients to the agency portal and to no other', () => {
-    expect(agencyNavGroups.find((g) => g.key === 'clients')?.leaves).toHaveLength(1)
+    /*
+     * Asserted on the DESTINATION, not on how many links share its heading.
+     *
+     * This used to require the agency's clients group to hold exactly one leaf, which had nothing to
+     * do with what the test is named for and broke the moment Clients and Projects were grouped
+     * together (SIMPLIFY-002). What matters is that `/agency/clients` exists and that no advertiser
+     * link points at a client roster.
+     */
+    expect(agencyNavLeafPaths).toContain('/agency/clients')
     expect(navLeaves(appNavGroups).some((l) => l.to.includes('/clients'))).toBe(false)
   })
 

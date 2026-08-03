@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, LayoutGrid, ListChecks, Plus, Rows3, Search, X } from 'lucide-react'
+import { FilterGroup, ViewCustomiser } from '@/components/ui/ViewCustomiser'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { DateField } from '@/components/ui/DateField'
@@ -131,11 +132,6 @@ export function TasksPage() {
               className="w-full rounded-xl border border-border bg-surface-secondary py-2 pe-3 ps-9 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none" />
           </label>
           <div className="flex items-center gap-2">
-            <button onClick={() => setMine((v) => !v)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${mine ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
-              {c.mine}
-            </button>
-            <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
             <div className="flex overflow-hidden rounded-lg border border-border">
               <button onClick={() => setView('list')} aria-label={c.view_list} title={c.view_list}
                 className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold ${view === 'list' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
@@ -148,17 +144,44 @@ export function TasksPage() {
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <FilterChip active={status === 'all'} onClick={() => setStatus('all')}>{c.all}</FilterChip>
-          {FILTER_STATUSES.map((s) => (
-            <FilterChip key={s} active={status === s} onClick={() => setStatus(s)}>{statusLabel(s, ar)}</FilterChip>
-          ))}
-          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-          <FilterChip tone="dark" active={priority === 'all'} onClick={() => setPriority('all')}>{c.priority}: {c.all}</FilterChip>
-          {FILTER_PRIORITIES.map((p) => (
-            <FilterChip key={p} tone="dark" active={priority === p} onClick={() => setPriority(p)}>{priorityLabel(p, ar)}</FilterChip>
-          ))}
-        </div>
+        {/*
+          Two chip rows folded behind one control (SIMPLIFY-002).
+          Search and the list/board switcher stay above — they are how the page is READ. Status and
+          priority change which rows exist, so they go in the dialog with a summary saying what is
+          applied; a filtered list that looks like a short list is the risk, and the summary is what
+          removes it.
+        */}
+        <ViewCustomiser
+          id="tasks"
+          ar={ar}
+          active={status !== 'all' || priority !== 'all' || mine}
+          summary={
+            [
+              status === 'all' ? null : `${ar ? 'الحالة' : 'Status'}: ${statusLabel(status, ar)}`,
+              priority === 'all' ? null : `${c.priority}: ${priorityLabel(priority, ar)}`,
+              mine ? c.mine : null,
+            ].filter(Boolean).join(' · ')
+            || (ar ? 'كل المهام' : 'All tasks')
+          }
+          onClear={() => { setStatus('all'); setPriority('all'); setMine(false) }}
+        >
+          <FilterGroup label={ar ? 'الحالة' : 'Status'}>
+            <FilterChip active={status === 'all'} onClick={() => setStatus('all')}>{c.all}</FilterChip>
+            {FILTER_STATUSES.map((s) => (
+              <FilterChip key={s} active={status === s} onClick={() => setStatus(s)}>{statusLabel(s, ar)}</FilterChip>
+            ))}
+          </FilterGroup>
+          <FilterGroup label={ar ? 'المُسنَدة' : 'Assigned to'}>
+            <FilterChip active={!mine} onClick={() => setMine(false)}>{c.all}</FilterChip>
+            <FilterChip active={mine} onClick={() => setMine(true)}>{c.mine}</FilterChip>
+          </FilterGroup>
+          <FilterGroup label={c.priority}>
+            <FilterChip tone="dark" active={priority === 'all'} onClick={() => setPriority('all')}>{c.all}</FilterChip>
+            {FILTER_PRIORITIES.map((p) => (
+              <FilterChip key={p} tone="dark" active={priority === p} onClick={() => setPriority(p)}>{priorityLabel(p, ar)}</FilterChip>
+            ))}
+          </FilterGroup>
+        </ViewCustomiser>
       </div>
 
       {/* Body */}
