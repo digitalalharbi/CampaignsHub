@@ -11,6 +11,62 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
+`40a912f` — **the SIMPLIFY pass is complete across all four portals, and the full gate is green.**
+
+Preceded by `e0bb6cf` (`/app` + `/admin` + `/portal` simplification) and `f718f4e` (`/agency`).
+
+**935 backend · 483 vitest · 677 E2E on chromium + firefox + webkit, 0 failed, `retries: 0`.**
+tsc clean · oxlint 0 errors · production build 723.21 kB gzip.
+
+### What the simplification pass did
+
+One rule, applied portal by portal: **the reader meets the answer, not the settings.** Every change
+is a relocation, never a removal — no control was deleted, no route changed, no server behaviour
+altered. Full write-up in `docs/simplification-report.md`; the matrix rows are SIMPLIFY-001 … 005 and
+SIMPLIFY-CARDGRID-001.
+
+- **SIMPLIFY-001** `/app/dashboard` — three bands of configuration folded behind one control.
+- **SIMPLIFY-002** `/agency` — the rail regrouped by the job somebody came to do; all fifteen paths
+  unchanged. Clients, Tasks, Alerts and Content fold their filters.
+- **SIMPLIFY-003** the rest of `/app` — Reports and Files fold. Campaigns deliberately left alone:
+  its chips carry live counts, which makes them information rather than configuration.
+- **SIMPLIFY-004** `/admin` — six daily entries, with a separate «متقدم» section for the two tools
+  that are run once, not daily. Every route still reachable.
+- **SIMPLIFY-005** `/portal` — Campaigns and Reports now precede Quotes and Invoices. Order was the
+  only thing wrong, so order was the only thing changed.
+
+The shared component is `src/components/ui/ViewCustomiser.tsx`. It folds a page's filters behind one
+button and states what is applied **in words** beside it — that sentence is the whole reason folding
+is safe. Search and the list/board switchers never fold: search is how a person finds a row they
+already have in mind.
+
+### Four defects the pass surfaced, all fixed
+
+1. **A real sideways scroll** on `/agency/clients` at 343px in Firefox — `min-width: auto` on a grid
+   item plus a company name with nowhere to wrap. Fixed with `min-w-0` and `break-words`. The test
+   was wrong first: it measured before the clients were fetched, saw an empty 343px page, passed,
+   then failed at the next measurement and blamed the dialog.
+2. **Three tests that named a control without saying where** — the agency rail rename made
+   «الإعدادات» and «الحملات» name both a group and a page tab. Scoped to `main`.
+3. **A flat 30s budget** on `agency-portal.spec.ts`'s walk of the whole rail. Scaled per destination,
+   as `portal-audit.spec.ts` already does.
+4. **`useProject`**, a Playwright helper named like a React hook, renamed to `selectProject`.
+
+Also closed the coverage gap that let #1 through: `responsive-sweep.spec.ts` only ever walked the
+four portal LANDING pages. `simplification-appearance.spec.ts` now covers the six folded pages at
+343px and 1440px, light and dark, Arabic and English, dialog open at the narrow width — and asserts
+the applied-state line keeps a contrast ratio above 3:1, because a summary that vanishes in dark mode
+hides the one thing folding promised to keep visible.
+
+### Performance, measured
+
+Bundle 723.03 → 723.21 kB gzip (+0.18 kB). No refetch loops (four pages idle six seconds each, zero
+requests after load). Query cache untouched. One duplicate request exists — `GET /api/v1/auth/me`
+twice per page load, from a single `useEffect` in `app/providers.tsx` that React StrictMode
+double-invokes in development. It predates this pass and is not caused by it.
+
+---
+
 `LOGIN-FINAL` — the network error root-caused, and five final sign-in doors on one engine.
 Preceded by `f8a1779` (INFL-003), `f00e7af` (PAY-002b), `883c40c` (I18N-001 + UI-MODAL-001).
 
@@ -35,7 +91,7 @@ Last work unit: `f0c813e` (CMS backend) → `320b569` (CMS editor + homepage ren
 Frozen delivery tags, **never move or rewrite**: `v1.0.0-baseline`, `v1.1.0-expanded-final`.
 
 ## Working tree status
-**CLEAN** — `git status --porcelain` is empty at `7722821`.
+**CLEAN** — `git status --porcelain` is empty at `40a912f`.
 **No uncommitted work, no stash, no undocumented WIP.** Nothing was left half-edited; the last unit
 closed on a green run.
 
