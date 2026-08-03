@@ -11,7 +11,15 @@ import { useUi } from '@/stores/ui'
 
 // Board-column layout order (a request-workflow layout constant, not a select's option source — those now come
 // from the taxonomy engine). Terminal states (rejected/cancelled/archived) are intentionally not columns.
-const KANBAN_COLUMNS = ['new', 'under_review', 'waiting_client', 'qualified', 'approved', 'in_progress', 'completed']
+/*
+ * REQ-JOURNEY-001 — the board is the journey, in order: جديد → مراجعة → عرض → موافقة → تنفيذ →
+ * تسليم → مكتمل.
+ *
+ * «معلّق» and «ينتظر العميل» are deliberately NOT columns. They are pauses, not places: a held request
+ * still belongs to whatever step it was on, and giving a pause its own column would hide a week's work
+ * behind a lane nobody scrolls to. They show as a badge on the card instead.
+ */
+const KANBAN_COLUMNS = ['new', 'under_review', 'qualified', 'quoted', 'approved', 'in_progress', 'delivered', 'completed']
 const VIEW_KEY = 'ch-requests-view'
 type View = 'table' | 'kanban' | 'cards'
 

@@ -70,13 +70,21 @@ export interface RequestFilters {
 }
 
 /** Allowed forward transitions (mirrors the backend RequestStatusMachine) — for Kanban drop validation. */
+/**
+ * A MIRROR of `RequestStatusMachine::FORWARD`, kept only so the board can grey out a lane you cannot
+ * drop into. The backend is the authority and rejects anything this map gets wrong — this exists to
+ * avoid offering a move that is about to fail, never to decide whether it may happen.
+ */
 export const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   new: ['under_review', 'qualified', 'rejected', 'cancelled'],
-  under_review: ['waiting_client', 'qualified', 'rejected', 'cancelled'],
+  under_review: ['waiting_client', 'qualified', 'on_hold', 'rejected', 'cancelled'],
   waiting_client: ['under_review', 'qualified', 'cancelled'],
-  qualified: ['approved', 'waiting_client', 'rejected', 'cancelled'],
-  approved: ['in_progress', 'cancelled'],
-  in_progress: ['waiting_client', 'completed', 'cancelled'],
+  qualified: ['quoted', 'approved', 'waiting_client', 'on_hold', 'rejected', 'cancelled'],
+  quoted: ['approved', 'waiting_client', 'on_hold', 'rejected', 'cancelled'],
+  approved: ['in_progress', 'on_hold', 'cancelled'],
+  in_progress: ['delivered', 'waiting_client', 'completed', 'on_hold', 'cancelled'],
+  delivered: ['completed', 'in_progress', 'waiting_client', 'cancelled'],
+  on_hold: ['under_review', 'qualified', 'quoted', 'approved', 'in_progress', 'cancelled'],
   completed: ['archived'],
   rejected: ['archived'],
   cancelled: ['archived'],

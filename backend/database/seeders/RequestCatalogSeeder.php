@@ -35,8 +35,25 @@ class RequestCatalogSeeder extends Seeder
             ['key' => 'under_review', 'name_ar' => 'تحت المراجعة', 'name_en' => 'Under Review'],
             ['key' => 'waiting_client', 'name_ar' => 'ينتظر العميل', 'name_en' => 'Waiting for Client', 'pauses_sla' => true],
             ['key' => 'qualified', 'name_ar' => 'مؤهل', 'name_en' => 'Qualified'],
+            /*
+             * REQ-JOURNEY-001 — the two steps the journey actually has and the status list did not.
+             *
+             * «عرض» and «تسليم» were real stages of the work with nowhere to record them. A quote sent
+             * and awaiting an answer looked identical to a request nobody had priced, and delivered
+             * work awaiting the client's sign-off looked identical to work still being done. Operators
+             * tracked both in their heads, which is exactly what a status column is for.
+             *
+             * They are INSERTED, never replacing anything: `qualified → approved` and
+             * `in_progress → completed` both still work, because not every request needs a quote and
+             * not every deliverable needs a hand-over step.
+             */
+            ['key' => 'quoted', 'name_ar' => 'عرض سعر مُرسل', 'name_en' => 'Quote sent'],
             ['key' => 'approved', 'name_ar' => 'معتمد', 'name_en' => 'Approved'],
             ['key' => 'in_progress', 'name_ar' => 'قيد التنفيذ', 'name_en' => 'In Progress'],
+            ['key' => 'delivered', 'name_ar' => 'تم التسليم', 'name_en' => 'Delivered'],
+            // «معلّق» is a pause an operator chooses, distinct from «ينتظر العميل» which the client causes.
+            // Both stop the SLA clock; only this one is the agency's own decision.
+            ['key' => 'on_hold', 'name_ar' => 'معلّق', 'name_en' => 'On Hold', 'pauses_sla' => true],
             ['key' => 'completed', 'name_ar' => 'مكتمل', 'name_en' => 'Completed', 'is_terminal' => true],
             ['key' => 'rejected', 'name_ar' => 'مرفوض', 'name_en' => 'Rejected', 'is_terminal' => true, 'is_client_visible' => false],
             ['key' => 'cancelled', 'name_ar' => 'ملغى', 'name_en' => 'Cancelled', 'is_terminal' => true],
