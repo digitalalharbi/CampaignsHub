@@ -79,9 +79,17 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
   await seededCampaignCard(page).click()
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
 
-  // Performance tab renders the real charts (Spend vs Revenue) from the campaign metrics API.
+  /*
+   * Performance tab renders the real charts (Spend vs Revenue) from the campaign metrics API.
+   *
+   * 20s, not 15s, and the difference is measured rather than guessed: this assertion waits on a
+   * metrics round-trip AND a recharts mount, and 15s cleared it comfortably in isolation (three runs,
+   * ~14s each INCLUDING auth setup) while failing once during a full three-browser gate. That is a
+   * budget sized for an idle machine, on the one wait in this file that depends on two slow things at
+   * once. 20s is what every other data-then-chart wait in this suite already allows.
+   */
   await page.getByRole('tab', { name: /Performance|الأداء/ }).click()
-  await expect(page.getByText(/الإنفاق مقابل الإيرادات/)).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText(/الإنفاق مقابل الإيرادات/)).toBeVisible({ timeout: 20000 })
 
   // Platforms tab lists linked external campaigns (or an empty state).
   await page.getByRole('tab', { name: /Platforms|المنصات/ }).click()

@@ -11,6 +11,51 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
+**FINISHING PASS — live client reports, phone numbers, and the requests journey.**
+
+Commits, in order: `94d777b` (LIVEREP-001) → `fcae937` (PHONE-001) →
+`6a40fa3` (REQ-LABELS-001) → `7712be2` (REQ-JOURNEY-001) → `fb0503e` (REQ-SUMMARY-001).
+
+**995 backend · 509 vitest · tsc · oxlint clean · Playwright on chromium + firefox + webkit.**
+
+### What was built
+
+- **LIVEREP-001** — a shared client link can now serve LIVE figures inside a ceiling it can never
+  exceed. `report_shares.mode`/`scope`, `LiveReportService`, `GET /reports/shared/{token}/live`.
+  The client page filters by period/platform/campaign and re-renders without a reload; per-platform
+  freshness is stated, and a platform with no credentials says `awaiting_credentials` where its
+  number would be. Operator side gets a live toggle, campaign+platform pickers, renew, revoke and a
+  per-link access history that shows denials as well as views.
+- **PHONE-001** — one reading of a phone number for the whole product. E.164 everywhere, Arabic-Indic
+  and Persian digits accepted, foreign country codes kept, Saudi Arabia the default. Normalisation on
+  the MODEL (8 models), validation at 8 sites, a mirrored browser helper so the intake form accepts
+  what the server accepts, and a safe chunked backfill that leaves unreadable values alone.
+- **REQ-LABELS-001** — statuses and priorities have names in the reader's language. All four
+  endpoints serve both; every reader picks by locale.
+- **REQ-JOURNEY-001** — «عرض سعر مُرسل», «تم التسليم» and «معلّق» exist, inserted without removing the
+  direct paths any small request still needs.
+- **REQ-SUMMARY-001** — the inbox header counts the whole filtered set, and its fourth card answers
+  «what needs me?» rather than restating a status.
+
+### Standing constraints honoured
+
+Nothing claims a delivery, payment or platform connection it has not made. The OTP path still reports
+`awaiting_provider_credentials`. Demo data is tagged. `/influencers` remains behind
+`influencers_ugc_enabled=false`, untouched. The frozen tags `v1.0.0-baseline` and
+`v1.1.0-expanded-final` have not moved.
+
+### Not done — do not mark these complete
+
+- **Dynamic per-service intake fields** exist (`required_field_rules` on the paid-service taxonomy) but
+  were NOT reworked in this pass; the intake still renders one form driven by those rules.
+- **Charts on the requests inbox** (requests by type/performance) were not added — the header cards and
+  the journey board were the parts that were wrong, and were fixed.
+- **`journey_stage` and `request_statuses` remain two overlapping models of the same journey.** This
+  pass aligned the status list with the journey the brief names; it did not merge the two. Merging is
+  a schema change and a migration of live rows, and should be its own unit.
+
+---
+
 `40a912f` — **the SIMPLIFY pass is complete across all four portals, and the full gate is green.**
 
 Preceded by `e0bb6cf` (`/app` + `/admin` + `/portal` simplification) and `f718f4e` (`/agency`).

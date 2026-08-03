@@ -182,8 +182,12 @@ return [
      * «Enter a valid number» tells somebody staring at a number they believe is valid
      * nothing at all. Showing the two forms this product accepts is the difference between
      * an error they can act on and one they can only retype.
+     *
+     * The EXAMPLES are in Latin digits, like every other number in this product — `ApiLanguageTest`
+     * enforces it. A message showing «٠٥٠…» would also be teaching the customer a form the input can
+     * read but no other screen will ever show back to them.
      */
-    'phone_number' => 'أدخل رقم جوال صحيح، مثل ٠٥٠١٢٣٤٥٦٧ أو +٩٦٦٥٠١٢٣٤٥٦٧.',
+    'phone_number' => 'أدخل رقم جوال صحيح، مثل 0501234567 أو ‎+966501234567.',
 
     'attributes' => [
         'address' => 'العنوان',
