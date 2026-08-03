@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, seededProject, switchToEnglish, useProject } from './helpers'
+import { AUTH, seededProject, switchToEnglish, selectProject } from './helpers'
 
 /**
  * Core campaigns paths (authenticated as the demo owner via reused storage state).
@@ -71,7 +71,7 @@ test('create a unified campaign and see it in the list', async ({ page }) => {
 })
 
 test('open a campaign detail and switch tabs', async ({ page }) => {
-  await useProject(page, await seededProject(page.request, SEEDED_PROJECT))
+  await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
   await page.goto('/app/campaigns')
   await switchToEnglish(page)
 
@@ -88,7 +88,7 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
 })
 
 test('link-external modal opens and labels sandbox data as Demo', async ({ page }) => {
-  await useProject(page, await seededProject(page.request, SEEDED_PROJECT))
+  await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
   await page.goto('/app/campaigns')
   await switchToEnglish(page)
   await openCardsView(page)

@@ -93,3 +93,112 @@ producing — a selector that guesses:
    opens, not a choice that applies). Each page now names the control it filters with.
 2. That same selector then hit the modal's close «X» — a button with no text — which shut the dialog
    without filtering. Scoped to the dialog *body* testid, which contains only the page's own controls.
+
+---
+
+## SIMPLIFY-003 — the rest of `/app`
+
+The advertiser dashboard was SIMPLIFY-001. Two more of its pages carried the same growth.
+
+| Page | Before | After |
+|---|---|---|
+| **Reports** | Search, then a status chip row, then a type chip row | Search stays; status and type fold. Summary: «كل التقارير» or the applied set |
+| **Files** | Search, view switcher, then a source row and a visibility row | Search + view switcher stay; source and visibility fold. Summary: «كل الملفات» |
+| **Campaigns** | Search + status chips carrying live counts («الكل ٢٥», «نشطة ١٢») | **Left alone.** Those chips carry data; folding them would hide information, not settings |
+| **Projects** | Search + one status row | **Left alone**, as in `/agency` |
+
+Campaigns is the clearest case for why this pattern needs judgement rather than application: a chip
+that tells you there are twelve active campaigns is a figure, and the whole point of the pass is that
+figures come first.
+
+---
+
+## SIMPLIFY-004 — `/admin`
+
+The platform console is used by staff, but «staff» is not one job. Its rail mixed the queue somebody
+works every morning with tools that are run once in the lifetime of an installation.
+
+| | |
+|---|---|
+| **Before** | Eight equal entries. `/admin/cutover` — which retires the client portal's OTP engine, once, ever — sat beside the registrations queue. Payment methods appeared both as its own entry and as a page inside System settings: one destination under two headings. |
+| **After** | Six daily entries, with **Registrations before Tenants** (an application is decided before the tenant it creates exists), then a separate «متقدم» heading holding cutover and payment methods. |
+| **Why** | A rare, irreversible tool listed with equal weight beside daily work reads as daily work. |
+| **Kept** | Every route unchanged and every destination still reachable — separated is not hidden, and the tests open both to prove it. |
+
+---
+
+## SIMPLIFY-005 — `/portal`
+
+The client portal's rail put Quotes and Invoices above Campaigns and Reports. A client signs in to
+learn how their advertising is doing; they met two pages about money first, and their results were
+fifth and eighth.
+
+| | |
+|---|---|
+| **Before** | Home, Requests, Quotes, Invoices, Messages, Files, Campaigns, Reports, Profile |
+| **After** | Home, Requests, **Campaigns, Reports**, Quotes, Invoices, Messages, Files, Profile |
+| **Why** | Order is the only thing that changed, because order was the only thing wrong. Everything was already there — being present in the wrong place is exactly the defect. |
+| **Kept** | Every path, every page, every permission. |
+
+The client portal is also asserted never to show operator vocabulary — `provider_key`, `binding`,
+`external_account`, `sync_run`, `tenant_id`, `awaiting_credentials`. A client cannot act on any of it
+and should not have to read past it.
+
+---
+
+## What the pass surfaced
+
+Four defects, none of them cosmetic, all found by running the thing rather than reading it.
+
+### 1. A real sideways scroll on `/agency/clients` — 343px, Firefox
+
+A client card grid scrolled the whole page sideways by 17px on a phone. The cause was
+`min-width: auto` on a grid item: a company name with no spaces in it («Conversion Co
+firefox-1785679135282») has nowhere to wrap, so the card refused to shrink, the column grew past the
+grid, and the grid grew past the viewport. Fixed with `min-w-0` down the chain and `break-words` on
+the name.
+
+**It was the test that was wrong first.** The check ran as soon as the filter button appeared —
+before the clients had been fetched — so it measured an empty page, found it exactly 343px wide, and
+passed. It then failed at the *next* measurement and blamed the dialog, which had nothing to do with
+it. Measuring a page that has not loaded proves nothing about the page; the check now waits for the
+data.
+
+### 2. Three tests that named a control without saying where
+
+Renaming the agency rail's groups for the job they do (SIMPLIFY-002) made «الإعدادات / Settings» and
+«الحملات / Campaigns» name both a rail group and a page tab. Three tests had addressed those tabs
+unscoped, which worked only for as long as no menu entry happened to share a label. All three are now
+scoped to `main` — which is what they always meant.
+
+This is worth stating plainly: the tests broke because they were imprecise, not because the rename
+was wrong. A locator that matches "a button called Settings, anywhere on the page" was always going
+to break the first time a second Settings appeared.
+
+### 3. A test helper named like a React hook
+
+`useProject` is a Playwright helper that primes localStorage. The hooks lint rule objected to it
+being called from an ordinary named function — correctly, by its own lights, because the name was
+lying about what it is. Renamed to `selectProject`.
+
+### 4. The appearance sweep did not cover the pages that changed
+
+`e2e/responsive-sweep.spec.ts` walks light/dark × RTL/LTR × three widths — but only across the four
+portal **landing** pages. Every page this pass touched was outside it, which is how the 17px overflow
+survived. `e2e/simplification-appearance.spec.ts` now covers the six folded pages at 343px and
+1440px, in both themes and both directions, with the dialog open at the narrow width — and asserts
+the applied-state line keeps a contrast ratio above 3:1 against whatever is behind it, because a
+summary that vanishes in dark mode hides the one thing folding promised to keep visible.
+
+---
+
+## Performance
+
+Measured, not assumed.
+
+| | |
+|---|---|
+| **Bundle** | 723.03 kB gzip before the pass → 723.21 kB after. +0.18 kB: `ViewCustomiser` is one shared component replacing per-page toolbars. |
+| **Refetch loops** | None. Four simplified pages left idle for six seconds each: zero requests after load. |
+| **Duplicate requests** | One — `GET /api/v1/auth/me` fires twice per page load. It comes from a single `useEffect` in `app/providers.tsx`, which React StrictMode double-invokes **in development**. Untouched by this pass and present before it. Every other call goes through TanStack Query, which dedupes. |
+| **Query cache** | Unchanged. Folding moved controls in the DOM; no query key, no `staleTime` and no fetch was touched. |

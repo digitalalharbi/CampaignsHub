@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { AUTH, createCampaign, pinnedProject, seedExternals, switchToEnglish, unlinkExternalByName, useProject } from './helpers'
+import { AUTH, createCampaign, pinnedProject, seedExternals, switchToEnglish, unlinkExternalByName, selectProject } from './helpers'
 
 /**
  * Full external-linking E2E (the acceptance-critical path):
@@ -71,7 +71,7 @@ test('link → 409 move-confirmation → confirm move → unlink (full path)', a
    * `seedExternals` began reusing the project's binding. An earlier run's link is now cleared here.
    */
   await unlinkExternalByName(page.request, projectId, TARGET_EXTERNAL)
-  await useProject(page, projectId)
+  await selectProject(page, projectId)
 
   const stamp = Date.now()
   const campA = `E2E Link A ${stamp}`

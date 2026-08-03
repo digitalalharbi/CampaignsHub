@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, seededProject, useProject } from './helpers'
+import { AUTH, seededProject, selectProject } from './helpers'
 
 /**
  * VERIFY-100 — the acceptance tests the `IMPLEMENTED_NOT_VERIFIED` rows never had.
@@ -32,7 +32,7 @@ test.describe('CAMPAIGN-010 — five ways to read the same campaigns', () => {
    * produce content that DIFFERS from the overview, not merely to be non-empty.
    */
   test('each of the five modes renders, and renders something different', async ({ page }) => {
-    await useProject(page, await seededProject(page.request, SEEDED_PROJECT))
+    await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
     await page.goto('/app/campaigns')
     await expect(page.getByTestId('view-overview')).toBeVisible({ timeout: 20000 })
 
@@ -52,7 +52,7 @@ test.describe('CAMPAIGN-010 — five ways to read the same campaigns', () => {
 
   /** The taxonomy chips filter server-side; a chip that changes nothing is a decoration. */
   test('a status chip narrows the list', async ({ page }) => {
-    await useProject(page, await seededProject(page.request, SEEDED_PROJECT))
+    await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
     await page.goto('/app/campaigns')
     await page.getByTestId('view-cards').click()
     await expect.poll(async () => await page.getByTestId('campaign-card').count(), { timeout: 20000 })
@@ -78,7 +78,7 @@ test.describe('CAMPAIGN-020 — comparing campaigns', () => {
    * say that it cannot.
    */
   test('the compare view asks which campaigns, rather than inventing an answer', async ({ page }) => {
-    await useProject(page, await seededProject(page.request, SEEDED_PROJECT))
+    await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
     await page.goto('/app/campaigns')
     await page.getByTestId('view-compare').click()
 
@@ -94,7 +94,7 @@ test.describe('CAMPDET-010 — the campaign in depth', () => {
   test.use({ storageState: AUTH.advertiser })
 
   async function openSeededCampaign(page: import('@playwright/test').Page) {
-    await useProject(page, await seededProject(page.request, SEEDED_PROJECT))
+    await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
     await page.goto('/app/campaigns')
     await page.getByTestId('view-cards').click()
     await expect.poll(async () => await page.getByTestId('campaign-card').count(), { timeout: 20000 })
@@ -145,7 +145,7 @@ test.describe('XREL-001 — where this campaign sits', () => {
    * «0 alerts» is a useful answer where a missing row is not.
    */
   test('the related-entities panel names each relation, zeros and all', async ({ page }) => {
-    await useProject(page, await seededProject(page.request, SEEDED_PROJECT))
+    await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
     await page.goto('/app/campaigns')
     await page.getByTestId('view-cards').click()
     await expect.poll(async () => await page.getByTestId('campaign-card').count(), { timeout: 20000 })
@@ -173,7 +173,7 @@ test.describe('REPORT-SCHEDULING — scheduling that says what it did', () => {
    * contract forbids outright: «لا تدّعِ إرسال بريد ... ما لم يكن فعليًا».
    */
   test('the schedule surface exists and claims no delivery it cannot make', async ({ page }) => {
-    await useProject(page, await seededProject(page.request, SEEDED_PROJECT))
+    await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
     await page.goto('/app/reports')
 
     const main = page.locator('main')
@@ -234,7 +234,7 @@ test.describe('SYNC-001 — the sync pipeline, reported honestly', () => {
    * a failed sync would send somebody debugging; reporting it as a successful one would be a lie.
    */
   test('the project sync surface states its real state', async ({ page }) => {
-    await useProject(page, await seededProject(page.request, BOUND_PROJECT))
+    await selectProject(page, await seededProject(page.request, BOUND_PROJECT))
     const projectId = await seededProject(page.request, BOUND_PROJECT)
     await page.goto(`/app/projects/${projectId}/integrations`)
 
@@ -258,7 +258,7 @@ test.describe('DEMO-001 — demo data that admits what it is', () => {
    * somewhere would not stop somebody reading the dashboard as their own results.
    */
   test('surfaces that show demo figures say so on the page', async ({ page }) => {
-    await useProject(page, await seededProject(page.request, SEEDED_PROJECT))
+    await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
 
     for (const path of ['/app/dashboard', '/app/campaigns']) {
       await page.goto(path)

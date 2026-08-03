@@ -99,7 +99,14 @@ test.describe('the portals are different products', () => {
 
     const rail = page.locator('aside').first()
     await expect(rail.getByText(/^العملاء$|^Clients$/).first()).toBeVisible()
-    await expect(rail.getByText(/الفريق والنطاقات|Team & scopes/).first()).toBeVisible()
+    /*
+     * «الفريق والصلاحيات / Team & permissions» — renamed from «…والنطاقات / …& scopes» by SIMPLIFY-002.
+     *
+     * A «scope» is what the code calls the restriction; a permission is what the person granting it
+     * thinks they are granting. The page, the route and the mechanism are unchanged — and the point
+     * this assertion makes is unchanged with them: the advertiser rail has no such entry at all.
+     */
+    await expect(rail.getByText(/الفريق والصلاحيات|Team & permissions/).first()).toBeVisible()
   })
 
   /**

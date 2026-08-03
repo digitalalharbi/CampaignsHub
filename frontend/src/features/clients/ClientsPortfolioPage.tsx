@@ -207,16 +207,28 @@ function ClientSummaryCard({ label, value, tone }: { label: string; value: numbe
 function ClientCardView({ c, t, lang }: { c: ClientCard; t: ReturnType<typeof useT>; lang: 'ar' | 'en' }) {
   const portalTo = usePortalPath()
   return (
-    <Link to={portalTo(`/clients/${c.id}`)} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 hover:border-brand-400">
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-primary-soft text-brand-600"><Building2 size={18} /></span>
-          <div>
-            <div className="font-bold text-text-primary">{c.name}</div>
+    /*
+     * `min-w-0` down the whole chain, or one long client name widens the page.
+     *
+     * A grid item's `min-width` is `auto`, so it refuses to shrink below its content — and a company
+     * name with no spaces in it («Conversion Co firefox-1785679135282») has no place to wrap. The card
+     * therefore grew past the single column it was given, the column grew past the grid, and the grid
+     * grew past the viewport: at 343px the whole page scrolled sideways by the length of the name.
+     *
+     * It surfaced on a phone, in Firefox, only once real clients had loaded — which is why a check
+     * that ran before the data arrived saw a page that was still exactly 343px wide. `min-w-0` lets
+     * each box shrink and `break-words` gives the name somewhere to break when it must.
+     */
+    <Link to={portalTo(`/clients/${c.id}`)} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-surface p-5 hover:border-brand-400">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-primary-soft text-brand-600"><Building2 size={18} /></span>
+          <div className="min-w-0">
+            <div className="break-words font-bold text-text-primary">{c.name}</div>
             {c.industry && <div className="text-[11px] text-text-muted">{labelOf(INDUSTRY_LABELS, c.industry, lang)}</div>}
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex shrink-0 flex-col items-end gap-1">
           <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone(c.client_status)}`}>{labelOf(CLIENT_STATUS_LABELS, c.client_status, lang)}</span>
           {c.alerts > 0 && <span className="flex items-center gap-1 text-[11px] font-semibold text-warning"><AlertTriangle size={12} /> {c.alerts}</span>}
         </div>

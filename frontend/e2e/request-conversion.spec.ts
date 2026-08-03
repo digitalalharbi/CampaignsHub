@@ -41,10 +41,17 @@ test('convert a request → client appears in portfolio and command center', asy
   await expect(page).toHaveURL(/\/agency\/clients\/[0-9A-Za-z-]+/)
   await expect(page.getByRole('heading', { name: company })).toBeVisible()
 
-  // Campaigns tab shows the draft campaign; Requests tab shows the originating request.
-  await page.getByRole('button', { name: /الحملات|Campaigns/ }).click()
+  /*
+   * Campaigns tab shows the draft campaign; Requests tab shows the originating request.
+   *
+   * Scoped to `main`: the agency rail now has a «الحملات / Campaigns» group of its own (SIMPLIFY-002),
+   * so the unscoped locator matched the menu as well as the tab and strict mode rejected both. The tab
+   * on the page is what this step was ever about.
+   */
+  const tab = (name: RegExp) => page.getByRole('main').getByRole('button', { name })
+  await tab(/الحملات|Campaigns/).click()
   await expect(page.getByText('draft').first()).toBeVisible()
-  await page.getByRole('button', { name: /الطلبات|Requests/ }).click()
+  await tab(/الطلبات|Requests/).click()
   await expect(page.getByText(reference!)).toBeVisible()
 
   /*

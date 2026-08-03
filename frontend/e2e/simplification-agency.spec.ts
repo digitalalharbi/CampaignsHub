@@ -166,9 +166,21 @@ test.describe('the agency portal holds together at every width', () => {
       await page.goto('/agency/clients')
 
       await expect(page.getByTestId('clients-customise')).toBeVisible({ timeout: 20000 })
+
+      /*
+       * Wait for the clients themselves, not just the toolbar above them.
+       *
+       * The first version measured as soon as the filter button appeared, which is before the list has
+       * been fetched — so it measured an empty page, found it exactly 343px wide, and passed. The real
+       * overflow was a long client name widening the card grid, and it only ever appeared AFTER the
+       * data arrived. The check then failed at the next measurement and blamed the dialog, which had
+       * nothing to do with it. Measuring a page that has not loaded proves nothing about the page.
+       */
+      await page.waitForLoadState('networkidle')
+
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth),
-        'the page scrolls sideways before the dialog is even opened',
+        'the loaded page scrolls sideways before the dialog is even opened',
       ).toBe(false)
 
       await page.getByTestId('clients-customise').click()

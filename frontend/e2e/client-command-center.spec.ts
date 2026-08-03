@@ -20,6 +20,18 @@ async function pickCombobox(page: import('@playwright/test').Page, labelRe: RegE
   await page.getByRole('option', { name: optionRe }).click()
 }
 
+/**
+ * A command-center tab, addressed inside `main` — never anywhere on the page.
+ *
+ * These tabs used to be reached unscoped, which worked only for as long as no navigation entry
+ * happened to share a label with one of them. SIMPLIFY-002 renamed the agency rail's groups for the
+ * job they do, and «الإعدادات / Settings» now names both a rail group and a tab: the unscoped
+ * locator matched two elements and strict mode refused to guess. Scoping states what the test always
+ * meant — the tab on the page, not the menu beside it — and stops the next rename from breaking it.
+ */
+const tab = (page: import('@playwright/test').Page, name: RegExp) =>
+  page.getByRole('main').getByRole('button', { name })
+
 test('owner drives a converted client through every command-center tab', async ({ page }, testInfo) => {
   const company = `CC Co ${testInfo.project.name}-${Date.now()}`
 
@@ -60,30 +72,30 @@ test('owner drives a converted client through every command-center tab', async (
   await expect(page.getByText(/Needs Attention|يحتاج متابعة/).first()).toBeVisible()
 
   // 4) Analytics tab renders (fresh client → honest "no data" state, source-of-truth still exposed).
-  await page.getByRole('button', { name: /^Analytics$|^التحليلات$/ }).click()
+  await tab(page, /^Analytics$|^التحليلات$/).click()
   await expect(page.getByText(/No performance data|source of truth|لا توجد بيانات|مصدر البيانات/i).first()).toBeVisible()
 
   // 5) Reports tab → create a client report (queued) appears.
-  await page.getByRole('button', { name: /^Reports$|^التقارير$/ }).click()
+  await tab(page, /^Reports$|^التقارير$/).click()
   await page.getByRole('button', { name: /New report|تقرير جديد/ }).click()
   await page.getByLabel(/Report name|اسم التقرير/).fill('Monthly CC')
   await page.getByRole('button', { name: /^Create$|^إنشاء$/ }).click()
   await expect(page.getByText('Monthly CC')).toBeVisible()
 
   // 6) Team tab → grant access to a same-tenant user, then remove.
-  await page.getByRole('button', { name: /^Team$|^الفريق$/ }).click()
+  await tab(page, /^Team$|^الفريق$/).click()
   await page.getByLabel(/^Member$|^العضو$/).selectOption({ index: 1 }) // first assignable user
   await page.getByRole('button', { name: /^Add$|^إضافة$/ }).click()
   await expect(page.getByLabel(/Remove|إزالة/).first()).toBeVisible()
   await page.getByLabel(/Remove|إزالة/).first().click()
 
   // 7) Files + Activity render (Activity has the real conversion/classification events).
-  await page.getByRole('button', { name: /^Files$|^الملفات$/ }).click()
-  await page.getByRole('button', { name: /^Activity$|^النشاط$/ }).click()
+  await tab(page, /^Files$|^الملفات$/).click()
+  await tab(page, /^Activity$|^النشاط$/).click()
   await expect(page.getByText(/classification|converted|created/i).first()).toBeVisible()
 
   // 8) Settings → change display name → Save.
-  await page.getByRole('button', { name: /^Settings$|^الإعدادات$/ }).click()
+  await tab(page, /^Settings$|^الإعدادات$/).click()
   await page.getByLabel(/Display name|اسم العرض/).fill(`${company} (edited)`)
   await page.getByRole('button', { name: /^Save$|^حفظ$/ }).click()
 

@@ -46,8 +46,15 @@ export async function switchToEnglish(page: Page) {
   if (await toggle.count()) await toggle.click().catch(() => {})
 }
 
-/** Force the global project switcher (zustand persist) to a specific project before the app boots. */
-export async function useProject(page: Page, projectId: string) {
+/**
+ * Force the global project switcher (zustand persist) to a specific project before the app boots.
+ *
+ * Named `selectProject`, not `useProject`: this is a Playwright helper, but anything beginning with
+ * «use» is read as a React hook by the hooks lint rule, which then objected — correctly, by its own
+ * lights — to it being called from an ordinary named function. The rule was right that the name was
+ * lying about what this is.
+ */
+export async function selectProject(page: Page, projectId: string) {
   await page.addInitScript((id) => {
     localStorage.setItem(
       'campaign-hub-project-storage',
