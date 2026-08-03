@@ -6,6 +6,8 @@ namespace App\Domains\Requests\Http\Controllers;
 
 use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
+use App\Rules\PhoneNumberRule;
+use App\Support\PhoneNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -72,10 +74,19 @@ final class ContactVerificationController
             return Str::lower($destination);
         }
 
-        // Phone: keep a leading + and digits only.
-        $plus = str_starts_with($destination, '+') ? '+' : '';
-
-        return $plus.preg_replace('/\D+/', '', $destination);
+        /*
+         * PHONE-001 — one reading of a phone number, shared with the rest of the product.
+         *
+         * This used to keep a leading «+» and strip everything else, which left «0501234567» as
+         * «0501234567» — and `assertShape()` then rejected it for having no «+». The customer was
+         * refused the OTP for writing their own number the ordinary way, and the OTP is the gate on
+         * the entire public request flow.
+         *
+         * Normalising to E.164 here also means the verification record and the request it later
+         * attaches to are keyed on the SAME string, so «has this number been verified?» has an answer
+         * that does not depend on which form was typed at which step.
+         */
+        return PhoneNumber::normalise($destination) ?? $destination;
     }
 
     private function assertShape(string $channel, string $destination): void
@@ -85,7 +96,8 @@ final class ContactVerificationController
 
             return;
         }
-        // Phone must be E.164-ish: + and 8–15 digits.
-        validator(['phone' => $destination], ['phone' => ['required', 'regex:/^\+[1-9]\d{7,14}$/']])->validate();
+        // Readable as a phone number, in any of the accepted forms — `normalize()` above has already
+        // turned it into E.164, so this rejects only what genuinely is not a number.
+        validator(['phone' => $destination], ['phone' => ['required', new PhoneNumberRule]])->validate();
     }
 }

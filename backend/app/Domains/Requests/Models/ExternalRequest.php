@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Requests\Models;
 
 use App\Models\User;
+use App\Support\Concerns\NormalisesPhoneNumbers;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -56,6 +57,11 @@ use Illuminate\Support\Carbon;
  */
 class ExternalRequest extends Model
 {
+    use NormalisesPhoneNumbers;
+
+    /** PHONE-001 — normalised to E.164 on save, from every caller. See the trait. */
+    protected array $phoneColumns = ['contact_phone'];
+
     use HasUlids;
 
     protected $guarded = ['id'];

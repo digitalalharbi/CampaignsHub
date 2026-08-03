@@ -16,6 +16,7 @@ use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestIntake;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
+use App\Rules\PhoneNumberRule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -77,7 +78,14 @@ final class PublicRequestController
             ],
             'contact_name' => ['required', 'string', 'min:2', 'max:120'],
             'contact_email' => ['required', 'email', 'max:160'],
-            'contact_phone' => ['required', 'string', 'max:32', 'regex:/^\+[1-9]\d{7,14}$/'], // E.164 with country code
+            /*
+             * PHONE-001 — accept the number the way the customer writes it.
+             *
+             * This demanded a leading «+», which rejected «0501234567» — the national format almost
+             * every Saudi customer types — on a PUBLIC intake form, with an error they could not act
+             * on. It is normalised to E.164 before storage either way, so nothing downstream changes.
+             */
+            'contact_phone' => ['required', 'string', 'max:32', new PhoneNumberRule],
             'company_name' => ['required', 'string', 'min:2', 'max:160'],
             'objective' => ['nullable', 'string', 'max:2000'],
             'budget' => ['nullable', 'numeric', 'min:0', 'max:99999999'],

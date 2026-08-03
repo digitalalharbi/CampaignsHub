@@ -6,6 +6,7 @@ namespace App\Domains\CRM\Http\Requests;
 
 use App\Domains\CRM\Enums\LeadSource;
 use App\Domains\CRM\Enums\LeadStatus;
+use App\Rules\PhoneNumberRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -22,7 +23,7 @@ final class StoreLeadRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:160'],
             'email' => ['nullable', 'email:rfc', 'max:190'],
-            'phone' => ['nullable', 'string', 'max:40'],
+            'phone' => ['nullable', 'string', 'max:40', new PhoneNumberRule],
             'source' => ['required', Rule::in(LeadSource::values())],
             'status' => ['sometimes', Rule::in(LeadStatus::values())],
             'estimated_value' => ['sometimes', 'numeric', 'min:0'],

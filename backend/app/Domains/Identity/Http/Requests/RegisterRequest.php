@@ -7,6 +7,7 @@ namespace App\Domains\Identity\Http\Requests;
 use App\Domains\Accounts\Enums\AccountType;
 use App\Domains\Subscriptions\Services\PlanCatalogue;
 use App\Domains\Tenancy\Enums\Portal;
+use App\Rules\PhoneNumberRule;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -75,7 +76,7 @@ final class RegisterRequest extends FormRequest
                 },
             ],
             'billing_interval' => ['sometimes', 'nullable', 'in:monthly,annual'],
-            'phone' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'phone' => ['sometimes', 'nullable', 'string', 'max:40', new PhoneNumberRule],
         ];
     }
 }

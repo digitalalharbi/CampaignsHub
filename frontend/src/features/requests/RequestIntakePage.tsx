@@ -1,3 +1,4 @@
+import { isReadablePhone, phoneError } from '@/lib/phone'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -247,7 +248,14 @@ function DefaultIntake() {
     if (s === 1) {
       if (form.contact_name.trim().length < 2) e.contact_name = ar ? 'الاسم مطلوب' : 'Name is required'
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.contact_email)) e.contact_email = ar ? 'بريد غير صحيح' : 'Invalid email'
-      if (!/^\+[1-9]\d{7,14}$/.test(form.contact_phone.trim())) e.contact_phone = ar ? 'أدخل رقمًا دوليًا مع رمز الدولة (مثال ‎+9665...)' : 'Enter an international number with country code (e.g. +9665…)'
+      /*
+       * PHONE-001 — accept the number the way the customer writes it.
+       *
+       * This demanded a leading «+», so «0501234567» was refused IN THE BROWSER and never reached the
+       * backend that would have normalised it. The customer was told to add a country code they had no
+       * reason to think was missing, on the public intake form, before they could ask for anything.
+       */
+      if (!isReadablePhone(form.contact_phone)) e.contact_phone = phoneError(ar)
       if (form.company_name.trim().length < 2) e.company_name = ar ? 'اسم المنشأة مطلوب' : 'Company name is required'
     }
     if (s === 2 && form.objective.trim().length < 5) e.objective = ar ? 'اذكر هدف الطلب باختصار' : 'Describe the objective'
@@ -348,7 +356,7 @@ function DefaultIntake() {
               <TextInput label={ar ? 'الاسم' : 'Name'} value={form.contact_name} onChange={(e) => set('contact_name', e.target.value)} required error={errors.contact_name} />
               <EmailInput label={ar ? 'البريد الإلكتروني' : 'Email'} value={form.contact_email} onChange={(e) => set('contact_email', e.target.value)} required error={errors.contact_email} />
               <div className="grid gap-4 sm:grid-cols-2">
-                <TextInput label={ar ? 'رقم الجوال (مع رمز الدولة)' : 'Phone (with country code)'} value={form.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} inputMode="tel" dir="ltr" placeholder="+9665XXXXXXXX" required error={errors.contact_phone} />
+                <TextInput label={ar ? 'رقم الجوال' : 'Mobile number'} value={form.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} inputMode="tel" dir="ltr" placeholder={ar ? '0501234567' : '0501234567'} required error={errors.contact_phone} hint={ar ? 'بمفتاح الدولة أو بدونه — كلاهما مقبول.' : 'With or without a country code — both are accepted.'} />
                 <TextInput label={ar ? 'اسم النشاط أو الشركة' : 'Company'} value={form.company_name} onChange={(e) => set('company_name', e.target.value)} required error={errors.company_name} />
               </div>
             </div>

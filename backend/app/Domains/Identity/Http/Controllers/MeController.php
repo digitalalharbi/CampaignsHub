@@ -7,6 +7,7 @@ namespace App\Domains\Identity\Http\Controllers;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Identity\Resources\UserResource;
 use App\Models\User;
+use App\Rules\PhoneNumberRule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -39,7 +40,7 @@ final class MeController
             'first_name' => ['sometimes', 'nullable', 'string', 'max:80'],
             'last_name' => ['sometimes', 'nullable', 'string', 'max:80'],
             'job_title' => ['sometimes', 'nullable', 'string', 'max:120'],
-            'phone' => ['sometimes', 'nullable', 'string', 'max:32', 'regex:/^[0-9+()\-\s]*$/'],
+            'phone' => ['sometimes', 'nullable', 'string', 'max:32', new PhoneNumberRule],
             'bio' => ['sometimes', 'nullable', 'string', 'max:500'],
             'locale' => ['sometimes', Rule::in(['ar', 'en'])],
             'timezone' => ['sometimes', 'string', 'timezone'],

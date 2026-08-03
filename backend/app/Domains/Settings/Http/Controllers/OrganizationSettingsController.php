@@ -9,6 +9,7 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
+use App\Rules\PhoneNumberRule;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -102,7 +103,7 @@ final class OrganizationSettingsController extends Controller
             'general.account_type' => ['required', Rule::in(self::accountTypes())],
             'general.logo_url' => ['nullable', 'url', 'max:2048'],
             'general.contact_email' => ['nullable', 'email', 'max:180'],
-            'general.contact_phone' => ['nullable', 'string', 'max:40'],
+            'general.contact_phone' => ['nullable', 'string', 'max:40', new PhoneNumberRule],
             'general.country' => ['required', 'string', 'size:2'],
             'general.default_locale' => ['required', 'in:ar,en'],
             'general.default_currency' => ['required', 'string', 'size:3'],

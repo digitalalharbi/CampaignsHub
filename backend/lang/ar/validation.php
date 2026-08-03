@@ -176,6 +176,15 @@ return [
      * not translating it at all. Only fields that actually appear on a customer-facing form are
      * listed; an internal one is better left as its own name than given an invented Arabic label.
      */
+    /*
+     * PHONE-001 — the message names BOTH accepted shapes on purpose.
+     *
+     * «Enter a valid number» tells somebody staring at a number they believe is valid
+     * nothing at all. Showing the two forms this product accepts is the difference between
+     * an error they can act on and one they can only retype.
+     */
+    'phone_number' => 'أدخل رقم جوال صحيح، مثل ٠٥٠١٢٣٤٥٦٧ أو +٩٦٦٥٠١٢٣٤٥٦٧.',
+
     'attributes' => [
         'address' => 'العنوان',
         'amount' => 'المبلغ',

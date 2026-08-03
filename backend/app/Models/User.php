@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Concerns\HasRoles;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Support\Concerns\NormalisesPhoneNumbers;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -30,6 +31,11 @@ use Laravel\Sanctum\HasApiTokens;
  */
 class User extends Authenticatable
 {
+    use NormalisesPhoneNumbers;
+
+    /** PHONE-001 — normalised to E.164 on save, from every caller. See the trait. */
+    protected array $phoneColumns = ['phone'];
+
     use HasApiTokens;
 
     /** @use HasFactory<UserFactory> */

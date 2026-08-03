@@ -7,6 +7,7 @@ namespace App\Domains\Influencers\Models;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use App\Models\User;
+use App\Support\Concerns\NormalisesPhoneNumbers;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -21,6 +22,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 final class Influencer extends Model
 {
+    use NormalisesPhoneNumbers;
+
+    /** PHONE-001 — normalised to E.164 on save, from every caller. See the trait. */
+    protected array $phoneColumns = ['contact_phone'];
+
     use BelongsToTenant;
     use HasUuidKey;
     use SoftDeletes;

@@ -7,6 +7,7 @@ namespace App\Domains\Influencers\Http\Controllers;
 use App\Domains\Influencers\Actions\LinkCreatorAccount;
 use App\Domains\Influencers\Models\Influencer;
 use App\Http\Controllers\Controller;
+use App\Rules\PhoneNumberRule;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -112,7 +113,7 @@ final class InfluencerController extends Controller
             'country' => ['nullable', 'string', 'max:64'],
             'language' => ['nullable', 'string', 'max:16'],
             'contact_email' => ['nullable', 'email', 'max:255'],
-            'contact_phone' => ['nullable', 'string', 'max:32'],
+            'contact_phone' => ['nullable', 'string', 'max:32', new PhoneNumberRule],
             'status' => ['nullable', 'string', 'max:64'],
             'internal_notes' => ['nullable', 'string', 'max:5000'],
         ]);

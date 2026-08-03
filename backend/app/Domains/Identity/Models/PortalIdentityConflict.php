@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Identity\Models;
 
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
+use App\Support\Concerns\NormalisesPhoneNumbers;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -16,6 +17,11 @@ use Illuminate\Database\Eloquent\Model;
  */
 final class PortalIdentityConflict extends Model
 {
+    use NormalisesPhoneNumbers;
+
+    /** PHONE-001 — normalised to E.164 on save, from every caller. See the trait. */
+    protected array $phoneColumns = ['contact_phone'];
+
     use HasUuidKey;
 
     protected $table = 'portal_identity_conflicts';
