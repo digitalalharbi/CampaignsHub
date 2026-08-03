@@ -13,15 +13,25 @@ import { useClientSpacePath } from './clientSpace'
  * they are in the shared view, `/portal/clients/acme/invoices` inside a space. Hard-coding `/client`
  * here would drop a visitor out of their brand's space on the first click.
  */
+/*
+ * Ordered by what a CLIENT opens the portal to find out (SIMPLIFY-005).
+ *
+ * The order was Requests, Quotes, Invoices, Messages, Campaigns, Files, Reports — which put the
+ * paperwork above the results. A client signs in to learn how their advertising is doing and whether
+ * anything needs them; «الحملات» and «التقارير» were fifth and eighth, below two pages about billing.
+ *
+ * Now: what is happening (home, requests, campaigns, reports), then the money (quotes, invoices),
+ * then the conversation (messages, files), then the account. Every destination and path is unchanged.
+ */
 export const PORTAL_NAV: { to: string; icon: LucideIcon; ar: string; en: string; end?: boolean }[] = [
   { to: '', icon: LayoutDashboard, ar: 'الرئيسية', en: 'Dashboard', end: true },
   { to: '/requests', icon: FileText, ar: 'الطلبات', en: 'Requests' },
+  { to: '/campaigns', icon: Megaphone, ar: 'الحملات', en: 'Campaigns' },
+  { to: '/reports', icon: BarChart3, ar: 'التقارير', en: 'Reports' },
   { to: '/quotes', icon: ScrollText, ar: 'عروض الأسعار', en: 'Quotes' },
   { to: '/invoices', icon: Receipt, ar: 'الفواتير', en: 'Invoices' },
   { to: '/messages', icon: MessagesSquare, ar: 'الرسائل', en: 'Messages' },
-  { to: '/campaigns', icon: Megaphone, ar: 'الحملات', en: 'Campaigns' },
   { to: '/files', icon: FolderOpen, ar: 'الملفات', en: 'Files' },
-  { to: '/reports', icon: BarChart3, ar: 'التقارير', en: 'Reports' },
   { to: '/profile', icon: User, ar: 'الملف الشخصي', en: 'Profile' },
 ]
 

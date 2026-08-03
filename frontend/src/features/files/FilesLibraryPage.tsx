@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Download, FileSpreadsheet, FileText, FileType, FolderGit2, LayoutGrid, Link2, Rows3, Search } from 'lucide-react'
+import { FilterGroup, ViewCustomiser } from '@/components/ui/ViewCustomiser'
 import { useUi } from '@/stores/ui'
 import { fmtDateTime } from '@/lib/datetime'
 import { getFilesLibrary } from './api'
@@ -97,15 +98,33 @@ export function FilesLibraryPage() {
             className="w-full rounded-xl border border-border bg-surface-secondary py-2 pe-3 ps-9 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none" />
         </label>
         <div className="flex flex-wrap items-center gap-1.5">
-          {(['all', 'request', 'report'] as const).map((s) => (
-            <Chip key={s} active={source === s} onClick={() => setSource(s)}>{s === 'all' ? `${c.col_source}: ${c.all}` : srcLabel(s)}</Chip>
-          ))}
-          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-          {(['all', 'client_visible', 'internal'] as const).map((v) => (
-            <Chip key={v} tone="dark" active={visibility === v} onClick={() => setVisibility(v)}>
-              {v === 'all' ? `${c.col_visibility}: ${c.all}` : v === 'internal' ? c.vis_internal : c.vis_client}
-            </Chip>
-          ))}
+          {/* Source and visibility fold; search and the view switcher stay (SIMPLIFY-003). */}
+          <ViewCustomiser
+            id="files"
+            ar={locale === 'ar'}
+            active={source !== 'all' || visibility !== 'all'}
+            summary={
+              [
+                source === 'all' ? null : srcLabel(source),
+                visibility === 'all' ? null : (visibility === 'internal' ? c.vis_internal : c.vis_client),
+              ].filter(Boolean).join(' · ')
+              || (locale === 'ar' ? 'كل الملفات' : 'All files')
+            }
+            onClear={() => { setSource('all'); setVisibility('all') }}
+          >
+            <FilterGroup label={c.col_source}>
+              {(['all', 'request', 'report'] as const).map((s) => (
+                <Chip key={s} active={source === s} onClick={() => setSource(s)}>{s === 'all' ? c.all : srcLabel(s)}</Chip>
+              ))}
+            </FilterGroup>
+            <FilterGroup label={c.col_visibility}>
+              {(['all', 'client_visible', 'internal'] as const).map((v) => (
+                <Chip key={v} tone="dark" active={visibility === v} onClick={() => setVisibility(v)}>
+                  {v === 'all' ? c.all : v === 'internal' ? c.vis_internal : c.vis_client}
+                </Chip>
+              ))}
+            </FilterGroup>
+          </ViewCustomiser>
           <span className="mx-1 h-4 w-px bg-border" aria-hidden />
           {/* View switch — grid for browsing, table for scanning (same language as Content). */}
           <div className="flex overflow-hidden rounded-lg border border-border">

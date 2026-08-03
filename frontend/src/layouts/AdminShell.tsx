@@ -34,19 +34,35 @@ import { useUi } from '@/stores/ui'
  * of a tenant's workspace, and the structure rule is a maximum of two levels — so related things are
  * grouped behind tabs on one page rather than given a rail entry each.
  */
+/**
+ * What the owner does most days (SIMPLIFY-004).
+ *
+ * The rail was eight flat entries in no particular order, and two of them do not belong beside daily
+ * work: `/admin/cutover` is a ONE-TIME migration that retires the client portal's OTP engine, and
+ * `/admin/settings/integrations/payments` is a page inside System settings given a second name in the
+ * rail — the same destination under two headings, which is how somebody comes to believe there are
+ * two of something.
+ *
+ * Both are still one click away, under «متقدم» at the foot of the rail. Nothing was removed; a rarely
+ * used tool simply stopped competing for attention with the queue somebody opens every morning.
+ */
 const adminNav = [
   { to: '/admin', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: Building2 },
   // The queue in front of Tenants: applications that have not become one yet (SIGNUP-003).
   { to: '/admin/registrations', ar: 'طلبات التسجيل', en: 'Registrations', icon: ClipboardCheck },
+  { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: Building2 },
   { to: '/admin/billing', ar: 'الخطط والاشتراكات', en: 'Plans & subscriptions', icon: CreditCard },
-  { to: '/admin/settings', ar: 'إعدادات النظام', en: 'System settings', icon: Settings },
-  { to: '/admin/settings/integrations/payments', ar: 'وسائل الدفع', en: 'Payment methods', icon: CreditCard },
-  { to: '/admin/cutover', ar: 'انتقال بوابة العملاء', en: 'Portal cutover', icon: ShieldAlert },
   { to: '/admin/audit', ar: 'السجلات والتدقيق', en: 'Logs & audit', icon: ScrollText },
+  { to: '/admin/settings', ar: 'إعدادات النظام', en: 'System settings', icon: Settings },
 ] as const
 
-type NavEntry = (typeof adminNav)[number]
+/** Rare and technical. Reachable, but not competing with the daily queue. */
+const adminAdvancedNav = [
+  { to: '/admin/settings/integrations/payments', ar: 'وسائل الدفع', en: 'Payment methods', icon: CreditCard },
+  { to: '/admin/cutover', ar: 'انتقال بوابة العملاء', en: 'Portal cutover', icon: ShieldAlert },
+] as const
+
+type NavEntry = (typeof adminNav)[number] | (typeof adminAdvancedNav)[number]
 
 function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: boolean; onNavigate?: () => void }) {
   const render = (list: readonly NavEntry[]) =>
@@ -84,6 +100,20 @@ function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: bool
       </nav>
 
       <div className="mt-auto" />
+
+      {/* Separated, not hidden — see the note on `adminAdvancedNav`. */}
+      <nav
+        aria-label={ar ? 'أدوات متقدمة' : 'Advanced tools'}
+        data-testid="admin-advanced-nav"
+        className="flex flex-col gap-1 border-t border-border pt-2"
+      >
+        {!collapsed && (
+          <span className="px-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-text-muted">
+            {ar ? 'متقدم' : 'Advanced'}
+          </span>
+        )}
+        {render(adminAdvancedNav)}
+      </nav>
     </>
   )
 }

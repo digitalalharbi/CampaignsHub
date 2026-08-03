@@ -29,6 +29,7 @@ import { DemoBadge } from '@/features/analytics/components'
 import { InteractiveReport } from './InteractiveReport'
 import { AnnotationsPanel } from './AnnotationsPanel'
 import { useProject } from '@/stores/project'
+import { FilterGroup, ViewCustomiser } from '@/components/ui/ViewCustomiser'
 import { useUi } from '@/stores/ui'
 
 const STATUS_STYLE: Record<string, string> = {
@@ -174,22 +175,57 @@ export function ReportsPage() {
           className="h-10 w-full rounded-xl border border-border bg-surface-secondary px-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 sm:max-w-xs"
         />
         <div className="flex flex-wrap items-center gap-2">
-          {[
-            ['', ar ? 'الكل' : 'All'],
-            ['completed', statusLabel('completed', ar)],
-            ['processing', statusLabel('processing', ar)],
-            ['failed', statusLabel('failed', ar)],
-          ].map(([value, label]) => (
-            <button
-              key={value || 'all'}
-              onClick={() => setStatus(value)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                status === value ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+          {/*
+            Status and type fold; search and the view switcher stay (SIMPLIFY-003).
+            A reports page is opened to FETCH a report — most often the newest one — and it opened
+            with a status row, a type row and a view switcher above the first filename.
+          */}
+          <ViewCustomiser
+            id="reports"
+            ar={ar}
+            active={status !== '' || typeFilter !== ''}
+            summary={
+              [
+                status === '' ? null : statusLabel(status, ar),
+                typeFilter === '' ? null : typeLabel(typeFilter),
+              ].filter(Boolean).join(' · ')
+              || (ar ? 'كل التقارير' : 'All reports')
+            }
+            onClear={() => { setStatus(''); setTypeFilter('') }}
+          >
+            <FilterGroup label={ar ? 'الحالة' : 'Status'}>
+              {[
+                ['', ar ? 'الكل' : 'All'],
+                ['completed', statusLabel('completed', ar)],
+                ['processing', statusLabel('processing', ar)],
+                ['failed', statusLabel('failed', ar)],
+              ].map(([value, label]) => (
+                <button
+                  key={value || 'all'}
+                  onClick={() => setStatus(value)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    status === value ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </FilterGroup>
+            {presentTypes.length > 1 && (
+              <FilterGroup label={ar ? 'النوع' : 'Type'}>
+                <button onClick={() => setTypeFilter('')}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${typeFilter === '' ? 'bg-text-primary text-surface' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
+                  {ar ? 'الكل' : 'All'}
+                </button>
+                {presentTypes.map((tp) => (
+                  <button key={tp} onClick={() => setTypeFilter(typeFilter === tp ? '' : tp)}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${typeFilter === tp ? 'bg-text-primary text-surface' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
+                    {typeLabel(tp)}
+                  </button>
+                ))}
+              </FilterGroup>
+            )}
+          </ViewCustomiser>
           <span className="mx-1 h-4 w-px bg-border" aria-hidden />
           {/* View switch — table for scanning, cards for browsing. */}
           <div className="flex overflow-hidden rounded-lg border border-border">
@@ -200,22 +236,6 @@ export function ReportsPage() {
           </div>
         </div>
       </div>
-
-      {/* Report-type filter — driven by the taxonomy engine (report.type), only types present in the list. */}
-      {presentTypes.length > 1 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button onClick={() => setTypeFilter('')}
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${typeFilter === '' ? 'bg-text-primary text-surface' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
-            {ar ? 'النوع: الكل' : 'Type: all'}
-          </button>
-          {presentTypes.map((tp) => (
-            <button key={tp} onClick={() => setTypeFilter(typeFilter === tp ? '' : tp)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${typeFilter === tp ? 'bg-text-primary text-surface' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
-              {typeLabel(tp)}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* List */}
       <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
