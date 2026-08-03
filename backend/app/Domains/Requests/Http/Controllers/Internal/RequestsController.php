@@ -62,8 +62,58 @@ final class RequestsController
 
         return response()->json([
             'data' => collect($page->items())->map(fn (ExternalRequest $r) => $this->row($r))->all(),
-            'meta' => ['total' => $page->total(), 'per_page' => $page->perPage(), 'current_page' => $page->currentPage(), 'last_page' => $page->lastPage()],
+            'meta' => [
+                'total' => $page->total(), 'per_page' => $page->perPage(),
+                'current_page' => $page->currentPage(), 'last_page' => $page->lastPage(),
+                'summary' => $this->summary(clone $query),
+            ],
         ]);
+    }
+
+    /**
+     * REQ-SUMMARY-001 — the real counts, over the whole filtered set.
+     *
+     * The inbox header used to compute these in the browser from `rows`, which is ONE PAGE. With 493
+     * requests and a hundred loaded, «جديد ٨٧» was eighty-seven out of the first hundred, presented
+     * beside a total of 493 as though the two were measured the same way. A card that answers «what is
+     * happening?» with a number silently scoped to whatever happened to be fetched is worse than no
+     * card: it is confidently wrong, and nothing on the page hints at it.
+     *
+     * Counted in ONE grouped query rather than five, and over a clone of the same builder — so the
+     * summary always describes exactly the set the list is showing, filters and all. A summary that
+     * ignored the active filter would be a different lie in the same place.
+     *
+     * `needs_attention` is the actionable one: breached SLA or nobody assigned. It is what turns a
+     * status board into something that answers «what needs me?» rather than only «what exists?».
+     *
+     * @param  Builder<ExternalRequest>  $query
+     * @return array<string, int>
+     */
+    private function summary(Builder $query): array
+    {
+        /*
+         * `reorder()` first — the ORDER BY has to go before this is aggregated.
+         *
+         * `paginate()` mutates the builder it is called on, so by the time this clone is taken the
+         * sort column is already attached; Postgres then refuses the aggregate because
+         * `submitted_at` is neither grouped nor aggregated. A 500 on the busiest screen in the
+         * product, from a line that reads as though it only counts rows.
+         */
+        $row = (array) $query->reorder()->toBase()
+            ->selectRaw('COUNT(*) AS total')
+            ->selectRaw("COUNT(*) FILTER (WHERE status_id = (SELECT id FROM request_statuses WHERE key = 'new')) AS new_count")
+            ->selectRaw("COUNT(*) FILTER (WHERE status_id = (SELECT id FROM request_statuses WHERE key = 'under_review')) AS review_count")
+            ->selectRaw("COUNT(*) FILTER (WHERE status_id IN (SELECT id FROM request_statuses WHERE key IN ('waiting_client', 'on_hold'))) AS paused_count")
+            ->selectRaw('COUNT(*) FILTER (WHERE sla_breached_at IS NOT NULL OR assigned_to IS NULL) AS needs_attention')
+            ->first();
+
+        return [
+            'total' => (int) ($row['total'] ?? 0),
+            'new' => (int) ($row['new_count'] ?? 0),
+            'review' => (int) ($row['review_count'] ?? 0),
+            'paused' => (int) ($row['paused_count'] ?? 0),
+            'needs_attention' => (int) ($row['needs_attention'] ?? 0),
+        ];
     }
 
     /** GET /api/v1/app/requests/{request} — full internal detail (includes internal notes + SLA). */

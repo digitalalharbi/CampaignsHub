@@ -39,11 +39,16 @@ export function RequestsDashboardPage() {
   const setViewPref = (v: View) => { setView(v); localStorage.setItem(VIEW_KEY, v) }
   const rows = query.data?.data ?? []
   const ar = useUi((s) => s.locale) === 'ar'
-  const summary = {
+  /*
+   * REQ-SUMMARY-001 — the backend's counts, over the whole filtered set.
+   *
+   * These were computed here from `rows`, which is one page. With 493 requests and 100 loaded, «جديد»
+   * read 87 — eighty-seven of the first hundred — sitting beside a total of 493 as though both were
+   * measured the same way. The fallback below only ever applies before the first response lands.
+   */
+  const summary = query.data?.meta?.summary ?? {
     total: query.data?.meta?.total ?? rows.length,
-    new: rows.filter((r) => r.status === 'new').length,
-    review: rows.filter((r) => r.status === 'under_review').length,
-    waiting: rows.filter((r) => r.status === 'waiting_client').length,
+    new: 0, review: 0, paused: 0, needs_attention: 0,
   }
 
   // Kanban move: optimistic status change, rollback (refetch) on failure. Backend is the state-machine authority.
@@ -72,7 +77,24 @@ export function RequestsDashboardPage() {
         <ReqSummaryCard label={ar ? 'إجمالي الطلبات' : 'Total requests'} value={summary.total} tone="brand" />
         <ReqSummaryCard label={ar ? 'جديدة' : 'New'} value={summary.new} tone="info" />
         <ReqSummaryCard label={ar ? 'قيد المراجعة' : 'Under review'} value={summary.review} tone="warning" />
-        <ReqSummaryCard label={ar ? 'بانتظار العميل' : 'Waiting on client'} value={summary.waiting} tone="muted" />
+        {/*
+          The fourth card answers «what needs me?», not «what exists?».
+          A breached SLA or an unassigned request is something an operator can act on this minute;
+          another status count is one more thing to read past. Clicking it filters the list to exactly
+          those requests, so the card is a way in rather than a number to admire.
+        */}
+        <button
+          type="button"
+          data-testid="requests-needs-attention"
+          onClick={() => set({ unassigned: filters.unassigned ? undefined : true })}
+          className="text-start"
+        >
+          <ReqSummaryCard
+            label={ar ? 'يحتاج انتباهك' : 'Needs your attention'}
+            value={summary.needs_attention}
+            tone={summary.needs_attention > 0 ? 'warning' : 'muted'}
+          />
+        </button>
       </div>
 
       {/* Filters */}

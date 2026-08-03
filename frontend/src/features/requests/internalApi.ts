@@ -25,7 +25,7 @@ export interface RequestRow {
 
 export interface RequestListResult {
   data: RequestRow[]
-  meta: { total: number; per_page: number; current_page: number; last_page: number }
+  meta: { total: number; per_page: number; current_page: number; last_page: number; summary?: RequestSummary }
 }
 
 export interface RequestComment { id: number; visibility: 'internal' | 'client'; author: string; body: string; at: string | null }
@@ -64,6 +64,8 @@ export interface RequestDetail extends RequestRow {
 export interface RequestFilters {
   status?: string
   priority?: string
+  /** REQ-SUMMARY-001 — the «needs your attention» card's way in. Backend-supported, not a client filter. */
+  unassigned?: boolean
   q?: string
   page?: number
   per_page?: number
@@ -75,6 +77,35 @@ export interface RequestFilters {
  * drop into. The backend is the authority and rejects anything this map gets wrong — this exists to
  * avoid offering a move that is about to fail, never to decide whether it may happen.
  */
+/**
+ * REQ-SUMMARY-001 — counts over the WHOLE filtered set, computed by the backend.
+ *
+ * These used to be derived in the browser from the loaded page. `needs_attention` is the actionable
+ * one: a breached SLA or nobody assigned.
+ */
+export interface RequestSummary {
+  total: number
+  new: number
+  review: number
+  paused: number
+  needs_attention: number
+}
+
+/**
+ * REQ-SUMMARY-001 — counts over the WHOLE filtered set, computed by the backend.
+ *
+ * These used to be derived in the browser from the loaded page, so «new: 87» was 87 of the first 100
+ * rows shown beside a total of 493. `needs_attention` is the actionable one: a breached SLA, or
+ * nobody assigned.
+ */
+export interface RequestSummary {
+  total: number
+  new: number
+  review: number
+  paused: number
+  needs_attention: number
+}
+
 export const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   new: ['under_review', 'qualified', 'rejected', 'cancelled'],
   under_review: ['waiting_client', 'qualified', 'on_hold', 'rejected', 'cancelled'],
@@ -96,6 +127,7 @@ export async function listRequests(filters: RequestFilters): Promise<RequestList
   const params = new URLSearchParams()
   if (filters.status) params.set('status', filters.status)
   if (filters.priority) params.set('priority', filters.priority)
+  if (filters.unassigned) params.set('unassigned', '1')
   if (filters.q) params.set('q', filters.q)
   if (filters.page) params.set('page', String(filters.page))
   if (filters.per_page) params.set('per_page', String(filters.per_page))

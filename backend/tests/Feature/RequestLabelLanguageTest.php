@@ -36,6 +36,8 @@ final class RequestLabelLanguageTest extends TestCase
 
     private User $owner;
 
+    private Tenant $tenant;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -44,7 +46,7 @@ final class RequestLabelLanguageTest extends TestCase
         $this->seed(TaxonomyEngineSeeder::class);
         RequestLabels::forget();
 
-        $tenant = Tenant::create(['name' => 'A', 'slug' => 'a', 'status' => 'active', 'is_default_portal' => true, 'portal_enabled' => true]);
+        $this->tenant = $tenant = Tenant::create(['name' => 'A', 'slug' => 'a', 'status' => 'active', 'is_default_portal' => true, 'portal_enabled' => true]);
         app(TenantContext::class)->setTenantId($tenant->id);
 
         $role = Role::create(['tenant_id' => $tenant->id, 'name' => 'O', 'slug' => 'o']);
@@ -103,6 +105,57 @@ final class RequestLabelLanguageTest extends TestCase
         $res->assertOk();
         $this->assertSame('تحت المراجعة', $res->json('data.status_label'));
         $this->assertSame('متوسطة', $res->json('data.priority_label'));
+    }
+
+    /**
+     * REQ-SUMMARY-001 — the header counts describe the whole set, not the loaded page.
+     *
+     * Seeds more requests than fit on one page and asks for a small page: if the counts were still
+     * derived from what was returned, `new` would equal the page size rather than the real total.
+     */
+    public function test_the_summary_counts_the_whole_set_not_the_page(): void
+    {
+        $newStatus = DB::table('request_statuses')->where('key', 'new')->value('id');
+        for ($i = 0; $i < 7; $i++) {
+            ExternalRequest::create([
+                'tenant_id' => $this->tenant->id,
+                'reference' => "REQ-SUM-{$i}",
+                'module' => 'paid_media',
+                'source' => 'public_portal',
+                'type_id' => DB::table('request_types')->value('id'),
+                'status_id' => $newStatus,
+                'priority' => 'medium',
+                'contact_name' => 'Guest',
+                'contact_email' => "g{$i}@example.test",
+            ]);
+        }
+
+        $res = $this->actingAs($this->owner)->getJson('/api/v1/app/requests?per_page=2');
+
+        $res->assertOk();
+        $this->assertCount(2, $res->json('data'), 'the page size was not honoured — the test proves nothing');
+        $this->assertSame(8, $res->json('meta.summary.total'));
+        $this->assertSame(7, $res->json('meta.summary.new'), 'the summary is still counting only the loaded page');
+        $this->assertSame(1, $res->json('meta.summary.review'));
+    }
+
+    /** «Needs attention» is actionable: a breached SLA, or nobody assigned. */
+    public function test_needs_attention_counts_unassigned_and_breached(): void
+    {
+        $res = $this->actingAs($this->owner)->getJson('/api/v1/app/requests');
+
+        $res->assertOk();
+        // The one seeded request has no assignee, so it needs somebody.
+        $this->assertSame(1, $res->json('meta.summary.needs_attention'));
+    }
+
+    /** The summary follows the FILTER — a count that ignored it would be a different lie. */
+    public function test_the_summary_respects_the_active_filter(): void
+    {
+        $res = $this->actingAs($this->owner)->getJson('/api/v1/app/requests?status=new');
+
+        $res->assertOk();
+        $this->assertSame(0, $res->json('meta.summary.review'), 'the summary ignored the status filter');
     }
 
     /**
