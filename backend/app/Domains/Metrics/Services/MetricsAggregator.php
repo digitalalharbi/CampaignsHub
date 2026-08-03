@@ -57,6 +57,9 @@ final class MetricsAggregator
     /** When set, every aggregation is scoped to this single unified campaign (command center). */
     private ?string $campaignId = null;
 
+    /** When set, every aggregation is scoped to this set of unified campaigns (a shared link's ceiling). */
+    private ?array $campaignIds = null;
+
     /** When set, every aggregation is scoped to these project ids (a client spans many projects). */
     private ?array $projectIds = null;
 
@@ -75,6 +78,24 @@ final class MetricsAggregator
     {
         $clone = clone $this;
         $clone->campaignId = $campaignId;
+
+        return $clone;
+    }
+
+    /**
+     * Return a copy scoped to a SET of unified campaigns (LIVEREP-001 — a shared link's ceiling).
+     *
+     * `forCampaign()` takes one id because the command centre looks at one campaign. A shared link is
+     * given a chosen handful, and passing an empty set must mean «no campaigns», never «all of them» —
+     * the same fail-closed rule `forProjects()` already follows, and for the same reason: this bound is
+     * the only thing standing between a client's link and somebody else's numbers.
+     *
+     * @param  list<string>  $campaignIds
+     */
+    public function forCampaigns(array $campaignIds): self
+    {
+        $clone = clone $this;
+        $clone->campaignIds = array_values(array_unique(array_filter($campaignIds)));
 
         return $clone;
     }
@@ -131,6 +152,15 @@ final class MetricsAggregator
 
         if ($this->campaignId !== null) {
             $query->where('unified_campaign_id', $this->campaignId);
+        }
+
+        if ($this->campaignIds !== null) {
+            // Empty set → match nothing, never "all" — see forCampaigns(). The never-matching UUID keeps
+            // the column type valid on Postgres, exactly as the project bound does.
+            $query->whereIn(
+                'daily_metrics.unified_campaign_id',
+                $this->campaignIds ?: ['00000000-0000-0000-0000-000000000000'],
+            );
         }
 
         if ($this->projectIds !== null) {

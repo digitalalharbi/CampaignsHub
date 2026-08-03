@@ -159,6 +159,19 @@ final class DemoAnalyticsSeeder extends Seeder
                 $add('add_to_cart', round($addToCart));
                 $add('checkout', round($checkout));
                 $add('conversions', round($conv, 2));
+                /*
+                 * `purchases` as well as `conversions`, because a store reports both and they are not
+                 * the same column.
+                 *
+                 * The funnel labels `conversions` «Purchase», so the seeded story looked complete — but
+                 * anything reading the `purchases` metric key found nothing and rendered a zero. On the
+                 * client's live report that put «Purchases: 0» directly beside «Add to cart: 17,812»,
+                 * which reads as a catastrophic checkout failure rather than as a metric nobody wrote.
+                 *
+                 * Equal to conversions here because for this demo store the conversion IS the purchase.
+                 * A product with several conversion events would seed them apart.
+                 */
+                $add('purchases', round($conv, 2));
                 $add('spend', 0, $spendOrig);
                 $add('revenue', 0, $revenueOrig);
             }

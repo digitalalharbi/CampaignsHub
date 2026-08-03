@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Services\ClientReportView;
+use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportExporter;
 use App\Domains\Reports\Services\ShareService;
 use App\Http\Controllers\Controller;
@@ -60,12 +61,80 @@ final class PublicReportController extends Controller
             'currency' => $report->currency,
             'is_demo' => $report->is_demo,
             'generated_at' => $report->generated_at?->toIso8601String(),
+            'mode' => $share->isLive() ? 'live' : 'snapshot',
+            'branding' => $this->branding($report),
             'settings' => [
                 'allow_download' => $share->allow_download,
                 'watermark' => $share->watermark,
             ],
             'data' => $data,
         ], 'Shared report.');
+    }
+
+    /**
+     * LIVEREP-001 — the figures for a live link, recomputed now, within the link's own ceiling.
+     *
+     * Split from `show()` rather than folded into it because the two answer different questions and the
+     * client's page asks them at different times: `show()` once, for the document's identity and its
+     * branding; this on every filter change. Keeping them apart is what lets a filter re-render without
+     * re-fetching the shell — which is the whole point of «updates without reloading the page».
+     *
+     * A snapshot link calling this gets 409 rather than an empty live payload: the caller asked for
+     * something this link is not, and saying so is more useful than returning zeroes it would render.
+     */
+    public function live(Request $request, string $token, LiveReportService $live): JsonResponse
+    {
+        $this->throttle($request);
+        $share = $this->shares->resolveActive($token);
+        if (! $share) {
+            return ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404);
+        }
+        if ($share->password_hash !== null) {
+            $provided = (string) ($request->header('X-Report-Password') ?? $request->query('password', ''));
+            if (! Hash::check($provided, $share->password_hash)) {
+                $this->shares->log($share, 'denied', $request, 'bad password');
+
+                return ApiResponse::error('كلمة المرور مطلوبة أو غير صحيحة.', status: 401, errors: ['password_required' => [true]]);
+            }
+        }
+        if (! $share->isLive()) {
+            return ApiResponse::error('هذا الرابط يعرض تقريرًا ثابتًا وليس بيانات لحظية.', status: 409);
+        }
+
+        $report = Report::withoutGlobalScopes()->find($share->report_id);
+        if (! $report) {
+            return ApiResponse::error('التقرير غير متاح.', status: 404);
+        }
+
+        $payload = $live->build($share, $request->query(), (string) $report->currency);
+
+        // Sanitised with the same hide-flags as the snapshot path: a live link that leaks spend a
+        // snapshot link would have hidden is the same disclosure, arriving by a newer route.
+        $payload = $this->shares->sanitizeLive($payload, $share);
+
+        $this->shares->log($share, 'view', $request, 'live');
+
+        return ApiResponse::success($payload + ['is_demo' => $report->is_demo], 'Live figures.');
+    }
+
+    /**
+     * Whose report this is, as the client should see it — the agency's identity, or the client's own.
+     *
+     * Read from the report's stored config rather than resolved live, so a link keeps the identity it
+     * was created with even if the agency later rebrands.
+     *
+     * @return array<string, mixed>
+     */
+    private function branding(Report $report): array
+    {
+        $config = (array) ($report->config ?? []);
+        $branding = (array) ($config['branding'] ?? []);
+
+        return [
+            'name' => $branding['name'] ?? null,
+            'logo_url' => $branding['logo_url'] ?? null,
+            'accent' => $branding['accent'] ?? null,
+        ];
     }
 
     public function download(Request $request, string $token, string $format): StreamedResponse

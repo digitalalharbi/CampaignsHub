@@ -4,6 +4,7 @@ import { Download, Lock } from 'lucide-react'
 import { fetchSharedReport, sharedDownloadUrl } from './api'
 import type { ReportFormat } from './api'
 import { InteractiveReport } from './InteractiveReport'
+import { LiveSharedReport } from './LiveSharedReport'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { useUi } from '@/stores/ui'
@@ -13,6 +14,9 @@ interface Shared {
   currency: string
   is_demo: boolean
   generated_at: string | null
+  /** LIVEREP-001 — `live` renders the filterable dashboard; `snapshot` renders the generated document. */
+  mode?: 'live' | 'snapshot'
+  branding?: { name: string | null; logo_url: string | null; accent: string | null }
   settings: { allow_download: boolean; watermark: boolean }
   data: Record<string, unknown>
 }
@@ -26,11 +30,21 @@ export function PublicReport() {
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
 
+  /*
+   * The password that actually worked, kept so the live endpoint can be called with it.
+   *
+   * Separate from `password`, which is bound to the input and is whatever the reader has typed at this
+   * instant — including a wrong guess, or an empty field after a re-render. Sending that to the live
+   * endpoint on every filter change would start 401-ing partway through a session that is working fine.
+   */
+  const [accepted, setAccepted] = useState<string | undefined>(undefined)
+
   const load = async (pw?: string) => {
     setState('loading')
     const { status, envelope } = await fetchSharedReport(token, pw)
     if (status === 200) {
       setReport(envelope.data)
+      setAccepted(pw)
       setState('ready')
     } else if (status === 401) {
       setState('password')
@@ -52,7 +66,7 @@ export function PublicReport() {
     <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-background text-text-primary">
       <header className="sticky top-0 z-10 border-b border-border bg-surface/85 px-4 py-3 backdrop-blur-md sm:px-8">
         <div className="mx-auto flex max-w-[1100px] items-center justify-between">
-          <span className="font-heading text-lg font-extrabold tracking-tight">CampaignsHub</span>
+          <span className="font-heading text-lg font-extrabold tracking-tight">{report?.branding?.name ?? 'CampaignsHub'}</span>
           {report && (
             <div className="flex items-center gap-2">
               {report.is_demo && <span className="rounded-full bg-[var(--warning-background)] px-2 py-0.5 text-xs font-semibold text-warning">Demo</span>}
@@ -108,11 +122,25 @@ export function PublicReport() {
               </div>
             )}
             <div className="relative z-[1]">
-              <InteractiveReport
-                data={report.data as never}
-                meta={{ reportName: report.name, platforms, isDemo: report.is_demo, agencyName: 'CampaignsHub' }}
-              />
-              <ReportMetaStrip report={report} />
+              <h1 className="mb-4 font-heading text-xl font-extrabold tracking-tight sm:text-2xl">{report.name}</h1>
+
+              {/*
+                A live link is a dashboard the client filters; a snapshot link is the document that was
+                signed off. They get different readers, so they get different components — see the note
+                at the top of LiveSharedReport for why folding them together would force the page to
+                mislabel one half of itself.
+              */}
+              {report.mode === 'live' ? (
+                <LiveSharedReport token={token} password={accepted} currency={report.currency} />
+              ) : (
+                <>
+                  <InteractiveReport
+                    data={report.data as never}
+                    meta={{ reportName: report.name, platforms, isDemo: report.is_demo, agencyName: report.branding?.name ?? 'CampaignsHub' }}
+                  />
+                  <ReportMetaStrip report={report} />
+                </>
+              )}
             </div>
           </div>
         )}

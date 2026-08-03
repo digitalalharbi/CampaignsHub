@@ -33,6 +33,9 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
 
     // Public secure client report links (token-gated, sanitized, logged).
     Route::get('/reports/shared/{token}', [PublicReportController::class, 'show'])->name('reports.shared.show');
+    // LIVEREP-001 — figures recomputed on request, inside the link's own ceiling. Same token, same
+    // password gate, same access log; a snapshot link answers this with 409 rather than empty data.
+    Route::get('/reports/shared/{token}/live', [PublicReportController::class, 'live'])->name('reports.shared.live');
     Route::get('/reports/shared/{token}/download/{format}', [PublicReportController::class, 'download'])->name('reports.shared.download');
 
     // Print pipeline: token-gated snapshot for the headless-Chromium print route (no session).

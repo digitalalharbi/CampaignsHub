@@ -1,0 +1,334 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
+import {
+  ChartCard,
+  ConversionFunnelChart,
+  MetricLineChart,
+  PlatformDonutChart,
+  RankingBarChart,
+} from '@/features/analytics/charts'
+import { KpiCard, platformColor } from '@/features/analytics/components'
+import { fetchLiveShared, type LivePayload } from './api'
+import { useUi } from '@/stores/ui'
+
+/**
+ * LIVEREP-001 — the client's own view of a live shared link.
+ *
+ * ## Why this is a separate page from `PublicReport`
+ *
+ * A snapshot report is a **document**: it was generated, signed off, and says the same thing every
+ * time it is opened. This is a **dashboard**: it recomputes, and the reader is expected to poke at it.
+ * They want different things from their reader, so folding them into one component would mean a page
+ * that is half-filtered and half-frozen, with no honest way to label either half.
+ *
+ * ## The two rules this page follows
+ *
+ * 1. **Filters never reload the page.** Changing the period or unticking a platform re-fetches one
+ *    endpoint and re-renders; the shell, the branding and the scroll position stay where they were.
+ *    While that request is in flight the previous figures stay on screen, dimmed — blanking them would
+ *    make every filter change feel like a page load, which is the thing being avoided.
+ * 2. **The page never claims more freshness than it has.** «Live» here means *this system recomputed
+ *    just now*, which is not the same as *the ad platform reported just now*. Both are shown, per
+ *    platform, and a platform with no credentials says so in the place where its number would be —
+ *    because a zero and «we cannot see this account» look identical on a chart and mean the opposite.
+ */
+
+/** Period choices, in days. Presets rather than a date picker: a client wants «this month», not a range. */
+const RANGES = [
+  { days: 7, ar: '٧ أيام', en: '7 days' },
+  { days: 30, ar: '٣٠ يومًا', en: '30 days' },
+  { days: 90, ar: '٩٠ يومًا', en: '90 days' },
+] as const
+
+const isoDaysAgo = (days: number) => {
+  const d = new Date()
+  d.setDate(d.getDate() - days + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+export function LiveSharedReport({
+  token,
+  password,
+  currency,
+}: {
+  token: string
+  password?: string
+  currency: string
+}) {
+  const { locale } = useUi()
+  const ar = locale === 'ar'
+
+  const [days, setDays] = useState(30)
+  const [providers, setProviders] = useState<string[]>([])
+  const [campaigns, setCampaigns] = useState<string[]>([])
+  const [payload, setPayload] = useState<LivePayload | null>(null)
+  const [busy, setBusy] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  /*
+   * A request counter, so a slow answer cannot overwrite a fast one.
+   *
+   * Every filter change starts a fetch, and they do not come back in the order they were sent. Without
+   * this, clicking «7 days» then «90 days» can leave the 7-day figures on screen under a «90 days»
+   * label — numbers that are real, for a period the reader is not looking at. That is worse than a
+   * spinner, because nothing about it looks wrong.
+   */
+  const latest = useRef(0)
+
+  const load = useCallback(async () => {
+    const ticket = ++latest.current
+    setBusy(true)
+    const { status, envelope } = await fetchLiveShared(token, {
+      from: isoDaysAgo(days),
+      to: new Date().toISOString().slice(0, 10),
+      providers,
+      campaigns,
+      password,
+    })
+    if (ticket !== latest.current) return
+    if (status === 200) {
+      setPayload(envelope.data as LivePayload)
+      setError(null)
+    } else {
+      setError(envelope.message ?? (ar ? 'تعذّر تحديث البيانات.' : 'Could not refresh the figures.'))
+    }
+    setBusy(false)
+  }, [token, days, providers, campaigns, password, ar])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const toggle = (list: string[], set: (v: string[]) => void, value: string) =>
+    set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value])
+
+  const money = useMemo(
+    () => (v: number | null | undefined) =>
+      v === null || v === undefined
+        ? '—'
+        : new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(v),
+    [currency],
+  )
+  const count = (v: number | null | undefined) =>
+    v === null || v === undefined ? '—' : new Intl.NumberFormat('en-US').format(Math.round(v))
+
+  if (!payload && busy) {
+    return <p className="py-20 text-center text-text-secondary">{ar ? 'جارٍ التحميل…' : 'Loading…'}</p>
+  }
+  if (!payload) {
+    return (
+      <div className="mx-auto max-w-md rounded-2xl border border-border bg-surface p-8 text-center">
+        <p className="text-sm text-text-secondary">{error}</p>
+      </div>
+    )
+  }
+
+  const t = payload.totals
+  const d = payload.deltas
+  const series = (key: string) => payload.timeseries.map((r) => Number(r[key] ?? 0))
+
+  return (
+    /*
+     * `[&>*]:min-w-0` — without it this page scrolls sideways on a phone.
+     *
+     * A grid item's `min-width` is `auto`, so a track is at least as wide as its widest item's
+     * min-content. Here that item is a KPI card holding a chart container, whose min-content is far
+     * wider than a 375px screen: the track went to 420px, every sibling stretched to match, and the
+     * whole document scrolled 61px sideways. Letting the items shrink below min-content is what makes
+     * the inner `flex-wrap` and the responsive chart containers do their job.
+     *
+     * This is the same mechanism that made `/agency/clients` overflow at 343px. It is worth naming
+     * twice, because it looks like an overflowing CHILD and is actually a track that refuses to narrow.
+     */
+    <div className="grid gap-4 [&>*]:min-w-0" data-testid="live-report">
+      {/*
+        Filters first, and they are the only controls on the page.
+        A client is not configuring a workspace; they are asking «which weeks, which platform».
+      */}
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3">
+        <div className="flex gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
+          {RANGES.map((r) => (
+            <button
+              key={r.days}
+              type="button"
+              data-testid={`live-range-${r.days}`}
+              onClick={() => setDays(r.days)}
+              className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition-colors ${
+                days === r.days
+                  ? 'bg-brand-600 text-white'
+                  : 'border border-border text-text-secondary hover:bg-surface-hover'
+              }`}
+            >
+              {ar ? r.ar : r.en}
+            </button>
+          ))}
+        </div>
+
+        {payload.available.providers.length > 1 && (
+          <div className="flex flex-wrap gap-1" role="group" aria-label={ar ? 'المنصات' : 'Platforms'}>
+            {payload.available.providers.map((p) => (
+              <button
+                key={p}
+                type="button"
+                data-testid={`live-platform-${p}`}
+                onClick={() => toggle(providers, setProviders, p)}
+                className={`rounded-xl border px-2.5 py-1.5 text-xs font-semibold capitalize transition-colors ${
+                  providers.includes(p)
+                    ? 'border-transparent text-white'
+                    : 'border-border text-text-secondary hover:bg-surface-hover'
+                }`}
+                style={providers.includes(p) ? { background: platformColor(p) } : undefined}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {payload.available.campaigns.length > 1 && (
+          <select
+            data-testid="live-campaign"
+            value={campaigns[0] ?? ''}
+            onChange={(e) => setCampaigns(e.target.value ? [e.target.value] : [])}
+            className="min-w-0 max-w-[200px] truncate rounded-xl border border-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-text-secondary"
+          >
+            <option value="">{ar ? 'كل الحملات' : 'All campaigns'}</option>
+            {payload.available.campaigns.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        )}
+
+        <button
+          type="button"
+          data-testid="live-refresh"
+          onClick={() => void load()}
+          className="ms-auto inline-flex items-center gap-1.5 rounded-xl border border-border px-2.5 py-1.5 text-xs font-semibold text-text-secondary hover:bg-surface-hover"
+        >
+          <RefreshCw size={13} className={busy ? 'animate-spin' : ''} aria-hidden />
+          {ar ? 'تحديث' : 'Refresh'}
+        </button>
+      </div>
+
+      <FreshnessStrip freshness={payload.freshness} ar={ar} />
+
+      {error && (
+        <p className="rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning">
+          {error}
+        </p>
+      )}
+
+      {/* Dimmed, not blanked, while refreshing — see the note at the top of this file. */}
+      <div className={busy ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard label={ar ? 'الإنفاق' : 'Spend'} value={money(t.spend)} delta={d.spend} invertGood spark={series('spend')} />
+          <KpiCard label={ar ? 'الظهور' : 'Impressions'} value={count(t.impressions)} delta={d.impressions} spark={series('impressions')} />
+          <KpiCard label={ar ? 'النقرات' : 'Clicks'} value={count(t.clicks)} delta={d.clicks} spark={series('clicks')} />
+          <KpiCard label={ar ? 'النتائج' : 'Results'} value={count(t.conversions)} delta={d.conversions} spark={series('conversions')} />
+        </div>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard label={ar ? 'الإضافات للسلة' : 'Add to cart'} value={count(payload.funnel.find((f) => f.stage === 'add_to_cart')?.count)} />
+          <KpiCard label={ar ? 'المشتريات' : 'Purchases'} value={count(t.purchases)} delta={d.purchases} />
+          <KpiCard label={ar ? 'الإيرادات' : 'Revenue'} value={money(t.revenue)} delta={d.revenue} />
+          <KpiCard label="ROAS" value={t.roas === null || t.roas === undefined ? '—' : `${t.roas.toFixed(2)}×`} delta={d.roas} />
+        </div>
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-3">
+          <ChartCard title={ar ? 'الأداء بمرور الوقت' : 'Performance over time'} className="lg:col-span-2">
+            <MetricLineChart
+              data={payload.timeseries}
+              currency={currency}
+              height={220}
+              series={[
+                { key: 'spend', name: ar ? 'الإنفاق' : 'Spend', color: 'var(--brand-600)', kind: 'money' },
+                { key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' },
+                { key: 'conversions', name: ar ? 'النتائج' : 'Results', color: 'var(--purple)', kind: 'num' },
+              ]}
+            />
+          </ChartCard>
+          <ChartCard title={ar ? 'توزيع الإنفاق' : 'Spend by platform'}>
+            <PlatformDonutChart
+              data={payload.platforms.map((p) => ({ name: p.provider, value: Number(p.spend ?? 0) }))}
+              currency={currency}
+              height={220}
+            />
+          </ChartCard>
+        </div>
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <ChartCard title={ar ? 'الحملات' : 'Campaigns'}>
+            {payload.campaigns.length > 0 ? (
+              <RankingBarChart
+                data={payload.campaigns.slice(0, 8).map((c) => ({
+                  name: c.campaign_name ?? '—',
+                  provider: c.provider,
+                  spend: Number(c.spend ?? 0),
+                }))}
+                bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]}
+                horizontal
+                height={220}
+                colorByPlatform
+              />
+            ) : (
+              <p className="py-10 text-center text-sm text-text-muted">
+                {ar ? 'لا توجد حملات في هذه الفترة.' : 'No campaigns in this period.'}
+              </p>
+            )}
+          </ChartCard>
+          <ChartCard title={ar ? 'قمع الأداء' : 'Performance funnel'}>
+            <ConversionFunnelChart stages={payload.funnel} currency={currency} />
+          </ChartCard>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * What the figures are actually as-of, per platform.
+ *
+ * The single most dishonest thing this page could do is print «live» and stop there. A platform we have
+ * never successfully read is reported as such — in words, next to its name — rather than being allowed
+ * to contribute a silent zero to every chart above.
+ */
+function FreshnessStrip({
+  freshness,
+  ar,
+}: {
+  freshness: LivePayload['freshness']
+  ar: boolean
+}) {
+  if (freshness.length === 0) return null
+  const waiting = freshness.filter((f) => f.state === 'awaiting_credentials')
+
+  return (
+    <div data-testid="live-freshness" className="grid gap-2">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary">
+        {freshness.map((f) => (
+          <span key={f.provider} className="capitalize">
+            <span className="text-text-muted">{f.provider}:</span>{' '}
+            <b className="font-semibold text-text-primary">
+              {f.data_as_of
+                ? new Date(f.data_as_of).toLocaleString(ar ? 'ar-SA' : 'en-GB')
+                : ar
+                  ? 'بانتظار بيانات الاعتماد'
+                  : 'Awaiting credentials'}
+            </b>
+          </span>
+        ))}
+      </div>
+
+      {waiting.length > 0 && (
+        <p className="flex items-start gap-1.5 rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
+          <span>
+            {ar
+              ? `لم تُربط بعد: ${waiting.map((f) => f.provider).join('، ')}. الأرقام أعلاه لا تشمل هذه المنصات.`
+              : `Not connected yet: ${waiting.map((f) => f.provider).join(', ')}. The figures above exclude them.`}
+          </span>
+        </p>
+      )}
+    </div>
+  )
+}

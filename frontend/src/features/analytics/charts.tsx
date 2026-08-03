@@ -252,7 +252,19 @@ export function KpiSparkline({ points, color = 'var(--brand-600)', height = 34 }
 
 export function ChartCard({ title, subtitle, action, children, className = '' }: { title: string; subtitle?: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={`flex flex-col rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] ${className}`}>
+    /*
+     * `min-w-0`, because a chart card is nearly always a grid or flex item.
+     *
+     * Those default to `min-width: auto`, meaning they refuse to shrink below their content's
+     * min-content width — and a chart's min-content is whatever its longest axis label happens to be.
+     * One campaign called «Meta — Advantage+ Shopping» was enough to push a two-column row to 433px
+     * inside a 343px phone and scroll the whole page sideways.
+     *
+     * A chart is responsive by definition: it is *supposed* to redraw itself at whatever width it is
+     * given. Refusing to narrow is never the behaviour anybody wanted here, so the card allows it
+     * everywhere rather than each caller remembering to.
+     */
+    <section className={`flex min-w-0 flex-col rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] ${className}`}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h3 className="text-base font-bold tracking-tight text-text-primary">{title}</h3>

@@ -96,6 +96,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('reports/{report}/shares', [ReportShareController::class, 'index'])->name('reports.shares.index');
     Route::post('reports/{report}/shares', [ReportShareController::class, 'store'])->name('reports.shares.store');
     Route::post('reports/{report}/shares/{share}/revoke', [ReportShareController::class, 'revoke'])->name('reports.shares.revoke');
+    Route::post('reports/{report}/shares/{share}/renew', [ReportShareController::class, 'renew'])->name('reports.shares.renew');
     Route::get('reports/{report}/shares/{share}/logs', [ReportShareController::class, 'logs'])->name('reports.shares.logs');
 
     Route::get('team', [ProjectMembershipController::class, 'index'])->name('team.index');

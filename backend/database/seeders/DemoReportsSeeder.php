@@ -7,6 +7,7 @@ namespace Database\Seeders;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportSchedule;
+use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ReportGenerator;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -75,6 +76,66 @@ final class DemoReportsSeeder extends Seeder
             ['type' => 'executive', 'frequency' => 'weekly', 'day' => 'sunday', 'time' => '08:00', 'active' => true, 'next_run_at' => Carbon::today()->next('Sunday')->setTime(8, 0), 'created_by' => $owner?->id, 'is_demo' => true],
         );
 
+        $this->seedLiveShare($project, $owner);
+
         app(TenantContext::class)->forget();
     }
+
+    /**
+     * A live client link that works before any platform credentials exist (LIVEREP-001).
+     *
+     * The point of a demo link is that somebody can open the client's own experience — filters, charts,
+     * freshness strip and all — without first connecting Meta. It reads the same demo `daily_metrics`
+     * every other demo surface reads, so the figures move when the seeded story moves rather than being
+     * a second set of numbers that drifts away from the first.
+     *
+     * **The token is fixed, and that is only safe because of where this can run.** `run()` returns early
+     * outside local/testing/demo, so a predictable token cannot exist in production. A random one would
+     * be unusable for the thing this exists for: a link somebody can type, and a test can assert on.
+     */
+    private function seedLiveShare(Project $project, ?User $owner): void
+    {
+        $report = Report::where('project_id', $project->id)
+            ->where('status', 'completed')
+            ->orderByDesc('period_end')
+            ->first();
+
+        if (! $report) {
+            return;
+        }
+
+        $campaigns = array_values(array_filter(array_map(
+            static fn ($row) => is_array($row) ? ($row['campaign_id'] ?? null) : null,
+            (array) (($report->data ?? [])['campaigns'] ?? []),
+        )));
+        $providers = array_values(array_unique(array_filter(array_map(
+            static fn ($row) => is_array($row) ? ($row['provider'] ?? null) : null,
+            (array) (($report->data ?? [])['platforms'] ?? []),
+        ))));
+
+        ReportShare::updateOrCreate(
+            ['token_hash' => hash('sha256', self::DEMO_LIVE_TOKEN)],
+            [
+                'tenant_id' => $report->tenant_id,
+                'report_id' => $report->id,
+                'mode' => 'live',
+                'scope' => [
+                    'project_id' => (string) $project->id,
+                    'campaign_ids' => $campaigns,
+                    'providers' => $providers,
+                    'earliest' => Carbon::today()->subDays(89)->toDateString(),
+                    'latest' => Carbon::today()->addYear()->toDateString(),
+                ],
+                'allow_download' => true,
+                'watermark' => false,
+                'created_by' => $owner?->id,
+                // Tagged, so the client page shows a Demo badge rather than passing seeded figures off
+                // as a real account's spend.
+                'is_demo' => true,
+            ],
+        );
+    }
+
+    /** The demo live link's token: `/reports/share/{token}`. Local/testing/demo only — see seedLiveShare. */
+    public const DEMO_LIVE_TOKEN = 'demo-live-report-token';
 }

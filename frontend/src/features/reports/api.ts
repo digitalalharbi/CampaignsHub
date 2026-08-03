@@ -80,6 +80,15 @@ export interface ShareRow {
   revoked_at: string | null
   logs_count: number | null
   created_at: string | null
+  /** LIVEREP-001 — `live` recomputes inside `scope`; `snapshot` serves the generated document. */
+  mode: 'live' | 'snapshot'
+  scope: {
+    project_id?: string
+    campaign_ids?: string[]
+    providers?: string[]
+    earliest?: string
+    latest?: string
+  } | null
 }
 export interface CreatedShare extends ShareRow {
   url: string
@@ -102,6 +111,72 @@ export async function fetchSharedReport(token: string, password?: string) {
 }
 export const sharedDownloadUrl = (token: string, format: ReportFormat) =>
   `/api/v1/reports/shared/${token}/download/${format}`
+
+export const renewShare = (p: string, reportId: string, shareId: string, expiresAt: string) =>
+  postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/renew`, { expires_at: expiresAt })
+
+export const shareLogs = (p: string, reportId: string, shareId: string) =>
+  getData<ShareAccessLog[]>(`${base(p)}/${reportId}/shares/${shareId}/logs`)
+
+export interface ShareAccessLog {
+  action: string
+  ip: string | null
+  user_agent: string | null
+  detail: string | null
+  created_at: string
+}
+
+/** The live payload — every figure recomputed inside the link's ceiling (LIVEREP-001). */
+export interface LivePayload {
+  period: { from: string; to: string; days: number }
+  currency: string
+  totals: Record<string, number | null>
+  deltas: Record<string, number | null>
+  timeseries: Array<Record<string, unknown>>
+  platforms: Array<Record<string, unknown> & { provider: string; spend: number | null }>
+  campaigns: Array<Record<string, unknown> & { campaign_name: string | null; provider: string | null; spend: number | null }>
+  funnel: Array<{ stage: string; label: string; count: number; step_rate: number | null; cost_per: number | null }>
+  freshness: Array<{
+    provider: string
+    data_as_of: string | null
+    last_checked_at: string | null
+    /** `awaiting_credentials` is stated, never rendered as a zero — see LiveSharedReport. */
+    state: 'synced' | 'awaiting_credentials'
+  }>
+  available: {
+    providers: string[]
+    campaigns: Array<{ id: string; name: string }>
+    earliest: string
+    latest: string
+  }
+  applied: { from: string; to: string; providers: string[]; campaigns: string[] }
+  is_demo: boolean
+}
+
+/**
+ * Fetch live figures for a shared link.
+ *
+ * Arrays go over as repeated `providers[]=` params because that is what Laravel's validator reads back
+ * as an array; a comma-joined string would arrive as one nonsense provider name and be intersected
+ * away to nothing, which fails silently as "no filter" rather than loudly as an error.
+ */
+export async function fetchLiveShared(
+  token: string,
+  opts: { from: string; to: string; providers: string[]; campaigns: string[]; password?: string },
+) {
+  const qs = new URLSearchParams({ from: opts.from, to: opts.to })
+  opts.providers.forEach((p) => qs.append('providers[]', p))
+  opts.campaigns.forEach((c) => qs.append('campaigns[]', c))
+
+  const res = await fetch(`/api/v1/reports/shared/${token}/live?${qs.toString()}`, {
+    headers: {
+      Accept: 'application/json',
+      ...(opts.password ? { 'X-Report-Password': opts.password } : {}),
+    },
+  })
+  const body = await res.json()
+  return { status: res.status, envelope: body }
+}
 
 // ---- Recommendation approval (report annotations) ----------------------------------------------
 export interface ReportAnnotation {

@@ -36,6 +36,16 @@ final class ShareService
             'hide_revenue' => $opts['hide_revenue'] ?? false,
             'hide_campaign_names' => $opts['hide_campaign_names'] ?? false,
             'watermark' => $opts['watermark'] ?? false,
+            /*
+             * A link is live only when it was given a ceiling to stay inside (LIVEREP-001).
+             *
+             * Mode and scope are set together, never independently: `mode = live` with no scope would be
+             * a link with no bound, and `ReportShare::isLive()` refuses to honour that combination for
+             * the same reason. Setting them from one expression makes the invalid pair unwritable rather
+             * than merely unread.
+             */
+            'mode' => ! empty($opts['scope']) ? 'live' : 'snapshot',
+            'scope' => $opts['scope'] ?? null,
             'expires_at' => $opts['expires_at'] ?? null,
             'created_by' => $userId,
             'is_demo' => (bool) ($report->is_demo ?? false),
@@ -103,5 +113,73 @@ final class ShareService
         }
 
         return $data;
+    }
+
+    /**
+     * The same hide-flags, applied to a LIVE payload (LIVEREP-001).
+     *
+     * A separate method rather than a reuse of `sanitize()` because the two payloads have different
+     * shapes — the live one has `totals`/`deltas`/`funnel` where the snapshot has `kpis`/`summary` — and
+     * a single function pretending to handle both would silently skip the sections it did not recognise.
+     * Silently skipping is precisely how a hidden figure gets published.
+     *
+     * The flags themselves are identical, deliberately: an operator who ticked «hide spend» ticked it
+     * about this client, not about one rendering path. A live link that showed what its snapshot
+     * equivalent hides would be the same disclosure arriving by a newer route.
+     */
+    public function sanitizeLive(array $payload, ReportShare $share): array
+    {
+        if (! $share->hide_spend && ! $share->hide_revenue && ! $share->hide_campaign_names) {
+            return $payload;
+        }
+
+        $money = array_merge(
+            $share->hide_spend ? ['spend', 'cpa', 'cpc', 'cpm', 'cpl', 'cpi', 'cpe'] : [],
+            $share->hide_revenue ? ['revenue', 'roas', 'aov'] : [],
+        );
+
+        $strip = function (array $row) use ($money, $share): array {
+            foreach ($money as $key) {
+                if (array_key_exists($key, $row)) {
+                    $row[$key] = null;
+                }
+            }
+            if ($share->hide_campaign_names && array_key_exists('campaign_name', $row)) {
+                $row['campaign_name'] = 'حملة';
+            }
+
+            return $row;
+        };
+
+        if (isset($payload['totals']) && is_array($payload['totals'])) {
+            $payload['totals'] = $strip($payload['totals']);
+            $payload['deltas'] = $strip((array) ($payload['deltas'] ?? []));
+        }
+
+        foreach (['timeseries', 'platforms', 'campaigns'] as $section) {
+            if (! empty($payload[$section]) && is_array($payload[$section])) {
+                $payload[$section] = array_map(
+                    fn ($row) => is_array($row) ? $strip($row) : $row,
+                    $payload[$section],
+                );
+            }
+        }
+
+        /*
+         * The campaign PICKER is renamed too, not just the rows.
+         *
+         * Hiding names in the table while the filter above it still lists them by name hides nothing —
+         * the reader simply looks up instead of down. This is the kind of gap a per-section sanitizer
+         * leaves behind, and the reason this method enumerates its sections rather than walking blind.
+         */
+        if ($share->hide_campaign_names && ! empty($payload['available']['campaigns'])) {
+            $payload['available']['campaigns'] = array_values(array_map(
+                fn (array $c, int $i): array => ['id' => $c['id'], 'name' => 'حملة '.($i + 1)],
+                $payload['available']['campaigns'],
+                array_keys($payload['available']['campaigns']),
+            ));
+        }
+
+        return $payload;
     }
 }

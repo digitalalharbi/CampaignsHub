@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Copy, Download, FileText, LayoutGrid, Link2, Loader2, Plus, RefreshCw, Rows3, Send, Share2, Trash2 } from 'lucide-react'
 import {
@@ -509,9 +509,34 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
   const ar = useAr()
   const qc = useQueryClient()
   const shares = useQuery({ queryKey: ['shares', projectId, reportId], queryFn: () => listShares(projectId, reportId) })
+
+  /*
+   * The report itself, so the scope pickers offer what this report actually covers.
+   *
+   * An operator narrowing a link should be choosing from the campaigns and platforms in front of them,
+   * not typing ids. Sourcing the options from the report also means the ceiling can never be set wider
+   * than the document it came from — the picker cannot offer what the report does not contain.
+   */
+  const detail = useQuery({ queryKey: ['report', projectId, reportId], queryFn: () => getReport(projectId, reportId) })
+  const allCampaigns = useMemo(
+    () => (detail.data?.data?.campaigns ?? []).map((c) => ({
+      id: String(c.campaign_id ?? ''),
+      name: String(c.campaign_name ?? '—'),
+    })).filter((c) => c.id !== ''),
+    [detail.data],
+  )
+  const allProviders = useMemo(
+    () => [...new Set((detail.data?.data?.platforms ?? []).map((p) => String(p.provider ?? '')).filter(Boolean))],
+    [detail.data],
+  )
+
   const [opts, setOpts] = useState({ password: '', allow_download: true, hide_spend: false, hide_revenue: false, hide_campaign_names: false, watermark: false, expires_at: '' })
+  const [live, setLive] = useState(false)
+  const [scopeCampaigns, setScopeCampaigns] = useState<string[]>([])
+  const [scopeProviders, setScopeProviders] = useState<string[]>([])
   const [created, setCreated] = useState<CreatedShare | null>(null)
   const [copied, setCopied] = useState(false)
+  const [logsFor, setLogsFor] = useState<string | null>(null)
 
   const create = useMutation({
     mutationFn: () =>
@@ -523,6 +548,18 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
         watermark: opts.watermark,
         ...(opts.password ? { password: opts.password } : {}),
         ...(opts.expires_at ? { expires_at: opts.expires_at } : {}),
+        /*
+         * An empty picker means "everything this report covers", which the backend fills in from the
+         * report itself — see ReportShareController::scopeFor. Sending [] would be read as a ceiling of
+         * nothing and produce a link showing no data at all.
+         */
+        ...(live
+          ? {
+              live: true,
+              ...(scopeCampaigns.length ? { campaign_ids: scopeCampaigns } : {}),
+              ...(scopeProviders.length ? { providers: scopeProviders } : {}),
+            }
+          : {}),
       }),
     onSuccess: (s) => {
       setCreated(s)
@@ -531,6 +568,10 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
   })
   const revoke = useMutation({
     mutationFn: (id: string) => revokeShare(projectId, reportId, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shares', projectId, reportId] }),
+  })
+  const renew = useMutation({
+    mutationFn: ({ id, until }: { id: string; until: string }) => renewShare(projectId, reportId, id, until),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['shares', projectId, reportId] }),
   })
 
@@ -563,6 +604,72 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
           </div>
         ) : (
           <div className="space-y-3">
+            {/*
+              Live or fixed, chosen first, because it changes what the rest of this form means.
+              A fixed link shares the document that was signed off; a live one shares a dashboard the
+              client can filter, bounded by the two pickers below and by nothing else.
+            */}
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border bg-surface-secondary p-3">
+              <input
+                type="checkbox"
+                data-testid="share-live"
+                checked={live}
+                onChange={(e) => setLive(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-brand-600"
+              />
+              <span className="text-sm">
+                <b className="block font-semibold">{ar ? 'رابط لحظي يتحدث تلقائيًا' : 'A live link that keeps updating'}</b>
+                <span className="text-xs text-text-secondary">
+                  {ar
+                    ? 'يرى العميل أحدث الأرقام ويستطيع تغيير الفترة والمنصة والحملة، ضمن ما تختاره أدناه فقط.'
+                    : 'The client sees current figures and can change period, platform and campaign — only within what you choose below.'}
+                </span>
+              </span>
+            </label>
+
+            {live && (
+              <div className="grid gap-2 rounded-xl border border-border p-3" data-testid="share-scope">
+                <span className="text-xs font-bold text-text-muted">{ar ? 'ما الذي يستطيع هذا الرابط عرضه؟' : 'What may this link show?'}</span>
+
+                {allProviders.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {allProviders.map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setScopeProviders((s) => (s.includes(p) ? s.filter((v) => v !== p) : [...s, p]))}
+                        className={`rounded-lg border px-2 py-1 text-xs font-semibold capitalize ${scopeProviders.includes(p) ? 'border-brand-500 bg-[var(--brand-background)] text-brand-700' : 'border-border text-text-secondary'}`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {allCampaigns.length > 0 && (
+                  <div className="grid max-h-32 gap-1 overflow-y-auto">
+                    {allCampaigns.map((c) => (
+                      <label key={c.id} className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={scopeCampaigns.includes(c.id)}
+                          onChange={() => setScopeCampaigns((s) => (s.includes(c.id) ? s.filter((v) => v !== c.id) : [...s, c.id]))}
+                          className="h-3.5 w-3.5 accent-brand-600"
+                        />
+                        <span className="truncate">{c.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-[11px] text-text-muted">
+                  {ar
+                    ? 'اترك الاختيار فارغًا ليشمل الرابط كل ما يغطيه هذا التقرير.'
+                    : 'Leave empty to cover everything this report already covers.'}
+                </p>
+              </div>
+            )}
+
             <div className="grid gap-2 sm:grid-cols-2">
               <Toggle k="allow_download" label={ar ? 'السماح بالتنزيل' : 'Allow download'} />
               <Toggle k="watermark" label={ar ? 'علامة مائية' : 'Watermark'} />
@@ -587,23 +694,114 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
           ) : (
             <div className="space-y-2">
               {shares.data!.map((s: ShareRow) => (
-                <div key={s.id} className="flex items-center justify-between rounded-xl border border-border p-3 text-sm">
-                  <div className="flex flex-wrap items-center gap-2">
+                <div key={s.id} data-testid="share-row" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3 text-sm">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${s.active ? 'bg-[var(--positive-background)] text-success' : 'bg-surface-secondary text-text-muted'}`}>{s.active ? (ar ? 'نشط' : 'Active') : s.revoked_at ? (ar ? 'مُلغى' : 'Revoked') : (ar ? 'منتهٍ' : 'Expired')}</span>
+                    {/* Which kind of link this is, said plainly — the client's experience differs entirely. */}
+                    <span className="rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-text-secondary">
+                      {s.mode === 'live' ? (ar ? 'لحظي' : 'Live') : (ar ? 'ثابت' : 'Fixed')}
+                    </span>
                     {s.password_protected && <span className="text-xs text-text-muted">🔒 {ar ? 'محمي' : 'Protected'}</span>}
                     {s.hide_spend && <span className="text-xs text-text-muted">{ar ? 'إنفاق مخفي' : 'Spend hidden'}</span>}
                     <span className="tnum text-xs text-text-muted">{s.view_count} {ar ? 'مشاهدة' : 'views'}</span>
                     {s.expires_at && <span className="tnum text-xs text-text-muted">{ar ? 'ينتهي' : 'expires'} {new Date(s.expires_at).toLocaleDateString('en-GB')}</span>}
                   </div>
-                  {s.active && (
-                    <button onClick={() => revoke.mutate(s.id)} className="text-xs font-semibold text-danger hover:underline">{ar ? 'إلغاء' : 'Revoke'}</button>
-                  )}
+                  <div className="flex shrink-0 items-center gap-3">
+                    <button onClick={() => setLogsFor(s.id)} className="text-xs font-semibold text-text-secondary hover:underline">
+                      {ar ? 'سجل الفتح' : 'Access history'}
+                    </button>
+                    {s.active && (
+                      <>
+                        {/*
+                          Renew pushes the expiry out by a month from today rather than opening a date
+                          picker. The action an operator wants here is «keep this working», and asking
+                          them to pick a date to express that is a step for nothing.
+                        */}
+                        <button
+                          onClick={() => renew.mutate({ id: s.id, until: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10) })}
+                          className="text-xs font-semibold text-text-secondary hover:underline"
+                        >
+                          {ar ? 'تمديد شهر' : 'Extend a month'}
+                        </button>
+                        <button onClick={() => revoke.mutate(s.id)} className="text-xs font-semibold text-danger hover:underline">{ar ? 'إلغاء' : 'Revoke'}</button>
+                      </>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {logsFor && <ShareAccessHistory projectId={projectId} reportId={reportId} shareId={logsFor} onClose={() => setLogsFor(null)} />}
       </div>
+    </Modal>
+  )
+}
+
+/**
+ * Who opened a link, and when — the answer to «did the client actually see the report?».
+ *
+ * Shows denials too, not only views. A run of `denied` rows against a password-protected link is the
+ * difference between «the client never opened it» and «the client could not get in», and an operator
+ * who only ever sees successful views will keep resending a link that works.
+ */
+function ShareAccessHistory({
+  projectId,
+  reportId,
+  shareId,
+  onClose,
+}: {
+  projectId: string
+  reportId: string
+  shareId: string
+  onClose: () => void
+}) {
+  const ar = useAr()
+  const logs = useQuery({
+    queryKey: ['share-logs', projectId, reportId, shareId],
+    queryFn: () => shareLogs(projectId, reportId, shareId),
+  })
+
+  const label = (action: string) =>
+    action === 'view' ? (ar ? 'فتح' : 'Opened')
+      : action === 'download' ? (ar ? 'تنزيل' : 'Downloaded')
+        : action === 'denied' ? (ar ? 'رُفض' : 'Denied')
+          : action
+
+  return (
+    <Modal open onClose={onClose} title={ar ? 'سجل فتح الرابط' : 'Link access history'} size="md">
+      {logs.isLoading ? (
+        <Skeleton className="h-24 w-full" />
+      ) : (logs.data?.length ?? 0) === 0 ? (
+        <p className="py-6 text-center text-sm text-text-muted">
+          {ar ? 'لم يُفتح هذا الرابط بعد.' : 'This link has not been opened yet.'}
+        </p>
+      ) : (
+        <div className="max-h-80 overflow-y-auto" data-testid="share-log-list">
+          <table className="w-full text-start text-sm">
+            <thead className="text-xs text-text-muted">
+              <tr>
+                <th className="p-2 text-start font-semibold">{ar ? 'الحدث' : 'Event'}</th>
+                <th className="p-2 text-start font-semibold">{ar ? 'الوقت' : 'When'}</th>
+                <th className="p-2 text-start font-semibold">IP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.data!.map((l, i) => (
+                <tr key={i} className="border-t border-border">
+                  <td className="p-2">
+                    <span className={l.action === 'denied' ? 'font-semibold text-danger' : ''}>{label(l.action)}</span>
+                    {l.detail && <span className="ms-1 text-xs text-text-muted">({l.detail})</span>}
+                  </td>
+                  <td className="tnum p-2 text-xs text-text-secondary">{new Date(l.created_at).toLocaleString('en-GB')}</td>
+                  <td className="tnum p-2 text-xs text-text-muted">{l.ip ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Modal>
   )
 }
