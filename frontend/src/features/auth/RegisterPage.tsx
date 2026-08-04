@@ -7,6 +7,7 @@ import { apply, rememberRegistration, type BillingInterval } from '@/features/si
 import { PlanChooser } from '@/features/signup/PlanChooser'
 import { Button } from '@/components/ui/Button'
 import { EmailInput, PasswordInput, TextInput } from '@/components/ui/form'
+import { PhoneField, phoneFieldValue, DEFAULT_DIAL_CODE } from '@/components/ui/PhoneField'
 import { controlClass } from '@/components/ui/Field'
 import { ErrorSummary, useFormDraft, type FieldError } from '@/components/forms'
 import { ACCOUNT_FIELDS, belongsToAccountStep, validateAccountStep, type AccountErrors } from './registerValidation'
@@ -135,11 +136,20 @@ export function RegisterPage() {
   const [accountErrors, setAccountErrors] = useState<AccountErrors>({})
   const [planError, setPlanError] = useState<string | null>(null)
 
-  // Non-secret fields autosave as a draft (survives refresh); passwords are kept in memory only, never persisted.
-  const draft = useFormDraft('register', { tenant_name: '', name: '', email: '' })
+  /*
+   * Non-secret fields autosave as a draft (survives refresh); passwords are kept in memory only.
+   *
+   * The mobile number and its dial code are drafted too: they are not secrets, and a number that has
+   * to be retyped after a refresh is the field people abandon a form over.
+   */
+  const draft = useFormDraft('register', { tenant_name: '', name: '', email: '', phone: '', dial_code: DEFAULT_DIAL_CODE })
   const [secret, setSecret] = useState({ password: '', password_confirmation: '' })
   const form = { ...draft.value, ...secret }
   const clearError = (k: string) => setAccountErrors((e) => (k in e ? { ...e, [k]: undefined } : e))
+  const setDraftValue = (k: 'phone' | 'dial_code') => (value: string) => {
+    draft.setValue((f) => ({ ...f, [k]: value }))
+    clearError('phone')
+  }
   const setDraft = (k: 'tenant_name' | 'name' | 'email') => (e: React.ChangeEvent<HTMLInputElement>) => {
     draft.setValue((f) => ({ ...f, [k]: e.target.value }))
     clearError(k)
@@ -357,8 +367,18 @@ export function RegisterPage() {
         }
         setPlanError(null)
 
+        const { dial_code: _dialCode, ...fields } = form
+
         mutation.mutate({
-          ...form,
+          ...fields,
+          /*
+           * The canonical number, not the raw text.
+           *
+           * The server normalises again — it must, because a hand-written payload never came through
+           * this control — but sending E.164 means the duplicate check, the OTP destination and what
+           * the customer sees back are one value rather than three readings of one.
+           */
+          phone: phoneFieldValue(form.phone, form.dial_code) ?? form.phone,
           ...(preset ?? {}),
           plan_code: planCode,
           billing_interval: interval,
@@ -377,6 +397,25 @@ export function RegisterPage() {
             <TextInput id="name" label={t('full_name')} value={form.name} onChange={setDraft('name')} autoComplete="name" required error={err('name')} />
             <EmailInput id="email" label={t('email')} value={form.email} onChange={setDraft('email')} required error={err('email')} />
           </div>
+          {/*
+            The mobile number, required (PHONE-VERIFY-001).
+
+            Saudi Arabia is selected and needs no typing — `05x xxx xxxx` is what the placeholder
+            shows, because that is how somebody in this market writes their own number.
+          */}
+          <PhoneField
+            id="phone"
+            label={ar ? 'رقم الجوال' : 'Mobile number'}
+            value={form.phone}
+            onChange={setDraftValue('phone')}
+            dialCode={form.dial_code}
+            onDialCodeChange={setDraftValue('dial_code')}
+            ar={ar}
+            required
+            error={err('phone')}
+            hint={ar ? 'سنرسل رمز تحقق إليه قبل تفعيل الحساب.' : 'We will send a verification code to it before the account is activated.'}
+          />
+
           <div className="grid gap-3 sm:grid-cols-2">
             <PasswordInput id="password" label={t('password')} value={form.password} onChange={setSecretField('password')} autoComplete="new-password" required error={err('password')} showLabel={t('show_password')} hideLabel={t('hide_password')} />
             <PasswordInput id="password_confirmation" label={t('confirm_password')} value={form.password_confirmation} onChange={setSecretField('password_confirmation')} autoComplete="new-password" required showLabel={t('show_password')} hideLabel={t('hide_password')} />

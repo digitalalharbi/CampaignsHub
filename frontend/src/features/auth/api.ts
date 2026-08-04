@@ -36,6 +36,34 @@ interface UserEnvelope {
  * browser can see, and guessing is what produced a page that showed clients a password field they
  * have never had. See `SignInMethodResolver` for why an unknown identifier answers `password`.
  */
+/**
+ * LOGIN-PATHS-001 — the mobile-number path.
+ *
+ * Deliberately NOT the client portal's OTP endpoints. Those open a portal session for a contact, so
+ * a platform user signing in with them would land in `/portal`, hold nothing there, and see a page
+ * that looked like it had worked.
+ *
+ * `start` answers identically for a number nobody holds — that is what stops it being a directory of
+ * who has an account here — so a `verification_id` coming back proves nothing about the number.
+ */
+export async function phoneSignInStart(phone: string): Promise<{
+  verification_id: string
+  delivery_status: string
+  dev_code: string | null
+}> {
+  await ensureCsrfCookie()
+  return postData('/auth/phone/start', { phone })
+}
+
+export async function phoneSignInVerify(verificationId: string, code: string, remember: boolean): Promise<AuthUser> {
+  await ensureCsrfCookie()
+  const { user } = await postData<{ user: AuthUser }>('/auth/phone/verify', {
+    verification_id: verificationId, code, remember,
+  })
+
+  return user
+}
+
 export async function signInMethod(identifier: string): Promise<{ method: 'password' | 'code'; channel: 'email' | 'sms' }> {
   await ensureCsrfCookie()
   return postData<{ method: 'password' | 'code'; channel: 'email' | 'sms' }>('/auth/method', { identifier })

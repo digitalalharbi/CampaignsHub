@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Support\AdPlatforms;
+
 /**
  * Builds a report's default slide layout + metric focus from the campaign objective and the set of
  * platforms actually present in the data. Slides are only created for connected platforms (never
@@ -14,7 +16,13 @@ final class ReportTemplateEngine
     public const VERSION = 1;
 
     /** Default platform ordering; unknown platforms fall to the end in encounter order. */
-    private const PLATFORM_ORDER = ['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin'];
+    /**
+     * The product's platform order, read from the one place that decides it (PLATFORM-ORDER-001).
+     *
+     * This list was correct and was also a second copy — which is how the other five surfaces came to
+     * disagree with it without anybody noticing.
+     */
+    private const PLATFORM_ORDER = AdPlatforms::ORDER;
 
     /** Objective → the KPIs that matter most (drives KPI emphasis + creative ranking). */
     private const METRIC_SETS = [

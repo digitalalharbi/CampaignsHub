@@ -17,4 +17,5 @@ return [
      * and one they can only retype.
      */
     'phone_number' => 'Enter a valid mobile number, for example 0501234567 or +966501234567.',
+    'phone_taken' => 'That mobile number is already used by another account.',
 ];

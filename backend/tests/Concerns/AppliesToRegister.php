@@ -58,7 +58,30 @@ trait AppliesToRegister
              */
             'plan_code' => 'starter',
             'billing_interval' => 'monthly',
+            /*
+             * A mobile number, because PHONE-VERIFY-001 made one mandatory.
+             *
+             * Unique per call: the number is now checked for duplicates in E.164, so a fixed value
+             * would make the SECOND application in any test fail with a message about somebody else's
+             * account — a confusing way to discover a rule that is working correctly.
+             */
+            'phone' => self::aFreshSaudiNumber(),
         ], $overrides));
+    }
+
+    /**
+     * A Saudi mobile number nothing else in this run has used.
+     *
+     * Written in the national form on purpose. It is what a customer types, it is what the duplicate
+     * check has to normalise before it can compare, and a helper that only ever produced `+966…`
+     * would quietly stop exercising the reading rule that makes the two the same number.
+     */
+    protected static function aFreshSaudiNumber(): string
+    {
+        static $seq = 0;
+        $seq++;
+
+        return '05'.str_pad((string) (10_000_000 + $seq + random_int(0, 9_000_000)), 8, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -97,6 +120,19 @@ trait AppliesToRegister
         $registration = RegistrationRequest::query()->whereRaw('lower(email) = ?', [mb_strtolower($email)])
             ->latest('created_at')->firstOrFail();
 
+        /*
+         * The mobile gate, then the payment gate — in the order the policy imposes them.
+         *
+         * Both are part of the journey rather than scaffolding around it: since PHONE-VERIFY-001 no
+         * account exists without a verified number, and since PLAN-PAID-001 none exists without a
+         * settled charge. A helper that reached a workspace without clearing both would be proving
+         * that tests can do something customers cannot.
+         */
+        if (! $registration->isProvisioned()) {
+            $this->verifyMobileFor($registration);
+            $registration = $registration->refresh();
+        }
+
         if (! $registration->isProvisioned()) {
             $this->payForRegistration($registration);
             $registration = $registration->refresh();
@@ -112,6 +148,27 @@ trait AppliesToRegister
             'registration' => $registration,
             'verify' => $verify,
         ];
+    }
+
+    /**
+     * Answer the mobile challenge, the way an applicant does.
+     *
+     * The code is requested through `resend` and read back from `dev_code`, which the backend exposes
+     * outside production only — the same affordance that keeps the email link walkable without a mail
+     * provider. Nothing here writes `mobile_verified_at`; the endpoint does, after checking the code.
+     */
+    protected function verifyMobileFor(RegistrationRequest $registration): void
+    {
+        $issued = $this->withHeaders($this->spaOrigin)
+            ->postJson("/api/v1/auth/registration/{$registration->getKey()}/resend", ['channel' => 'mobile'])
+            ->assertOk();
+
+        $code = (string) $issued->json('data.verification.dev_code');
+        $this->assertNotSame('', $code, 'no dev code was issued for the mobile challenge');
+
+        $this->withHeaders($this->spaOrigin)
+            ->postJson("/api/v1/auth/registration/{$registration->getKey()}/verify-mobile", ['code' => $code])
+            ->assertOk();
     }
 
     /**

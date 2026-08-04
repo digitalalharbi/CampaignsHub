@@ -107,10 +107,19 @@ final class CommercialJourneyTest extends TestCase
 
         $request = RegistrationRequest::query()->whereRaw('lower(email) = ?', [self::EMAIL])->firstOrFail();
 
-        // ── 2. Email verification → held at the REVIEW gate, not the payment one ──────────────
+        /*
+         * ── 2. Email verification → held at the MOBILE gate, then the review one ───────────────
+         *
+         * The order is the policy's, not this test's: since PHONE-VERIFY-001 a proven address is
+         * followed by a proven phone, and only then does a human look at the application.
+         */
         $this->postJson('/api/v1/auth/registration/verify-email', [
             'token' => $this->verificationTokenFrom($applied),
-        ])->assertOk()->assertJsonPath('data.registration.state', 'pending_approval');
+        ])->assertOk()->assertJsonPath('data.registration.state', 'mobile_verification_required');
+
+        $this->verifyMobileFor($request);
+        $this->getJson("/api/v1/auth/registration/{$request->getKey()}")
+            ->assertJsonPath('data.registration.state', 'pending_approval');
 
         // Waiting on us, so the applicant is offered nothing to do.
         $this->getJson("/api/v1/auth/registration/{$request->getKey()}")

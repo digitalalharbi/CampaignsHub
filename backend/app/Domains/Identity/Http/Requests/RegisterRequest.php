@@ -8,6 +8,7 @@ use App\Domains\Accounts\Enums\AccountType;
 use App\Domains\Subscriptions\Services\PlanCatalogue;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Rules\PhoneNumberRule;
+use App\Rules\UniquePhoneRule;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -88,7 +89,16 @@ final class RegisterRequest extends FormRequest
             // different amounts, and defaulting one silently is how a customer is charged a term
             // they did not choose.
             'billing_interval' => ['required', 'in:monthly,annual'],
-            'phone' => ['sometimes', 'nullable', 'string', 'max:40', new PhoneNumberRule],
+            /*
+             * Required since PHONE-VERIFY-001 — no account activates without a verified number, so
+             * an application that carries none can never clear the mobile gate. Asking for it here,
+             * where the applicant is already filling a form, is kinder than stranding them at a
+             * verification step with nothing to verify.
+             *
+             * `UniquePhoneRule` compares in E.164, so `05…`, `9665…` and `+9665…` are one number and
+             * a second account cannot be opened on any of the three spellings.
+             */
+            'phone' => ['required', 'string', 'max:40', new PhoneNumberRule, new UniquePhoneRule],
         ];
     }
 }

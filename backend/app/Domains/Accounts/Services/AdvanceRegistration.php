@@ -209,6 +209,47 @@ final class AdvanceRegistration
             'state_changed_at' => now(),
         ])->save();
 
-        return $request->refresh();
+        $request = $request->refresh();
+
+        /*
+         * Arriving at the mobile gate SENDS the code (PHONE-VERIFY-001).
+         *
+         * Without this the applicant landed on a screen that said «أدخل الرمز المرسل إلى جوالك» with
+         * no code sent and no obvious way to ask for one — the challenge was only issued if they
+         * happened to press "resend", which is an odd thing to press for a message you never had.
+         *
+         * Issued here rather than by the controller because this is the moment the gate becomes the
+         * one they are waiting on, and there is more than one route to it: email verification,
+         * an administrator's approval, and a payment that cleared before the phone did.
+         */
+        if ($state === AccountState::MobileVerificationRequired && $request->phone !== null) {
+            $this->issueMobileChallenge($request);
+        }
+
+        return $request;
+    }
+
+    /**
+     * Send the mobile code, without letting a delivery failure undo the state change.
+     *
+     * The same reasoning as `tell()` above: an application stuck because an SMS provider was
+     * unreachable is a worse failure than a message nobody received — and the applicant can always
+     * ask for another code from their status page.
+     */
+    private function issueMobileChallenge(RegistrationRequest $request): void
+    {
+        try {
+            /*
+             * Resolved from the container at the moment of use, not injected.
+             *
+             * `RegistrationVerificationService` takes an `AdvanceRegistration` of its own — it has to,
+             * because answering a challenge is what advances an application — so constructor injection
+             * here is a cycle the container resolves by building each of them forever. A lazy lookup
+             * breaks it without either class pretending it does not depend on the other.
+             */
+            app(RegistrationVerificationService::class)->send($request, 'mobile');
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 }

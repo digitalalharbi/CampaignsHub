@@ -19,27 +19,33 @@ export const DEMO_OVERVIEW_VM: OverviewVM = {
     { key: 'roas', label: 'ROAS', value: '3.1x', tone: 'good' },
   ],
   // spend / results give the CPA shown per platform; roas is blended.
+  /*
+   * In the product's order (PLATFORM-ORDER-001), not in spend order.
+   *
+   * Demo data is the first thing a reviewer sees, and a demo whose platform sequence differs from the
+   * live product teaches the wrong shape — the figures stay exactly what they were.
+   */
   platforms: [
+    { key: 'snapchat', name: 'Snapchat', spend: 5200, results: 228, roas: 2.4 },
+    { key: 'tiktok', name: 'TikTok', spend: 9600, results: 402, roas: 2.8 },
     { key: 'meta', name: 'Meta', spend: 18400, results: 512, roas: 3.6 },
     { key: 'google_ads', name: 'Google Ads', spend: 12100, results: 318, roas: 3.1 },
-    { key: 'tiktok', name: 'TikTok', spend: 9600, results: 402, roas: 2.8 },
-    { key: 'snapchat', name: 'Snapchat', spend: 5200, results: 228, roas: 2.4 },
     { key: 'x', name: 'X', spend: 2400, results: 74, roas: 1.9 },
     { key: 'linkedin', name: 'LinkedIn', spend: 1200, results: 22, roas: 1.6 },
   ],
   spend: [
+    { name: 'snapchat', value: 5200 },
+    { name: 'tiktok', value: 9600 },
     { name: 'meta', value: 18400 },
     { name: 'google_ads', value: 12100 },
-    { name: 'tiktok', value: 9600 },
-    { name: 'snapchat', value: 5200 },
     { name: 'x', value: 2400 },
     { name: 'linkedin', value: 1200 },
   ],
   topCampaigns: [
+    { id: 'c4', name: 'تجربة الجمهور الجديد', provider: 'snapchat', spend: 3000, results: 132, cpa: 22.7, roas: 2.5 },
+    { id: 'c3', name: 'حملة المحتوى القصير', provider: 'tiktok', spend: 5100, results: 214, cpa: 23.8, roas: 2.9 },
     { id: 'c1', name: 'إطلاق المجموعة الصيفية', provider: 'meta', spend: 9200, results: 263, cpa: 35.0, roas: 3.9 },
     { id: 'c2', name: 'عروض نهاية الأسبوع', provider: 'google_ads', spend: 6400, results: 176, cpa: 36.4, roas: 3.3 },
-    { id: 'c3', name: 'حملة المحتوى القصير', provider: 'tiktok', spend: 5100, results: 214, cpa: 23.8, roas: 2.9 },
-    { id: 'c4', name: 'تجربة الجمهور الجديد', provider: 'snapchat', spend: 3000, results: 132, cpa: 22.7, roas: 2.5 },
     { id: 'c5', name: 'حملة الوعي بالعلامة', provider: 'x', spend: 2400, results: 74, cpa: 32.4, roas: 1.9 },
   ],
   needsAttention: [

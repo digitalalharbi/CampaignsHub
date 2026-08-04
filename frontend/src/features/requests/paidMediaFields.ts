@@ -1,3 +1,4 @@
+import { sortByPlatform } from '@/lib/platforms'
 /**
  * Dynamic paid-media intake — the `metadata.needs` token → field mapping.
  *
@@ -42,15 +43,20 @@ export interface PaidFieldDef {
   hintEn?: string
 }
 
-/** Platform pick-list (a field value enum — NOT a taxonomy service list). */
-export const PAID_PLATFORMS: PaidFieldOption[] = [
+/**
+ * Platform pick-list (a field value enum — NOT a taxonomy service list).
+ *
+ * In the product's order (PLATFORM-ORDER-001), so the visitor filing a request meets the six
+ * platforms in the same sequence the dashboard, the connection centre and every report will use.
+ */
+export const PAID_PLATFORMS: PaidFieldOption[] = sortByPlatform([
+  { value: 'snapchat', ar: 'سناب شات', en: 'Snapchat' },
+  { value: 'tiktok', ar: 'تيك توك', en: 'TikTok' },
   { value: 'meta', ar: 'ميتا (فيسبوك/إنستغرام)', en: 'Meta (Facebook/Instagram)' },
   { value: 'google', ar: 'جوجل', en: 'Google' },
-  { value: 'tiktok', ar: 'تيك توك', en: 'TikTok' },
-  { value: 'snapchat', ar: 'سناب شات', en: 'Snapchat' },
   { value: 'x', ar: 'إكس (تويتر)', en: 'X (Twitter)' },
   { value: 'linkedin', ar: 'لينكدإن', en: 'LinkedIn' },
-]
+], (o) => o.value)
 
 const OBJECTIVES: PaidFieldOption[] = [
   { value: 'sales', ar: 'المبيعات', en: 'Sales' },
@@ -90,16 +96,22 @@ const PERIODS: PaidFieldOption[] = [
   { value: 'custom', ar: 'فترة مخصصة', en: 'Custom period' },
 ]
 
-const DATA_SOURCES: PaidFieldOption[] = [
+/*
+ * Data sources: the ad platforms first, in the product's order, then everything else.
+ *
+ * `sortByPlatform` is stable, so GA4, the CRM, Salla and Zid — none of which are ad platforms and all
+ * of which rank equal — keep the order written here rather than being shuffled between renders.
+ */
+const DATA_SOURCES: PaidFieldOption[] = sortByPlatform([
+  { value: 'snapchat', ar: 'سناب شات', en: 'Snapchat' },
+  { value: 'tiktok', ar: 'تيك توك', en: 'TikTok' },
   { value: 'meta', ar: 'ميتا', en: 'Meta' },
   { value: 'google_ads', ar: 'إعلانات جوجل', en: 'Google Ads' },
-  { value: 'tiktok', ar: 'تيك توك', en: 'TikTok' },
-  { value: 'snapchat', ar: 'سناب شات', en: 'Snapchat' },
   { value: 'ga4', ar: 'GA4', en: 'GA4' },
   { value: 'crm', ar: 'نظام CRM', en: 'CRM' },
   { value: 'salla', ar: 'سلة', en: 'Salla' },
   { value: 'zid', ar: 'زد', en: 'Zid' },
-]
+], (o) => o.value)
 
 /**
  * The full needs → field map. A token missing here is simply ignored (unknown needs never crash the

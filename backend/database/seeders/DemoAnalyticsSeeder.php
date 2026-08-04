@@ -39,10 +39,14 @@ final class DemoAnalyticsSeeder extends Seeder
     private const DEMO_UUID_NS = 'campaignshub-demo-analytics';
 
     /** archetype: [provider, name, ctr, cpc(orig currency), cvr, aov, spendScale, currency, phase, seasonal, note] */
+    /**
+     * The demo campaigns, grouped by platform IN THE PRODUCT'S ORDER (PLATFORM-ORDER-001).
+     *
+     * Demo data is the first thing a reviewer sees, and a demo whose platform sequence differs from
+     * the live product teaches the wrong shape. The rows, the figures and the `phase` ordinals are
+     * untouched — only which platform's block comes first.
+     */
     private const CAMPAIGNS = [
-        ['google', 'Google Search — Brand', 0.085, 0.90, 0.075, 420, 1.0, 'USD', 0, false, 'best_roas'],
-        ['google', 'Google Shopping — Catalog', 0.020, 0.72, 0.045, 380, 1.4, 'USD', 1, false, 'best_roas'],
-        ['google', 'Google PMax — Prospecting', 0.012, 0.58, 0.030, 350, 1.2, 'USD', 2, false, null],
         ['snapchat', 'Snap — Story Ads', 0.014, 0.9, 0.055, 300, 1.1, 'SAR', 0, false, 'best_cpa'],
         ['snapchat', 'Snap — Collection', 0.016, 1.1, 0.060, 320, 1.0, 'SAR', 1, false, 'best_cpa'],
         ['snapchat', 'Snap — Dynamic', 0.013, 1.0, 0.048, 290, 0.9, 'SAR', 2, false, null],
@@ -53,6 +57,9 @@ final class DemoAnalyticsSeeder extends Seeder
         ['meta', 'Meta — Retargeting', 0.024, 1.5, 0.070, 360, 1.1, 'SAR', 1, false, 'volume'],
         ['meta', 'Meta — Prospecting Broad', 0.015, 1.1, 0.038, 320, 1.5, 'SAR', 2, false, null],
         ['meta', 'Meta — Lead Gen (burner)', 0.021, 1.6, 0.0009, 0, 1.2, 'SAR', 3, false, 'burner'],
+        ['google', 'Google Search — Brand', 0.085, 0.90, 0.075, 420, 1.0, 'USD', 0, false, 'best_roas'],
+        ['google', 'Google Shopping — Catalog', 0.020, 0.72, 0.045, 380, 1.4, 'USD', 1, false, 'best_roas'],
+        ['google', 'Google PMax — Prospecting', 0.012, 0.58, 0.030, 350, 1.2, 'USD', 2, false, null],
         ['snapchat', 'Snap — White Friday (seasonal)', 0.017, 1.0, 0.058, 380, 1.4, 'SAR', 1, true, 'seasonal'],
         ['meta', 'Meta — White Friday (seasonal)', 0.020, 1.35, 0.055, 400, 1.9, 'SAR', 2, true, 'seasonal'],
     ];

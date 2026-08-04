@@ -28,12 +28,19 @@ use Illuminate\Http\Request;
  */
 final class PlatformOverviewController extends Controller
 {
-    /** The six real advertising platforms, in the order the product presents them. */
-    private const PLATFORMS = [
+    /**
+     * The six real advertising platforms, keyed by name.
+     *
+     * The ORDER is not decided here — `AdPlatforms::ORDER` decides it for the whole product, and this
+     * map is sorted through it before it is returned (PLATFORM-ORDER-001). Leading with Meta here
+     * while the report engine led with Snapchat is exactly the drift that made a customer hunt for
+     * the same platform in a different position on every screen.
+     */
+    public const PLATFORMS = [
+        'snapchat' => ['ar' => 'سناب شات', 'en' => 'Snapchat Ads'],
+        'tiktok' => ['ar' => 'تيك توك', 'en' => 'TikTok Ads'],
         'meta' => ['ar' => 'ميتا (فيسبوك وإنستقرام)', 'en' => 'Meta'],
         'google' => ['ar' => 'إعلانات جوجل', 'en' => 'Google Ads'],
-        'tiktok' => ['ar' => 'تيك توك', 'en' => 'TikTok Ads'],
-        'snapchat' => ['ar' => 'سناب شات', 'en' => 'Snapchat Ads'],
         'x' => ['ar' => 'منصة X', 'en' => 'X Ads'],
         'linkedin' => ['ar' => 'لينكدإن', 'en' => 'LinkedIn Ads'],
     ];

@@ -16,6 +16,7 @@ import {
   getConnectionHistory, listConnectors, syncConnector,
   type Connector, type ConnectionState, type SyncResult, type SyncRun,
 } from './api'
+import { sortPlatforms } from '@/lib/platforms'
 
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 const COPY = {
@@ -179,7 +180,9 @@ export function ConnectionCenterPage() {
      * changes is which ones the page leads with, and that `sandbox` is last of all — it is the one
      * entry that is not a customer's integration at all.
      */
-    const AD_PLATFORM_ORDER = ['meta_ads', 'google_ads', 'tiktok_ads', 'snapchat_ads', 'x_ads', 'linkedin_ads']
+    // The six ad platforms, in the product's order (PLATFORM-ORDER-001). Spelled with the `_ads`
+    // suffix because that is how connectors register; `platformRank` canonicalises before comparing.
+    const AD_PLATFORM_ORDER = sortPlatforms(['meta_ads', 'google_ads', 'tiktok_ads', 'snapchat_ads', 'x_ads', 'linkedin_ads'])
     const isSandbox = (provider: string) => connectors.find((c) => c.provider === provider)?.is_sandbox === true
     const rank = (provider: string): number => {
       const ad = AD_PLATFORM_ORDER.indexOf(provider)

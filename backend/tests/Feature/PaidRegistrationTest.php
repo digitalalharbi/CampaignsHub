@@ -48,7 +48,7 @@ final class PaidRegistrationTest extends TestCase
     }
 
     /**
-     * A verified email is not a workspace.
+     * A verified email is not a workspace — and since PHONE-VERIFY-001 it is not even the next gate.
      *
      * The strongest form of the gate: everything the applicant can do on their own has been done, and
      * still nothing exists that they could sign in to.
@@ -62,6 +62,12 @@ final class PaidRegistrationTest extends TestCase
         ])->assertOk()->assertJsonPath('data.registration.provisioned', false);
 
         $registration = RegistrationRequest::query()->firstOrFail();
+
+        // The email proved the address. It says nothing about the phone, so that is what is asked next.
+        $this->assertSame(AccountState::MobileVerificationRequired, $registration->state);
+
+        $this->verifyMobileFor($registration);
+        $registration = $registration->refresh();
         $this->assertSame(AccountState::ApprovedAwaitingPayment, $registration->state);
 
         $this->assertSame(0, Tenant::withoutGlobalScopes()->count());
@@ -242,7 +248,14 @@ final class PaidRegistrationTest extends TestCase
         $this->assertSame(0, Tenant::withoutGlobalScopes()->count());
     }
 
-    /** Apply and prove the email, and stop there — an application waiting on money. */
+    /**
+     * Apply and clear every gate EXCEPT the money — an application waiting on payment alone.
+     *
+     * The mobile gate is walked here rather than skipped, because since PHONE-VERIFY-001 it comes
+     * first: an application that has not proved its number never reaches the payment step, and a
+     * helper that pretended otherwise would set these tests up against a state the product cannot
+     * actually be in.
+     */
     private function verifiedApplication(): RegistrationRequest
     {
         $applied = $this->apply(['email' => 'buyer@a.test', 'tenant_name' => 'Buyer Co'])->assertStatus(202);
@@ -251,6 +264,9 @@ final class PaidRegistrationTest extends TestCase
             'token' => $this->verificationTokenFrom($applied),
         ])->assertOk();
 
-        return RegistrationRequest::query()->firstOrFail();
+        $registration = RegistrationRequest::query()->firstOrFail();
+        $this->verifyMobileFor($registration);
+
+        return $registration->refresh();
     }
 }

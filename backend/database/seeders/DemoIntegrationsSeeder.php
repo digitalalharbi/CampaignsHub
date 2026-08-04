@@ -41,10 +41,12 @@ final class DemoIntegrationsSeeder extends Seeder
 
     /** provider => [account external id, display name, currency] */
     private const ACCOUNTS = [
+        // In the product's order (PLATFORM-ORDER-001) — demo data teaches the shape of the product,
+        // so a demo that leads with a different platform teaches the wrong one.
+        'snapchat' => ['snap_900000001', 'Snapchat Ads — متجر تجريبي', 'SAR'],
+        'tiktok' => ['tt_7000000001', 'TikTok Ads — متجر تجريبي', 'SAR'],
         'meta' => ['act_1000000001', 'Meta Ads — متجر تجريبي', 'SAR'],
         'google' => ['123-456-7890', 'Google Ads — متجر تجريبي', 'SAR'],
-        'tiktok' => ['tt_7000000001', 'TikTok Ads — متجر تجريبي', 'SAR'],
-        'snapchat' => ['snap_900000001', 'Snapchat Ads — متجر تجريبي', 'SAR'],
     ];
 
     public function run(): void

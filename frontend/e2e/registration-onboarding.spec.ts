@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { signIn, switchToEnglish } from './helpers'
+import { aFreshSaudiNumber, signIn, switchToEnglish } from './helpers'
 
 /**
  * Full registration → onboarding acceptance: register → verify email → account type → service → workspace →
@@ -21,6 +21,8 @@ async function registerAndVerify(page: import('@playwright/test').Page, email: s
   await page.getByLabel(/Organization name|اسم المؤسسة/).fill(workspace)
   await page.getByLabel(/Full name|الاسم الكامل/).fill('New Owner')
   await page.getByLabel(/Email|البريد/).fill(email)
+  // Required since PHONE-VERIFY-001 — no account activates without a verified number.
+  await page.getByTestId('phone').fill(aFreshSaudiNumber())
   await page.locator('input[type="password"]').first().fill('secret1234')
   await page.locator('input[type="password"]').last().fill('secret1234')
   /*
@@ -49,6 +51,13 @@ async function registerAndVerify(page: import('@playwright/test').Page, email: s
    * …and a verified email is no longer enough. The application sits at the payment gate with no
    * workspace behind it, which is the guarantee PLAN-PAID-001 exists to make.
    */
+  /*
+   * …and the phone before the money (PHONE-VERIFY-001). A proven address says nothing about the
+   * number, so the mobile gate is what the application is waiting on next.
+   */
+  await expect(page.getByTestId('registration-status')).toHaveAttribute('data-state', 'mobile_verification_required')
+  await verifyMobile(page)
+
   await expect(page.getByTestId('registration-status')).toHaveAttribute('data-state', 'approved_awaiting_payment')
   await payThroughSandbox(page)
 
@@ -59,6 +68,26 @@ async function registerAndVerify(page: import('@playwright/test').Page, email: s
    */
   await signIn(page, email, 'secret1234')
   await expect(page).toHaveURL(/\/onboarding/, { timeout: 20000 })
+}
+
+/**
+ * Answer the mobile challenge.
+ *
+ * No SMS provider is wired, so the dev code — exposed outside production only, the same affordance
+ * that keeps the email link walkable — stands in for the message. Asking for a new one is what puts
+ * it on screen, which is also the real recovery a customer whose code never arrived would use.
+ */
+async function verifyMobile(page: import('@playwright/test').Page) {
+  await page.getByTestId('registration-resend-code').click()
+
+  const shown = page.getByText(/Dev code|رمز التطوير/)
+  await expect(shown).toBeVisible({ timeout: 20000 })
+
+  const code = (await shown.innerText()).match(/(\d{6})/)?.[1]
+  expect(code, 'no dev code was issued for the mobile challenge').toBeTruthy()
+
+  await page.getByLabel(/code we sent to your mobile|رمز التحقق المرسل إلى جوالك/i).fill(code!)
+  await page.getByRole('button', { name: /Confirm code|تأكيد الرمز/ }).click()
 }
 
 /**
@@ -143,6 +172,7 @@ test('the plan step reads the catalogue and quotes both terms before payment', a
   await page.getByLabel(/Organization name|اسم المؤسسة/).fill(`Plans ${tag}`)
   await page.getByLabel(/Full name|الاسم الكامل/).fill('Plan Picker')
   await page.getByLabel(/Email|البريد/).fill(`plans.${tag}@example.com`.toLowerCase())
+  await page.getByTestId('phone').fill(aFreshSaudiNumber())
   await page.locator('input[type="password"]').first().fill('secret1234')
   await page.locator('input[type="password"]').last().fill('secret1234')
   await page.getByRole('button', { name: /Continue|التالي/ }).click()
@@ -184,6 +214,7 @@ test('an invalid password is caught on the account step, not beside the price li
   await page.getByLabel(/Organization name|اسم المؤسسة/).fill(`Weak ${tag}`)
   await page.getByLabel(/Full name|الاسم الكامل/).fill('Weak Password')
   await page.getByLabel(/Email|البريد/).fill(`weak.${tag}@example.com`.toLowerCase())
+  await page.getByTestId('phone').fill(aFreshSaudiNumber())
   await page.locator('input[type="password"]').first().fill('short')
   await page.locator('input[type="password"]').last().fill('short')
   await page.getByRole('button', { name: /Continue|التالي/ }).click()

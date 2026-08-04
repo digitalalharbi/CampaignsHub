@@ -32,7 +32,18 @@ return [
     */
     'registration' => [
         'default' => [
-            'requires_mobile' => false,
+            /*
+             * PHONE-VERIFY-001 — a verified mobile number, for every account, before activation.
+             *
+             * Not a nicety and not an anti-abuse tweak: it is how this product reaches a customer when
+             * something is wrong with their campaigns, and it is the only identity in the system that
+             * is expensive to fake in bulk. An account with an unverified number is one nobody can be
+             * called about, and one that a script can mint by the hundred from disposable addresses.
+             *
+             * It applies to every route in — including registering and signing in with an email
+             * address. The email proves the address; it says nothing about the phone.
+             */
+            'requires_mobile' => true,
             'requires_approval' => false,
             'requires_payment' => true,
         ],

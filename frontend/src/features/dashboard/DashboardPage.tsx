@@ -30,9 +30,16 @@ import { useSavedViews, type SavedView } from './savedViews'
 import { OBJECTIVE_KEYS, dash, metricLabel, objectiveLabel } from '@/features/analytics/metricLabels'
 import { Modal } from '@/components/ui/Modal'
 import { useUi } from '@/stores/ui'
+import { sortPlatforms } from '@/lib/platforms'
 
-/** The six paid platforms CampaignsHub unifies — the dashboard platform filter. */
-const PLATFORM_KEYS = ['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin']
+/**
+ * The six paid platforms CampaignsHub unifies — the dashboard platform filter.
+ *
+ * Ordered by the product's own order rather than by this file's opinion (PLATFORM-ORDER-001). The
+ * keys keep their local spelling (`google_ads`) because that is what the API filter expects;
+ * `sortPlatforms` canonicalises before it compares.
+ */
+const PLATFORM_KEYS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
 
 /*
  * DASH-010-D: campaign objectives (keys match the CampaignObjective enum) for the filter and KPIs.

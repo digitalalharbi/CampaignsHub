@@ -56,6 +56,11 @@ final class PaymentActivationSecurityTest extends TestCase
 
         $request = RegistrationRequest::query()->whereRaw('lower(email) = ?', [$email])->firstOrFail();
 
+        // The mobile gate comes first since PHONE-VERIFY-001, and these tests are about the one after
+        // it — an application still holding at the phone step never reaches a charge to attack.
+        $this->verifyMobileFor($request);
+        $request = $request->refresh();
+
         $this->assertSame(AccountState::ApprovedAwaitingPayment, $request->state, 'the payment gate must be holding it');
 
         return $request;

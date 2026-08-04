@@ -19,9 +19,14 @@ import { portalLoginStart } from '@/features/requests/clientPortalApi'
 const mockedMethod = vi.mocked(signInMethod)
 const mockedStart = vi.mocked(portalLoginStart)
 
-/** Type an identifier and press Continue — the only action step 1 offers. */
+/**
+ * Type an address on the email path and press Continue.
+ *
+ * The page offers two paths now (LOGIN-PATHS-001) and the email one is what opens, so this is still
+ * the first action most visitors take — but it is the EMAIL field, not a field that accepts either.
+ */
 function identifyAs(value: string) {
-  fireEvent.change(screen.getByLabelText(/Email address or mobile number/i), { target: { value } })
+  fireEvent.change(screen.getByLabelText(/Email address/i), { target: { value } })
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
 }
 

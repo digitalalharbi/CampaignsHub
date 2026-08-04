@@ -75,7 +75,8 @@ export interface ApplyInput {
   requested_portal?: string
   plan_code?: string
   billing_interval?: BillingInterval
-  phone?: string
+  /** E.164, normalised by the form before it is sent — the server reads it again regardless. */
+  phone: string
 }
 
 export async function apply(input: ApplyInput): Promise<RegistrationEnvelope> {

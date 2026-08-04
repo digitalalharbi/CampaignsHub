@@ -1,3 +1,5 @@
+import { normalisePhone } from '@/lib/phone'
+
 /**
  * SIGNUP-STEP-001 — everything about the ACCOUNT is decided on the account step.
  *
@@ -18,6 +20,9 @@ export interface AccountFields {
   tenant_name: string
   name: string
   email: string
+  /** The national number as typed. `dial_code` says which country to read it in. */
+  phone: string
+  dial_code: string
   password: string
   password_confirmation: string
 }
@@ -34,6 +39,7 @@ const COPY = {
     passwordLetters: 'كلمة المرور يجب أن تحتوي على حرف واحد على الأقل.',
     passwordNumbers: 'كلمة المرور يجب أن تحتوي على رقم واحد على الأقل.',
     mismatch: 'تأكيد كلمة المرور لا يطابق كلمة المرور.',
+    phone: 'أدخل رقم جوال صحيح، مثل 0501234567.',
   },
   en: {
     required: 'This field is required.',
@@ -43,6 +49,7 @@ const COPY = {
     passwordLetters: 'Include at least one letter.',
     passwordNumbers: 'Include at least one number.',
     mismatch: 'The confirmation does not match the password.',
+    phone: 'Enter a valid mobile number, for example 0501234567.',
   },
 } as const
 
@@ -78,6 +85,19 @@ export function validateAccountStep(form: AccountFields, ar: boolean): AccountEr
   required('name', 120)
   required('email', 190)
 
+  /*
+   * The mobile number is required (PHONE-VERIFY-001).
+   *
+   * No account activates without a verified one, so an application that carries none can never clear
+   * the mobile gate — it would sit at a verification step with nothing to verify. Asking here, where
+   * the applicant is already filling a form, is the only kind version of that rule.
+   */
+  if (form.phone.trim() === '') {
+    errors.phone = c.required
+  } else if (normalisePhone(form.phone, form.dial_code) === null) {
+    errors.phone = c.phone
+  }
+
   if (!errors.email && !LOOKS_LIKE_EMAIL.test(form.email.trim())) errors.email = c.email
 
   if (form.password === '') {
@@ -104,7 +124,7 @@ export function validateAccountStep(form: AccountFields, ar: boolean): AccountEr
  * showing either on the wrong one is the failure this module exists to remove.
  */
 export const ACCOUNT_FIELDS: readonly string[] = [
-  'tenant_name', 'name', 'email', 'password', 'password_confirmation',
+  'tenant_name', 'name', 'email', 'phone', 'password', 'password_confirmation',
 ]
 
 export function belongsToAccountStep(fields: readonly string[]): boolean {

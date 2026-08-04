@@ -427,3 +427,38 @@ export async function payRegistrationThroughSandbox(
     `the sandbox gateway refused the confirmation: ${(await paid.text()).slice(0, 200)}`,
   ).toBe(302)
 }
+
+/**
+ * A Saudi mobile number nothing else in this run has used.
+ *
+ * Written in the national form on purpose: it is what a customer types, and it is what the server has
+ * to normalise before it can compare. A helper that only produced `+966…` would quietly stop
+ * exercising the reading rule that makes the two the same number (PHONE-SA-001).
+ */
+export function aFreshSaudiNumber(): string {
+  return `05${String(Date.now()).slice(-8)}`
+}
+
+/**
+ * Sign in with a mobile number and a one-time code (LOGIN-PATHS-001).
+ *
+ * The second of the two paths `/login` offers. Outside production the issued code comes back on the
+ * response and the page fills the field with it, which is what makes this branch walkable without an
+ * SMS provider.
+ */
+export async function signInWithPhone(page: Page, phone: string): Promise<void> {
+  if (!/\/login(\?|$)/.test(new URL(page.url()).pathname + new URL(page.url()).search)) {
+    await page.goto('/login')
+  }
+
+  await page.getByTestId('login-path-phone').click()
+  await page.getByTestId('login-phone-number').fill(phone)
+  await page.getByTestId('login-phone').locator('button[type="submit"]').click()
+
+  const form = page.getByTestId('login-code')
+  await expect(form, `${phone} was not offered a code step`).toBeVisible({ timeout: 20_000 })
+
+  const field = form.locator('input[autocomplete="one-time-code"]')
+  await expect(field, 'the issued code never arrived, so there is nothing to submit').not.toHaveValue('', { timeout: 20_000 })
+  await form.locator('button[type="submit"]').click()
+}

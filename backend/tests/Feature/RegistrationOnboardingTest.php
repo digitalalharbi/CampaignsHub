@@ -106,11 +106,15 @@ final class RegistrationOnboardingTest extends TestCase
     {
         $applied = $this->apply(['tenant_name' => 'Unpaid WS', 'email' => 'unpaid@acme.test'])->assertStatus(202);
 
+        /*
+         * Not even the payment gate yet: the address is proved, the phone is not (PHONE-VERIFY-001).
+         * Either way nothing exists — which is the claim this test is named for.
+         */
         $this->postJson('/api/v1/auth/registration/verify-email', [
             'token' => $this->verificationTokenFrom($applied),
         ])->assertOk()
             ->assertJsonPath('data.registration.provisioned', false)
-            ->assertJsonPath('data.registration.state', 'approved_awaiting_payment');
+            ->assertJsonPath('data.registration.state', 'mobile_verification_required');
 
         $this->assertDatabaseMissing('users', ['email' => 'unpaid@acme.test']);
         $this->assertDatabaseMissing('tenants', ['name' => 'Unpaid WS']);
@@ -295,7 +299,9 @@ final class RegistrationOnboardingTest extends TestCase
             'token' => $this->verificationTokenFrom($second),
         ])->assertOk();
 
-        // …and it is the corrected detail that becomes the workspace, once it is paid for.
+        // …and it is the corrected detail that becomes the workspace, once the phone is proved and
+        // the first period is paid for.
+        $this->verifyMobileFor(RegistrationRequest::query()->firstOrFail());
         $this->payForRegistration(RegistrationRequest::query()->firstOrFail());
         $this->assertDatabaseHas('tenants', ['name' => 'Corrected Name']);
     }
@@ -331,6 +337,7 @@ final class RegistrationOnboardingTest extends TestCase
         $this->postJson('/api/v1/auth/registration/verify-email', [
             'token' => $this->verificationTokenFrom($res),
         ])->assertOk();
+        $this->verifyMobileFor(RegistrationRequest::query()->firstOrFail());
         $this->payForRegistration(RegistrationRequest::query()->firstOrFail());
 
         $owner = User::where('email', 'journey@owner.test')->firstOrFail();

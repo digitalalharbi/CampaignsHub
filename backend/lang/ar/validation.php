@@ -188,6 +188,7 @@ return [
      * read but no other screen will ever show back to them.
      */
     'phone_number' => 'أدخل رقم جوال صحيح، مثل 0501234567 أو ‎+966501234567.',
+    'phone_taken' => 'هذا الرقم مستخدم في حساب آخر بالفعل.',
 
     'attributes' => [
         'address' => 'العنوان',

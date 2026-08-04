@@ -17,6 +17,7 @@ return [
 
     // Not part of Laravel's file — CampaignsHub's own auth answers.
     'signed_in' => 'تم تسجيل الدخول بنجاح.',
+    'code_sent' => 'تم إرسال رمز التحقق.',
     'signed_out' => 'تم تسجيل الخروج بنجاح.',
     'current_user' => 'المستخدم الحالي.',
     'token_issued' => 'تم إصدار رمز الوصول بنجاح.',

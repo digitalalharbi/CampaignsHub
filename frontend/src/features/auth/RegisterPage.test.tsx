@@ -54,7 +54,7 @@ describe('RegisterPage — journey handoff', () => {
     renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service', locale: 'en' })
     expect(screen.getByRole('button', { name: /I run my own campaigns/i })).toHaveAttribute('aria-pressed', 'true')
     // Account-type select is offered (freelancer/brand/in-house), defaulting to freelancer.
-    const select = screen.getByRole('combobox') as HTMLSelectElement
+    const select = screen.getByLabelText('Account type') as HTMLSelectElement
     expect(select.value).toBe('freelancer')
     expect(screen.getByRole('option', { name: 'In-house team' })).toBeInTheDocument()
   })
@@ -100,6 +100,7 @@ describe('RegisterPage — the journey is submitted, not just displayed', () => 
     fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
     fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'new@test.dev' } })
+    fireEvent.change(screen.getByTestId('phone'), { target: { value: '0501234567' } })
     fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
     fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'secret123' } })
     // Step one collects the details; step two asks for the plan (PLAN-001e). The application is
@@ -115,13 +116,13 @@ describe('RegisterPage — the journey is submitted, not just displayed', () => 
     renderWithProviders(<RegisterPage />, { route: '/register?journey=multi-client&module=paid-media', locale: 'en' })
     await fill()
     await waitFor(() => expect(apply).toHaveBeenCalled())
-    expect(vi.mocked(apply).mock.calls[0][0]).toMatchObject({ account_type: 'agency', service: 'paid_media' })
+    expect(vi.mocked(apply).mock.calls[0][0]).toMatchObject({ account_type: 'agency', service: 'paid_media', phone: '+966501234567' })
   })
 
   it('submits the self-managed path with the selected account type', async () => {
     vi.mocked(apply).mockResolvedValue(anApplication)
     renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service&module=paid-media', locale: 'en' })
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'brand' } })
+    fireEvent.change(screen.getByLabelText('Account type'), { target: { value: 'brand' } })
     await fill()
     await waitFor(() => expect(apply).toHaveBeenCalled())
     expect(vi.mocked(apply).mock.calls[0][0]).toMatchObject({ account_type: 'brand', service: 'paid_media' })
@@ -151,6 +152,7 @@ describe('RegisterPage — error summary + draft', () => {
     fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
     fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'dup@test.dev' } })
+    fireEvent.change(screen.getByTestId('phone'), { target: { value: '0501234567' } })
     fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
     fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'secret123' } })
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
@@ -196,6 +198,7 @@ describe('RegisterPage — details, then plan', () => {
     fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
     fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'new@test.dev' } })
+    fireEvent.change(screen.getByTestId('phone'), { target: { value: '0501234567' } })
     fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
     fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'secret123' } })
   }
@@ -280,6 +283,7 @@ describe('RegisterPage — the account step is validated before the packages ste
     fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
     fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'new@test.dev' } })
+    fireEvent.change(screen.getByTestId('phone'), { target: { value: '0501234567' } })
     fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
     fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'secret123' } })
   }

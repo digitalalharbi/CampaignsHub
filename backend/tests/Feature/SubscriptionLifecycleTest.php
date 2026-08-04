@@ -68,6 +68,11 @@ final class SubscriptionLifecycleTest extends TestCase
         ])->assertOk();
 
         $request = RegistrationRequest::query()->whereRaw('lower(email) = ?', [$email])->firstOrFail();
+
+        // The mobile gate, cleared the way an applicant clears it (PHONE-VERIFY-001).
+
+        $this->verifyMobileFor($request);
+
         $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk();
 
         $payment = SubscriptionPayment::query()->where('registration_request_id', $request->getKey())->firstOrFail();
@@ -331,6 +336,10 @@ final class SubscriptionLifecycleTest extends TestCase
         ])->assertOk();
 
         $request = RegistrationRequest::query()->whereRaw('lower(email) = ?', ['trialist2@a.test'])->firstOrFail();
+
+        // The mobile gate, cleared the way an applicant clears it (PHONE-VERIFY-001).
+
+        $this->verifyMobileFor($request);
 
         $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk()
             ->assertJsonPath('data.status', 'refused')

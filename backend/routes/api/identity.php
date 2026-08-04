@@ -9,6 +9,7 @@ use App\Domains\Identity\Http\Controllers\InvitationController;
 use App\Domains\Identity\Http\Controllers\MeController;
 use App\Domains\Identity\Http\Controllers\OAuthController;
 use App\Domains\Identity\Http\Controllers\OnboardingController;
+use App\Domains\Identity\Http\Controllers\PhoneSignInController;
 use App\Domains\Identity\Http\Controllers\UserController;
 use App\Domains\Tenancy\Http\Controllers\MembershipController;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
@@ -57,6 +58,22 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
 
     Route::post('/login', [AuthController::class, 'login'])->name('login')
         ->middleware('throttle:auth-login');
+
+    /*
+     * LOGIN-PATHS-001 — the mobile-number path.
+     *
+     * Its own endpoints rather than the client portal's, because `/client/login/verify` opens a
+     * PORTAL session: pointing a platform user's phone at it would have signed them into a space
+     * they hold nothing in, and the page would have looked like it worked.
+     *
+     * `start` is throttled per destination AND per IP (`otp-request`), which is what bounds the cost
+     * of answering identically for numbers nobody holds — the property that keeps this from being a
+     * directory of who has an account here.
+     */
+    Route::post('/phone/start', [PhoneSignInController::class, 'start'])->name('phone.start')
+        ->middleware('throttle:otp-request');
+    Route::post('/phone/verify', [PhoneSignInController::class, 'verify'])->name('phone.verify')
+        ->middleware('throttle:otp-check');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password')
         ->middleware('throttle:6,1');
     // Personal Access Token issuance for non-browser API clients only.

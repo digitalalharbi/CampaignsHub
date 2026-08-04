@@ -14,6 +14,9 @@ const valid = {
   tenant_name: 'Acme',
   name: 'Tester',
   email: 'new@test.dev',
+  // The national form, because that is what somebody in this market types (PHONE-SA-001).
+  phone: '0501234567',
+  dial_code: '966',
   password: 'secret123',
   password_confirmation: 'secret123',
 }
@@ -27,10 +30,28 @@ describe('validateAccountStep', () => {
     ['tenant_name', { tenant_name: '' }],
     ['name', { name: '   ' }],
     ['email', { email: '' }],
+    ['phone', { phone: '' }],
     ['password', { password: '' }],
     ['password_confirmation', { password_confirmation: '' }],
   ])('requires %s', (field, patch) => {
     expect(validateAccountStep({ ...valid, ...patch }, false)).toHaveProperty(field)
+  })
+
+  /** The mobile number is required, and read the way this market writes it (PHONE-VERIFY-001). */
+  it.each(['0501234567', '966501234567', '+966501234567', '050 123 4567', '٠٥٠١٢٣٤٥٦٧'])(
+    'accepts %s as a Saudi mobile number',
+    (typed) => {
+      expect(validateAccountStep({ ...valid, phone: typed }, false).phone).toBeUndefined()
+    },
+  )
+
+  it('refuses a number it cannot read', () => {
+    expect(validateAccountStep({ ...valid, phone: 'not a phone' }, false).phone).toMatch(/valid mobile/i)
+  })
+
+  /** The dial code decides the country when the number does not name one. */
+  it('reads a bare national number in the chosen country', () => {
+    expect(validateAccountStep({ ...valid, phone: '5551234', dial_code: '973' }, false).phone).toBeUndefined()
   })
 
   it('refuses an address with no domain', () => {
