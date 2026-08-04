@@ -40,13 +40,25 @@ test('login: keyboard-only navigation reaches email, password and submit', async
   })
 
   await page.goto('/login')
-  // Tab into the form and type — focus must land on real inputs, in order.
-  await page.locator('input[type="email"]').focus()
+  /*
+   * Tab into the form and type — focus must land on real inputs, in order.
+   *
+   * Two steps now (LOGIN-UNIFIED-001): the identifier field takes an email OR a phone, so it is no
+   * longer `input[type=email]`, and the password field does not exist until the server has said this
+   * account has one.
+   */
+  const identifier = page.getByTestId('login-identify').locator('input')
+  await identifier.focus()
   await page.keyboard.type('owner@demo-agency.local')
-  await page.keyboard.press('Tab')
+  await expect(identifier).toHaveValue('owner@demo-agency.local')
+
+  await page.getByTestId('login-identify').locator('button[type="submit"]').click()
+  await expect(page.getByTestId('login-password')).toBeVisible({ timeout: 20_000 })
+
+  const pw = page.getByTestId('login-password').locator('input[type="password"]')
+  await pw.focus()
   await page.keyboard.type('password')
-  await expect(page.locator('input[type="email"]')).toHaveValue('owner@demo-agency.local')
-  await expect(page.locator('input[type="password"]')).toHaveValue('password')
+  await expect(pw).toHaveValue('password')
 
   // No console errors while rendering + interacting with the login page.
   expect(errors, errors.join('\n')).toHaveLength(0)

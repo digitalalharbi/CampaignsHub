@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { signIn } from './helpers'
 
 /**
  * AUTH-002 acceptance for the redesigned sign-in / sign-up pages.
@@ -111,44 +112,32 @@ test('both pages fit a 1366x768 desktop without vertical scrolling', async ({ pa
   expect(await docHeightWithoutDevOnlyBlocks(page)).toBeLessThanOrEqual(DESKTOP.height)
 })
 
-/** Each portal must change what the panel says — a switcher that only recolours a pill is decoration. */
-test('every login portal rewrites the panel, by real clicks', async ({ page }) => {
+/**
+ * There is nothing to switch between any more (LOGIN-UNIFIED-001).
+ *
+ * This test used to click each portal pill and assert the panel's heading changed — proving the
+ * switcher was not decoration. The switcher is gone: the visitor never picks a portal, so the panel
+ * carries the product's one approved message and the page asks for an identifier first.
+ *
+ * What is worth asserting on the same screen is what replaced it.
+ */
+test('the sign-in page offers one message and no portal to choose', async ({ page }) => {
   await page.setViewportSize(LAPTOP)
   await page.goto('/login')
   await page.waitForLoadState('networkidle')
 
-  const panel = page.getByTestId('auth-panel')
-  const heading = panel.getByRole('heading')
-  const seen = new Set<string>()
+  const heading = page.getByTestId('auth-panel').getByRole('heading')
+  expect(((await heading.textContent()) ?? '').trim().length).toBeGreaterThan(0)
 
-  /*
-   * `client` is deliberately absent from this loop (LOGIN-001).
-   *
-   * The other three are contexts for THIS form — same engine, different copy. The client portal is a
-   * different door: it authenticates by one-time code and has no password, so its tab navigates to
-   * `/portal/login` rather than restyling a form that could never sign a client in. Asserting it
-   * stays here would be asserting the lie the tab used to tell.
-   */
-  for (const portal of ['agency', 'default'] as const) {
-    await page.getByTestId(`login-portal-${portal}`).click();
-    await expect(page.getByTestId(`login-portal-${portal}`)).toHaveAttribute('aria-current', 'page')
-    const text = ((await heading.textContent()) ?? '').trim()
-    expect(text.length).toBeGreaterThan(0)
-    seen.add(text)
-
-    // One auth engine behind all of them: the credentials form never disappears.
-    await expect(page.locator('input[type="email"]')).toBeVisible()
-    await expect(page.locator('input[type="password"]')).toBeVisible()
-    await expect(page.locator('button[type="submit"]')).toBeVisible()
+  await expect(page.getByTestId('login-portals')).toHaveCount(0)
+  for (const key of ['default', 'agency', 'client', 'influencer', 'admin']) {
+    await expect(page.getByTestId(`login-portal-${key}`)).toHaveCount(0)
   }
 
-  // The agency and advertiser contexts speak differently from each other. (The influencer tab used
-  // to be the third; it is withdrawn with its portal — INFL-OFF-001.)
-  expect(seen.size).toBeGreaterThan(1)
-
-  // …and the client tab leads to the portal that actually serves clients.
-  await page.getByTestId('login-portal-client').click()
-  await expect(page).toHaveURL(/\/portal\/login/)
+  // The identity step, and nothing secret before the server has named the account.
+  await expect(page.getByTestId('login-identify')).toBeVisible()
+  await expect(page.locator('input[type="password"]')).toHaveCount(0)
+  await expect(page.locator('button[type="submit"]')).toBeVisible()
 })
 
 /**
@@ -224,16 +213,23 @@ test('on a phone the form comes first and the panel collapses below it', async (
  * timeout would have hidden the race instead of removing it, and left the same click landing on a
  * page that was not ready.
  */
-test('forgot password, create account and request tracking all lead somewhere real', async ({ page }) => {
+test('forgot password and create account both lead somewhere real', async ({ page }) => {
   await page.setViewportSize(LAPTOP)
 
   /** The login form is on screen, so React has hydrated and the router is bound. */
   const loginReady = async () => {
     await page.goto('/login')
-    await expect(page.locator('input[type="email"]')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('login-identify')).toBeVisible({ timeout: 20000 })
   }
 
+  /*
+   * «نسيت كلمة المرور» belongs to the PASSWORD step (LOGIN-UNIFIED-001) — it is meaningless before
+   * the server has said this account even has one, so it is reached the way a person reaches it.
+   */
   await loginReady()
+  await page.getByTestId('login-identify').locator('input').fill('owner@demo-agency.local')
+  await page.getByTestId('login-identify').locator('button[type="submit"]').click()
+  await expect(page.getByTestId('login-password')).toBeVisible({ timeout: 20000 })
   await page.getByRole('link', { name: /Forgot|نسيت/ }).click()
   await expect(page).toHaveURL(/\/forgot-password/)
   await expect(page.locator('input[type="email"]')).toBeVisible()
@@ -243,11 +239,15 @@ test('forgot password, create account and request tracking all lead somewhere re
   await expect(page).toHaveURL(/\/register/)
   await expect(page.locator('form input#tenant_name')).toBeVisible()
 
+  /*
+   * «متابعة طلباتي» is deliberately absent (LOGIN-UNIFIED-001).
+   *
+   * It was one of the three portal choices, and a client following it was picking a portal — the
+   * thing the visitor no longer does. A client reaches the code step by typing their address into
+   * the same field everybody else uses, because the server recognises them.
+   */
   await loginReady()
-  await page.getByRole('link', { name: /Track my requests|متابعة طلباتي/ }).click()
-  await expect(page).toHaveURL(/\/portal\/login/)
-  // The portal signs in by one-time code, not a password — assert its own control, not the staff form's.
-  await expect(page.getByRole('button', { name: /Send code|إرسال الرمز/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Track my requests|متابعة طلباتي/ })).toHaveCount(0)
 })
 
 /** The redesign must hold in both writing directions and both themes. */
@@ -272,17 +272,18 @@ test('layout survives RTL/LTR and light/dark without clipping', async ({ page })
 })
 
 /**
- * The end of the journey, not a 200: signing in with a real account lands inside the app, and the
- * chosen portal never changes which engine authenticates.
+ * The end of the journey, not a 200.
+ *
+ * `?portal=agency` is left in the URL on purpose: it is inert now (LOGIN-UNIFIED-001), and the
+ * account still reaches its own portal. A page that started honouring it again would be the
+ * regression.
  */
-test('signing in from a portal reaches the app', async ({ page }) => {
+test('signing in reaches the app, and a portal in the URL changes nothing', async ({ page }) => {
   await page.setViewportSize(LAPTOP)
   await page.goto('/login?portal=agency')
   await page.waitForLoadState('networkidle')
 
-  await page.locator('input[type="email"]').fill('owner@demo-agency.local')
-  await page.locator('input[type="password"]').fill('password')
-  await page.locator('button[type="submit"]').click()
+  await signIn(page, 'owner@demo-agency.local')
 
   await expect(page).toHaveURL(/\/(dashboard|agency|onboarding)/, { timeout: 15_000 })
 })
