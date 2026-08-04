@@ -827,10 +827,12 @@ on a request they filed for a client.
 | Requirement | Where it is enforced | How it is proven |
 | --- | --- | --- |
 | Grant or remove extra permissions for one account | `account_grants` + `AccountGrants`; `POST`/`DELETE /admin/tenants/{tenant}/grants` | `AccountGrantTest` (12 tests); `platform-control.spec.ts` «granting needs a reason, and revoking needs its own» |
+| Services and features tied to each plan | boolean features are switches on `/admin/billing`; `PATCH /admin/plans/{plan}` accepts `features` | `BillingPage.test.tsx` «turns a plan's services on and off» |
 | Grant a subscription or full access free to a specific account | grant kinds `plan` and `full_access` | `AccountGrantTest` «full access is still bounded by the portal», «the console grants revokes and records the actor» |
 | Revocable without changing other accounts | one row per account; revocation stamps that row only | `AccountGrantTest` «revoking one grant does not touch another account» |
 | Suspend and reactivate | `PATCH /admin/tenants/{tenant}/status` (unchanged; data is preserved on suspension) | existing `TenantsPage` tests and `admin-console.spec.ts` |
-| Actor, reason and date on every change | `AccountGrants::grant()`/`revoke()` refuse a blank reason and write an `AuditLog` row | `AccountGrantTest` «the console grants revokes and records the actor» asserts both audit rows |
+| Actor, reason and date on every change | grants refuse a blank reason; the plan editor refuses to save until one is typed, and it is written to the `platform.plan.updated` audit row | `BillingPage.test.tsx` «…saves only a real change with a reason»; `platform-control.spec.ts` reads the audit back |
+| Actor, reason and date on every grant | `AccountGrants::grant()`/`revoke()` refuse a blank reason and write an `AuditLog` row | `AccountGrantTest` «the console grants revokes and records the actor» asserts both audit rows |
 | Fail-closed; nobody grants themselves anything | the routes sit behind `platform`; `AccountEntitlements` unions grants and can only widen | `AccountGrantTest` «a tenant owner cannot grant themselves anything»; `platform-control.spec.ts` «the console refuses an agency owner, at the page and at the API» |
 | A grant cannot exceed the plan's portal | `nav()` intersects granted sections with `Portal::sections()` | `AccountGrantTest` «a grant cannot reach outside the portal», «a grant does not survive having no portal» |
 

@@ -51,7 +51,13 @@ confirmation and the account came back `active` with an `app` membership and an 
 subscription; `/admin/billing` repriced the annual term and the public catalogue agreed; a module was
 granted to one account with a reason and revoked with its own, both audited.
 
-**1034 backend · 543 vitest · tsc · oxlint · Playwright on chromium, firefox and webkit.**
+`/admin/billing` edits a plan's monthly and annual price AND the services it includes, and refuses
+to save either until a reason is typed — which lands on the `platform.plan.updated` audit row beside
+the before and after. Rendering the features as switches immediately exposed a data error prose had
+hidden: Growth and Scale carried neither `campaign_tracking` nor `reports`, so the catalogue claimed
+the cheapest plan included campaign tracking and the dearest did not.
+
+**1034 backend · 544 vitest · tsc · oxlint · Playwright 755/755 on chromium, firefox and webkit.**
 
 ---
 
