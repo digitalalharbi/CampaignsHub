@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Subscriptions\Http\Controllers;
 
 use App\Domains\Accounts\Models\RegistrationRequest;
+use App\Domains\Billing\Providers\SandboxPaymentProvider;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use App\Domains\Subscriptions\Services\ApplySubscriptionPaymentEvent;
 use App\Domains\Subscriptions\Services\SubscriptionCheckout;
@@ -50,9 +51,20 @@ final class SubscriptionPaymentController extends Controller
             $providers[] = [
                 'provider' => $adapter->name(),
                 'is_default' => $key === $default,
-                // Honest, and the whole point of this endpoint: an interface that offers a gateway
-                // with no credentials is offering a button that cannot work.
-                'status' => $adapter->isConfigured() ? 'live' : 'awaiting_credentials',
+                /*
+                 * Three states, not two — the contract is explicit that Sandbox, Awaiting Credentials
+                 * and Live must be told apart.
+                 *
+                 * `live` would be a lie about the sandbox: nothing it settles is money. Collapsing it
+                 * into `awaiting_credentials` would be a different lie — that gateway IS configured
+                 * and will confirm a payment, and an interface saying otherwise beside a working Pay
+                 * button is worse than one saying nothing.
+                 */
+                'status' => match (true) {
+                    $adapter instanceof SandboxPaymentProvider && $adapter->isConfigured() => 'sandbox',
+                    $adapter->isConfigured() => 'live',
+                    default => 'awaiting_credentials',
+                },
                 'available' => $adapter->isConfigured(),
             ];
         }
@@ -75,7 +87,7 @@ final class SubscriptionPaymentController extends Controller
 
         $data = $request->validate(['provider' => ['sometimes', 'string', 'max:32']]);
 
-        $result = $this->checkout->startTrial($registration, $data['provider'] ?? null);
+        $result = $this->checkout->startRegistrationPayment($registration, $data['provider'] ?? null);
         $payment = $result['payment'];
 
         return ApiResponse::success([

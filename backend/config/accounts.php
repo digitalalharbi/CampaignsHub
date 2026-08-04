@@ -13,20 +13,28 @@ return [
     | `RegistrationPolicy`, which merges default → account type → plan, so the plan is the most
     | specific statement and wins.
     |
-    | The default below is EMAIL VERIFICATION ONLY, which is what the product does today. That is
-    | the auto-activate branch the contract permits, written down so it is a choice with a name
-    | rather than the absence of a gate. Turning on approval or payment for a plan is a config
-    | change and nothing else — the path is already built to honour them.
+    | The default is EMAIL VERIFICATION **AND PAYMENT** (PLAN-PAID-001).
     |
-    | These become editable from /admin once the plans engine lands (PLAN-001); until then this file
-    | is the single place the answer lives.
+    | It used to be email verification alone, which was defensible while «البداية» was free: an
+    | application that owes nothing has no payment to verify. With the free tier withdrawn there is no
+    | such application left, and leaving the gate off would mean the plan a customer picked decided
+    | whether the platform bothered to be paid — the very thing the brief forbids («يمنع إنشاء مساحة
+    | عمل مفعلة أو منح صلاحيات تشغيلية قبل تحقق الدفع فعليًا»).
+    |
+    | Turning this on grants nothing by itself. `requires_payment` only decides where an application
+    | WAITS; what lets it through is `AdvanceRegistration::paymentConfirmed()`, and the sole caller of
+    | that is a webhook the gateway signed. A misconfiguration here can strand an account, never
+    | activate one.
+    |
+    | A named exception for one account is not made here. It is granted per application from /admin
+    | and stored on the row (`review_concessions.policy`), where it carries who granted it and why.
     |
     */
     'registration' => [
         'default' => [
             'requires_mobile' => false,
             'requires_approval' => false,
-            'requires_payment' => false,
+            'requires_payment' => true,
         ],
 
         // Coarser than a plan and finer than the default: "every agency is reviewed" without

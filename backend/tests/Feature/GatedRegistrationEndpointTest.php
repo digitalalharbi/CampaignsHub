@@ -215,6 +215,18 @@ final class GatedRegistrationEndpointTest extends TestCase
     /** …and when no gate is configured, it does what it says, through the same provisioner. */
     public function test_the_auto_activate_branch_provisions_through_the_registration_path(): void
     {
+        /*
+         * Stated explicitly, because the SHIPPED default now requires payment (PLAN-PAID-001).
+         *
+         * That is the point of this pair of tests: the branch exists, and it only runs where a policy
+         * has deliberately opened every gate. Leaving this test to rely on the default would have made
+         * it silently assert the opposite of what the product does the day the default changed — which
+         * is exactly what happened.
+         */
+        config(['accounts.registration.default' => [
+            'requires_mobile' => false, 'requires_approval' => false, 'requires_payment' => false,
+        ]]);
+
         $user = app(RegisterTenantAction::class)->execute(
             new RegisterData(
                 tenantName: 'Direct Co', name: 'Direct', email: 'direct@a.test',

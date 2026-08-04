@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { signIn, submitVerifiedRequest } from './helpers'
+import { DEMO_CLIENT_CONTACT, signIn, signInWithCode } from './helpers'
 
 /**
  * LOGIN-UNIFIED-001 — one door, and the server decides where you land.
@@ -92,19 +92,55 @@ test.describe('the server picks the portal, not the URL', () => {
 })
 
 /**
- * The one-time-code branch is NOT covered here, deliberately.
+ * The one-time-code half of the same door.
  *
- * Reaching it end to end needs a real client contact, and the only honest way to create one from a
- * browser is to file a request through the intake flow — which made this spec a test of the intake
- * flow first and of sign-in second, and it failed on the intake's own success page rather than on
- * anything to do with logging in. A test whose failure does not point at the thing it names is worse
- * than no test.
+ * A client contact has never had a password. Before LOGIN-UNIFIED-001 they had their own page; now
+ * they type the same field as everybody else and the server sends them down the other branch. That
+ * hand-off is the part worth testing end to end — the resolver is covered in isolation by
+ * `backend/tests/Feature/Identity/SignInMethodTest.php`, but only the browser proves that answering
+ * `code` actually results in a session and a portal.
  *
- * The branch is covered where it can be tested directly:
- *   - `backend/tests/Feature/Identity/SignInMethodTest.php` — the resolver, against a real contact
- *     row, including the user-beats-contact collision and the no-enumeration rule.
- *   - `src/features/auth/LoginPage.test.tsx` — the page renders the code step, and only the code
- *     step, when the server says `method: 'code'`.
- * Both were also walked by hand against the running stack: a seeded contact address entered at
- * `/login` reached the code step and signed in to `/portal`.
+ * The contact comes from the demo seed rather than from filing a request through the intake flow.
+ * Driving intake here made the spec fail on the intake's own success page, which points away from
+ * the thing this test names; `client-portal.spec.ts` covers the guest-to-portal journey properly.
  */
+test.describe('the code branch of the same door', () => {
+  test('a client contact is offered a code, not a password', async ({ page }) => {
+    await page.goto('/login')
+    await page.getByTestId('login-identify').locator('input').fill(DEMO_CLIENT_CONTACT)
+    await page.getByTestId('login-identify').locator('button[type="submit"]').click()
+
+    await expect(page.getByTestId('login-code')).toBeVisible({ timeout: 20000 })
+    // Not merely "a password field is absent" — the password STEP must never have rendered.
+    await expect(page.getByTestId('login-password')).toHaveCount(0)
+    await expect(page.locator('input[type="password"]')).toHaveCount(0)
+  })
+
+  test('a client contact signs in with the code and lands in /portal', async ({ page }) => {
+    await signInWithCode(page, DEMO_CLIENT_CONTACT)
+
+    // A contact named on exactly one client space is taken straight into it (PORTAL-CLIENT-001).
+    await expect(page).toHaveURL(/\/portal(\/clients\/[^/]+)?$/, { timeout: 20000 })
+    await expect(page.getByTestId('login-code')).toHaveCount(0)
+  })
+
+  test('the code session survives a reload and a direct link', async ({ page }) => {
+    await signInWithCode(page, DEMO_CLIENT_CONTACT)
+    await expect(page).toHaveURL(/\/portal/, { timeout: 20000 })
+
+    await page.reload()
+    await expect(page).toHaveURL(/\/portal/)
+    await expect(page).not.toHaveURL(/\/login/)
+
+    await page.goto('/portal')
+    await expect(page).not.toHaveURL(/\/login/)
+  })
+
+  test('a contact who is bounced to the door comes back to where they were going', async ({ page }) => {
+    await page.goto('/portal/login?redirect=%2Fportal%2Frequests')
+    await expect(page).toHaveURL(/\/login\?redirect=/)
+
+    await signInWithCode(page, DEMO_CLIENT_CONTACT)
+    await expect(page).toHaveURL(/\/portal\/requests/, { timeout: 20000 })
+  })
+})

@@ -330,3 +330,34 @@ export async function signIn(page: Page, email: string, password = 'password'): 
   await page.getByTestId('login-password').locator('input[type="password"]').fill(password)
   await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
 }
+
+/**
+ * Sign in as a client contact — the one-time-code half of the unified door.
+ *
+ * A contact has never had a password, so `/login` sends them down the code step instead. Outside
+ * production the backend returns the code it just issued (`dev_code`, hard-gated server-side) and the
+ * page fills the field with it, which is what makes this branch testable at all without an inbox.
+ *
+ * The wait is on the field HAVING a value rather than on the step being visible: the step renders
+ * immediately, and submitting before `POST /client/login/start` has answered sends an empty code.
+ */
+export async function signInWithCode(page: Page, contact: string): Promise<void> {
+  if (!/\/login(\?|$)/.test(new URL(page.url()).pathname + new URL(page.url()).search)) {
+    await page.goto('/login')
+  }
+  await page.getByTestId('login-identify').locator('input').fill(contact)
+  await page.getByTestId('login-identify').locator('button[type="submit"]').click()
+
+  const form = page.getByTestId('login-code')
+  await expect(
+    form,
+    `${contact} was not offered a code step — the server says it signs in another way`,
+  ).toBeVisible({ timeout: 20_000 })
+
+  const field = form.locator('input[autocomplete="one-time-code"]')
+  await expect(field, 'the issued code never arrived, so there is nothing to submit').not.toHaveValue('', { timeout: 20_000 })
+  await form.locator('button[type="submit"]').click()
+}
+
+/** The contact seeded by `DemoAccountsSeeder` — a real client contact, with no password anywhere. */
+export const DEMO_CLIENT_CONTACT = 'customer@demo-client.local'

@@ -36,6 +36,54 @@ final class SubscriptionCheckout
     ) {}
 
     /**
+     * What an application actually owes, on the plan it applied for (PLAN-PAID-001).
+     *
+     * There are two shapes and the plan decides which: a plan sold with a paid trial charges the
+     * trial fee, and a plan sold outright charges the first period. Before the free tier was
+     * withdrawn the second shape did not exist — every registration charge was a trial fee — and the
+     * registration checkout threw for a plan that offered no trial. «البداية» is now such a plan, so
+     * this is the fork that lets somebody buy it.
+     *
+     * The amount comes from the catalogue's own quote, so the figure charged is the figure the plan
+     * page and the sign-up form showed. `refused` is only ever populated by the trial branch: trial
+     * abuse is a rule about free-ish periods, and refusing an ordinary purchase for it would be
+     * refusing a customer's money for having been a customer before.
+     *
+     * @return array{payment: SubscriptionPayment, status: string, checkout_url: ?string, refused: list<string>}
+     */
+    public function startRegistrationPayment(RegistrationRequest $request, ?string $provider = null): array
+    {
+        $plan = $this->catalogue->byCode($request->plan_code);
+
+        if ($plan === null) {
+            throw new RuntimeException('This application names no plan to charge for.');
+        }
+
+        if ($plan->offersTrial()) {
+            return $this->startTrial($request, $provider);
+        }
+
+        $interval = (string) ($request->billing_interval ?? 'monthly');
+        $quote = $this->catalogue->quote($plan, $interval);
+
+        if ($quote === null) {
+            // The plan is not sold on this term. Charging the other term's price would bill a year
+            // for a month, which is exactly what `priceFor()` returns null to prevent.
+            throw new RuntimeException('This plan is not sold on the requested term.');
+        }
+
+        return $this->open(
+            purpose: 'subscription',
+            amount: $quote['due_now'],
+            currency: $quote['currency'],
+            planCode: $plan->code,
+            interval: $interval,
+            provider: $provider,
+            registration: $request,
+        ) + ['refused' => []];
+    }
+
+    /**
      * The trial fee for an application that owes one.
      *
      * @return array{payment: SubscriptionPayment, status: string, checkout_url: ?string, refused: list<string>}
@@ -253,8 +301,14 @@ final class SubscriptionCheckout
         string $interval,
     ): string {
         if ($registration !== null) {
-            // One trial charge per application, whatever happens to the browser.
-            return "trial:{$registration->getKey()}:{$planCode}:{$interval}";
+            /*
+             * One registration charge per application, per plan, per term — whatever happens to the
+             * browser. The purpose is part of the key because an application can owe either a trial
+             * fee or a first period, and the two are different charges for different amounts; a key
+             * that ignored it would hand a customer buying «البداية» outright the trial charge that
+             * had been opened for them on some other plan.
+             */
+            return "{$purpose}:{$registration->getKey()}:{$planCode}:{$interval}";
         }
 
         // One charge per subscription PERIOD: the period end is what makes this month's retry the

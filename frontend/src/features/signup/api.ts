@@ -185,7 +185,13 @@ export function fetchQuote(code: string, interval: BillingInterval): Promise<{ q
 export interface PaymentProviderState {
   provider: string
   is_default: boolean
-  /** `live` or `awaiting_credentials` — reported by the server, never guessed at here. */
+  /**
+   * `live` | `sandbox` | `awaiting_credentials` — reported by the server, never guessed at here.
+   *
+   * Three, not two. A sandbox gateway takes a payment and activates the account for real, over a
+   * signed event this installation verified — but no money moves, and showing it as `live` would be
+   * a claim that it did.
+   */
   status: string
   available: boolean
 }

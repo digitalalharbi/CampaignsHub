@@ -21,17 +21,36 @@ final class SubscriptionPlanSeeder extends Seeder
                 'code' => 'starter',
                 'name' => 'Starter',
                 'name_ar' => 'البداية',
-                'summary_ar' => 'لمن يدير حملاته بنفسه ويحتاج أساسيات المتابعة والتقارير.',
-                'summary_en' => 'For someone running their own campaigns who needs the basics.',
-                'price_monthly' => 0,
-                // Free plans are not sold on an annual term — there is nothing to bill for a year.
-                'price_annual' => null,
+                'summary_ar' => 'لمن يدير حملاته بنفسه: متابعة الحملات والتقارير.',
+                'summary_en' => 'For someone running their own campaigns: campaign tracking and reports.',
+                /*
+                 * PLAN-PAID-001 — the entry plan is sold, not given away.
+                 *
+                 * A free tier was the one way into the product that owed nothing, and an application
+                 * that owes nothing clears the payment gate by having no payment to verify. Pricing
+                 * it means every new workspace in the system arrives the same way: through a settled
+                 * payment confirmed by a signed webhook.
+                 */
+                'price_monthly' => 99,
+                // The annual term, priced at ten months for twelve — the same shape as Growth and
+                // Scale. The console edits it (PATCH /admin/plans/{plan}); this is only the opening
+                // value a fresh database starts from.
+                'price_annual' => 990,
                 'currency' => 'SAR',
-                // A free plan starts free. No trial fee, because there is nothing to trial INTO.
+                // No trial: the entry plan IS the affordable way in, and a trial on top of it would
+                // be a second, cheaper front door to the same thing.
                 'trial_fee' => 0,
                 'trial_days' => 0,
                 'sort_order' => 10,
-                'features' => ['support' => 'community', 'ai_assist' => false, 'white_label' => false],
+                // Campaign tracking and reports are what this plan is sold on, so they are data the
+                // catalogue carries rather than a claim in a paragraph.
+                'features' => [
+                    'campaign_tracking' => true,
+                    'reports' => true,
+                    'support' => 'community',
+                    'ai_assist' => false,
+                    'white_label' => false,
+                ],
                 'limits' => ['projects' => 3, 'team_members' => 3, 'connections' => 3, 'reports_per_month' => 10],
             ],
             [

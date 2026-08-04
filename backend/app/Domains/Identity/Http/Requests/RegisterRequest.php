@@ -68,14 +68,26 @@ final class RegisterRequest extends FormRequest
              * a payload naming a withdrawn or private plan would otherwise decide it instead.
              */
             'plan_code' => [
-                'sometimes', 'nullable', 'string', 'max:64',
+                /*
+                 * Required since the free tier was withdrawn (PLAN-PAID-001).
+                 *
+                 * It used to be optional, and the sign-up form said so — "pick one later, before
+                 * activation". That was true only while an unpriced application could still become a
+                 * workspace. Now every application owes a first payment, and an application naming no
+                 * plan owes an amount nobody can compute: it would sit at the payment gate forever
+                 * with no charge to open.
+                 */
+                'required', 'string', 'max:64',
                 function (string $attribute, mixed $value, Closure $fail): void {
                     if ($value !== null && $value !== '' && ! app(PlanCatalogue::class)->isOffered((string) $value)) {
                         $fail('That plan is not available.');
                     }
                 },
             ],
-            'billing_interval' => ['sometimes', 'nullable', 'in:monthly,annual'],
+            // Required with the plan, and for the same reason: the annual and monthly prices are
+            // different amounts, and defaulting one silently is how a customer is charged a term
+            // they did not choose.
+            'billing_interval' => ['required', 'in:monthly,annual'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:40', new PhoneNumberRule],
         ];
     }

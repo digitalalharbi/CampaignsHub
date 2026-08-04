@@ -36,6 +36,23 @@ final class SubscriptionNotificationTemplates
         $effectiveAt = (string) ($c['effective_at'] ?? '');
 
         return match ($event) {
+            /*
+             * A plan bought outright (PLAN-PAID-001).
+             *
+             * Deliberately not worded as a trial: there is no window to cancel inside and no
+             * conversion coming, and saying otherwise would tell a paying customer to expect a second
+             * charge they have already made.
+             */
+            'subscription_started' => $ar ? [
+                'subject' => "تم تفعيل اشتراكك — باقة {$plan}",
+                'body' => "تم تأكيد الدفع ({$amount}) وتفعيل مساحة عملك.\n"
+                    ."يتجدد اشتراكك في {$date}، ويمكنك إدارته أو إلغاؤه من إعدادات الاشتراك.\n{$url}",
+            ] : [
+                'subject' => "Your subscription is active — {$plan}",
+                'body' => "Your payment ({$amount}) was confirmed and your workspace is active.\n"
+                    ."It renews on {$date}, and you can manage or cancel it from subscription settings.\n{$url}",
+            ],
+
             'trial_started' => $ar ? [
                 'subject' => "بدأت تجربتك لمدة {$days} أيام — باقة {$plan}",
                 'body' => "تم تأكيد رسوم التجربة ({$amount}) وتفعيل مساحة عملك.\n"
@@ -201,7 +218,7 @@ final class SubscriptionNotificationTemplates
     public static function events(): array
     {
         return [
-            'trial_started', 'trial_ending', 'trial_converted', 'payment_confirmed',
+            'subscription_started', 'trial_started', 'trial_ending', 'trial_converted', 'payment_confirmed',
             'renewal_failed', 'past_due', 'suspended', 'reactivated',
             'plan_changed', 'plan_change_scheduled',
             'registration_approved', 'registration_rejected', 'registration_information_requested',

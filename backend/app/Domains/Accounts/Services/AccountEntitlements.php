@@ -31,6 +31,19 @@ use App\Domains\Tenancy\Models\Tenant;
 final class AccountEntitlements
 {
     /**
+     * Administrative exceptions widen this, and can only widen it (GRANT-001).
+     *
+     * The brief asks the platform owner to be able to give one account something beyond its plan and
+     * to take it back. That is a union with what the plan already allows, applied here — the one
+     * place `nav()`, `allows()` and the rail all read — rather than at each of those in turn.
+     *
+     * It is deliberately additive. A grant cannot remove a section, so no grant, expiry or bug in
+     * the grants table can take away something a customer paid for; the only thing that narrows
+     * access is suspension, which preserves their data.
+     */
+    public function __construct(private readonly AccountGrants $grants) {}
+
+    /**
      * Sections that exist only when the influencer module is enabled. Kept as a narrowing rule
      * rather than a separate menu: the influencers portal offers these, and a workspace that has
      * not bought the module does not get them — the portal's shape does not change, its contents do.
@@ -59,8 +72,12 @@ final class AccountEntitlements
     public function modules(Tenant $tenant): array
     {
         $mods = $tenant->enabled_modules;
+        $mods = is_array($mods) && $mods !== [] ? array_values($mods) : ['paid_media'];
 
-        return is_array($mods) && $mods !== [] ? array_values($mods) : ['paid_media'];
+        // A module granted from the console counts as enabled, without editing the tenant's own
+        // column — so revoking the grant restores exactly what they had, and the record of who gave
+        // it away survives the revocation.
+        return array_values(array_unique([...$mods, ...$this->grants->modules($tenant)]));
     }
 
     /**
@@ -87,10 +104,26 @@ final class AccountEntitlements
             }
         }
 
-        return array_values(array_filter(
+        /*
+         * A full-access grant withholds nothing. It is still bounded by the PORTAL: an advertiser
+         * given full access gets everything `/app` offers, not the agency's client roster, because
+         * a portal a workspace does not hold is not a capability that can be granted to it.
+         */
+        if ($this->grants->hasFullAccess($tenant)) {
+            $withheld = [];
+        }
+
+        $allowed = array_values(array_filter(
             $portal->sections(),
             static fn (string $section) => ! in_array($section, $withheld, true),
         ));
+
+        // Individually granted sections, intersected with what this portal offers at all — for the
+        // same reason: a grant widens what the workspace may reach inside its portal, and cannot
+        // invent a section the portal does not have.
+        $granted = array_values(array_intersect($this->grants->sections($tenant), $portal->sections()));
+
+        return array_values(array_unique([...$allowed, ...$granted]));
     }
 
     /** A module switcher only makes sense when more than one module is enabled. */
@@ -124,6 +157,18 @@ final class AccountEntitlements
             'module_switcher' => $this->showModuleSwitcher($tenant),
             'nav' => $this->nav($tenant, $portal),
             'subscription_plan' => $tenant->subscription_plan,
+            /*
+             * What was granted rather than bought, stated as itself.
+             *
+             * The console needs it, and so does the customer's own billing screen: a workspace on a
+             * complimentary plan must not be shown an invoice it will never receive.
+             */
+            'grants' => [
+                'full_access' => $this->grants->hasFullAccess($tenant),
+                'sections' => $this->grants->sections($tenant),
+                'modules' => $this->grants->modules($tenant),
+                'complimentary_plan' => $this->grants->complimentaryPlan($tenant),
+            ],
             'onboarding' => [
                 'completed' => $tenant->onboarding_completed_at !== null,
                 'step' => $tenant->onboarding_step,

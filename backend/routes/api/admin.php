@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
+use App\Domains\Platform\Http\Controllers\PlatformGrantController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
@@ -35,6 +36,19 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/tenants/{tenant}', [PlatformTenantController::class, 'show'])->name('tenants.show');
         Route::patch('/tenants/{tenant}/status', [PlatformTenantController::class, 'updateStatus'])
             ->name('tenants.status');
+
+        /*
+         * GRANT-001 — one account's administrative exceptions.
+         *
+         * Nested under the tenant because a grant has no meaning apart from the account it was made
+         * for, and because that shape makes "grant this to everybody" an endpoint nobody can call by
+         * accident. `destroy` revokes; nothing here deletes.
+         */
+        Route::get('/tenants/{tenant}/grants', [PlatformGrantController::class, 'index'])->name('grants.index');
+        Route::post('/tenants/{tenant}/grants', [PlatformGrantController::class, 'store'])
+            ->middleware('throttle:30,1')->name('grants.store');
+        Route::delete('/tenants/{tenant}/grants/{grant}', [PlatformGrantController::class, 'destroy'])
+            ->middleware('throttle:30,1')->name('grants.destroy');
 
         /*
          * SIGNUP-003 — the registration review queue.

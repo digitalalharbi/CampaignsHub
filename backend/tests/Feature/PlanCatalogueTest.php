@@ -119,12 +119,58 @@ final class PlanCatalogueTest extends TestCase
      */
     public function test_a_term_a_plan_is_not_sold_on_has_no_price(): void
     {
-        // Starter is free and has no annual term.
-        $this->getJson('/api/v1/plans/starter/quote?interval=annual')->assertStatus(422);
+        /*
+         * Every seeded plan is now sold on both terms — «البداية» included, since PLAN-PAID-001 gave
+         * it a price. So the rule is demonstrated on a plan that is deliberately withdrawn from the
+         * annual term, which is what `price_annual = null` means and what the console writes when an
+         * owner takes a plan off the yearly price list.
+         */
+        $monthlyOnly = SubscriptionPlan::query()->create([
+            'code' => 'monthly-only', 'name' => 'Monthly Only', 'name_ar' => 'شهري فقط',
+            'price_monthly' => 199, 'price_annual' => null, 'currency' => 'SAR',
+            'trial_fee' => 0, 'trial_days' => 0, 'is_active' => true, 'is_public' => true, 'sort_order' => 90,
+        ]);
 
-        $starter = $this->catalogue()->byCode('starter');
-        $this->assertNull($starter->priceFor('annual'));
-        $this->assertNull($this->catalogue()->quote($starter, 'annual'));
+        $this->getJson('/api/v1/plans/monthly-only/quote?interval=annual')->assertStatus(422);
+
+        $this->assertNull($monthlyOnly->priceFor('annual'));
+        $this->assertNull($this->catalogue()->quote($monthlyOnly, 'annual'));
+
+        // And the priced term still answers, so the refusal above is about the TERM and not the plan.
+        $this->getJson('/api/v1/plans/monthly-only/quote?interval=monthly')->assertOk()
+            ->assertJsonPath('data.quote.due_now', '199.00');
+    }
+
+    /** «البداية» is sold, not given away (PLAN-PAID-001). */
+    public function test_the_entry_plan_is_priced_on_both_terms(): void
+    {
+        $res = $this->getJson('/api/v1/plans')->assertOk();
+
+        $starter = collect($res->json('data.plans'))->firstWhere('code', 'starter');
+        $this->assertSame('99.00', $starter['price_monthly'], 'the entry plan must cost 99 SAR a month');
+        $this->assertSame('990.00', $starter['price_annual'], 'the annual term must be published before payment');
+        $this->assertNotSame('0.00', $starter['price_monthly'], 'there is no free tier');
+
+        // What the plan is sold ON, as data rather than as marketing copy.
+        $this->assertTrue((bool) $starter['features']['campaign_tracking']);
+        $this->assertTrue((bool) $starter['features']['reports']);
+
+        // The quote a visitor is shown before paying names the whole annual amount, not a monthly one.
+        $this->getJson('/api/v1/plans/starter/quote?interval=annual')->assertOk()
+            ->assertJsonPath('data.quote.due_now', '990.00')
+            ->assertJsonPath('data.quote.renews_in_days', 365);
+    }
+
+    /** Nothing on sale is free — the check that would catch a free tier creeping back in. */
+    public function test_no_offered_plan_is_free(): void
+    {
+        foreach ($this->catalogue()->offered() as $plan) {
+            $this->assertGreaterThan(
+                0,
+                (float) $plan->price_monthly,
+                "plan [{$plan->code}] is offered at no charge, which reopens the unpaid route into the product",
+            );
+        }
     }
 
     public function test_an_unknown_plan_is_not_quotable(): void

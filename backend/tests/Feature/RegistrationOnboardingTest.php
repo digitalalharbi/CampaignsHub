@@ -62,21 +62,58 @@ final class RegistrationOnboardingTest extends TestCase
         $res->assertJsonPath('data.verification.delivery_status', 'awaiting_provider_credentials');
         $this->assertNotNull($res->json('data.verification.dev_link'));
 
-        // …and it tells the applicant what the policy will ask of them, before they wonder.
+        /*
+         * …and it tells the applicant what the policy will ask of them, before they wonder.
+         *
+         * Payment is asked for and approval is not, which is what the shipped policy says since
+         * PLAN-PAID-001: there is no free plan left, so every application owes a first charge, and
+         * nothing here is held for a human to read.
+         */
         $res->assertJsonPath('data.policy.requires_approval', false)
-            ->assertJsonPath('data.policy.requires_payment', false);
+            ->assertJsonPath('data.policy.requires_payment', true);
+
+        // The application is NOT a workspace, and says so — before the money, it grants nothing.
+        $this->assertDatabaseCount('tenants', 0);
+        $this->assertDatabaseMissing('users', ['email' => 'o@acme.test']);
     }
 
-    /** Verification is what produces the owner — with the permissions to actually operate. */
-    public function test_verifying_creates_a_working_owner(): void
+    /**
+     * The completed journey produces a working owner — with the permissions to actually operate.
+     *
+     * The moment this happens moved with PLAN-PAID-001: verifying an email used to be the last gate
+     * and therefore the point the owner appeared, and now it is the confirmed payment. The claim is
+     * unchanged and is asserted where it now becomes true, on the account itself rather than on the
+     * verify response — which today honestly reports an application that is still owed money.
+     */
+    public function test_the_completed_journey_creates_a_working_owner(): void
     {
-        $verify = $this->applyAndVerify(['tenant_name' => 'Acme WS', 'email' => 'o@acme.test'])['verify'];
+        ['user' => $user, 'registration' => $registration] =
+            $this->applyAndVerify(['tenant_name' => 'Acme WS', 'email' => 'o@acme.test']);
+
+        $this->assertTrue($registration->isProvisioned());
+        $this->assertNotNull($user->email_verified_at);
+
+        $me = $this->actingAs($user, 'sanctum')->getJson('/api/v1/auth/me')->assertOk();
 
         // Owner actually has permissions (previously the role was created empty).
-        $verify->assertJsonFragment(['role_slug' => 'tenant-owner']);
-        $this->assertContains('clients.view', $verify->json('data.user.permissions'));
-        $verify->assertJsonPath('data.user.email_verified', true)
-            ->assertJsonPath('data.registration.provisioned', true);
+        $me->assertJsonFragment(['role_slug' => 'tenant-owner']);
+        $this->assertContains('clients.view', $me->json('data.user.permissions'));
+        $me->assertJsonPath('data.user.email_verified', true);
+    }
+
+    /** Verifying an email clears ONE gate. It does not, on its own, produce an account. */
+    public function test_verifying_the_email_alone_creates_nothing(): void
+    {
+        $applied = $this->apply(['tenant_name' => 'Unpaid WS', 'email' => 'unpaid@acme.test'])->assertStatus(202);
+
+        $this->postJson('/api/v1/auth/registration/verify-email', [
+            'token' => $this->verificationTokenFrom($applied),
+        ])->assertOk()
+            ->assertJsonPath('data.registration.provisioned', false)
+            ->assertJsonPath('data.registration.state', 'approved_awaiting_payment');
+
+        $this->assertDatabaseMissing('users', ['email' => 'unpaid@acme.test']);
+        $this->assertDatabaseMissing('tenants', ['name' => 'Unpaid WS']);
     }
 
     /**
@@ -258,6 +295,8 @@ final class RegistrationOnboardingTest extends TestCase
             'token' => $this->verificationTokenFrom($second),
         ])->assertOk();
 
+        // …and it is the corrected detail that becomes the workspace, once it is paid for.
+        $this->payForRegistration(RegistrationRequest::query()->firstOrFail());
         $this->assertDatabaseHas('tenants', ['name' => 'Corrected Name']);
     }
 
@@ -287,10 +326,15 @@ final class RegistrationOnboardingTest extends TestCase
         // on a workspace that does not exist yet.
         $this->assertSame('agency', RegistrationRequest::query()->firstOrFail()->account_type);
 
-        // Both questions were already answered, so onboarding resumes at the workspace step.
+        // Both questions were already answered, so onboarding resumes at the workspace step — read
+        // from the account, which exists once the first payment is confirmed.
         $this->postJson('/api/v1/auth/registration/verify-email', [
             'token' => $this->verificationTokenFrom($res),
-        ])->assertOk()
+        ])->assertOk();
+        $this->payForRegistration(RegistrationRequest::query()->firstOrFail());
+
+        $owner = User::where('email', 'journey@owner.test')->firstOrFail();
+        $this->actingAs($owner, 'sanctum')->getJson('/api/v1/auth/me')->assertOk()
             ->assertJsonPath('data.user.account.onboarding.step', 'workspace')
             ->assertJsonPath('data.user.account.account_type', 'agency');
 
@@ -303,11 +347,10 @@ final class RegistrationOnboardingTest extends TestCase
     /** Without a journey nothing is presumed — the wizard still asks for the account type. */
     public function test_registration_without_a_journey_still_starts_at_account_type(): void
     {
-        $res = $this->apply(['email' => 'nojourney@owner.test']);
+        ['user' => $user] = $this->applyAndVerify(['email' => 'nojourney@owner.test']);
 
-        $this->postJson('/api/v1/auth/registration/verify-email', [
-            'token' => $this->verificationTokenFrom($res),
-        ])->assertOk()->assertJsonPath('data.user.account.onboarding.step', 'account_type');
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/auth/me')->assertOk()
+            ->assertJsonPath('data.user.account.onboarding.step', 'account_type');
     }
 
     /** An account type outside the enum is rejected rather than silently stored. */

@@ -84,7 +84,19 @@ function PlansTab({ ar }: { ar: boolean }) {
     mutationFn: ({ id, active }: { id: string; active: boolean }) => updatePlan(id, { is_active: active }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin'] }),
   })
-  const error = toggle.isError ? toApiError(toggle.error) : null
+  /*
+   * PLAN-PAID-001 — the brief puts the monthly and annual prices under the platform owner's control.
+   *
+   * Safe to expose because the two figures were separated long before this screen existed: the
+   * catalogue is what NEW customers are quoted, and `subscriptions.unit_amount` is what an existing
+   * one owes. Editing here cannot re-price anybody.
+   */
+  const reprice = useMutation({
+    mutationFn: ({ id, monthly, annual }: { id: string; monthly: string; annual: string | null }) =>
+      updatePlan(id, { price_monthly: monthly, price_annual: annual }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin'] }),
+  })
+  const error = toggle.isError ? toApiError(toggle.error) : reprice.isError ? toApiError(reprice.error) : null
 
   if (plans.isPending) return <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-20" />)}</div>
   if (plans.isError || !plans.data) {
@@ -98,8 +110,8 @@ function PlansTab({ ar }: { ar: boolean }) {
       <p className="mb-4 flex items-start gap-2.5 rounded-xl border border-border bg-surface-secondary px-4 py-3 text-sm text-text-secondary">
         <Info size={16} className="mt-0.5 shrink-0 text-info" aria-hidden />
         {ar
-          ? 'إيقاف الخطة يمنع الاشتراكات الجديدة فقط ولا يمس المشتركين الحاليين. السعر لا يُعدَّل من هنا — تغيير ما يدفعه مشتركون حاليون قرار تعاقدي.'
-          : 'Deactivating a plan stops new sign-ups only and leaves existing subscribers untouched. The price is not editable here — changing what current subscribers pay is a contractual decision.'}
+          ? 'إيقاف الباقة يمنع الاشتراكات الجديدة فقط ولا يمس المشتركين الحاليين. تعديل السعر يسري على المشتركين الجدد فقط؛ فكل اشتراك قائم يحتفظ بالسعر المتفق عليه عند بدايته. اترك السعر السنوي فارغًا لسحب الباقة من الاشتراك السنوي.'
+          : 'Deactivating a plan stops new sign-ups only and leaves existing subscribers untouched. A price change applies to NEW subscribers only — every existing subscription keeps the amount it was sold at. Leave the annual price empty to withdraw the plan from the yearly term.'}
       </p>
 
       {plans.data.plans.length === 0 ? (
@@ -127,18 +139,78 @@ function PlansTab({ ar }: { ar: boolean }) {
                   </span>
                 </p>
               </div>
-              <Switch
-                id={`plan-active-${p.code}`}
-                checked={p.is_active}
-                disabled={toggle.isPending}
-                onCheckedChange={(next) => toggle.mutate({ id: p.id, active: next })}
-                label={ar ? 'متاحة للاشتراك' : 'Open for sign-up'}
-              />
+              <div className="flex flex-wrap items-end gap-3">
+                <PlanPrices
+                  plan={p}
+                  ar={ar}
+                  saving={reprice.isPending}
+                  onSave={(monthly, annual) => reprice.mutate({ id: p.id, monthly, annual })}
+                />
+                <Switch
+                  id={`plan-active-${p.code}`}
+                  checked={p.is_active}
+                  disabled={toggle.isPending}
+                  onCheckedChange={(next) => toggle.mutate({ id: p.id, active: next })}
+                  label={ar ? 'متاحة للاشتراك' : 'Open for sign-up'}
+                />
+              </div>
             </li>
           ))}
         </ul>
       )}
     </>
+  )
+}
+
+/**
+ * The two prices, edited in place.
+ *
+ * The annual field is deliberately allowed to be EMPTY, and empty means null rather than zero: a
+ * plan withdrawn from the yearly term has no annual price, and a plan sold for nothing a year is a
+ * free tier by another name. Save is disabled until something actually changed, so an owner opening
+ * the screen cannot re-save the same numbers and fill the audit log with nothing.
+ */
+function PlanPrices({ plan, ar, saving, onSave }: {
+  plan: PlatformPlan
+  ar: boolean
+  saving: boolean
+  onSave: (monthly: string, annual: string | null) => void
+}) {
+  const [monthly, setMonthly] = useState(plan.price_monthly)
+  const [annual, setAnnual] = useState(plan.price_annual ?? '')
+
+  const changed = monthly !== plan.price_monthly || annual !== (plan.price_annual ?? '')
+  const field = 'h-9 w-24 rounded-lg border border-border bg-surface px-2.5 text-sm tabular-nums text-text-primary outline-none focus:border-brand-500'
+
+  return (
+    <div className="flex flex-wrap items-end gap-2" data-testid={`plan-prices-${plan.code}`}>
+      <label className="text-[11.5px] font-semibold text-text-muted">
+        <span className="mb-1 block">{ar ? 'شهري' : 'Monthly'}</span>
+        <input
+          data-testid={`plan-price-monthly-${plan.code}`}
+          className={field} dir="ltr" inputMode="decimal"
+          value={monthly} onChange={(e) => setMonthly(e.target.value)}
+        />
+      </label>
+      <label className="text-[11.5px] font-semibold text-text-muted">
+        <span className="mb-1 block">{ar ? 'سنوي' : 'Annual'}</span>
+        <input
+          data-testid={`plan-price-annual-${plan.code}`}
+          className={field} dir="ltr" inputMode="decimal"
+          placeholder={ar ? 'لا يُباع' : 'Not sold'}
+          value={annual} onChange={(e) => setAnnual(e.target.value)}
+        />
+      </label>
+      <button
+        type="button"
+        data-testid={`plan-save-${plan.code}`}
+        disabled={!changed || saving}
+        onClick={() => onSave(monthly.trim(), annual.trim() === '' ? null : annual.trim())}
+        className="h-9 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white disabled:opacity-45"
+      >
+        {ar ? 'حفظ' : 'Save'}
+      </button>
+    </div>
   )
 }
 

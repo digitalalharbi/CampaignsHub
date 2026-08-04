@@ -36,7 +36,7 @@ export const JOURNEYS: Record<JourneyKey, Journey> = {
 export const ACCOUNT_ROUTES = {
   login: '/login',
   register: '/register',
-  trackRequests: '/portal/login',
+  trackRequests: '/login',
   requestService: '/requests/new',
   servicesCatalogue: '/services',
 } as const

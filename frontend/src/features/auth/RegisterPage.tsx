@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Building2, Check, LayoutDashboard, Users } from 'lucide-react'
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { EmailInput, PasswordInput, TextInput } from '@/components/ui/form'
 import { controlClass } from '@/components/ui/Field'
 import { ErrorSummary, useFormDraft, type FieldError } from '@/components/forms'
+import { ACCOUNT_FIELDS, belongsToAccountStep, validateAccountStep, type AccountErrors } from './registerValidation'
 import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
@@ -59,7 +60,10 @@ const REG_COPY = {
     stepPlan: 'الباقة',
     next: 'التالي',
     back: 'رجوع',
-    planOptional: 'يمكنك المتابعة دون اختيار باقة الآن وتحديدها لاحقًا قبل التفعيل.',
+    planRequired: 'اختر باقة للمتابعة.',
+    planNote: 'يبدأ الاشتراك بعد تأكيد الدفع. لن تُفعّل مساحة العمل قبل ذلك.',
+    fixAccount: 'يرجى تصحيح بيانات الحساب في الخطوة السابقة.',
+    backToAccount: 'العودة إلى بيانات الحساب',
   },
   en: {
     errTitle: 'Please fix the following errors',
@@ -68,7 +72,10 @@ const REG_COPY = {
     stepPlan: 'Plan',
     next: 'Continue',
     back: 'Back',
-    planOptional: 'You can continue without choosing a plan and pick one later, before activation.',
+    planRequired: 'Choose a plan to continue.',
+    planNote: 'Your subscription starts once the payment is confirmed. Nothing is activated before then.',
+    fixAccount: 'Please correct your account details on the previous step.',
+    backToAccount: 'Back to account details',
   },
 } as const
 
@@ -118,14 +125,31 @@ export function RegisterPage() {
   const [planCode, setPlanCode] = useState<string | null>(null)
   const [interval, setInterval] = useState<BillingInterval>('monthly')
 
+  /*
+   * Account-step errors, decided in the browser (SIGNUP-STEP-001).
+   *
+   * Kept apart from the server's errors rather than merged into one bag, because they are answers to
+   * different questions and belong on different screens: these are "this field is not yet valid",
+   * and they are the reason the visitor has not reached the packages step at all.
+   */
+  const [accountErrors, setAccountErrors] = useState<AccountErrors>({})
+  const [planError, setPlanError] = useState<string | null>(null)
+
   // Non-secret fields autosave as a draft (survives refresh); passwords are kept in memory only, never persisted.
   const draft = useFormDraft('register', { tenant_name: '', name: '', email: '' })
   const [secret, setSecret] = useState({ password: '', password_confirmation: '' })
   const form = { ...draft.value, ...secret }
-  const setDraft = (k: 'tenant_name' | 'name' | 'email') => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const clearError = (k: string) => setAccountErrors((e) => (k in e ? { ...e, [k]: undefined } : e))
+  const setDraft = (k: 'tenant_name' | 'name' | 'email') => (e: React.ChangeEvent<HTMLInputElement>) => {
     draft.setValue((f) => ({ ...f, [k]: e.target.value }))
-  const setSecretField = (k: keyof typeof secret) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    clearError(k)
+  }
+  const setSecretField = (k: keyof typeof secret) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setSecret((s) => ({ ...s, [k]: e.target.value }))
+    clearError(k)
+    // Correcting the password can only ever fix the confirmation, never break it further.
+    if (k === 'password') clearError('password_confirmation')
+  }
 
   /**
    * The chosen path, translated into the account fields the backend actually stores. It travels in the
@@ -176,11 +200,38 @@ export function RegisterPage() {
     },
   })
   const error = mutation.isError ? toApiError(mutation.error) : null
-  const err = (k: string) => error?.errors?.[k]?.[0]
-  // Field ids match the input ids below so the summary's click-to-focus lands on the right control.
-  const summaryErrors: FieldError[] = error?.errors
-    ? Object.entries(error.errors).flatMap(([field, msgs]) => (msgs?.length ? [{ field, message: msgs[0] }] : []))
-    : []
+  const serverFields = error?.errors ? Object.keys(error.errors) : []
+
+  /*
+   * A server refusal about the ACCOUNT sends the visitor back to the account step.
+   *
+   * `unique:users` is the real case: the address is only known to be taken at the moment of submit,
+   * which happens on the packages step. Rendering that message there would put an error about a
+   * field on a screen the visitor has left — the exact failure this rework removes. So the form goes
+   * back to where the field is, with the message beside it.
+   */
+  useEffect(() => {
+    if (step === 2 && belongsToAccountStep(serverFields)) setStep(1)
+  }, [step, serverFields.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** A field's message — the browser's own if it has one, otherwise the server's. */
+  const err = (k: keyof typeof accountErrors) => accountErrors[k] ?? error?.errors?.[k]?.[0]
+
+  /*
+   * The summary lists the step the visitor is ON, and nothing else.
+   *
+   * Field ids match the input ids below so the summary's click-to-focus lands on the right control.
+   */
+  const summaryErrors: FieldError[] = step === 1
+    ? [
+      ...Object.entries(accountErrors).flatMap(([field, message]) => (message ? [{ field, message }] : [])),
+      ...Object.entries(error?.errors ?? {}).flatMap(([field, msgs]) =>
+        msgs?.length && !(field in accountErrors && accountErrors[field as keyof typeof accountErrors])
+          ? [{ field, message: msgs[0] }]
+          : []),
+    ].filter((e) => ACCOUNT_FIELDS.includes(e.field))
+    : Object.entries(error?.errors ?? {}).flatMap(([field, msgs]) =>
+      msgs?.length && !ACCOUNT_FIELDS.includes(field) ? [{ field, message: msgs[0] }] : [])
 
   return (
     <AuthShell portal={journey === 'multi-client' ? 'agency' : 'default'}>
@@ -266,17 +317,58 @@ export function RegisterPage() {
         Two columns where the fields are short, so every field and the button fit a 768px-tall desktop
         screen without scrolling.
       */}
-      <form className="mt-2 space-y-2" onSubmit={(e) => {
+      {/*
+        `noValidate` — one validation authority, not two (SIGNUP-STEP-001).
+        The browser's own bubbles are English-only, appear one field at a time, vanish on the next
+        click and cannot be placed beside the field the way the rest of this product places an error.
+        Left on, they also PREEMPT the check below, so a malformed address never reached our rules at
+        all. The fields keep `required` for assistive technology; `validateAccountStep` decides.
+      */}
+      <form noValidate className="mt-2 space-y-2" onSubmit={(e) => {
         e.preventDefault()
-        if (step === 1) { setStep(2); return }
+
+        /*
+         * Step one is a gate, not a page turn.
+         *
+         * Nothing about the account travels to the packages step until every field on this one is
+         * valid — which is what stops «كلمة المرور ضعيفة» being read for the first time beside a
+         * price list, with no field on screen to correct.
+         */
+        if (step === 1) {
+          const problems = validateAccountStep(form, ar)
+          setAccountErrors(problems)
+
+          const firstBad = Object.keys(problems)[0]
+          if (firstBad) {
+            document.getElementById(firstBad)?.focus()
+            return
+          }
+
+          mutation.reset() // a stale server error must not follow a corrected form forward
+          setStep(2)
+          return
+        }
+
+        // A plan is not optional any more: there is no free tier to fall back to, and an application
+        // naming no plan owes an amount nobody can compute.
+        if (!planCode) {
+          setPlanError(rc.planRequired)
+          return
+        }
+        setPlanError(null)
+
         mutation.mutate({
           ...form,
           ...(preset ?? {}),
-          // Omitted entirely when nothing was chosen — an empty string is not a plan, and sending one
-          // would be the form answering a question the visitor did not.
-          ...(planCode ? { plan_code: planCode, billing_interval: interval } : {}),
+          plan_code: planCode,
+          billing_interval: interval,
         })
       }}>
+        {/*
+          The summary belongs to the step it describes.
+          On the packages step it is shown only for errors about the packages step — a server refusal
+          about the email address sends the visitor back to the field instead (see `useEffect` above).
+        */}
         {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={rc.errTitle} />}
 
         <div className={step === 1 ? 'space-y-3' : 'hidden'} data-testid="register-panel-account">
@@ -293,8 +385,20 @@ export function RegisterPage() {
 
         {step === 2 && (
           <div data-testid="register-panel-plan" className="space-y-3">
-            <PlanChooser value={planCode} interval={interval} onChange={setPlanCode} onIntervalChange={setInterval} />
-            <p className="text-xs text-text-muted">{rc.planOptional}</p>
+            <PlanChooser
+              value={planCode}
+              interval={interval}
+              onChange={(code) => { setPlanCode(code); setPlanError(null) }}
+              onIntervalChange={setInterval}
+            />
+            {planError && (
+              <p data-testid="register-plan-error" role="alert" className="text-[13px] font-semibold text-danger">
+                {planError}
+              </p>
+            )}
+            {/* Said before the payment page, not after it: nothing is activated until the money is
+                confirmed, and the visitor should know that before they choose a term. */}
+            <p className="text-xs text-text-muted">{rc.planNote}</p>
           </div>
         )}
 

@@ -25,7 +25,8 @@ const COPY = {
       `تجربة ${days} أيام مقابل ${fee} ${currency}`,
     noAnnual: 'غير متاحة سنويًا',
     loading: 'جارٍ تحميل الباقات…',
-    unavailable: 'تعذّر تحميل الباقات الآن. يمكنك المتابعة واختيار الباقة لاحقًا.',
+    unavailable: 'تعذّر تحميل الباقات الآن، ولا يمكن إتمام التسجيل دون اختيار باقة.',
+    retry: 'إعادة المحاولة',
   },
   en: {
     heading: 'Choose a plan',
@@ -37,7 +38,8 @@ const COPY = {
       `${days}-day trial for ${fee} ${currency}`,
     noAnnual: 'Not sold annually',
     loading: 'Loading plans…',
-    unavailable: 'Plans could not be loaded right now. You can continue and choose one later.',
+    unavailable: 'Plans could not be loaded right now, and registration cannot be completed without one.',
+    retry: 'Try again',
   },
 } as const
 
@@ -63,14 +65,27 @@ export function PlanChooser({
   }
 
   /*
-   * A catalogue we could not read is said out loud, and does not block the application.
+   * A catalogue we could not read is said out loud — and, since PLAN-PAID-001, it is a dead end
+   * rather than a footnote.
    *
-   * The plan is optional at this point — it decides which policy applies and what a checkout will
-   * later charge, and both of those are questions the server answers. Refusing to let someone sign
-   * up because a price list failed to load would be the wrong trade.
+   * The plan used to be optional, so a failed price list was worth shrugging at. There is no free
+   * tier to fall back to now: an application naming no plan owes an amount nobody can compute and
+   * would sit at the payment gate forever. So the honest thing is to say the step cannot be
+   * completed and offer the only useful action — try again.
    */
   if (plans.isError || !plans.data) {
-    return <p data-testid="plans-unavailable" className="text-sm text-text-muted">{c.unavailable}</p>
+    return (
+      <div data-testid="plans-unavailable" className="rounded-xl border border-border bg-surface-secondary p-3">
+        <p className="text-sm text-text-secondary">{c.unavailable}</p>
+        <button
+          type="button"
+          onClick={() => void plans.refetch()}
+          className="mt-2 text-sm font-semibold text-brand-600 hover:underline"
+        >
+          {c.retry}
+        </button>
+      </div>
+    )
   }
 
   const anyAnnual = plans.data.plans.some((p) => p.price_annual !== null)

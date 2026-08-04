@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { screen } from '@testing-library/react'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { RequireInfluencersEnabled } from './RequireInfluencersEnabled'
-import { offeredDoors, PORTAL_DOORS } from '@/features/auth/portals'
 import { features } from '@/lib/features'
 import { renderWithProviders } from '@/test/utils'
 
@@ -37,21 +36,5 @@ describe('the retired influencers portal', () => {
 
     // A real destination, carrying the reason the page reads to explain the arrival.
     expect(screen.getByText(/^landed:/)).toHaveTextContent('unavailable=influencers')
-  })
-
-  /**
-   * The door is not offered anywhere a visitor picks one.
-   *
-   * `PORTAL_DOORS` still HAS the entry — that is the copy the door comes back with, and deleting it
-   * would mean writing it again from memory. What changed is which of them are shown.
-   */
-  it('is absent from the doors a visitor is offered, while its copy survives', () => {
-    const offered = offeredDoors().map(([key]) => key)
-
-    expect(offered).not.toContain('influencers')
-    expect(offered).toEqual(expect.arrayContaining(['admin', 'app', 'agency']))
-
-    expect(PORTAL_DOORS.influencers).toBeDefined()
-    expect(PORTAL_DOORS.influencers.path).toBe('/influencers/login')
   })
 })

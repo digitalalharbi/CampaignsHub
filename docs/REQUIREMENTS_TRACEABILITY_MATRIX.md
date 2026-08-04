@@ -784,3 +784,69 @@ to somebody this platform has no relationship with. `password` puts them on the 
 address produces the same uninformative answer as a wrong password. A platform user also beats a
 contact record with the same address, because an agency operator is routinely named as the contact
 on a request they filed for a client.
+
+---
+
+## PLAN-PAID-001 / SIGNUP-STEP-001 / GRANT-001 — nothing is free, nothing activates unpaid, and every exception is written down
+
+### The free plan is withdrawn
+
+| Requirement | Where it is enforced | How it is proven |
+| --- | --- | --- |
+| «البداية» costs `99 SAR` a month | `SubscriptionPlanSeeder` + migration `2026_08_04_100000_price_the_starter_plan` | `PlanCatalogueTest` «the entry plan is priced on both terms» |
+| A paid annual option, managed from `/admin` | `subscription_plans.price_annual`, edited by `PATCH /admin/plans/{plan}` and the console's `PlanPrices` control | `platform-control.spec.ts` «the monthly and annual prices are editable and reach the public catalogue» |
+| The annual price is shown clearly before payment | `PlanChooser` quotes the whole annual amount on the annual term; `GET /plans/{code}/quote` returns `due_now` | `registration-onboarding.spec.ts` «…quotes both terms before payment»; `RegisterPage.test.tsx` «shows the annual amount when the annual term is chosen» |
+| The plan includes campaign tracking and reports | `features.campaign_tracking` / `features.reports` on the catalogue row — data, not marketing copy | `PlanCatalogueTest` «the entry plan is priced on both terms» asserts both flags |
+| No free tier can creep back | — | `PlanCatalogueTest` «no offered plan is free»; `platform-control.spec.ts` «nothing on sale is free» |
+| An application must name a plan and a term | `RegisterRequest` — `plan_code` and `billing_interval` are `required` | `PaidRegistrationTest` «an application with no plan is refused»; `RegisterPage.test.tsx` «refuses to apply until a plan is chosen» |
+
+### Activation is a consequence of money, never of a browser
+
+| Requirement | Where it is enforced | How it is proven |
+| --- | --- | --- |
+| No activated workspace before verified payment | `config/accounts.php` default `requires_payment: true`; `ProvisionWorkspace` refuses without a settled charge | `PaidRegistrationTest` «a verified application waits at the payment gate with nothing created» — 0 tenants, 0 users, 0 memberships, 0 subscriptions |
+| Only a trusted payment record or a valid webhook activates | `ApplySubscriptionPaymentEvent::settle()` is the single call site of `AdvanceRegistration::paymentConfirmed()` | `PaidRegistrationTest` «an unverified webhook cannot activate an account», «a short payment does not activate an account» |
+| Returning from the payment page activates nothing | There is no endpoint a browser can call to declare itself paid; the status page reads state from the server | `PaidRegistrationTest` «opening a checkout activates nothing»; `registration-status` reads `data-state` |
+| Awaiting Credentials when Moyasar and Stripe are absent | `SubscriptionCheckout::open()` records `awaiting_credentials`; `GET /payments/providers` reports it | `PaidRegistrationTest` «with no gateway the checkout is honest and activates nothing»; `PaymentActivationSecurityTest` |
+| Sandbox, Awaiting Credentials and Live are told apart | `GET /payments/providers` returns three states; `AccountStatusPage` renders the sandbox warning | `PaymentActivationSecurityTest` «the sandbox gateway is never reported as live», «…is inert in production» |
+| A retried webhook does not charge or provision twice | `payment_webhook_events.event_id` unique + the idempotency key on the charge | `PaidRegistrationTest` «a redelivered webhook changes nothing» |
+| After payment: account → subscription → workspace → first project → membership → role → permissions → portal | `ProvisionWorkspace` (workspace, client space, first project, role, membership) then `SubscriptionLifecycle::beginSubscription()` | `PaidRegistrationTest` «a confirmed payment runs the whole provisioning chain»; walked live end to end |
+
+### The account step is a gate
+
+| Requirement | Where it is enforced | How it is proven |
+| --- | --- | --- |
+| Every account field, password strength included, is validated on step one | `features/auth/registerValidation.ts`, called before `setStep(2)` | `registerValidation.test.ts` (16 tests); `RegisterPage.test.tsx` «will not move to the packages step while a field is invalid» |
+| The error appears beside the field, before the packages step | `err()` feeds each control; the summary is filtered to the step in view | `RegisterPage.test.tsx` «names a weak password beside the password field, on the step that has one» |
+| No error from a previous step on the packages step | `summaryErrors` is built per step; a server refusal about an account field sends the form BACK | `RegisterPage.test.tsx` «shows no account-step error on the packages step», «shows an ErrorSummary on a failed submit…» |
+| Progress survives going back | Non-secret fields autosave (`useFormDraft`); the panel stays mounted so secrets survive in memory | `RegisterPage.test.tsx` «keeps the whole form across a round trip»; e2e «…not beside the price list» |
+| One validation authority | `<form noValidate>` — the browser's bubbles no longer preempt our rules | the malformed-address case, which the native check used to swallow |
+
+### An administrative exception, recorded and revocable
+
+| Requirement | Where it is enforced | How it is proven |
+| --- | --- | --- |
+| Grant or remove extra permissions for one account | `account_grants` + `AccountGrants`; `POST`/`DELETE /admin/tenants/{tenant}/grants` | `AccountGrantTest` (12 tests); `platform-control.spec.ts` «granting needs a reason, and revoking needs its own» |
+| Grant a subscription or full access free to a specific account | grant kinds `plan` and `full_access` | `AccountGrantTest` «full access is still bounded by the portal», «the console grants revokes and records the actor» |
+| Revocable without changing other accounts | one row per account; revocation stamps that row only | `AccountGrantTest` «revoking one grant does not touch another account» |
+| Suspend and reactivate | `PATCH /admin/tenants/{tenant}/status` (unchanged; data is preserved on suspension) | existing `TenantsPage` tests and `admin-console.spec.ts` |
+| Actor, reason and date on every change | `AccountGrants::grant()`/`revoke()` refuse a blank reason and write an `AuditLog` row | `AccountGrantTest` «the console grants revokes and records the actor» asserts both audit rows |
+| Fail-closed; nobody grants themselves anything | the routes sit behind `platform`; `AccountEntitlements` unions grants and can only widen | `AccountGrantTest` «a tenant owner cannot grant themselves anything»; `platform-control.spec.ts` «the console refuses an agency owner, at the page and at the API» |
+| A grant cannot exceed the plan's portal | `nav()` intersects granted sections with `Portal::sections()` | `AccountGrantTest` «a grant cannot reach outside the portal», «a grant does not survive having no portal» |
+
+### The sandbox gateway, and why it exists
+
+`SandboxPaymentProvider` is a real adapter: it signs a webhook, verifies the signature in constant
+time, and its event travels the same `ApplySubscriptionPaymentEvent` path Moyasar's does — including
+the amount re-check and the idempotency key. It exists because PLAN-PAID-001 made every workspace
+depend on a confirmed payment, which left an installation with no gateway credentials unable to walk
+its own registration journey.
+
+The alternatives were all worse: a "mark as paid" button, a policy that skips the gate off-production,
+or a test that writes the paid row directly — each proves the product can be activated by something
+other than money, which is the one thing this path exists to prevent.
+
+It is inert in production twice over: the routes are not registered there, and `isConfigured()`
+returns false on the environment name regardless of configuration. Its state is reported as
+`sandbox` rather than `live` everywhere it surfaces, and the applicant sees «وضع تجريبي (Sandbox)»
+above the Pay button.

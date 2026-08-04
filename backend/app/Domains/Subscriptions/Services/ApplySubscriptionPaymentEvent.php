@@ -198,13 +198,23 @@ final class ApplySubscriptionPaymentEvent
             }
 
             /*
+             * Buying a plan outright is not starting a trial (PLAN-PAID-001).
+             *
+             * The trial rules below exist to stop the same person taking a near-free look at the
+             * product repeatedly. Applying them to a customer paying «البداية» in full would refuse a
+             * genuine purchase — and worse, mark the money `refund_due` — for the offence of having
+             * been a customer before. The purpose the charge was opened with is what separates them.
+             */
+            $isTrial = $payment->purpose === 'trial';
+
+            /*
              * The second trial check, with the identity only the gateway could tell us.
              *
              * The first ran before the charge was opened, on the details the applicant typed. This one
              * knows the payment method, which is the identity hardest to vary — and it is the reason a
              * trial fee is charged at all rather than given away free.
              */
-            if ($fingerprint !== null && ! $this->trials->mayStartTrial($request, $fingerprint)) {
+            if ($isTrial && $fingerprint !== null && ! $this->trials->mayStartTrial($request, $fingerprint)) {
                 $payment->forceFill([
                     'status' => 'refund_due',
                     'error' => 'A trial has already been used by this payment method.',
@@ -220,13 +230,25 @@ final class ApplySubscriptionPaymentEvent
                 return;
             }
 
-            $this->trials->claim($request, null, $fingerprint);
+            if ($isTrial) {
+                $this->trials->claim($request, null, $fingerprint);
+            }
 
             // THE crossing. Nothing else in the codebase calls this.
             $advanced = $this->advance->paymentConfirmed($request);
 
+            /*
+             * The chain the brief asks for, in the order it asks for it: the account is advanced, the
+             * workspace is provisioned by `ProvisionWorkspace` (with its first project, membership and
+             * role), and only then does the subscription that the money bought come into existence.
+             *
+             * A trial subscription and a paid one are different states with different end dates, so
+             * they are different calls rather than one call with a flag.
+             */
             if ($advanced->isProvisioned() && $advanced->tenant !== null) {
-                $this->lifecycle->beginTrial($advanced->tenant, $advanced, $payment);
+                $isTrial
+                    ? $this->lifecycle->beginTrial($advanced->tenant, $advanced, $payment)
+                    : $this->lifecycle->beginSubscription($advanced->tenant, $advanced, $payment);
             }
 
             return;

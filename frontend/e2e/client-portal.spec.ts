@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { submitVerifiedRequest, switchToEnglish } from './helpers'
+import { signInWithCode, submitVerifiedRequest, switchToEnglish } from './helpers'
 
 /**
  * External Client Portal acceptance (mandated flow): submit a request → verify phone + email → receive a
@@ -21,16 +21,16 @@ test('guest submits a verified request then tracks it in the client portal', asy
   })
   expect(reference).toMatch(/REQ-\d{4}-[A-Z0-9]{6}/)
 
-  // 2) Sign into the client portal via email OTP (dev auto-fills the code).
-  await page.goto('/portal/login')
+  /*
+   * 2) Sign in at the one door there is (LOGIN-UNIFIED-001).
+   *
+   * The contact is not asked which portal they want and is never shown a password field: they type
+   * the address they filed with, the server recognises it as a contact rather than an operator, and
+   * the code step renders. Outside production the issued code is returned and filled for us.
+   */
+  await page.goto('/login')
   await switchToEnglish(page)
-  await page.getByRole('button', { name: /^Email$|^البريد$/ }).click()
-  await page.getByLabel(/Contact|وسيلة التواصل/).fill(email)
-  await page.getByRole('button', { name: /Send code|إرسال الرمز/ }).click()
-  // Wait for the code step (dev auto-fills the code) so Sign in is enabled before we click.
-  const signIn = page.getByRole('button', { name: /^Sign in$|^دخول$/ })
-  await expect(signIn).toBeEnabled()
-  await signIn.click()
+  await signInWithCode(page, email)
 
   // 3) The dashboard lists the request. A contact named on exactly one of the agency's clients is
   //    sent straight into that space rather than shown a picker with one option (PORTAL-CLIENT-001),

@@ -5,10 +5,27 @@ import { renderWithProviders, signOut } from '@/test/utils'
 
 vi.mock('@/features/signup/api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, apply: vi.fn(), rememberRegistration: vi.fn() }
+  return { ...actual, apply: vi.fn(), rememberRegistration: vi.fn(), fetchPlans: vi.fn() }
 })
 
-import { apply } from '@/features/signup/api'
+import { apply, fetchPlans } from '@/features/signup/api'
+
+/**
+ * The catalogue the packages step reads. Priced, because there is no free tier any more
+ * (PLAN-PAID-001) — a test whose catalogue still contained a 0 SAR plan would be rehearsing a
+ * journey the product no longer offers.
+ */
+const aCatalogue = {
+  plans: [
+    {
+      code: 'starter', name: 'Starter', name_ar: 'البداية',
+      summary_ar: 'متابعة الحملات والتقارير.', summary_en: 'Campaign tracking and reports.',
+      currency: 'SAR', price_monthly: '99.00', price_annual: '990.00',
+      trial_days: 0, trial_fee: '0.00', features: {}, limits: {}, trial_limits: null,
+      is_active: true, is_public: true, sort_order: 10,
+    },
+  ],
+} as never
 
 /** What POST /auth/register answers with now: an application, never a user (SIGNUP-002). */
 const anApplication = {
@@ -76,25 +93,27 @@ describe('RegisterPage — journey handoff', () => {
  * refresh, and the onboarding wizard would then ask the visitor to pick the same path a second time.
  */
 describe('RegisterPage — the journey is submitted, not just displayed', () => {
-  beforeEach(() => { vi.clearAllMocks(); localStorage.clear() })
+  beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); vi.mocked(fetchPlans).mockResolvedValue(aCatalogue) })
   afterEach(() => { signOut(); localStorage.clear() })
 
-  const fill = () => {
+  const fill = async () => {
     fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
     fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'new@test.dev' } })
     fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
     fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'secret123' } })
     // Step one collects the details; step two asks for the plan (PLAN-001e). The application is
-    // submitted from the second, so every test that expects a POST has to walk both.
+    // submitted from the second, so every test that expects a POST has to walk both — including
+    // choosing a plan, which is required now that nothing is free.
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+    fireEvent.click(await screen.findByTestId('plan-starter'))
     fireEvent.click(screen.getByRole('button', { name: /Create account/i }))
   }
 
   it('submits the agency path as account_type + service', async () => {
     vi.mocked(apply).mockResolvedValue(anApplication)
     renderWithProviders(<RegisterPage />, { route: '/register?journey=multi-client&module=paid-media', locale: 'en' })
-    fill()
+    await fill()
     await waitFor(() => expect(apply).toHaveBeenCalled())
     expect(vi.mocked(apply).mock.calls[0][0]).toMatchObject({ account_type: 'agency', service: 'paid_media' })
   })
@@ -103,7 +122,7 @@ describe('RegisterPage — the journey is submitted, not just displayed', () => 
     vi.mocked(apply).mockResolvedValue(anApplication)
     renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service&module=paid-media', locale: 'en' })
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'brand' } })
-    fill()
+    await fill()
     await waitFor(() => expect(apply).toHaveBeenCalled())
     expect(vi.mocked(apply).mock.calls[0][0]).toMatchObject({ account_type: 'brand', service: 'paid_media' })
   })
@@ -111,7 +130,7 @@ describe('RegisterPage — the journey is submitted, not just displayed', () => 
   it('presumes nothing when the visitor arrived without a journey', async () => {
     vi.mocked(apply).mockResolvedValue(anApplication)
     renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
-    fill()
+    await fill()
     await waitFor(() => expect(apply).toHaveBeenCalled())
     const payload = vi.mocked(apply).mock.calls[0][0] as unknown as Record<string, unknown>
     expect(payload).not.toHaveProperty('account_type')
@@ -120,7 +139,7 @@ describe('RegisterPage — the journey is submitted, not just displayed', () => 
 })
 
 describe('RegisterPage — error summary + draft', () => {
-  beforeEach(() => { vi.clearAllMocks(); localStorage.clear() })
+  beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); vi.mocked(fetchPlans).mockResolvedValue(aCatalogue) })
   afterEach(() => { signOut(); localStorage.clear() })
 
   it('shows an ErrorSummary on a failed submit and focuses the field on click', async () => {
@@ -135,10 +154,20 @@ describe('RegisterPage — error summary + draft', () => {
     fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
     fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'secret123' } })
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+    fireEvent.click(await screen.findByTestId('plan-starter'))
     fireEvent.click(screen.getByRole('button', { name: /Create account/i }))
 
+    /*
+     * The refusal is about a field on the FIRST step, so the form goes back to it.
+     *
+     * Only the server can know the address is taken, and it only finds out at the submit — which
+     * happens on the packages step. Rendering the message there would put an error about a field on
+     * a screen the visitor has left, which is exactly what SIGNUP-STEP-001 removes.
+     */
     const summary = await screen.findByTestId('error-summary')
     expect(summary).toHaveTextContent('The email has already been taken.')
+    expect(screen.getByTestId('register-panel-account')).toBeVisible()
+    expect(screen.queryByTestId('register-panel-plan')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'The email has already been taken.' }))
     expect(screen.getByLabelText(/Email/i)).toHaveFocus()
@@ -160,7 +189,7 @@ describe('RegisterPage — error summary + draft', () => {
  * nothing: the fields survive going back, and moving on is not the same as applying.
  */
 describe('RegisterPage — details, then plan', () => {
-  beforeEach(() => { vi.clearAllMocks(); localStorage.clear() })
+  beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); vi.mocked(fetchPlans).mockResolvedValue(aCatalogue) })
   afterEach(() => { signOut(); localStorage.clear() })
 
   const fillDetails = () => {
@@ -195,18 +224,158 @@ describe('RegisterPage — details, then plan', () => {
     expect((screen.getByLabelText(/^Password/i) as HTMLInputElement).value).toBe('secret123')
   })
 
-  /** An application carries no plan unless one was chosen — an empty string is not a plan. */
-  it('sends no plan when none was chosen', async () => {
+  /**
+   * A plan is required now (PLAN-PAID-001).
+   *
+   * It used to be optional — "you can pick one later, before activation" — which was true only while
+   * a free tier existed to fall back to. An application naming no plan owes an amount nobody can
+   * compute, so the form refuses rather than opening one that could never be activated.
+   */
+  it('refuses to apply until a plan is chosen', async () => {
     vi.mocked(apply).mockResolvedValue(anApplication)
     renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
 
     fillDetails()
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+    await screen.findByTestId('plan-starter')
+    fireEvent.click(screen.getByRole('button', { name: /Create account/i }))
+
+    expect(await screen.findByTestId('register-plan-error')).toHaveTextContent(/Choose a plan/i)
+    expect(apply).not.toHaveBeenCalled()
+
+    // …and it applies as soon as one is picked, carrying the term as well as the code.
+    fireEvent.click(screen.getByTestId('plan-starter'))
     fireEvent.click(screen.getByRole('button', { name: /Create account/i }))
 
     await waitFor(() => expect(apply).toHaveBeenCalled())
-    const payload = vi.mocked(apply).mock.calls[0][0] as unknown as Record<string, unknown>
-    expect(payload).not.toHaveProperty('plan_code')
-    expect(payload).not.toHaveProperty('billing_interval')
+    expect(vi.mocked(apply).mock.calls[0][0]).toMatchObject({ plan_code: 'starter', billing_interval: 'monthly' })
+  })
+
+  /** The annual price is on screen before anybody is asked to pay it. */
+  it('shows the annual amount when the annual term is chosen', async () => {
+    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+
+    fillDetails()
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+    await screen.findByTestId('plan-starter')
+    expect(screen.getByTestId('plan-starter')).toHaveTextContent('99.00')
+
+    fireEvent.click(screen.getByTestId('plan-interval-annual'))
+    expect(screen.getByTestId('plan-starter')).toHaveTextContent('990.00')
+  })
+})
+
+/**
+ * SIGNUP-STEP-001 — the account step is a gate.
+ *
+ * The failure being tested against is specific and was real: a weak password was accepted by the
+ * form, carried silently to the packages step, and surfaced there as an error beside a price list,
+ * with the field it referred to on a screen the visitor had left.
+ */
+describe('RegisterPage — the account step is validated before the packages step', () => {
+  beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); vi.mocked(fetchPlans).mockResolvedValue(aCatalogue) })
+  afterEach(() => { signOut(); localStorage.clear() })
+
+  const fillValid = () => {
+    fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
+    fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'new@test.dev' } })
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
+    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'secret123' } })
+  }
+
+  it('will not move to the packages step while a field is invalid', () => {
+    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+
+    expect(screen.queryByTestId('register-panel-plan')).not.toBeInTheDocument()
+    expect(screen.getByTestId('error-summary')).toBeInTheDocument()
+  })
+
+  it('names a weak password beside the password field, on the step that has one', () => {
+    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+
+    fillValid()
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'short' } })
+    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'short' } })
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+
+    expect(screen.getAllByText(/at least 8 characters/i).length).toBeGreaterThan(0)
+    expect(screen.queryByTestId('register-panel-plan')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/^Password/i)).toHaveFocus()
+  })
+
+  it('names a password with no digit, and a confirmation that does not match', () => {
+    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+
+    fillValid()
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'letters-only' } })
+    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'something-else' } })
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+
+    expect(screen.getAllByText(/at least one number/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/does not match/i).length).toBeGreaterThan(0)
+  })
+
+  it('names a malformed email address', () => {
+    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+
+    fillValid()
+    fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'not-an-address' } })
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+
+    expect(screen.getAllByText(/valid email address/i).length).toBeGreaterThan(0)
+    expect(screen.queryByTestId('register-panel-plan')).not.toBeInTheDocument()
+  })
+
+  it('clears a field’s error as soon as it is corrected', () => {
+    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+
+    fillValid()
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'short' } })
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+    expect(screen.getAllByText(/at least 8 characters/i).length).toBeGreaterThan(0)
+
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
+    expect(screen.queryByText(/at least 8 characters/i)).not.toBeInTheDocument()
+  })
+
+  /** Nothing from the account step is ever rendered on the packages step. */
+  it('shows no account-step error on the packages step', async () => {
+    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+
+    fillValid()
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'short' } })
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+    expect(screen.getAllByText(/at least 8 characters/i).length).toBeGreaterThan(0)
+
+    // Correct it and move on — the earlier complaint must not follow.
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
+    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'secret123' } })
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+
+    expect(await screen.findByTestId('register-panel-plan')).toBeInTheDocument()
+    expect(screen.queryByTestId('error-summary')).not.toBeInTheDocument()
+    expect(screen.queryByText(/at least 8 characters/i)).not.toBeInTheDocument()
+  })
+
+  /** Going back and forward keeps everything, secrets included. */
+  it('keeps the whole form across a round trip to the packages step', async () => {
+    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+
+    fillValid()
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+    fireEvent.click(await screen.findByTestId('plan-starter'))
+    fireEvent.click(screen.getByTestId('register-back'))
+
+    expect((screen.getByLabelText(/Organization|Org/i) as HTMLInputElement).value).toBe('Acme')
+    expect((screen.getByLabelText(/Email/i) as HTMLInputElement).value).toBe('new@test.dev')
+    expect((screen.getByLabelText(/^Password/i) as HTMLInputElement).value).toBe('secret123')
+    expect((screen.getByLabelText(/Confirm password/i) as HTMLInputElement).value).toBe('secret123')
+
+    // …and the plan chosen before going back is still chosen on the way forward.
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+    expect(await screen.findByTestId('plan-starter')).toHaveAttribute('data-selected', 'true')
   })
 })

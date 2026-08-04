@@ -44,9 +44,9 @@ const OWNED_PREFIXES = ['chub:draft:', 'ch-requests-', 'chub:']
 /**
  * Sign out and clear everything this browser holds about the person.
  *
- * `destination` defaults to the main sign-in page; the client portal has its own, so callers on that
- * side pass `/portal/login`. Sending a client to the operator login would be a small dead end of its
- * own — a form their account cannot use.
+ * `destination` defaults to `/login`, which since LOGIN-UNIFIED-001 is the only sign-in page there
+ * is: a client contact typing their address there reaches the one-time-code step, so there is no
+ * longer a second door for callers on the portal side to send them to.
  */
 export async function signOutCompletely(queryClient?: QueryClient, destination = '/login'): Promise<void> {
   // Best-effort: see the note above on why a failure here must not stop the rest.

@@ -60,7 +60,7 @@ export function ClientSpacePickerPage() {
               ACCESS-EXIT-001 — a client with no space needs an exit too, and it is NOT the operator
               login: sending them there would offer a form their account cannot use.
             */}
-            <AccessRecovery loginPath="/portal/login" />
+            <AccessRecovery loginPath="/login" />
           </div>
         )}
 

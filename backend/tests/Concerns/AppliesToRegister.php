@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Tests\Concerns;
 
 use App\Domains\Accounts\Models\RegistrationRequest;
+use App\Domains\Subscriptions\Models\SubscriptionPayment;
+use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Models\User;
+use Database\Seeders\SubscriptionPlanSeeder;
 use Illuminate\Testing\TestResponse;
 
 /**
@@ -28,12 +31,33 @@ trait AppliesToRegister
     /** @param array<string, mixed> $overrides */
     protected function apply(array $overrides = []): TestResponse
     {
+        /*
+         * A catalogue has to exist before anybody can name a plan.
+         *
+         * `plan_code` is required since PLAN-PAID-001, and it is validated against what is actually on
+         * sale — so a test with an empty `subscription_plans` table cannot register at all. Seeding
+         * here rather than in thirty `setUp()` methods keeps the requirement in the one place that
+         * introduced it. The seeder upserts by code, so calling it twice is free.
+         */
+        if (! SubscriptionPlan::query()->where('code', 'starter')->exists()) {
+            $this->seed(SubscriptionPlanSeeder::class);
+        }
+
         return $this->withHeaders($this->spaOrigin)->postJson('/api/v1/auth/register', array_merge([
             'tenant_name' => 'New Workspace',
             'name' => 'New Owner',
             'email' => 'new@owner.test',
             'password' => 'secret1234',
             'password_confirmation' => 'secret1234',
+            /*
+             * A plan and a term, because since PLAN-PAID-001 there is no unpriced way in.
+             *
+             * «البداية» is the cheapest thing on sale and the plan most real applicants pick, which
+             * makes it the right default for a helper whose job is to be the ordinary journey. A test
+             * about a different plan overrides it, as several do.
+             */
+            'plan_code' => 'starter',
+            'billing_interval' => 'monthly',
         ], $overrides));
     }
 
@@ -51,7 +75,12 @@ trait AppliesToRegister
     }
 
     /**
-     * Apply, prove the email, and come back with the workspace it produced.
+     * Apply, prove the email, PAY, and come back with the workspace it produced.
+     *
+     * The payment step is not scaffolding around the test — it is the journey. Since PLAN-PAID-001
+     * every application waits at the payment gate, and the only thing that opens it is a webhook the
+     * gateway signed. A helper that reached a workspace any other way would be proving that tests can
+     * do something customers cannot.
      *
      * @param  array<string, mixed>  $overrides
      * @return array{user: User, registration: RegistrationRequest, verify: TestResponse}
@@ -68,6 +97,11 @@ trait AppliesToRegister
         $registration = RegistrationRequest::query()->whereRaw('lower(email) = ?', [mb_strtolower($email)])
             ->latest('created_at')->firstOrFail();
 
+        if (! $registration->isProvisioned()) {
+            $this->payForRegistration($registration);
+            $registration = $registration->refresh();
+        }
+
         $this->assertTrue(
             $registration->isProvisioned(),
             'the application did not become a workspace — the registration policy still has a gate open',
@@ -78,5 +112,42 @@ trait AppliesToRegister
             'registration' => $registration,
             'verify' => $verify,
         ];
+    }
+
+    /**
+     * Take the application through a real, verified payment.
+     *
+     * Moyasar is configured here rather than in each test's `setUp`, because the gateway a test uses
+     * is not what any of them are about; what matters is that the event goes through
+     * `ApplySubscriptionPaymentEvent` with a signature it checks, exactly as a live one would. The
+     * amount is read back from the charge the platform opened, so a test cannot accidentally pay an
+     * amount the platform never asked for and still be activated.
+     */
+    protected function payForRegistration(RegistrationRequest $registration): void
+    {
+        config([
+            'services.moyasar.secret_key' => 'sk_test',
+            'services.moyasar.webhook_token' => 'shared-secret',
+        ]);
+
+        $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout")->assertOk();
+
+        $payment = SubscriptionPayment::query()
+            ->where('registration_request_id', $registration->getKey())
+            ->latest('created_at')->firstOrFail();
+
+        $this->postJson('/api/v1/payments/webhook/moyasar', [
+            'id' => 'evt_'.$payment->getKey(),
+            'type' => 'payment_paid',
+            'secret_token' => 'shared-secret',
+            'data' => [
+                'id' => 'pay_'.$payment->getKey(),
+                'status' => 'paid',
+                // Halalas — the smallest unit, which is what the gateway reports.
+                'amount' => (int) round(((float) $payment->amount) * 100),
+                'currency' => $payment->currency,
+                'metadata' => ['reference' => $payment->idempotency_key],
+            ],
+        ])->assertOk()->assertJsonPath('data.verified', true);
     }
 }

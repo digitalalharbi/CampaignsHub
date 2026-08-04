@@ -8,6 +8,7 @@ use App\Domains\Accounts\Actions\ProvisionWorkspace;
 use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Services\AdvanceRegistration;
+use App\Domains\Billing\Providers\SandboxPaymentProvider;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Services\SubscriptionCheckout;
 use App\Domains\Tenancy\Models\Membership;
@@ -291,15 +292,57 @@ final class PaymentActivationSecurityTest extends TestCase
      */
     public function test_both_gateways_report_awaiting_credentials_when_unconfigured(): void
     {
-        config(['services.moyasar.secret_key' => null, 'services.stripe.secret_key' => null]);
+        config([
+            'services.moyasar.secret_key' => null,
+            'services.stripe.secret_key' => null,
+            // The sandbox is a separate question, asserted below. Switched off here so this test is
+            // about the two real gateways and not about which local aids happen to be enabled.
+            'subscriptions.sandbox_secret' => '',
+        ]);
 
         $providers = collect($this->getJson('/api/v1/payments/providers')->assertOk()->json('data.providers'));
 
-        $this->assertSame(['moyasar', 'stripe'], $providers->pluck('provider')->all());
-        $this->assertTrue($providers->every(fn (array $p) => $p['status'] === 'awaiting_credentials'));
-        $this->assertTrue($providers->every(fn (array $p) => $p['available'] === false));
+        $real = $providers->whereIn('provider', ['moyasar', 'stripe']);
+        $this->assertSame(['moyasar', 'stripe'], $real->pluck('provider')->values()->all());
+        $this->assertTrue($real->every(fn (array $p) => $p['status'] === 'awaiting_credentials'));
+        $this->assertTrue($real->every(fn (array $p) => $p['available'] === false));
         // Moyasar is the official, primary gateway.
         $this->assertTrue($providers->firstWhere('provider', 'moyasar')['is_default']);
+
+        // The sandbox is off, so it reports what every unconfigured adapter reports.
+        $this->assertSame('awaiting_credentials', $providers->firstWhere('provider', 'sandbox')['status']);
+    }
+
+    /**
+     * The sandbox is reported as the sandbox — never as Live (PAY-SANDBOX-001).
+     *
+     * The contract requires Sandbox, Awaiting Credentials and Live to be told apart, and this is the
+     * endpoint every interface reads to tell them apart. `live` here would put a working Pay button
+     * under a label claiming real money moves.
+     */
+    public function test_the_sandbox_gateway_is_never_reported_as_live(): void
+    {
+        config(['subscriptions.sandbox_secret' => 'local-sandbox-secret']);
+
+        $providers = collect($this->getJson('/api/v1/payments/providers')->assertOk()->json('data.providers'));
+        $sandbox = $providers->firstWhere('provider', 'sandbox');
+
+        $this->assertSame('sandbox', $sandbox['status']);
+        $this->assertTrue($sandbox['available'], 'it can take a payment — it just is not real money');
+        $this->assertNotSame('live', $sandbox['status']);
+    }
+
+    /** …and in production it is not configured, whatever the configuration says. */
+    public function test_the_sandbox_gateway_is_inert_in_production(): void
+    {
+        config(['subscriptions.sandbox_secret' => 'local-sandbox-secret']);
+        app()->detectEnvironment(fn () => 'production');
+
+        try {
+            $this->assertFalse(app(SandboxPaymentProvider::class)->isConfigured());
+        } finally {
+            app()->detectEnvironment(fn () => 'testing');
+        }
     }
 
     /** An unconfigured checkout says so, and does not pretend a customer is on their way to pay. */

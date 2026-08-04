@@ -46,6 +46,7 @@ const COPY = {
     payNow: 'إتمام الدفع',
     paymentSoon: 'بوابة الدفع غير مهيأة بعد (بانتظار بيانات الاعتماد). لن يُفعَّل الحساب إلا بعد تأكيد الدفع من المزوّد.',
     paymentRule: 'لن يُفعَّل الحساب بمجرد رجوعك من صفحة الدفع، بل بعد تأكيد المزوّد للعملية.',
+    sandboxNote: 'وضع تجريبي (Sandbox): لا تتحرك أي أموال حقيقية. المسار كامل — يُوقَّع الحدث ويُتحقق منه ويُفعَّل الحساب — لكن هذه ليست عملية دفع فعلية.',
     payAmount: 'المبلغ المستحق الآن',
     trialRefused: 'لا يمكن بدء تجربة جديدة: سبق استخدام تجربة بهذه البيانات.',
     provider: 'مزوّد الدفع',
@@ -76,6 +77,7 @@ const COPY = {
     payNow: 'Complete payment',
     paymentSoon: 'No payment gateway is configured yet (awaiting credentials). The account is activated only once the provider confirms the payment.',
     paymentRule: 'Returning from the payment page does not activate the account — the provider confirming the charge does.',
+    sandboxNote: 'Sandbox mode: no real money moves. The whole path runs — the event is signed, verified and the account activated — but this is not a real payment.',
     payAmount: 'Due now',
     trialRefused: 'A new trial cannot be started: one has already been used with these details.',
     provider: 'Payment provider',
@@ -355,6 +357,15 @@ function PaymentStep({
   })
 
   const live = providers.data?.providers.find((p) => p.available)
+  /*
+   * Sandbox is said out loud, on the page where somebody is about to press Pay.
+   *
+   * The provider endpoint reports three states rather than two for exactly this moment: the button
+   * below genuinely works and genuinely activates the account, and letting it sit under the same
+   * wording a live gateway gets would be the clearest possible version of claiming a payment that
+   * did not happen.
+   */
+  const sandbox = live?.status === 'sandbox'
 
   return (
     <div data-testid="registration-payment" className="flex flex-col items-center gap-3">
@@ -372,6 +383,11 @@ function PaymentStep({
             <CreditCard size={16} /> {copy.payNow}
           </Button>
           <p className="text-xs text-text-muted">{copy.provider}: {live.provider}</p>
+          {sandbox && (
+            <p data-testid="registration-payment-sandbox" className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-center text-sm text-text-primary">
+              {copy.sandboxNote}
+            </p>
+          )}
         </>
       ) : (
         <p data-testid="registration-payment-note" className="rounded-xl border border-border bg-surface-secondary px-4 py-3 text-center text-sm text-text-secondary">

@@ -19,8 +19,9 @@ import { fetchPlans, fetchRevenue, fetchSubscriptions, updatePlan } from './api'
 
 function plan(over: Partial<PlatformPlan> = {}): PlatformPlan {
   return {
-    id: 'p1', code: 'growth', name: 'Growth', price_monthly: '300.00', currency: 'SAR',
-    is_active: true, features: [], limits: [], subscribers: { active: 2, total: 5 },
+    id: 'p1', code: 'growth', name: 'Growth', name_ar: 'النمو', price_monthly: '300.00',
+    price_annual: '3000.00', currency: 'SAR',
+    is_active: true, is_public: true, features: [], limits: [], subscribers: { active: 2, total: 5 },
     ...over,
   }
 }
@@ -54,12 +55,39 @@ describe('BillingPage', () => {
   })
 
   /** Deactivating stops new sign-ups; the page must say that rather than leave it to be guessed. */
-  it('explains that deactivating leaves existing subscribers alone', async () => {
+  /**
+   * The console explains what a change reaches — and what it deliberately does not.
+   *
+   * The price IS editable now (PLAN-PAID-001 puts it under the platform owner's control), and the
+   * screen has to say what that means: new subscribers only. That is not reassurance, it is how the
+   * system works — a subscription captures `unit_amount` when it is assigned and every renewal reads
+   * that column, so the catalogue governs quotes and the subscription governs bills.
+   */
+  it('explains that a price change reaches new subscribers only', async () => {
     renderWithProviders(<BillingPage />, { route: '/admin/billing', locale: 'en' })
 
     await waitFor(() => expect(screen.getByTestId('plan-growth')).toBeInTheDocument())
     expect(screen.getByText(/leaves existing subscribers untouched/)).toBeInTheDocument()
-    expect(screen.getByText(/price is not editable here/)).toBeInTheDocument()
+    expect(screen.getByText(/applies to NEW subscribers only/)).toBeInTheDocument()
+    expect(screen.queryByText(/price is not editable here/)).not.toBeInTheDocument()
+  })
+
+  /** Both prices are editable, and an empty annual field withdraws the plan from the yearly term. */
+  it('offers the monthly and annual price, and saves only a real change', async () => {
+    vi.mocked(updatePlan).mockResolvedValue({ plan: { id: 'p1', code: 'growth', name: 'Growth' } } as never)
+    renderWithProviders(<BillingPage />, { route: '/admin/billing', locale: 'en' })
+
+    await waitFor(() => expect(screen.getByTestId('plan-prices-growth')).toBeInTheDocument())
+
+    // Nothing has changed, so there is nothing to save — an owner opening the page cannot fill the
+    // audit log with a save that changed nothing.
+    expect(screen.getByTestId('plan-save-growth')).toBeDisabled()
+
+    fireEvent.change(screen.getByTestId('plan-price-annual-growth'), { target: { value: '' } })
+    fireEvent.click(screen.getByTestId('plan-save-growth'))
+
+    // An empty annual field is null, not zero: withdrawn from the term, not sold for nothing.
+    await waitFor(() => expect(updatePlan).toHaveBeenCalledWith('p1', { price_monthly: '300.00', price_annual: null }))
   })
 
   it('toggles a plan’s availability', async () => {

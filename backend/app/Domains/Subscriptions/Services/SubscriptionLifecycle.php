@@ -48,6 +48,56 @@ final class SubscriptionLifecycle
     // ── Starting ──────────────────────────────────────────────────────────────────────────────
 
     /**
+     * A confirmed FIRST PERIOD starts a paid subscription (PLAN-PAID-001).
+     *
+     * The counterpart to `beginTrial`, for the plans that are sold outright rather than trialled into
+     * — which since the free tier was withdrawn includes «البداية», the plan most new customers
+     * arrive on. Like `beginTrial` it is called only from `ApplySubscriptionPaymentEvent` after the
+     * gateway confirmed the money, so a subscription in `active` is always one somebody paid for.
+     *
+     * The period end is a real term rather than a trial window: a month or a year from now, taken
+     * from what was bought. No `trial_ends_at`, and no consent-to-convert timestamp — there is
+     * nothing to convert from, because the customer has already bought the thing.
+     */
+    public function beginSubscription(Tenant $tenant, RegistrationRequest $request, SubscriptionPayment $payment): Subscription
+    {
+        $plan = $this->catalogue->byCode($request->plan_code);
+
+        if ($plan === null) {
+            throw new \RuntimeException('The application names no plan to subscribe to.');
+        }
+
+        $interval = (string) ($request->billing_interval ?? 'monthly');
+        $periodEnd = Carbon::now()->{$interval === 'annual' ? 'addYear' : 'addMonth'}();
+
+        $subscription = $this->subscriptions->assignPlan(
+            $tenant,
+            $plan,
+            status: 'active',
+            currentPeriodEnd: $periodEnd,
+            interval: $interval,
+        );
+
+        $subscription->forceFill(['provider' => $payment->provider])->save();
+
+        $this->tell($tenant, 'subscription_started', $subscription->refresh(), [
+            'amount' => (string) $payment->amount,
+            'currency' => $payment->currency,
+            'date' => $periodEnd->toDateString(),
+        ]);
+
+        $this->audit->log(
+            action: 'subscription.started',
+            entityType: Subscription::class,
+            entityId: (string) $subscription->getKey(),
+            after: ['plan' => $plan->code, 'interval' => $interval, 'current_period_end' => $periodEnd->toIso8601String()],
+            tenantId: (string) $tenant->getKey(),
+        );
+
+        return $subscription->refresh();
+    }
+
+    /**
      * A confirmed trial fee starts the trial (PAY-002 → PAY-003).
      *
      * Called only from `ApplySubscriptionPaymentEvent` once the fee is settled, so a subscription in

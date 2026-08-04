@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Domains\Accounts\Services\AccountGrants;
 use App\Domains\Audit\Listeners\RecordAuthAudit;
 use App\Domains\CRM\Models\Company;
 use App\Domains\CRM\Models\Lead;
@@ -43,6 +44,16 @@ class AppServiceProvider extends ServiceProvider
 
         // Shared per-request project context — the authority on "current project".
         $this->app->singleton(ProjectContext::class);
+
+        /*
+         * Administrative grants, memoised for the length of ONE request (GRANT-001).
+         *
+         * `AccountEntitlements` asks it a question per menu item, so a fresh instance per resolution
+         * would read the same rows a dozen times to render one rail. Scoped rather than singleton for
+         * the reason above: a permission cache that outlived its request would answer the next one
+         * with the previous tenant's exceptions.
+         */
+        $this->app->scoped(AccountGrants::class);
 
         // Advertising connector registry; Sandbox is excluded in production.
         $this->app->singleton(

@@ -42,7 +42,7 @@ export function PortalShell({
   const signOut = async () => {
     try { await portalLogout() } catch { /* clearing the local session is enough to sign the user out */ }
     qc.clear()
-    navigate('/portal/login', { replace: true })
+    navigate('/login', { replace: true })
   }
 
   return (

@@ -11,6 +11,51 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
+**PLAN-PAID-001 + SIGNUP-STEP-001 + GRANT-001 — nothing is free, nothing activates unpaid, and
+every exception is written down.**
+
+«البداية» costs 99 SAR a month and 990 a year, both editable from `/admin` and both quoted before
+anybody pays. There is no free tier left, which is the point: a free plan was the one way into the
+product that owed nothing, and an application that owes nothing clears the payment gate by having no
+payment to verify. `requires_payment` is now the shipped default, so every new workspace in the
+system arrives the same way — through a settled charge confirmed by a signed webhook.
+
+`ProvisionWorkspace` refuses an application with no settled payment, and the single call site of
+`AdvanceRegistration::paymentConfirmed()` is still `ApplySubscriptionPaymentEvent::settle()`. After
+it: workspace → client space → first project → owner role → membership → the portal the account type
+names, then `SubscriptionLifecycle::beginSubscription()` for the money that was actually taken. The
+first project is created by provisioning now rather than only by the wizard's fourth question —
+somebody who paid and closed the tab used to come back to an empty room.
+
+Registration's account step is a gate. `registerValidation.ts` mirrors `RegisterRequest` — including
+`Password::min(8)->letters()->numbers()` — and nothing reaches the packages step until every field is
+valid. A server refusal about an account field (an address already taken) sends the form BACK to that
+field rather than rendering it beside a price list. `<form noValidate>` makes our rules the only
+authority; the browser's own bubbles used to swallow a malformed address before our check ran.
+
+`account_grants` is the administrative exception the brief asks for: one account, one thing, who
+granted it, why, and separately who revoked it. Additive only — `AccountEntitlements` unions grants
+over what the plan allows and intersects them with the portal, so a grant can widen access inside a
+workspace's own portals and can never reach another portal or take anything away. The routes sit
+behind `platform`, so a tenant owner has no path to them at all.
+
+`SandboxPaymentProvider` (PAY-SANDBOX-001) is how any of this is walkable without gateway
+credentials: a real adapter, a real HMAC over a real webhook, through the real event pipeline. It
+reports itself as `sandbox` — never `live` — and is inert in production twice over.
+
+**Verified by driving the product, not by testing it:** registration refused a five-character
+password on the step that has the field; the corrected form reached the packages step with no stale
+error; applying without a plan was refused; the annual term quoted 990 SAR before payment; a verified
+email left the application at `approved_awaiting_payment` with zero tenants; the sandbox page took the
+confirmation and the account came back `active` with an `app` membership and an active 99.00 monthly
+subscription; `/admin/billing` repriced the annual term and the public catalogue agreed; a module was
+granted to one account with a reason and revoked with its own, both audited.
+
+**1034 backend · 543 vitest · tsc · oxlint · Playwright on chromium, firefox and webkit.**
+
+---
+
+## Previously
 **LOGIN-UNIFIED-001 — one sign-in page, and the server decides where you land.**
 
 `/login` no longer asks which portal you want. It asks who you are; `POST /auth/method`

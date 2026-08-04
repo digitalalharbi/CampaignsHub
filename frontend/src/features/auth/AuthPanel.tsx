@@ -210,7 +210,7 @@ export function AuthPanel({ locale, portal }: { locale: Locale; portal: AuthPort
           </span>
         </Link>
 
-        <p className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[12px] font-semibold text-brand-700">
+        <p className="mt-5 inline-flex w-fit items-center gap-2 rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[12px] font-semibold text-brand-700">
           <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
           {c.eyebrow}
         </p>
@@ -224,30 +224,30 @@ export function AuthPanel({ locale, portal }: { locale: Locale; portal: AuthPort
           aria-label={`${c.title} ${c.titleAccent}`}
           className="mt-3 font-heading font-extrabold leading-[1.12] tracking-tight text-text-primary"
         >
-          <span className="block text-[32px] sm:text-[36px] xl:text-[42px]">{c.title}</span>
+          <span className="block text-[27px] sm:text-[30px] xl:text-[35px]">{c.title}</span>
           {/* Kept unbreakable: "in one place" split across two lines reads as a typo, not a promise. */}
-          <span className="mt-0.5 block whitespace-nowrap text-[40px] text-brand-600 sm:text-[46px] xl:text-[54px]">
+          <span className="mt-0.5 block whitespace-nowrap text-[34px] text-brand-600 sm:text-[38px] xl:text-[45px]">
             {c.titleAccent}
           </span>
         </h1>
-        <p className="mt-3.5 text-[14.5px] leading-relaxed text-text-secondary">{c.body}</p>
+        <p className="mt-3 text-[14px] leading-relaxed text-text-secondary">{c.body}</p>
 
         {/* Feature cards, at the same weight the rest of the product gives them: an icon tile, the
             capability, and one plain sentence saying what it does. */}
-        <ul className="mt-5 grid gap-2">
+        <ul className="mt-4 grid gap-2">
           {c.features.map((f, i) => {
             const Icon = FEATURE_ICONS[i] ?? Check
             return (
               <li
                 key={f.title}
-                className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3 shadow-[var(--shadow-small)]"
+                className="flex items-start gap-3 rounded-2xl border border-border bg-surface px-3 py-2.5 shadow-[var(--shadow-small)]"
               >
-                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${FEATURE_TINTS[i] ?? 'bg-brand-primary-soft text-brand-600'}`}>
-                  <Icon size={17} />
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ${FEATURE_TINTS[i] ?? 'bg-brand-primary-soft text-brand-600'}`}>
+                  <Icon size={16} />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-[14.5px] font-bold leading-snug text-text-primary">{f.title}</span>
-                  <span className="mt-1 block text-[12.5px] leading-relaxed text-text-secondary">{f.desc}</span>
+                  <span className="block text-[13.5px] font-bold leading-snug text-text-primary">{f.title}</span>
+                  <span className="mt-0.5 block text-[12px] leading-relaxed text-text-secondary">{f.desc}</span>
                 </span>
               </li>
             )

@@ -232,7 +232,12 @@ test('every offered journey ends where the owner said it should', async ({ page 
     await home(page)
   }
 
-  // …and the returning-visitor routes, which live in the same table.
-  await page.goto('/portal/login')
-  await expect(page.getByText(/رمز تحقق|verification code/i).first()).toBeVisible()
+  /*
+   * …and the returning-visitor route, which since LOGIN-UNIFIED-001 is the same door as everyone
+   * else's. «متابعة طلباتي» no longer leads to a form that asks for a code up front: it asks who you
+   * are, and the server decides whether that identifier gets a code or a password.
+   */
+  await page.goto('/login')
+  await expect(page.getByTestId('login-identify')).toBeVisible()
+  await expect(page.getByTestId('login-code')).toHaveCount(0)
 })

@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Accounts\Actions\ProvisionWorkspace;
 use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
+use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -59,6 +60,31 @@ final class GatedRegistrationTest extends TestCase
         return $request->refresh();
     }
 
+    /**
+     * The settled charge that provisioning now insists on (PLAN-PAID-001).
+     *
+     * The three tests below are about what a workspace LOOKS LIKE once it is created; the gate that
+     * lets it be created is tested on its own, above and in `SubscriptionLifecycleTest`. Writing the
+     * paid row directly here keeps each test to one subject, and it is written rather than assumed —
+     * removing this line makes them fail, which is the point.
+     */
+    private function settlePayment(RegistrationRequest $request): void
+    {
+        $payment = new SubscriptionPayment;
+        $payment->forceFill([
+            'registration_request_id' => $request->getKey(),
+            'purpose' => 'subscription',
+            'plan_code' => $request->plan_code,
+            'billing_interval' => 'monthly',
+            'provider' => 'moyasar',
+            'amount' => '99.00',
+            'currency' => 'SAR',
+            'status' => 'paid',
+            'paid_at' => now(),
+            'idempotency_key' => 'test:'.$request->getKey(),
+        ])->save();
+    }
+
     // ── The application grants nothing ────────────────────────────────────────────────────────
 
     public function test_a_registration_request_creates_no_tenant_workspace_or_membership(): void
@@ -109,6 +135,7 @@ final class GatedRegistrationTest extends TestCase
             'email_verified_at' => now(),
             'state' => AccountState::ApprovedAwaitingPayment->value,
         ])->save();
+        $this->settlePayment($request);
 
         ['tenant' => $tenant, 'user' => $user] = app(ProvisionWorkspace::class)->execute($request->refresh());
 
@@ -137,6 +164,7 @@ final class GatedRegistrationTest extends TestCase
             'email_verified_at' => now(),
             'state' => AccountState::ApprovedAwaitingPayment->value,
         ])->save();
+        $this->settlePayment($request);
 
         ['user' => $user] = app(ProvisionWorkspace::class)->execute($request->refresh());
 
@@ -152,6 +180,7 @@ final class GatedRegistrationTest extends TestCase
             'email_verified_at' => now(),
             'state' => AccountState::ApprovedAwaitingPayment->value,
         ])->save();
+        $this->settlePayment($request);
 
         $action = app(ProvisionWorkspace::class);
         $first = $action->execute($request->refresh());

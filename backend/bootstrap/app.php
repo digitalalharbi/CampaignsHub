@@ -60,6 +60,18 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
 
         /*
+         * The sandbox gateway's confirm form (PAY-SANDBOX-001).
+         *
+         * It is an ordinary HTML form served by this application, so Sanctum's stateful handling
+         * applies CSRF to it — and a gateway's page has no CSRF token from our SPA, which is exactly
+         * the point: a real gateway posts from its own origin too. Excluding it changes no security
+         * property, because the endpoint grants nothing. It builds a SIGNED event and hands it to the
+         * webhook, which verifies the signature before anything moves; a forged post reaches a
+         * verification it cannot pass. The route only exists outside production.
+         */
+        $middleware->validateCsrfTokens(except: ['api/v1/payments/sandbox/*']);
+
+        /*
          * An unauthenticated API call is a 401, not a redirect (LOGIN-003).
          *
          * Laravel's default is to send a guest to a named `login` route. This application has no such

@@ -34,5 +34,13 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <!--
+          The suite's default gateway is the shape production has: a real adapter with no credentials.
+          Local development points SUBSCRIPTION_PROVIDER at the sandbox so the payment path is
+          walkable (PAY-SANDBOX-001), and inheriting that here would quietly delete every assertion
+          about Awaiting Credentials — the state an unconfigured install is supposed to report.
+          Tests that exercise the sandbox name it explicitly.
+        -->
+        <env name="SUBSCRIPTION_PROVIDER" value="moyasar"/>
     </php>
 </phpunit>

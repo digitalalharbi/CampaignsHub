@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Subscriptions\Http\Controllers\PublicPlanController;
+use App\Domains\Subscriptions\Http\Controllers\SandboxCheckoutController;
 use App\Domains\Subscriptions\Http\Controllers\SubscriptionController;
 use App\Domains\Subscriptions\Http\Controllers\SubscriptionInvoiceController;
 use App\Domains\Subscriptions\Http\Controllers\SubscriptionPaymentController;
@@ -44,6 +45,23 @@ Route::middleware('throttle:60,1')->group(function (): void {
  */
 Route::post('payments/webhook/{provider}', [SubscriptionPaymentController::class, 'webhook'])
     ->name('payments.webhook');
+
+/*
+ * The sandbox gateway's own pages (PAY-SANDBOX-001) — NEVER registered in production.
+ *
+ * Two guards, not one: the routes do not exist here, and `SandboxPaymentProvider::isConfigured()`
+ * returns false in production whatever the environment says. Either alone would be enough; both
+ * together mean a misconfigured deploy cannot reach a page that confirms payments.
+ *
+ * They confirm nothing themselves — `confirm` posts a SIGNED event to the webhook above, and that
+ * webhook decides, exactly as it does for Moyasar and Stripe.
+ */
+if (! app()->environment('production')) {
+    Route::get('payments/sandbox/{reference}', [SandboxCheckoutController::class, 'show'])
+        ->name('payments.sandbox.show');
+    Route::post('payments/sandbox/{reference}/confirm', [SandboxCheckoutController::class, 'confirm'])
+        ->name('payments.sandbox.confirm');
+}
 
 Route::middleware('throttle:60,1')->group(function (): void {
     Route::get('payments/providers', [SubscriptionPaymentController::class, 'providers'])->name('payments.providers');

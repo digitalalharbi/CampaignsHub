@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
-import { ArrowLeft, Check, Copy, KeyRound, Megaphone, Moon, Sun } from 'lucide-react'
+import { ArrowLeft, KeyRound, Megaphone, Moon, Sun } from 'lucide-react'
 import { login, signInMethod } from './api'
 import { resolvePostAuthOutcome } from './postAuthDestination'
 import { Button } from '@/components/ui/Button'
@@ -45,21 +45,6 @@ import { useUi } from '@/stores/ui'
  * nothing left to refuse, because nothing is being requested.
  */
 
-/**
- * Demo identities, dev-only (LOGIN-001 kept).
- *
- * Two, not five, because there is no longer a tab to demonstrate. What these show is the property
- * the rewrite is actually about: the SERVER routes different accounts to different portals from the
- * same form. Sign in as each and land somewhere different, having chosen nothing.
- *
- * A client contact has no entry — it signs in by one-time code, and a code is not something a static
- * list can honestly print.
- */
-const DEMO = [
-  { email: 'owner@demo-company.local', ar: 'معلن — ينتهي في /app', en: 'Advertiser — lands in /app' },
-  { email: 'owner@demo-agency.local', ar: 'وكالة — تنتهي في /agency', en: 'Agency — lands in /agency' },
-] as const
-
 const COPY = {
   ar: {
     app: 'CampaignsHub',
@@ -70,9 +55,6 @@ const COPY = {
     back: 'استخدام حساب آخر',
     noAccount: 'ليس لديك حساب؟',
     register: 'تسجيل حساب',
-    demo: 'حسابات تجريبية · بيئة التطوير فقط',
-    copy: 'نسخ',
-    copied: 'تم النسخ',
     codeTitle: 'أدخل رمز التحقق',
     codeSentEmail: 'أرسلنا رمزًا إلى بريدك الإلكتروني.',
     codeSentSms: 'أرسلنا رمزًا إلى رقم جوالك.',
@@ -89,9 +71,6 @@ const COPY = {
     back: 'Use a different account',
     noAccount: "Don't have an account?",
     register: 'Create an account',
-    demo: 'Demo accounts · development only',
-    copy: 'Copy',
-    copied: 'Copied',
     codeTitle: 'Enter your verification code',
     codeSentEmail: 'We sent a code to your email address.',
     codeSentSms: 'We sent a code to your mobile number.',
@@ -100,46 +79,6 @@ const COPY = {
     resend: 'Resend',
   },
 } as const
-
-/**
- * Dev-only credentials: never auto-filled, never rendered in production.
- *
- * It names where each account ENDS UP, which is the property a reviewer should be checking here
- * rather than taking on trust.
- */
-function DemoCredentials({ c, ar }: { c: (typeof COPY)[keyof typeof COPY]; ar: boolean }) {
-  const [copied, setCopied] = useState<string | null>(null)
-
-  const copy = (value: string) => {
-    void navigator.clipboard?.writeText(value)
-    setCopied(value)
-    window.setTimeout(() => setCopied((v) => (v === value ? null : v)), 1500)
-  }
-
-  return (
-    <div data-testid="demo-credentials" className="mt-4 rounded-xl border border-dashed border-border bg-surface-secondary p-3">
-      <p className="mb-2 text-xs font-semibold text-text-muted">{c.demo}</p>
-      <div className="space-y-2.5">
-        {DEMO.map((account) => (
-          <div key={account.email}>
-            <p className="mb-1 text-xs text-text-secondary">{account[ar ? 'ar' : 'en']}</p>
-            <div className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
-              <code className="truncate font-mono text-xs text-text-secondary" dir="ltr">{account.email}</code>
-              <button
-                type="button" onClick={() => copy(account.email)}
-                className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-brand-600 hover:bg-brand-primary-soft"
-              >
-                {copied === account.email ? <Check size={13} /> : <Copy size={13} />}
-                {copied === account.email ? c.copied : c.copy}
-              </button>
-            </div>
-          </div>
-        ))}
-        <p className="text-xs text-text-muted" dir="ltr">password: <code className="font-mono">password</code></p>
-      </div>
-    </div>
-  )
-}
 
 export function LoginPage() {
   const t = useT()
@@ -289,121 +228,136 @@ export function LoginPage() {
           form pulled toward the divider, by fixing margin-inline-start and leaving margin-inline-end
           auto (correct in both LTR and RTL).
         */}
-        <div data-testid="login-form" className="mx-auto flex w-full max-w-[440px] flex-1 flex-col justify-center py-4 xl:ms-14">
-          <h2 className="font-[var(--font-heading)] text-[26px] font-extrabold text-text-primary sm:text-[30px] sm:leading-tight">
-            {step === 'code' ? c.codeTitle : c.formTitle}
-          </h2>
-          <p className="mt-1.5 text-[14.5px] text-text-secondary">
-            {step === 'code' ? (channel === 'sms' ? c.codeSentSms : c.codeSentEmail) : c.formValue}
-          </p>
-
-          {/* Step 1 — who are you. No portal, no password yet. */}
-          {step === 'identify' && (
-            <form
-              data-testid="login-identify"
-              className="mt-5 space-y-4"
-              onSubmit={(e) => { e.preventDefault(); if (identifier.trim()) identify.mutate() }}
-            >
-              <EmailInput
-                type="text"
-                inputMode="email"
-                autoComplete="username"
-                label={c.identifier}
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                required
-                error={activeError?.errors?.identifier?.[0]}
-              />
-              {activeError && !activeError.errors && (
-                <p data-testid="login-error" role="alert" className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{activeError.message}</p>
-              )}
-              <Button type="submit" loading={identify.isPending} className="w-full" size="lg">{c.continue}</Button>
-            </form>
-          )}
-
-          {/* Step 2a — password, for the accounts the server said have one. */}
-          {step === 'password' && (
-            <form
-              data-testid="login-password"
-              className="mt-5 space-y-4"
-              onSubmit={(e) => { e.preventDefault(); signIn.mutate() }}
-            >
-              <IdentifierRow value={identifier} label={c.back} onChange={startOver} />
-              <PasswordInput
-                label={t('password')} value={password} onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password" required autoFocus
-                error={activeError?.errors?.password?.[0]}
-                showLabel={t('show_password')} hideLabel={t('hide_password')}
-              />
-
-              <div className="flex items-center justify-between">
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-text-secondary">
-                  <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 rounded border-border accent-brand-600" />
-                  {t('remember_me')}
-                </label>
-                <Link to="/forgot-password" className="text-sm font-semibold text-brand-600 hover:underline">{t('forgot_password')}</Link>
-              </div>
-
-              {activeError && !activeError.errors && (
-                <p data-testid="login-error" role="alert" className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{activeError.message}</p>
-              )}
-
-              <Button type="submit" loading={signIn.isPending} className="w-full" size="lg">{t('sign_in')}</Button>
-            </form>
-          )}
-
-          {/* Step 2b — one-time code, for the accounts that have never had a password. */}
-          {step === 'code' && (
-            <form
-              data-testid="login-code"
-              className="mt-5 space-y-4"
-              onSubmit={(e) => { e.preventDefault(); if (verificationId && code.trim()) verifyCode.mutate() }}
-            >
-              <IdentifierRow value={identifier} label={c.back} onChange={startOver} />
-              <label className="block">
-                <span className="mb-1.5 block text-sm font-semibold text-text-primary">{c.code}</span>
-                <input
-                  className="h-11 w-full rounded-xl border border-border bg-surface px-3.5 text-center font-mono text-lg tracking-[0.3em] outline-none focus:border-brand-500"
-                  dir="ltr" inputMode="numeric" autoComplete="one-time-code" autoFocus
-                  value={code} onChange={(e) => setCode(e.target.value)}
-                />
-              </label>
-
-              {activeError && (
-                <p data-testid="login-error" role="alert" className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{activeError.message}</p>
-              )}
-
-              <Button type="submit" loading={verifyCode.isPending} disabled={!verificationId} className="w-full" size="lg">
-                <KeyRound size={16} /> {c.verify}
-              </Button>
-              <button
-                type="button"
-                onClick={() => startCode.mutate(channel)}
-                disabled={startCode.isPending}
-                className="w-full text-center text-sm font-semibold text-brand-600 hover:underline disabled:opacity-60"
-              >
-                {c.resend}
-              </button>
-            </form>
-          )}
-
+        <div data-testid="login-form" className="mx-auto flex w-full max-w-[468px] flex-1 flex-col justify-center py-6">
           {/*
-            Google and Apple, on the identity step only.
-            Once the server has said this identifier signs in by code, a password-provider button
-            beside it would put back the choice this page removed.
+            A card, not a bare column.
 
-            No portal travels with the request: like the password form, it states no preference.
+            The three steps are very different heights — an email field, an email field plus a
+            password and a remember row, six digits — and unframed they made the page jump on every
+            transition, which reads as a reload rather than as progress. A fixed frame with one
+            padding and a floor under the step area keeps the box the same object throughout, and
+            `min-h` is on the step region alone so the heading never drifts away from it.
           */}
-          {step === 'identify' && <SocialSignIn portalParam={null} redirect={params.get('redirect')} ar={ar} />}
+          <div className="rounded-3xl border border-border bg-surface px-5 py-7 shadow-[var(--shadow-medium)] sm:px-8 sm:py-10">
+            <h2 className="font-heading text-[26px] font-extrabold leading-tight tracking-tight text-text-primary sm:text-[30px]">
+              {step === 'code' ? c.codeTitle : c.formTitle}
+            </h2>
+            <p className="mt-1.5 text-[14px] leading-relaxed text-text-secondary">
+              {step === 'code' ? (channel === 'sms' ? c.codeSentSms : c.codeSentEmail) : c.formValue}
+            </p>
 
-          <p className="mt-4 text-center text-sm text-text-secondary">
+            {/*
+              One floor under all three steps, so the card does not resize as the visitor moves —
+              from `sm` only. On a phone the card is already the whole screen and a floor just opens
+              a gap between the button and what follows it.
+            */}
+            <div className="sm:min-h-[190px]">
+            {/* Step 1 — who are you. No portal, no password yet. */}
+            {step === 'identify' && (
+              <form
+                data-testid="login-identify"
+                className="mt-5 space-y-4"
+                onSubmit={(e) => { e.preventDefault(); if (identifier.trim()) identify.mutate() }}
+              >
+                <EmailInput
+                  type="text"
+                  inputMode="email"
+                  autoComplete="username"
+                  label={c.identifier}
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  required
+                  error={activeError?.errors?.identifier?.[0]}
+                />
+                {activeError && !activeError.errors && (
+                  <p data-testid="login-error" role="alert" className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{activeError.message}</p>
+                )}
+                <Button type="submit" loading={identify.isPending} className="w-full" size="lg">{c.continue}</Button>
+              </form>
+            )}
+
+            {/* Step 2a — password, for the accounts the server said have one. */}
+            {step === 'password' && (
+              <form
+                data-testid="login-password"
+                className="mt-5 space-y-4"
+                onSubmit={(e) => { e.preventDefault(); signIn.mutate() }}
+              >
+                <IdentifierRow value={identifier} label={c.back} onChange={startOver} />
+                <PasswordInput
+                  label={t('password')} value={password} onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password" required autoFocus
+                  error={activeError?.errors?.password?.[0]}
+                  showLabel={t('show_password')} hideLabel={t('hide_password')}
+                />
+
+                <div className="flex items-center justify-between">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-text-secondary">
+                    <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 rounded border-border accent-brand-600" />
+                    {t('remember_me')}
+                  </label>
+                  <Link to="/forgot-password" className="text-sm font-semibold text-brand-600 hover:underline">{t('forgot_password')}</Link>
+                </div>
+
+                {activeError && !activeError.errors && (
+                  <p data-testid="login-error" role="alert" className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{activeError.message}</p>
+                )}
+
+                <Button type="submit" loading={signIn.isPending} className="w-full" size="lg">{t('sign_in')}</Button>
+              </form>
+            )}
+
+            {/* Step 2b — one-time code, for the accounts that have never had a password. */}
+            {step === 'code' && (
+              <form
+                data-testid="login-code"
+                className="mt-5 space-y-4"
+                onSubmit={(e) => { e.preventDefault(); if (verificationId && code.trim()) verifyCode.mutate() }}
+              >
+                <IdentifierRow value={identifier} label={c.back} onChange={startOver} />
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-semibold text-text-secondary">{c.code}</span>
+                  <input
+                    className="min-h-[56px] w-full rounded-[11px] border border-border bg-surface px-4 text-center font-mono text-lg tracking-[0.3em] text-text-primary outline-none transition-colors focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/15"
+                    dir="ltr" inputMode="numeric" autoComplete="one-time-code" autoFocus
+                    value={code} onChange={(e) => setCode(e.target.value)}
+                  />
+                </label>
+
+                {activeError && (
+                  <p data-testid="login-error" role="alert" className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{activeError.message}</p>
+                )}
+
+                <Button type="submit" loading={verifyCode.isPending} disabled={!verificationId} className="w-full" size="lg">
+                  <KeyRound size={16} /> {c.verify}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => startCode.mutate(channel)}
+                  disabled={startCode.isPending}
+                  className="w-full text-center text-sm font-semibold text-brand-600 hover:underline disabled:opacity-60"
+                >
+                  {c.resend}
+                </button>
+              </form>
+            )}
+            </div>
+            {/*
+              Google and Apple, on the identity step only.
+              Once the server has said this identifier signs in by code, a password-provider button
+              beside it would put back the choice this page removed.
+
+              No portal travels with the request: like the password form, it states no preference.
+            */}
+            {step === 'identify' && <SocialSignIn portalParam={null} redirect={params.get('redirect')} ar={ar} />}
+          </div>
+
+          <p className="mt-5 text-center text-sm text-text-secondary">
             {c.noAccount} <Link to="/register" className="font-semibold text-brand-600 hover:underline">{c.register}</Link>
           </p>
 
           {/* On phones the value proposition lives here — under the form, collapsed by default. */}
           <AuthPanelMobile locale={locale} portal="default" />
-
-          {import.meta.env.DEV && step === 'identify' && <DemoCredentials c={c} ar={ar} />}
         </div>
       </main>
     </div>
@@ -419,7 +373,7 @@ export function LoginPage() {
  */
 function IdentifierRow({ value, label, onChange }: { value: string; label: string; onChange: () => void }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5">
+    <div className="flex min-h-[56px] items-center justify-between gap-3 rounded-[11px] border border-border bg-surface-secondary px-4 py-2.5">
       <span className="truncate font-mono text-sm text-text-secondary" dir="ltr">{value}</span>
       <button
         type="button"

@@ -292,7 +292,7 @@ const ar: HomeCopy = {
       helper: 'سجّل الدخول لإدارة حملاتك، أو تابع طلباتك وعروض الأسعار والفواتير والتنفيذ.',
       actions: [
         { label: 'تسجيل الدخول', to: '/login' },
-        { label: 'متابعة طلباتي', to: '/portal/login' },
+        { label: 'متابعة طلباتي', to: '/login' },
       ],
     },
   },
@@ -384,7 +384,7 @@ const ar: HomeCopy = {
       { label: 'إنشاء حساب', to: '/register' },
       { label: 'تسجيل الدخول', to: '/login' },
       { label: 'اطلب خدمة', to: '/requests/new' },
-      { label: 'متابعة طلباتي', to: '/portal/login' },
+      { label: 'متابعة طلباتي', to: '/login' },
     ],
     legal: ['الخصوصية', 'الشروط', 'الدعم'],
     contactLabel: 'للتواصل',
@@ -396,7 +396,7 @@ const ar: HomeCopy = {
           { label: 'إنشاء حساب', to: '/register' },
           { label: 'تسجيل الدخول', to: '/login' },
           { label: 'اطلب خدمة', to: '/requests/new' },
-          { label: 'متابعة طلباتي', to: '/portal/login' },
+          { label: 'متابعة طلباتي', to: '/login' },
         ],
       },
       {
@@ -589,7 +589,7 @@ const en: HomeCopy = {
       helper: 'Log in to manage your campaigns, or follow your requests, quotes, invoices and execution.',
       actions: [
         { label: 'Log in', to: '/login' },
-        { label: 'Track my requests', to: '/portal/login' },
+        { label: 'Track my requests', to: '/login' },
       ],
     },
   },
@@ -681,7 +681,7 @@ const en: HomeCopy = {
       { label: 'Create account', to: '/register' },
       { label: 'Log in', to: '/login' },
       { label: 'Request a service', to: '/requests/new' },
-      { label: 'Track my requests', to: '/portal/login' },
+      { label: 'Track my requests', to: '/login' },
     ],
     legal: ['Privacy', 'Terms', 'Support'],
     contactLabel: 'Contact',
@@ -693,7 +693,7 @@ const en: HomeCopy = {
           { label: 'Create an account', to: '/register' },
           { label: 'Log in', to: '/login' },
           { label: 'Request a service', to: '/requests/new' },
-          { label: 'Track my requests', to: '/portal/login' },
+          { label: 'Track my requests', to: '/login' },
         ],
       },
       {

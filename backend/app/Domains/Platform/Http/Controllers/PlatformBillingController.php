@@ -60,12 +60,15 @@ final class PlatformBillingController extends Controller
     }
 
     /**
-     * PATCH /api/v1/admin/plans/{plan} — availability and presentation only.
+     * PATCH /api/v1/admin/plans/{plan} — the commercial terms, availability and presentation.
      *
-     * Deliberately NOT the price. Changing the price of a plan people are already on is a billing
-     * decision with contractual consequences, and doing it from a console with one field would apply
-     * it silently to every existing subscriber. Deactivating stops new sign-ups and leaves existing
-     * subscriptions alone, which is the safe half of the operation.
+     * The price IS editable here, and it is safe to be, for a reason that is structural rather than
+     * careful: a subscription captures `unit_amount` when it is assigned, and every renewal reads
+     * that column. The catalogue governs what NEW customers are quoted; the subscription governs what
+     * an existing one owes. Editing a price therefore cannot re-price anybody already on the plan —
+     * which is what made a console price field dangerous before the two were separated.
+     *
+     * Every change is audited below with the before and after, and the actor.
      */
     /**
      * A plan as the console reads and writes it — one shape, so the list and the save cannot drift.

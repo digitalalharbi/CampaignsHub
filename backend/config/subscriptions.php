@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Billing\Providers\MoyasarPaymentProvider;
 use App\Domains\Billing\Providers\NullPaymentProvider;
+use App\Domains\Billing\Providers\SandboxPaymentProvider;
 use App\Domains\Billing\Providers\StripePaymentProvider;
 
 return [
@@ -27,8 +28,27 @@ return [
     'providers' => [
         'moyasar' => MoyasarPaymentProvider::class,
         'stripe' => StripePaymentProvider::class,
+        /*
+         * A gateway that is honestly not one (PAY-SANDBOX-001).
+         *
+         * Since PLAN-PAID-001 nothing is activated without a verified payment, which leaves an
+         * installation with no credentials unable to walk its own registration journey — including
+         * the acceptance suite. The sandbox adapter closes that by being a REAL adapter with a real
+         * signature check, over a secret this installation generated. It refuses to configure itself
+         * in production whatever this file says, so reaching for it there yields Awaiting Credentials
+         * — a stranded signup, which is the safe failure.
+         */
+        'sandbox' => SandboxPaymentProvider::class,
         'null' => NullPaymentProvider::class,
     ],
+
+    /*
+     * The sandbox's signing secret. Empty switches the sandbox off entirely.
+     *
+     * Defaulted off-production only, so the shipped configuration of a production deploy has no
+     * sandbox regardless of the `default` above.
+     */
+    'sandbox_secret' => env('SUBSCRIPTION_SANDBOX_SECRET', env('APP_ENV') === 'production' ? '' : 'local-sandbox-secret'),
 
     'currency' => env('SUBSCRIPTION_CURRENCY', 'SAR'),
 

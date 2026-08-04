@@ -1,4 +1,4 @@
-import { getData, patchData, postData } from '@/lib/api/client'
+import { deleteData, getData, patchData, postData } from '@/lib/api/client'
 
 /**
  * The platform owner's console (ADMIN-001).
@@ -121,9 +121,13 @@ export interface PlatformPlan {
   id: string
   code: string
   name: string
-  price_monthly: string
+  name_ar: string | null
   currency: string
+  price_monthly: string
+  /** Null is a statement: this plan is not sold on an annual term. */
+  price_annual: string | null
   is_active: boolean
+  is_public: boolean
   features: Record<string, unknown> | unknown[]
   limits: Record<string, unknown> | unknown[]
   /** Split by status: 40 cancelled subscribers is not 40 customers. */
@@ -157,9 +161,66 @@ export function fetchPlans(): Promise<{ plans: PlatformPlan[] }> {
   return getData('/admin/plans')
 }
 
-/** Availability and name only — the price is deliberately not editable from the console. */
-export function updatePlan(id: string, body: { name?: string; is_active?: boolean }): Promise<{ plan: { id: string; name: string; is_active: boolean } }> {
+/**
+ * The commercial terms of a plan.
+ *
+ * Editing a price changes what NEW customers are quoted and nothing else: a subscription captured
+ * its own `unit_amount` when it was assigned, and every renewal reads that. `price_annual: null` is
+ * how a plan is withdrawn from the annual term, which is why it is nullable rather than optional.
+ */
+export function updatePlan(
+  id: string,
+  body: {
+    name?: string
+    is_active?: boolean
+    is_public?: boolean
+    price_monthly?: string
+    price_annual?: string | null
+    features?: Record<string, unknown>
+  },
+): Promise<{ plan: PlatformPlan }> {
   return patchData(`/admin/plans/${id}`, body)
+}
+
+/* ------------------------------------------------------------------- GRANT-001: account grants */
+
+export type GrantKind = 'section' | 'module' | 'plan' | 'full_access'
+
+export interface AccountGrant {
+  id: string
+  tenant_id: string
+  kind: GrantKind
+  value: string
+  reason: string
+  granted_by: number | null
+  granted_at: string | null
+  expires_at: string | null
+  revoked_at: string | null
+  revoked_by: number | null
+  revoked_reason: string | null
+  in_force: boolean
+}
+
+export interface GrantCatalogue {
+  sections: string[]
+  modules: string[]
+  plans: string[]
+}
+
+export function fetchGrants(tenantId: string): Promise<{ grants: AccountGrant[]; catalogue: GrantCatalogue }> {
+  return getData(`/admin/tenants/${tenantId}/grants`)
+}
+
+export function createGrant(
+  tenantId: string,
+  body: { kind: GrantKind; value?: string; reason: string; expires_at?: string | null },
+): Promise<{ grant: AccountGrant }> {
+  return postData(`/admin/tenants/${tenantId}/grants`, body)
+}
+
+/** A revocation, not a deletion: the row survives and records who took it back, and why. */
+export function revokeGrant(tenantId: string, grantId: string, reason: string): Promise<{ grant: AccountGrant }> {
+  return deleteData(`/admin/tenants/${tenantId}/grants/${grantId}`, { reason })
 }
 
 export function fetchSubscriptions(status?: string): Promise<{ subscriptions: PlatformSubscription[]; meta: { total: number } }> {

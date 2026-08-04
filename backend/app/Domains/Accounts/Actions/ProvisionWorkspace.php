@@ -10,6 +10,8 @@ use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Services\RegistrationPolicy;
 use App\Domains\Accounts\Services\TransitionAccountState;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -183,6 +185,36 @@ final class ProvisionWorkspace
             $this->grants->execute(new MembershipGrant(
                 user: $user, tenant: $tenant, portal: $portal, role: 'owner',
             ));
+
+            /*
+             * The first project, so the workspace is not an empty room (PLAN-PAID-001).
+             *
+             * The brief spells the chain out — account → subscription → workspace → FIRST PROJECT →
+             * membership → role → permissions → portal — and until now the project appeared only if
+             * the customer walked the onboarding wizard to its fourth question. Somebody who paid and
+             * then closed the tab came back to a workspace with nowhere to put a campaign.
+             *
+             * It is created in `setup`, not `active`: it is a place to start, and calling it live
+             * would claim the customer had configured something they have not yet seen. The wizard
+             * still asks for a project name and still creates one — this is the floor, not a
+             * replacement for the question.
+             */
+            $client = ClientWorkspace::create([
+                'tenant_id' => $tenant->id,
+                'name' => $tenant->name,
+                'slug' => Str::slug($tenant->name.'-'.Str::random(4)),
+                'mode' => 'managed',
+                'status' => 'active',
+                'client_status' => 'onboarding',
+                'owner_id' => $user->id,
+            ]);
+
+            Project::create([
+                'tenant_id' => $tenant->id,
+                'client_workspace_id' => $client->id,
+                'name' => $tenant->name,
+                'status' => 'setup',
+            ]);
 
             $this->transitions->provision(
                 $tenant,

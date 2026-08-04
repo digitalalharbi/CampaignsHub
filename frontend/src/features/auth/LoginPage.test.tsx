@@ -188,3 +188,25 @@ describe('LoginPage — one door (LOGIN-UNIFIED-001)', () => {
     expect(screen.getByRole('link', { name: /Forgot/i })).toHaveAttribute('href', '/forgot-password')
   })
 })
+
+/**
+ * The public page prints no credentials (LOGIN-CLEAN-001).
+ *
+ * A dev-only block used to list two demo accounts under the form, with the shared password beside
+ * them. It was honest about being development-only and it still had to go: it taught the page's
+ * shape to everyone who saw a screenshot, and «حسابات تجريبية» under a sign-in box is the first
+ * thing a reviewer reads as "this is not finished". The demo accounts still exist and are still
+ * seeded — they are simply not advertised on the door.
+ */
+describe('LoginPage — nothing secret is printed on the page', () => {
+  afterEach(() => { signOut(); localStorage.clear() })
+
+  it('shows no demo credentials block, and no password anywhere in its text', () => {
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'ar' })
+
+    expect(screen.queryByTestId('demo-credentials')).not.toBeInTheDocument()
+    expect(screen.queryByText(/حسابات تجريبية|Demo accounts/i)).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/@demo-/)
+    expect(document.body.textContent).not.toMatch(/password:/i)
+  })
+})
