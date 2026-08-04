@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { signIn } from './helpers'
 
 /*
  * The intended path is carried UNPREFIXED (LOGIN-002).
@@ -24,8 +25,10 @@ test.use({ storageState: { cookies: [], origins: [] } })
 test('guest hitting a protected route is redirected to /login with the intended path', async ({ page }) => {
   await page.goto('/analytics')
   await expect(page).toHaveURL(/\/login\?redirect=%2Fanalytics/)
-  // The login form is present (not the router's default error screen).
-  await expect(page.locator('input[type="email"]')).toBeVisible()
+  // The login form is present (not the router's default error screen). The identifier field takes an
+  // email OR a phone now (LOGIN-UNIFIED-001), so it is not an `input[type=email]` any more — asserting
+  // on the step is both truer and stable across that kind of change.
+  await expect(page.getByTestId('login-identify')).toBeVisible()
 })
 
 test('the homepage at / is public (no auth redirect)', async ({ page }) => {
@@ -47,9 +50,7 @@ test('after login, the user lands on the originally requested page, not the dash
   // The ADVERTISER account, because `/app/reports` is the advertiser portal's page (LOGIN-002).
   // Signing in as the agency owner here tested "land on the requested page" with an account that
   // does not hold that portal — which passed only while /app had no guard.
-  await page.locator('input[type="email"]').fill('owner@demo-company.local')
-  await page.locator('input[type="password"]').fill('password')
-  await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
+  await signIn(page, 'owner@demo-company.local', 'password')
 
   await expect(page).toHaveURL(/\/app\/reports$/)
   await expect(page).not.toHaveURL(/\/login/)

@@ -295,3 +295,38 @@ export async function seededProject(request: APIRequestContext, name: string): P
 
   return found.id
 }
+
+/**
+ * Sign in through the one door there is (LOGIN-UNIFIED-001).
+ *
+ * `/login` is two steps now: the identifier, then whichever form the SERVER says that account uses.
+ * Every spec that used to fill `input[type="email"]` and `input[type="password"]` back to back was
+ * filling a field that does not exist yet, and failed as a timeout — which reads like a slow boot
+ * rather than like a form that changed shape. One helper so the next change to the flow is one edit.
+ *
+ * Assumes a password account, and says so loudly when it is not: a client contact reaches the
+ * one-time-code step instead, and silently timing out on a missing password field would hide that.
+ */
+export async function signIn(page: Page, email: string, password = 'password'): Promise<void> {
+  /*
+   * Only navigate if we are not already there.
+   *
+   * Several specs arrive at `/login?redirect=%2Fapp%2Freports` by being bounced off a guarded page,
+   * and the whole point of those tests is that the destination survives the sign-in. A helper that
+   * always did `goto('/login')` would quietly throw that parameter away and the assertion would then
+   * be checking a journey nobody takes.
+   */
+  if (!/\/login(\?|$)/.test(new URL(page.url()).pathname + new URL(page.url()).search)) {
+    await page.goto('/login')
+  }
+  await page.getByTestId('login-identify').locator('input').fill(email)
+  await page.getByTestId('login-identify').locator('button[type="submit"]').click()
+
+  await expect(
+    page.getByTestId('login-password'),
+    `${email} was not offered a password step — the server says it signs in another way`,
+  ).toBeVisible({ timeout: 20_000 })
+
+  await page.getByTestId('login-password').locator('input[type="password"]').fill(password)
+  await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
+}

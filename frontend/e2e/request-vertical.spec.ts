@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { submitVerifiedRequest } from './helpers'
+import { submitVerifiedRequest, signIn } from './helpers'
 
 /**
  * The full external→internal vertical flow — the acceptance path for the request portal:
@@ -21,9 +21,7 @@ test('external submit → owner dashboard → assign/status/internal-note → tr
 
   // 2) Owner logs in.
   await page.goto('/login')
-  await page.locator('input[type="email"]').fill('owner@demo-agency.local')
-  await page.locator('input[type="password"]').fill('password')
-  await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
+  await signIn(page, 'owner@demo-agency.local', 'password')
   await expect(page).not.toHaveURL(/\/login/)
 
   // 3) The request appears in the internal dashboard.

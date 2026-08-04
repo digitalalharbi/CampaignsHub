@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { submitVerifiedRequest, switchToEnglish } from './helpers'
+import { submitVerifiedRequest, switchToEnglish, signIn } from './helpers'
 
 /**
  * Full Client Command Center journey: guest submits a request → owner converts → opens the client → updates
@@ -43,9 +43,7 @@ test('owner drives a converted client through every command-center tab', async (
 
   // 2) Owner logs in and opens the request.
   await page.goto('/login')
-  await page.locator('input[type="email"]').fill('owner@demo-agency.local')
-  await page.locator('input[type="password"]').fill('password')
-  await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
+  await signIn(page, 'owner@demo-agency.local', 'password')
   await expect(page).not.toHaveURL(/\/login/)
 
   await page.goto('/app/requests')

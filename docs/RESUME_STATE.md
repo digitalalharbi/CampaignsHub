@@ -11,7 +11,25 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
-**ACCESS-EXIT-001 — every dead end now has a door.**
+**LOGIN-UNIFIED-001 — one sign-in page, and the server decides where you land.**
+
+`/login` no longer asks which portal you want. It asks who you are; `POST /auth/method`
+(`SignInMethodResolver`) says whether that identifier signs in by password or by one-time code; the
+matching step renders; and the destination comes from real memberships. `login()` is called with
+`portal: null` in every path, so the URL grants nothing.
+
+The five old doors — `/admin/login`, `/app/login`, `/agency/login`, `/portal/login`,
+`/influencers/login` — redirect to `/login` via `LegacyLoginRedirect`, with `replace` (so Back does
+not bounce forward) and with the query string intact (so the post-auth destination survives).
+`PortalLoginPage.tsx` and `ClientPortalLoginPage.tsx` are deleted: their routes are gone and an
+unrouted second login page is exactly the drift this change removes.
+
+Verified live against the running stack, not just by status code:
+`/agency/login?redirect=%2Fagency%2Fclients` → `/login` → agency owner → `/agency/clients`;
+`/admin/login` → company owner → `/app/dashboard` (the address granting nothing);
+`/portal/login` → client contact → code step → `/portal`.
+
+Preceded by **ACCESS-EXIT-001** (commit `7229c9f`) — every dead end has a door:
 
 `AccessRecovery` renders on every screen that can refuse: the three portal guards, the no-workspace
 switcher, the client-space picker, the load-failure state and email verification. It always offers

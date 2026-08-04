@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { signIn } from './helpers'
 
 /**
  * Account settings journey: a display-name change must persist and show up immediately in the topbar,
@@ -16,9 +17,7 @@ test('change display name → persists and reflects in the shell; then reset', a
   // prefix with, and guessing one sent an agency operator to the advertiser portal's copy of their
   // own profile after login (LOGIN-002).
   await expect(page).toHaveURL(/\/login\?redirect=%2Faccount%2Fprofile/)
-  await page.locator('input[type="email"]').fill('owner@demo-agency.local')
-  await page.locator('input[type="password"]').fill('password')
-  await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
+  await signIn(page, 'owner@demo-agency.local', 'password')
   await expect(page).toHaveURL(/\/account\/profile$/)
 
   const nameField = page.getByLabel(/اسم العرض|Display name/)

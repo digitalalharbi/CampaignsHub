@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { submitVerifiedRequest } from './helpers'
+import { submitVerifiedRequest, signIn } from './helpers'
 
 /**
  * Full conversion vertical: guest submits → owner converts the request into a client/project/draft
@@ -19,9 +19,7 @@ test('convert a request → client appears in portfolio and command center', asy
 
   // 2) Owner logs in and opens the request.
   await page.goto('/login')
-  await page.locator('input[type="email"]').fill('owner@demo-agency.local')
-  await page.locator('input[type="password"]').fill('password')
-  await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
+  await signIn(page, 'owner@demo-agency.local', 'password')
   await expect(page).not.toHaveURL(/\/login/)
 
   await page.goto('/app/requests')

@@ -757,3 +757,30 @@ fixes.
 - **The invoice download is plain text, not PDF.** A PDF renderer that has never been proven on Arabic
   is worse than none — this repository has already fixed one Arabic text-layer defect. The endpoint
   changes shape, not meaning, when one is added.
+
+---
+
+## LOGIN-UNIFIED-001 — one sign-in page, and the server decides the destination
+
+| Requirement | Where it is enforced | How it is proven |
+| --- | --- | --- |
+| A single login page at `/login` | `frontend/src/app/router.tsx` — the only sign-in element mounted | `e2e/login-unified.spec.ts` «the sign-in page offers no portal to choose» |
+| «إدارة الحملات» / «وكالة» / «متابعة الطلبات» removed permanently | `features/auth/LoginPage.tsx` — `PORTAL_TABS` and the client link deleted | `LoginPage.test.tsx` «offers no portal choice at all»; e2e asserts each `login-portal-*` testid has count 0 |
+| The user never chooses a portal | Two-step flow: identifier → the step the server names | `LoginPage.test.tsx` «asks only for an identifier…», «shows the code step for an account that signs in by one-time code» |
+| The backend decides from account, membership, permissions, state | `SignInMethodResolver` picks the FORM; `PortalResolver` + `resolvePostAuthOutcome` pick the DESTINATION | `SignInMethodTest` (7 tests); live: the same `/admin/login` sent an advertiser to `/app/dashboard` and an agency owner to `/agency` |
+| The login URL grants no permission | `login()` is called with `portal: null` unconditionally | `LoginPage.test.tsx` «signs in claiming no portal, even when the URL named one»; e2e «an address naming a portal grants no access to it» |
+| `/admin/login`, `/app/login`, `/agency/login`, `/portal/login` → `/login` | `features/auth/LegacyLoginRedirect.tsx`, mounted for all five old doors | `LegacyLoginRedirect.test.tsx` (7 tests); `login-unified.spec.ts` «… redirects to /login» |
+| No redirect loops | `<Navigate replace>` — the old address leaves the history entry | `login-unified.spec.ts` «Back from a redirected door does not bounce forward again» |
+| The post-auth destination is preserved | The query string travels through the redirect untouched | `LegacyLoginRedirect.test.tsx` «carries the post-auth destination through»; e2e signs in and lands on `/agency/clients` |
+| The approved marketing copy on the login panel | `AuthPanel` `COPY.ar.default`, passed `portal="default"` unconditionally | `LoginPage.test.tsx` «shows the single approved marketing panel», «ignores a portal in the query string» |
+| Registration keeps account-type marketing | `AuthShell` still takes a portal; untouched by this change | unchanged registration tests continue to pass |
+| No general sign-up for a platform admin | `/register` has no admin path; the admin door is gone rather than replaced | unchanged — no admin registration route exists |
+
+### Why an unrecognised identifier answers `password`
+
+`SignInMethodResolver` never answers `code` for an address it does not know. Answering `code` would
+confirm to any stranger which addresses belong to a client here, and would send a real one-time code
+to somebody this platform has no relationship with. `password` puts them on the form where a wrong
+address produces the same uninformative answer as a wrong password. A platform user also beats a
+contact record with the same address, because an agency operator is routinely named as the contact
+on a request they filed for a client.
