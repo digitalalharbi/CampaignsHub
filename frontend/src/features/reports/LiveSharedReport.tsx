@@ -112,6 +112,41 @@ export function LiveSharedReport({
   const count = (v: number | null | undefined) =>
     v === null || v === undefined ? '—' : new Intl.NumberFormat('en-US').format(Math.round(v))
 
+  /*
+   * How each chosen metric is rendered.
+   *
+   * A table rather than a chain of conditionals, because the SET is chosen by the operator at link
+   * time and the page must be able to render any subset in the order they picked. Formatting lives
+   * with the metric so «spend» is always money and «ROAS» is always a multiplier, wherever it appears.
+   */
+  const METRIC_META: Record<string, {
+    ar: string
+    en: string
+    invertGood?: boolean
+    spark?: boolean
+    format: (
+      t: Record<string, number | null>,
+      p: LivePayload,
+      money: (v: number | null | undefined) => string,
+      count: (v: number | null | undefined) => string,
+    ) => string
+  }> = {
+    spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, spark: true, format: (t, _p, money) => money(t.spend) },
+    impressions: { ar: 'الظهور', en: 'Impressions', spark: true, format: (t, _p, _m, count) => count(t.impressions) },
+    clicks: { ar: 'النقرات', en: 'Clicks', spark: true, format: (t, _p, _m, count) => count(t.clicks) },
+    ctr: { ar: 'نسبة النقر', en: 'CTR', format: (t) => (t.ctr === null || t.ctr === undefined ? '—' : `${(t.ctr * 100).toFixed(2)}%`) },
+    conversions: { ar: 'النتائج', en: 'Results', spark: true, format: (t, _p, _m, count) => count(t.conversions) },
+    // Add-to-cart is a funnel stage rather than a total, so it is read from where it actually lives.
+    add_to_cart: { ar: 'الإضافات للسلة', en: 'Add to cart', format: (_t, p, _m, count) => count(p.funnel.find((f) => f.stage === 'add_to_cart')?.count) },
+    purchases: { ar: 'المشتريات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
+    revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, _p, money) => money(t.revenue) },
+    roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => (t.roas === null || t.roas === undefined ? '—' : `${t.roas.toFixed(2)}×`) },
+    cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t, _p, money) => money(t.cpa) },
+  }
+
+  const DEFAULT_METRICS = ['spend', 'impressions', 'clicks', 'conversions', 'add_to_cart', 'purchases', 'revenue', 'roas']
+  const visibleMetrics = (payload?.metrics?.length ?? 0) > 0 ? payload!.metrics : DEFAULT_METRICS
+
   if (!payload && busy) {
     return <p className="py-20 text-center text-text-secondary">{ar ? 'جارٍ التحميل…' : 'Loading…'}</p>
   }
@@ -220,18 +255,27 @@ export function LiveSharedReport({
 
       {/* Dimmed, not blanked, while refreshing — see the note at the top of this file. */}
       <div className={busy ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard label={ar ? 'الإنفاق' : 'Spend'} value={money(t.spend)} delta={d.spend} invertGood spark={series('spend')} />
-          <KpiCard label={ar ? 'الظهور' : 'Impressions'} value={count(t.impressions)} delta={d.impressions} spark={series('impressions')} />
-          <KpiCard label={ar ? 'النقرات' : 'Clicks'} value={count(t.clicks)} delta={d.clicks} spark={series('clicks')} />
-          <KpiCard label={ar ? 'النتائج' : 'Results'} value={count(t.conversions)} delta={d.conversions} spark={series('conversions')} />
-        </div>
-
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard label={ar ? 'الإضافات للسلة' : 'Add to cart'} value={count(payload.funnel.find((f) => f.stage === 'add_to_cart')?.count)} />
-          <KpiCard label={ar ? 'المشتريات' : 'Purchases'} value={count(t.purchases)} delta={d.purchases} />
-          <KpiCard label={ar ? 'الإيرادات' : 'Revenue'} value={money(t.revenue)} delta={d.revenue} />
-          <KpiCard label="ROAS" value={t.roas === null || t.roas === undefined ? '—' : `${t.roas.toFixed(2)}×`} delta={d.roas} />
+        {/*
+          LIVEREP-002 — only the KPIs the operator chose.
+          An unchosen metric is ABSENT, not blanked: a card showing «—» still tells the reader a figure
+          exists and is being withheld, which is a different and worse message than not offering it.
+          An empty selection means «all of them» — what a link built before this existed carries.
+        */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="live-kpis">
+          {visibleMetrics.map((key) => {
+            const meta = METRIC_META[key]
+            if (!meta) return null
+            return (
+              <KpiCard
+                key={key}
+                label={ar ? meta.ar : meta.en}
+                value={meta.format(t, payload, money, count)}
+                delta={d[key]}
+                invertGood={meta.invertGood}
+                spark={meta.spark ? series(key) : undefined}
+              />
+            )
+          })}
         </div>
 
         <div className="mt-3 grid gap-3 lg:grid-cols-3">

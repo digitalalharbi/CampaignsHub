@@ -25,6 +25,7 @@ import { optionLabel } from '@/components/forms/types'
 import { toApiError } from '@/lib/api/client'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { SchedulesPanel } from './SchedulesPanel'
+import { LiveLinkBuilder } from './LiveLinkBuilder'
 import { DemoBadge } from '@/features/analytics/components'
 import { InteractiveReport } from './InteractiveReport'
 import { AnnotationsPanel } from './AnnotationsPanel'
@@ -81,6 +82,7 @@ export function ReportsPage() {
   const [builderOpen, setBuilderOpen] = useState(false)
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [shareId, setShareId] = useState<string | null>(null)
+  const [liveOpen, setLiveOpen] = useState(false)
   const [view, setView] = useState<'table' | 'cards'>('table')
   const [typeFilter, setTypeFilter] = useState('')
   // REPORT-SCHEDULING: saved documents vs the schedules that produce them.
@@ -125,10 +127,47 @@ export function ReportsPage() {
           </div>
           <p className="mt-1 text-sm text-text-secondary">{ar ? 'مستندات محفوظة قابلة للإنشاء والتصدير والإرسال' : 'Saved documents you can generate, export and send'}</p>
         </div>
-        <Button size="lg" onClick={() => setBuilderOpen(true)}>
-          <Plus size={18} /> {ar ? 'تقرير جديد' : 'New report'}
-        </Button>
+        {/*
+          Two ways out of this page, and they are different things.
+
+          «رابط لحظي للعميل» is the primary action, because sharing live figures is what this product is
+          FOR — it is a link built from a choice (campaigns, platforms, period, metrics) and needs no
+          document. «تقرير جديد» still generates a saved, signed-off document, which is the right tool
+          for a monthly PDF and the wrong one for «how is it going today?».
+        */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/*
+            Disabled with a reason, never silently inert.
+            Both actions need a project — the link's whole ceiling is «this project». Pressing an
+            enabled-looking button and having NOTHING happen is the worst of the three options; saying
+            why costs one line and turns a dead control into an instruction.
+          */}
+          <Button
+            size="lg"
+            data-testid="new-live-link"
+            disabled={!currentProjectId}
+            title={!currentProjectId ? (ar ? 'اختر مشروعًا أولًا' : 'Choose a project first') : undefined}
+            onClick={() => setLiveOpen(true)}
+          >
+            <Link2 size={18} /> {ar ? 'رابط لحظي للعميل' : 'Live client link'}
+          </Button>
+          <Button
+            size="lg"
+            variant="secondary"
+            disabled={!currentProjectId}
+            title={!currentProjectId ? (ar ? 'اختر مشروعًا أولًا' : 'Choose a project first') : undefined}
+            onClick={() => setBuilderOpen(true)}
+          >
+            <Plus size={18} /> {ar ? 'تقرير محفوظ' : 'Saved report'}
+          </Button>
+        </div>
       </div>
+
+      {!currentProjectId && (
+        <p data-testid="reports-need-project" className="rounded-2xl border border-border bg-surface-secondary px-4 py-3 text-sm text-text-secondary">
+          {ar ? 'اختر مشروعًا من الأعلى لعرض تقاريره وإنشاء رابط لحظي للعميل.' : 'Choose a project above to see its reports and create a live client link.'}
+        </p>
+      )}
 
       {/* Summary */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -316,6 +355,7 @@ export function ReportsPage() {
         />
       )}
       {previewId && <ReportPreview projectId={currentProjectId!} id={previewId} onClose={() => setPreviewId(null)} />}
+      {liveOpen && currentProjectId && <LiveLinkBuilder projectId={currentProjectId} onClose={() => setLiveOpen(false)} />}
       {shareId && <ShareManager projectId={currentProjectId!} reportId={shareId} onClose={() => setShareId(null)} />}
     </div>
   )

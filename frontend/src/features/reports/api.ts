@@ -101,6 +101,19 @@ export const createShare = (p: string, reportId: string, opts: Record<string, un
 export const revokeShare = (p: string, reportId: string, shareId: string) =>
   postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/revoke`)
 
+// ---- LIVEREP-002: build a live link from a choice, not from a document ---------------------------
+
+export interface LiveBuilderOptions {
+  campaigns: Array<{ id: string; name: string; status: string | null }>
+  providers: string[]
+  metrics: Array<{ key: string; ar: string; en: string }>
+}
+
+export const liveBuilderOptions = (p: string) => getData<LiveBuilderOptions>(`${base(p)}/live/options`)
+
+export const createLiveLink = (p: string, body: Record<string, unknown>) =>
+  postData<{ report_id: string; share_id: string; url: string; token: string }>(`${base(p)}/live`, body)
+
 /** Public (unauthenticated) shared report fetch. Sends the optional password via header. */
 export async function fetchSharedReport(token: string, password?: string) {
   const res = await fetch(`/api/v1/reports/shared/${token}`, {
@@ -149,6 +162,8 @@ export interface LivePayload {
     earliest: string
     latest: string
   }
+  /** LIVEREP-002 — the KPIs the operator chose; empty means all of them. */
+  metrics: string[]
   applied: { from: string; to: string; providers: string[]; campaigns: string[] }
   is_demo: boolean
 }

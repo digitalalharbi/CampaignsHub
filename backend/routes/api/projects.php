@@ -10,6 +10,7 @@ use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\Projects\Http\Controllers\ProjectController;
 use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
 use App\Domains\Projects\Http\Controllers\ProjectOverviewController;
+use App\Domains\Reports\Http\Controllers\LiveReportBuilderController;
 use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
 use App\Domains\Reports\Http\Controllers\ReportController;
 use App\Domains\Reports\Http\Controllers\ReportPrintController;
@@ -69,6 +70,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::post('sync-runs', [SyncRunController::class, 'store'])->name('sync-runs.store');
 
     // Reports (project-scoped; reports.view / reports.export).
+    /*
+     * LIVEREP-002 — build a live client link from a choice (client → project → campaigns → platforms
+     * → period → metrics), rather than from an already-generated document.
+     */
+    Route::get('reports/live/options', [LiveReportBuilderController::class, 'options'])->name('reports.live.options');
+    Route::post('reports/live', [LiveReportBuilderController::class, 'store'])->name('reports.live.store');
     Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
     // REPORT-SCHEDULING: the HTTP surface the dispatcher engine never had. Declared BEFORE
     // reports/{report} so "schedules" is not swallowed by the {report} wildcard.

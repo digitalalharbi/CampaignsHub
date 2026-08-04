@@ -101,6 +101,19 @@ final class LiveReportService
             'campaigns' => $engine->byCampaign($from, $to),
             'funnel' => $engine->funnel($from, $to),
             'freshness' => $this->freshness($scope['project_id'], $scope['providers']),
+            /*
+             * LIVEREP-002 — the metrics the operator chose, in the order they chose to show them.
+             *
+             * Empty means «all of them», which is what a link built before metric selection existed
+             * gets, and what an operator who skipped the step means. The client's page renders THIS
+             * list rather than a fixed set, so unticking «Revenue» actually removes the card instead
+             * of merely blanking a number — a blank card still tells the reader a figure exists and
+             * is being withheld.
+             */
+            'metrics' => array_values(array_filter(
+                (array) ($share->scope['metrics'] ?? []),
+                static fn ($m): bool => is_string($m) && $m !== '',
+            )),
             'available' => [
                 'providers' => $scope['providers'],
                 'campaigns' => $this->campaignChoices($scope['campaign_ids']),
