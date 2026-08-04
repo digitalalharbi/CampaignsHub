@@ -1,7 +1,8 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, ChevronDown, KeyRound, LogOut, Palette, Shield, User as UserIcon } from 'lucide-react'
-import { logout } from '@/features/auth/api'
+import { signOutCompletely } from '@/features/auth/signOut'
 import { usePortalPath } from '@/app/portalPath'
 import { useAuth } from '@/stores/auth'
 import { useT } from '@/lib/i18n'
@@ -45,13 +46,20 @@ function StatusBadge({ status }: { status?: AuthUser['status'] }) {
 /** The shared menu body — identical whether opened from the topbar avatar or the sidebar card. */
 function MenuBody({ onNavigate }: { onNavigate: (to: string) => void }) {
   const t = useT()
-  const { user, setUser } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
+  /*
+   * ACCESS-EXIT-001 — sign out means the BROWSER forgets, not just the server.
+   *
+   * This cleared the server session and the auth store and left everything else: the memoised query
+   * cache, the persisted project and client selection, and every `chub:draft:*` form draft. Signing
+   * in as somebody else then inherited the previous person's project and half-filled forms — which is
+   * confusing on your own machine and a small disclosure on a shared one.
+   */
   const handleLogout = async () => {
-    await logout().catch(() => undefined)
-    setUser(null)
-    navigate('/login', { replace: true })
+    await signOutCompletely(queryClient)
   }
 
   return (

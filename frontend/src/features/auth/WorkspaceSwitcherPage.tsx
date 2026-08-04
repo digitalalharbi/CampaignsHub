@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Building2, LayoutDashboard, Loader2, Megaphone, 
 import { PORTAL_LABELS, fetchMemberships, switchMembership, type Membership, type PortalKey } from './memberships'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { Button } from '@/components/ui/Button'
+import { AccessRecovery } from './AccessRecovery'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { features } from '@/lib/features'
@@ -95,6 +96,8 @@ export function WorkspaceSwitcherPage() {
             <Button variant="secondary" className="mt-3" onClick={() => void state.refetch()}>
               {ar ? 'إعادة المحاولة' : 'Retry'}
             </Button>
+            {/* Retry is not an exit: if the failure persists, the person still needs a way off this page. */}
+            <AccessRecovery />
           </div>
         )}
 
@@ -105,13 +108,20 @@ export function WorkspaceSwitcherPage() {
         )}
 
         {state.data && offered.length === 0 && (
-          <div className="mt-6">
+          <div className="mt-6" data-testid="no-workspace">
             <EmptyState
               title={ar ? 'لا توجد مساحة عمل بعد' : 'No workspace yet'}
               description={ar
                 ? 'حسابك ليس عضوًا في أي مساحة. أكمل الإعداد أو اطلب دعوة من مسؤول المساحة.'
                 : 'Your account is not a member of any space. Finish setting up, or ask a workspace admin to invite you.'}
             />
+            {/*
+              ACCESS-EXIT-001 — this was THE dead end.
+              An empty state with no actions, reached by the one button a refusal offered. The session
+              stayed valid, so returning to the site landed here again; the only escape was clearing
+              site data by hand.
+            */}
+            <AccessRecovery memberships={[]} onboarding />
           </div>
         )}
 

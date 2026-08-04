@@ -118,6 +118,25 @@ final class DemoAccountsSeeder extends Seeder
         $analystRole->givePermissionTo('campaigns.view', 'projects.view', 'projects.view.all', 'integrations.view', 'reports.view');
 
         $this->ensureUser('owner@demo-agency.local', 'Demo Owner', $tenant, $ownerRole);
+
+        /*
+         * ACCESS-EXIT-001 — an account that belongs to NOTHING, on purpose.
+         *
+         * The worst dead end in the product was reachable only by somebody with no membership at all,
+         * and there was no way to reach that state on a demo install without hand-editing the
+         * database. A state nobody can open is a state nobody checks, which is how it survived.
+         *
+         * Verified so it lands on the workspace picker rather than the email-confirmation screen —
+         * the point of this fixture is the no-workspace wall, not the verification one.
+         */
+        User::updateOrCreate(
+            ['email' => 'no-workspace@demo.local'],
+            [
+                'name' => 'No Workspace Demo',
+                'password' => bcrypt('password'),
+                'email_verified_at' => now(),
+            ],
+        );
         $this->ensureUser('analyst@demo-agency.local', 'Demo Analyst', $tenant, $analystRole);
 
         $context->forget();

@@ -1,8 +1,8 @@
-import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { fetchMemberships } from '@/features/auth/memberships'
-import { Button } from '@/components/ui/Button'
+import { AccessRecovery } from '@/features/auth/AccessRecovery'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -18,7 +18,6 @@ import { useUi } from '@/stores/ui'
  * browser changes nothing.
  */
 export function RequireInfluencerPortal() {
-  const navigate = useNavigate()
   const location = useLocation()
   const ar = useUi((s) => s.locale) === 'ar'
   const state = useQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
@@ -33,6 +32,7 @@ export function RequireInfluencerPortal() {
 
   // A failed probe is not proof of absence — let the user through and let the API answer honestly.
   const holdsInfluencers = state.data ? state.data.memberships.some((m) => m.portal === 'influencers') : true
+  const held = state.data?.memberships ?? []
 
   if (!holdsInfluencers) {
     return (
@@ -46,9 +46,8 @@ export function RequireInfluencerPortal() {
               ? 'هذه البوابة مخصّصة لفرق التسويق عبر المؤثرين والمحتوى الذي ينتجه المستخدمون. حسابك ليس عضوًا فيها.'
               : 'This portal is for teams running influencer and user-generated content work. Your account is not a member of one.'}
           </p>
-          <Button className="mt-5 w-full" onClick={() => navigate('/switch', { replace: true })}>
-            {ar ? 'انتقل إلى مساحاتك' : 'Go to your workspaces'}
-          </Button>
+          {/* ACCESS-EXIT-001 — the same one-button dead end as the other guards. */}
+          <AccessRecovery memberships={held} onboarding={held.length === 0} />
         </div>
       </div>
     )

@@ -6,6 +6,7 @@ import { fetchClientSpaces } from './clientSpace'
 import { usePortalGuard } from './usePortalGuard'
 import { PortalShell } from './PortalShell'
 import { useUi } from '@/stores/ui'
+import { AccessRecovery } from '@/features/auth/AccessRecovery'
 
 /**
  * `/portal` — which of the agency's clients am I looking at? (PORTAL-CLIENT-001)
@@ -49,11 +50,18 @@ export function ClientSpacePickerPage() {
         )}
 
         {spaces.data?.length === 0 && (
-          <p className="mt-6 rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-text-muted">
-            {ar
-              ? 'لا توجد مساحة عميل مرتبطة بحسابك بعد.'
-              : 'No client space is linked to your account yet.'}
-          </p>
+          <div data-testid="no-client-space">
+            <p className="mt-6 rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-text-muted">
+              {ar
+                ? 'لا توجد مساحة عميل مرتبطة بحسابك بعد.'
+                : 'No client space is linked to your account yet.'}
+            </p>
+            {/*
+              ACCESS-EXIT-001 — a client with no space needs an exit too, and it is NOT the operator
+              login: sending them there would offer a form their account cannot use.
+            */}
+            <AccessRecovery loginPath="/portal/login" />
+          </div>
         )}
 
         {spaces.data && spaces.data.length > 1 && (

@@ -1,8 +1,8 @@
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { fetchMemberships } from '@/features/auth/memberships'
-import { Button } from '@/components/ui/Button'
+import { AccessRecovery } from '@/features/auth/AccessRecovery'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -18,7 +18,6 @@ import { useUi } from '@/stores/ui'
  * browser changes nothing.
  */
 export function RequireAgencyPortal() {
-  const navigate = useNavigate()
   const ar = useUi((s) => s.locale) === 'ar'
   const state = useQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
 
@@ -32,6 +31,7 @@ export function RequireAgencyPortal() {
 
   // A failed probe is not proof of absence — let the user through and let the API answer honestly.
   const holdsAgency = state.data ? state.data.memberships.some((m) => m.portal === 'agency') : true
+  const held = state.data?.memberships ?? []
 
   if (!holdsAgency) {
     return (
@@ -45,9 +45,11 @@ export function RequireAgencyPortal() {
               ? 'هذه البوابة مخصّصة لفرق الوكالات التي تدير عملاء متعددين. حسابك ليس عضوًا فيها.'
               : 'This portal is for agency teams managing multiple clients. Your account is not a member of one.'}
           </p>
-          <Button className="mt-5 w-full" onClick={() => navigate('/switch', { replace: true })}>
-            {ar ? 'انتقل إلى مساحاتك' : 'Go to your workspaces'}
-          </Button>
+          {/*
+            ACCESS-EXIT-001 — «go to your workspaces» is not an exit for somebody who HAS none.
+            It sent them to a screen that said «no workspace yet» and offered nothing.
+          */}
+          <AccessRecovery memberships={held} onboarding={held.length === 0} />
         </div>
       </div>
     )

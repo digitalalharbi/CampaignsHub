@@ -7,6 +7,7 @@ import { OnboardingShell } from './OnboardingShell'
 import { fetchCurrentUser } from '@/features/auth/api'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
+import { AccessRecovery } from '@/features/auth/AccessRecovery'
 
 export function VerifyEmailPage() {
   const ar = useUi((s) => s.locale) === 'ar'
@@ -78,6 +79,13 @@ export function VerifyEmailPage() {
           {resend.isPending ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} {ar ? 'إعادة إرسال الرابط' : 'Resend link'}
         </button>
         {error && <p className="text-xs text-danger">{error}</p>}
+
+        {/*
+          ACCESS-EXIT-001 — verification is a wall too, for the person who cannot pass it.
+          Somebody who signed in with the wrong account, or who no longer has that inbox, had no way
+          off this page: no sign-out, no home, and the session kept them here on every return visit.
+        */}
+        <AccessRecovery />
       </div>
     </OnboardingShell>
   )

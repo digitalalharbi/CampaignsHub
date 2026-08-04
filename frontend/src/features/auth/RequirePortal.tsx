@@ -1,8 +1,8 @@
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { fetchMemberships, type PortalKey } from './memberships'
-import { Button } from '@/components/ui/Button'
+import { AccessRecovery } from './AccessRecovery'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -22,7 +22,6 @@ import { useUi } from '@/stores/ui'
  * wrong. Hiding menu items was doing the work a guard should do.
  */
 export function RequirePortal({ portal, fallback = '/switch' }: { portal: PortalKey; fallback?: string }) {
-  const navigate = useNavigate()
   const ar = useUi((s) => s.locale) === 'ar'
   const state = useQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
 
@@ -42,14 +41,10 @@ export function RequirePortal({ portal, fallback = '/switch' }: { portal: Portal
   if (holds) return <Outlet />
 
   const copy = DENIED[portal]
-  // Where they can actually go. One membership means one place, so name it rather than sending them
-  // through a switcher that would have exactly one option.
-  const destination = state.data?.memberships.length === 1
-    ? state.data.memberships[0].landing_path
-    : fallback
+  const held = state.data?.memberships ?? []
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-5">
+    <div className="flex min-h-screen items-center justify-center bg-background px-5 py-10">
       <div
         data-testid={`${portal}-portal-denied`}
         className="w-full max-w-md rounded-2xl border border-border bg-surface p-7 text-center"
@@ -58,11 +53,15 @@ export function RequirePortal({ portal, fallback = '/switch' }: { portal: Portal
           {ar ? copy.ar.title : copy.en.title}
         </h1>
         <p className="mt-2 text-sm text-text-secondary">{ar ? copy.ar.body : copy.en.body}</p>
-        <Button className="mt-5 w-full" onClick={() => navigate(destination, { replace: true })}>
-          {destination === fallback
-            ? (ar ? 'انتقل إلى مساحاتك' : 'Go to your workspaces')
-            : (ar ? 'انتقل إلى بوابتي' : 'Go to my portal')}
-        </Button>
+
+        {/*
+          ACCESS-EXIT-001 — a refusal that offers no exit is a wall.
+          This used to render ONE button, which for somebody holding no membership pointed at
+          `/switch` — a screen that said «no workspace yet» and offered nothing at all. Closing the
+          tab and returning landed on the same wall, because the session was still valid. The only
+          escape was clearing site data by hand.
+        */}
+        <AccessRecovery memberships={held} onboarding={held.length === 0} />
       </div>
     </div>
   )

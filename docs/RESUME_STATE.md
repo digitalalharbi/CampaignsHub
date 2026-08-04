@@ -11,6 +11,24 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
+**ACCESS-EXIT-001 — every dead end now has a door.**
+
+`AccessRecovery` renders on every screen that can refuse: the three portal guards, the no-workspace
+switcher, the client-space picker, the load-failure state and email verification. It always offers
+sign in as another account / home / sign out, plus the portal they hold, a switcher when there is
+more than one, and onboarding when there is none.
+
+`signOutCompletely()` clears the server session, the auth store, the whole query cache, the
+persisted project and client selection and every `chub:draft:*` — and keeps language and theme,
+which belong to the person rather than the session. It is best-effort on the network call, because
+it exists to rescue people whose session is already broken.
+
+Verified live for all seven cases in the brief, including sign-out from a refusal (session → 401,
+owned storage empty, `campaign-hub-locale` preserved) and a return visit landing on the public
+homepage rather than the wall.
+
+---
+
 **FINISHING PASS II — the four named gaps closed, and a live walkthrough.**
 
 Commits: `5e53473` (REQ-UNIFY-001 + REQ-DYNFIELDS-001 + REQ-CHARTS-001) → `9208b85` (LIVEREP-002).
