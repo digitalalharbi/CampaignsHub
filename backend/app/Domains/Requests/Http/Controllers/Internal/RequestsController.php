@@ -66,8 +66,72 @@ final class RequestsController
                 'total' => $page->total(), 'per_page' => $page->perPage(),
                 'current_page' => $page->currentPage(), 'last_page' => $page->lastPage(),
                 'summary' => $this->summary(clone $query),
+                'breakdown' => $this->breakdown(clone $query),
             ],
         ]);
+    }
+
+    /**
+     * REQ-CHARTS-001 — the shape of the queue: by status, by service, and against the SLA.
+     *
+     * Three groupings rather than one chart, because they answer three different questions an operator
+     * actually asks: «where is everything?» (status), «what kind of work is this?» (service type) and
+     * «are we late?» (SLA). Each is one grouped query over the SAME filtered builder the list uses, so
+     * a chart can never describe a different set from the table beneath it.
+     *
+     * The SLA bucket is the one worth naming: `breached` is a promise already missed, `due_soon` is one
+     * about to be, and they are counted separately because they need different actions — the first is
+     * an apology, the second is a reprioritisation.
+     *
+     * @param  Builder<ExternalRequest>  $query
+     * @return array<string, mixed>
+     */
+    private function breakdown(Builder $query): array
+    {
+        $base = $query->reorder()->toBase();
+
+        $byStatus = (clone $base)
+            ->join('request_statuses', 'request_statuses.id', '=', 'external_requests.status_id')
+            ->selectRaw('request_statuses.key, request_statuses.name_ar, request_statuses.name_en, COUNT(*) AS total')
+            ->groupBy('request_statuses.key', 'request_statuses.name_ar', 'request_statuses.name_en')
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn ($r): array => [
+                'key' => (string) $r->key,
+                'label' => (string) $r->name_ar,
+                'label_en' => (string) $r->name_en,
+                'total' => (int) $r->total,
+            ])->all();
+
+        $byType = (clone $base)
+            ->join('request_types', 'request_types.id', '=', 'external_requests.type_id')
+            ->selectRaw('request_types.key, request_types.name_ar, request_types.name_en, COUNT(*) AS total')
+            ->groupBy('request_types.key', 'request_types.name_ar', 'request_types.name_en')
+            ->orderByDesc('total')
+            ->limit(8)
+            ->get()
+            ->map(fn ($r): array => [
+                'key' => (string) $r->key,
+                'label' => (string) $r->name_ar,
+                'label_en' => (string) $r->name_en,
+                'total' => (int) $r->total,
+            ])->all();
+
+        $sla = (array) (clone $base)
+            ->selectRaw('COUNT(*) FILTER (WHERE sla_breached_at IS NOT NULL) AS breached')
+            ->selectRaw('COUNT(*) FILTER (WHERE sla_breached_at IS NULL AND sla_due_at IS NOT NULL AND sla_due_at <= NOW() + INTERVAL \'24 hours\') AS due_soon')
+            ->selectRaw('COUNT(*) FILTER (WHERE sla_breached_at IS NULL AND (sla_due_at IS NULL OR sla_due_at > NOW() + INTERVAL \'24 hours\')) AS on_track')
+            ->first();
+
+        return [
+            'by_status' => $byStatus,
+            'by_type' => $byType,
+            'sla' => [
+                'breached' => (int) ($sla['breached'] ?? 0),
+                'due_soon' => (int) ($sla['due_soon'] ?? 0),
+                'on_track' => (int) ($sla['on_track'] ?? 0),
+            ],
+        ];
     }
 
     /**

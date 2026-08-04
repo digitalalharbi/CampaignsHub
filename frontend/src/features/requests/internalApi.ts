@@ -25,7 +25,7 @@ export interface RequestRow {
 
 export interface RequestListResult {
   data: RequestRow[]
-  meta: { total: number; per_page: number; current_page: number; last_page: number; summary?: RequestSummary }
+  meta: { total: number; per_page: number; current_page: number; last_page: number; summary?: RequestSummary; breakdown?: RequestBreakdown }
 }
 
 export interface RequestComment { id: number; visibility: 'internal' | 'client'; author: string; body: string; at: string | null }
@@ -41,6 +41,9 @@ export interface RequestDetail extends RequestRow {
   budget: string | null
   currency: string
   metadata: Record<string, unknown> | null
+  /** REQ-DYNFIELDS-001 — the per-service intake answers, keyed by field token. */
+  service_details: Record<string, unknown> | null
+  services_resolved?: Array<{ key: string; label_ar?: string | null; label_en?: string | null }>
   sla: { due_at: string | null; started_at: string | null; paused_at: string | null; breached_at: string | null; remaining_seconds: number | null }
   comments: RequestComment[]
   events: RequestEvent[]
@@ -104,6 +107,19 @@ export interface RequestSummary {
   review: number
   paused: number
   needs_attention: number
+}
+
+/**
+ * REQ-CHARTS-001 — the shape of the queue, over the same filtered set as the list.
+ *
+ * Three groupings because operators ask three questions: where is everything, what kind of work is it,
+ * and are we late. `breached` and `due_soon` are separate because they need different actions — one is
+ * an apology, the other a reprioritisation.
+ */
+export interface RequestBreakdown {
+  by_status: Array<{ key: string; label: string; label_en: string; total: number }>
+  by_type: Array<{ key: string; label: string; label_en: string; total: number }>
+  sla: { breached: number; due_soon: number; on_track: number }
 }
 
 export const ALLOWED_TRANSITIONS: Record<string, string[]> = {

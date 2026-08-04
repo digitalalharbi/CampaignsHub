@@ -8,7 +8,9 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Requests\Journey\InvalidStageTransitionException;
 use App\Domains\Requests\Journey\RequestStage;
+use App\Domains\Requests\Journey\StageStatusMap;
 use App\Domains\Requests\Models\ExternalRequest;
+use App\Domains\Requests\Models\RequestStatus;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -70,6 +72,26 @@ final class RequestJourneyService
             }
             if (($paymentStatus = $to->paymentStatus()) !== null) {
                 $attributes['payment_status'] = $paymentStatus;
+            }
+
+            /*
+             * REQ-UNIFY-001 — the status follows the stage, always.
+             *
+             * This advanced `journey_stage` and left `status_id` untouched, so a request could sit on
+             * stage «paid» with status «under review»: two truthful-looking answers to «where is this?»
+             * that disagreed, with nothing on either screen hinting the other existed. The board, the
+             * inbox counts and the client's progress bar all read the STATUS, so the stage moving alone
+             * was invisible to every reader.
+             *
+             * A null mapping means «a stage nobody has decided the meaning of» — the status is left
+             * exactly where it is rather than being guessed at. See StageStatusMap.
+             */
+            $statusKey = StageStatusMap::statusFor($to);
+            if ($statusKey !== null) {
+                $statusId = RequestStatus::where('key', $statusKey)->value('id');
+                if ($statusId !== null) {
+                    $attributes['status_id'] = $statusId;
+                }
             }
 
             $request->forceFill($attributes)->save();

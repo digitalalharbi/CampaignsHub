@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Columns3, Inbox, LayoutGrid, Search, Table as TableIcon } from 'lucide-react'
-import { ALLOWED_TRANSITIONS, changeRequestStatus, listRequests, type RequestFilters, type RequestRow } from './internalApi'
+import { ALLOWED_TRANSITIONS, changeRequestStatus, listRequests, type RequestBreakdown, type RequestFilters, type RequestRow } from './internalApi'
 import { STATUS_LABELS, priorityTone, statusTone } from './labels'
+import { ChartCard } from '@/features/analytics/charts'
+import { Skeleton } from '@/components/ui/States'
 import { SearchableSelect } from '@/components/forms'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { useT, type TranslationKey } from '@/lib/i18n'
@@ -98,6 +100,8 @@ export function RequestsDashboardPage() {
       </div>
 
       {/* Filters */}
+      <RequestCharts breakdown={query.data?.meta?.breakdown} ar={ar} loading={query.isLoading} error={query.isError} />
+
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
         <form className="relative" onSubmit={(e) => { e.preventDefault(); set({ q: search || undefined }) }}>
           <Search size={16} className="pointer-events-none absolute inset-y-0 my-auto ms-3 text-text-muted" />
@@ -255,6 +259,115 @@ function ReqSummaryCard({ label, value, tone }: { label: string; value: number; 
         <span className="text-xs font-semibold text-text-secondary">{label}</span>
       </div>
       <span className="tnum text-2xl font-extrabold text-text-primary" dir="ltr">{value}</span>
+    </div>
+  )
+}
+
+
+/**
+ * REQ-CHARTS-001 — the shape of the queue, in three answers.
+ *
+ * Not decoration: each panel is a question an operator asks before touching anything. «Where is
+ * everything» (status), «what kind of work is this» (service), «are we late» (SLA). All three describe
+ * the SAME filtered set as the table below, because they are computed from the same builder — a chart
+ * that quietly described a wider set than the list under it would be worse than no chart.
+ *
+ * Loading, empty and error are all rendered, and they say different things. An empty queue is good
+ * news and reads as such; a failed request is not the same as nothing to show, and a chart that fell
+ * back to «no data» on an error would be reporting an empty inbox that is actually unknown.
+ */
+function RequestCharts({
+  breakdown,
+  ar,
+  loading,
+  error,
+}: {
+  breakdown?: RequestBreakdown
+  ar: boolean
+  loading: boolean
+  error: boolean
+}) {
+  if (loading) {
+    return (
+      <div className="mb-4 grid gap-3 lg:grid-cols-3" data-testid="request-charts-loading">
+        {[0, 1, 2].map((i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <p data-testid="request-charts-error" className="mb-4 rounded-2xl border border-border bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">
+        {ar ? 'تعذّر تحميل ملخص الطلبات. حدِّث الصفحة للمحاولة مرة أخرى.' : 'Could not load the request summary. Refresh to try again.'}
+      </p>
+    )
+  }
+
+  if (!breakdown) return null
+
+  const total = breakdown.by_status.reduce((a, b) => a + b.total, 0)
+  if (total === 0) {
+    return (
+      <p data-testid="request-charts-empty" className="mb-4 rounded-2xl border border-border bg-surface px-4 py-6 text-center text-sm text-text-muted">
+        {ar ? 'لا توجد طلبات مطابقة لعرضها في الملخص.' : 'No matching requests to summarise.'}
+      </p>
+    )
+  }
+
+  const sla = breakdown.sla
+  const slaTotal = sla.breached + sla.due_soon + sla.on_track
+
+  return (
+    <div className="mb-4 grid gap-3 lg:grid-cols-3" data-testid="request-charts">
+      <ChartCard title={ar ? 'حسب الحالة' : 'By status'}>
+        <BarRows rows={breakdown.by_status.map((r) => ({ label: ar ? r.label : r.label_en, value: r.total }))} total={total} />
+      </ChartCard>
+
+      <ChartCard title={ar ? 'حسب نوع الخدمة' : 'By service type'}>
+        {breakdown.by_type.length > 0
+          ? <BarRows rows={breakdown.by_type.map((r) => ({ label: ar ? r.label : r.label_en, value: r.total }))} total={total} />
+          : <p className="py-8 text-center text-sm text-text-muted">{ar ? 'لا توجد أنواع لعرضها.' : 'No types to show.'}</p>}
+      </ChartCard>
+
+      <ChartCard title={ar ? 'الالتزام بالـSLA' : 'SLA'}>
+        <div className="grid gap-2">
+          {([
+            ['breached', sla.breached, ar ? 'متجاوَز' : 'Breached', 'bg-danger'],
+            ['due_soon', sla.due_soon, ar ? 'يستحق خلال 24 ساعة' : 'Due within 24h', 'bg-warning'],
+            ['on_track', sla.on_track, ar ? 'ضمن المدة' : 'On track', 'bg-success'],
+          ] as const).map(([key, value, label, tone]) => (
+            <div key={key} className="flex items-center gap-2.5" data-testid={`sla-${key}`}>
+              <span className="w-36 shrink-0 truncate text-xs text-text-secondary">{label}</span>
+              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-surface-secondary">
+                <div className={`h-full rounded-full ${tone}`} style={{ width: `${slaTotal > 0 ? (value / slaTotal) * 100 : 0}%` }} />
+              </div>
+              <span className="tnum w-10 shrink-0 text-end text-xs font-semibold text-text-primary">{value}</span>
+            </div>
+          ))}
+        </div>
+      </ChartCard>
+    </div>
+  )
+}
+
+/**
+ * A labelled proportion bar per row.
+ *
+ * Bars rather than a pie: these lists have up to eight entries with a long tail, and a reader comparing
+ * «under review» to «new» wants two lengths side by side, not two wedges they have to estimate.
+ */
+function BarRows({ rows, total }: { rows: Array<{ label: string; value: number }>; total: number }) {
+  return (
+    <div className="grid gap-2">
+      {rows.map((r) => (
+        <div key={r.label} className="flex items-center gap-2.5">
+          <span className="w-32 shrink-0 truncate text-xs text-text-secondary" title={r.label}>{r.label}</span>
+          <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-surface-secondary">
+            <div className="h-full rounded-full bg-brand-500" style={{ width: `${total > 0 ? (r.value / total) * 100 : 0}%` }} />
+          </div>
+          <span className="tnum w-10 shrink-0 text-end text-xs font-semibold text-text-primary">{r.value}</span>
+        </div>
+      ))}
     </div>
   )
 }

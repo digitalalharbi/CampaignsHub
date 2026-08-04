@@ -14,6 +14,7 @@ import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
+import { fieldDef } from './paidMediaFields'
 
 const STATUS_OPTIONS = ['under_review', 'waiting_client', 'qualified', 'approved', 'in_progress', 'completed', 'rejected', 'cancelled']
 const PRIORITY_OPTIONS = ['critical', 'high', 'medium', 'low']
@@ -177,6 +178,16 @@ export function RequestDetailPage() {
             </section>
           )}
 
+          {/*
+            REQ-DYNFIELDS-001 — the answers the client actually gave.
+            The public intake asks a DIFFERENT set of questions per service (`required_field_rules` →
+            dynamic fields), stores them in `service_details`, and the operator's page never showed
+            them. So the person who has to act on the request could see WHICH services were asked for
+            and none of what was said about them — the brief, the budget, the platforms, the tracking
+            details — and had to go back to the client for information already sitting in the record.
+          */}
+          <ServiceAnswers details={d.service_details} lang={lang} />
+
           {/* Billing thread — quotes raised from this request, each with its issued invoice. */}
           {(d.billing?.length ?? 0) > 0 && (
             <section className="rounded-2xl border border-border bg-surface p-5 text-sm">
@@ -216,4 +227,47 @@ export function RequestDetailPage() {
 
 function Info({ k, v }: { k: string; v: string }) {
   return <div><dt className="text-xs text-text-muted">{k}</dt><dd className="break-words font-medium text-text-primary">{v}</dd></div>
+}
+
+
+/**
+ * The per-service intake answers, labelled.
+ *
+ * Renders through the SAME field definitions the intake form used (`fieldDef`), so a question and its
+ * answer always carry the same wording — a second list of labels here would drift from the form the
+ * client filled in, and the operator would be reading a different question from the one that was
+ * asked.
+ *
+ * A token with no definition still shows, under its raw key. That is deliberate: an answer the client
+ * typed is worth more than tidiness, and a value silently dropped because a definition was renamed is
+ * information lost with nothing on screen to say so.
+ */
+function ServiceAnswers({ details, lang }: { details: Record<string, unknown> | null; lang: string }) {
+  const ar = lang === 'ar'
+  const entries = Object.entries(details ?? {}).filter(([, v]) => v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0))
+  if (entries.length === 0) return null
+
+  const render = (value: unknown): string => {
+    if (Array.isArray(value)) return value.map((v) => String(v)).join('، ')
+    if (typeof value === 'boolean') return value ? (ar ? 'نعم' : 'Yes') : (ar ? 'لا' : 'No')
+    if (value !== null && typeof value === 'object') return JSON.stringify(value)
+    return String(value)
+  }
+
+  return (
+    <section data-testid="request-service-answers" className="rounded-2xl border border-border bg-surface p-5 text-sm">
+      <h2 className="mb-3 text-sm font-bold text-text-primary">{ar ? 'تفاصيل الخدمة' : 'Service details'}</h2>
+      <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+        {entries.map(([token, value]) => {
+          const def = fieldDef(token)
+          return (
+            <div key={token} className="min-w-0">
+              <dt className="text-xs text-text-muted">{def ? (ar ? def.labelAr : def.labelEn) : token}</dt>
+              <dd className="break-words font-medium text-text-primary">{render(value)}</dd>
+            </div>
+          )
+        })}
+      </dl>
+    </section>
+  )
 }
