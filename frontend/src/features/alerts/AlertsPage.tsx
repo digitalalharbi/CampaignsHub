@@ -382,7 +382,14 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['alert-rules'] }); setForm((f) => ({ ...f, name: '' })); setThresholdRaw('') },
   })
-  const rules = q.data ?? []
+  const rules = q.data?.rules ?? []
+  /*
+   * The server bounds this list (newest first). Saying so is not a footnote: a truncated list
+   * presented as the whole set sends somebody looking for a rule that exists and concluding it was
+   * deleted.
+   */
+  const total = q.data?.total ?? rules.length
+  const capped = total > rules.length
   const summaryErrors: FieldError[] = createM.isError
     ? (() => { const api = toApiError(createM.error); return api.errors ? Object.entries(api.errors).flatMap(([f, m]) => (m?.length ? [{ field: f === 'name' ? 'rule-name' : f, message: m[0] }] : [])) : [] })()
     : []
@@ -390,6 +397,14 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   return (
     <div className="grid gap-4 md:grid-cols-[1fr_320px]">
       <div className="flex flex-col gap-2">
+        {capped && (
+          <p data-testid="alert-rules-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-[12.5px] text-text-secondary">
+            {locale === 'ar'
+              ? `تُعرض أحدث ${rules.length} قاعدة من ${total}.`
+              : `Showing the most recent ${rules.length} of ${total} rules.`}
+          </p>
+        )}
+
         {rules.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">{c.none}</p>
         ) : (

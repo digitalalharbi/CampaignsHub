@@ -155,6 +155,18 @@ export async function getData<T>(url: string): Promise<T> {
   return response.data.data
 }
 
+/**
+ * The whole envelope, for the few callers that need `meta` as well as `data`.
+ *
+ * Most do not: `meta` carries a request id and nothing else worth reading. The exception is a list
+ * the server has BOUNDED — the page has to be able to say "the most recent 100 of 316" rather than
+ * present a truncated list as the whole set, and `getData` throws the count away.
+ */
+export async function getEnvelope<T>(url: string): Promise<ApiEnvelope<T>> {
+  const response = await api.get<ApiEnvelope<T>>(url)
+  return response.data
+}
+
 export async function postData<T>(url: string, body?: unknown): Promise<T> {
   const response = await api.post<ApiEnvelope<T>>(url, body)
   return response.data.data

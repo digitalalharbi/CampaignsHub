@@ -43,6 +43,40 @@ final class AlertsIsolationTest extends TestCase
         return [$tenant, $user];
     }
 
+    /**
+     * The rules list is bounded, newest first, and says how many there are.
+     *
+     * It used to return every row. Fine on the day a workspace writes its third rule and wrong
+     * forever after — the payload and the number of cards rendered both grow without limit, and the
+     * page a customer opens to add one rule gets slower every time anybody adds one. The acceptance
+     * suite reached 316 rules and took the page past ten seconds to paint.
+     *
+     * Newest first is what makes the cap safe rather than merely smaller: the rule somebody has just
+     * created is the one at the top, so a bounded list never hides what they are looking for.
+     */
+    public function test_the_rules_list_is_bounded_and_leads_with_the_newest(): void
+    {
+        [$tenant, $owner] = $this->tenantWithOwner('bounded');
+
+        foreach (range(1, 105) as $i) {
+            $rule = AlertRule::create([
+                'tenant_id' => $tenant->id, 'type' => 'sync_failure',
+                'name' => 'Rule '.str_pad((string) $i, 3, '0', STR_PAD_LEFT), 'active' => true,
+            ]);
+            // Stamped after creation: `created_at` is a timestamp the model sets itself, and 105 rows
+            // written inside one second would otherwise all share it and make "newest" meaningless.
+            $rule->forceFill(['created_at' => Carbon::now()->addSeconds($i)])->save();
+        }
+
+        $res = $this->actingAs($owner, 'sanctum')->getJson('/api/v1/alerts/rules')->assertOk();
+
+        $names = array_column((array) $res->json('data'), 'name');
+
+        $this->assertCount(100, $names, 'the list must be bounded');
+        $this->assertSame('Rule 105', $names[0], 'the newest rule must lead — a cap that hides it is worse than none');
+        $this->assertSame(105, $res->json('meta.total'), 'the response must say how many there really are');
+    }
+
     public function test_a_tenant_cannot_see_or_resolve_another_tenants_alerts(): void
     {
         // Tenant A: a rule + an open event.

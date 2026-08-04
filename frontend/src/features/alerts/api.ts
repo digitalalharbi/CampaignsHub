@@ -1,4 +1,4 @@
-import { api, getData, postData } from '@/lib/api/client'
+import { api, getData, getEnvelope, postData } from '@/lib/api/client'
 import type { ApiEnvelope } from '@/lib/api/types'
 
 /** An alert rule (config). Mirrors backend AlertRule. */
@@ -42,7 +42,19 @@ export const ALERT_TYPES = [
 
 export type AlertType = (typeof ALERT_TYPES)[number]
 
-export const listAlertRules = () => getData<AlertRule[]>('/alerts/rules')
+/**
+ * The rules, newest first and bounded by the server.
+ *
+ * The envelope rather than just the rows, because `meta.total` is what lets the page say the list is
+ * capped. A truncated list presented as the whole set is the kind of quiet lie this codebase does not
+ * ship: somebody would go looking for a rule that exists and conclude it had been deleted.
+ */
+export const listAlertRules = async (): Promise<{ rules: AlertRule[]; total: number }> => {
+  const envelope = await getEnvelope<AlertRule[]>('/alerts/rules')
+  const rules = envelope.data ?? []
+
+  return { rules, total: Number(envelope.meta?.total ?? rules.length) }
+}
 
 export interface NewAlertRule {
   type: AlertType

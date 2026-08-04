@@ -25,13 +25,33 @@ final class AlertController extends Controller
         'sync_failure', 'token_expiry', 'report_failed', 'sla_warning',
     ];
 
+    /**
+     * The rules a workspace has, newest first and BOUNDED.
+     *
+     * It returned every row. That is fine on the day a workspace writes its third rule and wrong
+     * forever after: the payload and the number of cards rendered both grow without limit, and the
+     * page a customer opens to add one rule gets slower every time anybody adds one. Our own
+     * acceptance suite reached 316 rules and took the page past ten seconds to paint on the third
+     * browser of a run — the first honest symptom of an unbounded list.
+     *
+     * Newest first is what makes the cap safe rather than merely smaller: the rule somebody has just
+     * created is the one at the top, so a bounded list never hides the thing the customer is looking
+     * for. `meta.total` says how many there are, so an interface can say "showing the most recent
+     * 100 of 316" instead of quietly presenting a truncated list as the whole set.
+     */
+    /** How many rules one response carries. Newest first, so the cap never hides a fresh one. */
+    private const RULE_PAGE_SIZE = 100;
+
     public function rules(Request $request): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('alerts.view'), 403);
 
+        $query = AlertRule::query()->latest('created_at');
+
         return ApiResponse::success(
-            AlertRule::query()->latest('created_at')->get()->all(),
+            (clone $query)->limit(self::RULE_PAGE_SIZE)->get()->all(),
             'Alert rules.',
+            ['total' => $query->count(), 'limit' => self::RULE_PAGE_SIZE],
         );
     }
 
