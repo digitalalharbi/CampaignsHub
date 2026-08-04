@@ -11,6 +11,41 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
+**FINISHING PASS II — the four named gaps closed, and a live walkthrough.**
+
+Commits: `5e53473` (REQ-UNIFY-001 + REQ-DYNFIELDS-001 + REQ-CHARTS-001) → `9208b85` (LIVEREP-002).
+
+**1001 backend · 509 vitest · tsc · oxlint clean · Playwright on chromium + firefox + webkit.**
+
+### What was verified by DRIVING the product, not by testing it
+
+- Signed in through the real form as `owner@demo-agency.local` → `/agency/dashboard`.
+- `admin@demo-campaignshub.local` → `/admin` renders «Platform overview».
+- `owner@demo-company.local` signs in. `/portal/login` is OTP-only by design (no password).
+- Full request journey walked end to end: submitted → under_review → qualified → proposal_sent →
+  awaiting_client_approval → payment_pending → paid → onboarding → in_progress → client_review →
+  completed, with the STATUS following at every step (جديد → تحت المراجعة → مؤهل → عرض سعر مُرسل →
+  معتمد → قيد التنفيذ → تم التسليم → مكتمل).
+- Phone `050 111 2233` on that request stored as `+966501112233`. Seven spellings through the OTP
+  gate all normalise to `+966501234567`; `+20 …` keeps Egypt; delivery honestly reports
+  `awaiting_provider_credentials`.
+- Live client link built through the UI over 2 campaigns × google+meta × 7 metrics, opened in a
+  session-less tab, period changed 238,870 → 54,542 without a reload, and a tampered URL returned
+  identical totals with the dates clamped.
+- Mobile 375px × English × dark on the client report: no sideways scroll.
+
+### Still not done — do not mark these complete
+
+- **Quote and invoice CREATION from the request detail.** The request shows its linked quotes and
+  invoices and the journey has a «عرض سعر مُرسل» stage, but raising the quote itself still happens in
+  the billing area rather than inline on the request.
+- **A saved-view / template concept for live links.** Each link is built from scratch; there is no way
+  to reuse a scope.
+- **Charts on `/app/reports` and `/portal`.** The finishing pass covered the requests inbox and the
+  client report; the reports LIST is still cards and a table.
+
+---
+
 **FINISHING PASS — live client reports, phone numbers, and the requests journey.**
 
 Commits, in order: `94d777b` (LIVEREP-001) → `fcae937` (PHONE-001) →

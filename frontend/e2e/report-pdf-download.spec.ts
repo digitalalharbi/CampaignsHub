@@ -41,7 +41,15 @@ test('export button → queue → download → the downloaded Arabic PDF is a va
   //    Report type & audience are now taxonomy-fed SelectField comboboxes; the builder already defaults the
   //    audience to «العميل» (client), so no explicit audience selection is needed for a client report.
   const name = `E2E PDF ${Date.now()}`
-  await page.getByRole('button', { name: 'تقرير جديد' }).click()
+  /*
+   * «تقرير محفوظ», not «تقرير جديد» (LIVEREP-002).
+   *
+   * The reports page now offers two things, and the difference matters: a LIVE client link built from
+   * a choice, and a SAVED document that can be generated and exported. This test is about the export
+   * pipeline, so it wants the saved document — and the button was renamed to say which one it is,
+   * because «new report» stopped being unambiguous the moment there were two kinds.
+   */
+  await page.getByRole('button', { name: /تقرير محفوظ|Saved report/ }).click()
   await page.getByPlaceholder(/التقرير الشهري/).fill(name)
   const [createRes] = await Promise.all([
     page.waitForResponse((r) => r.url().endsWith('/reports') && r.request().method() === 'POST'),
