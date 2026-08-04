@@ -46,6 +46,15 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
             ->middleware('throttle:6,1');
     });
 
+    /*
+     * LOGIN-UNIFIED-001. The single sign-in page asks this which form to render for an identifier,
+     * so the visitor never picks a portal. Throttled like a sign-in attempt because it takes an
+     * identifier and touches the users table — an unthrottled version would be a cheap way to probe
+     * addresses even though the answer is deliberately uninformative.
+     */
+    Route::post('/method', [AuthController::class, 'method'])->name('method')
+        ->middleware('throttle:auth-login');
+
     Route::post('/login', [AuthController::class, 'login'])->name('login')
         ->middleware('throttle:auth-login');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password')

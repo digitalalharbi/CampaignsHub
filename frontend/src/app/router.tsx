@@ -32,7 +32,6 @@ import { PublicInfoPage } from '@/features/marketing/PublicInfoPage'
 import { PublicServicesPage } from '@/features/marketing/PublicServicesPage'
 import { RequestIntakePage } from '@/features/requests/RequestIntakePage'
 import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
-import { ClientPortalLoginPage } from '@/features/requests/portal/ClientPortalLoginPage'
 import { ClientRequestsPage } from '@/features/requests/portal/ClientRequestsPage'
 import { ClientRequestDetailPage } from '@/features/requests/portal/ClientRequestDetailPage'
 import { ClientDashboardPage } from '@/features/requests/portal/ClientDashboardPage'
@@ -90,7 +89,7 @@ import { RequireInfluencerPortal } from '@/features/influencers/RequireInfluence
 import { RequireInfluencersEnabled } from '@/features/influencers/RequireInfluencersEnabled'
 import { features } from '@/lib/features'
 import { CollaborationsPage } from '@/features/influencers/CollaborationsPage'
-import { PortalLoginPage } from '@/features/auth/PortalLoginPage'
+import { LegacyLoginRedirect } from '@/features/auth/LegacyLoginRedirect'
 import { NominationsPage } from '@/features/influencers/NominationsPage'
 import { RosterPage } from '@/features/influencers/RosterPage'
 import { DeliverablesPage } from '@/features/influencers/DeliverablesPage'
@@ -130,32 +129,28 @@ export const router = createBrowserRouter([
   // session (see PORTAL-AUTH-001 — the auth engines are not merged yet); what moved is the URL
   // space, so all four portals are addressed the same way. Each page guards itself: a 401 from the
   // portal endpoints returns to the portal login. The section nav lives in PortalShell.
-  { path: '/portal/login', element: <ClientPortalLoginPage /> },
+  /*
+   * LOGIN-UNIFIED-001 — every sign-in door is `/login`, and only `/login`.
+   *
+   * There used to be five: `/login` with a portal chooser on it, plus `/admin/login`,
+   * `/app/login`, `/agency/login`, `/influencers/login` and `/portal/login`. Six addresses that all
+   * answered the same question meant six places for the answer to drift, and the chooser asked the
+   * visitor something only the server can know — a client who picked «إدارة الحملات» was shown a
+   * password field their account has never had.
+   *
+   * So the doors are gone and the addresses redirect. `replace` matters: without it, Back from
+   * `/login` returns to `/app/login`, which redirects forward again — a loop the visitor cannot
+   * escape with the one control they reached for.
+   *
+   * `LegacyLoginRedirect` carries the query string through, so `?redirect=%2Fagency%2Fclients`
+   * survives and the destination after authenticating is still the page they were heading for.
+   */
+  { path: '/admin/login', element: <LegacyLoginRedirect /> },
+  { path: '/app/login', element: <LegacyLoginRedirect /> },
+  { path: '/agency/login', element: <LegacyLoginRedirect /> },
+  { path: '/portal/login', element: <LegacyLoginRedirect /> },
+  { path: '/influencers/login', element: <LegacyLoginRedirect /> },
 
-  /*
-   * One door per portal (LOGIN-FINAL).
-   *
-   * All four render the SAME component with a different entry from `PORTAL_DOORS`: one `login()`,
-   * one destination resolver, one refusal path. `/login` stays as the neutral entry for anyone who
-   * does not know which door is theirs.
-   *
-   * `/portal/login` is above rather than here because it authenticates by one-time code — it is a
-   * different engine, and grouping it with these would invite somebody to add a password field.
-   */
-  { path: '/admin/login', element: <PortalLoginPage portal="admin" /> },
-  { path: '/app/login', element: <PortalLoginPage portal="app" /> },
-  { path: '/agency/login', element: <PortalLoginPage portal="agency" /> },
-  /*
-   * The influencers door, behind the same switch as the portal it opens (INFL-OFF-001).
-   *
-   * Kept mounted rather than deleted, so this address has somewhere to send the people who have it
-   * bookmarked instead of answering 404 — and so it comes back with the sub-system, untouched.
-   */
-  {
-    path: '/influencers/login',
-    element: <RequireInfluencersEnabled />,
-    children: [{ index: true, element: <PortalLoginPage portal="influencers" /> }],
-  },
   /*
    * …and the rest of the withdrawn tree, answered BEFORE authentication (INFL-OFF-001).
    *

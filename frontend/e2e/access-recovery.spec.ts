@@ -31,9 +31,12 @@ async function signInAs(page: Page, email: string): Promise<void> {
    * form uses the app's own token handling, which is the only version guaranteed to stay correct when
    * that handling changes.
    */
+  // Two steps (LOGIN-UNIFIED-001): identify, then the form the SERVER says this account uses.
   await page.goto('/login')
-  await page.locator('input[type="email"]').fill(email)
-  await page.locator('input[type="password"]').fill('password')
+  await page.getByTestId('login-identify').locator('input').fill(email)
+  await page.getByTestId('login-identify').locator('button[type="submit"]').click()
+  await expect(page.getByTestId('login-password')).toBeVisible({ timeout: 20000 })
+  await page.getByTestId('login-password').locator('input[type="password"]').fill('password')
   await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
   await expect(page, `${email} could not sign in`).not.toHaveURL(/\/login$/, { timeout: 20000 })
 }

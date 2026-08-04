@@ -6,6 +6,7 @@ namespace App\Domains\Identity\Http\Controllers;
 
 use App\Domains\Identity\Http\Requests\LoginRequest;
 use App\Domains\Identity\Resources\UserResource;
+use App\Domains\Identity\Services\SignInMethodResolver;
 use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Services\PortalResolver;
@@ -24,7 +25,30 @@ use Illuminate\Validation\ValidationException;
  */
 final class AuthController extends Controller
 {
-    public function __construct(private readonly PortalResolver $portals) {}
+    public function __construct(
+        private readonly PortalResolver $portals,
+        private readonly SignInMethodResolver $methods,
+    ) {}
+
+    /**
+     * LOGIN-UNIFIED-001 — which form the single sign-in page should show for this identifier.
+     *
+     * There is one door now, `/login`, and the visitor is never asked to pick a portal. They type an
+     * email or a phone; this says whether that identifier signs in with a password or with a one-time
+     * code, and the page renders the matching step. Everything after — which portal, whether the
+     * account is suspended, where to land — is still decided by {@see login()} and `PortalResolver`.
+     *
+     * Deliberately uninformative about existence: see `SignInMethodResolver` for why an unknown email
+     * answers `password` rather than `code`.
+     */
+    public function method(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'identifier' => ['required', 'string', 'max:190'],
+        ]);
+
+        return ApiResponse::success($this->methods->resolve((string) $data['identifier']));
+    }
 
     /*
      * `register` used to live here and no longer does (SIGNUP-002).

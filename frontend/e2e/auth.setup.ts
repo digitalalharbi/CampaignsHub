@@ -24,9 +24,23 @@ const ROLES = [
 
 for (const role of ROLES) {
   setup(`authenticate ${role.email}`, async ({ page }) => {
+    /*
+     * Two steps now, not one (LOGIN-UNIFIED-001).
+     *
+     * `/login` asks who you are, the SERVER says whether that account uses a password or a one-time
+     * code, and only then does the password field exist. Filling `input[type="password"]` straight
+     * after `goto` matched nothing and failed as a timeout — which reads like a slow boot rather
+     * than like a form that has changed shape.
+     */
     await page.goto('/login')
-    await page.locator('input[type="email"]').fill(role.email)
-    await page.locator('input[type="password"]').fill('password')
+    await page.getByTestId('login-identify').locator('input').fill(role.email)
+    await page.getByTestId('login-identify').locator('button[type="submit"]').click()
+
+    await expect(
+      page.getByTestId('login-password'),
+      `${role.email} was not offered a password step — the server said it signs in another way`,
+    ).toBeVisible({ timeout: 30_000 })
+    await page.getByTestId('login-password').locator('input[type="password"]').fill('password')
 
     /*
      * Wait on the login RESPONSE, then on the navigation — two separate facts.

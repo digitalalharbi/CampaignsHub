@@ -1,329 +1,259 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
-import { BarChart3, Check, Copy, LayoutGrid, Megaphone, Moon, ShieldCheck, Sun } from 'lucide-react'
-import { login } from './api'
-import { portalKeyFor } from './memberships'
+import { ArrowLeft, Check, Copy, KeyRound, Megaphone, Moon, Sun } from 'lucide-react'
+import { login, signInMethod } from './api'
 import { resolvePostAuthOutcome } from './postAuthDestination'
 import { Button } from '@/components/ui/Button'
 import { EmailInput, PasswordInput } from '@/components/ui/form'
 import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
 import { SocialSignIn } from './SocialSignIn'
-import { AuthPanel, AuthPanelMobile, type AuthPortal } from './AuthPanel'
+import { AuthPanel, AuthPanelMobile } from './AuthPanel'
+import { portalLoginStart, portalLoginVerify } from '@/features/requests/clientPortalApi'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
-import { features } from '@/lib/features'
 
 /**
- * One demo identity PER PORTAL (LOGIN-001).
+ * LOGIN-UNIFIED-001 — one sign-in page, and the server decides everything else.
  *
- * Every tab used to offer `owner@demo-agency.local`, so whichever portal you picked you signed in
- * as the same agency operator — and landed in the agency portal, which read as the tab being
- * broken. Testing five portals with one agency account cannot show that they differ, and it is how
- * the portal regression stayed invisible for as long as it did.
+ * ## What was removed, and why it had to be
  *
- * These are the accounts `DatabaseSeeder` actually provisions. Each holds a DIFFERENT membership
- * with different data and different permissions, so switching tabs demonstrates the separation
- * rather than hiding it.
+ * This page used to open with a row of portal tabs: «إدارة الحملات», «وكالة», «متابعة الطلبات».
+ * It asked the visitor a question only the system can answer. A client who picked «إدارة الحملات»
+ * was shown a password field their account has never had; an operator who picked «متابعة الطلبات»
+ * was sent to a form that would mail them a code instead of signing them in. Neither could have got
+ * it right by reading more carefully — the correct answer depends on the account, which is precisely
+ * the thing they have not identified yet at the moment the question is asked.
  *
- * The client portal has no entry here on purpose: it authenticates by one-time code at
- * `/portal/login`, not by password, so listing a password for it would be a lie. That tab links
- * there instead.
+ * There were also five other doors — `/admin/login`, `/app/login`, `/agency/login`,
+ * `/influencers/login`, `/portal/login` — each a separate implementation of the same event. Those
+ * addresses still work; they redirect here (see `LegacyLoginRedirect`).
+ *
+ * ## The shape now: identify first, then the right step
+ *
+ * 1. The visitor types an email or a phone. Nothing else is asked.
+ * 2. `POST /auth/method` says whether that identifier signs in by **password** or by **one-time
+ *    code**. The rule lives on the server (`SignInMethodResolver`), where the accounts are, and it
+ *    is deliberately uninformative about identifiers it does not recognise.
+ * 3. The matching step renders. On success the destination comes from `resolvePostAuthOutcome`,
+ *    i.e. from real memberships — `/admin`, `/app`, `/agency` or `/portal`.
+ *
+ * **The URL grants nothing.** No portal is claimed by the browser at any point: `login()` is called
+ * with `portal: null`, so there is no preference for the server to check and no way for a link to
+ * ask for access. That also removes the wrong-portal refusal from this page entirely — there is
+ * nothing left to refuse, because nothing is being requested.
  */
-const DEMO: Record<Exclude<AuthPortal, 'client'>, { email: string; password: string; ar: string; en: string }> = {
-  default: {
-    email: 'owner@demo-company.local', password: 'password',
-    ar: 'معلن — يدير حملاته الخاصة', en: 'Advertiser — runs their own campaigns',
-  },
-  agency: {
-    email: 'owner@demo-agency.local', password: 'password',
-    ar: 'وكالة — تدير عملاء متعددين', en: 'Agency — manages multiple clients',
-  },
-  influencer: {
-    email: 'layla@creators.demo', password: 'password',
-    ar: 'صانعة محتوى — ترى اتفاقياتها فقط', en: 'Creator — sees only her own agreements',
-  },
-}
 
 /**
- * Customer-facing sign-in copy, kept local to the auth feature (not in the shared i18n dictionary).
- * Plain customer-facing product language only — no internal or admin phrasing.
+ * Demo identities, dev-only (LOGIN-001 kept).
+ *
+ * Two, not five, because there is no longer a tab to demonstrate. What these show is the property
+ * the rewrite is actually about: the SERVER routes different accounts to different portals from the
+ * same form. Sign in as each and land somewhere different, having chosen nothing.
+ *
+ * A client contact has no entry — it signs in by one-time code, and a code is not something a static
+ * list can honestly print.
  */
+const DEMO = [
+  { email: 'owner@demo-company.local', ar: 'معلن — ينتهي في /app', en: 'Advertiser — lands in /app' },
+  { email: 'owner@demo-agency.local', ar: 'وكالة — تنتهي في /agency', en: 'Agency — lands in /agency' },
+] as const
+
 const COPY = {
   ar: {
     app: 'CampaignsHub',
-    eyebrow: 'منصة إدارة الحملات الإعلانية',
-    heroTitle: 'أدِر حملاتك الإعلانية وتابع نتائجك في مكان واحد',
-    heroValue:
-      'تابع الأداء والميزانيات والنتائج عبر جميع المنصات، ونظّم عملاءك ومشاريعك، وأنشئ تقارير احترافية بسهولة.',
     formTitle: 'مرحباً بعودتك',
-    formValue: 'سجّل دخولك لمتابعة حملاتك ونتائجك.',
+    formValue: 'أدخل بريدك الإلكتروني أو رقم جوالك للمتابعة.',
+    identifier: 'البريد الإلكتروني أو رقم الجوال',
+    continue: 'متابعة',
+    back: 'استخدام حساب آخر',
     noAccount: 'ليس لديك حساب؟',
     register: 'تسجيل حساب',
-    clientPrompt: 'هل أنت عميل؟',
-    clientLogin: 'متابعة طلباتي',
-    demo: 'بيانات حساب تجريبي · بيئة التطوير فقط',
-    copyEmail: 'نسخ البريد',
-    copyPassword: 'نسخ كلمة المرور',
+    demo: 'حسابات تجريبية · بيئة التطوير فقط',
     copy: 'نسخ',
     copied: 'تم النسخ',
-    benefits: [
-      { icon: LayoutGrid, title: 'متابعة موحّدة لكل المنصات', desc: 'شاهد الإنفاق والنتائج والمؤشرات دون التنقل بين الحسابات.' },
-      { icon: BarChart3, title: 'تقارير احترافية جاهزة للمشاركة', desc: 'قدّم نتائج واضحة لعملائك في دقائق معدودة.' },
-      { icon: ShieldCheck, title: 'تنبيهات ومتابعة لحظية', desc: 'ابقَ على اطلاع بالميزانيات وتغيّرات الأداء أولاً بأول.' },
-    ],
+    codeTitle: 'أدخل رمز التحقق',
+    codeSentEmail: 'أرسلنا رمزًا إلى بريدك الإلكتروني.',
+    codeSentSms: 'أرسلنا رمزًا إلى رقم جوالك.',
+    code: 'رمز التحقق',
+    verify: 'تأكيد الرمز',
+    resend: 'إعادة الإرسال',
   },
   en: {
     app: 'CampaignsHub',
-    eyebrow: 'Ad campaign management platform',
-    heroTitle: 'Run your ad campaigns and track results in one place',
-    heroValue:
-      'Track performance, budgets and results across every platform, organize your clients and projects, and build professional reports with ease.',
     formTitle: 'Welcome back',
-    formValue: 'Sign in to keep track of your campaigns and results.',
+    formValue: 'Enter your email address or mobile number to continue.',
+    identifier: 'Email address or mobile number',
+    continue: 'Continue',
+    back: 'Use a different account',
     noAccount: "Don't have an account?",
     register: 'Create an account',
-    clientPrompt: 'Are you a client?',
-    clientLogin: 'Track my requests',
-    demo: 'Demo account · development only',
-    copyEmail: 'Copy email',
-    copyPassword: 'Copy password',
+    demo: 'Demo accounts · development only',
     copy: 'Copy',
     copied: 'Copied',
-    benefits: [
-      { icon: LayoutGrid, title: 'Unified tracking across platforms', desc: 'See spend and results without switching between accounts.' },
-      { icon: BarChart3, title: 'Shareable professional reports', desc: 'Present clear results to your clients in minutes.' },
-      { icon: ShieldCheck, title: 'Real-time alerts and monitoring', desc: 'Stay ahead of budgets and performance shifts.' },
-    ],
+    codeTitle: 'Enter your verification code',
+    codeSentEmail: 'We sent a code to your email address.',
+    codeSentSms: 'We sent a code to your mobile number.',
+    code: 'Verification code',
+    verify: 'Verify code',
+    resend: 'Resend',
   },
 } as const
 
 /**
- * Dev-only demo credentials FOR THE SELECTED PORTAL (LOGIN-001). Never auto-fills the fields and
- * never renders in production — it just offers copy buttons so a developer can paste them
- * deliberately, and it names which kind of account they are about to become.
+ * Dev-only credentials: never auto-filled, never rendered in production.
+ *
+ * It names where each account ENDS UP, which is the property a reviewer should be checking here
+ * rather than taking on trust.
  */
-function DemoCredentials({ c, portal, ar }: {
-  c: (typeof COPY)[keyof typeof COPY]
-  portal: AuthPortal
-  ar: boolean
-}) {
-  const [copied, setCopied] = useState<'email' | 'password' | null>(null)
+function DemoCredentials({ c, ar }: { c: (typeof COPY)[keyof typeof COPY]; ar: boolean }) {
+  const [copied, setCopied] = useState<string | null>(null)
 
-  // The client portal signs in by one-time code, not by password — there is nothing honest to put
-  // here, and that tab sends the visitor to its own login instead.
-  if (portal === 'client') return null
-
-  const account = DEMO[portal]
-  const copy = (which: 'email' | 'password') => {
-    void navigator.clipboard?.writeText(account[which])
-    setCopied(which)
-    window.setTimeout(() => setCopied((v) => (v === which ? null : v)), 1500)
+  const copy = (value: string) => {
+    void navigator.clipboard?.writeText(value)
+    setCopied(value)
+    window.setTimeout(() => setCopied((v) => (v === value ? null : v)), 1500)
   }
-  const Row = ({ which, value }: { which: 'email' | 'password'; value: string }) => (
-    <div className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
-      <code className="truncate font-mono text-xs text-text-secondary" dir="ltr">{value}</code>
-      <button
-        type="button" onClick={() => copy(which)}
-        className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-brand-600 hover:bg-brand-primary-soft"
-        aria-label={which === 'email' ? c.copyEmail : c.copyPassword}
-      >
-        {copied === which ? <Check size={13} /> : <Copy size={13} />}
-        {copied === which ? c.copied : c.copy}
-      </button>
-    </div>
-  )
+
   return (
     <div data-testid="demo-credentials" className="mt-4 rounded-xl border border-dashed border-border bg-surface-secondary p-3">
-      <p className="mb-1 text-xs font-semibold text-text-muted">{c.demo}</p>
-      {/* Says what this account IS, so a tester knows what they should be seeing afterwards. */}
-      <p data-testid="demo-account-kind" className="mb-2 text-xs text-text-secondary">{account[ar ? 'ar' : 'en']}</p>
-      <div className="space-y-1.5">
-        <Row which="email" value={account.email} />
-        <Row which="password" value={account.password} />
+      <p className="mb-2 text-xs font-semibold text-text-muted">{c.demo}</p>
+      <div className="space-y-2.5">
+        {DEMO.map((account) => (
+          <div key={account.email}>
+            <p className="mb-1 text-xs text-text-secondary">{account[ar ? 'ar' : 'en']}</p>
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
+              <code className="truncate font-mono text-xs text-text-secondary" dir="ltr">{account.email}</code>
+              <button
+                type="button" onClick={() => copy(account.email)}
+                className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-brand-600 hover:bg-brand-primary-soft"
+              >
+                {copied === account.email ? <Check size={13} /> : <Copy size={13} />}
+                {copied === account.email ? c.copied : c.copy}
+              </button>
+            </div>
+          </div>
+        ))}
+        <p className="text-xs text-text-muted" dir="ltr">password: <code className="font-mono">password</code></p>
       </div>
     </div>
   )
 }
-
-/**
- * The portal refusal, rendered INSIDE the form (LOGIN-003).
- *
- * It sits directly under the submit button, next to where a wrong-password message would appear,
- * because it is the same kind of mistake: the sign-in did not happen. It used to be shown after a
- * session had been created and the browser had already moved to a portal, which made a wrong choice
- * on this page feel like a broken destination rather than an answer to what was asked.
- *
- * Says what to do next as well as what went wrong — the account has a portal, and the button goes
- * there.
- */
-function PortalRefusal({ chosen, destination, ar, busy, onContinue }: {
-  chosen: AuthPortal
-  destination: string
-  ar: boolean
-  busy: boolean
-  onContinue: () => void
-}) {
-  const label = PORTAL_TABS.find((t) => t.key === chosen)
-  const mine = DESTINATION_LABELS.find((d) => destination.startsWith(d.path))
-
-  return (
-    <div
-      data-testid="wrong-portal-notice"
-      role="alert"
-      className="rounded-xl border border-[var(--warning-border,var(--color-border))] bg-[var(--negative-background)] p-4"
-    >
-      <p className="text-sm font-bold text-text-primary">
-        {ar
-          ? 'هذا الحساب غير مخول للدخول إلى هذه البوابة. استخدم بوابتك المخصصة.'
-          : 'This account is not authorised for this portal. Please use the portal assigned to it.'}
-      </p>
-      <p className="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
-        {ar
-          ? `اخترت الدخول عبر «${label?.ar}»، وحسابك ليس عضوًا في هذه البوابة.`
-          : `You chose to sign in through “${label?.en}”, and your account is not a member of it.`}
-        {mine && (ar ? ` بوابتك هي «${mine.ar}».` : ` Your portal is “${mine.en}”.`)}
-      </p>
-      <Button className="mt-3.5 w-full" loading={busy} onClick={onContinue}>
-        {ar ? 'انتقل إلى بوابتي' : 'Go to my portal'}
-      </Button>
-    </div>
-  )
-}
-
-/** Human names for the destinations the server can return, for the notice above. */
-const DESTINATION_LABELS = [
-  { path: '/admin', ar: 'إدارة المنصة', en: 'Platform administration' },
-  { path: '/agency', ar: 'الوكالة', en: 'Agency' },
-  // Kept even while the portal is withdrawn (INFL-OFF-001): this list NAMES a destination the server
-  // may still return, and dropping it would leave that notice showing a bare path.
-  { path: '/influencers', ar: 'المؤثرون وUGC', en: 'Influencers & UGC' },
-  { path: '/portal', ar: 'متابعة الطلبات', en: 'Request tracking' },
-  { path: '/app', ar: 'إدارة الحملات', en: 'Campaign management' },
-  { path: '/switch', ar: 'مساحات العمل', en: 'Your workspaces' },
-]
-
-/**
- * The portals a visitor can sign in through. Same auth engine; only the framing changes.
- *
- * The influencer tab drops out while its sub-system is off (INFL-OFF-001). A tab that names a demo
- * identity and a portal, and then refuses both, is worse than no tab: it reads as the product being
- * broken rather than as a service that has not opened yet.
- */
-const PORTAL_TABS = [
-  { key: 'default' as const, ar: 'إدارة الحملات', en: 'Campaigns' },
-  { key: 'agency' as const, ar: 'وكالة', en: 'Agency' },
-  ...(features.influencersUgc
-    ? [{ key: 'influencer' as const, ar: 'المؤثرون وUGC', en: 'Influencers & UGC' }]
-    : []),
-  { key: 'client' as const, ar: 'متابعة الطلبات', en: 'Track requests' },
-]
 
 export function LoginPage() {
   const t = useT()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const setUser = useAuth((s) => s.setUser)
+  const status = useAuth((s) => s.status)
   const { theme, locale, toggleTheme, toggleLocale } = useUi()
   const c = COPY[locale]
-  // AUTH-002: adapt ONLY the marketing panel copy to the portal/journey the user arrived from
-  // (?portal, or a /client redirect) — same auth engine + destination logic, content only.
-  const portalParam = params.get('portal') ?? (params.get('redirect')?.startsWith('/client') ? 'client' : null)
-  const portal: AuthPortal =
-    portalParam === 'influencer' && features.influencersUgc ? 'influencer'
-      : portalParam === 'client' ? 'client'
-        : portalParam === 'agency' ? 'agency' : 'default'
-  const [email, setEmail] = useState('')
+  const ar = locale === 'ar'
+
+  /**
+   * `identify` → the visitor is saying who they are.
+   * `password` / `code` → the SERVER has said which step applies to them.
+   */
+  const [step, setStep] = useState<'identify' | 'password' | 'code'>('identify')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
+  const [channel, setChannel] = useState<'email' | 'sms'>('email')
+  const [verificationId, setVerificationId] = useState<string | null>(null)
+  const [code, setCode] = useState('')
 
   /*
-   * Already signed in? Then this page is not for you — go where you belong.
+   * Already signed in? Then this page is not for you.
    *
-   * Reachable more often than it looks: pressing Back after signing in, a bookmarked `/login`, a
-   * second tab, or the brief guest state the session probe can pass through on reload, which
-   * replaces the current history entry with this one. In every case the visitor met a login form
-   * while holding a valid session, and the only way out was to sign in again.
+   * Reachable more often than it looks: Back after signing in, a bookmarked `/login`, a second tab,
+   * or the brief guest state the session probe passes through on reload. The destination comes from
+   * the server, exactly as it does after signing in — the browser never gets a second, different
+   * rule for the same question.
    *
-   * The destination comes from the server, exactly as it does after signing in — the browser does
-   * not get a second, different rule for the same question.
+   * `null` is passed as the requested portal because this page never requests one. That is also why
+   * there is no refusal branch here any more: nothing is being asked for, so nothing can be refused.
    */
-  const status = useAuth((s) => s.status)
-
-  /*
-   * The same refusal, reached without a sign-in attempt.
-   *
-   * Someone ALREADY signed in who follows a link to `/login?portal=agency` has expressed the same
-   * intent and deserves the same answer — the sign-in path gets its refusal from the server's 403,
-   * and this path has no request to refuse, so it is worked out from the memberships instead. Both
-   * end in the identical panel, because from the visitor's side it is the identical situation.
-   */
-  const [refusedWhileSignedIn, setRefusedWhileSignedIn] = useState<string | null>(null)
-
-  // Only an EXPLICIT portal choice is passed as a preference. Sending the 'default' tab as 'app'
-  // would mean a plain /login always claimed the advertiser portal, and a user who belongs to
-  // several would never be offered the switcher.
-  const requested = portalParam ? portalKeyFor(portal) : null
-
   useEffect(() => {
     if (status !== 'authenticated') return
 
     let cancelled = false
-    resolvePostAuthOutcome(params, requested)
-      .then(({ destination, requestedPortalHeld }) => {
-        if (cancelled) return
-        // Same rule as after signing in: an unheld portal is explained, never routed around.
-        if (!requestedPortalHeld) setRefusedWhileSignedIn(destination)
-        else navigate(destination, { replace: true })
-      })
-      // A failed probe is not a reason to strand someone on a login form they do not need.
+    resolvePostAuthOutcome(params, null)
+      .then(({ destination }) => { if (!cancelled) navigate(destination, { replace: true }) })
+      // A failed probe is not a reason to strand somebody on a form they do not need.
       .catch(() => undefined)
 
     return () => { cancelled = true }
-  }, [status, params, requested, navigate])
+  }, [status, params, navigate])
 
-  const mutation = useMutation({
-    mutationFn: login,
-    // ADR 0002: the destination comes from the user's memberships (server-derived), carrying through
-    // the portal they were heading for. It is not computed here from an account type — the browser
-    // is the one place that rule must not live.
+  /** Step 2b — one-time code, the same engine the client portal has always used. */
+  const startCode = useMutation({
+    mutationFn: (via: 'email' | 'sms') => portalLoginStart(via, identifier.trim()),
+    onSuccess: (r) => {
+      setVerificationId(r.verification_id)
+      // Dev-only: the backend returns `dev_code` ONLY outside production (hard-gated server-side).
+      if (r.dev_code) setCode(r.dev_code)
+    },
+  })
+
+  /** Step 1 — ask the server which form this identifier uses. */
+  const identify = useMutation({
+    mutationFn: () => signInMethod(identifier.trim()),
+    onSuccess: (result) => {
+      const via = result.channel === 'sms' ? 'sms' : 'email'
+      setChannel(via)
+      if (result.method === 'code') {
+        setStep('code')
+        startCode.mutate(via)
+        return
+      }
+      setStep('password')
+    },
+  })
+
+  /**
+   * Step 2a — password.
+   *
+   * `portal: null`, always. The browser states no preference, so the server picks the destination
+   * from memberships alone and no link can claim access it does not have.
+   */
+  const signIn = useMutation({
+    mutationFn: () => login({ email: identifier.trim(), password, remember, portal: null }),
     onSuccess: async (user) => {
       setUser(user)
-      const { destination } = await resolvePostAuthOutcome(params, requested)
+      const { destination } = await resolvePostAuthOutcome(params, null)
       navigate(destination, { replace: true })
     },
   })
-  const error = mutation.isError ? toApiError(mutation.error) : null
 
-  /*
-   * The portal refusal now arrives as a FAILED sign-in (LOGIN-003).
-   *
-   * Nothing above runs for it: the server refused before creating a session, so there is no user to
-   * store and nowhere to navigate. It is an error on the form, like a wrong password, and the only
-   * thing that distinguishes it is that the server also said where this account belongs.
-   */
-  const refusedPortal = error?.meta?.portal_mismatch === true
-    ? String(error.meta.destination ?? '/switch')
-    : refusedWhileSignedIn
+  const verifyCode = useMutation({
+    mutationFn: () => portalLoginVerify(verificationId!, code),
+    /*
+     * The code session belongs to the request portal, so `/portal` is where it lands — but a
+     * `redirect` INSIDE that space is honoured, which is how somebody who followed a link to a
+     * specific request gets taken there rather than to the portal home. Anything outside it is
+     * ignored: an absolute or protocol-relative URL here would make this an open redirect.
+     */
+    onSuccess: () => {
+      const wanted = params.get('redirect') ?? ''
+      const safe = /^\/(portal|client)(\/|$)/.test(wanted) && !wanted.startsWith('//')
+      navigate(safe ? wanted : '/portal', { replace: true })
+    },
+  })
 
-  /*
-   * "Go to my portal" has to SIGN THEM IN first.
-   *
-   * The refusal happens before a session exists (LOGIN-003), so navigating straight to the portal
-   * would meet the auth gate and bounce them back here — a button that returns you to the page you
-   * pressed it on. Their credentials were correct, and only the portal was wrong, so this re-submits
-   * the same credentials claiming no portal: the server then picks the destination from their
-   * memberships, which is where the button says it is going.
-   *
-   * When they are already signed in (the other path into this panel) there is nothing to re-submit.
-   */
-  const continueToOwnPortal = () => {
-    if (refusedWhileSignedIn !== null) {
-      navigate(refusedWhileSignedIn, { replace: true })
-      return
-    }
-    mutation.mutate({ email, password, remember, portal: null })
+  const activeError = identify.isError ? toApiError(identify.error)
+    : signIn.isError ? toApiError(signIn.error)
+      : startCode.isError ? toApiError(startCode.error)
+        : verifyCode.isError ? toApiError(verifyCode.error)
+          : null
+
+  /** Back to step 1. Clears the secrets; keeps the identifier so it need not be retyped. */
+  const startOver = () => {
+    setStep('identify')
+    setPassword('')
+    setCode('')
+    setVerificationId(null)
+    identify.reset(); signIn.reset(); startCode.reset(); verifyCode.reset()
   }
 
   const Logo = ({ size = 20, className = '' }: { size?: number; className?: string }) => (
@@ -334,123 +264,171 @@ export function LoginPage() {
 
   return (
     <div className="grid min-h-screen grid-cols-1 bg-background lg:grid-cols-[1.05fr_1fr]">
-      <AuthPanel locale={locale} portal={portal} />
+      {/*
+        One panel, one message. The sign-in page speaks about the product, not about a portal —
+        tailoring it would mean knowing which portal the visitor belongs to, which is the question
+        this page exists to answer. Registration is where the copy adapts, because there the account
+        type genuinely is being chosen (`AuthShell`).
+      */}
+      <AuthPanel locale={locale} portal="default" />
 
-      {/* Sign-in form column. */}
       <main className="flex flex-col px-5 py-4 sm:px-8">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 lg:invisible">
+          <Link to="/" className="flex items-center gap-2 lg:invisible">
             <Logo size={16} className="h-8 w-8 rounded-lg" />
             <span className="font-extrabold text-text-primary">{c.app}</span>
-          </div>
+          </Link>
           <div className="flex items-center gap-1.5">
-            <button onClick={toggleLocale} aria-label="Toggle language" className="flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover">{locale === 'ar' ? 'EN' : 'ع'}</button>
+            <button onClick={toggleLocale} aria-label="Toggle language" className="flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover">{ar ? 'EN' : 'ع'}</button>
             <button onClick={toggleTheme} aria-label="Toggle theme" className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button>
           </div>
         </div>
 
         {/*
-          Centred by default. Only from `lg` — where the panel actually appears beside it — is the form
-          pulled toward the divider, by fixing margin-inline-start and leaving margin-inline-end auto
-          (correct in both LTR and RTL). Applying that pull at every width is what threw the form against
-          one edge of a phone, with the whole other half of the screen left empty.
+          Centred by default. Only from `lg` — where the panel actually appears beside it — is the
+          form pulled toward the divider, by fixing margin-inline-start and leaving margin-inline-end
+          auto (correct in both LTR and RTL).
         */}
-        <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col justify-center py-4 xl:ms-14">
-          <h2 className="font-[var(--font-heading)] text-[26px] font-extrabold text-text-primary sm:text-[30px] sm:leading-tight">{c.formTitle}</h2>
-          <p className="mt-1.5 text-[14.5px] text-text-secondary">{c.formValue}</p>
+        <div data-testid="login-form" className="mx-auto flex w-full max-w-[440px] flex-1 flex-col justify-center py-4 xl:ms-14">
+          <h2 className="font-[var(--font-heading)] text-[26px] font-extrabold text-text-primary sm:text-[30px] sm:leading-tight">
+            {step === 'code' ? c.codeTitle : c.formTitle}
+          </h2>
+          <p className="mt-1.5 text-[14.5px] text-text-secondary">
+            {step === 'code' ? (channel === 'sms' ? c.codeSentSms : c.codeSentEmail) : c.formValue}
+          </p>
 
-          {/* The portals, shown plainly. Choosing one rewrites the panel copy and carries through the
-              redirect — the authentication engine behind it is the same for all of them. */}
-          <div data-testid="login-portals" className="mt-4 flex flex-wrap gap-1.5">
-            {PORTAL_TABS.map((tab) => {
-              const on = portal === tab.key
-              const next = new URLSearchParams(params)
-              if (tab.key === 'default') next.delete('portal')
-              else next.set('portal', tab.key)
-              /*
-               * The client portal is not a variant of this form — it signs in by one-time code and
-               * has no password. Pointing its tab at `/login` framed it as "the same form with
-               * different copy", so a client who picked it was asked for a password that does not
-               * exist for them. It links to its own door instead (LOGIN-001).
-               */
-              const to = tab.key === 'client'
-                ? { pathname: '/portal/login', search: '' }
-                : { pathname: '/login', search: next.toString() }
-              return (
-                <Link
-                  key={tab.key}
-                  to={to}
-                  data-testid={`login-portal-${tab.key}`}
-                  aria-current={on ? 'page' : undefined}
-                  className={`rounded-full border px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
-                    on ? 'border-brand-500 bg-brand-primary-soft text-brand-700' : 'border-border text-text-secondary hover:border-brand-300 hover:bg-surface-hover'
-                  }`}
-                >
-                  {locale === 'ar' ? tab.ar : tab.en}
-                </Link>
-              )
-            })}
-          </div>
-
-          {/* `remember` is passed through: the backend calls Auth::login($user, $remember), which needs the
-              flag to issue the long-lived cookie. Holding it in local state only would make the checkbox a lie. */}
-          <form className="mt-5 space-y-4" onSubmit={(e) => { e.preventDefault(); mutation.mutate({ email, password, remember, portal: requested }) }}>
-            <EmailInput label={t('email')} value={email} onChange={(e) => setEmail(e.target.value)} required error={error?.errors?.email?.[0]} />
-            <PasswordInput
-              label={t('password')} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required
-              error={error?.errors?.password?.[0]} showLabel={t('show_password')} hideLabel={t('hide_password')}
-            />
-
-            <div className="flex items-center justify-between">
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-text-secondary">
-                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 rounded border-border accent-brand-600" />
-                {t('remember_me')}
-              </label>
-              <Link to="/forgot-password" className="text-sm font-semibold text-brand-600 hover:underline">{t('forgot_password')}</Link>
-            </div>
-
-            {error && !error.errors && !refusedPortal && <p className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{error.message}</p>}
-
-            {/* The portal refusal, in the form, where a wrong-password message would be (LOGIN-003). */}
-            {refusedPortal && (
-              <PortalRefusal
-                chosen={portal}
-                destination={refusedPortal}
-                ar={locale === 'ar'}
-                busy={mutation.isPending}
-                onContinue={continueToOwnPortal}
+          {/* Step 1 — who are you. No portal, no password yet. */}
+          {step === 'identify' && (
+            <form
+              data-testid="login-identify"
+              className="mt-5 space-y-4"
+              onSubmit={(e) => { e.preventDefault(); if (identifier.trim()) identify.mutate() }}
+            >
+              <EmailInput
+                type="text"
+                inputMode="email"
+                autoComplete="username"
+                label={c.identifier}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                required
+                error={activeError?.errors?.identifier?.[0]}
               />
-            )}
+              {activeError && !activeError.errors && (
+                <p data-testid="login-error" role="alert" className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{activeError.message}</p>
+              )}
+              <Button type="submit" loading={identify.isPending} className="w-full" size="lg">{c.continue}</Button>
+            </form>
+          )}
 
-            <Button type="submit" loading={mutation.isPending} className="w-full" size="lg">{t('sign_in')}</Button>
-          </form>
+          {/* Step 2a — password, for the accounts the server said have one. */}
+          {step === 'password' && (
+            <form
+              data-testid="login-password"
+              className="mt-5 space-y-4"
+              onSubmit={(e) => { e.preventDefault(); signIn.mutate() }}
+            >
+              <IdentifierRow value={identifier} label={c.back} onChange={startOver} />
+              <PasswordInput
+                label={t('password')} value={password} onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password" required autoFocus
+                error={activeError?.errors?.password?.[0]}
+                showLabel={t('show_password')} hideLabel={t('hide_password')}
+              />
 
-          <SocialSignIn portalParam={portalParam} redirect={params.get('redirect')} ar={locale === 'ar'} />
+              <div className="flex items-center justify-between">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-text-secondary">
+                  <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 rounded border-border accent-brand-600" />
+                  {t('remember_me')}
+                </label>
+                <Link to="/forgot-password" className="text-sm font-semibold text-brand-600 hover:underline">{t('forgot_password')}</Link>
+              </div>
+
+              {activeError && !activeError.errors && (
+                <p data-testid="login-error" role="alert" className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{activeError.message}</p>
+              )}
+
+              <Button type="submit" loading={signIn.isPending} className="w-full" size="lg">{t('sign_in')}</Button>
+            </form>
+          )}
+
+          {/* Step 2b — one-time code, for the accounts that have never had a password. */}
+          {step === 'code' && (
+            <form
+              data-testid="login-code"
+              className="mt-5 space-y-4"
+              onSubmit={(e) => { e.preventDefault(); if (verificationId && code.trim()) verifyCode.mutate() }}
+            >
+              <IdentifierRow value={identifier} label={c.back} onChange={startOver} />
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-semibold text-text-primary">{c.code}</span>
+                <input
+                  className="h-11 w-full rounded-xl border border-border bg-surface px-3.5 text-center font-mono text-lg tracking-[0.3em] outline-none focus:border-brand-500"
+                  dir="ltr" inputMode="numeric" autoComplete="one-time-code" autoFocus
+                  value={code} onChange={(e) => setCode(e.target.value)}
+                />
+              </label>
+
+              {activeError && (
+                <p data-testid="login-error" role="alert" className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{activeError.message}</p>
+              )}
+
+              <Button type="submit" loading={verifyCode.isPending} disabled={!verificationId} className="w-full" size="lg">
+                <KeyRound size={16} /> {c.verify}
+              </Button>
+              <button
+                type="button"
+                onClick={() => startCode.mutate(channel)}
+                disabled={startCode.isPending}
+                className="w-full text-center text-sm font-semibold text-brand-600 hover:underline disabled:opacity-60"
+              >
+                {c.resend}
+              </button>
+            </form>
+          )}
+
+          {/*
+            Google and Apple, on the identity step only.
+            Once the server has said this identifier signs in by code, a password-provider button
+            beside it would put back the choice this page removed.
+
+            No portal travels with the request: like the password form, it states no preference.
+          */}
+          {step === 'identify' && <SocialSignIn portalParam={null} redirect={params.get('redirect')} ar={ar} />}
 
           <p className="mt-4 text-center text-sm text-text-secondary">
             {c.noAccount} <Link to="/register" className="font-semibold text-brand-600 hover:underline">{c.register}</Link>
           </p>
 
-          <div className="mt-4 flex items-center gap-3 text-xs text-text-muted">
-            <span className="h-px flex-1 bg-border" />
-            <span>{c.clientPrompt}</span>
-            <span className="h-px flex-1 bg-border" />
-          </div>
-          <Link
-            to="/portal/login"
-            className="mt-3 flex h-11 w-full items-center justify-center rounded-xl border border-border-strong bg-surface text-sm font-semibold text-text-primary transition-colors hover:bg-surface-hover"
-          >
-            {c.clientLogin}
-          </Link>
-
           {/* On phones the value proposition lives here — under the form, collapsed by default. */}
-          <AuthPanelMobile locale={locale} portal={portal} />
+          <AuthPanelMobile locale={locale} portal="default" />
 
-          {/* Demo credentials — dev only, BELOW the form, separate card with copy buttons, never
-              auto-filled, and specific to the portal tab in view (LOGIN-001). */}
-          {import.meta.env.DEV && <DemoCredentials c={c} portal={portal} ar={locale === 'ar'} />}
+          {import.meta.env.DEV && step === 'identify' && <DemoCredentials c={c} ar={ar} />}
         </div>
       </main>
+    </div>
+  )
+}
+
+/**
+ * The identifier already given, shown back with a way to change it.
+ *
+ * A two-step form that hides what you typed in step one is a small trap of its own: somebody who
+ * mistyped a character sees a password failure and never learns the address was wrong. This states
+ * which account is being signed into, and makes correcting it one click.
+ */
+function IdentifierRow({ value, label, onChange }: { value: string; label: string; onChange: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5">
+      <span className="truncate font-mono text-sm text-text-secondary" dir="ltr">{value}</span>
+      <button
+        type="button"
+        data-testid="login-change-identifier"
+        onClick={onChange}
+        className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-brand-600 hover:underline"
+      >
+        <ArrowLeft size={13} /> {label}
+      </button>
     </div>
   )
 }

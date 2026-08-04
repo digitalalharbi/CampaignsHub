@@ -28,6 +28,19 @@ interface UserEnvelope {
   user: AuthUser
 }
 
+/**
+ * LOGIN-UNIFIED-001 — which sign-in form this identifier uses, answered by the server.
+ *
+ * The browser must not work this out for itself. Whether somebody has a password depends on the
+ * accounts table and on whether their address appears as a client contact — neither of which the
+ * browser can see, and guessing is what produced a page that showed clients a password field they
+ * have never had. See `SignInMethodResolver` for why an unknown identifier answers `password`.
+ */
+export async function signInMethod(identifier: string): Promise<{ method: 'password' | 'code'; channel: 'email' | 'sms' }> {
+  await ensureCsrfCookie()
+  return postData<{ method: 'password' | 'code'; channel: 'email' | 'sms' }>('/auth/method', { identifier })
+}
+
 export async function login(input: LoginInput): Promise<AuthUser> {
   await ensureCsrfCookie()
   const { user } = await postData<UserEnvelope>('/auth/login', input)
