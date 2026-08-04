@@ -23,19 +23,19 @@ import { AUTH } from './helpers'
  * install — a state nobody can reach is a state nobody checks, which is how this trap survived.
  */
 async function signInAs(page: Page, email: string): Promise<void> {
+  /*
+   * Through the FORM, not a hand-rolled fetch.
+   *
+   * The fetch version primed its own CSRF cookie beside the one the app had already taken, and the
+   * server answered 419 — a failure that says nothing about the thing under test. Driving the real
+   * form uses the app's own token handling, which is the only version guaranteed to stay correct when
+   * that handling changes.
+   */
   await page.goto('/login')
-  const status = await page.evaluate(async (address: string) => {
-    const xsrf = () => decodeURIComponent((document.cookie.match(/XSRF-TOKEN=([^;]+)/) ?? [])[1] ?? '')
-    await fetch('/sanctum/csrf-cookie', { credentials: 'include' })
-    const res = await fetch('/api/v1/auth/login', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-XSRF-TOKEN': xsrf() },
-      body: JSON.stringify({ email: address, password: 'password' }),
-    })
-    return res.status
-  }, email)
-  expect(status, `the seeded account ${email} could not sign in`).toBe(200)
+  await page.locator('input[type="email"]').fill(email)
+  await page.locator('input[type="password"]').fill('password')
+  await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
+  await expect(page, `${email} could not sign in`).not.toHaveURL(/\/login$/, { timeout: 20000 })
 }
 
 const signInAsNoWorkspace = (page: Page) => signInAs(page, 'no-workspace@demo.local')
