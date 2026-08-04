@@ -118,11 +118,18 @@ test.describe('homepage journeys route somewhere real', () => {
     }
   })
 
-  test('track-my-requests opens the client portal login', async ({ page }) => {
+  /**
+   * «متابعة طلباتي» leads to the one door there is (LOGIN-UNIFIED-001).
+   *
+   * It used to point at `/portal/login`, which still answers — as a redirect. The link itself now
+   * names `/login` directly, because a marketing link that bounces through a retired address is
+   * exactly the drift the unification removed.
+   */
+  test('track-my-requests opens the one sign-in page', async ({ page }) => {
     await home(page)
     await page.getByTestId('hero-track-requests').click()
-    await expect(page).toHaveURL(/\/portal\/login$/)
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(page.getByTestId('login-identify')).toBeVisible()
   })
 
   test('a service opens the intake with that service already chosen', async ({ page }) => {

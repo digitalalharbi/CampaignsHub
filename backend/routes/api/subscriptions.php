@@ -57,9 +57,9 @@ Route::post('payments/webhook/{provider}', [SubscriptionPaymentController::class
  * webhook decides, exactly as it does for Moyasar and Stripe.
  */
 if (! app()->environment('production')) {
-    Route::get('payments/sandbox/{reference}', [SandboxCheckoutController::class, 'show'])
+    Route::get('payments/sandbox', [SandboxCheckoutController::class, 'show'])
         ->name('payments.sandbox.show');
-    Route::post('payments/sandbox/{reference}/confirm', [SandboxCheckoutController::class, 'confirm'])
+    Route::post('payments/sandbox/confirm', [SandboxCheckoutController::class, 'confirm'])
         ->name('payments.sandbox.confirm');
 }
 

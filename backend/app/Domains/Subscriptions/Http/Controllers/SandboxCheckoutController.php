@@ -39,12 +39,14 @@ final class SandboxCheckoutController extends Controller
         private readonly TenantContext $tenants,
     ) {}
 
-    /** GET /payments/sandbox/{reference} — the page the customer is sent to. */
-    public function show(string $reference): Response
+    /** GET /payments/sandbox?ref=… — the page the customer is sent to. */
+    public function show(Request $request): Response
     {
         abort_unless($this->sandbox->isConfigured(), 404);
 
         $this->tenants->enterPlatformScope();
+
+        $reference = (string) $request->query('ref', '');
 
         $payment = SubscriptionPayment::query()->where('idempotency_key', $reference)->first();
 
@@ -62,7 +64,7 @@ final class SandboxCheckoutController extends Controller
 
         $amount = e((string) $payment->amount.' '.$payment->currency);
 
-        return response($this->page("Authorise a payment of {$amount}.", $reference, $reference))
+        return response($this->page("Authorise a payment of {$amount}.", e($reference), $reference))
             ->header('Content-Type', 'text/html; charset=utf-8');
     }
 
@@ -74,11 +76,13 @@ final class SandboxCheckoutController extends Controller
      * the event were rejected for any reason, the customer would arrive to an unpaid application
      * rather than to a page that told them it had worked.
      */
-    public function confirm(Request $request, string $reference): RedirectResponse
+    public function confirm(Request $request): RedirectResponse
     {
         abort_unless($this->sandbox->isConfigured(), 404);
 
         $this->tenants->enterPlatformScope();
+
+        $reference = (string) $request->input('ref', $request->query('ref', ''));
 
         $payment = SubscriptionPayment::query()->where('idempotency_key', $reference)->firstOrFail();
 
@@ -114,7 +118,8 @@ final class SandboxCheckoutController extends Controller
     private function page(string $message, ?string $payable, string $reference): string
     {
         $action = $payable === null ? '' : <<<HTML
-            <form method="post" action="/api/v1/payments/sandbox/{$payable}/confirm">
+            <form method="post" action="/api/v1/payments/sandbox/confirm">
+                <input type="hidden" name="ref" value="{$payable}">
                 <button type="submit" data-testid="sandbox-pay">Pay now (sandbox)</button>
             </form>
             HTML;

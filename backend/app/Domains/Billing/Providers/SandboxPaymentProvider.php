@@ -70,8 +70,16 @@ final class SandboxPaymentProvider implements PaymentProvider
         return [
             'status' => 'created',
             'session_id' => 'sbx_'.Str::random(24),
+            /*
+             * The reference travels as a QUERY parameter, not as a path segment.
+             *
+             * An idempotency key contains colons (`subscription:<id>:<plan>:<term>`), and a
+             * percent-encoded colon inside a path segment is not decoded back into the route
+             * parameter — the charge was then looked up by a key that did not exist and the page
+             * answered 404 for a payment that was perfectly real.
+             */
             'checkout_url' => rtrim((string) config('app.url'), '/')
-                .'/api/v1/payments/sandbox/'.rawurlencode($reference),
+                .'/api/v1/payments/sandbox?ref='.rawurlencode($reference),
             'error' => null,
         ];
     }

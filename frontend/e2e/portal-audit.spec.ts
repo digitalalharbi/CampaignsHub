@@ -145,13 +145,29 @@ test.describe('the withdrawn influencers portal', () => {
   test.use({ storageState: { cookies: [], origins: [] } })
 
   test('every retired address lands on a real page that says why', async ({ page }) => {
-    for (const path of ['/influencers', '/influencers/login', '/influencers/roster', '/influencers/nominations', '/influencers/me']) {
+    for (const path of ['/influencers', '/influencers/roster', '/influencers/nominations', '/influencers/me']) {
       await page.goto(path)
 
       await expect(page, `${path} did not redirect`).toHaveURL(/\/services\?unavailable=influencers/)
       await expect(page.getByTestId('influencers-unavailable')).toBeVisible()
       expect(await contentLength(page), `${path} landed on an empty page`).toBeGreaterThan(40)
     }
+  })
+
+  /**
+   * …except its DOOR, which goes where every other old door goes.
+   *
+   * `/influencers/login` is a sign-in address, and the portal being withdrawn says nothing about the
+   * person's account — they still have one, and they still need to sign in. Sending them to a page
+   * explaining that a portal they were not asking for is unavailable would answer a question nobody
+   * asked; `/login` answers the one they did. This is LOGIN-UNIFIED-001 winning over INFL-OFF-001 for
+   * exactly one address, and only because that address was never part of the portal's content.
+   */
+  test('the retired door goes to the one sign-in page, not to an explanation', async ({ page }) => {
+    await page.goto('/influencers/login')
+
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(page.getByTestId('login-identify')).toBeVisible()
   })
 })
 

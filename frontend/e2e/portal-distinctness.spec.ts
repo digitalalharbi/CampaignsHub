@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { API_HEADERS, AUTH, csrfHeaders, signIn } from './helpers'
+import { API_HEADERS, AUTH, csrfHeaders, payRegistrationThroughSandbox, signIn } from './helpers'
 
 /**
  * The five portals must be different products in the browser, not only in the API (REG-001).
@@ -43,6 +43,10 @@ test.describe('the portals are different products', () => {
       tenant_name: `E2E Freelance Studio ${Date.now()}`,
       account_type: 'freelancer',
       service: 'paid_media',
+      // Required since PLAN-PAID-001 — there is no unpriced way in, so an application that names no
+      // plan owes an amount nobody can compute and is refused before it is opened.
+      plan_code: 'starter',
+      billing_interval: 'monthly',
     })
     // 202, not 201: an application was received. Nothing has been created that anyone can sign in
     // with, which is the point of SIGNUP-002 and the reason this beforeAll has a second step.
@@ -50,9 +54,27 @@ test.describe('the portals are different products', () => {
 
     // No mail provider is configured, so the token comes back on the response in non-production —
     // an honest dev link rather than a pretend "email sent".
-    const devLink = (await registered.json()).data.verification.dev_link as string
+    const applied = await registered.json()
+    const devLink = applied.data.verification.dev_link as string
     const verified = await post('/api/v1/auth/registration/verify-email', { token: devLink.split('token=')[1] })
     expect(verified.status(), 'email verification must succeed').toBe(200)
+
+    /*
+     * …and a verified email is not a workspace (PLAN-PAID-001).
+     *
+     * Every plan is paid, so what creates the account is a confirmed payment. This fixture pays for
+     * real, through the sandbox gateway's signed webhook — the same path a live gateway travels.
+     */
+    await payRegistrationThroughSandbox(request, applied.data.registration.id as string)
+
+    /*
+     * The workspace was created by a webhook, which has no browser and left no session behind, so
+     * the onboarding calls below need one of their own.
+     */
+    const signedIn = await post('/api/v1/auth/login', {
+      email: FREELANCER.email, password: FREELANCER.password, remember: true, portal: null,
+    })
+    expect(signedIn.status(), 'the new owner must be able to sign in').toBe(200)
 
     const type = await post('/api/v1/onboarding/account-type', { account_type: 'freelancer' })
     expect(type.status(), 'account-type step must succeed').toBe(200)

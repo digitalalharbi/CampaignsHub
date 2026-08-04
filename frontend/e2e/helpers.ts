@@ -361,3 +361,69 @@ export async function signInWithCode(page: Page, contact: string): Promise<void>
 
 /** The contact seeded by `DemoAccountsSeeder` — a real client contact, with no password anywhere. */
 export const DEMO_CLIENT_CONTACT = 'customer@demo-client.local'
+
+/**
+ * Take an application through a real, verified payment — over the API (PLAN-PAID-001).
+ *
+ * The browser version of this journey lives in `registration-onboarding.spec.ts`, where the point is
+ * the journey. This is for specs that build a fixture account and are about something else entirely:
+ * they still have to pay, because since the free tier was withdrawn a payment is the only thing that
+ * creates a workspace, but they should not have to drive a gateway page to do it.
+ *
+ * It is still the real path. `checkout` opens the charge the platform decided on, and the sandbox
+ * endpoint signs an event and hands it to the same webhook a live gateway posts to — nothing here
+ * writes a paid row or skips a gate.
+ */
+export async function payRegistrationThroughSandbox(
+  request: APIRequestContext,
+  registrationId: string,
+): Promise<void> {
+  const headers = await csrfHeaders(request)
+
+  const checkout = await request.post(`/api/v1/auth/registration/${registrationId}/checkout`, { headers, data: {} })
+  expect(checkout.status(), 'a charge must be opened before it can be paid').toBe(200)
+
+  const body = await checkout.json()
+  const url = body.data.checkout_url as string | null
+
+  expect(
+    url,
+    `no checkout URL was issued — the configured gateway reported "${body.data.status}". `
+    + 'Set SUBSCRIPTION_PROVIDER=sandbox for a machine with no gateway credentials.',
+  ).toBeTruthy()
+
+  /*
+   * The gateway's own confirm endpoint, given the same reference its page carries.
+   *
+   * The reference travels as a query parameter rather than a path segment because an idempotency key
+   * contains colons, and a percent-encoded colon in a path is not decoded back into the route
+   * parameter — the lookup then missed and the page answered 404 for a perfectly real charge.
+   */
+  const reference = new URL(url!).searchParams.get('ref')!
+
+  /*
+   * `maxRedirects: 0`, deliberately.
+   *
+   * A gateway answers a confirmation with a redirect back to the merchant, and this one is no
+   * different. Followed, that redirect lands on the SPA's `/signup/status` — which the dev server
+   * answers 404 to for a bare API fetch, so `ok()` reported a failure for a payment that had already
+   * gone through. The 302 IS the success; what it points at is the browser's business.
+   */
+  /*
+   * Posted through the SAME origin the rest of the spec uses, not to the absolute URL the gateway
+   * published. `checkout_url` names the API host directly, and a request to it deposits a session
+   * and an XSRF cookie for a second hostname — after which every later call in this context sent
+   * the wrong token and came back 419. A relative path resolves against the base URL and keeps one
+   * set of cookies.
+   */
+  const paid = await request.post('/api/v1/payments/sandbox/confirm', {
+    headers: await csrfHeaders(request),
+    form: { ref: reference },
+    maxRedirects: 0,
+  })
+
+  expect(
+    paid.status(),
+    `the sandbox gateway refused the confirmation: ${(await paid.text()).slice(0, 200)}`,
+  ).toBe(302)
+}
