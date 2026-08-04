@@ -11,6 +11,47 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
+**LOGIN-PATHS-001 + PHONE-VERIFY-001 + PHONE-SA-001 + PLATFORM-ORDER-001 — two ways in, a phone this
+market can write, and one platform order.**
+
+`/login` keeps its marketing panel and is rebuilt on `AuthShell` — the component registration already
+uses, not a copy of it. The two pages sit either side of one panel and were drifting apart in width,
+padding and header every time either was touched. Inside the box, two paths: an address and a
+password, or a number and a code. Choosing between them is not choosing a portal; it is saying which
+credential you hold. The email path still asks `POST /auth/method` first, so a client contact who has
+never had a password gets a code rather than a field they cannot fill.
+
+The phone path has its own endpoints, `POST /auth/phone/{start,verify}`. `/client/login/verify` opens
+a PORTAL session for a contact — pointing a platform user's phone at it would have signed them into a
+space they hold nothing in, and the page would have looked like it worked. `start` answers
+identically for a number nobody holds, and `verify` consumes the code: `ContactVerificationService`
+marks a challenge verified and leaves it usable, so the same six digits were opening a session every
+time they were posted.
+
+`requires_mobile` is on by default and `phone` is required at registration. An email proves an
+address and says nothing about a phone. Arriving at the mobile gate now SENDS the code — it used to
+be issued only if the applicant thought to press "resend". Duplicates are compared in E.164, because
+`unique:users,phone` cannot see that `0501234567` and `+966501234567` are one number.
+
+`PhoneField` makes the country a control with a visible value rather than something the server
+guesses: it opens on `+966`, takes everything the server takes, and lets a pasted international
+number keep its own country.
+
+The platform order lives in `AdPlatforms` and `src/lib/platforms.ts`. It was a literal beside each of
+six screens — right in some, wrong in the others — and each had a test agreeing with the file next to
+it, which is how the drift stayed invisible.
+
+**Verified by driving the product:** registration refused an empty and then an unreadable number on
+the step that has the field; the journey held at `mobile_verification_required` with nothing created;
+the code cleared it; the sandbox payment activated the account; `0553318866` signed in through the
+phone path and landed on the account's real next step; `+966` is the default and another country can
+be chosen; English/LTR/light and Arabic/RTL/dark both hold, and 375px has no sideways scroll.
+
+**1073 backend · 563 vitest · tsc · oxlint · Playwright 773/773 on chromium, firefox and webkit.**
+
+---
+
+## Previously
 **PLAN-PAID-001 + SIGNUP-STEP-001 + GRANT-001 — nothing is free, nothing activates unpaid, and
 every exception is written down.**
 

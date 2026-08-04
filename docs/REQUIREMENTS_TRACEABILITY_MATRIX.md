@@ -852,3 +852,61 @@ It is inert in production twice over: the routes are not registered there, and `
 returns false on the environment name regardless of configuration. Its state is reported as
 `sandbox` rather than `live` everywhere it surfaces, and the applicant sees «وضع تجريبي (Sandbox)»
 above the Pay button.
+
+---
+
+## LOGIN-PATHS-001 / PHONE-VERIFY-001 / PHONE-SA-001 / PLATFORM-ORDER-001
+
+### Two ways in, on one page
+
+| Requirement | Where it is enforced | How it is proven |
+| --- | --- | --- |
+| `/login` keeps the marketing panel and gets a larger, balanced box | `LoginPage` renders through `AuthShell` — the component registration uses, not a copy | `auth-redesign.spec.ts` layout budgets; `auth-visual.spec.ts` baselines |
+| Path 1 — email and password | `login-path-email` → `login-identify` → `login-password` | `login-paths.spec.ts` «both paths are offered…»; `LoginPage.test.tsx` |
+| Path 2 — mobile number and a one-time code | `login-path-phone` → `login-phone` → `login-code` | `login-paths.spec.ts` «the national form signs in…» |
+| Choosing a method is not choosing a portal | `login()` and the phone verify both claim `portal: null`; the destination comes from memberships | `login-paths.spec.ts` asserts every `login-portal-*` has count 0 |
+| A contact with no password still gets a code | the email path asks `POST /auth/method` before rendering a password field | `SignInMethodTest`; `login-unified.spec.ts` code branch |
+| A phone code opens a PLATFORM session, not a portal one | `POST /auth/phone/{start,verify}` — its own endpoints, because `/client/login/verify` opens a portal session | `PhoneSignInTest` (16 tests) |
+| A phone code cannot be replayed | the challenge is `consumed_at`-stamped on use | `PhoneSignInTest` «a code cannot be used twice» |
+| A portal code is not a platform credential | `purpose` must be `phone_sign_in` | `PhoneSignInTest` «a portal code cannot be replayed…» |
+| No number enumeration | `start` answers identically for a number nobody holds | `PhoneSignInTest` «an unknown number is answered identically», «…creates no session» |
+| A suspended account stays out on both paths | `PhoneSignInController::assertMaySignIn` uses the same `AccountSuspension` helper as the password path | `PhoneSignInTest` «a disabled account cannot sign in by phone» |
+
+### A verified mobile number, for every account
+
+| Requirement | Where it is enforced | How it is proven |
+| --- | --- | --- |
+| Mandatory for every account, including email registration | `config/accounts.php` → `requires_mobile: true` | `MobileVerificationGateTest` «a paid application with an unverified number creates nothing» |
+| A number is required at registration | `RegisterRequest` → `phone` is `required` | `MobileVerificationGateTest`; `registerValidation.test.ts` |
+| No activation without it | `AdvanceRegistration` holds at `MobileVerificationRequired`; `ProvisionWorkspace` never runs | `PaidRegistrationTest`; `registration-onboarding.spec.ts` walks the gate |
+| The code is sent on arriving at the gate | `AdvanceRegistration::moveTo()` issues the challenge | the applicant lands on a code field with a code already sent |
+| A wrong code clears nothing | `verifyMobile` refuses; `mobile_verified_at` stays null | `MobileVerificationGateTest` «a wrong code does not clear the mobile gate» |
+| The administrator's shortcut cannot skip it | `RegisterTenantAction` refuses while any gate is open | `MobileVerificationGateTest` «…refuses while the mobile gate is on» |
+
+### Saudi Arabia is the default
+
+| Requirement | Where it is enforced | How it is proven |
+| --- | --- | --- |
+| `+966` is the default dial code | `PhoneField` → `DEFAULT_DIAL_CODE`; `PhoneNumber::DEFAULT_COUNTRY` | `login-paths.spec.ts` «the country opens on +966 and offers others» |
+| Another country can be chosen | the `DIAL_CODES` select | same test — selecting `971` changes the code and nothing else |
+| `05…`, `9665…`, `+9665…` accepted | `PhoneNumber::normalise()` | `MobileVerificationGateTest::saudiForms` (8 forms); `PhoneSignInTest::saudiForms` (7) |
+| Spaces, dashes and Arabic-Indic digits accepted | same | same data providers; `platforms`/`phone` unit tests |
+| Normalised to E.164 before storing or comparing | `NormalisesPhoneNumbers` on every model with a phone column | `MobileVerificationGateTest` «…stores the number in e164» |
+| Duplicates prevented after normalisation | `UniquePhoneRule` compares in E.164, across users AND live applications | `MobileVerificationGateTest` «the same number cannot open a second application in another spelling» |
+| No manual country code needed for Saudi Arabia | the placeholder is `05x xxx xxxx`; the national form is what the field expects | live walk-through and `login-paths.spec.ts` |
+| Not client-side only | every rule above lives in `PhoneNumberRule` / `UniquePhoneRule` / `PhoneNumber` on the server | the backend tests above call the API, never the form |
+
+### One platform order, everywhere
+
+`سناب شات، تيك توك، ميتا، جوجل أدز، إكس، لينكدإن` — `App\Support\AdPlatforms::ORDER` and
+`src/lib/platforms.ts`, read by the integrations overview, the connection centre, the dashboard
+filter, the request forms, the report engine and the demo seeders.
+
+| Where | How it is proven |
+| --- | --- |
+| Integrations overview | `PlatformOrderTest` «the integrations overview is in the products order»; `integrations.spec.ts` «the six ad platforms come first, in order» |
+| Report engine | `PlatformOrderTest` «the report engine reads the shared order» — it holds the constant itself, not a copy |
+| Connection centre, dashboard filter, request forms | `sortPlatforms` / `sortByPlatform` at each site; `platforms.test.ts` (11 tests) |
+| Demo data | `DemoAnalyticsSeeder`, `DemoIntegrationsSeeder`, `demoOverview.ts` reordered |
+| Every spelling ranks alike | `PlatformOrderTest` and `platforms.test.ts` — `google_ads`, `meta_ads`, `twitter`, `snap` all canonicalise |
+| Sorting never rewrites a key | both order tests — these keys are API filters and connector ids |

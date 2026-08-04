@@ -12,10 +12,20 @@ for (const path of PAGES) {
     const input = page.locator('input').first()
     await expect(input).toBeVisible()
 
-    // Field is wide (spans the form) and tall (≥ 50px) — not a small pill.
+    /*
+     * Field is wide and tall (≥ 50px) — not a small pill.
+     *
+     * "Wide" is measured against the FORM, not in absolute pixels. Registration pairs fields two to a
+     * row — the organisation name beside the mobile number, the full name beside the address — so no
+     * single field spans the form any more, and a fixed 280px threshold was really asserting that
+     * every field sits on a row of its own. What it is actually guarding against is a field squeezed
+     * into a corner, and a control filling its column is not that.
+     */
     const box = await input.boundingBox()
+    const formWidth = (await page.locator('form').first().boundingBox())!.width
+
     expect(box!.height).toBeGreaterThanOrEqual(50)
-    expect(box!.width).toBeGreaterThanOrEqual(280)
+    expect(box!.width, 'the field does not fill its column').toBeGreaterThanOrEqual(formWidth * 0.45)
 
     // 16px text prevents iOS auto-zoom.
     const fontPx = await input.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))
