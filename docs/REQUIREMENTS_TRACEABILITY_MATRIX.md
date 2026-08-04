@@ -906,7 +906,20 @@ filter, the request forms, the report engine and the demo seeders.
 | --- | --- |
 | Integrations overview | `PlatformOrderTest` «the integrations overview is in the products order»; `integrations.spec.ts` «the six ad platforms come first, in order» |
 | Report engine | `PlatformOrderTest` «the report engine reads the shared order» — it holds the constant itself, not a copy |
-| Connection centre, dashboard filter, request forms | `sortPlatforms` / `sortByPlatform` at each site; `platforms.test.ts` (11 tests) |
+| Connection centre, request forms | `sortPlatforms` / `sortByPlatform` at each site; `platforms.test.ts` |
+| Dashboard filter | `platforms.test.ts` «is what the dashboard filter offers» — asserted on the list itself, because the control folds by default (SIMPLIFY-001) and a page-text check finds no platform names at all and passes for the wrong reason |
 | Demo data | `DemoAnalyticsSeeder`, `DemoIntegrationsSeeder`, `demoOverview.ts` reordered |
 | Every spelling ranks alike | `PlatformOrderTest` and `platforms.test.ts` — `google_ads`, `meta_ads`, `twitter`, `snap` all canonicalise |
 | Sorting never rewrites a key | both order tests — these keys are API filters and connector ids |
+
+---
+
+## Two guards that were failing open, found by the gate
+
+Neither was in the brief. Both were reached by running the four units end to end on three browsers,
+and both are the kind of defect a status check cannot see.
+
+| Defect | Why it was wrong | Fix, and how it is proven |
+| --- | --- | --- |
+| `OnboardingGate` read `account: null` as "onboarded" | It is null for two different reasons: the platform owner holds no membership BY DESIGN, and a payload whose workspace could not be resolved. Reading both the same way put a brand-new customer on a portal home for a workspace the payload could not even name — and left them there, because nothing re-decides once the navigation has happened. | The owner passes on the flag; anyone else with no account goes to `/switch`, the destination `resolvePostAuthOutcome` already falls back to. `OnboardingGate.test.tsx` (6 tests) covers both null cases and the loop the exemption prevents. |
+| `GET /alerts/rules` returned every row | Fine on the day a workspace writes its third rule and wrong forever after: the payload and the number of cards rendered both grow without limit, so the page a customer opens to ADD a rule gets slower every time anybody adds one. The acceptance suite reached 316 and took the third browser of a run past ten seconds to paint. | Bounded at 100, newest first — so the rule just created is the one at the top and a cap can never hide it — with `meta.total` travelling alongside so the page says «تُعرض أحدث 100 قاعدة من 316» rather than presenting a truncated list as the whole set. `AlertsIsolationTest` «the rules list is bounded and leads with the newest». |

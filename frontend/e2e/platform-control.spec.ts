@@ -69,13 +69,20 @@ test.describe('the plan catalogue is the owner’s to price', () => {
     expect(reasons.some((r: string | null) => r?.includes('Introductory annual price'))).toBeTruthy()
   })
 
-  test('nothing on sale is free', async ({ page }) => {
+  test('nothing on sale is free, and «البداية» is 99 a month and 990 a year', async ({ page }) => {
     const res = await page.request.get('/api/v1/plans')
     const body = await res.json()
 
     for (const plan of body.data.plans) {
       expect(Number(plan.price_monthly), `plan [${plan.code}] is offered at no charge`).toBeGreaterThan(0)
     }
+
+    // The figures the brief names, and what the plan is sold ON — data, not marketing copy.
+    const starter = body.data.plans.find((p: { code: string }) => p.code === 'starter')
+    expect(starter.price_monthly).toBe('99.00')
+    expect(starter.price_annual).toBe('990.00')
+    expect(starter.features.campaign_tracking).toBe(true)
+    expect(starter.features.reports).toBe(true)
   })
 })
 

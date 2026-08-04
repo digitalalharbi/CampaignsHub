@@ -47,7 +47,15 @@ the code cleared it; the sandbox payment activated the account; `0553318866` sig
 phone path and landed on the account's real next step; `+966` is the default and another country can
 be chosen; English/LTR/light and Arabic/RTL/dark both hold, and 375px has no sideways scroll.
 
-**1073 backend · 563 vitest · tsc · oxlint · Playwright 773/773 on chromium, firefox and webkit.**
+Two guards that were failing open turned up while running this end to end, and neither was in the
+brief. `OnboardingGate` read a payload with no `account` as "onboarded" — true for the platform owner,
+who holds no membership by design, and false for a payload whose workspace could not be resolved; the
+second case left a brand-new customer sitting on a portal home for a workspace the payload could not
+name. And `GET /alerts/rules` returned every row, so the page a customer opens to add one rule got
+slower every time anybody added one — our own suite reached 316 and pushed the third browser past ten
+seconds to paint. Both are fixed at the cause and pinned by tests.
+
+**1074 backend · 570 vitest · tsc · oxlint · Playwright 773/773 on chromium, firefox and webkit.**
 
 ---
 

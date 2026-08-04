@@ -46,6 +46,19 @@ describe('the product platform order', () => {
     expect(sortByPlatform(rows, (r) => r.p).map((r) => r.p)).toEqual(['snapchat', 'tiktok', 'meta', 'ga4'])
   })
 
+  /**
+   * The dashboard's filter reads the shared order.
+   *
+   * Asserted on the list itself rather than through the rendered control, which folds by default
+   * (SIMPLIFY-001) — an e2e check that reads the page text finds no platform names at all and passes
+   * for the wrong reason. This is the literal that drifted, so this is what is pinned.
+   */
+  it('is what the dashboard filter offers', async () => {
+    const { PLATFORM_KEYS } = await import('@/features/dashboard/DashboardPage')
+
+    expect(PLATFORM_KEYS.map(canonicalPlatform)).toEqual([...PLATFORM_ORDER])
+  })
+
   /** Stable: two unknowns keep the order they arrived in rather than swapping between renders. */
   it('keeps unknown platforms in the order they arrived', () => {
     expect(sortPlatforms(['ga4', 'crm', 'snapchat'])).toEqual(['snapchat', 'ga4', 'crm'])

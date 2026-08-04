@@ -39,7 +39,7 @@ import { sortPlatforms } from '@/lib/platforms'
  * keys keep their local spelling (`google_ads`) because that is what the API filter expects;
  * `sortPlatforms` canonicalises before it compares.
  */
-const PLATFORM_KEYS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
+export const PLATFORM_KEYS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
 
 /*
  * DASH-010-D: campaign objectives (keys match the CampaignObjective enum) for the filter and KPIs.
