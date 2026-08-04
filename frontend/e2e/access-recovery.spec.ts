@@ -22,21 +22,23 @@ import { AUTH } from './helpers'
  * login page. The account is seeded rather than created ad hoc so the state is reproducible on any
  * install — a state nobody can reach is a state nobody checks, which is how this trap survived.
  */
-async function signInAsNoWorkspace(page: Page): Promise<void> {
+async function signInAs(page: Page, email: string): Promise<void> {
   await page.goto('/login')
-  const status = await page.evaluate(async () => {
+  const status = await page.evaluate(async (address: string) => {
     const xsrf = () => decodeURIComponent((document.cookie.match(/XSRF-TOKEN=([^;]+)/) ?? [])[1] ?? '')
     await fetch('/sanctum/csrf-cookie', { credentials: 'include' })
     const res = await fetch('/api/v1/auth/login', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-XSRF-TOKEN': xsrf() },
-      body: JSON.stringify({ email: 'no-workspace@demo.local', password: 'password' }),
+      body: JSON.stringify({ email: address, password: 'password' }),
     })
     return res.status
-  })
-  expect(status, 'the seeded no-workspace account could not sign in').toBe(200)
+  }, email)
+  expect(status, `the seeded account ${email} could not sign in`).toBe(200)
 }
+
+const signInAsNoWorkspace = (page: Page) => signInAs(page, 'no-workspace@demo.local')
 
 /** The four things that must always be reachable from a dead end. */
 const alwaysAvailable = ['recovery-switch-account', 'recovery-home', 'recovery-sign-out']
@@ -98,35 +100,6 @@ test.describe('an agency operator who opens the advertiser portal', () => {
     await expect(page).not.toHaveURL(/\/login/)
   })
 
-  /**
-   * Signing out FROM the refusal must actually end the session and clear the browser.
-   *
-   * The half-measure this replaces cleared the server session and left the persisted project
-   * selection behind, so the next person to sign in on that machine inherited it.
-   */
-  test('signing out from the refusal ends the session and clears what this app stored', async ({ page }) => {
-    await page.goto('/app/dashboard')
-    await expect(page.getByTestId('access-recovery')).toBeVisible({ timeout: 20000 })
-
-    await page.evaluate(() => {
-      window.localStorage.setItem('campaign-hub-project-storage', JSON.stringify({ state: { currentProjectId: 'stale' }, version: 0 }))
-      window.localStorage.setItem('campaign-hub-locale', 'ar')
-    })
-
-    await page.getByTestId('recovery-sign-out').click()
-    await expect(page).toHaveURL(/\/login/, { timeout: 20000 })
-
-    const state = await page.evaluate(() => ({
-      project: window.localStorage.getItem('campaign-hub-project-storage'),
-      locale: window.localStorage.getItem('campaign-hub-locale'),
-    }))
-    expect(state.project, 'the previous person’s project selection survived sign-out').toBeNull()
-    // A preference of the PERSON, not of the session — resetting it reads as a bug.
-    expect(state.locale, 'the language preference was wiped as a side effect').toBe('ar')
-
-    const status = await page.evaluate(async () => (await fetch('/api/v1/auth/me', { headers: { Accept: 'application/json' } })).status)
-    expect(status, 'the session outlived the sign-out').toBe(401)
-  })
 })
 
 /**
@@ -166,5 +139,53 @@ test.describe('an account that belongs to no workspace', () => {
     await page.goto('/')
     await expect(page.getByTestId('access-recovery')).toHaveCount(0)
     await expect(page.locator('body')).toContainText(/CampaignsHub/)
+  })
+})
+
+/**
+ * Signing out FROM the refusal must actually end the session and clear the browser.
+ *
+ * ## Why this describe has its OWN session
+ *
+ * `AUTH.owner`'s storage state is a cookie pointing at ONE server-side session, shared by every test
+ * that uses it. `logout` calls `$request->session()->invalidate()`, so signing out here with the
+ * shared cookie destroyed that session for the whole run — and every later test using `AUTH.owner`
+ * failed on the login page, a dozen files away from the cause. Signing in here creates a session this
+ * test owns and is free to destroy.
+ */
+test.describe('signing out from a refusal', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  test('ends the session and clears what this app stored', async ({ page }) => {
+    await signInAs(page, 'owner@demo-agency.local')
+    await page.goto('/app/dashboard')
+    await expect(page.getByTestId('access-recovery')).toBeVisible({ timeout: 20000 })
+
+    await page.evaluate(() => {
+      window.localStorage.setItem('campaign-hub-project-storage', JSON.stringify({ state: { currentProjectId: 'stale' }, version: 0 }))
+      window.localStorage.setItem('campaign-hub-locale', 'ar')
+    })
+
+    await page.getByTestId('recovery-sign-out').click()
+    await expect(page).toHaveURL(/\/login/, { timeout: 20000 })
+    /*
+     * Wait for the new document before reading storage.
+     *
+     * Sign-out ends with a FULL navigation (see `signOutCompletely` — every provider is rebuilt from
+     * nothing, which is what makes the result trustworthy). Reading `localStorage` the instant the URL
+     * changes lands mid-navigation and the execution context is torn down underneath the call.
+     */
+    await page.waitForLoadState('domcontentloaded')
+
+    const state = await page.evaluate(() => ({
+      project: window.localStorage.getItem('campaign-hub-project-storage'),
+      locale: window.localStorage.getItem('campaign-hub-locale'),
+    }))
+    expect(state.project, 'the previous person’s project selection survived sign-out').toBeNull()
+    // A preference of the PERSON, not of the session — resetting it reads as a bug.
+    expect(state.locale, 'the language preference was wiped as a side effect').toBe('ar')
+
+    const status = await page.evaluate(async () => (await fetch('/api/v1/auth/me', { headers: { Accept: 'application/json' } })).status)
+    expect(status, 'the session outlived the sign-out').toBe(401)
   })
 })
