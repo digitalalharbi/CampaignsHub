@@ -16,7 +16,15 @@ import { AUTH, seededProject } from './helpers'
 test.describe('the integrations centre', () => {
   test.use({ storageState: AUTH.advertiser })
 
-  const AD_PLATFORMS = ['Meta Ads', 'Google Ads', 'TikTok Ads', 'Snapchat Ads', 'X Ads', 'LinkedIn Ads']
+  /**
+   * The product's order (PLATFORM-ORDER-001) — سناب شات، تيك توك، ميتا، جوجل أدز، إكس، لينكدإن.
+   *
+   * This list used to lead with Meta, which is how the drift stayed invisible: the connection centre
+   * and the dashboard led with Meta, the report engine led with Snapchat, and each had a test that
+   * agreed with the file beside it. The order now lives in `@/lib/platforms`, and this asserts the
+   * rendered result against it.
+   */
+  const AD_PLATFORMS = ['Snapchat Ads', 'TikTok Ads', 'Meta Ads', 'Google Ads', 'X Ads', 'LinkedIn Ads']
 
   async function connectorNames(page: import('@playwright/test').Page): Promise<string[]> {
     return page.locator('main li').evaluateAll((els) =>

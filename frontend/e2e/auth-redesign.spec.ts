@@ -235,7 +235,7 @@ test('forgot password and create account both lead somewhere real', async ({ pag
   await expect(page.locator('input[type="email"]')).toBeVisible()
 
   await loginReady()
-  await page.getByRole('link', { name: /Create an account|تسجيل حساب/ }).click()
+  await page.getByRole('link', { name: /Create an account|إنشاء حساب/ }).click()
   await expect(page).toHaveURL(/\/register/)
   await expect(page.locator('form input#tenant_name')).toBeVisible()
 

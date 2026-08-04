@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { aFreshSaudiNumber, signInWithPhone, switchToEnglish } from './helpers'
+import { aFreshSaudiNumber, csrfHeaders, signInWithPhone, switchToEnglish } from './helpers'
 
 /**
  * LOGIN-PATHS-001 + PHONE-SA-001 — two ways in, and a phone field that speaks this market's language.
@@ -73,21 +73,45 @@ test.describe('the sign-in box offers two paths and no portal', () => {
  * thing being tested; there is no other way to get an account whose phone is trustworthy.
  */
 test.describe('signing in with a mobile number', () => {
-  test('every Saudi spelling of one number reaches the same account', async ({ page }, testInfo) => {
+  test('the national form signs in, and every other spelling is the same number', async ({ page }, testInfo) => {
     const tag = `${testInfo.project.name}-${Date.now()}`
     const national = aFreshSaudiNumber()
     const email = `phone.${tag}@example.com`.toLowerCase()
 
     await openAccount(page, { email, phone: national, workspace: `Phone ${tag}` })
 
-    // `05xxxxxxxx`, `9665xxxxxxxx` and `+9665xxxxxxxx` are one number — so one account.
-    const withoutZero = national.slice(1)
-    for (const spelling of [national, `966${withoutZero}`, `+966${withoutZero}`, national.replace(/(\d{3})(\d{3})/, '$1 $2 ')]) {
-      await page.context().clearCookies()
-      await page.goto('/login')
+    // The journey, once, through the browser: `05xxxxxxxx` — what somebody here actually types.
+    await page.context().clearCookies()
+    await page.goto('/login')
+    await signInWithPhone(page, national)
+    await expect(page).not.toHaveURL(/\/login/, { timeout: 20000 })
 
-      await signInWithPhone(page, spelling)
-      await expect(page, `${spelling} did not sign in`).not.toHaveURL(/\/login/, { timeout: 20000 })
+    /*
+     * The other spellings are checked against the endpoint rather than by signing in four times.
+     *
+     * The claim is about NORMALISATION — that `9665…` and `+9665…` are the same number as `05…` —
+     * and re-walking a whole browser journey to test a reading rule made this the slowest test in the
+     * suite and the one that failed under a loaded three-browser run for want of an SMS round trip.
+     * What the browser has to prove is that the path works; that it works for one spelling and not
+     * another is a property of the server, and this is the server being asked.
+     */
+    const withoutZero = national.slice(1)
+    for (const spelling of [`966${withoutZero}`, `+966${withoutZero}`, national.replace(/(\d{3})(\d{3})/, '$1 $2 ')]) {
+      const res = await page.request.post('/api/v1/auth/phone/start', {
+        headers: await csrfHeaders(page.request),
+        data: { phone: spelling },
+      })
+      expect(res.status(), `${spelling} was not accepted`).toBe(200)
+
+      const verificationId = (await res.json()).data.verification_id as string
+      const code = (await res.json()).data.dev_code as string
+
+      const signedIn = await page.request.post('/api/v1/auth/phone/verify', {
+        headers: await csrfHeaders(page.request),
+        data: { verification_id: verificationId, code },
+      })
+      expect(signedIn.status(), `${spelling} did not reach the same account`).toBe(200)
+      expect((await signedIn.json()).data.user.email).toBe(email)
     }
   })
 

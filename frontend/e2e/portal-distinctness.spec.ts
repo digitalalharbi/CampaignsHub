@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { API_HEADERS, AUTH, csrfHeaders, payRegistrationThroughSandbox, signIn } from './helpers'
+import { aFreshSaudiNumber, API_HEADERS, AUTH, csrfHeaders, payRegistrationThroughSandbox, signIn, verifyMobileThroughApi } from './helpers'
 
 /**
  * The five portals must be different products in the browser, not only in the API (REG-001).
@@ -47,6 +47,8 @@ test.describe('the portals are different products', () => {
       // plan owes an amount nobody can compute and is refused before it is opened.
       plan_code: 'starter',
       billing_interval: 'monthly',
+      // Required since PHONE-VERIFY-001 — no account activates without a verified number.
+      phone: aFreshSaudiNumber(),
     })
     // 202, not 201: an application was received. Nothing has been created that anyone can sign in
     // with, which is the point of SIGNUP-002 and the reason this beforeAll has a second step.
@@ -65,6 +67,11 @@ test.describe('the portals are different products', () => {
      * Every plan is paid, so what creates the account is a confirmed payment. This fixture pays for
      * real, through the sandbox gateway's signed webhook — the same path a live gateway travels.
      */
+    /*
+     * The phone before the money — the order the policy imposes (PHONE-VERIFY-001). An application
+     * still holding at the mobile step never reaches a charge.
+     */
+    await verifyMobileThroughApi(request, applied.data.registration.id as string)
     await payRegistrationThroughSandbox(request, applied.data.registration.id as string)
 
     /*

@@ -462,3 +462,33 @@ export async function signInWithPhone(page: Page, phone: string): Promise<void> 
   await expect(field, 'the issued code never arrived, so there is nothing to submit').not.toHaveValue('', { timeout: 20_000 })
   await form.locator('button[type="submit"]').click()
 }
+
+/**
+ * Clear the mobile gate over the API (PHONE-VERIFY-001).
+ *
+ * The browser version lives in `registration-onboarding.spec.ts`, where the gate IS the subject.
+ * This is for specs that build a fixture account and are about something else: they still have to
+ * prove the number, because since PHONE-VERIFY-001 no account exists without one.
+ *
+ * The code is asked for and read back from `dev_code` — exposed outside production only, the same
+ * affordance that keeps the email link walkable without a mail provider.
+ */
+export async function verifyMobileThroughApi(
+  request: APIRequestContext,
+  registrationId: string,
+): Promise<void> {
+  const issued = await request.post(`/api/v1/auth/registration/${registrationId}/resend`, {
+    headers: await csrfHeaders(request),
+    data: { channel: 'mobile' },
+  })
+  expect(issued.status(), 'a mobile challenge must be issuable').toBe(200)
+
+  const code = (await issued.json()).data.verification.dev_code as string | null
+  expect(code, 'no dev code was issued for the mobile challenge').toBeTruthy()
+
+  const verified = await request.post(`/api/v1/auth/registration/${registrationId}/verify-mobile`, {
+    headers: await csrfHeaders(request),
+    data: { code },
+  })
+  expect(verified.status(), 'the mobile code must be accepted').toBe(200)
+}

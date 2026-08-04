@@ -392,29 +392,37 @@ export function RegisterPage() {
         {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={rc.errTitle} />}
 
         <div className={step === 1 ? 'space-y-3' : 'hidden'} data-testid="register-panel-account">
-          <TextInput id="tenant_name" label={t('org_name')} value={form.tenant_name} onChange={setDraft('tenant_name')} required error={err('tenant_name')} />
+          {/*
+            Three rows, not four.
+
+            The mobile number is required now (PHONE-VERIFY-001), and giving it a row of its own
+            pushed this page past the 768px-tall budget `auth-redesign.spec.ts` holds it to — the
+            submit button went below the fold on every desktop size. Pairing it with the organisation
+            name keeps the count where it was, and the pairing reads: the workspace, then the person,
+            then their secrets.
+
+            No hint under the field, for the same reason. What it said — that a code goes to this
+            number before activation — is said on the status page, at the moment it happens, which is
+            where somebody actually needs to read it.
+          */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextInput id="tenant_name" label={t('org_name')} value={form.tenant_name} onChange={setDraft('tenant_name')} required error={err('tenant_name')} />
+            <PhoneField
+              id="phone"
+              label={ar ? 'رقم الجوال' : 'Mobile number'}
+              value={form.phone}
+              onChange={setDraftValue('phone')}
+              dialCode={form.dial_code}
+              onDialCodeChange={setDraftValue('dial_code')}
+              ar={ar}
+              required
+              error={err('phone')}
+            />
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <TextInput id="name" label={t('full_name')} value={form.name} onChange={setDraft('name')} autoComplete="name" required error={err('name')} />
             <EmailInput id="email" label={t('email')} value={form.email} onChange={setDraft('email')} required error={err('email')} />
           </div>
-          {/*
-            The mobile number, required (PHONE-VERIFY-001).
-
-            Saudi Arabia is selected and needs no typing — `05x xxx xxxx` is what the placeholder
-            shows, because that is how somebody in this market writes their own number.
-          */}
-          <PhoneField
-            id="phone"
-            label={ar ? 'رقم الجوال' : 'Mobile number'}
-            value={form.phone}
-            onChange={setDraftValue('phone')}
-            dialCode={form.dial_code}
-            onDialCodeChange={setDraftValue('dial_code')}
-            ar={ar}
-            required
-            error={err('phone')}
-            hint={ar ? 'سنرسل رمز تحقق إليه قبل تفعيل الحساب.' : 'We will send a verification code to it before the account is activated.'}
-          />
 
           <div className="grid gap-3 sm:grid-cols-2">
             <PasswordInput id="password" label={t('password')} value={form.password} onChange={setSecretField('password')} autoComplete="new-password" required error={err('password')} showLabel={t('show_password')} hideLabel={t('hide_password')} />
