@@ -123,8 +123,18 @@ test.describe('the portals are different products', () => {
     await page.goto('/agency/clients')
 
     await expect(page.getByTestId('agency-portal-denied')).toBeVisible({ timeout: 20000 })
-    // Refused, and told where they CAN go — not a dead end.
-    await expect(page.getByRole('button', { name: /انتقل إلى مساحاتك|Go to your workspaces/ })).toBeVisible()
+
+    /*
+     * Refused, and given a way out — ACCESS-EXIT-001.
+     *
+     * This asserted on ONE button, «انتقل إلى مساحاتك», which for somebody holding no membership
+     * pointed at a screen that offered nothing at all. The refusal now renders the shared recovery
+     * block, so the assertion is on the ACTIONS being there rather than on a particular label: a
+     * refusal whose copy is rewritten should keep passing, one that loses its exits must not.
+     */
+    await expect(page.getByTestId('access-recovery')).toBeVisible()
+    await expect(page.getByTestId('recovery-go-to-portal')).toBeVisible()
+    await expect(page.getByTestId('recovery-sign-out')).toBeVisible()
   })
 
   /** The API refuses the same thing, so the gate above is a courtesy and not the boundary. */
