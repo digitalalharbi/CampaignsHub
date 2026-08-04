@@ -119,8 +119,16 @@ test.describe('the code branch of the same door', () => {
   test('a client contact signs in with the code and lands in /portal', async ({ page }) => {
     await signInWithCode(page, DEMO_CLIENT_CONTACT)
 
-    // A contact named on exactly one client space is taken straight into it (PORTAL-CLIENT-001).
-    await expect(page).toHaveURL(/\/portal(\/clients\/[^/]+)?$/, { timeout: 20000 })
+    /*
+     * Inside the portal — but WHERE inside it is the portal's business, not this test's.
+     *
+     * A contact named on exactly one client space is taken straight into it; one named on several is
+     * shown the picker at `/portal/spaces` (PORTAL-CLIENT-001). How many spaces the seeded contact
+     * has depends on what the rest of the suite has created before this point, and pinning that made
+     * this fail on the second browser of a full run for a reason that had nothing to do with signing
+     * in. The claim under test is that a one-time code produces a portal session.
+     */
+    await expect(page).toHaveURL(/\/portal(\/|$)/, { timeout: 20000 })
     await expect(page.getByTestId('login-code')).toHaveCount(0)
   })
 

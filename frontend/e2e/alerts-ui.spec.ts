@@ -28,7 +28,15 @@ test('alerts page renders all sections and a rule created in the UI persists', a
   // Rules tab → create a rule → it appears in the list.
   const unique = `E2E budget ${test.info().project.name}-${Date.now()}`
   await page.getByRole('button', { name: /^Rules$|^القواعد$/ }).click()
-  await page.getByRole('textbox').first().fill(unique)
+  /*
+   * The rule-name field by id, not "the first textbox on the page".
+   *
+   * The alerts list carries its own search box, and that box only renders once there ARE alerts. So
+   * on a clean database the first textbox was the rule name, and by the third browser of a full run —
+   * after the earlier legs had created alerts — it was the search box: the rule name was typed into
+   * a filter, no rule was created, and the failure read as a broken form.
+   */
+  await page.locator('#rule-name').fill(unique)
   await page.getByRole('button', { name: /^Save$|^حفظ$/ }).click()
   await expect(page.getByText(unique)).toBeVisible({ timeout: 10_000 })
 

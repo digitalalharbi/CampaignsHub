@@ -76,7 +76,16 @@ final class SubscriptionPlanSeeder extends Seeder
                 // A trial is a look at the product, not a quarter of free capacity.
                 'trial_limits' => ['projects' => 3, 'team_members' => 3, 'connections' => 3, 'reports_per_month' => 10],
                 'sort_order' => 20,
-                'features' => ['support' => 'email', 'ai_assist' => true, 'white_label' => false],
+                // A higher plan includes everything the lower one does. The console renders these as
+                // switches now, and a Growth plan without the campaign tracking «البداية» sells would
+                // read as an error to any customer comparing the two — because it is one.
+                'features' => [
+                    'campaign_tracking' => true,
+                    'reports' => true,
+                    'support' => 'email',
+                    'ai_assist' => true,
+                    'white_label' => false,
+                ],
                 'limits' => ['projects' => 25, 'team_members' => 15, 'connections' => 25, 'reports_per_month' => 100],
             ],
             [
@@ -92,7 +101,13 @@ final class SubscriptionPlanSeeder extends Seeder
                 'trial_days' => 7,
                 'trial_limits' => ['projects' => 5, 'team_members' => 5, 'connections' => 5, 'reports_per_month' => 20],
                 'sort_order' => 30,
-                'features' => ['support' => 'priority', 'ai_assist' => true, 'white_label' => true],
+                'features' => [
+                    'campaign_tracking' => true,
+                    'reports' => true,
+                    'support' => 'priority',
+                    'ai_assist' => true,
+                    'white_label' => true,
+                ],
                 // null == unlimited. Scale is the most permissive plan and the no-subscription default.
                 'limits' => ['projects' => null, 'team_members' => null, 'connections' => null, 'reports_per_month' => null],
             ],

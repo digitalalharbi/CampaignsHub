@@ -27,6 +27,10 @@ test.describe('the plan catalogue is the owner’s to price', () => {
     await expect(page.getByTestId('plan-save-starter')).toBeDisabled()
 
     await annual.fill('950.00')
+
+    // A change is not saveable until it is explained — the reason goes on the audit entry.
+    await expect(page.getByTestId('plan-save-starter')).toBeDisabled()
+    await page.getByTestId('plan-reason-starter').fill('Introductory annual price for the quarter.')
     await expect(page.getByTestId('plan-save-starter')).toBeEnabled()
     await page.getByTestId('plan-save-starter').click()
 
@@ -40,12 +44,29 @@ test.describe('the plan catalogue is the owner’s to price', () => {
     // Put it back, so the rest of the suite sees the catalogue it expects.
     await page.reload()
     await page.getByTestId('plan-price-annual-starter').fill(original)
+    await page.getByTestId('plan-reason-starter').fill('Reverting the introductory price.')
     await page.getByTestId('plan-save-starter').click()
     await expect.poll(async () => {
       const res = await page.request.get('/api/v1/plans')
       const body = await res.json()
       return body.data.plans.find((p: { code: string }) => p.code === 'starter').price_annual
     }, { timeout: 15000 }).toBe(original)
+
+    /*
+     * …and the audit trail carries the actor, the reason and the date.
+     *
+     * Read from INSIDE the page rather than through `page.request`: Sanctum's stateful guard engages
+     * on the SPA's own Origin, which a bare API-context request does not send — the endpoint then
+     * answers 401 and the assertion fails for a reason that has nothing to do with auditing.
+     */
+    const reasons = await page.evaluate(async () => {
+      const res = await fetch('/api/v1/admin/audit', { credentials: 'include' })
+      const body = await res.json()
+      return (body.data?.entries ?? [])
+        .filter((e: { action: string }) => e.action === 'platform.plan.updated')
+        .map((e: { reason: string | null }) => e.reason)
+    })
+    expect(reasons.some((r: string | null) => r?.includes('Introductory annual price'))).toBeTruthy()
   })
 
   test('nothing on sale is free', async ({ page }) => {

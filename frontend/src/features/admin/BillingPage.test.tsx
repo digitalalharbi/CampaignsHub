@@ -73,21 +73,51 @@ describe('BillingPage', () => {
   })
 
   /** Both prices are editable, and an empty annual field withdraws the plan from the yearly term. */
-  it('offers the monthly and annual price, and saves only a real change', async () => {
+  it('offers the monthly and annual price, and saves only a real change with a reason', async () => {
     vi.mocked(updatePlan).mockResolvedValue({ plan: { id: 'p1', code: 'growth', name: 'Growth' } } as never)
     renderWithProviders(<BillingPage />, { route: '/admin/billing', locale: 'en' })
 
     await waitFor(() => expect(screen.getByTestId('plan-prices-growth')).toBeInTheDocument())
 
     // Nothing has changed, so there is nothing to save — an owner opening the page cannot fill the
-    // audit log with a save that changed nothing.
+    // audit log with a save that changed nothing, and there is no reason field to fill in either.
     expect(screen.getByTestId('plan-save-growth')).toBeDisabled()
+    expect(screen.queryByTestId('plan-reason-growth')).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByTestId('plan-price-annual-growth'), { target: { value: '' } })
+
+    // A change without an explanation is still not saveable: a commercial decision nobody wrote a
+    // reason for is one nobody can defend later.
+    expect(screen.getByTestId('plan-save-growth')).toBeDisabled()
+    fireEvent.change(screen.getByTestId('plan-reason-growth'), { target: { value: 'Withdrawn from the annual term for Q4.' } })
+
     fireEvent.click(screen.getByTestId('plan-save-growth'))
 
     // An empty annual field is null, not zero: withdrawn from the term, not sold for nothing.
-    await waitFor(() => expect(updatePlan).toHaveBeenCalledWith('p1', { price_monthly: '300.00', price_annual: null }))
+    await waitFor(() => expect(updatePlan).toHaveBeenCalledWith('p1', {
+      price_monthly: '300.00',
+      price_annual: null,
+      features: { campaign_tracking: false, reports: false, ai_assist: false, white_label: false },
+      reason: 'Withdrawn from the annual term for Q4.',
+    }))
+  })
+
+  /** What a plan INCLUDES is data the owner edits, not a paragraph somebody rewrites. */
+  it('turns a plan’s services on and off', async () => {
+    vi.mocked(updatePlan).mockResolvedValue({ plan: { id: 'p1', code: 'growth', name: 'Growth' } } as never)
+    vi.mocked(fetchPlans).mockResolvedValue({ plans: [plan({ features: { campaign_tracking: true, reports: false } })] })
+    renderWithProviders(<BillingPage />, { route: '/admin/billing', locale: 'en' })
+
+    await waitFor(() => expect(screen.getByTestId('plan-feature-growth-reports')).toBeInTheDocument())
+    expect(screen.getByTestId('plan-feature-growth-campaign_tracking')).toBeChecked()
+    expect(screen.getByTestId('plan-feature-growth-reports')).not.toBeChecked()
+
+    fireEvent.click(screen.getByTestId('plan-feature-growth-reports'))
+    fireEvent.change(screen.getByTestId('plan-reason-growth'), { target: { value: 'Reports are included from this month.' } })
+    fireEvent.click(screen.getByTestId('plan-save-growth'))
+
+    await waitFor(() => expect(updatePlan).toHaveBeenCalled())
+    expect(vi.mocked(updatePlan).mock.calls[0][1].features).toMatchObject({ campaign_tracking: true, reports: true })
   })
 
   it('toggles a plan’s availability', async () => {

@@ -92,8 +92,13 @@ function PlansTab({ ar }: { ar: boolean }) {
    * one owes. Editing here cannot re-price anybody.
    */
   const reprice = useMutation({
-    mutationFn: ({ id, monthly, annual }: { id: string; monthly: string; annual: string | null }) =>
-      updatePlan(id, { price_monthly: monthly, price_annual: annual }),
+    mutationFn: ({ id, monthly, annual, features, reason }: {
+      id: string
+      monthly: string
+      annual: string | null
+      features: Record<string, unknown>
+      reason: string
+    }) => updatePlan(id, { price_monthly: monthly, price_annual: annual, features, reason }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin'] }),
   })
   const error = toggle.isError ? toApiError(toggle.error) : reprice.isError ? toApiError(reprice.error) : null
@@ -140,11 +145,12 @@ function PlansTab({ ar }: { ar: boolean }) {
                 </p>
               </div>
               <div className="flex flex-wrap items-end gap-3">
-                <PlanPrices
+                <PlanTerms
                   plan={p}
                   ar={ar}
                   saving={reprice.isPending}
-                  onSave={(monthly, annual) => reprice.mutate({ id: p.id, monthly, annual })}
+                  onSave={(monthly, annual, features, reason) =>
+                    reprice.mutate({ id: p.id, monthly, annual, features, reason })}
                 />
                 <Switch
                   id={`plan-active-${p.code}`}
@@ -163,53 +169,107 @@ function PlansTab({ ar }: { ar: boolean }) {
 }
 
 /**
- * The two prices, edited in place.
+ * The services a plan includes, as switches.
+ *
+ * Only the boolean features are offered. `support` is a tier name rather than a yes/no, and a
+ * checkbox that silently turned "priority" into `true` would be worse than not offering it — the
+ * ones a switch can honestly express are the ones a switch gets.
+ */
+const FEATURE_LABELS: Record<string, { ar: string; en: string }> = {
+  campaign_tracking: { ar: 'متابعة الحملات', en: 'Campaign tracking' },
+  reports: { ar: 'التقارير', en: 'Reports' },
+  ai_assist: { ar: 'المساعد الذكي', en: 'AI assist' },
+  white_label: { ar: 'علامة بيضاء', en: 'White label' },
+}
+
+/**
+ * A plan's commercial terms, edited in place — prices and what it includes.
  *
  * The annual field is deliberately allowed to be EMPTY, and empty means null rather than zero: a
  * plan withdrawn from the yearly term has no annual price, and a plan sold for nothing a year is a
- * free tier by another name. Save is disabled until something actually changed, so an owner opening
- * the screen cannot re-save the same numbers and fill the audit log with nothing.
+ * free tier by another name. Save is disabled until something actually changed AND a reason has been
+ * given, so an owner opening the screen cannot re-save the same numbers, and no change reaches the
+ * catalogue without an explanation on the audit entry beside it.
  */
-function PlanPrices({ plan, ar, saving, onSave }: {
+function PlanTerms({ plan, ar, saving, onSave }: {
   plan: PlatformPlan
   ar: boolean
   saving: boolean
-  onSave: (monthly: string, annual: string | null) => void
+  onSave: (monthly: string, annual: string | null, features: Record<string, unknown>, reason: string) => void
 }) {
+  const current = (plan.features && !Array.isArray(plan.features) ? plan.features : {}) as Record<string, unknown>
+
   const [monthly, setMonthly] = useState(plan.price_monthly)
   const [annual, setAnnual] = useState(plan.price_annual ?? '')
+  const [features, setFeatures] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(Object.keys(FEATURE_LABELS).map((k) => [k, current[k] === true])),
+  )
+  const [reason, setReason] = useState('')
 
-  const changed = monthly !== plan.price_monthly || annual !== (plan.price_annual ?? '')
+  const featuresChanged = Object.keys(FEATURE_LABELS).some((k) => features[k] !== (current[k] === true))
+  const changed = monthly !== plan.price_monthly || annual !== (plan.price_annual ?? '') || featuresChanged
   const field = 'h-9 w-24 rounded-lg border border-border bg-surface px-2.5 text-sm tabular-nums text-text-primary outline-none focus:border-brand-500'
 
   return (
-    <div className="flex flex-wrap items-end gap-2" data-testid={`plan-prices-${plan.code}`}>
-      <label className="text-[11.5px] font-semibold text-text-muted">
-        <span className="mb-1 block">{ar ? 'شهري' : 'Monthly'}</span>
+    <div className="flex flex-col gap-2" data-testid={`plan-prices-${plan.code}`}>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-[11.5px] font-semibold text-text-muted">
+          <span className="mb-1 block">{ar ? 'شهري' : 'Monthly'}</span>
+          <input
+            data-testid={`plan-price-monthly-${plan.code}`}
+            className={field} dir="ltr" inputMode="decimal"
+            value={monthly} onChange={(e) => setMonthly(e.target.value)}
+          />
+        </label>
+        <label className="text-[11.5px] font-semibold text-text-muted">
+          <span className="mb-1 block">{ar ? 'سنوي' : 'Annual'}</span>
+          <input
+            data-testid={`plan-price-annual-${plan.code}`}
+            className={field} dir="ltr" inputMode="decimal"
+            placeholder={ar ? 'لا يُباع' : 'Not sold'}
+            value={annual} onChange={(e) => setAnnual(e.target.value)}
+          />
+        </label>
+        <button
+          type="button"
+          data-testid={`plan-save-${plan.code}`}
+          disabled={!changed || reason.trim().length < 3 || saving}
+          onClick={() => onSave(
+            monthly.trim(),
+            annual.trim() === '' ? null : annual.trim(),
+            { ...current, ...features },
+            reason.trim(),
+          )}
+          className="h-9 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white disabled:opacity-45"
+        >
+          {ar ? 'حفظ' : 'Save'}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {Object.entries(FEATURE_LABELS).map(([key, label]) => (
+          <label key={key} className="flex items-center gap-1.5 text-[12px] text-text-secondary">
+            <input
+              type="checkbox"
+              data-testid={`plan-feature-${plan.code}-${key}`}
+              checked={features[key] ?? false}
+              onChange={(e) => setFeatures((f) => ({ ...f, [key]: e.target.checked }))}
+              className="h-3.5 w-3.5 rounded border-border accent-brand-600"
+            />
+            {label[ar ? 'ar' : 'en']}
+          </label>
+        ))}
+      </div>
+
+      {/* Asked for whenever there is something to explain, and only then. */}
+      {changed && (
         <input
-          data-testid={`plan-price-monthly-${plan.code}`}
-          className={field} dir="ltr" inputMode="decimal"
-          value={monthly} onChange={(e) => setMonthly(e.target.value)}
+          data-testid={`plan-reason-${plan.code}`}
+          value={reason} onChange={(e) => setReason(e.target.value)}
+          placeholder={ar ? 'سبب التغيير (مطلوب)' : 'Why the terms changed (required)'}
+          className="h-9 w-full rounded-lg border border-border bg-surface px-2.5 text-sm text-text-primary outline-none focus:border-brand-500"
         />
-      </label>
-      <label className="text-[11.5px] font-semibold text-text-muted">
-        <span className="mb-1 block">{ar ? 'سنوي' : 'Annual'}</span>
-        <input
-          data-testid={`plan-price-annual-${plan.code}`}
-          className={field} dir="ltr" inputMode="decimal"
-          placeholder={ar ? 'لا يُباع' : 'Not sold'}
-          value={annual} onChange={(e) => setAnnual(e.target.value)}
-        />
-      </label>
-      <button
-        type="button"
-        data-testid={`plan-save-${plan.code}`}
-        disabled={!changed || saving}
-        onClick={() => onSave(monthly.trim(), annual.trim() === '' ? null : annual.trim())}
-        className="h-9 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white disabled:opacity-45"
-      >
-        {ar ? 'حفظ' : 'Save'}
-      </button>
+      )}
     </div>
   )
 }

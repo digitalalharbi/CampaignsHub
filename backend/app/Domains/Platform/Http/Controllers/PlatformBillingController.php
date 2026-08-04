@@ -129,7 +129,19 @@ final class PlatformBillingController extends Controller
             // it must keep working, which is why these are two fields and not one.
             'is_public' => ['sometimes', 'boolean'],
             'sort_order' => ['sometimes', 'integer', 'min:0', 'max:9999'],
+            /*
+             * Why the terms changed, in the operator's own words.
+             *
+             * Optional rather than required, because this endpoint also carries the ordinary
+             * availability toggle — but the console asks for one on a price or a feature change, and
+             * a commercial decision whose reason nobody wrote down is one nobody can defend later.
+             */
+            'reason' => ['sometimes', 'nullable', 'string', 'max:500'],
         ]);
+
+        // Not a column on the plan — it belongs to the audit entry, not to the catalogue.
+        $reason = isset($data['reason']) ? trim((string) $data['reason']) : null;
+        unset($data['reason']);
 
         /** @var SubscriptionPlan|null $model */
         $model = SubscriptionPlan::query()->whereKey($plan)->first();
@@ -149,6 +161,7 @@ final class PlatformBillingController extends Controller
             'entity_id' => (string) $model->getKey(),
             'before' => $before,
             'after' => $model->only($tracked),
+            'reason' => $reason !== '' ? $reason : null,
             'ip_address' => $request->ip(),
         ]);
 

@@ -177,6 +177,8 @@ export function updatePlan(
     price_monthly?: string
     price_annual?: string | null
     features?: Record<string, unknown>
+    /** Why the commercial terms changed — recorded on the audit entry, never on the plan. */
+    reason?: string
   },
 ): Promise<{ plan: PlatformPlan }> {
   return patchData(`/admin/plans/${id}`, body)
