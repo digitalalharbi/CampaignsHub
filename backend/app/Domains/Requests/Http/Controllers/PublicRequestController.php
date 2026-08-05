@@ -51,7 +51,28 @@ final class PublicRequestController
                 'key' => $t->key, 'module' => $t->module, 'name_ar' => $t->name_ar, 'name_en' => $t->name_en,
             ]);
 
-        return response()->json(['data' => ['types' => $types]]);
+        /*
+         * INFL-SOON-001 — announced, in a list of its own.
+         *
+         * A withdrawn service used to be absent from the form entirely, so a visitor looking for
+         * influencer work read the catalogue, did not find it, and concluded the product does not do
+         * it. Naming it as «قريبًا» answers that without taking an order nobody can fulfil.
+         *
+         * It is a SEPARATE key rather than a `disabled` flag inside `types`, and that is the whole
+         * design: the list the form submits against contains only things that can be submitted, so a
+         * client — this one or a future one — cannot turn an announcement into an order by ignoring a
+         * boolean. `store()` refuses these keys independently, so the guarantee does not rest on the
+         * interface at all.
+         */
+        $comingSoon = RequestType::query()->comingSoon()->where('is_active', true)->orderBy('sort')
+            ->get(['key', 'module', 'name_ar', 'name_en'])
+            ->map(fn (RequestType $t) => [
+                'key' => $t->key, 'module' => $t->module, 'name_ar' => $t->name_ar, 'name_en' => $t->name_en,
+                'note_ar' => 'هذه الخدمة ستتوفر قريبًا، ولا يمكن إرسال طلب لها حاليًا.',
+                'note_en' => 'This service is coming soon. A request cannot be submitted for it yet.',
+            ]);
+
+        return response()->json(['data' => ['types' => $types, 'coming_soon' => $comingSoon]]);
     }
 
     /** POST /api/v1/requests — public intake. */

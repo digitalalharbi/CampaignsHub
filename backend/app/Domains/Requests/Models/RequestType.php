@@ -54,11 +54,41 @@ class RequestType extends Model
      */
     public function scopeOffered(Builder $query): Builder
     {
-        $withdrawn = array_keys(array_filter(
+        $withdrawn = self::withdrawnModules();
+
+        return $withdrawn === [] ? $query : $query->whereNotIn('module', $withdrawn);
+    }
+
+    /**
+     * The exact complement of {@see scopeOffered()} — announced, and not openable (INFL-SOON-001).
+     *
+     * The intake form names «علاقات المؤثرين وUGC» so a visitor looking for it learns it is coming
+     * rather than concluding the product does not do it. That announcement must never become an
+     * order, so it is a SEPARATE list from the one the form submits against — not a flag on a row in
+     * the same list. A caller iterating the offerable types cannot reach these rows at all, which is
+     * a stronger guarantee than remembering to check `disabled` at every call site.
+     *
+     * Complement rather than its own predicate, deliberately: written as a second condition the two
+     * could drift until a type was in both lists — offered AND coming soon — and the form would show
+     * it disabled while the API happily accepted it.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeComingSoon(Builder $query): Builder
+    {
+        $withdrawn = self::withdrawnModules();
+
+        // No withdrawn module means nothing is coming soon — match nothing, never everything.
+        return $withdrawn === [] ? $query->whereRaw('1 = 0') : $query->whereIn('module', $withdrawn);
+    }
+
+    /** @return list<string> modules whose portal is switched off in this release. */
+    private static function withdrawnModules(): array
+    {
+        return array_keys(array_filter(
             self::MODULE_PORTALS,
             static fn (Portal $portal): bool => ! $portal->isEnabled(),
         ));
-
-        return $withdrawn === [] ? $query : $query->whereNotIn('module', $withdrawn);
     }
 }

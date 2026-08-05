@@ -7,6 +7,19 @@ export interface RequestType {
   name_en: string
 }
 
+/**
+ * A service the form NAMES but cannot open a request against (INFL-SOON-001).
+ *
+ * Deliberately its own type, fed by its own key on the response, rather than a `disabled` flag on
+ * `RequestType`. The list the form submits against then contains only submittable things, so no
+ * amount of forgetting to check a boolean can turn an announcement into an order. The reason travels
+ * with the row so the message the user sees is the server's sentence, not one this page invented.
+ */
+export interface ComingSoonType extends RequestType {
+  note_ar: string
+  note_en: string
+}
+
 export interface RequestSubmitPayload {
   type: string
   contact_name: string
@@ -71,7 +84,8 @@ export interface UploadedFileMeta {
   mime: string | null
 }
 
-export const getRequestMeta = () => getData<{ types: RequestType[] }>('/requests/meta')
+export const getRequestMeta = () =>
+  getData<{ types: RequestType[]; coming_soon?: ComingSoonType[] }>('/requests/meta')
 
 /** Start an expiring upload session; the token is held in memory only (never localStorage). */
 export const startUploadSession = () => postData<{ upload_token: string; expires_at: string }>('/requests/uploads/start')

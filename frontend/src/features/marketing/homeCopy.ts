@@ -351,7 +351,7 @@ const ar: HomeCopy = {
     soon: {
       badge: 'قريبًا',
       title: 'علاقات المؤثرين وUGC',
-      desc: 'إدارة حملات المؤثرين والمحتوى والتعاونات من مكان واحد.',
+      desc: 'إدارة حملات المؤثرين وصنّاع المحتوى والتعاونات من مكان واحد.',
     },
   },
   features: {
@@ -653,7 +653,7 @@ const en: HomeCopy = {
     soon: {
       badge: 'Coming soon',
       title: 'Influencer relations & UGC',
-      desc: 'Run influencer campaigns, content and collaborations from one place.',
+      desc: 'Run influencer campaigns, content creators and collaborations from one place.',
     },
   },
   features: {

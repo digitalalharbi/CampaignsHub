@@ -24,7 +24,10 @@ class RequestCatalogSeeder extends Seeder
             ['key' => 'data_analysis', 'module' => 'analytics', 'name_ar' => 'تحليل بيانات', 'name_en' => 'Data analysis'],
             ['key' => 'consulting', 'module' => 'consulting', 'name_ar' => 'استشارة', 'name_en' => 'Consulting'],
             ['key' => 'custom', 'module' => 'custom', 'name_ar' => 'طلب مخصص', 'name_en' => 'Custom request'],
-            ['key' => 'influencer_ugc', 'module' => 'influencer_marketing', 'name_ar' => 'حملة مؤثرين أو UGC', 'name_en' => 'Influencer / UGC campaign'],
+            // INFL-SOON-001 — named the way the marketing page names it, so a visitor who read
+            // «علاقات المؤثرين وUGC» there recognises the same service here rather than wondering
+            // whether «حملة مؤثرين» is a different offering.
+            ['key' => 'influencer_ugc', 'module' => 'influencer_marketing', 'name_ar' => 'علاقات المؤثرين وUGC', 'name_en' => 'Influencer relations & UGC'],
         ];
         foreach ($types as $i => $t) {
             RequestType::updateOrCreate(['key' => $t['key']], $t + ['sort' => $i, 'is_active' => true]);

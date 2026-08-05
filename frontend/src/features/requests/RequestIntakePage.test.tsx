@@ -105,6 +105,85 @@ describe('RequestIntakePage — service handoff (default flow, unchanged)', () =
   })
 })
 
+/**
+ * INFL-SOON-001 — «علاقات المؤثرين وUGC» is NAMED on the form and cannot be ordered.
+ *
+ * Absent from the list entirely, it read as «this product does not do influencer work» to the one
+ * visitor who came looking for it. Announcing it answers that — but an announcement that could be
+ * submitted would be worse than the silence it replaced, so these tests are about the refusal as
+ * much as the presence.
+ */
+describe('RequestIntakePage — a service that is announced but not openable', () => {
+  const SOON = [{
+    key: 'influencer_ugc', module: 'influencer_marketing',
+    name_ar: 'علاقات المؤثرين وUGC', name_en: 'Influencer relations & UGC',
+    note_ar: 'هذه الخدمة ستتوفر قريبًا، ولا يمكن إرسال طلب لها حاليًا.',
+    note_en: 'This service is coming soon. A request cannot be submitted for it yet.',
+  }]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getRequestMeta).mockResolvedValue({ types: [TYPES[0]], coming_soon: SOON })
+  })
+
+  it('names it with a coming-soon badge, in Arabic', async () => {
+    renderWithProviders(<RequestIntakePage />, { route: '/requests/new', locale: 'ar' })
+
+    const tile = await screen.findByTestId('service-soon-influencer_ugc')
+    expect(tile.textContent).toContain('علاقات المؤثرين وUGC')
+    expect(tile.textContent).toContain('قريبًا')
+  })
+
+  it('names it with a coming-soon badge, in English', async () => {
+    renderWithProviders(<RequestIntakePage />, { route: '/requests/new', locale: 'en' })
+
+    const tile = await screen.findByTestId('service-soon-influencer_ugc')
+    expect(tile.textContent).toContain('Influencer relations & UGC')
+    expect(tile.textContent).toContain('Coming soon')
+  })
+
+  /** Pressing it explains, rather than doing nothing — silence reads as a broken button. */
+  it('explains that no request can be submitted, when pressed', async () => {
+    renderWithProviders(<RequestIntakePage />, { route: '/requests/new', locale: 'ar' })
+
+    fireEvent.click(await screen.findByTestId('service-soon-influencer_ugc'))
+
+    const notice = await screen.findByTestId('service-soon-notice')
+    expect(notice.textContent).toBe('هذه الخدمة ستتوفر قريبًا، ولا يمكن إرسال طلب لها حاليًا.')
+  })
+
+  /**
+   * The claim that matters: pressing it does NOT select it.
+   *
+   * A tile that looked inert but quietly set the form's type would carry the visitor to step 1 of a
+   * service nobody can fulfil, and the refusal would arrive at submit — after they had typed their
+   * name, email, phone and company.
+   */
+  it('does not become the chosen service when pressed', async () => {
+    renderWithProviders(<RequestIntakePage />, { route: '/requests/new', locale: 'ar' })
+
+    const tile = await screen.findByTestId('service-soon-influencer_ugc')
+    fireEvent.click(tile)
+
+    expect(tile).toHaveAttribute('aria-disabled', 'true')
+    // Still on the service step, and nothing is selected.
+    expect(screen.getByText('اختر نوع الخدمة')).toBeInTheDocument()
+    for (const b of screen.getAllByRole('button')) {
+      expect(b.getAttribute('aria-pressed')).not.toBe('true')
+    }
+  })
+
+  /** With nothing withheld, no announcement appears — the grid is exactly the openable services. */
+  it('shows no announcement when every service is openable', async () => {
+    vi.mocked(getRequestMeta).mockResolvedValue({ types: [TYPES[0]], coming_soon: [] })
+
+    renderWithProviders(<RequestIntakePage />, { route: '/requests/new', locale: 'ar' })
+
+    await screen.findByText('اختر نوع الخدمة')
+    expect(screen.queryByTestId('service-soon-influencer_ugc')).toBeNull()
+  })
+})
+
 describe('RequestIntakePage — paid-media dynamic intake (?module=paid-media)', () => {
   beforeEach(() => {
     vi.clearAllMocks()

@@ -348,7 +348,7 @@ describe('PublicHomePage — the influencer & UGC announcement', () => {
 
     const card = screen.getByTestId('home-service-soon-influencers')
     expect(within(card).getByText('علاقات المؤثرين وUGC')).toBeInTheDocument()
-    expect(within(card).getByText('إدارة حملات المؤثرين والمحتوى والتعاونات من مكان واحد.')).toBeInTheDocument()
+    expect(within(card).getByText('إدارة حملات المؤثرين وصنّاع المحتوى والتعاونات من مكان واحد.')).toBeInTheDocument()
     expect(within(card).getByText('قريبًا')).toBeInTheDocument()
   })
 
@@ -358,6 +358,7 @@ describe('PublicHomePage — the influencer & UGC announcement', () => {
 
     const card = screen.getByTestId('home-service-soon-influencers')
     expect(within(card).getByText('Influencer relations & UGC')).toBeInTheDocument()
+    expect(within(card).getByText('Run influencer campaigns, content creators and collaborations from one place.')).toBeInTheDocument()
     expect(within(card).getByText('Coming soon')).toBeInTheDocument()
   })
 

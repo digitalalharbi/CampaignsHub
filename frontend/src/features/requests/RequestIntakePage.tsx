@@ -126,6 +126,8 @@ function DefaultIntake() {
 
   const metaQuery = useQuery({ queryKey: ['requests', 'meta'], queryFn: getRequestMeta })
   const types = metaQuery.data?.types ?? []
+  // Announced but not openable (INFL-SOON-001). A separate list from `types`, by design — see the grid.
+  const comingSoon = metaQuery.data?.coming_soon ?? []
 
   // Journey handoff from the homepage decision cards: `?service=` or `?module=` presets the module and
   // skips step 0. (`module=paid-media` never reaches here — RequestIntakePage renders PaidMediaIntake for it.)
@@ -150,6 +152,8 @@ function DefaultIntake() {
     } catch { /* ignore malformed draft */ }
   }, [])
   const [errors, setErrors] = useState<Record<string, string>>({})
+  /** The refusal shown after pressing an announced-but-unopenable service (INFL-SOON-001). */
+  const [soonNotice, setSoonNotice] = useState<string | null>(null)
 
   // Persist ONLY the non-sensitive service + step (+ timestamp for expiry). No PII ever touches storage.
   useEffect(() => {
@@ -344,7 +348,44 @@ function DefaultIntake() {
                     {ar ? t.name_ar : t.name_en}
                   </button>
                 ))}
+
+                {/*
+                  INFL-SOON-001 — named, and not openable.
+                  A withdrawn service used to be absent from this list entirely, so somebody looking
+                  for influencer work read the catalogue, did not find it, and concluded the product
+                  does not do it. It is announced here instead — in the same grid so the columns stay
+                  balanced at every width, and visibly inert so nobody spends time on a dead end.
+                  It comes from `coming_soon`, a different list from the one this form submits, so it
+                  cannot become a selection: there is no `set('type', …)` on this branch to forget.
+                */}
+                {comingSoon.map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    data-testid={`service-soon-${t.key}`}
+                    aria-disabled="true"
+                    onClick={() => setSoonNotice(ar ? t.note_ar : t.note_en)}
+                    className="min-h-[56px] cursor-not-allowed rounded-xl border border-dashed border-border-strong bg-surface-secondary px-4 py-3 text-start text-sm font-semibold text-text-secondary"
+                  >
+                    <span className="flex flex-wrap items-center gap-2">
+                      {ar ? t.name_ar : t.name_en}
+                      <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-text-muted">
+                        {ar ? 'قريبًا' : 'Coming soon'}
+                      </span>
+                    </span>
+                  </button>
+                ))}
               </div>
+              {/*
+                The refusal is stated once, below the grid, and only after a press — a permanent
+                notice beside a card nobody has touched is noise, and an alert() would be a modal the
+                reader has to dismiss before they can carry on choosing.
+              */}
+              {soonNotice && (
+                <p data-testid="service-soon-notice" role="status" className="rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-sm text-text-secondary">
+                  {soonNotice}
+                </p>
+              )}
               {errors.type && <p className="text-sm text-danger">{errors.type}</p>}
             </div>
           )}

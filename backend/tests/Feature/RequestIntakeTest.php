@@ -75,6 +75,50 @@ final class RequestIntakeTest extends TestCase
             ->assertJsonValidationErrors('type');
     }
 
+    /**
+     * INFL-SOON-001 — the withdrawn service is ANNOUNCED, in a list of its own.
+     *
+     * Absent from the form entirely, it read as «this product does not do influencer work» to anyone
+     * looking for it. Naming it as «قريبًا» answers that. The separate key is the guarantee: the list
+     * the form submits against holds only submittable things, so no client can turn the announcement
+     * into an order by ignoring a flag.
+     */
+    public function test_the_withdrawn_service_is_announced_separately_from_the_openable_ones(): void
+    {
+        $res = $this->getJson('/api/v1/requests/meta')->assertOk();
+
+        $offered = collect($res->json('data.types'))->pluck('key');
+        $soon = collect($res->json('data.coming_soon'));
+
+        $this->assertTrue($soon->pluck('key')->contains('influencer_ugc'));
+        $this->assertFalse($offered->contains('influencer_ugc'));
+
+        // The two lists are complements — nothing may appear in both.
+        $this->assertEmpty(array_intersect($offered->all(), $soon->pluck('key')->all()));
+
+        // The refusal travels with the row, so the page shows the server's sentence, not its own.
+        $row = $soon->firstWhere('key', 'influencer_ugc');
+        $this->assertStringContainsString('قريبًا', $row['note_ar']);
+        $this->assertNotEmpty($row['note_en']);
+    }
+
+    /**
+     * Announcing it does not make it openable.
+     *
+     * The pairing that matters: the key is now visible in a public response, which is exactly the
+     * circumstance under which somebody copies it into a payload by hand.
+     */
+    public function test_a_service_that_is_only_announced_still_cannot_be_submitted(): void
+    {
+        $announced = collect($this->getJson('/api/v1/requests/meta')->json('data.coming_soon'))->pluck('key');
+
+        foreach ($announced as $key) {
+            $this->postJson('/api/v1/requests', $this->payload(['type' => $key]))
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('type');
+        }
+    }
+
     public function test_public_intake_creates_request_reference_token_and_event(): void
     {
         $res = $this->postJson('/api/v1/requests', $this->payload())->assertCreated();
