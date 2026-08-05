@@ -22,4 +22,5 @@ return [
     'contact_received' => 'Thank you — your message has been received and we will reply by email.',
     'support_ticket_created' => 'Your ticket has been created. Keep the reference to follow it up.',
     'data_request_received' => 'Your request has been recorded and will be reviewed.',
+    'policies_not_accepted' => 'You must accept: :documents',
 ];

@@ -11,6 +11,7 @@ use App\Domains\Identity\Http\Controllers\OAuthController;
 use App\Domains\Identity\Http\Controllers\OnboardingController;
 use App\Domains\Identity\Http\Controllers\PhoneSignInController;
 use App\Domains\Identity\Http\Controllers\UserController;
+use App\Domains\Legal\Http\Controllers\ConsentController;
 use App\Domains\Tenancy\Http\Controllers\MembershipController;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -165,3 +166,16 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('me')->name('me.')->group(
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])
     ->get('users', [UserController::class, 'index'])
     ->name('users.index');
+
+/*
+ * LEGAL-003 — the binding documents a signed-in user still owes, and accepting them.
+ *
+ * Here rather than behind a portal gate because it applies to every signed-in person regardless of
+ * which portal they are in: a new terms version has to be answerable by an agency operator, an
+ * advertiser and a platform owner alike, and gating it per portal would leave one of them unable to
+ * clear the prompt blocking them.
+ */
+Route::middleware('auth:sanctum')->prefix('legal')->name('legal.')->group(function (): void {
+    Route::get('/outstanding', [ConsentController::class, 'outstanding'])->name('outstanding');
+    Route::post('/accept', [ConsentController::class, 'accept'])->middleware('throttle:10,1')->name('accept');
+});

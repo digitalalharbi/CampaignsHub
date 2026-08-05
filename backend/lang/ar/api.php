@@ -35,4 +35,5 @@ return [
     'contact_received' => 'شكرًا لك — وصلتنا رسالتك وسنرد عبر البريد الإلكتروني.',
     'support_ticket_created' => 'أُنشئت تذكرتك. احتفظ بالرقم المرجعي لمتابعتها.',
     'data_request_received' => 'سُجّل طلبك وسيُراجَع.',
+    'policies_not_accepted' => 'يجب الموافقة على: :documents',
 ];

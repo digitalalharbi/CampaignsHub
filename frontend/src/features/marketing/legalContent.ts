@@ -176,6 +176,13 @@ const ar: LegalDoc[] = [
         body: ['لا نستخدم ملفات تتبع إعلاني ولا نشارك سلوك تصفحك مع شبكات إعلانية.'],
       },
       {
+        heading: 'لماذا لا يوجد شريط موافقة',
+        body: [
+          'لأنه لا يوجد ما تُطلب الموافقة عليه. كل ما نستخدمه ضروري لتشغيل الموقع وتسجيل دخولك وحفظ لغتك ومظهرك، ولا يمكن للموقع أن يعمل بدونه — وسؤالك عن شيء لا خيار فيه ليس موافقة.',
+          'لا يوجد Google Analytics ولا Pixels ولا أي أداة تتبع على هذا الموقع. إن أُضيف مستقبلًا أي ملف غير ضروري، فستُضاف معه آلية موافقة واضحة في التغيير نفسه — لا قبله ولا بعده.',
+        ],
+      },
+      {
         heading: 'التحكم',
         body: ['يمكنك حذف ملفات تعريف الارتباط من متصفحك في أي وقت؛ سيؤدي حذف ملف الجلسة إلى تسجيل الخروج فقط.'],
       },
@@ -467,6 +474,13 @@ const en: LegalDoc[] = [
         ],
       },
       { heading: 'What we do not use', body: ['No advertising trackers, and no sharing of your browsing behaviour with ad networks.'] },
+      {
+        heading: 'Why there is no consent banner',
+        body: [
+          'Because there is nothing to consent to. Everything we set is required to run the site, sign you in and remember your language and theme, and the site cannot work without it — asking about something you have no choice over is not consent.',
+          'There is no Google Analytics, no pixel and no tracker on this site. If a non-essential cookie is ever introduced, a clear consent mechanism arrives with it in the same change — not before it, and not after.',
+        ],
+      },
       { heading: 'Control', body: ['You can clear cookies in your browser at any time; clearing the session cookie simply signs you out.'] },
     ],
   },
