@@ -10,6 +10,7 @@ import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
 import { toApiError } from '@/lib/api/client'
 import { fmtDateTime } from '@/lib/datetime'
+import { AdPlatformsPanel } from '@/features/integrations/IntegrationsPage'
 import { SearchableSelect } from '@/components/forms/SearchableSelect'
 import type { Option } from '@/components/forms/types'
 import {
@@ -210,6 +211,16 @@ export function ConnectionCenterPage() {
     return (
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4 md:p-6">
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
+
+        {/*
+          * The six ad platforms live above the project-scoped centre (INTEG-UI-001).
+          *
+          * Connecting Snapchat or Meta is a TENANT-level act — one authorisation serves every project —
+          * so it must be reachable before a project has been chosen, which is why it sits outside the
+          * project gate below rather than inside it.
+          */}
+        <AdPlatformsPanel />
+
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">
           <span className="block font-semibold text-text-primary">{c.pick_project}</span>
           {c.pick_project_hint}
@@ -224,6 +235,15 @@ export function ConnectionCenterPage() {
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
         <p className="text-sm text-text-secondary">{c.subtitle}</p>
       </header>
+
+      {/*
+        * The six ad platforms live above the project-scoped centre (INTEG-UI-001).
+        *
+        * Connecting Snapchat or Meta is a TENANT-level act — one authorisation serves every project —
+        * so it must be reachable before a project has been chosen, which is why it sits outside the
+        * project gate below rather than inside it.
+        */}
+      <AdPlatformsPanel />
 
       {/* Summary tiles */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
