@@ -966,3 +966,64 @@ Neither was in the brief, and neither is visible from a passing test suite.
 | --- | --- | --- |
 | The public homepage scrolled sideways on a phone | At 375px the header asked for 423px — logo 163, the two toggles 76, «Create account» 128 — so `scrollWidth` exceeded `clientWidth` by 31px and **every section of the page**, not just the header, could be dragged off-centre. Nothing in the row was droppable: the language and theme toggles are how an Arabic-first product is read at all, and the CTA is what the page is for. | The wordmark yields below 480px (`max-[479px]:hidden`) and the row tightens to `gap-2` on mobile; the gradient mark keeps the brand in a third of the width. Measured after: overflow 0 at 375 in both languages and both themes, wordmark back at 1280. |
 | React warned «two children with the same key: /login» on every render | The footer's product column keys its links by route, and since the portals merged (LOGIN-UNIFIED-001) «تسجيل الدخول» and «متابعة طلباتي» are two different invitations to ONE door. React was free to reuse the wrong node between them, and the console error buried anything real that might have been logged beside it. | Keyed by label at both sites — the footer column and the hero's account actions. Verified by hooking `console.error` and remounting the whole page through an SPA navigation: zero errors. |
+
+---
+
+# The production-integrations brief — closing ledger at `72200dc`
+
+> This section supersedes any earlier row or note in this file that reported items 1f, 2, 3, 4, 5 or 6
+> as `NOT_STARTED`, and any status statement pinned to `4eb36fa`. Every other row above stands
+> unchanged.
+
+**Gate at `72200dc`, clean tree:** Playwright **773/773** on Chromium + Firefox + WebKit ·
+Failed 0 · Flaky 0 · Retries 0 · exit 0 · 28.7m.
+**Backend 1246 passed (6207 assertions) · Vitest 625 passed (90 files) · tsc clean · oxlint 0 errors ·
+Pint clean · composer audit clean.**
+
+| ID | Module | Requirement | Backend | Frontend | Test | Status | Commit | Remaining gap |
+|---|---|---|---|---|---|---|---|---|
+| STRUCT-001 | INTEGRATIONS | Per-platform hierarchy: ad sets → ads → creatives, read as each platform actually has it (LinkedIn has no ad-set level; Google budgets campaigns not ad groups) | `ImportExternalStructure`, `AccountStructureSyncer`, `SyncAccountStructureJob`, 6 connectors | `CampaignStructureTab` (4 states, no-preview marker) | `AdPlatformStructureSyncTest` (14) + `CampaignStructureTab.test.tsx` (5) | **VERIFIED** | `9848277` | `integrations:sync-structure` runs `55 */6` — AHEAD of the metrics sweep, because insights for an undiscovered campaign are dropped. Live sync itself is `BLOCKED_EXTERNAL_CREDENTIALS` |
+| COMMERCE-001 | COMMERCE | Salla + Zid: OAuth, stores, products, orders, customers, abandoned carts, revenue, cancellations/refunds, webhooks, UTM + click-id binding to projects and campaigns | `Domains/Commerce/*` (connectors, `StoreSyncer`, `ImportStoreData`, `OrderAttributionResolver`), 5 tables | `StoresPanel` (6 states, cart-capability) | `CommerceStoreSyncTest` (14) + `CommerceOAuthAndBoardTest` (11) + `StoresPanel.test.tsx` (6) | **VERIFIED** | `7156143` | Zid publishes no abandoned-cart endpoint; its connector REFUSES rather than returning empty, so the run reads `partial` and the UI says «لا توفّرها المنصة». Live sync `BLOCKED_EXTERNAL_CREDENTIALS` |
+| ATTRIB-001 | COMMERCE | A click id proves the PLATFORM, never the campaign; a UTM may name a campaign; a mismatch is `conflict` and attributed to neither; no signal is `none`, never "direct" | `Attribution`, `OrderAttributionResolver` | funnel attribution block | covered in `CommerceStoreSyncTest` | **VERIFIED** | `7156143` | Re-resolves on every import, so an order that arrived before its campaign was discovered is placed on the next sweep |
+| FUNNEL-001 | ANALYTICS | «الفانل والمتجر»: 9 stages impression→riyal with conversion, drop-off, CAC, CPA, AOV, ROAS **and the source of every number** | `StoreFunnelService`, `StoreFunnelController` | `StoreFunnelTab` | `StoreFunnelTest` (12) + `StoreFunnelTab.test.tsx` (8) | **VERIFIED** | `e8c1518` | Store beats pixel; an unmeasured stage says WHY and never shows a zero; CAC ≠ CPA; untraceable orders counted and shown, never spread across campaigns |
+| SHARE-SHORT-001 | REPORTS | Client link shortened to `/r/<22>` (~131 bits) without weakening it; 48-char links keep working | `ShareService::pathFor`, `TOKEN_LENGTH` | `/r/:token` route | `LiveReportShareTest` | **VERIFIED** | `d262764` | The token IS the credential, so it could not simply be truncated |
+| LIVEREP-003 | REPORTS | The store funnel inside the client's copy, built by the SAME service the analytics tab calls, obeying the share's hide flags | `LiveReportService::storeFunnel` | `LiveSharedReport` | `LiveReportShareTest` (+4) | **VERIFIED** | `d262764` | Spend-derived ROAS/AOV hidden too — a reader could divide back to the hidden figure. Null when the project has no store |
+| UNIFIED-001 | PLATFORM | One synced source feeding dashboard, campaigns, ad sets, ads, content, analytics, funnel, reports, client links, alerts, budgets and data freshness — no duplicate or conflicting source | `DataFreshnessService`, `ProjectStores`, `MetricsAggregator::acrossProjects()`, rewired `AlertEvaluator` / `ClientAnalyticsService` / `ClientPortfolioStats` / `MetricsController` / `LiveReportService` | dashboard store strip, freshness rows incl. stores | `UnifiedDataSourceTest` (9) + `DashboardStore.test.tsx` (6) | **VERIFIED** | `3846899` | Freshness was computed 4 ways and none of them looked at stores; alerts had a second ROAS definition |
+| SEC-FUNNEL-001 | SECURITY | A store belongs to the PROJECT its data was filed under, not to the tenant | `ProjectStores::forProject/unsynced` | funnel coverage incl. `stores_pending_first_sync` | `StoreFunnelTest` (+2) | **VERIFIED** | `3846899` | Cross-project: one client's funnel named another client's shop. Orders were project-scoped throughout, so the figures were right and everything said about them was wrong |
+| SEC-SHARE-002 | SECURITY | An empty provider ceiling on a client link means NOTHING, never everything | `LiveReportService::freshness` | — | `LiveReportShareTest` (+1) | **VERIFIED** | `672b11b` | Fail-open regression I introduced in `3846899` and caught in self-review; **the first full gate run was voided** because the fix landed mid-run |
+| PROD-001 | PLATFORM | Production readiness: secrets, callbacks, webhook URLs, Redis, Horizon, cron, queues, monitoring, health checks, backups, token renewal, performance, security, clean install, upgrade path | `OperationalReadiness`, `QueueHeartbeatJob`, `OperationalStatusController`, `BackupCommand`, Horizon + gate | — (operator API + runbook) | `OperationalReadinessTest` (12) + `BackupCommandTest` (5) | **VERIFIED** | `e175e1d` | Running Horizon + cron on a real server, and the first restore drill, remain outside local verification |
+| SEC-DEP-001 | SECURITY | Dependency advisories are a release gate, not a formality | guzzle patched (CVE-2026-69246 high — noncanonical host bypasses host-based checks), postcss patched | — | `composer audit` clean | **VERIFIED** | `e175e1d` | 2 npm advisories remain: one issue in React Router **RSC server mode**, which this client-only SPA never runs; no forward fix exists and the only remediation offered is a semver-major router downgrade. Assessment + expiry conditions in `PRODUCTION_RUNBOOK.md` |
+| MKT-UGC-001 | MARKETING | «علاقات المؤثرين — قريبًا» on the marketing page only, `influencers_ugc_enabled=false` unchanged | feature flag | inert tile | `PublicHomePage.test.tsx` | **VERIFIED** | `d575eeb` | Pre-existing; verified this session, not rewritten |
+
+## External integrations — classification
+
+**No provider is `Connected`, `Synced` or `Live`.** The structure, interfaces and tests are complete;
+what is missing is the credential. Every external provider is **`BLOCKED_EXTERNAL_CREDENTIALS`** until
+real credentials are entered AND OAuth succeeds AND an API round trip succeeds AND a real sync runs.
+
+| Provider | Kind | Setup state read from the system | Classification |
+|---|---|---|---|
+| Snapchat | advertising | `not_configured` | `BLOCKED_EXTERNAL_CREDENTIALS` |
+| TikTok | advertising | `not_configured` | `BLOCKED_EXTERNAL_CREDENTIALS` |
+| Meta | advertising | `not_configured` | `BLOCKED_EXTERNAL_CREDENTIALS` |
+| Google Ads | advertising | `not_configured` | `BLOCKED_EXTERNAL_CREDENTIALS` |
+| X | advertising | `not_configured` | `BLOCKED_EXTERNAL_CREDENTIALS` |
+| LinkedIn | advertising | `awaiting_credentials` | `BLOCKED_EXTERNAL_CREDENTIALS` |
+| Salla | commerce | `not_configured` | `BLOCKED_EXTERNAL_CREDENTIALS` |
+| Zid | commerce | `not_configured` | `BLOCKED_EXTERNAL_CREDENTIALS` |
+
+LinkedIn alone reads `awaiting_credentials` because its required `version` field ships an API-version
+default (`2411`) that is not an operator credential, so it counts as "partially configured". Both
+states are honest, neither is connectable, and the difference is cosmetic — deliberately not patched
+after a green gate. Any `provider_connections` / `external_accounts` rows in the dev database are E2E
+artefacts, not evidence of a sync.
+
+## Clean install, upgrade and live journey
+
+| Check | Result |
+|---|---|
+| Clean install (empty DB → `migrate` → `db:seed PermissionSeeder`) | **VERIFIED** — 121 tables, 111 permissions; `config:cache` (46,567 B) and `route:cache` (625,661 B) build |
+| Upgrade path | **VERIFIED** — «Nothing to migrate», 0 pending; `horizon:terminate` present and required |
+| Layer separation | **VERIFIED** live — tenant owner 403 on the provider console (list + single); zero system-key leaks on `/app/integrations` |
+| One source | **VERIFIED** live — dashboard and funnel returned byte-identical store figures (5626.5 / 6 / 937.75) |
+| Client link | **VERIFIED** live — opened with no session (curl, no cookies) → filters applied → out-of-ceiling range clamped → 3 opens logged → revoked → 404 |

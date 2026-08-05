@@ -1751,12 +1751,15 @@ The brief has six sections plus a marketing card. Order of execution, and where 
 | 0d | **PROVCFG-002** — `/admin/settings/integrations`, the operator's page | **done, committed** `551f007` |
 | 0e | **CONNECT-001** — the tenant's connect surface; system-config leak closed; `/agency/integrations` mounted; client picker | **done, committed** `e0883c7` |
 | 1e | Ad-platform **webhooks** + safe polling elsewhere, signature verification and event idempotency | **done, committed** `06ecef5` |
-| 1f | Ad **set / ad / creative** discovery through the new adapters (the tables exist; only campaigns and insights are wired) | **not started** |
-| 2 | Salla & Zid | not started |
-| 3 | Funnel & store analytics | not started |
-| 4 | Interactive shareable client reports | not started |
-| 5 | One synced source feeding dashboard/campaigns/analytics/funnel/reports/alerts/share links | not started |
-| 6 | Production readiness sweep | not started |
+| 1f | Ad **set / ad / creative** discovery through the new adapters | **done, committed** `9848277` |
+| 2 | Salla & Zid | **done, committed** `7156143` |
+| 3 | Funnel & store analytics | **done, committed** `e8c1518` |
+| 4 | Interactive shareable client reports | **done, committed** `d262764` |
+| 5 | One synced source feeding dashboard/campaigns/analytics/funnel/reports/alerts/share links | **done, committed** `3846899` |
+| 6 | Production readiness sweep | **done, committed** `e175e1d` |
+
+> **This table was written when the session started at `4eb36fa` and is kept for the record.** Every
+> row above now reads done; the authoritative closing state is at the end of this file, at `72200dc`.
 
 ### What the survey found before writing anything (unit 1)
 
@@ -2151,3 +2154,38 @@ done at `d575eeb` and was verified rather than rewritten.
 
 Totals: **backend 1246 (6207 assertions) · vitest 625 (90 files) · Playwright 773 on 3 browsers ·
 tsc clean · oxlint 0 errors · Pint clean · composer audit clean**.
+
+---
+
+## Closing state — `72200dc`
+
+```text
+Branch:        feat/taxonomy-ux
+HEAD:          72200dc
+Working Tree:  CLEAN
+Playwright:    773/773   (Chromium + Firefox + WebKit)
+Failed:        0
+Flaky:         0
+Retries:       0
+Backend:       1246 passed (6207 assertions)
+Vitest:        625 passed (90 files)
+tsc:           clean
+oxlint:        0 errors
+Pint:          clean
+composer audit: clean
+```
+
+**Implemented and verified locally:** the production structure for the six ad platforms, Salla and
+Zid, «الفانل والمتجر», the unified data pipeline, the interactive client reports, and production
+readiness. Evidence per item is in `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` under
+«The production-integrations brief — closing ledger at `72200dc`».
+
+**No provider is `Connected`, `Synced` or `Live`.** All eight external integrations are
+**`BLOCKED_EXTERNAL_CREDENTIALS`** until real credentials are entered AND OAuth succeeds AND an API
+round trip succeeds AND a real sync runs. Seven read `not_configured`; LinkedIn reads
+`awaiting_credentials` only because its required `version` field ships an API-version default
+(`2411`) that is not an operator credential — both are honest, neither is connectable.
+
+**What remains is external, and cannot be faked:** entering real OAuth credentials per provider from
+`/admin`; a real OAuth round trip, API call and sync; running Horizon and cron on a real server until
+`/api/v1/admin/operational-status` reads `healthy`; and the first backup plus a dated restore drill.
