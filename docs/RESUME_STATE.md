@@ -1811,7 +1811,9 @@ section, the **interactive shareable client reports**, the **one-source unificat
 - **Kill the hand-started backend and Vite before any Playwright run.** The suite reuses an existing
   :8000 and then skips its own `queue:work --queue=reports,default`, and the report-export specs hang
   at "processing". Both were running for the live review in this session and have been killed.
-- **The full three-browser gate has NOT been run since `4eb36fa`.** The unit suites are green and the
-  changed surfaces were reviewed live, but `e2e/` has not been re-run over these four commits. That is
-  the first thing to do on resume, before anything is called verified end to end.
+- **The full three-browser gate HAS been run over this work, twice.** The first run failed exactly two
+  tests — the homepage `@visual` baselines — and they were right to fail: the services grid gained the
+  announcement card and the header row tightened, so the page genuinely looks different. The baselines
+  were regenerated and REVIEWED (not accepted blind), and the gate then returned **773/773, `EXIT=0`**
+  at `517696c` with a clean working tree.
 - Do not edit source while a gate runs. A run with edits under it is void.
