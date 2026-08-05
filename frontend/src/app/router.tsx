@@ -79,6 +79,7 @@ import { RegistrationsPage } from '@/features/admin/RegistrationsPage'
 import { PaymentSettingsPage } from '@/features/admin/PaymentSettingsPage'
 import { ProviderSettingsPage } from '@/features/admin/ProviderSettingsPage'
 import { SystemSettingsPage } from '@/features/admin/SystemSettingsPage'
+import { PlatformLegalPage } from '@/features/admin/PlatformLegalPage'
 import { BillingPage as AdminBillingPage } from '@/features/admin/BillingPage'
 import { AuditPage } from '@/features/admin/AuditPage'
 import { CutoverPage } from '@/features/admin/CutoverPage'
@@ -375,6 +376,8 @@ export const router = createBrowserRouter([
             // inside System settings, because it is the surface an operator opens when a customer
             // cannot connect a platform, and it is the only place these keys can be written.
             { path: 'settings/integrations', element: <ProviderSettingsPage /> },
+            // LEGAL-001 — the operator's own legal identity, as printed on the public policies.
+            { path: 'settings/platform', element: <PlatformLegalPage /> },
             { path: 'cutover', element: <CutoverPage /> },
             { path: 'audit', element: <AuditPage /> },
           ],

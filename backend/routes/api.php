@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Legal\Http\Controllers\PublicLegalController;
 use App\Domains\Reports\Http\Controllers\PublicReportController;
 use App\Domains\Reports\Http\Controllers\ReportDownloadController;
 use App\Domains\Reports\Http\Controllers\ReportPrintController;
@@ -27,6 +28,15 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     if (! app()->environment('production')) {
         Route::get('/dev/status', [DevStatusController::class, 'show'])->name('dev.status');
     }
+
+    /*
+     * LEGAL-001 — the operator's identity and policy versions, without a session.
+     *
+     * Public is a requirement here, not a convenience: every platform whose OAuth review this
+     * product must pass fetches the privacy and terms URLs itself, unauthenticated, from this
+     * domain. A policy surface behind a login fails those reviews with no explanation.
+     */
+    Route::get('/legal', PublicLegalController::class)->name('legal');
 
     // Public, token-gated, expiring report download (the shareable secure link).
     Route::get('/reports/download/{token}', ReportDownloadController::class)->name('reports.download');

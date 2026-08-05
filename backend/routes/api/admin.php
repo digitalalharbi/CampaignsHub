@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Legal\Http\Controllers\PlatformSettingsController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
@@ -126,6 +127,17 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/permissions', [PlatformAccessController::class, 'permissions'])->name('permissions.index');
         Route::get('/integrations', [PlatformAccessController::class, 'integrations'])->name('integrations.index');
         Route::get('/status', [DevStatusController::class, 'platform'])->name('status');
+
+        /*
+         * LEGAL-001 — who operates this platform, as printed on the public policies.
+         *
+         * Here rather than in a tenant's settings because there is one operator and one privacy
+         * policy: a tenant administrator able to change the named data controller would be a
+         * considerable problem. Unknown facts stay unset — nothing on this screen is defaulted to a
+         * plausible-looking company, because a default here ends up on a published policy.
+         */
+        Route::get('/settings/platform', [PlatformSettingsController::class, 'show'])->name('settings.platform.show');
+        Route::put('/settings/platform', [PlatformSettingsController::class, 'update'])->name('settings.platform.update');
 
         /*
          * PROD-001 — is the deployment actually working, in the terms an operator acts on.
