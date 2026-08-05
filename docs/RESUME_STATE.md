@@ -2189,3 +2189,59 @@ round trip succeeds AND a real sync runs. Seven read `not_configured`; LinkedIn 
 **What remains is external, and cannot be faked:** entering real OAuth credentials per provider from
 `/admin`; a real OAuth round trip, API call and sync; running Horizon and cron on a real server until
 `/api/v1/admin/operational-status` reads `healthy`; and the first backup plus a dated restore drill.
+
+---
+
+## Session — the public-surface brief (items 1–5)
+
+Six slices, six commits, on top of `dcdf3c6`.
+
+| Commit | Slice |
+| --- | --- |
+| `9e54fcc` | 1 — influencer & UGC announced, sub-system still off |
+| `50f67f2` | 2 — platform operator identity + policy version registry |
+| `ffcf6cb` | 3 — the 17 public pages |
+| `7c24302` · `67ff5be` | 4 — contact, support, data-subject requests (backend, then forms) |
+| `ff04a77` | 5 — policy acceptance; cookie banner withdrawn |
+| `a5b79f0` | 6 — per-provider review checklists |
+
+### Decisions
+
+80. **An announcement is a separate LIST, not a flag.** `scopeComingSoon()` is written as the exact
+    complement of `scopeOffered()`, so a type cannot be in both, and `/requests/meta` returns them
+    under separate keys. The list the form submits against therefore holds only submittable things —
+    there is no `disabled` boolean for a future client to forget.
+81. **An unknown legal fact stays unknown.** Legal name, registration, tax number and jurisdiction
+    ship empty and are never defaulted; the editor names what is missing and the public pages say the
+    operator has not published its details. A plausible default would end up on a published policy.
+82. **Policy versions live in code, not a table.** A version is what an acceptance points at, and a
+    version stored as a row can be edited after somebody agreed to it — leaving the record claiming
+    they agreed to whatever the row says today.
+83. **Every footer policy link was already dead.** `/privacy`, `/terms`, `/cookies` and six others
+    rendered «الصفحة غير موجودة»: static routes with no `:slug` segment, so `useParams()` returned
+    undefined every time. Found by opening one, not by a test — the component's tests render it with
+    a fixture rather than through the router.
+84. **A circular import would have blanked the public site.** The two content modules referenced each
+    other's `CONTACT_EMAIL` at module-evaluation time. TypeScript resolved it perfectly; the browser
+    would have thrown. The shared constant moved to its own module.
+85. **`blocked` is a state with reasons, not a failure.** A deletion against open invoices cannot be
+    executed and must not be discarded. Reasons are recorded, shown to the requester in their own
+    language, and re-checked at completion rather than trusted from submission.
+86. **A reference is read aloud.** The alphabet excludes O/0, I/1/L, S/5, B/8 and Z/2, and a short
+    blocklist catches the rest — the first live submission produced `DR-SEX9YP`.
+87. **The cookie banner was withdrawn** at the operator's direction, and removed rather than hidden:
+    component, module, tests, mount, endpoint, model and table. Strictly necessary cookies only, and
+    the policy commits that a consent mechanism arrives with any non-essential cookie in the same
+    change. Policy acceptance is untouched and separate.
+88. **Eight review checklists, not one.** Derived requirements are answered by the system and cannot
+    be ticked; an HTTP redirect URI reads `missing` because every platform refuses one.
+
+### Where this stands
+
+HEAD `a5b79f0`, clean tree, branch `feat/taxonomy-ux`.
+**Backend 1295 (7561 assertions) · vitest 659 · tsc clean · oxlint 0 errors · Pint clean.**
+
+The full three-browser gate has NOT been run since these six slices landed. Run it from a clean tree
+with nothing else touching the database, and take the verdict from Playwright's own exit code —
+piping through `tail` swallows it and reports a failing gate as passing.
+

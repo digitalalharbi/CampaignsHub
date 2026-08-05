@@ -140,3 +140,19 @@ permissions, isolation, live preview and tests are all done and committed.
 **Honesty rules held throughout:** no Connected/Synced/Live without a real credential and a successful
 API round trip; absent credentials read `Awaiting Credentials`; no claim of an email, payment or
 external call that did not happen; zero dead buttons and zero placeholder data posing as real.
+
+## PHASE: Public surface, legal and platform review (feat/taxonomy-ux)
+
+Items 1–5 of the public-surface brief. Every row is backend + frontend + permissions + audit + tests
++ live review + a clean commit.
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| 1 | «علاقات المؤثرين وUGC» announced on the marketing page and in the intake form, sub-system off | **Implemented & Tested** | `9e54fcc`. `scopeComingSoon()` is the exact complement of `scopeOffered()`, and `/requests/meta` returns them under separate keys — the list the form submits contains only submittable things, so no flag can be forgotten. `store()` refuses the key independently. `influencers_ugc_enabled=false` unchanged |
+| 2 | Platform operator's legal identity + policy version registry | **Implemented & Tested** | `50f67f2`. Database-enforced singleton behind the platform gate; unknown facts stay visibly unset and are never invented; versions live in code so an acceptance points at text that cannot be edited after the fact |
+| 3 | 17 public pages, AR + EN, version + effective date + operator identity | **Implemented & Tested** | `ffcf6cb`. **Found and fixed: every footer policy link already rendered «الصفحة غير موجودة»** — static routes with no `:slug` segment, so `useParams()` never resolved a document. Tests forbid placeholder text and unsupported certification claims, and walk every footer link in both languages |
+| 4 | Contact, support tickets, data-subject requests — real persistence, `/admin` queues, audit | **Implemented & Tested** | `7c24302` + `67ff5be`. Deletion is refused behind a stated review when invoices or an active subscription exist, blockers are re-checked at completion rather than trusted from submission, and references avoid every character that is ambiguous when read aloud |
+| 5 | Policy acceptance at registration and payment; cookie banner **withdrawn** | **Implemented & Tested** | `ff04a77`. Version taken from the registry never the request; incomplete acceptance refused by name. The banner and its table were removed at the operator's direction — strictly necessary cookies only, and the policy states that a consent mechanism arrives with any non-essential cookie in the same change |
+| 6 | Per-provider platform review checklists | **Implemented & Tested** | `a5b79f0`. Eight distinct checklists; derived requirements are answered by the system and cannot be ticked; an HTTP redirect URI reads `missing` because every platform refuses one |
+
+**No provider is Connected, Synced or Live.** All eight remain `BLOCKED_EXTERNAL_CREDENTIALS`.
