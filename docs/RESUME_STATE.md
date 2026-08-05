@@ -2029,3 +2029,19 @@ reports, alerts and client links · `6` production readiness · plus the marketi
 **No full three-browser Playwright gate has been run since `c8753db`.** Kill the hand-started :8000
 backend and :5173 Vite before the next one — the suite reuses an existing :8000 and then skips its
 own `queue:work --queue=reports,default`, and the report-export specs hang at "processing".
+
+### Where this session stopped
+
+HEAD `530f2f3`, clean tree, branch `feat/taxonomy-ux`. Units 1f, 2, 3 and 4 are done and committed.
+Totals: **backend 1217 · vitest 619 · tsc · oxlint 0 errors · Pint clean**.
+
+**Still to do:** `5` one synced source across dashboard / campaigns / content / analytics / funnel /
+reports / alerts / client links (much of it now lands automatically — the store funnel already flows
+into analytics AND the client link from one service; what remains is the audit that nothing else
+computes these figures a second way) · `6` production readiness · the marketing-page card
+«علاقات المؤثرين — قريبًا» with `influencers_ugc_enabled=false` unchanged (check whether `d575eeb`
+already added it before writing anything) · then the FULL three-browser Playwright gate.
+
+**A hand-started backend on :8000 and Vite on :5173 are running right now** for the live reviews.
+Kill both before the gate — the suite reuses an existing :8000 and then skips its own
+`queue:work --queue=reports,default`, and the report-export specs hang at "processing".
