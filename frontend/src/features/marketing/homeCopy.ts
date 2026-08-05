@@ -434,6 +434,27 @@ const ar: HomeCopy = {
           { label: 'الأمان', to: '/security' },
         ],
       },
+      /*
+       * LEGAL-001 — the operational policies, in their own column.
+       *
+       * Folded into «السياسات» they would have made one column twice the height of its neighbours and
+       * pushed the footer past a phone screen. They are also a different question: the policies column
+       * answers «what are the rules», this one answers «what can I do about my data and my
+       * subscription» — which is what a data subject and an OAuth reviewer each arrive looking for.
+       */
+      {
+        title: 'بياناتك وحسابك',
+        links: [
+          { label: 'حذف الحساب والبيانات', to: '/account-deletion' },
+          { label: 'طلبات البيانات', to: '/data-requests' },
+          { label: 'الاحتفاظ بالبيانات', to: '/retention' },
+          { label: 'مزودو المعالجة', to: '/subprocessors' },
+          { label: 'الاستخدام المقبول', to: '/acceptable-use' },
+          { label: 'الاشتراكات والاسترداد', to: '/subscriptions-refunds' },
+          { label: 'الإفصاح عن OAuth', to: '/oauth-disclosure' },
+          { label: 'حالة النظام', to: '/system-status' },
+        ],
+      },
     ],
     rights: 'جميع الحقوق محفوظة',
   },
@@ -734,6 +755,19 @@ const en: HomeCopy = {
           { label: 'Data processing', to: '/data-processing' },
           { label: 'Cookies', to: '/cookies' },
           { label: 'Security', to: '/security' },
+        ],
+      },
+      {
+        title: 'Your data & account',
+        links: [
+          { label: 'Account & data deletion', to: '/account-deletion' },
+          { label: 'Data requests', to: '/data-requests' },
+          { label: 'Data retention', to: '/retention' },
+          { label: 'Subprocessors', to: '/subprocessors' },
+          { label: 'Acceptable use', to: '/acceptable-use' },
+          { label: 'Subscriptions & refunds', to: '/subscriptions-refunds' },
+          { label: 'OAuth disclosure', to: '/oauth-disclosure' },
+          { label: 'System status', to: '/system-status' },
         ],
       },
     ],

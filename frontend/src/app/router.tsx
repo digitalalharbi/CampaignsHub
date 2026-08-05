@@ -121,8 +121,12 @@ export const router = createBrowserRouter([
   { path: '/requests/track', element: <RequestTrackPage /> },
   // Public policy + company pages behind the footer links. One route with a slug so adding a page is a
   // content change, and an unknown slug renders a clear not-found state rather than a blank screen.
-  ...['privacy', 'terms', 'data-processing', 'cookies', 'security', 'about', 'contact', 'support', 'faq']
-    .map((slug) => ({ path: `/${slug}`, element: <PublicInfoPage /> })),
+  ...[
+    'privacy', 'terms', 'data-processing', 'cookies', 'security', 'about', 'contact', 'support', 'faq',
+    // LEGAL-001 — the operational policies every OAuth review and every data subject asks for.
+    'retention', 'subprocessors', 'account-deletion', 'data-requests', 'acceptable-use',
+    'subscriptions-refunds', 'oauth-disclosure', 'system-status',
+  ].map((slug) => ({ path: `/${slug}`, element: <PublicInfoPage /> })),
 
   // Public services catalogue, read from the taxonomy engine (never a bundled array).
   { path: '/services', element: <PublicServicesPage /> },

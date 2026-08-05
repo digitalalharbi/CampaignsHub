@@ -1,4 +1,10 @@
 import type { Locale } from './homeCopy'
+import { AR_OPERATIONAL, EN_OPERATIONAL } from './legalContentOperational'
+import { CONTACT_EMAIL, type LegalDoc, type LegalSection } from './legalTypes'
+
+// Re-exported so existing importers keep working unchanged.
+export { CONTACT_EMAIL }
+export type { LegalDoc, LegalSection }
 
 /**
  * Content for the public policy and company pages the footer links to.
@@ -11,26 +17,6 @@ import type { Locale } from './homeCopy'
  * They are deliberately NOT legal advice: the closing note on every policy page tells the operator to
  * have counsel review the text before relying on it commercially.
  */
-
-export const CONTACT_EMAIL = 'info@CampaignsHub.io'
-
-export interface LegalSection {
-  heading: string
-  /** Paragraphs and/or bullet lists, in reading order. */
-  body?: string[]
-  bullets?: string[]
-}
-
-export interface LegalDoc {
-  slug: string
-  title: string
-  intro: string
-  /** Shown under the title so a reader knows how current the text is. */
-  updated: string
-  sections: LegalSection[]
-  /** Set on policy documents; company pages (about/contact/support/faq) leave it off. */
-  disclaimer?: string
-}
 
 const AR_DISCLAIMER =
   'هذه الصفحة تصف الممارسة الفعلية للنظام ولا تُعد استشارة قانونية. راجعها مع مستشارك القانوني قبل الاعتماد عليها تجاريًا.'
@@ -610,7 +596,18 @@ const en: LegalDoc[] = [
   },
 ]
 
-export const LEGAL_DOCS: Record<Locale, LegalDoc[]> = { ar, en }
+/*
+ * The operational policies live in their own module (LEGAL-001) — retention, subprocessors,
+ * deletion, data-subject requests, acceptable use, subscriptions, the OAuth disclosure and status.
+ *
+ * Split for weight rather than for meaning: they are the same kind of document as the ones above and
+ * are merged into one list here, so every consumer still sees a single set and a page can be added
+ * without touching a route.
+ */
+export const LEGAL_DOCS: Record<Locale, LegalDoc[]> = {
+  ar: [...ar, ...AR_OPERATIONAL],
+  en: [...en, ...EN_OPERATIONAL],
+}
 
 export function findLegalDoc(locale: Locale, slug: string): LegalDoc | undefined {
   return LEGAL_DOCS[locale].find((d) => d.slug === slug)
