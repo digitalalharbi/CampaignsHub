@@ -2305,7 +2305,7 @@ with nothing else touching the database, and take the verdict from Playwright's 
 piping through `tail` swallows it and reports a failing gate as passing.
 
 
-## Unit 1 — AGENCY-PERMS (done, `bec46b3`)
+## Unit 1 — AGENCY-PERMS (done, `3b3f7ed`)
 
 Three reports — «تعذّر تحميل المهام / المحادثات / لوحة الوكالة» — were correct refusals described as
 failures. Fixing the description turned up a real leak underneath it.
