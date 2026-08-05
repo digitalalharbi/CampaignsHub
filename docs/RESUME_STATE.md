@@ -11,6 +11,11 @@
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
 ## Current commit
+`2ea6943` — **PHONE-002 + PAGES-001 + TAX-ADMIN-001.** Gate-verified: `PLAYWRIGHT_EXIT=0`,
+773 passed / 0 failed / 0 flaky / retries 0, Chromium + Firefox + WebKit. Working tree CLEAN.
+See **Exact next task — 2026-08-08** below for the state and the remaining programme.
+
+### Previously (retained)
 **LOGIN-PATHS-001 + PHONE-VERIFY-001 + PHONE-SA-001 + PLATFORM-ORDER-001 — two ways in, a phone this
 market can write, and one platform order.**
 
@@ -746,7 +751,61 @@ Also required: restore any page or feature that has disappeared, remove dead lin
 anything tangled or overlapping. Each unit ships frontend + backend + permissions, is reviewed live
 in the browser, is committed clean, and updates this file and the matrix before the next one starts.
 
-## Exact next task
+## Exact next task — 2026-08-08
+
+> Supersedes the REVIEW-001 note below, which stays for the detail it carries.
+
+**State at this point.** `HEAD = 2ea6943` on `feat/taxonomy-ux`, working tree CLEAN, and a full
+three-browser gate on exactly that commit returned `PLAYWRIGHT_EXIT=0` — **773 passed, 0 failed,
+0 flaky, retries 0** (Chromium + Firefox + WebKit, 34.7m). Backend 1303 passed / 7602 assertions ·
+Vitest 659 passed · tsc clean · oxlint 0 errors · Pint clean.
+
+Three reported defects were fixed and are in that commit: `PHONE-002` (every phone shape accepted on
+both public intake forms), `PAGES-001` (the public-site editor moved to the platform layer, which
+also ended a cross-tenant defect where any customer could rewrite the platform homepage), and
+`TAX-ADMIN-001` (the taxonomy manager reachable from `/admin`). All three are `VERIFIED` with live
+journeys — see the matrix.
+
+**Not defects, recorded so they are not re-investigated:** the reported «تعذّر تحميل المهام /
+المحادثات / لوحة الوكالة» and «لا تملك صلاحية billing.view» all came from browsing TENANT surfaces
+while signed in as **Platform Admin**, who holds no tenant. Verified under `owner@demo-agency.local`:
+`taxonomies 200 · tasks 200 · agency/dashboard 200 · notifications 200`. What IS wrong is the
+*presentation*: `TasksPage`, `ThreadsPage` and `TabMessages` discard the classified error and print
+«تعذّر تحميل…» for a 403, a missing project context and a dead server alike. `toApiError` already
+distinguishes them and the codebase already has the right pattern (`no_permission` guards in
+`ConnectionCenterPage`, `DrivePage`, `SubscriptionsPage`) — those three pages simply skipped it.
+
+**The remaining programme**, in order, per `docs/MASTER_EXECUTION_CONTRACT.md` and the 2026-08-08
+directive:
+
+1. **AGENCY-PERMS** — the three pages above must distinguish permission / missing-context / failure.
+   `manager@demo-agency.local` is the deliberately client-scoped *Account Manager* fixture
+   (`clients.*`, `campaigns.view`, `projects.view`, `reports.view`, `requests.view`, `tasks.view` —
+   no `billing.view`, no `messaging.view`), so its refusals are CORRECT and must read as refusals.
+   `owner@demo-agency.local` holds every permission. Add the 9 acceptance cases from the directive.
+2. **PORTALS-SWEEP** — live page-by-page review of `/admin`, `/app`, `/agency`, `/portal`.
+   `/admin` is already swept clean at this commit (all 7 settings tabs + all 8 rail pages).
+3. **IDENTITY-PROD** — `config/brand.php` already centralises `campaignshub.io`. Gaps: the system
+   email is spelled `info@CampaignsHub.io` (mixed case) in the model default, the migration default,
+   marketing copy and tests; `SUPPORT_EMAIL` defaults to `support@`; `MAIL_FROM_ADDRESS` is
+   `hello@example.com`; production `APP_URL`, `SESSION_DOMAIN=.campaignshub.io`,
+   `SANCTUM_STATEFUL_DOMAINS` and secure/SameSite cookies need values.
+4. **PIPELINE-12** — the engine and most guarantees are already covered (`UnifiedDataSourceTest` 9,
+   `MetricsSyncPipelineTest` 4, `LiveReportShareTest` 14). The missing guarantee is one assertion
+   that a single figure is identical across dashboard ↔ analytics ↔ client link ↔ funnel from one
+   sync, with a second client proven absent from all four. **That test is already written** at
+   `scratchpad/UnifiedFigureConsistencyTest.php` — move it to `backend/tests/Feature/` and run it.
+5. **REPORT-LINKS-13** — add the executive-summary vs detailed distinction to `ShareService`.
+6. **REPORT-OBJECTIVE-14** — BLOCKING for the reports unit. Objective taxonomy, path separation,
+   direct vs blended, per-objective layouts, attribution transparency.
+7. **HANDOVER** — `PRODUCTION_HANDOVER.md` (does not exist yet).
+
+`CampaignsHub_Master_Context_and_Instructions.md` is named as a source of truth but is **not in the
+repo** — it appears to be a ChatGPT project source. Do not invent it.
+
+---
+
+## Earlier next task (retained for detail)
 **REVIEW-001 (per-portal live audit)** is the one to take first — it is both an open matrix row and
 the directive above. `docs/REGRESSION_AUDIT_PORTALS.md` already covers `/app` and `/agency`;
 `/admin`, `/influencers` and `/portal` have never had the same pass. Walk each portal in the browser
