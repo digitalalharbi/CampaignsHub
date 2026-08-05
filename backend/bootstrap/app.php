@@ -10,6 +10,7 @@ use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
+use App\Domains\Platform\Console\BackupCommand;
 use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Reports\Console\DispatchScheduledReports;
 use App\Domains\Reports\Console\InvalidateLegacyExportsCommand;
@@ -68,6 +69,8 @@ return Application::configure(basePath: dirname(__DIR__))
         PruneRawPayloadsCommand::class,
         // COMMERCE-001 — the store sweep: products, customers, orders and abandoned carts.
         SyncStoresCommand::class,
+        // PROD-001 — a backup that either happens or says it did not, plus its verification half.
+        BackupCommand::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.

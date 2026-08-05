@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformGrantController;
@@ -125,6 +126,19 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/permissions', [PlatformAccessController::class, 'permissions'])->name('permissions.index');
         Route::get('/integrations', [PlatformAccessController::class, 'integrations'])->name('integrations.index');
         Route::get('/status', [DevStatusController::class, 'platform'])->name('status');
+
+        /*
+         * PROD-001 — is the deployment actually working, in the terms an operator acts on.
+         *
+         * Separate from `/status` above, which is the developer's snapshot (git branch, last
+         * migration, the requirement board). This one answers only «are the background processes
+         * alive, is anything queued, has anything failed» — the questions that decide whether to page
+         * somebody — and is shaped to be scraped by a monitor rather than read by a person.
+         *
+         * Behind `platform` like everything else on this file: it names queue depths and failure
+         * counts across every tenant, which is the platform operator's business and nobody else's.
+         */
+        Route::get('/operational-status', OperationalStatusController::class)->name('operational-status');
 
         // PORTAL-AUTH-001: the identities the backfill refused to guess at, and the safe way to
         // settle each one. No bulk resolve — see the controller for why.

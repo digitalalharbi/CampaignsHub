@@ -1,5 +1,7 @@
 <?php
 
+use App\Domains\Platform\Jobs\QueueHeartbeatJob;
+use App\Domains\Platform\Services\OperationalReadiness;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -34,6 +36,24 @@ if (! app()->environment('production')) {
         Cache::put('dev:scheduler:heartbeat', now(), now()->addMinutes(10));
     })->everyMinute()->name('dev-scheduler-heartbeat');
 }
+
+/*
+ * PROD-001 — the two heartbeats that make a dead background process visible.
+ *
+ * This runs in EVERY environment, production included, which is the difference between it and the
+ * dev heartbeat above. Both of these processes die quietly — a supervisor never installed, a cron
+ * line lost in a rebuild, an OOM kill at 3am — and until now nothing in the product noticed: reports
+ * sat at «قيد المعالجة» and the platforms stopped syncing while `/ready` went on answering `ready`
+ * because the database was up.
+ *
+ * The scheduler stamps itself here. The queue's stamp is written by the job on the worker, because
+ * dispatching proves only that Redis accepted a push — a job that comes back out is the only thing
+ * that proves somebody is consuming.
+ */
+Schedule::call(function (): void {
+    app(OperationalReadiness::class)->markScheduler();
+    QueueHeartbeatJob::dispatch();
+})->everyMinute()->name('ops-heartbeat')->withoutOverlapping();
 
 // Evaluate alert rules (budget risk, no results, ROAS drop, sync failure, token expiry) every 15 minutes.
 Schedule::command('alerts:evaluate')->everyFifteenMinutes();

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Dev;
 
+use App\Domains\Platform\Services\OperationalReadiness;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
@@ -93,24 +94,55 @@ final class DevStatusController
     }
 
     /** Derived from a heartbeat the worker refreshes via the dev:queue-ping job. */
+    /**
+     * Both processes are read from {@see OperationalReadiness} — one heartbeat, not two (PROD-001).
+     *
+     * These used to read `dev:queue:heartbeat` and `dev:scheduler:heartbeat`, which are written only
+     * outside production. This endpoint is mounted at `/admin/status` for the platform OPERATOR, so
+     * in the one environment where it matters it reported both processes «stopped» whether or not
+     * they were running — a monitoring screen that is wrong by construction is worse than none, since
+     * somebody will eventually stop believing it on the day it is right.
+     *
+     * The dev keys are still honoured as a fallback so a developer's `/dev/status` keeps working
+     * against a machine that has not run the new scheduler entry yet.
+     */
     private function queueWorker(): array
     {
-        $beat = Cache::get('dev:queue:heartbeat');
-        if ($beat === null) {
-            return ['state' => 'stopped', 'note' => 'no recent processed job'];
-        }
-        $age = now()->diffInSeconds($beat);
-
-        return ['state' => $age < 120 ? 'running' : 'degraded', 'age_seconds' => $age];
+        return $this->process(
+            app(OperationalReadiness::class)->status()['processes']['queue'],
+            'dev:queue:heartbeat',
+            'no recent processed job',
+        );
     }
 
     private function scheduler(): array
     {
-        $beat = Cache::get('dev:scheduler:heartbeat');
-        if ($beat === null) {
-            return ['state' => 'stopped'];
+        return $this->process(
+            app(OperationalReadiness::class)->status()['processes']['scheduler'],
+            'dev:scheduler:heartbeat',
+        );
+    }
+
+    /**
+     * @param  array<string,mixed>  $heartbeat
+     * @return array<string,mixed>
+     */
+    private function process(array $heartbeat, string $legacyKey, ?string $stoppedNote = null): array
+    {
+        if ($heartbeat['state'] !== 'never_seen') {
+            return [
+                'state' => $heartbeat['state'] === 'up' ? 'running' : 'degraded',
+                'age_seconds' => ($heartbeat['minutes_since'] ?? 0) * 60,
+            ];
         }
-        $age = now()->diffInSeconds($beat);
+
+        $legacy = Cache::get($legacyKey);
+
+        if ($legacy === null) {
+            return ['state' => 'stopped'] + ($stoppedNote === null ? [] : ['note' => $stoppedNote]);
+        }
+
+        $age = (int) now()->diffInSeconds($legacy);
 
         return ['state' => $age < 120 ? 'running' : 'degraded', 'age_seconds' => $age];
     }
