@@ -1,21 +1,71 @@
-# CampaignsHub — السياق التنفيذي الكامل وتعليمات الاستمرار
-**نسخة محدثة حتى: 2026-08-05 — التوقيت المحلي +03:00 · مراجعة الحالة عند HEAD `72200dc`**
+# CampaignsHub — الملف الموحد للسياق والقرارات والحالة التنفيذية
+**النسخة المعتمدة:** 2026-08-05  
+**الغرض:** استخدام الملف نفسه داخل مستودع المشروع، ومصادر مشروع ChatGPT، وأي جلسة Claude Code جديدة.
 
-> **الغرض من هذا الملف:** نقل سياق مشروع CampaignsHub وقرارات هذه المحادثة بالكامل إلى مصادر المشروع في ChatGPT، بحيث تبدأ أي محادثة جديدة من نفس الفهم دون إعادة شرح المشروع أو إسقاط المتطلبات.
+> هذا الملف هو المرجع الموحد للسياق الكامل والقرارات والتصحيحات والحالة التنفيذية المعلنة للمشروع.
 >
-> **قاعدة الأولوية:** هذا الملف امتداد محدث للملف الأصلي `CampaignsHub_Master_Context_and_Instructions.md`. جميع التعليمات تراكمية وملزمة، وأحدث تصحيح صريح يلغي فقط الجزء المتعارض من التعليمات السابقة. لا يجوز حذف أي متطلب بالاستنتاج.
+> يبقى الملف `CampaignsHub_Master_Context_and_Instructions.md` مرجع الحقيقة الأساسي للهدف والمتطلبات الأصلية. هذا الملف يكمله ويحدّث الحالة التنفيذية.
 >
-> **قاعدة الحالة المتغيرة:** عند التعارض بين حالة تنفيذ مكتوبة هنا وبين Git أو `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` أو `docs/RESUME_STATE.md`، تُراجع الأدلة الأربعة معًا. Git والمصفوفة وملف الاستئناف هي المرجع التشغيلي للحالة الحالية، بينما هذا الملف هو المرجع الكامل للهدف والقرارات والمتطلبات.
+> عند التعارض في حالة التنفيذ، تكون الأولوية التشغيلية:
 >
-> **الصدق:** الأرقام والـCommits وحالات الاختبارات المذكورة هنا هي آخر ما أعلنه Claude Code في هذه المحادثة، وليست تحققًا مستقلاً من ChatGPT. يجب فحصها من المستودع قبل البناء عليها.
+> `Git → docs/REQUIREMENTS_TRACEABILITY_MATRIX.md → docs/RESUME_STATE.md → هذا الملف`
+>
+> أحدث تصحيح صريح يلغي فقط الجزء المتعارض من التعليمات السابقة، وتبقى بقية المتطلبات تراكمية وملزمة.
 
 ---
 
-# 1. تعريف المشروع والهدف الأساسي
+# 1. الحالة الحالية المعتمدة
 
-**CampaignsHub** منصة احترافية لإدارة ومتابعة وتحليل الحملات الإعلانية المدفوعة من مكان واحد، وليست مجرد Dashboard أو نموذج تجريبي.
+```text
+Project: CampaignsHub
+Branch: feat/taxonomy-ux
 
-المنصات الإعلانية الأساسية بالترتيب الثابت في النظام كله:
+Current HEAD: df962e1
+Code verified at: 72200dc
+Documentation-only commit: df962e1
+Working Tree: CLEAN
+
+Backend: 1246 passed
+Vitest: 625 passed — 90 files
+Playwright: 773/773
+Browsers: Chromium + Firefox + WebKit
+Failed: 0
+Flaky: 0
+Retries: 0
+Full Gate Exit: 0
+Full Gate Duration: 28.7m
+```
+
+## تفسير الـCommits
+
+- `72200dc`: آخر Commit وظيفي تم عليه Full Gate والتثبيت النظيف ومسار الترقية والرحلة الحية.
+- `df962e1`: Commit وثائق فقط فوق `72200dc`.
+- لا يجوز الادعاء بأن الاختبارات جرت على `df962e1`؛ الاختبارات جرت على الكود عند `72200dc`.
+- لا حاجة لإعادة الاختبارات بسبب `df962e1` لأنه لم يغيّر أي ملف وظيفي.
+
+---
+
+# 2. الهدف الأساسي للنظام
+
+CampaignsHub منصة SaaS لإدارة ومتابعة وتحليل جميع الحملات الإعلانية المدفوعة من مكان واحد، وربط المتاجر، وإنشاء تقارير تفاعلية قابلة للمشاركة مع العملاء.
+
+الهدف الأساسي الملزم:
+
+```text
+إدارة ومتابعة وتحليل الحملات الإعلانية المدفوعة
++
+ربط العملاء والمشروعات والحسابات الإعلانية
++
+مزامنة الحملات والمجموعات والإعلانات والمحتويات والمؤشرات
++
+ربط سلة وزد وبيانات التجارة الإلكترونية
++
+تحليل الفانل والمتجر
++
+إنشاء روابط تقارير تفاعلية للعملاء دون تسجيل دخول
+```
+
+المنصات بالترتيب الثابت في كامل النظام:
 
 1. Snapchat Ads — سناب شات
 2. TikTok Ads — تيك توك
@@ -24,56 +74,9 @@
 5. X Ads — إكس
 6. LinkedIn Ads — لينكدإن
 
-الهدف الأساسي:
-
-```text
-إدارة ومتابعة واستعراض وتحليل جميع الحملات الإعلانية المدفوعة من مكان واحد
-+
-ربط العملاء والمشروعات والحسابات والحملات والمحتويات والمؤشرات
-+
-إصدار تقارير تفاعلية قابلة للمشاركة مع العملاء دون تسجيل دخول
-+
-ربط بيانات المتاجر الإلكترونية وتحليلات الفانل
-```
-
-العلاقة التشغيلية المستهدفة:
-
-```text
-العميل
-→ المشروع
-→ المنصة
-→ الحساب الإعلاني
-→ الحملة
-→ المجموعة الإعلانية
-→ الإعلان
-→ المحتوى الإعلاني
-→ المؤشرات
-→ التنبيه
-→ المهمة
-→ التقرير
-→ عرض السعر
-→ الفاتورة
-→ المدفوعات
-```
-
-المنتج يجب أن يجيب بسرعة عن:
-
-```text
-كم تم إنفاقه؟
-ما النتائج المحققة؟
-أي منصة أفضل؟
-أي حملة أفضل؟
-أي محتوى أفضل؟
-أي حملة تحتاج تدخلًا؟
-هل الميزانية تسير بالشكل الصحيح؟
-هل البيانات محدثة؟
-ما الذي يحتاج انتباهي الآن؟
-ما الإجراء التالي؟
-```
-
 ---
 
-# 2. التقنية والبنية الأساسية
+# 3. البنية التقنية
 
 ## Backend
 
@@ -86,6 +89,7 @@
 - Scheduler
 - Horizon
 - API Resources
+- ULID/UUID حسب النماذج
 - Rate Limiting
 - Encryption
 - Tenant / Workspace / Project Isolation
@@ -93,17 +97,20 @@
 
 ## Frontend
 
-- React + Vite + TypeScript
+- React
+- Vite
+- TypeScript
 - React Query
-- Tailwind
 - React Router
+- Tailwind
 - RTL / LTR
 - Light / Dark
 - Responsive
+- Arabic-first
+- English support
 - IBM Plex Sans Arabic
-- Arabic-first مع دعم الإنجليزية الحقيقي، وليس تغيير اتجاه فقط
 
-## البيئات المحلية
+## البيئة المحلية
 
 ```text
 Frontend: http://localhost:5173
@@ -111,38 +118,22 @@ Backend: http://127.0.0.1:8000
 Status: http://localhost:5173/dev/status
 ```
 
-يجب إبقاء التالي عاملًا أثناء التطوير:
-
-- Frontend / Vite
-- Backend API
-- PostgreSQL
-- Redis
-- Queue Worker
-- Scheduler
-
-إعداد SPA production fallback ضروري للمسارات العميقة:
-
-```nginx
-try_files $uri $uri/ /index.html;
-```
-
 ---
 
-# 3. مصدر الحقيقة الدائم
+# 4. مصادر الحقيقة الدائمة
 
-الملفات الدائمة داخل المستودع:
+يجب قراءة المصادر التالية بالترتيب:
 
 ```text
 CampaignsHub_Master_Context_and_Instructions.md
+CampaignsHub_Conversation_Master_Context_2026-08-05.md
 docs/MASTER_EXECUTION_CONTRACT.md
 docs/REQUIREMENTS_TRACEABILITY_MATRIX.md
 docs/RESUME_STATE.md
-docs/CAMPAIGN_MANAGEMENT_AUDIT.md
-docs/MODULES_AND_CLASSIFICATIONS_AUDIT.md
 Git History
 ```
 
-الحالات المعتمدة:
+الحالات المعتمدة فقط:
 
 ```text
 NOT_STARTED
@@ -154,83 +145,13 @@ BLOCKED_EXTERNAL_CREDENTIALS
 BLOCKED_OPERATIONAL_EVIDENCE
 ```
 
-يُمنع استخدام `DONE` أو `COMPLETED` دون تنفيذ فعلي واختبار قبول مستهدف ومراجعة حية وCommit نظيف.
+لا تعتبر الوثائق أو التدقيق أو نجاح الاختبارات وحدها دليلًا على اكتمال التطوير.
 
 ---
 
-# 4. دستور التنفيذ الدائم
+# 5. البوابات التشغيلية
 
-## قاعدة التعارض
-
-```text
-1. أحدث تصحيح صريح يلغي فقط الجزء المتعارض.
-2. جميع التعليمات غير المتعارضة تبقى تراكمية وملزمة.
-3. لا يُحذف متطلب بالاستنتاج.
-4. أي متطلب غير منفذ يبقى مفتوحًا.
-5. نجاح الاختبارات لا يثبت اكتمال المنتج.
-6. الوثائق والتدقيق ليست تطويرًا.
-7. Demo Data ليست Live Integration.
-8. وجود زر أو Endpoint أو Adapter لا يعني أن الرحلة مكتملة.
-```
-
-## لا يُعتبر إنجازًا
-
-- إنشاء وثيقة أو Audit أو خطة
-- Component غير مستخدم
-- Endpoint غير مربوط
-- Demo Data فقط
-- تغيير النصوص فقط
-- نجاح Build أو اختبارات قديمة فقط
-- Connect button أو Integration card أو Mock Adapter فقط
-- Route غير مراجع حيًا
-- تغيير حالة المصفوفة دون دليل
-
-## كل وحدة مكتملة تشمل حسب طبيعتها
-
-```text
-Database
-Migrations
-Models
-Services
-API
-Validation
-Permissions
-Portal/Workspace/Project Scope
-Tenant Isolation
-Frontend
-Search
-Filters
-Classification
-Details
-Actions
-Related Entities
-Loading
-Empty
-Error
-Responsive
-RTL/LTR
-Light/Dark
-Tests
-Live Browser Review
-Commit
-Working Tree Clean
-```
-
-## أسلوب العمل
-
-- Orchestrator واحد فقط.
-- لا توجد جلسات متعددة تعمل على نفس Working Tree.
-- أكمل المهمة الحالية قبل بدء التالية.
-- لا تعدّل المصدر أثناء تشغيل Full Gate.
-- أي Gate حدثت أثناءه تعديلات يعد ملغيًا ويعاد كاملًا.
-- لا ترسل تقارير مرحلية.
-- عند امتلاء السياق: أكمل الوحدة، اختبر، Commit، حدّث `RESUME_STATE`، ثم `/compact`.
-
----
-
-# 5. البوابات المعتمدة
-
-النظام الحالي يعتمد أربع بوابات تشغيلية فقط:
+يوجد أربع بوابات تشغيلية فقط:
 
 ```text
 /admin
@@ -241,28 +162,42 @@ Working Tree Clean
 
 ## `/admin`
 
-مدير المنصة / Platform Owner:
+مدير المنصة:
 
-- إدارة النظام بالكامل
-- المستأجرون والمساحات
-- التسجيلات والاعتمادات
-- الباقات والأسعار
-- الاشتراكات والمدفوعات
-- الصلاحيات والمنح
-- التكاملات والإعدادات
-- التدقيق والحالة التشغيلية
+- إعداد مزودي API وOAuth وWebhooks
+- إدارة مفاتيح النظام والأسرار
+- إدارة المستأجرين والمساحات
+- إدارة التسجيلات
+- إدارة الباقات والأسعار
+- إدارة الاشتراكات والمدفوعات
+- إدارة المنح والصلاحيات
+- إدارة التكاملات
+- إدارة الإعدادات
+- Audit Log
+- الحالة التشغيلية
 
-مدير المنصة ليس Tenant Membership عاديًا، ولا يُنشأ من تسجيل عام.
+مدير المنصة ليس Tenant Membership عاديًا.
 
 ## `/app`
 
-المعلن أو المتجر الذي يدير حملاته:
+المعلن أو المتجر:
 
-- المشاريع والحسابات الإعلانية
-- الحملات والمجموعات والإعلانات
-- المحتويات والميزانيات
-- التحليلات والتقارير والتنبيهات
-- المهام والملفات والفريق والتكاملات
+- المشاريع
+- الحسابات الإعلانية
+- الحملات
+- المجموعات
+- الإعلانات
+- المحتويات
+- الميزانيات
+- التحليلات
+- الفانل والمتجر
+- التقارير
+- الروابط التفاعلية
+- التنبيهات
+- المهام
+- الملفات
+- الفريق
+- التكاملات الخاصة بحساباته
 
 ## `/agency`
 
@@ -272,57 +207,29 @@ Working Tree Clean
 العميل → المشروع → الحسابات → الحملات → الفريق → التقارير → المالية
 ```
 
-تشمل العملاء والمشروعات والحملات والفريق والصلاحيات والدعوات والموافقات والتقارير والمهام والملفات والمحادثات وعروض الأسعار والفواتير والمدفوعات وWhite Label.
+تشمل العملاء والمشاريع والحملات والحسابات الإعلانية والفريق والصلاحيات والموافقات والتقارير وروابط العملاء والمهام والملفات والمحادثات وعروض الأسعار والفواتير والمدفوعات وWhite Label.
 
 ## `/portal`
 
 بوابة العميل:
 
-- الطلبات وحالة التنفيذ
-- عروض الأسعار والموافقات
-- الفواتير والدفع
-- الملفات والمحادثات والتسليمات
-- الإشعارات والتقارير المشتركة
+- متابعة الطلبات
+- عروض الأسعار
+- الموافقات
+- الفواتير
+- الدفع
+- الملفات
+- المحادثات
+- التسليمات
+- الإشعارات
+- التقارير المشتركة
 - ملخص نتائج الحملات
 
-يمنع ظهور أدوات إدارة الوكالة أو المعلن داخلها.
-
 ---
 
-# 6. المؤثرون وUGC — القرار النهائي الحالي
+# 6. تسجيل الدخول والمصادقة
 
-لا توجد بوابة مؤثرين تشغيلية في النسخة الحالية.
-
-```text
-influencers_ugc_enabled=false
-```
-
-القواعد:
-
-- لا تُفعّل `/influencers` كبوابة تشغيلية.
-- لا تظهر في التسجيل أو الباقات أو الصلاحيات أو Portal Switcher.
-- لا تنشئ حسابات Demo تشغيلية لها.
-- لا تحذف الكود أو البيانات السابقة.
-- المسارات القديمة تتحول بأمان إلى الخدمات أو الطلبات.
-- الخدمة تظهر في الصفحة التسويقية فقط:
-
-```text
-علاقات المؤثرين
-إدارة حملات المؤثرين والمحتوى والتعاونات من مكان واحد.
-قريبًا
-```
-
-- شارة واضحة `قريبًا`.
-- لا زر تسجيل أو طلب أو تفعيل أو مسار تشغيل.
-- الحفاظ على توازن الصفحة على Desktop/Mobile وRTL/LTR وLight/Dark.
-
-هذه البطاقة مطلوبة في أحدث مهمة، ولم يثبت تنفيذها بعد آخر تقرير.
-
----
-
-# 7. المصادقة وتسجيل الدخول
-
-## صفحة واحدة
+## صفحة دخول واحدة
 
 ```text
 /login
@@ -335,15 +242,9 @@ influencers_ugc_enabled=false
 - الوكالة
 - عميل بوابة الطلبات
 
-المستخدم لا يختار البوابة. أزيلت خيارات:
+لا يختار المستخدم نوع البوابة.
 
-```text
-إدارة الحملات
-وكالة
-متابعة الطلبات
-```
-
-الـBackend يحدد الوجهة من:
+الـBackend يحدد الوجهة تلقائيًا من:
 
 ```text
 Account
@@ -355,7 +256,7 @@ Account
 + Subscription State
 ```
 
-ثم:
+الوجهات:
 
 ```text
 /admin
@@ -365,7 +266,7 @@ Account
 /switch
 ```
 
-المسارات القديمة تعيد التوجيه إلى `/login`:
+المسارات القديمة تحول إلى `/login`:
 
 ```text
 /admin/login
@@ -375,81 +276,35 @@ Account
 /influencers/login
 ```
 
-القواعد:
-
-- اختيار URL لا يمنح صلاحية.
-- `portal: null` في طلب الدخول الموحد.
-- الحساب في البوابة الخطأ يحول للبوابة الصحيحة أو يرفض بوضوح.
-- لا Redirect Loop.
-- Query string وredirect الآمن يحفظان عند الحاجة.
-- لا يحفظ مسار غير مسموح في `returnTo` أو `lastVisitedRoute`.
-
-## منع الصفحات المغلقة بلا مخرج
-
-في حالات:
-
-- PortalMismatch
-- Forbidden
-- NoWorkspace
-- Suspended
-- ExpiredSession
-- Failed workspace resolution
-- Old/dead link
-
-يجب توفير:
-
-- التوجيه للبوابة الصحيحة
-- اختيار مساحة أخرى
-- العودة للرئيسية
-- تسجيل الدخول بحساب آخر
-- تسجيل الخروج
-- طلب دعوة أو إكمال إعداد الحساب
-
-زر تسجيل الخروج ظاهر داخل البوابات وصفحات الرفض والأخطاء.
-
-بعد الخروج تمسح:
-
-- Sanctum session
-- Cookies
-- user cache
-- workspace/project context
-- returnTo
-- lastVisitedRoute
-- local storage ذات الصلة
-
-ثم `/login`.
-
-## شكل صفحة الدخول
-
-- نفس الجانب التسويقي الحالي.
-- صندوق احترافي مودرن ومتوازن.
-- بُني حسب آخر تقرير على `AuthShell`.
-- عرض معلن: `468px`.
-- الحقول بارتفاع موحد معلن: `56px`.
-- لا بيانات Demo في الصفحة العامة.
-- Google وApple بحالة صادقة عند غياب البيانات.
-
 ## طرق الدخول
 
 1. البريد الإلكتروني + كلمة المرور
 2. رقم الجوال + رمز تحقق
 
-`POST /auth/method` يقرر طريقة الحساب.
-
-مسار الجوال المعلن:
+المسارات المعلنة:
 
 ```text
+POST /auth/method
 POST /auth/phone/start
 POST /auth/phone/verify
 ```
 
 رمز التحقق Single-use.
 
+## قواعد الوصول
+
+- URL لا يمنح صلاحية.
+- لا Redirect Loop.
+- لا صفحة رفض بلا مخرج.
+- زر تسجيل الخروج متاح.
+- لا حفظ لمسار غير مسموح.
+- بعد الخروج تمسح الجلسة والكوكيز وسياق المساحة والمشروع والمسارات المحفوظة.
+
 ---
 
-# 8. الجوال والتحقق
+# 7. أرقام الجوال
 
-السعودية هي الافتراضية:
+السعودية هي الدولة الافتراضية:
 
 ```text
 +966
@@ -463,85 +318,32 @@ POST /auth/phone/verify
 +9665xxxxxxxx
 ```
 
-وتقبل المسافات والشرطات والأرقام العربية والفارسية و`00` بدل `+` ومفاتيح دول أخرى الصحيحة.
+وتقبل المسافات والشرطات والأرقام العربية والفارسية و`00` بدل `+` ومفاتيح دول أخرى صحيحة.
 
-الرقم يطبّع Backend إلى E.164 قبل الحفظ والمقارنة ومنع التكرار وOTP والتسجيل والعملاء وجهات الاتصال والطلبات والفواتير والبوابة.
+كل الأرقام تطبع في Backend إلى E.164 قبل الحفظ والمقارنة ومنع التكرار وOTP والتسجيل والعملاء وجهات الاتصال والطلبات والفواتير والبوابة.
 
-آخر تقرير أعلن:
+مثال تحقق معلن:
 
 ```text
 0553318866 → +966553318866
 ```
 
-والتحقق الإلزامي بالجوال:
-
-```text
-requires_mobile=true
-```
-
 ---
 
-# 9. الصفحة التسويقية
-
-## النص الأساسي
-
-```text
-CampaignsHub
-إدارة الحملات الإعلانية
-منصة متكاملة لإدارة الحملات الإعلانية
-
-كل حملاتك الإعلانية المدفوعة
-في مكان واحد
-
-تابع الأداء والميزانيات والنتائج عبر المنصات، نظّم العملاء والمشاريع، وأنشئ تقارير احترافية من مساحة عمل واحدة.
-```
-
-المزايا:
-
-```text
-متابعة موحّدة لجميع المنصات
-سناب شات وتيك توك وميتا وجوجل وإكس ولينكدإن في شاشة واحدة.
-
-تحليلات تناسب هدف الحملة
-مؤشرات كل هدف على حدة، دون خلط الوعي بالزيارات أو المبيعات.
-
-تقارير احترافية قابلة للمشاركة
-جهّز تقريرًا واضحًا لعميلك أو لإدارتك في دقائق.
-
-تنبيهات ومتابعة مستمرة
-تنبيه عند تغيّر الإنفاق أو الأداء قبل أن تكبر المشكلة.
-```
-
-الإجراءات العامة:
-
-```text
-تسجيل حساب
-تسجيل الدخول
-اطلب خدمة
-متابعة طلباتي
-```
-
-يمنع استخدام مصطلحات هندسية عامة مثل Tenant وWorkspace وSaaS وOperations Console.
-
----
-
-# 10. التسجيل والباقات والدفع
+# 8. التسجيل والباقات والدفع
 
 ## التسجيل
 
-- تسجيل متعدد الخطوات.
-- خطوة بيانات الحساب تتحقق من جميع الحقول قبل الانتقال.
-- شرط قوة كلمة المرور يظهر بجانب الحقل في الخطوة الأولى.
-- لا يظهر خطأ كلمة مرور في خطوة الباقات.
+- متعدد الخطوات.
+- التحقق من قوة كلمة المرور في الخطوة الأولى.
+- يمنع الانتقال قبل صحة الحقول.
+- الأخطاء تظهر بجانب الحقل الصحيح.
 - البيانات تبقى عند الرجوع.
-- Server errors تعاد إلى الحقل والخطوة الصحيحة.
-- اختيار نوع الحساب والخدمات يحدد البوابة والصلاحيات والباقات المناسبة.
+- نوع الحساب والخدمات يحددان البوابة والصلاحيات.
 
-لا يوجد تسجيل عام لحساب مدير المنصة، لكن مدير المنصة يدخل من `/login`.
+لا يوجد تسجيل عام لحساب مدير المنصة.
 
-## الباقات
-
-الباقة المجانية ملغاة.
+## الباقة الأساسية
 
 ```text
 Starter / البداية
@@ -551,11 +353,11 @@ Starter / البداية
 
 تشمل متابعة الحملات والتقارير.
 
-السعر السنوي والإضافات قابلة للإدارة من `/admin`.
+لا توجد باقة مجانية.
 
 ## التفعيل
 
-لا وصول تشغيلي كامل قبل دفع موثوق.
+لا تفعيل قبل دفع موثوق.
 
 ```text
 Verified Payment Event
@@ -566,344 +368,207 @@ Verified Payment Event
 → Membership
 → Role
 → Plan Entitlements
-→ Selected Service Entitlements
+→ Service Entitlements
 → Correct Portal
 ```
 
-فتح Checkout أو واجهة نجاح غير كافٍ.
-
-عند غياب Moyasar/Stripe:
-
-```text
-Awaiting Credentials
-```
-
-Sandbox مسموح في Development/Test فقط، وبوسم واضح، وممنوع في Production.
+فتح Checkout أو واجهة نجاح لا يكفي.
 
 ## تحكم مدير المنصة
 
 من `/admin`:
 
 - تعديل السعر الشهري والسنوي
-- تعديل ميزات وخدمات كل باقة
+- تعديل ميزات الباقات
 - منح وإزالة صلاحيات إضافية
-- منح اشتراك أو وصول كامل مجانًا
+- منح اشتراك مجاني
+- منح وصول كامل مجانًا
 - إلغاء المنحة
-- تعليق الحساب وإعادة تفعيله
+- تعليق الحساب
+- إعادة التفعيل
 - Audit Log للسبب والمنفذ والتاريخ
 
-المنح Additive وFail-Closed ومحصورة ببوابات الحساب وقابلة للإلغاء.
-
-آخر تقرير قبل مهمة التكاملات أعلن اكتمال هذه الوحدة واختبارها.
+المنح Additive وFail-Closed.
 
 ---
 
-# 11. العزل والصلاحيات
+# 9. المؤثرون وUGC
+
+النظام الفرعي غير مفعّل:
 
 ```text
-Portal
-+ Tenant
-+ Workspace Membership
-+ Role
-+ Permission
-+ Entity Scope
+FEATURE_INFLUENCERS_UGC=false
+influencers_ugc_enabled=false
 ```
 
-- Platform Admin ليس Tenant Membership.
-- كل API يعزل المستأجر/المساحة/العميل/المشروع.
-- Project-only membership يمكن أن يتجاوز اختيار العميل.
-- اختيار Client يمسح Project إذا لم يعد صالحًا.
-- IDs المحفوظة تعاد مصادقتها Server-side.
-- لا fallback إلى `users.tenant_id`.
-- لا صلاحيات ضمنية.
-- لا Mass Assignment للحقول الإدارية أو حالات الحساب والدفع.
-- روابط التقارير العامة لها نطاق مستقل Fail-Closed.
+لا توجد بوابة مؤثرين تشغيلية حاليًا.
 
----
-
-# 12. بساطة وتجربة الواجهات
-
-- قوائم بحد أقصى مستويين.
-- إجراء رئيسي واحد في كل صفحة.
-- أهم المعلومات أولًا.
-- الخيارات المتقدمة داخل Drawer / Dialog / Tabs.
-- لا أكواد قاعدة بيانات أو مصطلحات تقنية للمستخدم.
-- لا تكرار بطاقات ورسوم بلا قيمة.
-- البحث والفلاتر الأساسية واضحة.
-- الفلاتر الكثيرة خلف `ViewCustomiser`.
-- يذكر بالكلمات ما هو مطبق.
-- لا تطوى شرائح الأعداد الحية المهمة.
-- كل Dashboard يجيب:
-  - ماذا يحدث؟
-  - ماذا يحتاج انتباهي؟
-  - ما الإجراء التالي؟
-
-المراجعة:
-
-- Desktop / Tablet / Mobile
-- 343px / 375px / 1440px / 1920px
-- Arabic / English
-- RTL/LTR
-- Light/Dark
-- Chromium / Firefox / WebKit
-
----
-
-# 13. الوحدات التي أُبلغ عن تطويرها
-
-هذه الحالة مبنية على تقارير Claude Code ويجب مطابقتها مع Git والمصفوفة.
-
-## Dashboard / Campaigns / Analytics
-
-أُبلغ عن:
-
-- KPIs حسب هدف الحملة
-- Mixed/All بمقاييس محايدة
-- أوضاع متعددة للحملات
-- Compare endpoint
-- Campaign detail tabs
-- Saved Views
-- Budget/Freshness/Funnel APIs
-- Translation وResponsive fixes
-
-## Admin
-
-- Platform console
-- committed subscription value
-- growth series
-- attention list
-- tenants search/filter/drawer/actions
-- plans/subscriptions/registrations
-- permission catalog/integrations/audit
-- revenue stream separation
-
-## Agency
-
-- client → project context
-- team/client scopes
-- client spaces
-- White Label
-- 15 destinations
-- simplification pass
-- filters folded
-- finance under `/agency/finance`
-
-## Client Portal
-
-- membership-first access
-- portal account 401 fix
-- request-derived spaces fix
-- requests/quotes/invoices/files/conversations/reports
-- Portal auth cutover قد يبقى جزئيًا حتى legacy sessions = 0 حسب المصفوفة الحالية
-
-## Requests
-
-- status/priority bilingual labels
-- `StageStatusMap`
-- dynamic intake fields
-- عرض إجابات العميل للمشغل
-- charts by status/type/SLA
-- journey:
-  ```text
-  submitted
-  → under_review
-  → qualified
-  → proposal_sent
-  → awaiting_client_approval
-  → payment_pending
-  → paid
-  → onboarding
-  → in_progress
-  → client_review
-  → completed
-  ```
-
-## Reports
-
-- live share reports
-- scope by project/campaign/platform/date/metrics
-- public link without session
-- filters without reload
-- password/expiry/revoke/renew/access history
-- Demo badge
-- KPIs/charts/ranking/funnel
-- fail-closed intersection
-- builder in `/app/reports` و`/agency/reports`
-
-يجب التحقق من short URLs والقوالب وPDF/Excel ومصدر البيانات الحقيقي.
-
-## Normalization / Revenue / Audit
-
-- source/raw/normalized metadata
-- currency/timezone/attribution provenance
-- four revenue streams separated
-- `combined_total=null`
-- subscription/payment audit
-- audit filters and UI
-
----
-
-# 14. التقارير التفاعلية — هدف أساسي
-
-> **الحالة عند `72200dc`: منفَّذ ومتحقق محليًا** (`d262764`). الرابط `/r/<22 حرفًا>` ≈131 بت، والروابط القديمة بطول 48 ما زالت تعمل. المتطلبات أدناه تبقى المرجع الكامل ولم يُحذف منها شيء.
-
-من `/app` أو `/agency`:
-
-1. العميل
-2. المشروع
-3. الحملات
-4. المنصات
-5. الفترة
-6. المؤشرات
-7. المحتويات
-8. الهوية
-9. إنشاء رابط مختصر
-10. مشاركة الرابط
-
-رابط العميل:
-
-- بلا تسجيل
-- Dashboard تفاعلي
-- Mobile-first
-- KPIs
-- line/bar/donut
-- funnel
-- campaign/platform/creative comparison
-- budget status
-- last sync
-- data freshness
-- filters دون reload
-- optional password
-- expiry/revoke/renew
-- access history
-- templates
-- PDF/Excel
-
-العزل:
+تظهر في الصفحة التسويقية فقط:
 
 ```text
-Client filter may narrow only.
-It must never widen the granted scope.
+علاقات المؤثرين
+إدارة حملات المؤثرين والمحتوى والتعاونات من مكان واحد.
+قريبًا
 ```
 
-لا تستخدم «لحظي» للدلالة على أن المنصة أرسلت الآن. فرّق بين إعادة الحساب الآن وآخر مزامنة حقيقية.
+القواعد:
+
+- بطاقة تسويقية جامدة فقط.
+- لا تسجيل.
+- لا طلب.
+- لا تفعيل.
+- لا صلاحيات.
+- لا Portal Switcher.
+- لا حذف للكود أو البيانات القديمة.
+
+الحالة المعلنة: منفذة ومتحققة عند `d575eeb`.
 
 ---
 
-# 15. التكاملات الإعلانية — المهمة الحالية التالية
+# 10. الفصل الجوهري للتكاملات
 
-> **الحالة عند `72200dc`: البنية منفَّذة ومتحققة محليًا** (`e92fb38` + `9848277`) — الحسابات والحملات والمجموعات والإعلانات والمحتويات والمؤشرات والخام والمطبَّع، مع Queue وScheduler وRetry وBackoff وIdempotency وToken Refresh وسجل المزامنة. **التشغيل الفعلي `BLOCKED_EXTERNAL_CREDENTIALS`** حتى إدخال اعتماد حقيقي ونجاح OAuth وجولة API ومزامنة.
+## طبقة مدير المنصة `/admin`
 
-آخر تقرير عند commit `4eb36fa` أعلن أن مهمة التكاملات الجديدة **لم تبدأ**.
+مخصصة لإعداد مزود التكامل على مستوى النظام:
 
-الترتيب:
+- API
+- OAuth App
+- MCP عند توفره رسميًا
+- Client ID
+- Client Secret
+- App ID
+- Developer Token
+- Redirect URIs
+- Webhook URLs
+- Webhook Secrets
+- Scopes
+- Sandbox / Production
+- اختبار الإعداد
+- تدوير الأسرار
+- تعطيل المزود
+- Audit
 
-1. Snapchat Ads
-2. TikTok Ads
-3. Meta Ads
+الأسرار:
+
+- مشفرة.
+- لا تعاد للواجهة بعد الحفظ.
+- لا تظهر للمستخدم.
+- لا تسجل في Logs.
+
+## طبقة المستخدم `/app` و`/agency`
+
+مخصصة لربط المستخدم حساباته الخاصة:
+
+```text
+System Provider Configuration
+→ User OAuth Consent
+→ External Account
+→ Client
+→ Project
+```
+
+المستخدم يستطيع بدء OAuth والموافقة الرسمية واكتشاف الحسابات واختيارها وربطها بالعميل والمشروع واختيار الحملات وفصل الحساب وإعادة المصادقة ورؤية آخر مزامنة والأخطاء والصلاحيات الناقصة.
+
+المستخدم لا يستطيع رؤية أو إدخال Client Secret أو Webhook Secret.
+
+---
+
+# 11. التكاملات الإعلانية
+
+البنية الإنتاجية منفذة للمزودات الست:
+
+1. Snapchat
+2. TikTok
+3. Meta
 4. Google Ads
-5. X Ads
-6. LinkedIn Ads
+5. X
+6. LinkedIn
 
-لكل مزود:
+تشمل البنية:
 
-- OAuth Start/Callback
-- State validation
+- OAuth start/callback
+- state validation
 - PKCE عند الدعم
-- Token encryption/refresh/revocation
-- Scope validation
-- Account discovery
-- Project binding
-- Campaign/Ad group/Ads/Creative discovery
-- Metrics sync
-- Pagination
-- Incremental sync
-- Rate limits
-- Retry/Backoff
-- Idempotency
-- Sync history
-- Manual sync
-- Scheduler/Queue
-- Webhooks أو Polling
-- Disconnect
-- Tenant isolation
-- Tests
-- Live browser review
+- token encryption
+- token refresh
+- token revocation
+- scope validation
+- account discovery
+- project binding
+- campaigns
+- ad sets
+- ads
+- creatives
+- metrics sync
+- raw payloads
+- normalized data
+- pagination
+- incremental sync
+- retries
+- backoff
+- idempotency
+- scheduler
+- queues
+- sync history
+- manual sync
+- webhooks
+- signature verification
+- disconnect
+- tenant isolation
 
-حالات الصدق:
+الـCommits الرئيسية:
 
 ```text
-غير مربوط
-جاهز للربط
-بانتظار بيانات الاعتماد
-تطوير جزئي
-جاهز للاختبار
-قيد الاتصال
-متصل فعليًا
-قيد المزامنة
-متزامن فعليًا
-صلاحية منتهية
-صلاحيات ناقصة
-فشل الربط
-بيانات قديمة
-وضع تجريبي
+e92fb38
+9848277
 ```
-
-لا تعرض Connected أو Synced أو Live إلا بعد API round trip حقيقي.
-
-ترتيب المنصات ثابت في الصفحة التسويقية والتكاملات والمشروع والحملات والفلاتر والتقارير والرسوم والنماذج وDemo Data.
 
 ---
 
-# 16. تكاملات سلة وزد — مهمة حالية
+# 12. سلة وزد
 
-> **الحالة عند `72200dc`: منفَّذ ومتحقق محليًا** (`7156143`). زد لا تنشر نقطة سلات متروكة، وموصّلها **يرفض** بدل إعادة قائمة فارغة، فتُقرأ الجولة `partial` وتقول الواجهة «لا توفّرها المنصة». **التشغيل الفعلي `BLOCKED_EXTERNAL_CREDENTIALS`**.
+البنية الإنتاجية منفذة لكل من:
 
 ```text
 Salla
 Zid
 ```
 
-لكل متجر:
+تشمل:
 
-- OAuth أو الربط الرسمي
-- Store account
-- Products
-- Orders
-- Customers
-- Abandoned carts
-- Revenue
-- Discounts
-- Cancellations
-- Refunds
-- Inventory عند الدعم
+- OAuth
+- المتاجر
+- المنتجات
+- الطلبات
+- العملاء
+- الإيرادات
+- الخصومات
+- الإلغاءات
+- الاستردادات
+- السلات المتروكة
 - Webhooks
 - Idempotency
 - Last sync
 - Data freshness
 - Error log
 - Retry
-
-الربط التسويقي:
-
 - UTM
-- click IDs
-- campaign source
-- platform attribution
-- order source
-- events
-- currency
-- timezone
+- Click IDs
+- Attribution
+- Currency
+- Timezone
 
-يمنع التكرار ويُربط المتجر بالمشروع الصحيح.
+Commit رئيسي:
+
+```text
+7156143
+```
 
 ---
 
-# 17. تحليلات الفانل والمتجر — مهمة حالية
+# 13. الفانل والمتجر
 
-> **الحالة عند `72200dc`: منفَّذ ومتحقق محليًا** (`e8c1518`). كل مرحلة تحمل النظام الذي أنتجها، والمرحلة التي لا يقيسها شيء تقول السبب ولا تعرض صفرًا. CAC ≠ CPA. الطلبات بلا إسناد تُعدّ وتُعرض ولا تُوزَّع على الحملات.
-
-أنشئ داخل Analytics:
+تصنيف داخل Analytics باسم:
 
 ```text
 الفانل والمتجر
@@ -925,7 +590,7 @@ Zid
 
 المؤشرات:
 
-- Conversion Rate بين المراحل
+- Conversion Rate
 - Drop-off
 - CAC
 - CPA
@@ -935,28 +600,9 @@ Zid
 - Orders
 - Purchases
 - Abandoned Cart Rate
-- Refunds عند توفرها
+- Refunds
 
-المقارنات:
-
-- المنصات
-- الحملات
-- المحتويات
-- المنتجات
-- العملاء
-- الفترات
-
-الفلاتر:
-
-- العميل
-- المشروع
-- المتجر
-- المنصة
-- الحملة
-- المنتج
-- الفترة
-
-مصدر كل رقم واضح:
+المصادر واضحة:
 
 ```text
 Ad platform data
@@ -965,13 +611,17 @@ Analytics data
 Normalized metric
 ```
 
+Commit رئيسي:
+
+```text
+e8c1518
+```
+
 ---
 
-# 18. Unified Data Pipeline
+# 14. Unified Data Pipeline
 
-> **الحالة عند `72200dc`: منفَّذ ومتحقق محليًا** (`3846899`). خدمة حداثة واحدة حلّت أربع استعلامات متفرقة وصارت تحسب المتاجر أيضًا؛ التنبيهات تقرأ `MetricsAggregator` بدل حساب ROAS بنفسها؛ وكتلة المتجر في اللوحة تأتي من `StoreFunnelService` نفسها التي تغذّي تبويب التحليلات.
-
-البيانات المتزامنة تغذي:
+مصدر بيانات موحد يغذي:
 
 ```text
 Dashboard
@@ -993,13 +643,13 @@ Sync Status
 
 يمنع:
 
-- إدخال الرقم نفسه يدويًا في أكثر من وحدة
-- جداول متناقضة
-- مصدر منفصل لكل صفحة
-- Demo مختلط مع Live
-- Attribution غير موضح
+- إدخال الرقم نفسه في أكثر من مكان.
+- مصادر متضاربة.
+- خلط Demo وLive.
+- خلط attribution.
+- الاستعلام خارج المشروع.
 
-حفظ:
+يحفظ:
 
 - raw payload
 - normalized rows
@@ -1015,252 +665,250 @@ Sync Status
 - synced_at
 - source_updated_at
 
----
-
-# 19. Canonical Metrics
+Commit رئيسي:
 
 ```text
-spend
-impressions
-reach
-frequency
-clicks
-link_clicks
-landing_page_views
-engagements
-video_views
-leads
-add_to_cart
-checkout_started
-orders
-purchases
-revenue
-installs
-results
-cpm
-cpc
-ctr
-cpa
-cpl
-cpi
-aov
-roas
-conversion_rate
+3846899
 ```
-
-لكل مقياس:
-
-- Provider mapping
-- Objective compatibility
-- Aggregation rule
-- Currency handling
-- Timezone handling
-- Attribution context
-- Data freshness
-- Source
-- `is_demo`
-
-لا تستخدم ROAS لجميع الأهداف.
 
 ---
 
-# 20. بيانات Demo
+# 15. التقارير التفاعلية وروابط العملاء
 
-مطلوبة للمعاينة وموسومة:
+النظام يدعم:
+
+- اختيار العميل
+- المشروع
+- الحملات
+- المنصات
+- الفترة
+- المؤشرات
+- المحتويات
+- الهوية
+- إنشاء رابط مختصر
+- فتح الرابط بلا تسجيل
+- فلاتر دون Reload
+- KPI cards
+- line/bar/donut
+- funnel
+- مقارنة الحملات والمنصات والمحتويات
+- budget status
+- last sync
+- data freshness
+- كلمة مرور
+- انتهاء
+- إلغاء
+- تجديد
+- access history
+- PDF
+- Excel
+- Fail-Closed ceiling
+
+المسار المختصر:
 
 ```text
-Demo
-بيانات تجريبية
+/r/<token>
 ```
 
-تشمل عملاء ومشروعات ومنصات وحسابات وأهداف وحملات قوية وضعيفة وأخطاء مزامنة ومحتويات وتنبيهات ومهام وتقارير وطلبات وعروض وفواتير ومدفوعات ومتاجر ومنتجات وطلبات متجر وFunnel events.
-
-المعادلات:
+قاعدة العزل:
 
 ```text
-CPA = Spend / Results
-CPC = Spend / Clicks
-CPM = Spend / Impressions × 1000
-CTR = Clicks / Impressions × 100
-ROAS = Revenue / Spend
-AOV = Revenue / Orders
+Client filters may narrow only.
+They must never widen the granted scope.
 ```
 
-لا تستخدم Demo لإثبات Live Integration.
-
----
-
-# 21. Taxonomy
-
-الخيارات القابلة للإدارة تأتي من Taxonomy Engine:
-
-- إضافة وتعديل وترجمة وترتيب
-- تفعيل وتعطيل ودمج
-- Parent/Child
-- Default
-- Tenant Scope
-- Usage Count
-- Audit
-
-يمنع استخدام Arrays ثابتة للخيارات القابلة للإدارة، مع السماح بمصدر مركزي واحد للثوابت الرسمية مثل ترتيب المنصات.
-
----
-
-# 22. الجاهزية الإنتاجية
-
-> **الحالة عند `72200dc`: منفَّذ ومتحقق محليًا** (`e175e1d`). نبضات حية للمجدول والعامل، وثلاث نقاط صحة يفصلها القرار الذي تقوده، وHorizon محكوم بـ`is_platform_admin` ويراقب طابور `reports`، و`ops:backup` بمانيفست وتحقق. **تشغيل Horizon والـCron على خادم حقيقي وأول بروفة استرجاع ما زالا خارج نطاق التحقق المحلي.**
-
-- `.env.example`
-- secret management
-- OAuth callback URLs
-- webhook URLs
-- queues/scheduler/cron
-- Redis/Horizon
-- token refresh/expiry/reconnect
-- rate limits
-- CORS/CSRF/encryption
-- health checks/monitoring/logs/alerting
-- backups/restore
-- migrations/seed safety
-- indices/N+1/query performance
-- retention policies/failed jobs
-- tenant isolation/share-token security
-- production SPA fallback
-- session domain/cookie security
-
-Clean install مطلوب قبل التسليم.
-
----
-
-# 23. سياسة التكاملات الخارجية
-
-قد تنتظر بيانات اعتماد:
-
-- Snapchat
-- TikTok
-- Meta
-- Google Ads
-- X
-- LinkedIn
-- Salla
-- Zid
-- GA4
-- Google Drive
-- CRM
-- Email
-- SMS
-- WhatsApp
-- Moyasar
-- Stripe
-- Apple OAuth
-- Google OAuth
-
-عند الغياب:
+Commits رئيسية:
 
 ```text
-1. نفّذ البنية القابلة للتفعيل.
-2. أنشئ شاشة إعداد واضحة.
-3. اختبر Adapter/state/security.
-4. استخدم Demo/Sandbox معلّمًا في غير الإنتاج.
-5. صنّف BLOCKED_EXTERNAL_CREDENTIALS.
-6. واصل بقية المشروع.
+d262764
+672b11b
 ```
 
-## التصنيف الملزم للحالة الراهنة
+---
 
-**لا يُصنَّف أي مزوّد `Connected` أو `Synced` أو `Live`.** جميع التكاملات الخارجية تبقى
-`BLOCKED_EXTERNAL_CREDENTIALS` حتى تُدخَل بيانات اعتماد حقيقية **وينجح OAuth وجولة API ومزامنة
-فعلية**. البنية والواجهات والاختبارات مكتملة؛ الاعتماد وحده هو الناقص.
+# 16. جاهزية الإنتاج
 
-الحالة المقروءة من النظام عند `72200dc`:
+منفذ ومتحقق محليًا:
 
-| المزوّد | النوع | حالة الإعداد | التصنيف |
+- Horizon
+- Queue workers
+- Scheduler
+- Cron
+- Health checks
+- Operational readiness endpoint
+- Scheduler heartbeat
+- Worker heartbeat
+- Backup command
+- Backup verification
+- Corruption detection
+- Runbook
+- OAuth callback URL derivation
+- Webhook URL derivation
+- Secret masking
+- Production Horizon gate
+- SPA fallback
+- Session domain
+- Clean install
+- Upgrade path
+- config:cache
+- route:cache
+- horizon:terminate
+
+Commit رئيسي:
+
+```text
+e175e1d
+```
+
+---
+
+# 17. التثبيت النظيف ومسار الترقية
+
+## Clean Install
+
+```text
+Empty database
+→ migrate
+→ PermissionSeeder
+→ 121 tables
+→ 111 permissions
+```
+
+تحقق أيضًا:
+
+```text
+config:cache
+route:cache
+```
+
+## Upgrade
+
+```text
+migrate
+→ Nothing to migrate
+→ 0 pending
+```
+
+`horizon:terminate` إلزامي بعد النشر.
+
+---
+
+# 18. حالة التكاملات الخارجية الحالية
+
+## الحقيقة التشغيلية
+
+**لا يوجد أي مزود Connected أو Synced أو Live.**
+
+لم تدخل بيانات اعتماد فعلية، ولم تنفذ OAuth حقيقية أو جولة API أو مزامنة حقيقية.
+
+| المزود | النوع | حالة النظام | التصنيف النهائي |
 |---|---|---|---|
-| Snapchat | إعلانات | `not_configured` | `BLOCKED_EXTERNAL_CREDENTIALS` |
-| TikTok | إعلانات | `not_configured` | `BLOCKED_EXTERNAL_CREDENTIALS` |
-| Meta | إعلانات | `not_configured` | `BLOCKED_EXTERNAL_CREDENTIALS` |
-| Google Ads | إعلانات | `not_configured` | `BLOCKED_EXTERNAL_CREDENTIALS` |
-| X | إعلانات | `not_configured` | `BLOCKED_EXTERNAL_CREDENTIALS` |
-| LinkedIn | إعلانات | `awaiting_credentials` | `BLOCKED_EXTERNAL_CREDENTIALS` |
-| سلة | متاجر | `not_configured` | `BLOCKED_EXTERNAL_CREDENTIALS` |
-| زد | متاجر | `not_configured` | `BLOCKED_EXTERNAL_CREDENTIALS` |
+| Snapchat | إعلانات | not_configured | BLOCKED_EXTERNAL_CREDENTIALS |
+| TikTok | إعلانات | not_configured | BLOCKED_EXTERNAL_CREDENTIALS |
+| Meta | إعلانات | not_configured | BLOCKED_EXTERNAL_CREDENTIALS |
+| Google Ads | إعلانات | not_configured | BLOCKED_EXTERNAL_CREDENTIALS |
+| X | إعلانات | not_configured | BLOCKED_EXTERNAL_CREDENTIALS |
+| LinkedIn | إعلانات | awaiting_credentials | BLOCKED_EXTERNAL_CREDENTIALS |
+| Salla | متاجر | not_configured | BLOCKED_EXTERNAL_CREDENTIALS |
+| Zid | متاجر | not_configured | BLOCKED_EXTERNAL_CREDENTIALS |
 
-**لماذا LinkedIn وحده `awaiting_credentials`:** حقوله المطلوبة `client_id` و`client_secret`
-و`version`، و`version` يأتي بقيمة افتراضية (`2411`) وهي رقم إصدار API لا بيانات اعتماد — فتُقرأ
-الحالة «مهيّأ جزئيًا». الحالتان صادقتان وكلتاهما غير قابلة للربط، والفرق تجميلي ولم يُعدَّل بعد
-بوابة خضراء.
+LinkedIn مختلف لأن `version=2411` قيمة API افتراضية وليست اعتمادًا.
 
-أي صفوف `provider_connections` أو `external_accounts` في قاعدة التطوير هي من تشغيلات E2E، **لا من
-مزامنة حقيقية**، ولا واحد منها قابل للمزامنة لأن المزوّد نفسه غير مهيّأ.
+أي صفوف اتصال موجودة في قاعدة التطوير هي Demo/E2E وليست اتصالًا حيًا.
 
 ---
 
-# 24. آخر حالة معلنة
-
-آخر تقرير موثق ومعتمد:
+# 19. نتائج التحقق النهائي
 
 ```text
-Branch: feat/taxonomy-ux
-HEAD: 72200dc
-Working Tree: CLEAN
+Backend: 1246 passed
+Vitest: 625 passed
 Playwright: 773/773
-Browsers: Chromium + Firefox + WebKit
+Chromium: PASS
+Firefox: PASS
+WebKit: PASS
 Failed: 0
 Flaky: 0
 Retries: 0
-EXIT: 0
-Backend: 1246 passed (6207 assertions)
-Vitest: 625 passed (90 files)
-tsc: clean · oxlint: 0 errors · Pint: clean · composer audit: clean
+Exit: 0
+Duration: 28.7m
 ```
 
-> **هذا القسم يلغي الحالة السابقة التي كانت تتوقف عند `4eb36fa`.** كل ما ورد هناك من «لم يبدأ»
-> بخصوص التكاملات الست وسلة وزد والفانل والتقارير والجاهزية الإنتاجية **لم يعد صحيحًا**. بقية
-> التعليمات والمتطلبات في هذا الملف تبقى سارية كما هي.
-
-## المنفَّذ والمتحقَّق منه محليًا
-
-البنية الإنتاجية للبنود التالية **منفذة ومتحققة محليًا** — كودًا واختبارات ومعاينة حية:
-
-| البند | الحالة | الدليل |
-|---|---|---|
-| المزامنة الكاملة للمنصات الست: الحسابات → الحملات → المجموعات → الإعلانات → المحتويات → المؤشرات → الخام والمطبَّع، مع Queue وScheduler وRetry وBackoff وIdempotency وToken Refresh وسجل المزامنة وآخر تحديث | **منفذ ومتحقق محليًا** | `e92fb38` + `9848277` |
-| الفصل الملزم: `/admin` مفاتيح النظام وOAuth Apps وWebhooks والأسرار · `/app` و`/agency` ربط المستخدم حساباته فقط | **منفذ ومتحقق محليًا** | PROVCFG-001/002 · CONNECT-001 · تحقق حي: 403 على وحدة المفاتيح، وصفر تسريب في `/app/integrations` |
-| سلة ثم زد: OAuth الرسمي، المتاجر، المنتجات، الطلبات، العملاء، السلات المتروكة، الإيرادات، الإلغاءات والاستردادات، Webhooks، وربط UTM وClick IDs بالمشروعات والحملات | **منفذ ومتحقق محليًا** | `7156143` |
-| «الفانل والمتجر» داخل التحليلات: الظهور → النقرات → الزيارات → مشاهدة المنتج → الإضافة للسلة → بدء الدفع → الطلبات → المشتريات → الإيرادات، مع Conversion Rate وDrop-off وCAC وCPA وAOV وROAS **ومصدر كل رقم** | **منفذ ومتحقق محليًا** | `e8c1518` |
-| Unified Data Pipeline: البيانات المتزامنة تغذي Dashboard والحملات والمجموعات والإعلانات والمحتويات والتحليلات والفانل والتقارير وروابط العملاء والتنبيهات والميزانيات وحالة حداثة البيانات، **دون تكرار أو مصادر متعارضة** | **منفذ ومتحقق محليًا** | `3846899` |
-| التقارير التفاعلية: رابط مختصر بلا تسجيل، فلاتر لحظية، مؤشرات ومحتويات ورسوم وقمع ومقارنات، آخر مزامنة، كلمة مرور، انتهاء، إلغاء، تجديد، سجل فتح، قوالب، PDF وExcel وعزل Fail-Closed | **منفذ ومتحقق محليًا** | `d262764` |
-| بطاقة «علاقات المؤثرين — قريبًا» في الصفحة التسويقية فقط مع بقاء `influencers_ugc_enabled=false` | **منفذ ومتحقق محليًا** | `d575eeb` (سابق — تم التحقق منه ولم يُعد كتابته) |
-| جاهزية الإنتاج: الأسرار، Callbacks، Webhook URLs، Redis، Horizon، Cron، Queues، Monitoring، Health Checks، النسخ الاحتياطي، تجديد الرموز، الأداء، الأمان، Clean Install ومسار الترقية | **منفذ ومتحقق محليًا** | `e175e1d` |
-
-## ما تم التحقق منه حيًا في هذه الجلسة
-
-- **البوابة الشاملة:** 773/773 على ثلاثة متصفحات، `retries: 0`، من شجرة نظيفة بعد إيقاف خادمي التطوير.
-- **تثبيت نظيف:** قاعدة فارغة فعليًا → `migrate` → `db:seed PermissionSeeder` ← **121 جدولًا و111 صلاحية**؛ `config:cache` و`route:cache` يُبنيان (لا Closures في الإعدادات).
-- **مسار الترقية:** «Nothing to migrate»، 0 معلّق؛ `horizon:terminate` موجود وإلزامي.
-- **الرحلة الحية:** `/admin` يعرض Redirect URI وWebhook URL **مشتقَّين** بلا إمكانية قراءة أي سر · مالك المستأجر **403** على وحدة المفاتيح · `/app/integrations` صفر تسريب و«بانتظار بيانات الاعتماد» بلا زر ميت · اللوحة والفانل يعيدان أرقام المتجر **متطابقة حرفيًا** من خدمة واحدة · رابط `/r/<22>` فُتح **بلا أي جلسة**، الفلاتر طُبِّقت، المدى خارج السقف **قُصَّ**، الفتحات سُجِّلت، وبعد الإلغاء **404**.
-- أُزيلت كل بيانات التجربة بعدها؛ جداول التجارة عادت إلى صفر صفوف.
-
-## ما تم اكتشافه وإصلاحه ولم يكن مطلوبًا العثور عليه
-
-- **ثغرة أمنية حقيقية:** `guzzlehttp/guzzle` كان يحمل CVE-2026-69246 (خطورة عالية — *مضيف غير قانوني يتجاوز فحوص المضيف*)، في مسار منتج يتصل بثماني واجهات خارجية. رُقِّع، و`composer audit` نظيف الآن.
-- **إفشاء عبر المشاريع في الفانل:** كان يأخذ كل متاجر المستأجر، فيعرض مشروعُ عميلٍ اسمَ متجر عميل آخر. الطلبات كانت مقيَّدة بالمشروع طوال الوقت، فالأرقام صحيحة وكل ما يُقال عنها خطأ.
-- **نافذة الفانل:** الطلبات طوابع زمنية ونقاط النهاية تمرّر `to` عند منتصف الليل، فاختلفت اللوحة والتحليلات على إيراد اليوم بمقدار كل طلبات اليوم.
-- **Fail-Open في رابط العميل:** سقف منصات فارغ تحوّل من «لا شيء» إلى «كل شيء». **أُلغيت جولة بوابة كاملة بسببه** لأن الإصلاح نزل أثناء تشغيلها، ثم أُعيدت من شجرة نظيفة.
-
-## التنبيهات المتبقية — مسجَّلة لا مُتجاهَلة
-
-`npm audit` يُبقي تنبيهين، وكلاهما نفس المشكلة في **وضع RSC** لـReact Router. هذا التطبيق SPA عميل
-بحت لا يشغّل ذلك المسار، ولا يوجد إصلاح للأمام (المدى `7.12.0–8.2.0`، وأحدث إصدار `7.18.2`)،
-والعلاج الوحيد المعروض هو **تنزيل major** لمكتبة التوجيه عبر كل مسار في المنتج. التقييم وشروط
-انتهاء صلاحيته في `docs/PRODUCTION_RUNBOOK.md`: يُعاد الفحص كل إصدار، ويسقط فورًا إذا تبنّى
-التطبيق RSC.
+التثبيت النظيف ومسار الترقية والرحلة الحية تحققت.
 
 ---
 
-# 25. الحسابات التجريبية المعروفة
+# 20. الأمان والإصلاحات المهمة
 
-Development فقط، ولا تظهر في الصفحة العامة:
+أُصلحت:
+
+- Fail-Open في سقف منصات رابط التقرير العام.
+- تسريب بيانات المتاجر بين المشاريع في الفانل.
+- اختلاف نافذة التاريخ بسبب منتصف الليل.
+- تناقض حداثة المتجر عند حذف سجل التشغيل.
+- خطأ `OnboardingGate` fail-open.
+- Webhook signature verification.
+- Webhook idempotency.
+- Secret leakage prevention.
+- CVE-2026-69246 في `guzzlehttp/guzzle`.
+
+تبقى تنبيهات npm مرتبطة بوضع React Router RSC، بينما التطبيق SPA ولا يستخدم RSC. التقييم موثق في `PRODUCTION_RUNBOOK.md`.
+
+---
+
+# 21. قواعد الصدق
+
+يمنع وصف أي مزود بأنه:
+
+```text
+Connected
+Synced
+Live
+```
+
+إلا بعد:
+
+1. إدخال الاعتماد الحقيقي.
+2. نجاح OAuth.
+3. اكتشاف حساب خارجي حقيقي.
+4. نجاح API round trip.
+5. نجاح أول مزامنة.
+6. ظهور البيانات الحية.
+7. اختبار Token Refresh.
+8. اختبار Webhooks.
+9. اختبار Reconnect.
+
+حتى ذلك الوقت:
+
+```text
+BLOCKED_EXTERNAL_CREDENTIALS
+Awaiting Credentials
+Ready for Configuration
+```
+
+---
+
+# 22. ما تبقى
+
+المتبقي خارجي وتشغيلي فقط:
+
+1. إنشاء واعتماد تطبيقات OAuth لدى كل مزود.
+2. إدخال Client IDs وSecrets وDeveloper Tokens.
+3. ضبط Redirect URIs وWebhook URLs في بوابات المزودين.
+4. تنفيذ OAuth حقيقي لحساب اختباري.
+5. تنفيذ API round trip حقيقي.
+6. تنفيذ أول مزامنة حية.
+7. التحقق من البيانات في Dashboard والفانل والتقرير.
+8. اختبار Refresh وReconnect وWebhooks.
+9. تغيير الحالة إلى Connected/Synced فقط بعد الأدلة.
+
+لا توجد متطلبات برمجية غير خارجية معلنة مفتوحة حسب التقرير النهائي الحالي.
+
+---
+
+# 23. الحسابات التجريبية
+
+Development فقط، ولا تظهر على الصفحة العامة:
 
 ```text
 Platform Admin:
@@ -1268,9 +916,8 @@ admin@demo-campaignshub.local
 password
 → /admin
 
-Platform Admin (بديل، تم التحقق منه حيًا في هذه الجلسة):
+Alternative Platform Admin:
 platform@mediabuying.local
-password
 → /admin
 
 Advertiser:
@@ -1293,134 +940,65 @@ OTP
 
 ---
 
-# 26. بوابة الاختبارات النهائية
+# 24. قواعد التنفيذ الدائمة
 
-- Backend full suite
-- Frontend typecheck/lint/tests/build
-- Chromium/Firefox/WebKit
-- Desktop 1440×900 و1920×1080
-- Tablet/Mobile
-- Arabic/English
-- RTL/LTR
-- Light/Dark
-- Migration fresh + seed
-- Upgrade migration path
-- Clean install
-- Live browser journeys
-- Working tree clean
-
-الهدف:
-
-```text
-Failed = 0
-Flaky = 0
-Retries = 0
-Unexplained Skipped = 0
-Open non-external requirements = 0
-Unverified non-external requirements = 0
-Working Tree = CLEAN
-```
+- لا تعِد تنفيذ أي وحدة VERIFIED إلا عند اكتشاف خلل فعلي.
+- لا تعتبر Demo اتصالًا حيًا.
+- لا تعتبر Adapter أو Button أو Endpoint دليل اكتمال.
+- لا تعدّل المصدر أثناء Full Gate.
+- لا أكثر من جلسة تكتب في Working Tree نفسه.
+- لا تقرير نهائي مع بند غير خارجي PARTIAL.
+- لا بيانات حية مزعومة دون اعتماد وجولة API.
+- لا صفحة رفض وصول بلا مخرج.
+- لا قوائم أعمق من مستويين.
+- لا رسوم للزينة.
+- كل Dashboard يجيب:
+  - ماذا يحدث؟
+  - ماذا يحتاج انتباهي؟
+  - ما الخطوة التالية؟
 
 ---
 
-# 27. التقرير النهائي فقط
+# 25. تعليمات مشروع ChatGPT الجاهزة
 
-لا ترسل تقارير مرحلية أو رسائل حالة بلا تطوير فعلي.
+استخدم النص التالي داخل تعليمات المشروع:
 
-التقرير النهائي يحتوي:
+```text
+اعتبر الملف التالي مصدر الحقيقة الأساسي والملزم للمشروع:
 
-1. Requirement IDs وحالاتها.
-2. الصفحات المطورة.
-3. Backend/Frontend/E2E.
-4. Preview URLs.
-5. Integration readiness لكل مزود.
-6. API round trips الفعلية.
-7. Demo.
-8. Awaiting Credentials.
-9. External blockers.
-10. Final commits.
-11. Git status.
-12. Remaining operational evidence.
+CampaignsHub_Master_Context_and_Instructions.md
 
-إذا امتلأ السياق:
+واعتبر الملف التالي مصدر السياق الكامل والمحدث للمحادثات والقرارات والتصحيحات وحالة التطوير:
 
-- أكمل الوحدة الحالية.
-- Commit.
-- حدّث `RESUME_STATE`.
-- اطلب `/compact` فقط.
-- استأنف من Exact Next Requirement.
+CampaignsHub_Conversation_Master_Context_2026-08-05.md
+
+عند بدء أي محادثة جديدة داخل هذا المشروع:
+
+1. اقرأ الملفين واعتمد تعليماتهما تراكمياً قبل الرد.
+2. أحدث تصحيح صريح يلغي فقط الجزء المتعارض من التعليمات السابقة، وتبقى بقية التعليمات ملزمة.
+3. لا تعتمد على الذاكرة العامة أو التخمين عند وجود إجابة في مصادر المشروع.
+4. عند اختلاف حالة التنفيذ، اعتمد Git وREQUIREMENTS_TRACEABILITY_MATRIX.md وRESUME_STATE.md لتحديد الحالة الحالية.
+5. ميّز بوضوح بين:
+   - منفذ ومتحقق حياً.
+   - منفذ جزئياً.
+   - IMPLEMENTED_NOT_VERIFIED.
+   - Demo.
+   - Awaiting Credentials.
+   - BLOCKED_EXTERNAL_CREDENTIALS.
+   - BLOCKED_OPERATIONAL_EVIDENCE.
+   - غير منفذ.
+6. لا تعتبر الوثائق أو التدقيق أو نجاح الاختبارات وحدها دليلاً على اكتمال التطوير.
+7. حافظ على هدف النظام الأساسي: إدارة ومتابعة وتحليل الحملات المدفوعة، وربط المتاجر، وإصدار تقارير تفاعلية للعملاء.
+8. لا تعِد تنفيذ الوحدات VERIFIED إلا عند اكتشاف خلل فعلي.
+9. عند إعداد برومنت لـClaude Code أو مراجعة رده، تحقق من جميع المتطلبات السابقة وليس آخر طلب فقط.
+10. اكتب البرومنت قصيراً وصارماً وقابلاً للتنفيذ.
+```
+
+> عند رفع الملف إلى مصادر ChatGPT قد يضيف النظام رقمًا مثل `(1)` أو `(2)`. عدّل الاسم في تعليمات المشروع ليطابق الاسم الظاهر حرفيًا.
 
 ---
 
-# 28. ترتيب التنفيذ الحالي الملزم
-
-الترتيب الأصلي، **وقد نُفِّذ بالكامل** عند `72200dc`:
-
-```text
-1.  تحقق من HEAD والشجرة .......................... ✔ 72200dc · CLEAN
-2.  اقرأ المصفوفة وRESUME_STATE .................... ✔
-3.  لا تعد تنفيذ LOGIN-UNIFIED-001 ................. ✔ لم يُمسّ
-4.  بطاقة «علاقات المؤثرين — قريبًا» مع الفلاغ off .. ✔ d575eeb (سابق، تم التحقق)
-5.  Project Integrations readiness ................ ✔ PROVCFG-001/002 · CONNECT-001
-6.  OAuth/Sync للمنصات الست بالترتيب الرسمي ........ ✔ e92fb38 + 9848277
-7.  Salla ......................................... ✔ 7156143
-8.  Zid ........................................... ✔ 7156143
-9.  Store/Funnel Analytics ........................ ✔ e8c1518
-10. Unified Data Pipeline لجميع الوحدات ............ ✔ 3846899
-11. Shared Reports فوق البيانات المتزامنة .......... ✔ d262764
-12. Production Readiness .......................... ✔ e175e1d
-13. Live journeys ................................. ✔ تحقق حي كامل
-14. Full regression ............................... ✔ 773/773 · 3 متصفحات · retries 0
-15. Clean install ................................. ✔ 121 جدولًا · 111 صلاحية
-16. Final handover ................................ ✔ التقرير النهائي معتمد
-```
-
-لا تقرير نهائي مع بند غير خارجي `PARTIAL` أو `IMPLEMENTED_NOT_VERIFIED`. **لا يوجد بند غير خارجي
-في أي من هاتين الحالتين الآن.**
-
-## ما تبقّى — خارجي بحت
-
-```text
-1. إدخال بيانات اعتماد OAuth الحقيقية لكل مزوّد من /admin.
-2. تنفيذ جولة OAuth حقيقية ثم جولة API ناجحة ثم مزامنة فعلية.
-3. عندها فقط يجوز رفع التصنيف عن BLOCKED_EXTERNAL_CREDENTIALS.
-4. تشغيل Horizon والـCron على الخادم، وتأكيد /api/v1/admin/operational-status = healthy.
-5. أول نسخة احتياطية + بروفة استرجاع موثّقة بالتاريخ.
-```
-
-لا يجوز لأي من هذه الخمسة أن يُنفَّذ بادعاء أو ببيانات وهمية.
-
----
-
-# 29. أمر بدء محادثة ChatGPT جديدة
-
-```text
-اعتبر ملف CampaignsHub_Conversation_Master_Context_2026-08-05.md مصدر السياق الكامل للمشروع، واعتبر CampaignsHub_Master_Context_and_Instructions.md مصدر الحقيقة الأساسي المتراكم.
-
-اقرأ أيضًا:
-docs/MASTER_EXECUTION_CONTRACT.md
-docs/REQUIREMENTS_TRACEABILITY_MATRIX.md
-docs/RESUME_STATE.md
-Git History
-
-أحدث تصحيح صريح يلغي فقط الجزء المتعارض، ولا يجوز إسقاط بقية التعليمات.
-
-ميّز دائمًا بين:
-- منفذ ومتحقق حيًا
-- منفذ جزئيًا
-- Demo
-- Awaiting Credentials
-- Blocked Operational Evidence
-- غير منفذ
-
-لا تعتبر نجاح الاختبارات أو الوثائق دليلًا منفردًا على اكتمال المنتج.
-
-ابدأ بالحالة الحالية المستنتجة من Git والمصفوفة وRESUME_STATE، ثم ساعد في إعداد برومنت قصير وصارم لـClaude Code يحافظ على جميع المتطلبات.
-```
-
----
-
-# 30. أمر بدء جلسة Claude Code جديدة
+# 26. أمر بدء Claude Code جديد
 
 ```text
 اقرأ بالكامل وبالترتيب:
@@ -1435,72 +1013,34 @@ docs/RESUME_STATE.md
 Git branch
 HEAD
 Working Tree
-Preview
-Backend
-Queue
-Scheduler
-Redis
-/dev/status
 
-لا تعد تنفيذ الوحدات VERIFIED، ولا تبدأ Audit أو خطة جديدة.
+الحالة المتوقعة:
+Current HEAD: df962e1 أو أحدث
+Code verified at: 72200dc
+Working Tree: CLEAN
 
-استأنف مباشرة من أول Requirement ID غير VERIFIED، مع الأولوية الحالية:
-- بطاقة علاقات المؤثرين «قريبًا» دون تفعيل النظام الفرعي
-- تكاملات المنصات الست
-- Salla وZid
-- تحليلات الفانل والمتجر
-- التقارير التفاعلية فوق البيانات المتزامنة
-- جاهزية الإنتاج
+لا تعد تنفيذ أي وحدة VERIFIED.
+لا تشغّل الاختبارات دون سبب.
+لا تعدّل الكود لمجرد أن التكاملات غير مرتبطة؛ حالتها BLOCKED_EXTERNAL_CREDENTIALS.
 
-نفّذ وحدة واحدة كاملة:
-Database + Backend + Frontend + Permissions + Isolation + Loading/Empty/Error + Live Review + Tests + Commit.
+المرحلة التالية تشغيلية فقط:
+إدخال بيانات الاعتماد، اعتماد OAuth Apps، ثم تنفيذ أول OAuth وAPI round trip ومزامنة حقيقية لكل مزود.
 
-لا ترسل تقارير مرحلية. إذا غابت بيانات اعتماد، أكمل البنية وصنّف Awaiting Credentials وواصل. لا تدّعِ Connected أو Synced أو Live دون API round trip حقيقي.
-
-إذا امتلأ السياق:
-أكمل الوحدة الحالية، اختبرها، Commit، حدّث RESUME_STATE، ثم اطلب /compact فقط.
-
-لا ترجع للمستخدم إلا بتقرير نهائي واحد بعد اكتمال جميع المتطلبات غير الخارجية.
+لا تدّعِ Connected أو Synced أو Live دون دليل حقيقي.
 ```
 
 ---
 
-# 31. نقاط لا يجوز نسيانها
-
-- الهدف الأساسي إدارة الحملات والتقارير التفاعلية، وليس إدارة الوكالة فقط.
-- السعودية هي السوق الافتراضية.
-- الريال السعودي العملة العربية الافتراضية.
-- رقم الجوال السعودي مرن ويخزن E.164.
-- المنصات الست لها ترتيب ثابت.
-- المؤثرون وUGC غير مفعّل؛ بطاقة «قريبًا» فقط.
-- أربع بوابات تشغيلية فقط.
-- `/login` صفحة واحدة.
-- لا Demo credentials على الصفحة العامة.
-- لا Free plan.
-- Starter = 99 SAR شهريًا وفق آخر قرار.
-- لا تفعيل قبل دفع موثوق.
-- مدير المنصة يدير الباقات والمنح والصلاحيات.
-- لا صفحة رفض وصول بلا مخرج.
-- لا قوائم عميقة.
-- لا رسوم للزينة.
-- لا بيانات حية مزعومة دون اعتماد ومزامنة.
-- لا تقرير نهائي مع Partial غير خارجي.
-- لا تعديل Source أثناء Full Gate.
-- لا أكثر من جلسة تكتب في Working Tree نفسه.
-
----
-
-# 32. خاتمة تشغيلية
-
-هذا الملف لا يلغي Git أو المصفوفة أو RESUME_STATE، بل يمنع فقدان الهدف والقرارات والتصحيحات عند فتح محادثة جديدة.
+# 27. قاعدة الاستمرار
 
 ```text
-تحقق من الواقع
-→ أكمل أول متطلب مفتوح
+اقرأ Git والمصفوفة وRESUME_STATE
+→ تحقق من الواقع
+→ لا تعد تنفيذ VERIFIED
+→ أكمل فقط المتطلبات المفتوحة الحقيقية
 → راجع حيًا
-→ اختبر
+→ اختبر عند الحاجة
 → Commit نظيف
-→ حدّث المصفوفة وRESUME_STATE
-→ انتقل تلقائيًا
+→ حدّث الوثائق
 → لا تدّعِ ما لم يحدث
 ```
