@@ -7,6 +7,7 @@ use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformGrantController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
+use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
@@ -92,6 +93,30 @@ Route::middleware(['auth:sanctum', 'platform'])
             // A real round trip to the gateway, rate limited because it leaves the building.
             Route::post('/{provider}/test', [PlatformPaymentSettingsController::class, 'test'])
                 ->middleware('throttle:10,1')->name('test');
+        });
+
+        /*
+         * PROVCFG-001 — the ad and commerce providers, configured by the platform operator.
+         *
+         * Unlike the payment gateways above, these ARE written here. The difference is what a
+         * compromise costs: a payment key redirects money, while a provider client secret lets an
+         * attacker impersonate our OAuth app — bad, but recoverable by rotating at the provider, and
+         * the alternative (a redeploy to add a customer's platform) makes the product unoperable.
+         * Every write is audited by field name, and there is NO endpoint that reads a value back.
+         *
+         * `test` and `rotate` are throttled because both leave the building or change what leaves it.
+         */
+        Route::prefix('/settings/integrations/providers')->name('providers.')->group(function (): void {
+            Route::get('/', [PlatformProviderSettingsController::class, 'index'])->name('index');
+            Route::get('/{provider}', [PlatformProviderSettingsController::class, 'show'])->name('show');
+            Route::put('/{provider}', [PlatformProviderSettingsController::class, 'update'])->name('update');
+            Route::post('/{provider}/test', [PlatformProviderSettingsController::class, 'test'])
+                ->middleware('throttle:10,1')->name('test');
+            Route::post('/{provider}/rotate', [PlatformProviderSettingsController::class, 'rotate'])
+                ->middleware('throttle:10,1')->name('rotate');
+            Route::patch('/{provider}/status', [PlatformProviderSettingsController::class, 'status'])->name('status');
+            Route::delete('/{provider}/credentials/{key}', [PlatformProviderSettingsController::class, 'forget'])
+                ->name('credentials.forget');
         });
 
         // ADMIN-003 — read surfaces. The permission catalogue is code (PermissionSeeder), the

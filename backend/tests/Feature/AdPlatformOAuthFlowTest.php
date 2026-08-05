@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\AuthorizationState;
@@ -54,14 +55,43 @@ final class AdPlatformOAuthFlowTest extends TestCase
 
     // ── start ─────────────────────────────────────────────────────────────────────────────────
 
-    /** The honest state of this install: no keys, so no authorise URL — and it says what is missing. */
-    public function test_starting_an_unconfigured_platform_says_awaiting_credentials_and_what_is_missing(): void
+    /**
+     * The honest state of this install: no keys, so no authorise URL.
+     *
+     * It says `awaiting_credentials` and stops there. It used to list WHICH system credential was
+     * absent, which told a tenant about the platform operator's configuration — «ينقص: developer_token»
+     * is an instruction for the console at `/admin`, not for a customer, and PROVCFG-001 moved it
+     * there. The tenant learns the platform is not available yet; the operator learns why.
+     */
+    public function test_starting_an_unconfigured_platform_says_awaiting_credentials_without_naming_system_secrets(): void
     {
-        $this->actingAs($this->owner, 'sanctum')
+        $response = $this->actingAs($this->owner, 'sanctum')
             ->postJson('/api/v1/integrations/snapchat/oauth/start')
             ->assertStatus(422)
-            ->assertJsonPath('meta.status', 'awaiting_credentials')
-            ->assertJsonPath('errors.missing', ['client_id', 'client_secret', 'organization_id']);
+            ->assertJsonPath('meta.status', 'awaiting_credentials');
+
+        $this->assertArrayNotHasKey('missing', (array) $response->json('errors'));
+        $this->assertStringNotContainsString('organization_id', $response->getContent());
+    }
+
+    /**
+     * PROVCFG-001 — a provider the platform operator disabled is refused before a state is minted.
+     *
+     * The customer-facing page hides it, but an interface not drawing a button has never stopped
+     * anybody replaying a request. And the refusal says only that the platform is unavailable: WHY it
+     * was disabled is the operator's business and lives in the audit trail, not in a tenant's error.
+     */
+    public function test_a_disabled_provider_is_refused_before_any_authorisation_is_issued(): void
+    {
+        $this->configure('meta');
+        app(ProviderConfigurationService::class)->setEnabled('meta', false);
+
+        $response = $this->actingAs($this->owner, 'sanctum')
+            ->postJson('/api/v1/integrations/meta/oauth/start')
+            ->assertStatus(422)
+            ->assertJsonPath('meta.status', 'disabled');
+
+        $this->assertStringNotContainsString('client_secret', $response->getContent());
     }
 
     public function test_a_configured_platform_issues_a_single_use_authorization_url(): void

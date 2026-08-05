@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\AuthorizationState;
@@ -51,6 +52,7 @@ final class AdPlatformOAuthController extends Controller
         private readonly PlatformOAuth $oauth,
         private readonly TokenVault $vault,
         private readonly AdvertisingConnectorRegistry $registry,
+        private readonly ProviderConfigurationService $settings,
     ) {}
 
     /**
@@ -66,12 +68,31 @@ final class AdPlatformOAuthController extends Controller
 
         $creds = $this->credentialsOr404($provider);
 
+        /*
+         * PROVCFG-001 — a provider the platform operator has taken out of service is refused here,
+         * BEFORE a state is minted and before a URL exists to be followed. The customer-facing page
+         * already hides it, but an interface not drawing a button has never stopped anybody replaying
+         * a request, and this is the gate that actually holds.
+         *
+         * The refusal deliberately does NOT say which system credential is missing. That is the
+         * platform operator's business; a tenant learns only that the platform is unavailable, and the
+         * console is where the reason lives.
+         */
+        if (! $this->settings->isEnabled($creds->platform)) {
+            return ApiResponse::error(
+                message: 'This platform is currently unavailable.',
+                errors: ['provider' => [$creds->platform]],
+                meta: ['status' => 'disabled', 'provider' => $creds->platform],
+                status: 422,
+            );
+        }
+
         // An unconfigured platform has no authorise URL to build. Saying so is the honest answer; a
         // half-built URL would send the customer to a platform error page with our name on it.
         if (! $creds->isConfigured()) {
             return ApiResponse::error(
                 message: 'This platform is awaiting credentials.',
-                errors: ['provider' => [$creds->platform], 'missing' => $creds->missing()],
+                errors: ['provider' => [$creds->platform]],
                 meta: ['status' => 'awaiting_credentials', 'provider' => $creds->platform],
                 status: 422,
             );

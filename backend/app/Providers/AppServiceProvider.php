@@ -9,6 +9,7 @@ use App\Domains\Audit\Listeners\RecordAuthAudit;
 use App\Domains\CRM\Models\Company;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Models\Opportunity;
+use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Subscriptions\Models\Subscription;
@@ -54,6 +55,15 @@ class AppServiceProvider extends ServiceProvider
          * with the previous tenant's exceptions.
          */
         $this->app->scoped(AccountGrants::class);
+
+        /*
+         * The platform operator's provider configuration (PROVCFG-001).
+         *
+         * Scoped rather than singleton for the same reason as the contexts above — it memoises rows
+         * from `provider_configurations`, and a singleton would keep answering with the keys that were
+         * in place before an operator rotated one, for the life of the worker process.
+         */
+        $this->app->scoped(ProviderConfigurationService::class);
 
         // Advertising connector registry; Sandbox is excluded in production.
         $this->app->singleton(

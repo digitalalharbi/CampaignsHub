@@ -4,21 +4,35 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\OAuth;
 
+use App\Domains\Integrations\Catalogue\ProviderCatalogue;
+use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Support\AdPlatforms;
 use InvalidArgumentException;
 
 /**
- * INTEG-OAUTH-001 — what one ad platform's `config/ad_platforms.php` entry says, read once.
+ * INTEG-OAUTH-001 — what one ad platform's endpoints are, and which keys this install holds for it.
  *
  * The single place that answers "may we call this platform at all?". Everything downstream — the
  * connector's status, the OAuth controller, the setup page, the sync scheduler — asks this object
  * rather than reaching into config, so there is exactly one definition of configured and it cannot
  * drift into a laxer one somewhere convenient.
  *
- * `isConfigured()` is deliberately all-or-nothing against the platform's own `requires` list. A
- * partial configuration is the dangerous case, not the harmless one: Google Ads with an OAuth client
- * and no developer token authenticates cleanly and is then refused by every API call, which reads to a
- * customer as "connected, and your numbers are zero".
+ * ## Two sources, and which one wins (PROVCFG-001)
+ *
+ * The PROTOCOL half — authorise URL, token URL, API host — is code, and stays in
+ * `config/ad_platforms.php`: it is a fact about the platform, identical on every install, and an
+ * operator has no business editing it from a browser.
+ *
+ * The CREDENTIAL half comes from `ProviderConfigurationService`, which reads what the platform
+ * operator entered at `/admin/settings/integrations` and falls back to `.env` only when nothing was
+ * entered. That is why this class no longer reads `client_id` out of config directly: an install
+ * configured through the console and one configured through the environment must reach exactly the
+ * same code path, or the console would be a second, quieter configuration system.
+ *
+ * `isConfigured()` is deliberately all-or-nothing against the provider's own required-field list in
+ * `ProviderCatalogue`. A partial configuration is the dangerous case, not the harmless one: Google Ads
+ * with an OAuth client and no developer token authenticates cleanly and is then refused by every API
+ * call, which reads to a customer as "connected, and your numbers are zero".
  */
 final class PlatformCredentials
 {
@@ -38,7 +52,16 @@ final class PlatformCredentials
             throw new InvalidArgumentException("No ad-platform configuration for '{$platform}'.");
         }
 
-        return new self($canonical, $config);
+        $settings = app(ProviderConfigurationService::class);
+
+        // The credential half, overlaid onto the protocol half. `values()` already applied the
+        // database-over-environment rule, so a key absent from both arrives here as null and
+        // `missing()` names it — rather than the config's own stale `.env` read winning quietly.
+        return new self($canonical, [
+            ...$config,
+            ...$settings->values($canonical),
+            'scopes' => $settings->scopes($canonical),
+        ]);
     }
 
     /** @return list<string> the six platform keys, in the products order */
@@ -86,14 +109,15 @@ final class PlatformCredentials
     /**
      * Everything this platform needs before a single call is worth making.
      *
+     * Read from `ProviderCatalogue`, not from this config file. The list used to live in both, and
+     * two lists of required keys is one list that is wrong — the admin console would show a field as
+     * optional while the connector refused without it.
+     *
      * @return list<string>
      */
     public function requires(): array
     {
-        /** @var list<string> $requires */
-        $requires = $this->config['requires'] ?? ['client_id', 'client_secret'];
-
-        return $requires;
+        return ProviderCatalogue::get($this->platform)->requiredKeys();
     }
 
     /**

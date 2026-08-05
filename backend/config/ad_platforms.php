@@ -12,16 +12,24 @@ declare(strict_types=1);
 | that platform for real: where to send somebody to authorise, where to exchange and refresh the code,
 | which API host to call, and which extra secret that platform demands beyond a client id and secret.
 |
-| ## What "configured" means here, and why it is strict
+| ## Where the credential values actually come from now (PROVCFG-001)
 |
-| A platform counts as configured only when EVERY value in its `requires` list is present. Anything
-| less and the connector reports `awaiting_credentials` and refuses to call out — it does not attempt a
-| request that would fail, and it never renders as connected.
+| The `env()` reads below are a FALLBACK for local development and CI. A real install is configured by
+| the platform operator at `/admin/settings/integrations`, stored encrypted in
+| `provider_configurations`, and that always wins — see `ProviderConfigurationService::values()`.
 |
-| The `requires` lists are not decoration. Google Ads without a developer token can authenticate and
-| then be refused by every single API call; Snapchat without an organisation id can authenticate and
-| then have nothing to list. Both would look "connected" to a check that only asked for a token, and
-| the customer would be told their account was linked while no figure would ever arrive.
+| ## What "configured" means, and why it is strict
+|
+| A platform counts as configured only when EVERY required value is present. The required list lives in
+| `ProviderCatalogue`, not here: it used to be in both files, and two lists of required keys is one
+| list that is wrong. Anything less than complete and the connector reports `awaiting_credentials` and
+| refuses to call out — it does not attempt a request that would fail, and it never renders as
+| connected.
+|
+| That strictness is not decoration. Google Ads without a developer token can authenticate and then be
+| refused by every single API call; Snapchat without an organisation id can authenticate and then have
+| nothing to list. Both would look "connected" to a check that only asked for a token, and the customer
+| would be told their account was linked while no figure would ever arrive.
 |
 | ## Nothing in this file is a claim
 |
@@ -70,7 +78,6 @@ return [
             'client_secret' => env('SNAPCHAT_ADS_CLIENT_SECRET'),
             // Snapchat hangs ad accounts off an organisation; without one there is nothing to list.
             'organization_id' => env('SNAPCHAT_ADS_ORGANIZATION_ID'),
-            'requires' => ['client_id', 'client_secret', 'organization_id'],
         ],
 
         'tiktok' => [
@@ -83,7 +90,6 @@ return [
             // `app_id`/`secret` rather than the standard names, which the connector handles.
             'client_id' => env('TIKTOK_ADS_APP_ID'),
             'client_secret' => env('TIKTOK_ADS_APP_SECRET'),
-            'requires' => ['client_id', 'client_secret'],
         ],
 
         'meta' => [
@@ -94,7 +100,6 @@ return [
             'scopes' => ['ads_read', 'ads_management', 'business_management'],
             'client_id' => env('META_ADS_APP_ID'),
             'client_secret' => env('META_ADS_APP_SECRET'),
-            'requires' => ['client_id', 'client_secret'],
         ],
 
         'google' => [
@@ -107,13 +112,12 @@ return [
             'client_secret' => env('GOOGLE_ADS_CLIENT_SECRET'),
             /*
              * The developer token is approved separately from the OAuth client, and every Google Ads
-             * call is refused without it. Listing it under `requires` is the difference between an
+             * call is refused without it. Listing it as REQUIRED in the catalogue is the difference between an
              * account that says "awaiting credentials" and one that says "connected" and then returns
              * nothing but errors.
              */
             'developer_token' => env('GOOGLE_ADS_DEVELOPER_TOKEN'),
             'login_customer_id' => env('GOOGLE_ADS_LOGIN_CUSTOMER_ID'),
-            'requires' => ['client_id', 'client_secret', 'developer_token'],
         ],
 
         'x' => [
@@ -124,7 +128,6 @@ return [
             'scopes' => ['tweet.read', 'users.read', 'offline.access'],
             'client_id' => env('X_ADS_CLIENT_ID'),
             'client_secret' => env('X_ADS_CLIENT_SECRET'),
-            'requires' => ['client_id', 'client_secret'],
         ],
 
         'linkedin' => [
@@ -137,7 +140,6 @@ return [
             'client_secret' => env('LINKEDIN_ADS_CLIENT_SECRET'),
             // LinkedIn pins every REST call to a monthly version; an unpinned call is rejected.
             'version' => env('LINKEDIN_ADS_VERSION', '202411'),
-            'requires' => ['client_id', 'client_secret'],
         ],
     ],
 ];
