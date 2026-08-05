@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Building2, ChevronsUpDown, FolderKanban } from 'lucide-react'
+import { Building2, ChevronsUpDown, FolderKanban, Search } from 'lucide-react'
 import { listClientWorkspaces, listProjects } from '@/features/projects/api'
 import { useProject } from '@/stores/project'
 import { useAgencyClient } from '@/stores/agencyClient'
@@ -160,7 +160,28 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
   )
 }
 
-/** One labelled select. Native, so it is keyboard- and screen-reader-correct in both directions. */
+/**
+ * Above this many options the list stops being scannable and a filter box appears above it.
+ *
+ * Found by opening the live agency portal: the client step rendered 269 `<option>` elements in one
+ * scroll, and it is the entry point to every project-scoped page in the portal. An agency with even
+ * fifty clients cannot use it, and this control is not optional — nothing downstream renders until
+ * a client is chosen.
+ */
+const FILTER_ABOVE = 12
+
+/**
+ * One labelled select, with a filter box once the list is long.
+ *
+ * Still a NATIVE select, deliberately: it is keyboard- and screen-reader-correct in both text
+ * directions for free, and a listbox reimplemented in React would have to earn that back. The
+ * filter is a plain search input beside it, so the accessible control is untouched — it just has
+ * fewer options in it.
+ *
+ * The currently selected option is always kept in the list even when it does not match the filter.
+ * Dropping it would make the select fall back to the placeholder and read as "nothing is selected"
+ * while the rest of the portal is still showing that client's data.
+ */
 function Field({ testId, icon, label, value, placeholder, options, onChange, disabled }: {
   testId: string
   icon: React.ReactNode
@@ -171,12 +192,37 @@ function Field({ testId, icon, label, value, placeholder, options, onChange, dis
   onChange: (id: string) => void
   disabled?: boolean
 }) {
+  const ar = useUi((s) => s.locale) === 'ar'
+  const [term, setTerm] = useState('')
+  const filterable = options.length > FILTER_ABOVE && !disabled
+
+  const needle = term.trim().toLowerCase()
+  const shown = !filterable || needle === ''
+    ? options
+    : options.filter((o) => o.name.toLowerCase().includes(needle) || o.id === value)
+
   return (
     <label className="block">
       <span className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-text-muted">
         {icon}
         {label}
       </span>
+
+      {filterable && (
+        <div className="relative mb-1.5">
+          <Search size={12} className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden />
+          <input
+            type="search"
+            data-testid={`${testId}-filter`}
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+            aria-label={ar ? `تصفية ${label}` : `Filter ${label}`}
+            placeholder={ar ? 'تصفية…' : 'Filter…'}
+            className="w-full rounded-xl border border-border bg-surface-secondary py-1.5 pe-2 ps-7 text-[12px] text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none"
+          />
+        </div>
+      )}
+
       <div className="relative">
         <select
           data-testid={testId}
@@ -187,12 +233,19 @@ function Field({ testId, icon, label, value, placeholder, options, onChange, dis
           className="w-full cursor-pointer appearance-none rounded-xl border border-border bg-surface-secondary py-2 pe-8 ps-3 text-[13px] font-semibold text-text-primary transition-colors hover:border-border-strong focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/25 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <option value="">{placeholder}</option>
-          {options.map((o) => (
+          {shown.map((o) => (
             <option key={o.id} value={o.id}>{o.name}</option>
           ))}
         </select>
         <ChevronsUpDown className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 text-text-muted" size={14} />
       </div>
+
+      {/* A filter that hides everything must say so, or it reads as "you have no clients". */}
+      {filterable && needle !== '' && shown.length === 0 && (
+        <span data-testid={`${testId}-filter-empty`} className="mt-1 block text-[11px] text-text-muted">
+          {ar ? 'لا نتائج لهذه التصفية.' : 'Nothing matches that filter.'}
+        </span>
+      )}
     </label>
   )
 }
