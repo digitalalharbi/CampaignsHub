@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
 use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
@@ -59,6 +60,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // CAMPAIGN-020: side-by-side comparison of 2–5 campaigns of this project.
     Route::get('metrics/compare', [MetricsController::class, 'compare'])->name('metrics.compare');
     Route::get('metrics/funnel', [MetricsController::class, 'funnel'])->name('metrics.funnel');
+    /*
+     * FUNNEL-001 — «الفانل والمتجر»: the ad half and the store half in one place, with the source of
+     * every number attached. Kept apart from `metrics/funnel`, which is the ad-only funnel over
+     * `daily_metrics` and has no notion of an order.
+     */
+    Route::get('commerce/funnel', [StoreFunnelController::class, 'show'])->name('commerce.funnel');
     Route::get('metrics/budget', [MetricsController::class, 'budget'])->name('metrics.budget');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
     // NORM-001: what was done to the numbers before they were shown — currency, timezone, attribution,

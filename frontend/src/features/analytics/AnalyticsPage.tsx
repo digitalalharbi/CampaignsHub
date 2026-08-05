@@ -28,12 +28,15 @@ import { compact, money, num, percent, ratio } from './format'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
+import { StoreFunnelTab } from './StoreFunnelTab'
 
 const TABS = [
   { id: 'performance', ar: 'نظرة عامة على الأداء', en: 'Performance overview' },
   { id: 'platforms', ar: 'تحليل المنصات', en: 'Platform analysis' },
   { id: 'campaigns', ar: 'تحليل الحملات', en: 'Campaign analysis' },
   { id: 'funnel', ar: 'التحويلات والقمع', en: 'Conversions & funnel' },
+  // FUNNEL-001 — the ad funnel and the STORE funnel in one place, with the source of every number.
+  { id: 'store', ar: 'الفانل والمتجر', en: 'Funnel & store' },
   { id: 'budget', ar: 'تحليل الميزانية', en: 'Budget analysis' },
   { id: 'quality', ar: 'جودة البيانات والإسناد', en: 'Data quality & attribution' },
 ] as const
@@ -82,6 +85,7 @@ export function AnalyticsPage() {
       {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} />}
       {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} />}
       {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} />}
+      {tab === 'store' && <StoreFunnelTab projectId={currentProjectId} range={range} />}
       {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} />}
       {tab === 'quality' && <QualityTab projectId={currentProjectId} range={range} />}
 
