@@ -1908,3 +1908,110 @@ that is unit 2's job, and `integration_webhook_events` is where it should read f
 oxlint 0 errors · Pint clean, all at `06ecef5`. Kill the hand-started :8000 backend and :5173 Vite
 before the next gate — the suite reuses an existing :8000 and then skips its own
 `queue:work --queue=reports,default`, and the report-export specs hang at "processing".
+
+---
+
+## Session of 2026-08-05 (continued): units 1f, 2 and 3
+
+Branch `feat/taxonomy-ux`. Commits, in order, on top of `e92fb38`:
+
+| Commit | Unit | What it is |
+| --- | --- | --- |
+| `9848277` | 1f | ad sets, ads and creatives, per platform |
+| `7156143` | 2 | Salla & Zid: OAuth, stores, orders, attribution |
+| `e8c1518` | 3 | «الفانل والمتجر» inside analytics |
+
+Totals at `e8c1518`: **backend 1213 · vitest 619 · tsc · oxlint 0 errors · Pint clean**.
+
+### 1f — structure discovery (`9848277`)
+
+`syncAdSets()` / `syncAds()` on the connector contract; six adapters written against the API in front
+of them, not a shared idea of one.
+
+43. **LinkedIn has no ad-set level and must not be given a synthetic one.** Its hierarchy is campaign
+    group → campaign → creative, and what this product calls an external campaign IS a LinkedIn
+    campaign. `external_ads.external_ad_set_id` is nullable for that, and the old
+    `unique(ad_set, external_id)` was REPLACED by `unique(campaign, external_id)` — Postgres treats
+    NULLs as distinct, so the old index stopped preventing anything the moment the column could be
+    null, and every LinkedIn creative would have been re-inserted on each sweep.
+44. **Google budgets a campaign, never an ad group**, and has no creative object — the ad is the
+    creative. Copying a budget down would show one campaign's budget on each of four ad groups.
+45. **TikTok's creative is the media on the ad**; an ad with neither a video nor an image gets no
+    creative rather than an empty one named after itself.
+46. **Snapchat's ad names a squad and a creative id, never a campaign.** The creatives list is fetched
+    and joined so the name and format are real; the campaign is read off the squad.
+47. **X's promoted tweets name only a line item**, so the campaign is resolved through the line items.
+48. **Meta's `effective_status` answers delivery AND review**; only the review answers become a
+    verdict, so a paused ad gets none.
+49. **A row naming an undiscovered parent is skipped and COUNTED**, which turns the run partial.
+50. **Discovery runs at :55 every six hours, five minutes AHEAD of the metrics sweep**, because
+    `AccountMetricsSyncer` drops an insight for a campaign it has never seen — without that ordering
+    a new campaign loses its first day of spend.
+51. `ImportExternalCampaigns` takes an explicit project for the queued path and settles it only on
+    CREATE. `external_campaigns` is unique across all projects while the project scope hides other
+    projects' rows, so the scoped upsert would have hit the unique index; and writing the project on
+    every import would MOVE a campaign somebody had already placed.
+
+`GET/POST /projects/{p}/campaigns/{c}/structure[/sync]`. The panel gained the
+`awaiting_credentials` state — previously indistinguishable from «never synced», which offered a
+button that could not have worked — and renders ads that belong to no ad set with the reason.
+
+### 2 — Salla & Zid (`7156143`)
+
+`CommerceConnector` is its OWN contract, not `AdvertisingConnector`. What is genuinely the same
+question still shares one implementation: `PlatformCredentials::for()` now resolves either config root
+by kind, so there is exactly one definition of `isConfigured()`.
+
+52. **Salla states money as `{amount, currency}`** — reading it as a float gives 0.0 for every order —
+    and paginates; reading one page is the failure that looks like success.
+53. **Zid localises every name, needs BOTH the bearer and `X-Manager-Token` on every call, and
+    publishes no abandoned-cart endpoint.** Its connector REFUSES carts rather than returning an empty
+    list; the run reads `partial` and the UI says «لا توفّرها المنصة». A token exchange arriving
+    without the manager token opens NO connection.
+54. **A click id proves the PLATFORM, never the campaign.** A UTM naming a discovered campaign places
+    the order; a click id alone is `click_id_platform_only`; a Meta click id beside a Google campaign
+    is `conflict` and attributed to neither. An order with no signal is `none` — never "direct",
+    never the project's only campaign. Resolution re-runs on every import, so an order that arrived
+    before its campaign was discovered is placed on the next sweep.
+55. **A commerce webhook triggers the store sync rather than writing the order it carries**, over a
+    30-day window because a store event is usually about an older order.
+56. Refunds and cancellations live ON the order — both providers state them that way — and
+    `netRevenue()` is what the funnel counts.
+
+`commerce:sync` hourly at :20. Tables: `commerce_products|customers|orders|order_items|abandoned_carts`.
+A store is an `external_accounts` row with `account_type = 'store'`, behind the same connection and
+the same encrypted credential as an ad account.
+
+### 3 — «الفانل والمتجر» (`e8c1518`)
+
+`GET /projects/{p}/commerce/funnel`, rendered as an analytics tab.
+
+57. **Every stage carries the system that produced it**, and the store wins over the pixel wherever it
+    can answer: the store's copy is the merchant's ledger, the pixel's is an estimate of what the
+    browser allowed.
+58. **A stage nothing measures says so with a reason and never shows a zero.** A zero is a
+    measurement. Visits, product views and checkout starts are `unavailable` today, each with its own
+    sentence.
+59. **CAC ≠ CPA.** CAC is spend over NEW customers; a returning customer's order is revenue, not an
+    acquisition. ROAS is on NET revenue, and is stated twice — over everything, and over what could
+    be traced.
+60. **Untraceable orders are counted and shown, never spread across campaigns.**
+61. A step that jumps over unmeasured stages says it spans them.
+
+**Defect found by the live review and fixed:** the shared `percent()` helper takes a RATIO and this
+API states percentages, so 3.5% rendered as «350.0%». Now pinned by an assertion.
+
+### What is left of the brief, in order
+
+`4` interactive shareable client reports — audit the existing `ReportShare` / `ShareService` /
+`LiveReportService` surface against the full requirement set (short link, live filters, funnel,
+comparisons, last-sync, password, expiry, revoke, renew, open log, templates, PDF + Excel,
+fail-closed) · `5` one synced source feeding dashboard, campaigns, content, analytics, funnel,
+reports, alerts and client links · `6` production readiness · plus the marketing-page card
+«علاقات المؤثرين — قريبًا» with `influencers_ugc_enabled=false` unchanged.
+
+### Gate status
+
+**No full three-browser Playwright gate has been run since `c8753db`.** Kill the hand-started :8000
+backend and :5173 Vite before the next one — the suite reuses an existing :8000 and then skips its
+own `queue:work --queue=reports,default`, and the report-export specs hang at "processing".
