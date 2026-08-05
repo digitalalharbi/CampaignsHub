@@ -2015,33 +2015,66 @@ closed:
     the share's hide flags, including the spend-derived ROAS and AOV a reader could divide back from;
     the order COUNT stays because it is not money. Null when the project has no store.
 
-### What is left of the brief, in order
+### 5 — one synced source (`3846899`)
 
-~~`4` interactive shareable client reports~~ (done) — audit the existing `ReportShare` / `ShareService` /
-`LiveReportService` surface against the full requirement set (short link, live filters, funnel,
-comparisons, last-sync, password, expiry, revoke, renew, open log, templates, PDF + Excel,
-fail-closed) · `5` one synced source feeding dashboard, campaigns, content, analytics, funnel,
-reports, alerts and client links · `6` production readiness · plus the marketing-page card
-«علاقات المؤثرين — قريبًا» with `influencers_ugc_enabled=false` unchanged.
+The audit found three places where a figure was computed twice, and fixed two cross-project defects
+on the way. New: `DataFreshnessService`, `ProjectStores`, `MetricsAggregator::acrossProjects()`.
+
+64. **Freshness is one service.** It was computed four ways — the dashboard strip, the client link's
+    footer, a client's analytics header, the client list's «آخر مزامنة» — with different columns and
+    different cutoffs, so one project could read `fresh` in one place and `stale` in another on the
+    same afternoon. All four call `DataFreshnessService` now.
+65. **Stores are sources.** Every one of those four looked only at `daily_metrics`. After
+    COMMERCE-001 a dashboard whose shop had not synced in a week still said «محدَّث» while revenue,
+    orders, AOV and ROAS on the same page came off that shop. Stores are listed beside the platforms.
+66. **Figures on the table disprove «awaiting credentials».** Runs get pruned; data does not. Found
+    by the live review calling a store with six orders and a twenty-minute-old sweep unreadable.
+67. **A gap is only a gap when something was expected to fill it.** A store-only project read
+    `partial` forever on thirty missing days of ad metrics nothing was going to write.
+68. **Alerts read `MetricsAggregator`.** The evaluator summed `daily_metrics` and divided revenue by
+    spend inline; the arithmetic agreed on the day it was written and nothing held it there.
+    `acrossProjects()` lifts the active-project bound by name and keeps the tenant one — the
+    scheduler has no request, and a campaign id already names one project.
+69. **The store's figures are on the dashboard, from the funnel's service.** Labelled as the
+    merchant's ledger, beside the platforms' pixel estimate rather than instead of it. The page's
+    filters do not narrow them and a line says so — an order does not belong to a platform the way a
+    click does, and a large share carry no attribution at all. Suppressing the block under a filter
+    was the first cut and was wrong in practice: the dashboard opens on an objective filter, so the
+    figures would have been replaced by a refusal permanently and shown never.
+70. **A store belongs to the project its data was filed under, not to the tenant.** The funnel took
+    every tenant store, so an agency running two clients out of two projects saw the other client's
+    shop in `coverage.stores` and named in `stores_without_cart_data`. Orders were project-scoped
+    throughout, so the figures were right and everything said about them was wrong. `ProjectStores`
+    answers it once, from the commerce tables; a shop connected and never swept is reported as
+    `stores_pending_first_sync` rather than as «no store».
+71. **`StoreFunnelService` normalises its own window.** Orders are timestamps and the metrics
+    endpoints pass a `to` of midnight, so the dashboard and the analytics tab disagreed about today's
+    revenue by every order of the day.
+
+### 7 — the marketing card
+
+**Already delivered at `d575eeb`; nothing was written this session.** Verified: `FEATURE_INFLUENCERS_UGC`
+defaults false, the card is the one inert tile in the grid (dashed border, «قريبًا», nothing to
+press), it is on the marketing page only, and it disappears when the flag turns on.
+
+### What is left of the brief
+
+`6` production readiness — secrets, callbacks, webhook URLs, Redis, Horizon, Cron, queues,
+monitoring, health checks, backups, token renewal, performance, security, clean install, upgrade
+path — then the FULL three-browser Playwright gate.
 
 ### Gate status
 
-**No full three-browser Playwright gate has been run since `c8753db`.** Kill the hand-started :8000
+**No full three-browser Playwright gate has been run since `c8753db`.** Kill any hand-started :8000
 backend and :5173 Vite before the next one — the suite reuses an existing :8000 and then skips its
 own `queue:work --queue=reports,default`, and the report-export specs hang at "processing".
 
 ### Where this session stopped
 
-HEAD `530f2f3`, clean tree, branch `feat/taxonomy-ux`. Units 1f, 2, 3 and 4 are done and committed.
-Totals: **backend 1217 · vitest 619 · tsc · oxlint 0 errors · Pint clean**.
+HEAD `3846899`, clean tree, branch `feat/taxonomy-ux`. Units 1f, 2, 3, 4 and 5 are done and
+committed; 7 was already done at `d575eeb`.
+Totals: **backend 1228 · vitest 625 · tsc · oxlint 0 errors · Pint clean**.
 
-**Still to do:** `5` one synced source across dashboard / campaigns / content / analytics / funnel /
-reports / alerts / client links (much of it now lands automatically — the store funnel already flows
-into analytics AND the client link from one service; what remains is the audit that nothing else
-computes these figures a second way) · `6` production readiness · the marketing-page card
-«علاقات المؤثرين — قريبًا» with `influencers_ugc_enabled=false` unchanged (check whether `d575eeb`
-already added it before writing anything) · then the FULL three-browser Playwright gate.
-
-**A hand-started backend on :8000 and Vite on :5173 are running right now** for the live reviews.
-Kill both before the gate — the suite reuses an existing :8000 and then skips its own
-`queue:work --queue=reports,default`, and the report-export specs hang at "processing".
+A backend on :8000 and Vite on :5173 were used for the live review. The review's dev-database
+fixtures (one Salla store, six orders, marker `unified-001-review`) were **removed** — commerce
+tables are back to zero rows.
