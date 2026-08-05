@@ -77,6 +77,7 @@ import { PlatformOverviewPage } from '@/features/admin/PlatformOverviewPage'
 import { TenantsPage } from '@/features/admin/TenantsPage'
 import { RegistrationsPage } from '@/features/admin/RegistrationsPage'
 import { PaymentSettingsPage } from '@/features/admin/PaymentSettingsPage'
+import { ProviderSettingsPage } from '@/features/admin/ProviderSettingsPage'
 import { SystemSettingsPage } from '@/features/admin/SystemSettingsPage'
 import { BillingPage as AdminBillingPage } from '@/features/admin/BillingPage'
 import { AuditPage } from '@/features/admin/AuditPage'
@@ -361,6 +362,10 @@ export const router = createBrowserRouter([
             // PAYSET-001 — the gateways. Its own page rather than a tab, because it is the surface an
             // operator opens when money is not moving.
             { path: 'settings/integrations/payments', element: <PaymentSettingsPage /> },
+            // PROVCFG-001 — the ad and commerce providers' OAuth apps. Its own page rather than a tab
+            // inside System settings, because it is the surface an operator opens when a customer
+            // cannot connect a platform, and it is the only place these keys can be written.
+            { path: 'settings/integrations', element: <ProviderSettingsPage /> },
             { path: 'cutover', element: <CutoverPage /> },
             { path: 'audit', element: <AuditPage /> },
           ],

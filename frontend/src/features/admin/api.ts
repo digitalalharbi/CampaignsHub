@@ -1,4 +1,4 @@
-import { deleteData, getData, patchData, postData } from '@/lib/api/client'
+import { deleteData, getData, patchData, postData, putData } from '@/lib/api/client'
 
 /**
  * The platform owner's console (ADMIN-001).
@@ -527,4 +527,121 @@ export function testPaymentProvider(provider: string): Promise<{
   error: string | null
 }> {
   return postData(`/admin/settings/integrations/payments/${provider}/test`, {})
+}
+
+/*
+ * PROVCFG-001 — the ad and commerce providers, configured by the platform operator.
+ *
+ * Unlike the payment gateways above, these ARE written from the console. Note what still cannot be
+ * read: there is no field on any of these types that carries a stored value. `present`, `source` and
+ * a four-character `hint` are the whole of what comes back, for the platform owner as much as for
+ * anybody else — a console that could display a client secret is a console whose compromise hands
+ * over every customer's ad accounts.
+ */
+
+export interface ProviderFieldSpec {
+  key: string
+  label: string
+  label_ar: string
+  /** Decides masking AND storage. A field marked non-secret is echoed back in full. */
+  secret: boolean
+  required: boolean
+  /** Which screen of the PROVIDER's console holds this value. */
+  where: string
+  where_ar: string
+}
+
+/** Presence, provenance and a hint. Never a value. */
+export interface ProviderFieldState {
+  key: string
+  present: boolean
+  /** `stored` (entered here) or `environment` (a .env fallback nobody typed into this console). */
+  source: 'stored' | 'environment' | null
+  hint: string | null
+}
+
+export type ProviderSetupState =
+  | 'not_configured'
+  | 'awaiting_credentials'
+  | 'ready_to_connect'
+  | 'configuration_error'
+  | 'production_ready'
+
+export interface IntegrationProvider {
+  key: string
+  kind: 'advertising' | 'commerce'
+  label: string
+  label_ar: string
+  fields: ProviderFieldSpec[]
+  scopes: string[]
+  effective_scopes: string[]
+  uses_pkce: boolean
+  supports_refresh: boolean
+  token_note: string
+  token_note_ar: string
+  /** `supported` · `polling_only` · `requires_confirmation` — three different facts, never a boolean. */
+  webhooks: 'supported' | 'polling_only' | 'requires_confirmation'
+  webhook_signature_header: string | null
+  webhook_url: string | null
+  redirect_uri: string
+  /** What the operator must obtain OUTSIDE this product before a correct key can work. */
+  prerequisites: string[]
+  prerequisites_ar: string[]
+  docs_url: string
+  rate_limit_note: string
+  pagination_note: string
+  state: ProviderSetupState
+  enabled: boolean
+  environment: 'sandbox' | 'production'
+  missing: string[]
+  /** `state` is about the configuration; this is whether a workspace may be offered the button. */
+  connectable: boolean
+  values: ProviderFieldState[]
+  last_tested_at: string | null
+  last_test_status: 'passed' | 'failed' | null
+  last_test_message: string | null
+  last_rotated_at: string | null
+  configured_at: string | null
+}
+
+export function fetchIntegrationProviders(): Promise<{
+  providers: IntegrationProvider[]
+  summary: { total: number; connectable: number; needs_attention: number }
+}> {
+  return getData('/admin/settings/integrations/providers')
+}
+
+/**
+ * Partial by design: an omitted or empty field is left alone, which is what lets an operator change
+ * the environment without re-typing a secret they cannot read back.
+ */
+export function saveIntegrationProvider(
+  provider: string,
+  body: Record<string, string | string[] | undefined>,
+): Promise<IntegrationProvider & { fields_changed: string[] }> {
+  return putData(`/admin/settings/integrations/providers/${provider}`, body)
+}
+
+/** A real round trip. A pass proves the client id and secret — not scopes, and not account access. */
+export function testIntegrationProvider(provider: string): Promise<
+  IntegrationProvider & { passed: boolean; message: string }
+> {
+  return postData(`/admin/settings/integrations/providers/${provider}/test`, {})
+}
+
+export function rotateIntegrationCredential(provider: string, key: string, value: string): Promise<IntegrationProvider> {
+  return postData(`/admin/settings/integrations/providers/${provider}/rotate`, { key, value })
+}
+
+/** Disabling stops new work and destroys nothing — no credential, connection or synced figure. */
+export function setIntegrationProviderEnabled(
+  provider: string,
+  enabled: boolean,
+  reason?: string,
+): Promise<IntegrationProvider> {
+  return patchData(`/admin/settings/integrations/providers/${provider}/status`, { enabled, reason })
+}
+
+export function forgetIntegrationCredential(provider: string, key: string): Promise<IntegrationProvider> {
+  return deleteData(`/admin/settings/integrations/providers/${provider}/credentials/${key}`)
 }

@@ -11,6 +11,7 @@ import {
   Menu,
   Moon,
   PanelLeft,
+  Plug,
   Sun,
   X,
 } from 'lucide-react'
@@ -53,6 +54,15 @@ const adminNav = [
   { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: Building2 },
   { to: '/admin/billing', ar: 'الخطط والاشتراكات', en: 'Plans & subscriptions', icon: CreditCard },
   { to: '/admin/audit', ar: 'السجلات والتدقيق', en: 'Logs & audit', icon: ScrollText },
+  /*
+   * PROVCFG-001 — a daily entry, not an advanced one.
+   *
+   * It sits beside the rest because it is the gate every customer integration passes through: until
+   * a provider is configured HERE, nobody in any workspace can connect that platform at all. Filing
+   * it under «متقدم» beside the one-time portal cutover would put the reason nothing is syncing two
+   * clicks and one guess away from the person looking for it.
+   */
+  { to: '/admin/settings/integrations', ar: 'مزوّدو التكامل', en: 'Integration providers', icon: Plug },
   { to: '/admin/settings', ar: 'إعدادات النظام', en: 'System settings', icon: Settings },
 ] as const
 
