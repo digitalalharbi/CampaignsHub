@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, LayoutGrid, ListChecks, Plus, Rows3, Search, X } from 'lucide-react'
 import { FilterGroup, ViewCustomiser } from '@/components/ui/ViewCustomiser'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { DateField } from '@/components/ui/DateField'
@@ -117,10 +118,10 @@ export function TasksPage() {
 
       {/* Summary */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryCard label={c.sum_total} value={summary.total} tone="brand" />
-        <SummaryCard label={c.sum_open} value={summary.open} tone="info" />
-        <SummaryCard label={c.sum_overdue} value={summary.overdue} tone="danger" />
-        <SummaryCard label={c.sum_done} value={summary.done} tone="success" />
+        <SummaryCard label={c.sum_total} value={summary.total} tone="brand" unknown={q.isError} />
+        <SummaryCard label={c.sum_open} value={summary.open} tone="info" unknown={q.isError} />
+        <SummaryCard label={c.sum_overdue} value={summary.overdue} tone="danger" unknown={q.isError} />
+        <SummaryCard label={c.sum_done} value={summary.done} tone="success" unknown={q.isError} />
       </div>
 
       {/* Search + filters + view toggle */}
@@ -188,7 +189,9 @@ export function TasksPage() {
       {q.isLoading ? (
         <StateBox>{c.loading}</StateBox>
       ) : q.isError ? (
-        <StateBox tone="danger">{c.error}</StateBox>
+        // AGENCY-PERMS: a refusal, an expired session and a dead server used to print the same
+        // sentence here, and only the last of the three is something a Retry button can fix.
+        <QueryFailure error={q.error} ar={ar} fallbackTitle={c.error} testId="tasks-failure" onRetry={() => q.refetch()} />
       ) : tasks.length === 0 ? (
         <StateBox>{all.length === 0 ? c.none : c.no_match}</StateBox>
       ) : view === 'board' ? (
@@ -238,7 +241,14 @@ function FilterChip({ active, onClick, children, tone }: { active: boolean; onCl
   )
 }
 
-function SummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'info' | 'danger' | 'success' }) {
+/**
+ * A count, or «—» when the list could not be read (AGENCY-PERMS).
+ *
+ * With the refusal arm in place these four cards still read 0 · 0 · 0 · 0, which turns a permission
+ * boundary into an empty state — the exact substitution the product forbids. Nobody refused the
+ * list knows how many tasks there are, so the honest figure is "not available", not zero.
+ */
+function SummaryCard({ label, value, tone, unknown }: { label: string; value: number; tone: 'brand' | 'info' | 'danger' | 'success'; unknown?: boolean }) {
   const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', info: 'bg-info', danger: 'bg-danger', success: 'bg-success' }
   return (
     <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
@@ -246,7 +256,9 @@ function SummaryCard({ label, value, tone }: { label: string; value: number; ton
         <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
         <span className="text-xs font-semibold text-text-secondary">{label}</span>
       </div>
-      <span className="text-2xl font-extrabold tnum text-text-primary" dir="ltr">{value}</span>
+      <span className={`text-2xl font-extrabold tnum ${unknown ? 'text-text-muted' : 'text-text-primary'}`} dir="ltr">
+        {unknown ? '—' : value}
+      </span>
     </div>
   )
 }

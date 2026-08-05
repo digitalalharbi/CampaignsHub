@@ -215,11 +215,24 @@ return Application::configure(basePath: dirname(__DIR__))
                 /*
                  * An `abort(403, '…')` carries a message written at the call site, and that message
                  * is already in the language it was written in. Passing it through a translator
-                 * would render the sentence itself as a missing key, so it is used as-is and only
-                 * the fallback — an abort with no message at all — is translated.
+                 * would render the sentence itself as a missing key, so it is used as-is.
+                 *
+                 * An abort with NO message is translated FROM ITS STATUS (AGENCY-PERMS). It used to
+                 * fall back to `api.failed` — «تعذّر تنفيذ الطلب» — which is the sentence for a
+                 * request that broke. The application's own permission gates are written
+                 * `abort_unless($user->hasPermission('tasks.view'), 403)` with no message, so every
+                 * one of them told the customer the system had failed when in fact it had refused
+                 * them. The two need different words because they need different actions: one is
+                 * "try again", the other is "ask for the permission".
                  */
                 $e instanceof HttpExceptionInterface => ApiResponse::error(
-                    $e->getMessage() ?: __('api.failed'),
+                    $e->getMessage() ?: __(match ($e->getStatusCode()) {
+                        401 => 'api.unauthenticated',
+                        403 => 'api.unauthorized',
+                        404 => 'api.not_found',
+                        429 => 'api.too_many_requests',
+                        default => 'api.failed',
+                    }),
                     status: $e->getStatusCode(),
                 ),
                 default => ApiResponse::error(

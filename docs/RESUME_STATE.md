@@ -2304,3 +2304,48 @@ The full three-browser gate has NOT been run since these six slices landed. Run 
 with nothing else touching the database, and take the verdict from Playwright's own exit code —
 piping through `tail` swallows it and reports a failing gate as passing.
 
+
+## Unit 1 — AGENCY-PERMS (done, `bec46b3`)
+
+Three reports — «تعذّر تحميل المهام / المحادثات / لوحة الوكالة» — were correct refusals described as
+failures. Fixing the description turned up a real leak underneath it.
+
+### What was actually wrong
+
+1. **The server called every refusal a failure.** The JSON renderer's fallback for a message-less
+   `abort()` was `api.failed` — «تعذّر تنفيذ الطلب». Every permission gate in the codebase is
+   `abort_unless($user->hasPermission('…'), 403)` with no message, so *all of them* said the request
+   had broken. The fallback now translates from the status.
+2. **Five surfaces printed one sentence for four different failures.** `QueryFailure`
+   (`components/ui/QueryFailure.tsx`) classifies through `toApiError` and renders permission /
+   session / not-found / retryable separately. Retry appears only on the last — a Retry button on a
+   403 cannot work.
+3. **The summary cards turned a refusal into an empty state.** They said 0 · 0 · 0 · 0 to somebody
+   who was not allowed to look. They now read «—».
+4. **The client ceiling was missing from the tenant-wide lists.** `manager@demo-agency.local` is
+   confined to ONE client and `/agency/tasks` showed 2105 — the whole agency. Tasks and
+   conversations were filtered by tenant only. `ClientScopeResolver::constrainAllowingOwn()` adds
+   the ceiling while keeping client-less rows visible to *their own* author (an internal task has no
+   client by design, and the plain `whereIn` would have deleted a manager's own worklist from their
+   own screen). `canReachRow()` is its single-record twin, so the list and the detail page cannot
+   disagree — hidden from the list now also means unreachable by id, for reads *and* writes.
+
+### Not defects
+
+`/agency/finance` already refused correctly («تحتاج صلاحية billing.view»); `manager@…` genuinely
+holds no `billing.view` and no `messaging.view`. Its scoped client has 0 tasks, so an empty tasks
+page is the right answer for that fixture.
+
+### Noticed, not fixed here
+
+The dev database (`mediabuying`) holds **269 client workspaces and 2105 tasks in `demo-agency`**,
+almost all of them Playwright residue (`CC Co chromium-1785594333382`). The E2E `webServer` runs
+`artisan serve` against the dev database, so every gate leaves rows behind. It does not affect the
+gate, but it makes live review of any list misleading — worth a decision during **PORTALS-SWEEP**
+or the demo-data unit.
+
+### Next
+
+**PORTALS-SWEEP** — `/admin` was swept clean at `2ea6943`; `/app`, `/agency`, `/portal` remain.
+While sweeping, apply the `QueryFailure` treatment to the other ~35 surfaces that still hardcode
+«تعذّر تحميل…» (`grep -rn 'تعذّر تحميل' frontend/src`).

@@ -93,11 +93,69 @@ final class ClientScopeResolver
         return $query->whereIn($column, $ids);
     }
 
+    /**
+     * The ceiling, for tables whose rows may legitimately belong to NO client.
+     *
+     * `constrain()` alone is wrong for tasks and conversations: `whereIn(client_workspace_id, …)`
+     * silently drops every row where the column is null, and an internal task somebody wrote for
+     * themselves has no client by design. Applying the plain ceiling would have deleted a scoped
+     * manager's own worklist from their own screen.
+     *
+     * So a capped caller sees their clients' rows PLUS the client-less rows that are demonstrably
+     * theirs — the ones they created, or that are assigned to them. Client-less rows belonging to
+     * somebody else stay hidden, which keeps the direction fail-closed.
+     *
+     * @template TQuery of \Illuminate\Database\Eloquent\Builder
+     *
+     * @param  TQuery  $query
+     * @param  list<string>  $ownColumns  columns holding a user id — e.g. `created_by`, `assignee_id`
+     * @return TQuery
+     */
+    public function constrainAllowingOwn($query, ?User $user, array $ownColumns, string $column = 'client_workspace_id')
+    {
+        $ids = $this->reachableClientIds($user);
+
+        if ($ids === null) {
+            return $query;
+        }
+
+        return $query->where(function ($outer) use ($ids, $column, $ownColumns, $user): void {
+            $outer->whereIn($column, $ids);
+
+            if ($user === null || $ownColumns === []) {
+                return;
+            }
+
+            $outer->orWhere(function ($own) use ($column, $ownColumns, $user): void {
+                $own->whereNull($column)->where(function ($mine) use ($ownColumns, $user): void {
+                    foreach ($ownColumns as $ownColumn) {
+                        $mine->orWhere($ownColumn, $user->id);
+                    }
+                });
+            });
+        });
+    }
+
     /** Whether one specific client is reachable. Used by policies and by route-model binding. */
     public function canReach(?User $user, string $clientId): bool
     {
         $ids = $this->reachableClientIds($user);
 
         return $ids === null || in_array($clientId, $ids, true);
+    }
+
+    /**
+     * Whether a row that MAY carry a client is reachable — the single-record twin of
+     * `constrainAllowingOwn()`, so a list and a detail page cannot disagree about one row.
+     */
+    public function canReachRow(?User $user, ?string $clientId, bool $isOwn = false): bool
+    {
+        $ids = $this->reachableClientIds($user);
+
+        if ($ids === null) {
+            return true;
+        }
+
+        return $clientId === null ? $isOwn : in_array($clientId, $ids, true);
     }
 }

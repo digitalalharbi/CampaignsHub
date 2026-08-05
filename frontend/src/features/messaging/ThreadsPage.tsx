@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCheck, Inbox, MessagesSquare, Plus, Search, Send, X } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 import {
   formatDateTime, getThread, listThreads, markThreadRead, openThread, postTeamReply,
   type MessageThread, type ThreadStatus,
@@ -44,6 +45,7 @@ type Copy = (typeof COPY)['ar']
 
 export function ThreadsPage() {
   const locale = useUi((s) => s.locale)
+  const ar = locale === 'ar'
   const c = COPY[locale]
   const canManage = useAuth((s) => s.hasPermission('messaging.manage'))
   const [filter, setFilter] = useState<ThreadStatus | 'all'>('open')
@@ -95,10 +97,10 @@ export function ThreadsPage() {
 
       {/* Summary — the inbox at a glance. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <ThreadSummaryCard label={c.sum_total} value={summary.total} tone="brand" />
-        <ThreadSummaryCard label={c.sum_open} value={summary.open} tone="warning" />
-        <ThreadSummaryCard label={c.sum_closed} value={summary.closed} tone="success" />
-        <ThreadSummaryCard label={c.sum_recent} value={summary.recent} tone="muted" />
+        <ThreadSummaryCard label={c.sum_total} value={summary.total} tone="brand" unknown={q.isError} />
+        <ThreadSummaryCard label={c.sum_open} value={summary.open} tone="warning" unknown={q.isError} />
+        <ThreadSummaryCard label={c.sum_closed} value={summary.closed} tone="success" unknown={q.isError} />
+        <ThreadSummaryCard label={c.sum_recent} value={summary.recent} tone="muted" unknown={q.isError} />
       </div>
 
       {/* Search + status filters. */}
@@ -132,7 +134,8 @@ export function ThreadsPage() {
           {q.isLoading ? (
             <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">{c.loading}</p>
           ) : q.isError ? (
-            <p className="rounded-xl border border-danger/30 bg-danger/5 p-8 text-center text-sm text-danger">{c.error}</p>
+            // AGENCY-PERMS — a member without `messaging.view` is refused, not broken.
+            <QueryFailure error={q.error} ar={ar} fallbackTitle={c.error} testId="threads-failure" onRetry={() => q.refetch()} />
           ) : threads.length === 0 ? (
             <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border p-10 text-center text-text-secondary">
               <Inbox size={22} /><span className="text-sm">{all.length === 0 ? c.none : c.no_match}</span>
@@ -149,6 +152,7 @@ export function ThreadsPage() {
             <ThreadDetailPanel
               threadId={selectedId}
               c={c}
+              ar={ar}
               canManage={canManage}
               onChanged={() => qc.invalidateQueries({ queryKey: ['messaging', 'threads'] })}
             />
@@ -171,7 +175,15 @@ export function ThreadsPage() {
   )
 }
 
-function ThreadSummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'warning' | 'success' | 'muted' }) {
+/**
+ * A count, or «—» when the list could not be read.
+ *
+ * `unknown` exists because the refusal arm below left these cards reading 0 · 0 · 0 · 0 — which is
+ * a claim, and a false one: a member without `messaging.view` has no idea how many conversations
+ * exist, and neither do we. Zero is the answer to "how many are there"; this is the answer to
+ * "we were not allowed to look".
+ */
+function ThreadSummaryCard({ label, value, tone, unknown }: { label: string; value: number; tone: 'brand' | 'warning' | 'success' | 'muted'; unknown?: boolean }) {
   const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', warning: 'bg-warning', success: 'bg-success', muted: 'bg-text-muted' }
   return (
     <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
@@ -179,7 +191,9 @@ function ThreadSummaryCard({ label, value, tone }: { label: string; value: numbe
         <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
         <span className="text-xs font-semibold text-text-secondary">{label}</span>
       </div>
-      <span className="text-2xl font-extrabold tnum text-text-primary" dir="ltr">{value}</span>
+      <span className={`text-2xl font-extrabold tnum ${unknown ? 'text-text-muted' : 'text-text-primary'}`} dir="ltr">
+        {unknown ? '—' : value}
+      </span>
     </div>
   )
 }
@@ -208,8 +222,8 @@ function ThreadRow({ thread, c, active, onClick }: { thread: MessageThread; c: C
 }
 
 function ThreadDetailPanel({
-  threadId, c, canManage, onChanged,
-}: { threadId: string; c: Copy; canManage: boolean; onChanged: () => void }) {
+  threadId, c, ar, canManage, onChanged,
+}: { threadId: string; c: Copy; ar: boolean; canManage: boolean; onChanged: () => void }) {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['messaging', 'thread', threadId], queryFn: () => getThread(threadId) })
   const [draft, setDraft] = useState('')
@@ -225,7 +239,11 @@ function ThreadDetailPanel({
   const readM = useMutation({ mutationFn: () => markThreadRead(threadId, 'team'), onSuccess: invalidate })
 
   if (q.isLoading) return <p className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">{c.loading}</p>
-  if (q.isError || !q.data) return <p className="rounded-2xl border border-danger/30 bg-danger/5 p-8 text-center text-sm text-danger">{c.error}</p>
+  // `!q.data` matters as much as `isError`: between retries neither is true, and dereferencing the
+  // missing payload below would take the panel down instead of explaining itself.
+  if (q.isError || !q.data) {
+    return <QueryFailure error={q.error} ar={ar} fallbackTitle={c.error} testId="thread-detail-failure" onRetry={() => q.refetch()} />
+  }
 
   const { thread, messages, unread } = q.data
   const authorLabel = (t: string) => (t === 'team' ? c.team : t === 'client' ? c.client : c.system)

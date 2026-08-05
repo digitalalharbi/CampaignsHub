@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Columns3, Inbox, LayoutGrid, Search, Table as TableIcon } from 'lucide-react'
+import { Columns3, Inbox, LayoutGrid, Search, Table as TableIcon } from 'lucide-react'
 import { ALLOWED_TRANSITIONS, changeRequestStatus, listRequests, type RequestBreakdown, type RequestFilters, type RequestRow } from './internalApi'
 import { STATUS_LABELS, priorityTone, statusTone } from './labels'
 import { ChartCard } from '@/features/analytics/charts'
 import { Skeleton } from '@/components/ui/States'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 import { SearchableSelect } from '@/components/forms'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { useT, type TranslationKey } from '@/lib/i18n'
@@ -100,7 +101,8 @@ export function RequestsDashboardPage() {
       </div>
 
       {/* Filters */}
-      <RequestCharts breakdown={query.data?.meta?.breakdown} ar={ar} loading={query.isLoading} error={query.isError} />
+      <RequestCharts breakdown={query.data?.meta?.breakdown} ar={ar} loading={query.isLoading}
+        error={query.isError} failure={query.error} />
 
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
         <form className="relative" onSubmit={(e) => { e.preventDefault(); set({ q: search || undefined }) }}>
@@ -134,7 +136,8 @@ export function RequestsDashboardPage() {
       {query.isLoading ? (
         <div className="space-y-2 rounded-2xl border border-border bg-surface p-4">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-11 animate-pulse rounded-lg bg-surface-secondary" />)}</div>
       ) : query.isError ? (
-        <div className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface p-12 text-center text-sm text-danger"><AlertTriangle size={22} /> {t('error_generic')}</div>
+        <QueryFailure error={query.error} ar={ar} testId="requests-failure" onRetry={() => void query.refetch()}
+          fallbackTitle={ar ? 'تعذّر تحميل الطلبات.' : 'Requests could not be loaded.'} />
       ) : rows.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface p-12 text-center text-text-muted"><Inbox size={26} /> <span className="text-sm">{t('requests_empty')}</span></div>
       ) : view === 'table' ? (
@@ -281,11 +284,14 @@ function RequestCharts({
   ar,
   loading,
   error,
+  failure,
 }: {
   breakdown?: RequestBreakdown
   ar: boolean
   loading: boolean
   error: boolean
+  /** The thrown value behind `error`, so a refusal can be told apart from a broken summary. */
+  failure: unknown
 }) {
   if (loading) {
     return (
@@ -297,9 +303,10 @@ function RequestCharts({
 
   if (error) {
     return (
-      <p data-testid="request-charts-error" className="mb-4 rounded-2xl border border-border bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">
-        {ar ? 'تعذّر تحميل ملخص الطلبات. حدِّث الصفحة للمحاولة مرة أخرى.' : 'Could not load the request summary. Refresh to try again.'}
-      </p>
+      <div className="mb-4" data-testid="request-charts-error">
+        <QueryFailure error={failure} ar={ar} testId="request-charts-failure"
+          fallbackTitle={ar ? 'تعذّر تحميل ملخص الطلبات.' : 'Could not load the request summary.'} />
+      </div>
     )
   }
 

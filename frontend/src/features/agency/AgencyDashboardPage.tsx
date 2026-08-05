@@ -2,7 +2,8 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Building2, FolderKanban, Inbox, Megaphone, ShieldCheck } from 'lucide-react'
 import { fetchAgencyDashboard, type AgencyDashboard } from './api'
-import { ErrorState, Skeleton } from '@/components/ui/States'
+import { Skeleton } from '@/components/ui/States'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -131,13 +132,16 @@ export function AgencyDashboardPage() {
   }
 
   if (query.isError || !query.data) {
+    // AGENCY-PERMS — signed in without an agency membership (the platform admin holds no tenant),
+    // this endpoint answers 403. Offering «أعد المحاولة» there sends somebody to press a button
+    // that will refuse them again.
     return (
-      <ErrorState
-        title={ar ? 'تعذّر تحميل لوحة الوكالة.' : 'The agency overview could not be loaded.'}
-        description={ar
-          ? 'لم نعرض أرقامًا تقديرية بدلًا منها — أعد المحاولة.'
-          : 'No estimated figures were shown in its place — please try again.'}
+      <QueryFailure
+        error={query.error}
+        ar={ar}
+        testId="agency-dashboard-failure"
         onRetry={() => void query.refetch()}
+        fallbackTitle={ar ? 'تعذّر تحميل لوحة الوكالة.' : 'The agency overview could not be loaded.'}
       />
     )
   }

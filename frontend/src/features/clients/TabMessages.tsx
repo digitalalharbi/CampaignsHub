@@ -5,6 +5,7 @@ import { listThreads } from '@/features/messaging/api'
 import { formatDateTime } from '@/features/messaging/api'
 import { useUi } from '@/stores/ui'
 import { usePortalPath } from '@/app/portalPath'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 
 /** Client conversations tab — the team-inbox threads that belong to this client workspace. */
 export function TabMessages({ clientId }: { clientId: string }) {
@@ -14,7 +15,20 @@ export function TabMessages({ clientId }: { clientId: string }) {
   const threads = (q.data ?? []).filter((t) => t.client_workspace_id === clientId)
 
   if (q.isLoading) return <div className="h-40 animate-pulse rounded-xl bg-surface-secondary" />
-  if (q.isError) return <p className="rounded-xl border border-danger/30 bg-danger/5 p-6 text-center text-sm text-danger">{ar ? 'تعذّر تحميل المحادثات.' : 'Could not load conversations.'}</p>
+  // AGENCY-PERMS — this tab is visible to anyone who can open the client, but the thread list needs
+  // `messaging.view`. A scoped Account Manager therefore hits a 403 here legitimately, and it must
+  // read as the boundary it is rather than as a broken tab.
+  if (q.isError) {
+    return (
+      <QueryFailure
+        error={q.error}
+        ar={ar}
+        testId="client-messages-failure"
+        onRetry={() => q.refetch()}
+        fallbackTitle={ar ? 'تعذّر تحميل المحادثات.' : 'Could not load conversations.'}
+      />
+    )
+  }
 
   return threads.length === 0 ? (
     <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border p-10 text-center text-text-secondary">
