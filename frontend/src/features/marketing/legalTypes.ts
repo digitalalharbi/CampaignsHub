@@ -8,7 +8,7 @@
  * perfectly well — so it would have surfaced as a blank public site the first time anyone opened it.
  */
 
-export const CONTACT_EMAIL = 'info@CampaignsHub.io'
+export const CONTACT_EMAIL = 'info@campaignshub.io'
 
 export interface LegalSection {
   heading: string

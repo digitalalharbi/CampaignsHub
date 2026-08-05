@@ -26,10 +26,10 @@ function payload(over: Partial<PlatformSettingsPayload> = {}): PlatformSettingsP
     legal_name_ar: null, legal_name_en: null, trading_name: null,
     registration_number: null, tax_number: null, jurisdiction: null,
     address_ar: null, address_en: null,
-    contact_email: 'info@CampaignsHub.io',
-    support_email: 'info@CampaignsHub.io',
-    security_email: 'info@CampaignsHub.io',
-    privacy_email: 'info@CampaignsHub.io',
+    contact_email: 'info@campaignshub.io',
+    support_email: 'info@campaignshub.io',
+    security_email: 'info@campaignshub.io',
+    privacy_email: 'info@campaignshub.io',
     phone: null, dpo_name: null, dpo_email: null,
     updated_at: null, missing: ['legal_name'],
     ...over,
@@ -54,7 +54,7 @@ describe('PlatformLegalPage', () => {
       expect((screen.getByTestId(`platform-${key}`) as HTMLInputElement).value).toBe('')
     }
     // …and the one address the product genuinely owns is present.
-    expect((screen.getByTestId('platform-contact_email') as HTMLInputElement).value).toBe('info@CampaignsHub.io')
+    expect((screen.getByTestId('platform-contact_email') as HTMLInputElement).value).toBe('info@campaignshub.io')
   })
 
   /**

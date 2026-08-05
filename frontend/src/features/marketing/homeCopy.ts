@@ -404,7 +404,7 @@ const ar: HomeCopy = {
     ],
     legal: ['الخصوصية', 'الشروط', 'الدعم'],
     contactLabel: 'للتواصل',
-    email: 'info@CampaignsHub.io',
+    email: 'info@campaignshub.io',
     groups: [
       {
         title: 'المنتج',
@@ -727,7 +727,7 @@ const en: HomeCopy = {
     ],
     legal: ['Privacy', 'Terms', 'Support'],
     contactLabel: 'Contact',
-    email: 'info@CampaignsHub.io',
+    email: 'info@campaignshub.io',
     groups: [
       {
         title: 'Product',

@@ -14,5 +14,5 @@ export const brand = {
     docs: 'https://docs.campaignshub.io',
     status: 'https://status.campaignshub.io',
   },
-  supportEmail: 'support@campaignshub.io',
+  supportEmail: 'info@campaignshub.io',
 } as const

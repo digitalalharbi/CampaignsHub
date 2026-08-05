@@ -20,7 +20,7 @@ import { useUi } from '@/stores/ui'
  * are still missing, and fills in nothing on the operator's behalf.
  *
  * The contact address is the single exception, and only because the product already publishes
- * `info@CampaignsHub.io` on its own marketing page: that is ours to state, not a guess about anyone.
+ * `info@campaignshub.io` on its own marketing page: that is ours to state, not a guess about anyone.
  *
  * ## Why this is not in workspace settings
  *

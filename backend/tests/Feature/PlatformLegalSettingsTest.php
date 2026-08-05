@@ -79,7 +79,7 @@ final class PlatformLegalSettingsTest extends TestCase
         $this->assertNull($operator['registration_number']);
         $this->assertNull($operator['jurisdiction']);
         // The one contact that is ours to state, because the product already publishes it.
-        $this->assertSame('info@CampaignsHub.io', $operator['contact_email']);
+        $this->assertSame('info@campaignshub.io', $operator['contact_email']);
     }
 
     /** Contacts fall back to the general address rather than rendering blank. */
@@ -87,9 +87,9 @@ final class PlatformLegalSettingsTest extends TestCase
     {
         $operator = $this->getJson('/api/v1/legal')->json('data.operator');
 
-        $this->assertSame('info@CampaignsHub.io', $operator['privacy_email']);
-        $this->assertSame('info@CampaignsHub.io', $operator['security_email']);
-        $this->assertSame('info@CampaignsHub.io', $operator['support_email']);
+        $this->assertSame('info@campaignshub.io', $operator['privacy_email']);
+        $this->assertSame('info@campaignshub.io', $operator['security_email']);
+        $this->assertSame('info@campaignshub.io', $operator['support_email']);
     }
 
     // ── the operator's editor ─────────────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ final class PlatformLegalSettingsTest extends TestCase
                 'legal_name_en' => 'CampaignsHub Co.',
                 'registration_number' => '1010101010',
                 'jurisdiction' => 'Riyadh, Saudi Arabia',
-                'contact_email' => 'info@CampaignsHub.io',
+                'contact_email' => 'info@campaignshub.io',
                 'privacy_email' => 'privacy@CampaignsHub.io',
             ])->assertOk();
 
@@ -131,7 +131,7 @@ final class PlatformLegalSettingsTest extends TestCase
         $this->actingAs($this->platformOwner(), 'sanctum')
             ->putJson('/api/v1/admin/settings/platform', [
                 'legal_name_en' => 'CampaignsHub Co.',
-                'contact_email' => 'info@CampaignsHub.io',
+                'contact_email' => 'info@campaignshub.io',
             ])->assertOk();
 
         $entry = AuditLog::query()->where('action', 'platform.settings.updated')->latest()->first();
@@ -144,7 +144,7 @@ final class PlatformLegalSettingsTest extends TestCase
     public function test_a_save_that_changes_nothing_writes_no_audit_entry(): void
     {
         $owner = $this->platformOwner();
-        $payload = ['legal_name_en' => 'CampaignsHub Co.', 'contact_email' => 'info@CampaignsHub.io'];
+        $payload = ['legal_name_en' => 'CampaignsHub Co.', 'contact_email' => 'info@campaignshub.io'];
 
         $this->actingAs($owner, 'sanctum')->putJson('/api/v1/admin/settings/platform', $payload)->assertOk();
         $before = AuditLog::query()->where('action', 'platform.settings.updated')->count();

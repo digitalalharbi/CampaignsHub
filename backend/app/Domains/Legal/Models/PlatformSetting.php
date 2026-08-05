@@ -53,7 +53,7 @@ final class PlatformSetting extends Model
          */
         return self::query()->firstOrCreate(
             ['is_singleton' => true],
-            ['contact_email' => 'info@CampaignsHub.io'],
+            ['contact_email' => 'info@campaignshub.io'],
         );
     }
 

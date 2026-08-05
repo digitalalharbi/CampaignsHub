@@ -12,7 +12,7 @@ return [
     'api_url' => env('API_URL', 'https://api.campaignshub.io'),
     'docs_url' => env('DOCS_URL', 'https://docs.campaignshub.io'),
     'status_url' => env('STATUS_URL', 'https://status.campaignshub.io'),
-    'support_email' => env('SUPPORT_EMAIL', 'support@campaignshub.io'),
+    'support_email' => env('SUPPORT_EMAIL', 'info@campaignshub.io'),
     'tagline' => 'Run every client, project, and campaign from one place.',
 
     // Feature flags (platform defaults; a tenant may override in its settings later).
