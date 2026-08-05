@@ -274,6 +274,31 @@ final class LiveReportShareTest extends TestCase
         $this->assertSame('awaiting_credentials', $states['tiktok']);
     }
 
+    /**
+     * A ceiling naming NO platform lists no platform — «nothing», never «everything».
+     *
+     * The rule `ceiling()` states, applied to the freshness footer. It is not a figure, so it is easy
+     * to treat as harmless: it is still a disclosure, because which platforms an agency buys on is
+     * not something a client is automatically entitled to know — and this is the one surface in the
+     * product with no session behind it.
+     *
+     * Written after the freshness rewrite (UNIFIED-001) briefly made an empty ceiling mean «no
+     * provider filter», which is exactly the fail-open reading the class was built to refuse.
+     */
+    public function test_a_link_whose_ceiling_names_no_platform_lists_none(): void
+    {
+        [, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id, 'campaign_ids' => [$this->shared->id],
+                'providers' => [], 'earliest' => '2026-07-01', 'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk();
+
+        $this->assertSame([], $res->json('data.freshness'));
+    }
+
     /** Every view is logged, live path included — the access history must not have a hole in it. */
     public function test_a_live_view_is_logged(): void
     {

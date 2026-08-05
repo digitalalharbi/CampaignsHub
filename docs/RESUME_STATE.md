@@ -2057,24 +2057,59 @@ on the way. New: `DataFreshnessService`, `ProjectStores`, `MetricsAggregator::ac
 defaults false, the card is the one inert tile in the grid (dashed border, «قريبًا», nothing to
 press), it is on the marketing page only, and it disappears when the flag turns on.
 
+### 6 — production readiness (`e175e1d`)
+
+New: `OperationalReadiness`, `QueueHeartbeatJob`, `OperationalStatusController`, `BackupCommand`,
+Horizon + `HorizonServiceProvider`. `docs/PRODUCTION_RUNBOOK.md` substantially rewritten.
+
+72. **A dead background process is now visible.** Both leave a heartbeat every minute, in every
+    environment. The scheduler stamps itself; the queue's stamp is written by the job ON the worker,
+    because dispatching proves only that Redis accepted a push. `never_seen` is kept distinct from
+    `down` so a release does not page anybody.
+73. **Three endpoints, separated by the decision each drives.** `/up` liveness · `/api/v1/ready` «can
+    THIS node serve» — deliberately does NOT fail on a dead worker elsewhere, because pulling healthy
+    web nodes turns a delayed report into an outage · `/api/v1/admin/operational-status` is the one
+    that pages, 200/503 so a monitor needs no JSON parsing, naming the failing process and its fix.
+74. **`/ready` stopped probing Redis on deployments that do not use it.** A database-queue install —
+    supported, and what `config/queue.php` still defaults to — was unready for a dependency it does
+    not have and would never have entered rotation.
+75. **`/admin/status` read dev-only heartbeat keys**, so in the one environment it exists for it
+    reported both processes stopped whether or not they ran. It reads the same service now.
+76. **Horizon is gated on `is_platform_admin`**, not on the empty email allow-list it ships with: it
+    lists job payloads, and a payload here carries tenant ids, client names and store identifiers.
+    Its supervisor watches `reports` as well as `default` — the published default watches `default`
+    alone, so replacing `queue:work` with Horizon would have left every report at «قيد المعالجة»
+    with a dashboard beside it reporting a healthy queue. Notifications are left unrouted because
+    every channel is awaiting credentials, and a queue monitor that silently fails to alert is the
+    failure a queue monitor exists to prevent.
+77. **`ops:backup` either happens or says it did not.** pg_dump + storage archive + a manifest of
+    sizes and SHA-256s; retention that can never delete the newest; every failure path exits non-zero
+    and writes no manifest. `--verify` re-hashes; restoring is a documented human step, because a
+    command able to restore is one that will eventually restore over something live.
+78. **`composer audit` was NOT clean.** `guzzlehttp/guzzle` carried CVE-2026-69246 (high —
+    *noncanonical host bypasses host-based checks*), squarely in the path of a product calling eight
+    external APIs. Patched, as was postcss. The two remaining npm advisories are one issue in React
+    Router's **RSC server mode**, which this client-only SPA never runs; there is no forward fix
+    (range `7.12.0–8.2.0`, newest published `7.18.2`) and the only offered remediation is a
+    semver-major downgrade of the router. Assessment and its expiry conditions are in the runbook —
+    re-check every release, and it expires the moment this app adopts RSC.
+
 ### What is left of the brief
 
-`6` production readiness — secrets, callbacks, webhook URLs, Redis, Horizon, Cron, queues,
-monitoring, health checks, backups, token renewal, performance, security, clean install, upgrade
-path — then the FULL three-browser Playwright gate.
+Nothing but the gate. Items 1–8 are implemented, tested and committed.
 
 ### Gate status
 
-**No full three-browser Playwright gate has been run since `c8753db`.** Kill any hand-started :8000
-backend and :5173 Vite before the next one — the suite reuses an existing :8000 and then skips its
-own `queue:work --queue=reports,default`, and the report-export specs hang at "processing".
+**Running at HEAD `e175e1d`** (`npx playwright test`, 3 browsers, `retries: 0`, `workers: 1`).
+The hand-started :8000 backend and :5173 Vite were killed first — the suite reuses an existing :8000
+and then skips its own `queue:work --queue=reports,default`, and the report-export specs hang at
+"processing". Both ports were confirmed free before the run started.
 
 ### Where this session stopped
 
-HEAD `3846899`, clean tree, branch `feat/taxonomy-ux`. Units 1f, 2, 3, 4 and 5 are done and
-committed; 7 was already done at `d575eeb`.
-Totals: **backend 1228 · vitest 625 · tsc · oxlint 0 errors · Pint clean**.
+HEAD `e175e1d`, branch `feat/taxonomy-ux`. Units 1f, 2, 3, 4, 5 and 6 done and committed; 7 was
+already done at `d575eeb` and was verified rather than rewritten.
+Totals: **backend 1245 · vitest 625 · tsc · oxlint 0 errors · Pint clean · composer audit clean**.
 
-A backend on :8000 and Vite on :5173 were used for the live review. The review's dev-database
-fixtures (one Salla store, six orders, marker `unified-001-review`) were **removed** — commerce
-tables are back to zero rows.
+The live reviews' dev-database fixtures (one Salla store, six orders, marker `unified-001-review`)
+were **removed** — commerce tables are back to zero rows.

@@ -110,3 +110,23 @@ Status legend: Tested = feature tests + phpstan green; Awaiting Ext Dep = adapte
 | 12 | Permissions/Audit/Tenant isolation (taxonomies.*/options.*) | **Implemented & Tested** (backend) — UI gating pending |
 | 13 | Three-app regression (Operations/SaaS/Client on one engine, scoped by permission/plan) | Not Started |
 | 14 | Cross-browser/mobile/RTL-LTR/light-dark E2E | Not Started |
+
+## PHASE: Integrations, commerce, funnel, reports & production readiness (feat/taxonomy-ux)
+
+The eight numbered items of the standing brief. Close a row only when backend, frontend, database,
+permissions, isolation, live preview and tests are all done and committed.
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| 1 | Six-platform sync: accounts → campaigns → ad sets → ads → creatives → metrics → raw + normalised, with queue, scheduler, retry/backoff, idempotency, token refresh, sync log and last-updated | **Implemented & Tested** | `e92fb38` (1a–1e) + `9848277` (1f). `integrations:sync` /30min, `integrations:sync-structure` `55 */6` (ahead of the metrics sweep — insights for an undiscovered campaign are dropped), `integrations:refresh-tokens` hourly, `integrations:prune-raw` daily. `AdPlatformStructureSyncTest` (14) |
+| 2 | `/admin` holds system keys, OAuth apps, API, MCP, webhooks and secrets; `/app` + `/agency` link the user's own accounts only | **Implemented & Tested** | `PROVCFG-001/002`, `CONNECT-001`. No endpoint reads a secret back; callback + webhook URLs are derived (`ProviderDefinition::redirectUri()`), never stored |
+| 3 | Salla then Zid: OAuth, stores, products, orders, customers, abandoned carts, revenue, cancellations/refunds, webhooks, UTM + click-id binding to projects and campaigns | **Implemented & Tested** | `7156143`. `commerce:sync` hourly at :20. Zid publishes no cart endpoint and its connector REFUSES rather than returning empty → `partial`. `CommerceStoreSyncTest` (14), `CommerceOAuthAndBoardTest` (11) |
+| 4 | «الفانل والمتجر» inside analytics: nine stages with conversion, drop-off, CAC, CPA, AOV, ROAS — and the source of every number | **Implemented & Tested** | `e8c1518`. Store beats pixel; an unmeasured stage says why and never shows a zero; CAC ≠ CPA; untraceable orders counted, never spread. `StoreFunnelTest` (12), `StoreFunnelTab.test.tsx` (8) |
+| 5 | Synced data feeds dashboard, campaigns, ad sets, ads, content, analytics, funnel, reports, client links, alerts, budgets and freshness — with no duplicate or conflicting source | **Implemented & Tested** | `3846899`. `DataFreshnessService` replaces four freshness queries and counts stores; alerts read `MetricsAggregator`; the dashboard's store block comes from `StoreFunnelService`. `UnifiedDataSourceTest` (9), `DashboardStore.test.tsx` (6) |
+| 6 | Interactive client reports: short link, live filters, KPIs/creatives/charts/funnel/comparisons, last sync, password, expiry, revoke, renew, open log, templates, PDF + Excel, fail-closed isolation | **Implemented & Tested** | `d262764`. `/r/<22>` ≈131 bits, old 48-char links still open; the store funnel is built by the same service the analytics tab calls and obeys the share's hide flags. `LiveReportShareTest` |
+| 7 | «علاقات المؤثرين — قريبًا» on the marketing page only, `influencers_ugc_enabled=false` unchanged | **Implemented & Tested** | `d575eeb` (pre-existing; verified this session). The one inert tile in the grid; disappears when the flag turns on |
+| 8 | Production readiness: secrets, callbacks, webhook URLs, Redis, Horizon, cron, queues, monitoring, health checks, backups, token renewal, performance, security, clean install, upgrade path | **Implemented & Tested** | `e175e1d`. Heartbeats for scheduler + worker; three health endpoints separated by the decision each drives; Horizon gated on `is_platform_admin` and watching `reports`; `ops:backup` with manifest + verify; guzzle CVE-2026-69246 patched. `OperationalReadinessTest` (12), `BackupCommandTest` (5), `docs/PRODUCTION_RUNBOOK.md` |
+
+**Honesty rules held throughout:** no Connected/Synced/Live without a real credential and a successful
+API round trip; absent credentials read `Awaiting Credentials`; no claim of an email, payment or
+external call that did not happen; zero dead buttons and zero placeholder data posing as real.

@@ -337,15 +337,20 @@ final class LiveReportService
      */
     private function freshness(string $tenantId, string $projectId, array $providers): array
     {
-        if ($projectId === '') {
+        /*
+         * An empty ceiling means NOTHING, never everything — the same rule {@see ceiling()} states.
+         *
+         * Passing `null` through to the service here would have meant «no provider filter», so a link
+         * whose scope named no platform would have listed every platform the tenant runs. That is not
+         * a figure, but it is still a disclosure: which platforms an agency buys on is something a
+         * client is not automatically entitled to know, and this is the one surface with no session
+         * behind it.
+         */
+        if ($projectId === '' || $providers === []) {
             return [];
         }
 
-        $sources = app(DataFreshnessService::class)->sources(
-            $tenantId,
-            [$projectId],
-            $providers === [] ? null : $providers,
-        );
+        $sources = app(DataFreshnessService::class)->sources($tenantId, [$projectId], $providers);
 
         return array_map(static fn (array $source): array => [
             'kind' => $source['kind'],
