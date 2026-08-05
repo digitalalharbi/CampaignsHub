@@ -2094,22 +2094,60 @@ Horizon + `HorizonServiceProvider`. `docs/PRODUCTION_RUNBOOK.md` substantially r
     semver-major downgrade of the router. Assessment and its expiry conditions are in the runbook —
     re-check every release, and it expires the moment this app adopts RSC.
 
-### What is left of the brief
+### The regression the self-review caught (`672b11b`)
 
-Nothing but the gate. Items 1–8 are implemented, tested and committed.
+79. **An empty provider ceiling means NOTHING, not everything.** Routing the client link's freshness
+    footer through `DataFreshnessService` mapped an empty `scope.providers` to `null`, which the
+    service reads as «no provider filter» — so a link naming no platform would have listed every
+    platform the tenant runs. It carries no figure, which is what makes it easy to wave through; it is
+    still a disclosure, on the one surface with no session behind it. `ceiling()` states the rule in
+    as many words. Restored and pinned by an assertion.
 
-### Gate status
+    **The first gate run was VOIDED for this.** The fix landed in a backend file the running suite was
+    serving, so the run stopped being evidence. It was killed, the fix committed, and the gate
+    restarted from a clean tree.
 
-**Running at HEAD `e175e1d`** (`npx playwright test`, 3 browsers, `retries: 0`, `workers: 1`).
-The hand-started :8000 backend and :5173 Vite were killed first — the suite reuses an existing :8000
-and then skips its own `queue:work --queue=reports,default`, and the report-export specs hang at
-"processing". Both ports were confirmed free before the run started.
+### Gate — PASSED
 
-### Where this session stopped
+`npx playwright test` at HEAD `672b11b`, clean tree, both dev servers killed first so the suite owned
+its own `queue:work --queue=reports,default`.
 
-HEAD `e175e1d`, branch `feat/taxonomy-ux`. Units 1f, 2, 3, 4, 5 and 6 done and committed; 7 was
-already done at `d575eeb` and was verified rather than rewritten.
-Totals: **backend 1245 · vitest 625 · tsc · oxlint 0 errors · Pint clean · composer audit clean**.
+**773 passed · 0 failed · 0 flaky · retries 0 · 28.7m · exit 0** across setup + chromium + firefox +
+webkit.
 
-The live reviews' dev-database fixtures (one Salla store, six orders, marker `unified-001-review`)
-were **removed** — commerce tables are back to zero rows.
+### Clean install — verified
+
+Empty database (`campaignshub_cleaninstall`, 0 tables) → `migrate --force` → `db:seed PermissionSeeder`
+→ **121 tables, 111 permissions**, no errors. `config:cache` (46,567 B) and `route:cache` (625,661 B)
+both build, so there are still no closures in config. On a fresh install every provider is unconnected:
+seven read `not_configured`, LinkedIn reads `awaiting_credentials` because its required `version` field
+ships a default (`2411`) — an API version constant, not an operator credential. Both states are honest
+and neither is connectable; the difference is cosmetic and deliberately NOT patched after a green gate.
+
+### Upgrade path — verified
+
+`migrate --force` on the existing database → «Nothing to migrate», 0 pending. `horizon:terminate` is
+present (required on upgrade: a long-running worker holds the old code in memory). Caches rebuild and
+clear cleanly.
+
+### Live journey — verified end to end
+
+`/admin` → Salla drawer shows the DERIVED redirect URI and webhook URL with its signature header,
+each field as «غير مُعرَّف», «لا يمكن عرض القيمة بعد الحفظ» (no readback) and «لم يُختبر بعد» ·
+tenant owner gets **403** on `/api/v1/admin/settings/integrations/providers` (list and single) ·
+`/app/integrations` leaks **zero** system keys and reads «بانتظار بيانات الاعتماد» with «يتولّى مشغّل
+المنصة تجهيزها» — no dead connect button · dashboard and funnel return byte-identical store figures
+(revenue 5626.5, orders 6, AOV 937.75) from ONE service, with the store listed as a freshness source ·
+client link `/r/<22>` opened with **no session at all** (curl, no cookies) → filters applied → a range
+outside the ceiling **clamped** rather than honoured → 3 opens logged → revoked → **404**.
+
+All drill fixtures were removed afterwards: the store and its six orders, the drill share and its logs,
+and the rehearsal database. Commerce tables are back to zero rows; the tree is clean.
+
+### Where this session ended
+
+HEAD `672b11b`, clean tree, branch `feat/taxonomy-ux`. Items 1–8 of the brief are done; 7 was already
+done at `d575eeb` and was verified rather than rewritten.
+
+Totals: **backend 1246 (6207 assertions) · vitest 625 (90 files) · Playwright 773 on 3 browsers ·
+tsc clean · oxlint 0 errors · Pint clean · composer audit clean**.

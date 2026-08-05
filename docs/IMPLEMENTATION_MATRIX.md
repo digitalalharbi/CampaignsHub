@@ -127,6 +127,16 @@ permissions, isolation, live preview and tests are all done and committed.
 | 7 | «علاقات المؤثرين — قريبًا» on the marketing page only, `influencers_ugc_enabled=false` unchanged | **Implemented & Tested** | `d575eeb` (pre-existing; verified this session). The one inert tile in the grid; disappears when the flag turns on |
 | 8 | Production readiness: secrets, callbacks, webhook URLs, Redis, Horizon, cron, queues, monitoring, health checks, backups, token renewal, performance, security, clean install, upgrade path | **Implemented & Tested** | `e175e1d`. Heartbeats for scheduler + worker; three health endpoints separated by the decision each drives; Horizon gated on `is_platform_admin` and watching `reports`; `ops:backup` with manifest + verify; guzzle CVE-2026-69246 patched. `OperationalReadinessTest` (12), `BackupCommandTest` (5), `docs/PRODUCTION_RUNBOOK.md` |
 
+### Gate, clean install, upgrade and the live journey
+
+| Check | Result |
+|---|---|
+| Full Playwright gate (setup + chromium + firefox + webkit, `retries: 0`, `workers: 1`) | **PASS** — 773 passed, 0 failed, 0 flaky, 28.7m, exit 0, at `672b11b` from a clean tree |
+| Clean install (empty DB → migrate → seed) | **PASS** — 121 tables, 111 permissions; `config:cache` + `route:cache` build |
+| Upgrade path | **PASS** — «Nothing to migrate», 0 pending; `horizon:terminate` present |
+| Live journey: `/admin` setup → user link → sync state → data → funnel → report link → open with no session → filters → revoke | **PASS** — see RESUME_STATE for the evidence of each leg |
+| Layer separation | **PASS** — tenant owner 403 on the provider console; zero system-key leaks on `/app/integrations` |
+
 **Honesty rules held throughout:** no Connected/Synced/Live without a real credential and a successful
 API round trip; absent credentials read `Awaiting Credentials`; no claim of an email, payment or
 external call that did not happen; zero dead buttons and zero placeholder data posing as real.
