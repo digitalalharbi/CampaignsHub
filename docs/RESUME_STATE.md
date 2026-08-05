@@ -1743,7 +1743,12 @@ The brief has six sections plus a marketing card. Order of execution, and where 
 | --- | --- | --- |
 | 0 | **MKT-UGC-001** — the influencer/UGC «قريبًا» card, sub-system still off | **done, committed** |
 | 0b | **MKT-FIX-001** — mobile horizontal scroll + duplicate React keys, both found live | **done, committed** |
-| 1 | Ad-platform integrations: OAuth, ad accounts, campaigns/ad sets/ads/creatives/budgets/metrics, scheduler + queues, retry/backoff/idempotency, webhooks or polling, token refresh, sync log, raw + normalised storage, fail-closed isolation | next |
+| 1a | **INTEG-OAUTH-001** — real OAuth + API adapters for all six, inert without credentials | **done, committed** `9566d24` |
+| 1b | **INTEG-RETRY-001** — one retry/backoff policy, and the two platforms that answer 200 for a failure | **done, committed** `9566d24` |
+| 1c | **INTEG-SYNC-001 / INTEG-RAW-001** — scheduler, queue idempotency, token refresh ahead of need, raw payload retention | **done, committed** `6013252` |
+| 1d | **INTEG-UI-001b** — the four states, with the action each admits | **done, committed** `f62af29` |
+| 1e | Ad-platform **webhooks** (Meta/TikTok/Snapchat where supported) + safe polling elsewhere, with signature verification and event idempotency | **not started** |
+| 1f | Ad **set / ad / creative** discovery through the new adapters (the tables exist; only campaigns and insights are wired) | **not started** |
 | 2 | Salla & Zid | not started |
 | 3 | Funnel & store analytics | not started |
 | 4 | Interactive shareable client reports | not started |
@@ -1771,4 +1776,42 @@ four-state `Connected | Syncing | Error | Awaiting Credentials` display.
   its own `queue:work --queue=reports,default`, and the report-export specs hang at "processing".
   **Kill the hand-started backend and Vite before the gate.** (Both are running right now, for the live
   review; they must be killed before the next full run.)
+- Do not edit source while a gate runs. A run with edits under it is void.
+
+
+---
+
+## Where unit 1 actually stands (written before the context ran out)
+
+**Done and green.** Backend 1126 tests · vitest 584 tests · tsc and oxlint clean. Three commits:
+`9566d24`, `6013252`, `f62af29`, on top of `d575eeb` (the marketing card).
+
+**Still Awaiting Credentials, and honestly so.** No install in this repository holds keys for any of
+the six platforms. Every response in the adapter tests is faked, which proves OUR PARSING and never
+their API. Nothing in the product says connected, synced or live for any platform.
+
+### What unit 1 still owes
+
+- **1e — webhooks.** Meta, TikTok and Snapchat can push change notifications; X and LinkedIn cannot,
+  and Google Ads only through a separate product. So the shape is: a verified webhook endpoint per
+  platform that supports one, and the existing 30-minute poll for the rest. Signature verification and
+  event-id idempotency are the whole of the security surface here.
+- **1f — ad sets, ads and creatives.** `external_ad_sets` and `external_ads` exist and are seeded by
+  the demo seeder. The new adapters fetch campaigns and insights; the ad-set/ad/creative fetch per
+  platform is not written.
+
+### Then, untouched
+
+Sections 2–6 of the brief have not been started: **Salla & Zid**, the **funnel & store analytics**
+section, the **interactive shareable client reports**, the **one-source unification**, and the
+**production-readiness sweep**.
+
+### Discipline reminders that still bind
+
+- **Kill the hand-started backend and Vite before any Playwright run.** The suite reuses an existing
+  :8000 and then skips its own `queue:work --queue=reports,default`, and the report-export specs hang
+  at "processing". Both were running for the live review in this session and have been killed.
+- **The full three-browser gate has NOT been run since `4eb36fa`.** The unit suites are green and the
+  changed surfaces were reviewed live, but `e2e/` has not been re-run over these four commits. That is
+  the first thing to do on resume, before anything is called verified end to end.
 - Do not edit source while a gate runs. A run with edits under it is void.
