@@ -415,7 +415,16 @@ final class MetricsAggregator
         return $out;
     }
 
-    /** Conversion funnel with per-step transition rate, drop-off and cost per stage. */
+    /**
+     * Conversion funnel with per-step transition rate, drop-off and cost per stage.
+     *
+     * Returns `['stages' => …, 'spend' => …]` rather than the bare stage list it used to
+     * (UNIFIED-002). The spend was always computed here — every `cost_per` on every stage divides by
+     * it — and was then thrown away, so the funnel published a dozen figures derived from a number
+     * it never stated. A reader could multiply their way back to it and could not read it, and
+     * nothing reconciled the funnel against the dashboard, which is exactly where a page that had
+     * grown its own query would have hidden.
+     */
     public function funnel(Carbon $from, Carbon $to): array
     {
         $stages = self::FUNNEL_STAGES;
@@ -443,7 +452,7 @@ final class MetricsAggregator
             $prev = $count;
         }
 
-        return $out;
+        return ['stages' => $out, 'spend' => round($spend, 2)];
     }
 
     /** Planned vs spent budget with pacing (over/under) and a linear end-of-period projection. */

@@ -191,7 +191,16 @@ final class MetricsController extends Controller
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
-        return ApiResponse::success($this->scoped($request)->funnel($from, $to), 'Conversion funnel.', meta: $this->meta($from, $to));
+        // `data` stays the stage list every caller already renders; the spend it is all derived from
+        // rides in `meta`, so the funnel can be reconciled against the dashboard without changing
+        // the shape of the payload (UNIFIED-002).
+        $funnel = $this->scoped($request)->funnel($from, $to);
+
+        return ApiResponse::success(
+            $funnel['stages'],
+            'Conversion funnel.',
+            meta: $this->meta($from, $to) + ['spend' => $funnel['spend']],
+        );
     }
 
     public function budget(Request $request): JsonResponse

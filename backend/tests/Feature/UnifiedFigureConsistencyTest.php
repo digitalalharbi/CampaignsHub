@@ -6,24 +6,25 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
-use App\Domains\Integrations\Models\ExternalCampaign;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
+use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Services\ShareService;
-use App\Domains\Tenancy\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
@@ -145,15 +146,16 @@ final class UnifiedFigureConsistencyTest extends TestCase
      */
     public function test_the_dashboard_the_breakdowns_and_the_funnel_report_one_spend(): void
     {
-        $summary = $this->get('metrics/summary');
-        $platforms = $this->get('metrics/platforms');
-        $campaigns = $this->get('metrics/campaigns');
-        $funnel = $this->get('metrics/funnel');
+        $summary = $this->read('metrics/summary');
+        $platforms = $this->read('metrics/platforms');
+        $campaigns = $this->read('metrics/campaigns');
+        $funnel = $this->read('metrics/funnel');
 
         $dashboard = (float) $summary->json('data.current.spend');
         $byPlatform = $this->sum($platforms->json('data'), 'spend');
         $byCampaign = $this->sum($campaigns->json('data'), 'spend');
-        $inFunnel = (float) ($funnel->json('data.totals.spend') ?? $funnel->json('data.stages.0.value'));
+        // `data` is the stage list; the spend the whole funnel is derived from rides in `meta`.
+        $inFunnel = (float) $funnel->json('meta.spend');
 
         $this->assertSame(self::SPEND, $dashboard, 'the dashboard disagrees with the sync');
         $this->assertSame($dashboard, $byPlatform, 'the platform breakdown disagrees with the dashboard');
@@ -168,7 +170,7 @@ final class UnifiedFigureConsistencyTest extends TestCase
      */
     public function test_the_client_report_link_reports_the_same_spend_without_a_session(): void
     {
-        $dashboard = (float) $this->get('metrics/summary')->json('data.current.spend');
+        $dashboard = (float) $this->read('metrics/summary')->json('data.current.spend');
 
         $res = $this->getJson("/api/v1/reports/shared/{$this->liveLink()}/live")->assertOk();
 
@@ -188,9 +190,9 @@ final class UnifiedFigureConsistencyTest extends TestCase
     public function test_no_surface_carries_another_clients_figures(): void
     {
         $surfaces = [
-            'dashboard' => (float) $this->get('metrics/summary')->json('data.current.spend'),
-            'platforms' => $this->sum($this->get('metrics/platforms')->json('data'), 'spend'),
-            'campaigns' => $this->sum($this->get('metrics/campaigns')->json('data'), 'spend'),
+            'dashboard' => (float) $this->read('metrics/summary')->json('data.current.spend'),
+            'platforms' => $this->sum($this->read('metrics/platforms')->json('data'), 'spend'),
+            'campaigns' => $this->sum($this->read('metrics/campaigns')->json('data'), 'spend'),
             'client link' => (float) $this->getJson("/api/v1/reports/shared/{$this->liveLink()}/live")
                 ->assertOk()->json('data.totals.spend'),
         ];
@@ -201,7 +203,7 @@ final class UnifiedFigureConsistencyTest extends TestCase
         }
 
         // The neighbour's campaign is not even named in the breakdown.
-        $names = array_column((array) $this->get('metrics/campaigns')->json('data'), 'name');
+        $names = array_column((array) $this->read('metrics/campaigns')->json('data'), 'name');
         $this->assertNotContains('حملة أخرى', $names);
     }
 
@@ -213,15 +215,22 @@ final class UnifiedFigureConsistencyTest extends TestCase
      */
     public function test_the_figures_are_accompanied_by_their_freshness(): void
     {
-        $freshness = $this->get('metrics/freshness')->assertOk();
+        $freshness = $this->read('metrics/freshness')->assertOk();
 
-        $this->assertNotEmpty($freshness->json('data.sources'), 'no source is named beside the figures');
-        $this->assertNotNull($freshness->json('data.state'), 'the figures carry no freshness verdict');
+        // `data` is the per-source list, `meta.summary` the one verdict over all of them. Asserted
+        // in the shape the endpoint actually serves — the draft guessed `data.sources`/`data.state`
+        // and would have failed a working product.
+        $this->assertNotEmpty($freshness->json('data'), 'no source is named beside the figures');
+        $this->assertNotNull($freshness->json('meta.summary.state'), 'the figures carry no freshness verdict');
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────────
 
-    private function get(string $path): \Illuminate\Testing\TestResponse
+    /*
+     * Named `read`, not `get`: `TestCase::get()` is public and PHP refuses to let a subclass
+     * narrow it to private, so the whole file was a fatal error before it ran a single assertion.
+     */
+    private function read(string $path): TestResponse
     {
         return $this->actingAs($this->operator, 'sanctum')
             ->getJson("/api/v1/projects/{$this->project->id}/{$path}?".self::WINDOW)
