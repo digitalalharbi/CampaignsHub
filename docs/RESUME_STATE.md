@@ -1750,7 +1750,7 @@ The brief has six sections plus a marketing card. Order of execution, and where 
 | 0c | **PROVCFG-001** — the system/tenant split: `provider_configurations`, the 8-provider catalogue, 5 honest states, real probe, full audit, secrets write-only | **done, committed** `97e9ea4` |
 | 0d | **PROVCFG-002** — `/admin/settings/integrations`, the operator's page | **done, committed** `551f007` |
 | 0e | **CONNECT-001** — the tenant's connect surface; system-config leak closed; `/agency/integrations` mounted; client picker | **done, committed** `e0883c7` |
-| 1e | Ad-platform **webhooks** (Meta/TikTok/Snapchat where supported) + safe polling elsewhere, with signature verification and event idempotency | **in progress** |
+| 1e | Ad-platform **webhooks** + safe polling elsewhere, signature verification and event idempotency | **done, committed** `06ecef5` |
 | 1f | Ad **set / ad / creative** discovery through the new adapters (the tables exist; only campaigns and insights are wired) | **not started** |
 | 2 | Salla & Zid | not started |
 | 3 | Funnel & store analytics | not started |
@@ -1869,9 +1869,42 @@ database was restored afterwards.
   why nothing caught it. Fixed with `usePortalPath()` and pinned in both portals.
 - **`/agency/integrations` did not exist**, though the API had always accepted the agency portal.
 
+### Webhooks (1e), at `06ecef5`
+
+`POST /api/v1/webhooks/{kind}/{provider}`, where `{kind}` is `ads` or `commerce`
+(`ProviderKind::routeSegment()` — NOT «advertising», which cost a round of red tests).
+
+37. **Unverified means refused and stored NOWHERE.** No secret configured is also a refusal. The
+    HMAC is over the RAW body, compared with `hash_equals`, and Meta's `sha256=` prefix is stripped.
+38. **Idempotency is the unique index on `(provider, fingerprint)`, not a lookup.** Insert first,
+    work second. A duplicate answers 200 — Meta redelivers for 36 hours until it gets one. The
+    insert is scoped to a SAVEPOINT, because catching the violation and then querying leaves an
+    aborted Postgres transaction the moment ingestion is called inside one.
+39. **The tenant is derived from `external_accounts`, never read from the payload.** Only known
+    account-id shapes are read. An unmatched delivery is KEPT with a null tenant — it is the evidence
+    that a webhook URL was registered against the wrong app.
+40. **A verified advertising delivery triggers the SAME sync the scheduler runs, and nothing else.**
+    A notification says something changed, not what the number is. Never a second source of truth.
+41. **Snapchat and TikTok are `polling_only`**, reclassified honestly — no verifiable scheme, no
+    credentials here to confirm one. A provider that cannot deliver returns 404, not a refusal.
+42. A suspended provider stops being LISTENED to as well as stops being connectable.
+
+`api/v1/webhooks/*` is excluded from CSRF in `bootstrap/app.php` (a provider's server has no token;
+the HMAC is the gate).
+
+### What is left of the brief, in order
+
+`1f` ad sets/ads/creatives · `2` Salla & Zid (the catalogue, config, webhook receiver and
+`commerce_platforms.php` already exist; the connectors, store/order/product tables and the UTM +
+Click ID linkage do not) · `3` funnel & store analytics · `4` interactive shareable reports ·
+`5` one synced source · `6` production readiness.
+
+Commerce webhook deliveries are verified and recorded today and **nothing consumes them yet** —
+that is unit 2's job, and `integration_webhook_events` is where it should read from.
+
 ### Gate status
 
-**No full three-browser gate has been run since `c8753db`.** Backend 1150 · vitest 600 · tsc ·
-oxlint 0 errors · Pint clean, all at `e0883c7`. Kill the hand-started :8000 backend and :5173 Vite
+**No full three-browser gate has been run since `c8753db`.** Backend 1161 · vitest 600 · tsc ·
+oxlint 0 errors · Pint clean, all at `06ecef5`. Kill the hand-started :8000 backend and :5173 Vite
 before the next gate — the suite reuses an existing :8000 and then skips its own
 `queue:work --queue=reports,default`, and the report-export specs hang at "processing".
