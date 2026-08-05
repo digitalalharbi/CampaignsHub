@@ -22,6 +22,7 @@ import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { ErrorSummary, type FieldError } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
+import { usePortalPath } from '@/app/portalPath'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 
@@ -39,6 +40,7 @@ const PROJ_EDIT_IDS: Record<string, string> = { name: 'proj-edit-name', status: 
 
 export function ProjectsPage() {
   const t = useT()
+  const portalPath = usePortalPath()
   const locale = useUi((s) => s.locale)
   const errTitle = PROJ_ERR_TITLE[locale]
   const queryClient = useQueryClient()
@@ -227,10 +229,16 @@ export function ProjectsPage() {
                       {t('archive')}
                     </button>
                   )}
-                  <Link to={`/projects/${p.id}/team`} className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary">
+                  {/*
+                    Portal-relative, per ADR 0002's decision 2. These two were written as `/projects/…`
+                    — which is not a route in ANY portal — so both were dead in `/app` and `/agency`
+                    alike. Found by pressing them during a live review, not by a status check: a
+                    client-side router answers a route it does not have with a blank page and a 200.
+                  */}
+                  <Link to={portalPath(`/projects/${p.id}/team`)} className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary">
                     <Users size={13} /> {t('team')}
                   </Link>
-                  <Link to={`/projects/${p.id}/integrations`} className="ms-auto font-bold text-brand-600 hover:underline">
+                  <Link to={portalPath(`/projects/${p.id}/integrations`)} className="ms-auto font-bold text-brand-600 hover:underline">
                     {t('integrations')} →
                   </Link>
                 </div>

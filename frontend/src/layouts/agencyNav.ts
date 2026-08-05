@@ -1,6 +1,6 @@
 import {
   BarChart3, BellRing, Building2, CreditCard, FolderKanban, FolderOpen, Images, Inbox,
-  LayoutDashboard, ListChecks, Megaphone, MessageSquare, Receipt, Settings, Users,
+  LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Settings, Users,
 } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
@@ -105,6 +105,15 @@ export const agencyNavGroups: readonly NavGroup[] = [
      */
     ar: 'الإعدادات', en: 'Settings', icon: Settings,
     leaves: [
+      /*
+       * CONNECT-001 — connecting the agency's ad accounts.
+       *
+       * It lives under Settings rather than beside Campaigns because it is done once per account and
+       * then not thought about; what an operator opens daily is the campaigns those accounts feed.
+       * The page itself was reachable only under `/app` until now, so an agency operator had nowhere
+       * to press connect at all — the API had always allowed them.
+       */
+      { to: '/agency/integrations', ar: 'ربط المنصات', en: 'Platform connections', icon: Plug },
       { to: '/agency/team', ar: 'الفريق والصلاحيات', en: 'Team & permissions', icon: Users },
       { to: '/agency/settings', ar: 'إعدادات الوكالة', en: 'Agency settings', icon: Settings },
     ],

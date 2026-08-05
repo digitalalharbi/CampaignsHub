@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -47,6 +48,48 @@ final class IntegrationApiTest extends TestCase
 
         $meta = collect($data)->firstWhere('key', 'meta');
         $this->assertSame('awaiting_credentials', $meta['status']);
+    }
+
+    /**
+     * PROVCFG-001 — the tenant's board says a platform is not ready and never says why.
+     *
+     * `missing: ['developer_token']` used to travel with every awaiting row. It is an instruction for
+     * the console at `/admin` addressed to the wrong reader: a customer cannot obtain a developer
+     * token for our OAuth app, and the shape of our provider registration is not theirs to be told.
+     */
+    public function test_the_tenant_board_never_names_a_system_credential(): void
+    {
+        app(TenantContext::class)->forget();
+
+        $response = $this->actingAs($this->user, 'sanctum')->getJson('/api/v1/integrations')->assertOk();
+
+        $this->assertStringNotContainsString('developer_token', $response->getContent());
+        $this->assertStringNotContainsString('organization_id', $response->getContent());
+
+        foreach ($response->json('data') as $row) {
+            $this->assertArrayNotHasKey('missing', $row);
+        }
+    }
+
+    /**
+     * A provider the operator suspended reads as `unavailable`, not as one waiting for keys.
+     *
+     * The two are different facts — a setup that has not happened, and a decision that has — and the
+     * order matters: a complete-but-suspended provider must not be offered a connect button the
+     * OAuth start is going to refuse.
+     */
+    public function test_a_suspended_provider_reads_as_unavailable_rather_than_connectable(): void
+    {
+        app(TenantContext::class)->forget();
+
+        config()->set('ad_platforms.platforms.meta.client_id', 'id');
+        config()->set('ad_platforms.platforms.meta.client_secret', 'secret');
+        app(ProviderConfigurationService::class)->setEnabled('meta', false);
+
+        $data = $this->actingAs($this->user, 'sanctum')->getJson('/api/v1/integrations')->assertOk()->json('data');
+        $meta = collect($data)->firstWhere('key', 'meta');
+
+        $this->assertSame('unavailable', $meta['state']);
     }
 
     public function test_real_connector_connect_is_awaiting_credentials(): void

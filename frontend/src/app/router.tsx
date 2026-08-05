@@ -386,6 +386,18 @@ export const router = createBrowserRouter([
             { path: 'projects', element: <ProjectsPage /> },
             { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
             { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
+            /*
+             * CONNECT-001 — the agency's own connect surface.
+             *
+             * It existed only under `/app`, so an agency operator — the reader who connects platforms
+             * on behalf of five clients, and therefore the one who needs it most — had no page to
+             * reach at all. The API has always accepted them (`portal:app,agency` on every
+             * integrations route); it was only the URL that was missing.
+             *
+             * MOUNTED, not copied. Same component as `/app/integrations`, per ADR 0002.
+             */
+            { path: 'integrations', element: <ConnectionCenterPage /> },
+            { path: 'integrations/drive', element: <DrivePage /> },
             { path: 'campaigns', element: <CampaignsPage /> },
             { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
             { path: 'content', element: <CreativesPage /> },

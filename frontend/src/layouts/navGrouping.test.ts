@@ -40,6 +40,14 @@ const AGENCY_BEFORE = [
   '/agency/campaigns', '/agency/content', '/agency/reports', '/agency/tasks',
   '/agency/files', '/agency/alerts', '/agency/messages', '/agency/billing',
   '/agency/subscriptions', '/agency/team', '/agency/settings',
+  /*
+   * ADDED by CONNECT-001, deliberately, and pinned here so the next addition is also deliberate.
+   *
+   * This list is a guard against sections being LOST; growing it is a decision, and relaxing the
+   * assertion into a subset check would be the thing decision 20 forbids. See the reversal recorded
+   * in «the portals stay distinct» below for why an agency now has this entry.
+   */
+  '/agency/integrations',
 ]
 
 /** The sections REG-001 moved out of the advertiser rail, and the portal each landed in. */
@@ -113,11 +121,21 @@ describe('the portals stay distinct', () => {
     const app = new Set(navLeaves(appNavGroups).map((l) => l.to.replace('/app', '')))
     const agency = new Set(navLeaves(agencyNavGroups).map((l) => l.to.replace('/agency', '')))
 
-    // The advertiser connects its own ad accounts. An agency connects them inside the client or
-    // project they belong to, so an agency-wide integrations screen would invite connecting an
-    // account to nothing in particular.
+    /*
+     * REVERSED by CONNECT-001, and the reason it was written is worth keeping.
+     *
+     * It used to say: an agency connects accounts inside the client or project they belong to, so an
+     * agency-wide screen would invite connecting an account to nothing in particular. The concern was
+     * right and the conclusion was wrong — an agency operator simply had NO page on which to press
+     * connect, in the portal they work in, while the API had accepted them all along
+     * (`portal:app,agency` is on every integrations route). The concern is now answered where it
+     * belongs: the page asks which client the discovered accounts belong to before it starts the
+     * authorisation, and that choice travels inside the single-use state.
+     *
+     * Both portals therefore have it, and this entry stops distinguishing them.
+     */
     expect(app.has('/integrations')).toBe(true)
-    expect(agency.has('/integrations')).toBe(false)
+    expect(agency.has('/integrations')).toBe(true)
 
     // Only the agency invoices anyone. Both pay for a plan, so `/subscriptions` is not the
     // distinguishing entry — `/billing` is.

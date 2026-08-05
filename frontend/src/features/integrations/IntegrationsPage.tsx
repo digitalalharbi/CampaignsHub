@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { KeyRound, Loader2, Plug, RefreshCw } from 'lucide-react'
@@ -5,6 +6,7 @@ import {
   connectConnector, listConnectors, startPlatformOAuth, syncConnector,
   type Connector, type PlatformState,
 } from './api'
+import { listClientWorkspaces } from '@/features/projects/api'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/Card'
@@ -27,11 +29,21 @@ import { useUi } from '@/stores/ui'
  *
  * | State | What is true | What is offered |
  * | --- | --- | --- |
- * | Awaiting credentials | no app registered for this deployment | nothing to press; the missing keys are NAMED |
+ * | Unavailable | the platform operator took this provider out of service | nothing to press |
+ * | Awaiting credentials | no app registered for this deployment | nothing to press |
  * | Disconnected | configured, nobody has authorised | Connect → the platform's own consent screen |
  * | Syncing | a run is open right now | nothing; pressing again would do nothing twice |
  * | Connected | authorised, with accounts and a last-sync time | Sync now, Reconnect |
  * | Error | the platform stopped accepting us | Reconnect, with the platform's reason shown |
+ *
+ * ## The two states this page must NOT explain (PROVCFG-001)
+ *
+ * `awaiting_credentials` and `unavailable` are both facts about the SYSTEM's configuration, and this
+ * page used to name the missing credential — «ينقص: developer_token». That is an instruction for the
+ * console at `/admin` addressed to the wrong reader: a customer cannot obtain a developer token for
+ * our OAuth app, and the shape of our provider registration is not theirs to be told. Both states now
+ * say the same true and sufficient thing — this needs the platform operator — and the named detail
+ * lives on the one screen whose reader can act on it.
  */
 
 /** Only these carry a state; the sandbox and analytics connectors keep the simpler status shape. */
@@ -40,8 +52,12 @@ const STATE_META: Record<PlatformState, { tone: 'success' | 'warning' | 'danger'
   syncing: { tone: 'info', ar: 'جارٍ المزامنة', en: 'Syncing' },
   error: { tone: 'danger', ar: 'خطأ', en: 'Error' },
   awaiting_credentials: { tone: 'warning', ar: 'بانتظار بيانات الاعتماد', en: 'Awaiting credentials' },
+  unavailable: { tone: 'neutral', ar: 'غير متاح حاليًا', en: 'Currently unavailable' },
   disconnected: { tone: 'neutral', ar: 'غير مربوط', en: 'Not connected' },
 }
+
+/** The two states a customer cannot act on, and the same honest sentence for both. */
+const NEEDS_OPERATOR: readonly PlatformState[] = ['awaiting_credentials', 'unavailable']
 
 const LEGACY_META: Record<Connector['status'], { tone: 'success' | 'warning' | 'danger' | 'neutral'; ar: string; en: string }> = {
   connected: { tone: 'success', ar: 'متصل', en: 'Connected' },
@@ -119,8 +135,23 @@ export function AdPlatformsPanel() {
     mutationFn: syncConnector,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['connectors'] }),
   })
+  /*
+   * Which client the accounts about to be discovered belong to (CONNECT-001).
+   *
+   * Only asked when the workspace HAS clients, which is what distinguishes an agency from an
+   * advertiser: an advertiser connecting its own accounts has exactly one answer and being asked for
+   * it is friction. An agency has five, and connecting "to nothing in particular" is how an ad
+   * account ends up attributed to whichever client somebody happened to be looking at.
+   *
+   * The empty string means «الوكالة نفسها» — a house account, which is a real answer and not a
+   * missing one.
+   */
+  const clients = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces })
+  const [clientWorkspaceId, setClientWorkspaceId] = useState('')
+  const clientChoices = clients.data ?? []
+
   const authorizeMutation = useMutation({
-    mutationFn: startPlatformOAuth,
+    mutationFn: (provider: string) => startPlatformOAuth(provider, clientWorkspaceId || null),
     // A full navigation, not a router push: the destination is the platform's own consent screen.
     onSuccess: ({ authorization_url }) => { window.location.assign(authorization_url) },
   })
@@ -175,6 +206,32 @@ export function AdPlatformsPanel() {
         <div role="alert" className="rounded-[12px] bg-[var(--warning-background)] px-4 py-3 text-sm text-warning">
           {actionError.message}
         </div>
+      )}
+
+      {clientChoices.length > 0 && (
+        <label
+          data-testid="connect-client-workspace"
+          className="flex flex-col gap-1.5 rounded-[12px] border border-border bg-surface p-3 sm:flex-row sm:items-center sm:gap-3"
+        >
+          <span className="text-sm font-bold text-text-primary">
+            {ar ? 'الحسابات التي ستُكتشف تخص' : 'The accounts discovered belong to'}
+          </span>
+          <select
+            value={clientWorkspaceId}
+            onChange={(e) => setClientWorkspaceId(e.target.value)}
+            className="rounded-xl border border-border bg-surface-secondary px-3 py-2 text-sm text-text-primary sm:max-w-xs"
+          >
+            <option value="">{ar ? 'مساحة العمل نفسها' : 'This workspace itself'}</option>
+            {clientChoices.map((w) => (
+              <option key={w.id} value={w.id}>{w.name}</option>
+            ))}
+          </select>
+          <span className="text-xs text-text-muted sm:ms-auto">
+            {ar
+              ? 'يُحدَّد قبل الربط ويُحفَظ مع الموافقة — لا يمكن تغييره من صفحة العودة.'
+              : 'Chosen before connecting and carried with the consent — the return page cannot change it.'}
+          </span>
+        </label>
       )}
 
       {query.isLoading ? (
@@ -233,15 +290,16 @@ function ConnectorCard({
       </div>
 
       <CardDescription>
-        {state === 'awaiting_credentials' ? (
+        {state && NEEDS_OPERATOR.includes(state) ? (
           /*
-           * Naming what is missing is the whole difference between a status and an instruction.
-           * Google Ads is the case that proves it: an OAuth client with no developer token
-           * authenticates cleanly and is then refused by every call.
+           * The same sentence for both, because from here they are the same fact: this platform is
+           * not open yet and nothing on this page will open it. Which system credential is absent —
+           * or why the operator suspended it — is deliberately not said; see the file's doc block.
            */
-          <span data-testid={`connector-missing-${c.key}`}>
-            {ar ? 'ينقص: ' : 'Missing: '}
-            <span className="font-mono text-xs">{(c.missing ?? []).join(', ')}</span>
+          <span data-testid={`connector-needs-operator-${c.key}`}>
+            {ar
+              ? 'هذه المنصة غير متاحة للربط حاليًا. يتولّى مشغّل المنصة تجهيزها.'
+              : 'This platform is not open for connecting yet. The platform operator is setting it up.'}
           </span>
         ) : state === 'error' ? (
           <span className="text-danger" data-testid={`connector-error-${c.key}`}>{c.connection_error}</span>
@@ -257,7 +315,7 @@ function ConnectorCard({
       </CardDescription>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {state === 'awaiting_credentials' ? (
+        {state && NEEDS_OPERATOR.includes(state) ? (
           /* Nothing to press: no button here can produce a connection, so none is offered. */
           <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
             <KeyRound size={13} /> {ar ? 'يحتاج إعدادًا من مشغّل المنصة' : 'Needs setup by the platform operator'}

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\Integration;
@@ -21,7 +22,10 @@ use Illuminate\Support\Carbon;
 
 final class IntegrationController extends Controller
 {
-    public function __construct(private readonly AdvertisingConnectorRegistry $registry) {}
+    public function __construct(
+        private readonly AdvertisingConnectorRegistry $registry,
+        private readonly ProviderConfigurationService $settings,
+    ) {}
 
     /** List every advertising connector with its live status and this tenant's connection (if any). */
     public function index(Request $request): JsonResponse
@@ -66,19 +70,29 @@ final class IntegrationController extends Controller
     }
 
     /**
-     * The four states one of the six ad platforms can honestly be in (INTEG-UI-001).
+     * The five states one of the six ad platforms can honestly be in, from a TENANT's point of view.
      *
-     * `Connected · Syncing · Error · Awaiting Credentials`, and they are answers to four different
-     * questions, which is why one status string could not carry them:
+     * They are answers to five different questions, which is why one status string could not carry
+     * them, and each admits a different action:
      *
-     * - **Awaiting Credentials** — this deployment has no app registered with the platform. Nothing
-     *   the customer does fixes it; an operator has to provision keys. So `missing` travels with it,
-     *   because «بانتظار بيانات الاعتماد» is not actionable and «ينقص: developer_token» is.
+     * - **Unavailable** — the platform operator has taken this provider out of service. Nothing the
+     *   customer does changes it and no button is offered. WHY it was taken out of service is not
+     *   said here: that is the operator's business, recorded in the audit trail at `/admin`.
+     * - **Awaiting Credentials** — this deployment has no app registered with the platform. Also not
+     *   the customer's to fix, so also no button.
      * - **Error** — we WERE connected and the platform stopped accepting us; almost always a revoked
      *   authorisation. The customer fixes this by connecting again, so the reason is shown.
      * - **Syncing** — a run is open right now. Without it, a customer who presses sync sees a page
      *   that looks exactly as it did before and presses it again.
      * - **Connected** — authorised, with the number of ad accounts and when data last arrived.
+     *
+     * ## What this deliberately no longer tells a tenant (PROVCFG-001)
+     *
+     * Which SYSTEM credential is absent. `missing: ['developer_token']` used to travel with the
+     * awaiting state, and it is an instruction for the console at `/admin` addressed to the wrong
+     * reader — a customer cannot obtain a developer token for our OAuth app, and telling them the
+     * shape of our provider registration is telling them about the platform's internals. The named
+     * list still exists, on the one screen whose reader can act on it.
      *
      * A platform with no entry in `config/ad_platforms.php` gets nothing here; this block belongs
      * only to the six, and the sandbox and analytics connectors keep their own simpler shape.
@@ -113,6 +127,9 @@ final class IntegrationController extends Controller
             ->exists();
 
         $state = match (true) {
+            // Ordered so an out-of-service provider reads as such even when its keys are complete —
+            // otherwise a tenant would be offered a connect button the OAuth start is going to refuse.
+            ! $this->settings->isEnabled($platform) => 'unavailable',
             ! $creds->isConfigured() => 'awaiting_credentials',
             $connection === null => 'disconnected',
             $syncing => 'syncing',
@@ -127,7 +144,6 @@ final class IntegrationController extends Controller
         return [
             'is_ad_platform' => true,
             'state' => $state,
-            'missing' => $creds->missing(),
             'accounts' => $accountIds->count(),
             'connection_error' => $connection?->last_error,
             'token_expires_at' => $connection?->token_expires_at?->toIso8601String(),

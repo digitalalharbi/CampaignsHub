@@ -13,15 +13,22 @@ import { renderWithProviders } from '@/test/utils'
  */
 
 const rows = vi.hoisted(() => ({ data: [] as Connector[] }))
-const started = vi.hoisted(() => ({ calls: [] as string[] }))
+const started = vi.hoisted(() => ({ calls: [] as Array<{ provider: string; clientWorkspaceId?: string | null }> }))
+const workspaces = vi.hoisted(() => ({ data: [] as Array<{ id: string; name: string }> }))
+
+// The client picker reads the tenant's own client workspaces — the `→ Client` link in the chain.
+vi.mock('@/features/projects/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  listClientWorkspaces: () => Promise.resolve(workspaces.data),
+}))
 
 vi.mock('./api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./api')>()
   return {
     ...actual,
     listConnectors: () => Promise.resolve(rows.data),
-    startPlatformOAuth: (provider: string) => {
-      started.calls.push(provider)
+    startPlatformOAuth: (provider: string, clientWorkspaceId?: string | null) => {
+      started.calls.push({ provider, clientWorkspaceId })
       return Promise.resolve({ authorization_url: `https://platform.test/authorize?provider=${provider}` })
     },
     syncConnector: () => Promise.resolve({ success: true, count: 1 }),
@@ -33,7 +40,7 @@ function connector(over: Partial<Connector> & Pick<Connector, 'key'>): Connector
   return {
     label: over.key, status: 'disconnected', ad_account_id: null,
     last_synced_at: null, last_sync_error: null, is_ad_platform: true,
-    state: 'disconnected', missing: [], accounts: 0,
+    state: 'disconnected', accounts: 0,
     connection_error: null, token_expires_at: null, data_last_synced_at: null,
     ...over,
   }
@@ -43,22 +50,43 @@ describe('IntegrationsPage — the four states', () => {
   afterEach(() => {
     rows.data = []
     started.calls = []
+    workspaces.data = []
   })
 
-  /** Awaiting credentials names the missing keys and offers nothing to press. */
-  it('an unconfigured platform says what is missing and gives no connect button', async () => {
-    rows.data = [connector({
-      key: 'google', label: 'Google Ads API', state: 'awaiting_credentials',
-      missing: ['developer_token'],
-    })]
+  /**
+   * Awaiting credentials offers nothing to press, and says nothing about the system's own keys.
+   *
+   * It used to print «ينقص: developer_token». That is an instruction for `/admin` addressed to the
+   * wrong reader — a customer cannot obtain a developer token for our OAuth app — so the named list
+   * moved to the console and this page says the true, sufficient thing instead (PROVCFG-001).
+   */
+  it('an unconfigured platform offers nothing to press and names no system credential', async () => {
+    rows.data = [connector({ key: 'google', label: 'Google Ads API', state: 'awaiting_credentials' })]
 
-    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+    const { container } = renderWithProviders(<IntegrationsPage />, { locale: 'en' })
 
     expect(await screen.findByTestId('connector-state-google')).toHaveTextContent('Awaiting credentials')
-    expect(screen.getByTestId('connector-missing-google')).toHaveTextContent('developer_token')
+    expect(screen.getByTestId('connector-needs-operator-google'))
+      .toHaveTextContent('not open for connecting yet')
+    expect(container.innerHTML).not.toContain('developer_token')
     // The distinction that matters: nobody using this page can fix it, so nothing invites them to try.
     expect(screen.queryByTestId('connector-connect-google')).not.toBeInTheDocument()
     expect(screen.getByText(/Needs setup by the platform operator/i)).toBeInTheDocument()
+  })
+
+  /**
+   * A provider the operator SUSPENDED is a different fact from one nobody has configured, and the
+   * data keeps them apart even though the sentence a customer reads is the same. What must not
+   * happen is a connect button the OAuth start is going to refuse anyway.
+   */
+  it('a provider the operator took out of service reads as unavailable and offers no connect button', async () => {
+    rows.data = [connector({ key: 'meta', label: 'Meta Marketing API', state: 'unavailable' })]
+
+    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('connector-state-meta')).toHaveTextContent('Currently unavailable')
+    expect(screen.queryByTestId('connector-connect-meta')).not.toBeInTheDocument()
+    expect(screen.getByTestId('connector-needs-operator-meta')).toBeInTheDocument()
   })
 
   /** …and a CONFIGURED platform nobody has authorised is the opposite: one clear action. */
@@ -70,7 +98,7 @@ describe('IntegrationsPage — the four states', () => {
     expect(await screen.findByTestId('connector-state-meta')).toHaveTextContent('Not connected')
     fireEvent.click(screen.getByTestId('connector-connect-meta'))
 
-    await vi.waitFor(() => expect(started.calls).toEqual(['meta']))
+    await vi.waitFor(() => expect(started.calls).toEqual([{ provider: 'meta', clientWorkspaceId: null }]))
   })
 
   it('a connected platform shows its accounts and when data last arrived', async () => {
@@ -164,5 +192,49 @@ describe('IntegrationsPage — the four states', () => {
     const line = screen.getByTestId('connector-synced-snapchat')
     expect(line).toHaveTextContent('3 حساب إعلاني')
     expect(line.textContent ?? '').not.toMatch(/[٠-٩]/)
+  })
+})
+
+/**
+ * CONNECT-001 — the `→ Client` link in the chain.
+ *
+ *     system provider configuration → user OAuth consent → external account → client → project
+ *
+ * The choice is made HERE, by an authenticated member, and travels inside the single-use state. It is
+ * asked only of a workspace that HAS clients: an advertiser connecting its own accounts has exactly
+ * one answer and being asked for it is friction, while an agency has five and connecting "to nothing
+ * in particular" is how an ad account ends up attributed to whoever was on screen at the time.
+ */
+describe('IntegrationsPage — which client the accounts belong to', () => {
+  afterEach(() => {
+    rows.data = []
+    started.calls = []
+    workspaces.data = []
+  })
+
+  it('does not ask an advertiser, who has only one possible answer', async () => {
+    rows.data = [connector({ key: 'meta', state: 'disconnected' })]
+
+    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+
+    await screen.findByTestId('connector-state-meta')
+    expect(screen.queryByTestId('connect-client-workspace')).not.toBeInTheDocument()
+  })
+
+  it('asks an agency, and carries the answer into the authorisation', async () => {
+    rows.data = [connector({ key: 'meta', state: 'disconnected' })]
+    workspaces.data = [{ id: 'ws-acme', name: 'Acme' }, { id: 'ws-beta', name: 'Beta' }]
+
+    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+
+    const picker = await screen.findByTestId('connect-client-workspace')
+    // The default is the workspace itself — a house account is a real answer, not a missing one.
+    expect(picker.querySelector('select')).toHaveValue('')
+
+    fireEvent.change(picker.querySelector('select')!, { target: { value: 'ws-beta' } })
+    fireEvent.click(screen.getByTestId('connector-connect-meta'))
+
+    await vi.waitFor(() => expect(started.calls)
+      .toEqual([{ provider: 'meta', clientWorkspaceId: 'ws-beta' }]))
   })
 })

@@ -1,13 +1,19 @@
 import { ensureCsrfCookie, getData, postData } from '@/lib/api/client'
 
 /**
- * The four states one of the six ad platforms can honestly be in (INTEG-UI-001).
+ * The states one of the six ad platforms can honestly be in, as a TENANT sees them (INTEG-UI-001).
  *
- * `disconnected` is the fifth and it is not a failure: the platform is configured and simply nobody
- * has authorised it yet. Collapsing it into `awaiting_credentials` — the shape this page had before —
- * told an operator to go and find keys that were already provisioned.
+ * `disconnected` is not a failure: the platform is configured and simply nobody has authorised it
+ * yet. Collapsing it into `awaiting_credentials` — the shape this page had before — told an operator
+ * to go and find keys that were already provisioned.
+ *
+ * `unavailable` (PROVCFG-001) is the provider the platform operator has taken out of service. It is
+ * kept apart from `awaiting_credentials` in the DATA even though the page says the same sentence for
+ * both, because they are different facts and a future surface may need to tell them apart — one is
+ * a setup that has not happened, the other a decision that has.
  */
-export type PlatformState = 'connected' | 'syncing' | 'error' | 'awaiting_credentials' | 'disconnected'
+export type PlatformState =
+  | 'connected' | 'syncing' | 'error' | 'awaiting_credentials' | 'unavailable' | 'disconnected'
 
 export interface Connector {
   key: string
@@ -19,8 +25,11 @@ export interface Connector {
   /** Present only for the six ad platforms; the sandbox and analytics connectors keep the old shape. */
   is_ad_platform?: boolean
   state?: PlatformState
-  /** Which configured values are absent — what a setup page has to be told, not just "awaiting". */
-  missing?: string[]
+  /*
+   * There is deliberately no `missing` here any more. The list of absent SYSTEM credentials was being
+   * served to tenants, and it is an instruction for `/admin` addressed to the wrong reader — see the
+   * doc block on `IntegrationsPage`.
+   */
   accounts?: number
   connection_error?: string | null
   token_expires_at?: string | null
@@ -44,9 +53,26 @@ export async function connectConnector(key: string): Promise<{ key: string; stat
  * facebook.com would be followed by the fetch and swallowed, and the customer would sit on a page
  * where nothing happened. The caller navigates.
  */
-export async function startPlatformOAuth(provider: string): Promise<{ authorization_url: string }> {
+/**
+ * Begin the customer's own authorisation (CONNECT-001).
+ *
+ * `clientWorkspaceId` is the `→ Client` link in the chain the architecture requires:
+ *
+ *     system provider configuration → user OAuth consent → external account → client → project
+ *
+ * It travels inside the single-use `state`, never in the callback's query string, so the workspace an
+ * account lands in is the one chosen HERE by an authenticated member — not one a returning browser
+ * could name for itself.
+ */
+export async function startPlatformOAuth(
+  provider: string,
+  clientWorkspaceId?: string | null,
+): Promise<{ authorization_url: string }> {
   await ensureCsrfCookie()
-  return postData<{ authorization_url: string }>(`/integrations/${provider}/oauth/start`)
+  return postData<{ authorization_url: string }>(
+    `/integrations/${provider}/oauth/start`,
+    clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {},
+  )
 }
 
 export async function syncConnector(key: string): Promise<{ success: boolean; count: number }> {

@@ -11,6 +11,7 @@ import { Field } from '@/components/ui/Field'
 import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
+import { usePortalPath } from '@/app/portalPath'
 import { useT } from '@/lib/i18n'
 
 const ROLES = [
@@ -27,6 +28,7 @@ const ROLES = [
 
 export function ProjectTeamPage() {
   const t = useT()
+  const portalPath = usePortalPath()
   const queryClient = useQueryClient()
   const { projectId = '' } = useParams()
   const [userId, setUserId] = useState('')
@@ -62,7 +64,7 @@ export function ProjectTeamPage() {
           <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('project_team')}</h1>
           <p className="mt-1 text-sm text-text-secondary">{t('project_team_hint')}</p>
         </div>
-        <Link to={`/projects/${projectId}/integrations`} className="text-xs font-bold text-brand-600 hover:underline">
+        <Link to={portalPath(`/projects/${projectId}/integrations`)} className="text-xs font-bold text-brand-600 hover:underline">
           {t('integrations')} →
         </Link>
       </div>
