@@ -100,6 +100,143 @@ final class MetaConnector extends ApiAdvertisingConnector
         return $campaigns;
     }
 
+    protected function fetchAdSets(OAuthTokens $tokens, string $adAccountId): array
+    {
+        $body = $this->read(
+            $this->api($tokens)->get($this->url("{$adAccountId}/adsets"), [
+                'fields' => 'id,name,status,campaign_id,optimization_goal,bid_strategy,daily_budget,lifetime_budget,targeting,start_time,end_time',
+                'limit' => 500,
+            ]),
+            'ad sets',
+        );
+
+        $sets = [];
+
+        foreach ((array) ($body['data'] ?? []) as $s) {
+            if (($s['id'] ?? null) === null || ($s['campaign_id'] ?? null) === null) {
+                continue;
+            }
+
+            $sets[] = [
+                'external_id' => (string) $s['id'],
+                'campaign_external_id' => (string) $s['campaign_id'],
+                'name' => (string) ($s['name'] ?? $s['id']),
+                'status' => strtolower((string) ($s['status'] ?? 'unknown')),
+                'optimization_goal' => isset($s['optimization_goal']) ? strtolower((string) $s['optimization_goal']) : null,
+                'bid_strategy' => isset($s['bid_strategy']) ? strtolower((string) $s['bid_strategy']) : null,
+                // Minor units of the account currency, as with campaigns.
+                'daily_budget' => isset($s['daily_budget']) ? (float) $s['daily_budget'] / 100 : null,
+                'lifetime_budget' => isset($s['lifetime_budget']) ? (float) $s['lifetime_budget'] / 100 : null,
+                'currency' => null,
+                'targeting' => $this->readableTargeting($s['targeting'] ?? null),
+                'starts_at' => isset($s['start_time']) ? (string) $s['start_time'] : null,
+                'ends_at' => isset($s['end_time']) ? (string) $s['end_time'] : null,
+                'raw' => (array) $s,
+            ];
+        }
+
+        return $sets;
+    }
+
+    protected function fetchAds(OAuthTokens $tokens, string $adAccountId): array
+    {
+        $body = $this->read(
+            $this->api($tokens)->get($this->url("{$adAccountId}/ads"), [
+                'fields' => 'id,name,status,effective_status,adset_id,campaign_id,preview_shareable_link,creative{id,name,thumbnail_url,object_type}',
+                'limit' => 500,
+            ]),
+            'ads',
+        );
+
+        $ads = [];
+
+        foreach ((array) ($body['data'] ?? []) as $a) {
+            if (($a['id'] ?? null) === null) {
+                continue;
+            }
+
+            /** @var array<string,mixed> $creative */
+            $creative = (array) ($a['creative'] ?? []);
+
+            $ads[] = array_filter([
+                'external_id' => (string) $a['id'],
+                'ad_set_external_id' => isset($a['adset_id']) ? (string) $a['adset_id'] : null,
+                'campaign_external_id' => isset($a['campaign_id']) ? (string) $a['campaign_id'] : null,
+                'name' => (string) ($a['name'] ?? $a['id']),
+                'status' => strtolower((string) ($a['status'] ?? 'unknown')),
+                'review_status' => $this->reviewStatus($a['effective_status'] ?? null),
+                'destination_url' => null, // Meta states it inside the creative's story spec, not on the ad
+                'creative' => isset($creative['id']) ? array_filter([
+                    'external_id' => (string) $creative['id'],
+                    'name' => isset($creative['name']) ? (string) $creative['name'] : null,
+                    'format' => $this->creativeFormat($creative['object_type'] ?? null),
+                    // Passed through when Meta sends one; never constructed.
+                    'thumbnail_url' => isset($creative['thumbnail_url']) ? (string) $creative['thumbnail_url'] : null,
+                    'preview_url' => isset($a['preview_shareable_link']) ? (string) $a['preview_shareable_link'] : null,
+                ], static fn ($v) => $v !== null) : null,
+                'raw' => (array) $a,
+            ], static fn ($v) => $v !== null);
+        }
+
+        return $ads;
+    }
+
+    /**
+     * Meta's `effective_status` answers two questions at once, and only one of them is about review.
+     *
+     * `PAUSED`, `CAMPAIGN_PAUSED` and `ADSET_PAUSED` say who turned the ad off — nothing about whether
+     * it was ever approved. Mapping them onto a review verdict would put «معتمد» or «مرفوض» on an ad
+     * whose review Meta has not commented on, so anything that is not a review answer stays null.
+     */
+    private function reviewStatus(mixed $effective): ?string
+    {
+        return match (strtoupper((string) $effective)) {
+            'ACTIVE' => 'approved',
+            'PENDING_REVIEW', 'IN_PROCESS' => 'pending',
+            'DISAPPROVED', 'WITH_ISSUES' => 'rejected',
+            default => null,
+        };
+    }
+
+    private function creativeFormat(mixed $objectType): ?string
+    {
+        return match (strtoupper((string) $objectType)) {
+            'VIDEO' => 'video',
+            'PHOTO', 'SHARE' => 'image',
+            'DOMAIN' => 'carousel',
+            default => null,
+        };
+    }
+
+    /**
+     * Meta's targeting object is enormous and mostly ids; the panel shows the few keys a human reads.
+     *
+     * The whole object is kept in `raw` regardless, so nothing is lost — this decides only what is
+     * rendered as a chip, and a wall of numeric interest ids is not information.
+     *
+     * @return array<string,mixed>|null
+     */
+    private function readableTargeting(mixed $targeting): ?array
+    {
+        if (! is_array($targeting)) {
+            return null;
+        }
+
+        $readable = array_filter([
+            'countries' => $targeting['geo_locations']['countries'] ?? null,
+            'cities' => array_map(
+                static fn (array $c): string => (string) ($c['name'] ?? ''),
+                array_filter((array) ($targeting['geo_locations']['cities'] ?? []), 'is_array'),
+            ) ?: null,
+            'age_min' => $targeting['age_min'] ?? null,
+            'age_max' => $targeting['age_max'] ?? null,
+            'genders' => $targeting['genders'] ?? null,
+            'platforms' => $targeting['publisher_platforms'] ?? null,
+        ], static fn ($v) => $v !== null && $v !== []);
+
+        return $readable === [] ? null : $readable;
+    }
+
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
         $body = $this->read(

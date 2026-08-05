@@ -53,6 +53,18 @@ Schedule::command('alerts:evaluate')->everyFifteenMinutes();
 Schedule::command('integrations:sync')->everyThirtyMinutes()->withoutOverlapping();
 
 /*
+ * Structure discovery (STRUCT-001) — campaigns, ad sets, ads and creatives.
+ *
+ * Six-hourly rather than half-hourly: a hierarchy changes when a human changes it, and each pass is
+ * four calls per account against APIs that count them.
+ *
+ * It runs at :55, five minutes AHEAD of the metrics sweep on the hour, so discovery lands first —
+ * `AccountMetricsSyncer` DROPS an insight row for a campaign it has never seen and reports the run as
+ * partial, so a campaign created since the last pass would otherwise lose its first day of spend.
+ */
+Schedule::command('integrations:sync-structure')->cron('55 */6 * * *')->withoutOverlapping();
+
+/*
  * Refresh tokens BEFORE a sync needs them.
  *
  * The vault refreshes on use too, but discovering a revoked authorisation from a queue worker at 3am

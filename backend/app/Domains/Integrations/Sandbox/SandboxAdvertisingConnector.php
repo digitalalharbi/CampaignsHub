@@ -61,6 +61,22 @@ final class SandboxAdvertisingConnector implements AdvertisingConnector
         ], 'Sandbox campaigns.');
     }
 
+    public function syncAdSets(string $adAccountId): SyncResult
+    {
+        return SyncResult::of([
+            ['external_id' => 'sbx-set-1', 'campaign_external_id' => 'sbx-cmp-1', 'name' => 'Sandbox Broad', 'status' => 'active', 'optimization_goal' => 'reach', 'bid_strategy' => 'lowest_cost', 'daily_budget' => 50.0, 'currency' => 'SAR', 'targeting' => ['countries' => ['SA']], 'raw' => ['sandbox' => true]],
+            ['external_id' => 'sbx-set-2', 'campaign_external_id' => 'sbx-cmp-2', 'name' => 'Sandbox Retargeting', 'status' => 'paused', 'optimization_goal' => 'conversions', 'bid_strategy' => 'cost_cap', 'daily_budget' => 120.0, 'currency' => 'SAR', 'targeting' => ['countries' => ['SA']], 'raw' => ['sandbox' => true]],
+        ], 'Sandbox ad sets.');
+    }
+
+    public function syncAds(string $adAccountId): SyncResult
+    {
+        return SyncResult::of([
+            ['external_id' => 'sbx-ad-1', 'ad_set_external_id' => 'sbx-set-1', 'campaign_external_id' => 'sbx-cmp-1', 'name' => 'Sandbox Video Ad', 'status' => 'active', 'review_status' => 'approved', 'destination_url' => 'https://sandbox.local/landing', 'creative' => ['external_id' => 'sbx-crv-1', 'name' => 'Sandbox Video', 'format' => 'video'], 'raw' => ['sandbox' => true]],
+            ['external_id' => 'sbx-ad-2', 'ad_set_external_id' => 'sbx-set-2', 'campaign_external_id' => 'sbx-cmp-2', 'name' => 'Sandbox Image Ad', 'status' => 'paused', 'review_status' => 'pending', 'destination_url' => 'https://sandbox.local/landing', 'creative' => ['external_id' => 'sbx-crv-2', 'name' => 'Sandbox Image', 'format' => 'image'], 'raw' => ['sandbox' => true]],
+        ], 'Sandbox ads.');
+    }
+
     public function syncInsights(string $adAccountId, string $from, string $to): SyncResult
     {
         return SyncResult::of([

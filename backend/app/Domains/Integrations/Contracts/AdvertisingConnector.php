@@ -45,5 +45,23 @@ interface AdvertisingConnector
 
     public function syncCampaigns(string $adAccountId): SyncResult;
 
+    /**
+     * The targeting-and-budget layer beneath a campaign (STRUCT-001).
+     *
+     * Meta calls it an ad set, Google and TikTok an ad group, Snapchat an ad squad and X a line item.
+     * A platform that genuinely has no such level — LinkedIn — returns an EMPTY result rather than one
+     * synthesised row per campaign, and its ads hang directly off the campaign instead.
+     */
+    public function syncAdSets(string $adAccountId): SyncResult;
+
+    /**
+     * The ads themselves, each carrying whatever the platform says about its creative.
+     *
+     * A row names its parents by the PLATFORM's ids (`ad_set_external_id`, `campaign_external_id`),
+     * not ours, because the connector has never seen our rows and resolving them here would need a
+     * database lookup inside an adapter.
+     */
+    public function syncAds(string $adAccountId): SyncResult;
+
     public function syncInsights(string $adAccountId, string $from, string $to): SyncResult;
 }

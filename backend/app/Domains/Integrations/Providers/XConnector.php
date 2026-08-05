@@ -90,6 +90,101 @@ final class XConnector extends ApiAdvertisingConnector
         return $campaigns;
     }
 
+    protected function fetchAdSets(OAuthTokens $tokens, string $adAccountId): array
+    {
+        $body = $this->read(
+            $this->api($tokens)->get($this->url("accounts/{$adAccountId}/line_items"), ['count' => 200]),
+            'line items',
+        );
+
+        $items = [];
+
+        foreach ((array) ($body['data'] ?? []) as $l) {
+            if (($l['id'] ?? null) === null || ($l['campaign_id'] ?? null) === null) {
+                continue;
+            }
+
+            $items[] = [
+                'external_id' => (string) $l['id'],
+                'campaign_external_id' => (string) $l['campaign_id'],
+                'name' => (string) ($l['name'] ?? $l['id']),
+                'status' => strtolower((string) ($l['entity_status'] ?? 'unknown')),
+                'optimization_goal' => isset($l['goal']) ? strtolower((string) $l['goal']) : null,
+                'bid_strategy' => isset($l['bid_strategy']) ? strtolower((string) $l['bid_strategy']) : null,
+                // X budgets the campaign; a line item carries a bid and a total, not a daily budget.
+                'daily_budget' => null,
+                'lifetime_budget' => isset($l['total_budget_amount_local_micro'])
+                    ? (float) $l['total_budget_amount_local_micro'] / self::MICRO
+                    : null,
+                'currency' => isset($l['currency']) ? (string) $l['currency'] : null,
+                'targeting' => array_filter([
+                    'product_type' => isset($l['product_type']) ? strtolower((string) $l['product_type']) : null,
+                    'placements' => $l['placements'] ?? null,
+                ], static fn ($v) => $v !== null && $v !== []) ?: null,
+                'starts_at' => isset($l['start_time']) ? (string) $l['start_time'] : null,
+                'ends_at' => isset($l['end_time']) ? (string) $l['end_time'] : null,
+                'raw' => (array) $l,
+            ];
+        }
+
+        return $items;
+    }
+
+    /**
+     * X's ads are promoted tweets, and a promoted tweet names only its line item.
+     *
+     * The campaign is therefore resolved from the line items — one extra call, rather than leaving
+     * every ad unattached to a campaign and letting the importer guess.
+     */
+    protected function fetchAds(OAuthTokens $tokens, string $adAccountId): array
+    {
+        $campaignOfLineItem = [];
+
+        foreach ($this->fetchAdSets($tokens, $adAccountId) as $lineItem) {
+            $campaignOfLineItem[$lineItem['external_id']] = $lineItem['campaign_external_id'];
+        }
+
+        $body = $this->read(
+            $this->api($tokens)->get($this->url("accounts/{$adAccountId}/promoted_tweets"), ['count' => 200]),
+            'promoted tweets',
+        );
+
+        $ads = [];
+
+        foreach ((array) ($body['data'] ?? []) as $p) {
+            if (($p['id'] ?? null) === null) {
+                continue;
+            }
+
+            $lineItemId = isset($p['line_item_id']) ? (string) $p['line_item_id'] : null;
+            $tweetId = isset($p['tweet_id']) ? (string) $p['tweet_id'] : null;
+
+            $ads[] = array_filter([
+                'external_id' => (string) $p['id'],
+                'ad_set_external_id' => $lineItemId,
+                'campaign_external_id' => $lineItemId === null ? null : ($campaignOfLineItem[$lineItemId] ?? null),
+                // A promoted tweet has no name of its own; the tweet it promotes is its identity.
+                'name' => $tweetId !== null ? "Tweet {$tweetId}" : (string) $p['id'],
+                'status' => strtolower((string) ($p['entity_status'] ?? 'unknown')),
+                'review_status' => match (strtoupper((string) ($p['approval_status'] ?? ''))) {
+                    'ACCEPTED' => 'approved',
+                    'UNDER_APPEAL', 'PENDING' => 'pending',
+                    'REJECTED' => 'rejected',
+                    default => null,
+                },
+                'destination_url' => null,
+                'creative' => $tweetId === null ? null : [
+                    'external_id' => $tweetId,
+                    'name' => "Tweet {$tweetId}",
+                    'format' => 'text',
+                ],
+                'raw' => (array) $p,
+            ], static fn ($v) => $v !== null);
+        }
+
+        return $ads;
+    }
+
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
         $campaignIds = array_map(

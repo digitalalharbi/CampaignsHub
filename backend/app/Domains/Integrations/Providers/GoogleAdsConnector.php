@@ -113,6 +113,106 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector
         return $campaigns;
     }
 
+    protected function fetchAdSets(OAuthTokens $tokens, string $adAccountId): array
+    {
+        $rows = $this->stream($tokens, $adAccountId, <<<'GAQL'
+            SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.type,
+                   ad_group.cpc_bid_micros, ad_group.target_cpa_micros, campaign.id
+            FROM ad_group
+            WHERE ad_group.status != 'REMOVED'
+            GAQL);
+
+        $groups = [];
+
+        foreach ($rows as $row) {
+            /** @var array<string,mixed> $group */
+            $group = (array) ($row['adGroup'] ?? []);
+            /** @var array<string,mixed> $campaign */
+            $campaign = (array) ($row['campaign'] ?? []);
+
+            if (($group['id'] ?? null) === null || ($campaign['id'] ?? null) === null) {
+                continue;
+            }
+
+            $groups[] = [
+                'external_id' => (string) $group['id'],
+                'campaign_external_id' => (string) $campaign['id'],
+                'name' => (string) ($group['name'] ?? $group['id']),
+                'status' => strtolower((string) ($group['status'] ?? 'unknown')),
+                // Google states the optimisation target on the campaign's bidding strategy, not on the
+                // ad group — so this level genuinely has none, and null is the true answer rather than
+                // `ad_group.type` dressed up as a goal.
+                'optimization_goal' => null,
+                'bid_strategy' => isset($group['targetCpaMicros']) ? 'target_cpa' : (isset($group['cpcBidMicros']) ? 'manual_cpc' : null),
+                /*
+                 * Google budgets a CAMPAIGN, never an ad group.
+                 *
+                 * Copying the campaign's budget down would show the same figure on every ad group
+                 * beneath it, and an operator reading four ad groups at «100 ر.س / يوم» would conclude
+                 * the campaign spends four hundred.
+                 */
+                'daily_budget' => null,
+                'lifetime_budget' => null,
+                'currency' => null,
+                'targeting' => null, // criteria are separate resources; not fetched at this level
+                'raw' => $row,
+            ];
+        }
+
+        return $groups;
+    }
+
+    protected function fetchAds(OAuthTokens $tokens, string $adAccountId): array
+    {
+        $rows = $this->stream($tokens, $adAccountId, <<<'GAQL'
+            SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type,
+                   ad_group_ad.ad.final_urls, ad_group_ad.status,
+                   ad_group_ad.policy_summary.approval_status, ad_group.id, campaign.id
+            FROM ad_group_ad
+            WHERE ad_group_ad.status != 'REMOVED'
+            GAQL);
+
+        $ads = [];
+
+        foreach ($rows as $row) {
+            /** @var array<string,mixed> $adGroupAd */
+            $adGroupAd = (array) ($row['adGroupAd'] ?? []);
+            /** @var array<string,mixed> $ad */
+            $ad = (array) ($adGroupAd['ad'] ?? []);
+
+            if (($ad['id'] ?? null) === null) {
+                continue;
+            }
+
+            $finalUrls = array_values(array_filter((array) ($ad['finalUrls'] ?? []), 'is_string'));
+
+            $ads[] = array_filter([
+                'external_id' => (string) $ad['id'],
+                'ad_set_external_id' => isset($row['adGroup']['id']) ? (string) $row['adGroup']['id'] : null,
+                'campaign_external_id' => isset($row['campaign']['id']) ? (string) $row['campaign']['id'] : null,
+                // Google's responsive ads are frequently unnamed; the id is the only honest label.
+                'name' => (string) ($ad['name'] ?? $ad['id']),
+                'status' => strtolower((string) ($adGroupAd['status'] ?? 'unknown')),
+                'review_status' => match (strtoupper((string) (($adGroupAd['policySummary']['approvalStatus'] ?? '')))) {
+                    'APPROVED' => 'approved',
+                    'APPROVED_LIMITED', 'AREA_OF_INTEREST_ONLY' => 'pending',
+                    'DISAPPROVED' => 'rejected',
+                    default => null,
+                },
+                'destination_url' => $finalUrls[0] ?? null,
+                /*
+                 * Google has no creative object beneath an ad — the ad IS the creative. So there is no
+                 * separate row to make, and inventing one per ad would double every ad in the panel
+                 * for no information at all. The ad's type is kept in `raw`.
+                 */
+                'creative' => null,
+                'raw' => $row,
+            ], static fn ($v) => $v !== null);
+        }
+
+        return $ads;
+    }
+
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
         $rows = $this->stream($tokens, $adAccountId, <<<GAQL

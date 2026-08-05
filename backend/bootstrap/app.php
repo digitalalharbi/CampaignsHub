@@ -8,6 +8,7 @@ use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
+use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
 use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Reports\Console\DispatchScheduledReports;
 use App\Domains\Reports\Console\InvalidateLegacyExportsCommand;
@@ -60,6 +61,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // INTEG-SYNC-001 — the sweep that drives synced data, the token refresh that runs ahead of
         // need, and the retention that keeps raw payloads from becoming the largest table here.
         SyncAdPlatformsCommand::class,
+        // STRUCT-001 — the discovery half: campaigns, ad sets, ads and creatives, on its own cadence.
+        SyncAdPlatformStructureCommand::class,
         RefreshAdPlatformTokensCommand::class,
         PruneRawPayloadsCommand::class,
     ])

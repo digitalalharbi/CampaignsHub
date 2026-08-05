@@ -46,6 +46,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
         Route::get('campaigns/{campaign}/sync-log', [CampaignMetricsController::class, 'syncLog'])->name('sync-log');
         // CAMPDET-010: the real ad-set / ad hierarchy beneath the campaign.
         Route::get('campaigns/{campaign}/structure', [CampaignStructureController::class, 'index'])->name('structure');
+        // STRUCT-001: queue the same discovery the scheduler runs, for this campaign's accounts.
+        Route::post('campaigns/{campaign}/structure/sync', [CampaignStructureController::class, 'sync'])
+            ->middleware('throttle:12,1')->name('structure.sync');
         // XREL-001: everything this campaign is connected to, one click away.
         Route::get('campaigns/{campaign}/related', [RelatedEntitiesController::class, 'campaign'])->name('related');
         Route::get('campaigns/{campaign}/creatives', [CampaignCreativesController::class, 'index'])->name('creatives');

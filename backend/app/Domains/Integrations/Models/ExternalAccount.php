@@ -18,12 +18,14 @@ final class ExternalAccount extends Model
     protected $fillable = [
         'tenant_id', 'client_workspace_id', 'provider_connection_id', 'provider', 'account_type',
         'external_id', 'parent_external_id', 'name', 'currency', 'timezone', 'status', 'metadata',
-        'last_synced_at',
+        'last_synced_at', 'last_structure_synced_at',
     ];
 
     protected $casts = [
         'metadata' => 'array',
         'last_synced_at' => 'datetime',
+        // STRUCT-001: structure and metrics run on different clocks, so they have different columns.
+        'last_structure_synced_at' => 'datetime',
     ];
 
     /** @return BelongsTo<ProviderConnection, $this> */

@@ -51,6 +51,16 @@ abstract class AwaitingCredentialsConnector implements AdvertisingConnector
         return SyncResult::failed($this->label().' is awaiting credentials.');
     }
 
+    public function syncAdSets(string $adAccountId): SyncResult
+    {
+        return SyncResult::failed($this->label().' is awaiting credentials.');
+    }
+
+    public function syncAds(string $adAccountId): SyncResult
+    {
+        return SyncResult::failed($this->label().' is awaiting credentials.');
+    }
+
     public function syncInsights(string $adAccountId, string $from, string $to): SyncResult
     {
         return SyncResult::failed($this->label().' is awaiting credentials.');

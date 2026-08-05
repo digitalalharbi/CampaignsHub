@@ -76,6 +76,27 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
     abstract protected function fetchCampaigns(OAuthTokens $tokens, string $adAccountId): array;
 
     /**
+     * The layer beneath a campaign, in this platform's own words (STRUCT-001).
+     *
+     * `campaign_external_id` is the PLATFORM's campaign id, because the connector has never seen our
+     * rows and cannot resolve one. A platform with no such level returns `[]`.
+     *
+     * @return list<array{external_id:string,campaign_external_id:string,name:string,status:string,optimization_goal?:?string,bid_strategy?:?string,daily_budget?:?float,lifetime_budget?:?float,currency?:?string,targeting?:?array<string,mixed>,starts_at?:?string,ends_at?:?string,raw:array<string,mixed>}>
+     */
+    abstract protected function fetchAdSets(OAuthTokens $tokens, string $adAccountId): array;
+
+    /**
+     * The ads, each with whatever the platform says about its creative.
+     *
+     * `creative` is present only when the platform actually identifies one. A thumbnail or preview URL
+     * is passed through or left null — never constructed, because a fabricated preview is indist-
+     * inguishable from a real one at a glance and wrong in a way nobody checks.
+     *
+     * @return list<array{external_id:string,ad_set_external_id:?string,campaign_external_id:?string,name:string,status:string,review_status?:?string,destination_url?:?string,creative?:array{external_id:string,name?:?string,format?:?string,thumbnail_url?:?string,preview_url?:?string},raw:array<string,mixed>}>
+     */
+    abstract protected function fetchAds(OAuthTokens $tokens, string $adAccountId): array;
+
+    /**
      * Daily rows, one per campaign per day, in the shape `AccountMetricsSyncer::ingest()` reads.
      *
      * @return list<array{campaign_id:string,date:string,spend?:float,impressions?:float,clicks?:float,conversions?:float,revenue?:float,reach?:float,video_views?:float}>
@@ -202,6 +223,34 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
 
         try {
             return SyncResult::of($this->fetchCampaigns($this->tokens(), $adAccountId));
+        } catch (Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+    }
+
+    public function syncAdSets(string $adAccountId): SyncResult
+    {
+        $refusal = $this->refusal();
+        if ($refusal !== null) {
+            return $refusal;
+        }
+
+        try {
+            return SyncResult::of($this->fetchAdSets($this->tokens(), $adAccountId));
+        } catch (Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+    }
+
+    public function syncAds(string $adAccountId): SyncResult
+    {
+        $refusal = $this->refusal();
+        if ($refusal !== null) {
+            return $refusal;
+        }
+
+        try {
+            return SyncResult::of($this->fetchAds($this->tokens(), $adAccountId));
         } catch (Throwable $e) {
             return SyncResult::failed($e->getMessage());
         }

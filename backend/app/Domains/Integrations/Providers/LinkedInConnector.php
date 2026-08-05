@@ -87,6 +87,73 @@ final class LinkedInConnector extends ApiAdvertisingConnector
         return $campaigns;
     }
 
+    /**
+     * LinkedIn has no ad-set level, and this method says so by returning nothing.
+     *
+     * Its hierarchy is campaign group → campaign → creative. What this product already calls an
+     * external campaign IS a LinkedIn campaign — the level that carries the targeting and the budget —
+     * so beneath it there is a creative and nothing in between. Synthesising one ad set per campaign
+     * to make the shape match the other five would put a row on the screen that LinkedIn never
+     * returned; the schema lets an ad hang directly off its campaign instead (STRUCT-001).
+     */
+    protected function fetchAdSets(OAuthTokens $tokens, string $adAccountId): array
+    {
+        return [];
+    }
+
+    protected function fetchAds(OAuthTokens $tokens, string $adAccountId): array
+    {
+        $body = $this->read(
+            $this->api($tokens)->get($this->url("adAccounts/{$adAccountId}/creatives"), ['q' => 'criteria']),
+            'creatives',
+        );
+
+        $ads = [];
+
+        foreach ((array) ($body['elements'] ?? []) as $c) {
+            $id = $this->idFromUrn($c['id'] ?? null, 'sponsoredCreative');
+            $campaignId = $this->idFromUrn($c['campaign'] ?? null, 'sponsoredCampaign');
+
+            if ($id === null) {
+                continue;
+            }
+
+            $ads[] = array_filter([
+                'external_id' => $id,
+                'ad_set_external_id' => null, // there is no such level on LinkedIn
+                'campaign_external_id' => $campaignId,
+                // LinkedIn creatives carry no name; the id is the only label it gives one.
+                'name' => "Creative {$id}",
+                'status' => strtolower((string) ($c['intendedStatus'] ?? 'unknown')),
+                'review_status' => match (strtoupper((string) ($c['reviewStatus'] ?? ''))) {
+                    'APPROVED' => 'approved',
+                    'PENDING', 'IN_REVIEW' => 'pending',
+                    'REJECTED' => 'rejected',
+                    default => null,
+                },
+                'destination_url' => null,
+                // The creative IS the ad here, so a separate creative row would be the same thing
+                // twice under two names.
+                'creative' => null,
+                'raw' => (array) $c,
+            ], static fn ($v) => $v !== null);
+        }
+
+        return $ads;
+    }
+
+    /** `urn:li:sponsoredCreative:123` → `"123"`, and anything else → null. */
+    private function idFromUrn(mixed $urn, string $type): ?string
+    {
+        if (! is_string($urn) || ! str_contains($urn, $type.':')) {
+            return null;
+        }
+
+        $id = substr($urn, strrpos($urn, ':') + 1);
+
+        return $id === '' ? null : $id;
+    }
+
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
         $body = $this->read(

@@ -14,9 +14,11 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Jobs\SyncAccountStructureJob;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
@@ -30,6 +32,7 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
 use Tests\TestCase;
@@ -341,10 +344,14 @@ final class CampaignMetricsTest extends TestCase
     }
 
     /**
-     * CAMPDET-010: the structure endpoint must tell three different situations apart, because "empty"
-     * for three different reasons is three different instructions to the user.
+     * CAMPDET-010, extended by STRUCT-001: the structure endpoint must tell FOUR situations apart,
+     * because "empty" for four different reasons is four different instructions to the user.
+     *
+     * The fourth — the platform holds no credentials on this install — used to be indistinguishable
+     * from «never synced», which sent the reader to press a discovery button that could not possibly
+     * have worked.
      */
-    public function test_structure_distinguishes_not_linked_from_not_synced_from_ready(): void
+    public function test_structure_distinguishes_not_linked_from_awaiting_credentials_from_not_synced_from_ready(): void
     {
         // 1) Nothing linked at all.
         $this->actingAs($this->owner)
@@ -371,10 +378,24 @@ final class CampaignMetricsTest extends TestCase
         ]);
         app(TenantContext::class)->forget();
 
+        // 2a) Linked, but Meta holds no credentials here — so nothing could ever have been pulled,
+        // and the answer is not «press sync».
         $this->actingAs($this->owner)
             ->getJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/structure")
             ->assertOk()
-            ->assertJsonPath('data.state', 'not_synced');
+            ->assertJsonPath('data.state', 'awaiting_credentials')
+            ->assertJsonPath('data.awaiting_credentials', ['meta']);
+
+        // 2b) With credentials in place, the same emptiness means the discovery has not run yet.
+        foreach (PlatformCredentials::for('meta')->requires() as $key) {
+            config()->set("ad_platforms.platforms.meta.{$key}", "test-{$key}");
+        }
+
+        $this->actingAs($this->owner)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/structure")
+            ->assertOk()
+            ->assertJsonPath('data.state', 'not_synced')
+            ->assertJsonPath('data.awaiting_credentials', []);
 
         // 3) The hierarchy exists.
         $adSet = ExternalAdSet::create([
@@ -407,5 +428,104 @@ final class CampaignMetricsTest extends TestCase
             ->getJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA2->id}/structure")
             ->assertOk()
             ->assertJsonPath('data.state', 'not_linked');
+    }
+
+    /**
+     * STRUCT-001 — an ad with no ad set is still an ad, and must not disappear.
+     *
+     * LinkedIn has no ad-set level, so its ads hang directly off the campaign. A reader that only
+     * walked the ad sets would show a LinkedIn campaign as empty while its ads sat in the table —
+     * which is the bug the nullable column would otherwise have introduced.
+     */
+    public function test_an_ad_with_no_ad_set_is_returned_beside_the_ad_sets_rather_than_hidden(): void
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+        $credential = new IntegrationCredential(['provider' => 'linkedin', 'credential_scope' => 'project_only', 'credential_type' => 'oauth', 'status' => 'active']);
+        $credential->setPayload('t');
+        $credential->save();
+        $connection = ProviderConnection::create(['credential_id' => $credential->id, 'provider' => 'linkedin', 'connection_name' => 'l', 'scope' => 'project_only', 'status' => 'connected']);
+        $account = ExternalAccount::create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id, 'provider' => 'linkedin',
+            'account_type' => 'ad_account', 'external_id' => 'li_1', 'name' => 'L', 'status' => 'active',
+        ]);
+        $external = ExternalCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'unified_campaign_id' => $this->campA1->id, 'external_account_id' => $account->id,
+            'provider' => 'linkedin', 'external_id' => '771', 'name' => 'Leads', 'status' => 'active',
+        ]);
+        $creative = ExternalCreative::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'external_campaign_id' => $external->id, 'provider' => 'linkedin',
+            'external_creative_id' => '991', 'name' => 'Creative 991', 'format' => 'image', 'source_type' => 'api',
+        ]);
+        ExternalAd::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'external_ad_set_id' => null, 'external_campaign_id' => $external->id,
+            'unified_campaign_id' => $this->campA1->id, 'creative_id' => $creative->id, 'provider' => 'linkedin',
+            'external_id' => '991', 'name' => 'Creative 991', 'status' => 'active', 'source_type' => 'api',
+        ]);
+        app(TenantContext::class)->forget();
+
+        $res = $this->actingAs($this->owner)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/structure")
+            ->assertOk()
+            ->assertJsonPath('data.state', 'ready');
+
+        $this->assertSame([], $res->json('data.ad_sets'));
+        $this->assertSame('991', $res->json('data.ads_without_ad_set.0.external_id'));
+        $this->assertSame('image', $res->json('data.ads_without_ad_set.0.creative.format'));
+        // The platform sent no thumbnail, so none was invented.
+        $this->assertNull($res->json('data.ads_without_ad_set.0.creative.thumbnail_url'));
+    }
+
+    /**
+     * STRUCT-001 — the discovery button QUEUES the same job the scheduler queues.
+     *
+     * It never fetches inline: a platform call behind a button is how a page hangs for thirty seconds
+     * and then times out with the work half done.
+     */
+    public function test_asking_for_structure_now_queues_the_scheduled_job_and_refuses_an_unlinked_campaign(): void
+    {
+        Queue::fake();
+
+        // An unlinked campaign has nothing to discover, and says so instead of queueing nothing.
+        $this->actingAs($this->owner)
+            ->postJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA2->id}/structure/sync")
+            ->assertStatus(422);
+        Queue::assertNothingPushed();
+
+        $this->holdingTenant((string) $this->tenant->id);
+        $credential = new IntegrationCredential(['provider' => 'meta', 'credential_scope' => 'project_only', 'credential_type' => 'oauth', 'status' => 'active']);
+        $credential->setPayload('t');
+        $credential->save();
+        $connection = ProviderConnection::create(['credential_id' => $credential->id, 'provider' => 'meta', 'connection_name' => 'm', 'scope' => 'project_only', 'status' => 'connected']);
+        $account = ExternalAccount::create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id, 'provider' => 'meta',
+            'account_type' => 'ad_account', 'external_id' => 'act_9', 'name' => 'A', 'status' => 'active',
+        ]);
+        ExternalCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'unified_campaign_id' => $this->campA1->id, 'external_account_id' => $account->id,
+            'provider' => 'meta', 'external_id' => 'c-9', 'name' => 'Ext', 'status' => 'active',
+        ]);
+        app(TenantContext::class)->forget();
+
+        $this->actingAs($this->owner)
+            ->postJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/structure/sync")
+            ->assertStatus(202)
+            ->assertJsonPath('data.queued', 1);
+
+        Queue::assertPushed(SyncAccountStructureJob::class, 1);
+
+        // A revoked authorisation is refused rather than queued into a guaranteed failure row.
+        $this->holdingTenant((string) $this->tenant->id);
+        $connection->update(['status' => 'revoked']);
+        app(TenantContext::class)->forget();
+
+        $this->actingAs($this->owner)
+            ->postJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/structure/sync")
+            ->assertStatus(422);
+
+        Queue::assertPushed(SyncAccountStructureJob::class, 1);
     }
 }
