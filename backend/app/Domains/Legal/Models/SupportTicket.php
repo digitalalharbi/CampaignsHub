@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Legal\Models;
 
+use App\Domains\Legal\Services\ReferenceGenerator;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
 
 /**
  * LEGAL-002 — a support ticket, and the reference the sender can quote back.
@@ -39,13 +39,15 @@ final class SupportTicket extends Model
      * support should not have to disambiguate O from 0 or I from 1. Collisions are handled by the
      * unique index and a retry, not by hoping.
      */
+    /**
+     * Delegated to {@see ReferenceGenerator} — see it for why the alphabet excludes O/0/I/1 and why a
+     * short blocklist earns its keep on a string customers read aloud.
+     */
     public static function makeReference(): string
     {
-        do {
-            $code = 'CH-'.Str::upper(Str::random(6));
-            $code = str_replace(['O', '0', 'I', '1', 'L'], ['X', 'Y', 'Z', 'W', 'V'], $code);
-        } while (self::query()->where('reference', $code)->exists());
-
-        return $code;
+        return app(ReferenceGenerator::class)->make(
+            'CH',
+            static fn (string $candidate): bool => self::query()->where('reference', $candidate)->exists(),
+        );
     }
 }

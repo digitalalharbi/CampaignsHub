@@ -97,11 +97,22 @@ final class LegalIntakeTest extends TestCase
         $this->assertSame($reference, SupportTicket::query()->first()->reference);
     }
 
-    /** The reference is readable aloud — no O/0 or I/1 to disambiguate down a phone. */
-    public function test_the_reference_avoids_characters_that_are_confused_when_read_aloud(): void
+    /**
+     * A reference is readable aloud and not accidentally offensive.
+     *
+     * Both matter because these are quoted down a phone and printed on emails. The confusable
+     * characters are absent from the alphabet, and the blocklist earns its keep: the very first live
+     * submission of this feature produced `DR-SEX9YP`.
+     */
+    public function test_a_reference_is_unambiguous_and_not_embarrassing(): void
     {
-        for ($i = 0; $i < 25; $i++) {
-            $this->assertDoesNotMatchRegularExpression('/[O0I1L]/', SupportTicket::makeReference());
+        for ($i = 0; $i < 200; $i++) {
+            $reference = SupportTicket::makeReference();
+
+            $this->assertDoesNotMatchRegularExpression('/[O0I1L S5B8Z2]/', $reference, 'confusable character in '.$reference);
+            foreach (['SEX', 'ASS', 'FUK', 'CUM'] as $bad) {
+                $this->assertStringNotContainsString($bad, $reference);
+            }
         }
     }
 

@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, Check, Info, Mail, Megaphone } from 'lucide-reac
 import { useQuery } from '@tanstack/react-query'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { getLegalMeta } from '@/features/admin/legalApi'
+import { ContactForm, DataRequestForm, SupportForm } from './PublicFormPages'
 import { CONTACT_EMAIL, LEGAL_DOCS, findLegalDoc } from './legalContent'
 import { Button } from '@/components/ui/Button'
 import { useUi } from '@/stores/ui'
@@ -149,6 +150,15 @@ export function PublicInfoPage() {
                 </section>
               ))}
             </div>
+
+            {/*
+              LEGAL-002 — the working form, on the page that explains it.
+              A separate «forms» page would mean reading what a data request means and then losing
+              the explanation to submit one.
+            */}
+            {slug === 'contact' && <div className="mt-8"><ContactForm /></div>}
+            {slug === 'support' && <div className="mt-8"><SupportForm /></div>}
+            {(slug === 'data-requests' || slug === 'account-deletion') && <div className="mt-8"><DataRequestForm /></div>}
 
             {doc.disclaimer && (
               <p className="mt-6 flex items-start gap-2 rounded-xl border border-border bg-surface-secondary p-3.5 text-[12.5px] leading-relaxed text-text-muted">

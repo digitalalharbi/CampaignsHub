@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Legal\Models;
 
+use App\Domains\Legal\Services\ReferenceGenerator;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
 
 /**
  * LEGAL-002 — a data-subject request: export, correction, or deletion.
@@ -52,13 +52,15 @@ final class DataRequest extends Model
         return in_array($this->type, ['delete_data', 'delete_account'], true);
     }
 
+    /**
+     * Delegated to {@see ReferenceGenerator} — see it for why the alphabet excludes O/0/I/1 and why a
+     * short blocklist earns its keep on a string customers read aloud.
+     */
     public static function makeReference(): string
     {
-        do {
-            $code = 'DR-'.Str::upper(Str::random(6));
-            $code = str_replace(['O', '0', 'I', '1', 'L'], ['X', 'Y', 'Z', 'W', 'V'], $code);
-        } while (self::query()->where('reference', $code)->exists());
-
-        return $code;
+        return app(ReferenceGenerator::class)->make(
+            'DR',
+            static fn (string $candidate): bool => self::query()->where('reference', $candidate)->exists(),
+        );
     }
 }
