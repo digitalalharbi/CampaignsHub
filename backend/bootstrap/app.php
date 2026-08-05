@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Alerts\Console\EvaluateAlerts;
+use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
@@ -65,6 +66,8 @@ return Application::configure(basePath: dirname(__DIR__))
         SyncAdPlatformStructureCommand::class,
         RefreshAdPlatformTokensCommand::class,
         PruneRawPayloadsCommand::class,
+        // COMMERCE-001 — the store sweep: products, customers, orders and abandoned carts.
+        SyncStoresCommand::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.

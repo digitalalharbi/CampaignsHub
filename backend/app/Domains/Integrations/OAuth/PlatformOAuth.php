@@ -143,7 +143,25 @@ final class PlatformOAuth
         /** @var array<string,mixed> $body */
         $body = $response->json() ?? [];
 
-        return $this->tokensFrom($creds, $body, $previous);
+        $tokens = $this->tokensFrom($creds, $body, $previous);
+
+        /*
+         * COMMERCE-001 — Zid hands back TWO credentials, and one of them is not called a token.
+         *
+         * `access_token` goes in `Authorization: Bearer`, and a separate `authorization` value goes in
+         * `X-Manager-Token`. A call carrying only the first is refused by every endpoint. It survives
+         * inside `raw`, but a token set arriving WITHOUT it is a connection that will exchange
+         * perfectly and then fail on its first read — which is the exact «connected, and your numbers
+         * are zero» state this product refuses to enter. So it is checked here, at the one moment the
+         * answer is in front of us.
+         */
+        if ($creds->platform === 'zid' && ! isset($tokens->raw['authorization'])) {
+            throw new RuntimeException(
+                $creds->label().' returned an access token without the manager token its API also requires.',
+            );
+        }
+
+        return $tokens;
     }
 
     /**

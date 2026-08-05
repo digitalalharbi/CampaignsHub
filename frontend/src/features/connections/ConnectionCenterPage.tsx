@@ -11,6 +11,7 @@ import { useProject } from '@/stores/project'
 import { toApiError } from '@/lib/api/client'
 import { fmtDateTime } from '@/lib/datetime'
 import { AdPlatformsPanel } from '@/features/integrations/IntegrationsPage'
+import { StoresPanel } from '@/features/commerce/StoresPanel'
 import { SearchableSelect } from '@/components/forms/SearchableSelect'
 import type { Option } from '@/components/forms/types'
 import {
@@ -221,6 +222,15 @@ export function ConnectionCenterPage() {
           */}
         <AdPlatformsPanel />
 
+        {/*
+          * Stores sit beside the ad platforms, for the same reason and at the same level.
+          *
+          * Connecting Salla or Zid is a TENANT-level act — one merchant authorisation serves every
+          * project — and it is the other half of the same question a reader of this page is asking:
+          * where do the numbers on my dashboard come from (COMMERCE-001).
+          */}
+        <StoresPanel />
+
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">
           <span className="block font-semibold text-text-primary">{c.pick_project}</span>
           {c.pick_project_hint}
@@ -244,6 +254,9 @@ export function ConnectionCenterPage() {
         * project gate below rather than inside it.
         */}
       <AdPlatformsPanel />
+
+      {/* Stores, at the same tenant level and for the same reason as above (COMMERCE-001). */}
+      <StoresPanel />
 
       {/* Summary tiles */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">

@@ -73,6 +73,20 @@ Schedule::command('integrations:sync-structure')->cron('55 */6 * * *')->withoutO
  */
 Schedule::command('integrations:refresh-tokens')->hourly()->withoutOverlapping();
 
+/*
+ * The store sweep (COMMERCE-001) — Salla and Zid.
+ *
+ * Hourly, at :20, out of the way of both ad sweeps: a store's four paginated reads should not be
+ * queued in the same minute as a thousand ad-account jobs, or the two starve each other on a small
+ * worker pool.
+ *
+ * Fourteen days back by default, because an order is not final when it is placed — it is paid,
+ * fulfilled, returned and refunded over the following fortnight, and both providers restate it each
+ * time. A sweep that asked only for today would leave a client's report showing revenue that has
+ * already been refunded.
+ */
+Schedule::command('commerce:sync')->hourlyAt(20)->withoutOverlapping();
+
 // Retain raw platform payloads for ninety days — long enough to settle a dispute about a figure,
 // short enough that the audit trail does not become the largest table in the database.
 Schedule::command('integrations:prune-raw')->dailyAt('03:30');

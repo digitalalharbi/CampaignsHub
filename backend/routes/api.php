@@ -67,6 +67,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     require __DIR__.'/api/identity.php';
     require __DIR__.'/api/crm.php';
     require __DIR__.'/api/integrations.php';
+    require __DIR__.'/api/commerce.php';
     require __DIR__.'/api/workspaces.php';
     require __DIR__.'/api/projects.php';
     require __DIR__.'/api/campaigns.php';

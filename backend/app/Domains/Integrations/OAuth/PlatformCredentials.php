@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\OAuth;
 
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
+use App\Domains\Integrations\Catalogue\ProviderKind;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Support\AdPlatforms;
 use InvalidArgumentException;
@@ -42,14 +43,31 @@ final class PlatformCredentials
         private readonly array $config,
     ) {}
 
-    /** @throws InvalidArgumentException when the key is not one of the six platforms */
+    /**
+     * @throws InvalidArgumentException when the key is not a provider this product integrates with
+     */
     public static function for(string $platform): self
     {
-        $canonical = AdPlatforms::canonical($platform);
-        $config = config("ad_platforms.platforms.{$canonical}");
+        /*
+         * COMMERCE-001 — Salla and Zid come through here too, and deliberately so.
+         *
+         * They are not advertising platforms, and `ProviderCatalogue` keeps them described as
+         * themselves. But «may we call this provider at all?» is the SAME question for a store as for
+         * an ad account, and the answer has to have one definition: the moment a second credentials
+         * class existed, `isConfigured()` would mean one thing for six providers and something
+         * slightly laxer for the other two.
+         *
+         * So only the protocol half is chosen by kind — `ad_platforms.php` or `commerce_platforms.php`
+         * — and everything after that is identical.
+         */
+        $definition = ProviderCatalogue::has($platform) ? ProviderCatalogue::get($platform) : null;
+        $canonical = $definition?->key ?? AdPlatforms::canonical($platform);
+        $root = $definition?->kind === ProviderKind::Commerce ? 'commerce_platforms' : 'ad_platforms';
+
+        $config = config("{$root}.platforms.{$canonical}");
 
         if (! is_array($config)) {
-            throw new InvalidArgumentException("No ad-platform configuration for '{$platform}'.");
+            throw new InvalidArgumentException("No platform configuration for '{$platform}'.");
         }
 
         $settings = app(ProviderConfigurationService::class);
@@ -138,9 +156,30 @@ final class PlatformCredentials
         return $this->missing() === [];
     }
 
-    /** Where this platform sends the browser back. Registered by hand in each developer console. */
+    public function kind(): ProviderKind
+    {
+        return ProviderCatalogue::has($this->platform)
+            ? ProviderCatalogue::get($this->platform)->kind
+            : ProviderKind::Advertising;
+    }
+
+    public function isCommerce(): bool
+    {
+        return $this->kind() === ProviderKind::Commerce;
+    }
+
+    /**
+     * Where this platform sends the browser back. Registered by hand in each developer console.
+     *
+     * Delegated to the catalogue rather than built here, because the admin setup page shows the
+     * operator the URL to paste into the provider's console from the SAME method. Two constructions of
+     * one URL is one URL that is wrong, and the failure is a redirect-mismatch error at the provider's
+     * end — which reads to everybody as «the integration is broken» and names nothing.
+     */
     public function redirectUri(): string
     {
-        return config('ad_platforms.redirect_base').'/api/v1/oauth/ads/'.$this->platform.'/callback';
+        return ProviderCatalogue::has($this->platform)
+            ? ProviderCatalogue::get($this->platform)->redirectUri()
+            : config('ad_platforms.redirect_base').'/api/v1/oauth/ads/'.$this->platform.'/callback';
     }
 }

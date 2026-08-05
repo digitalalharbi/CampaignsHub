@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Commerce\Jobs\SyncStoreJob;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
@@ -202,6 +203,61 @@ final class IntegrationWebhookTest extends TestCase
         $this->assertSame('unmatched', $event->status);
         $this->assertNull($event->tenant_id);
         Queue::assertNothingPushed();
+    }
+
+    // ── A commerce delivery drives the store sync, not a direct write ─────────────────────────
+
+    /**
+     * COMMERCE-001 — a verified Salla delivery triggers the SAME store sync the scheduler runs.
+     *
+     * It deliberately does not write the order the payload carries. An order changes for a fortnight
+     * after it is placed — paid, shipped, returned, refunded — and each change is a separate delivery
+     * that can arrive out of order or not at all. A receiver that applied each payload as it landed
+     * would write «قيد المعالجة» over «مكتمل» whenever two crossed, and a refund that never arrived
+     * would leave revenue on a client's report for ever.
+     *
+     * The window is wider than the advertising one, because a store event is frequently about an
+     * OLDER order: a refund on a three-week-old purchase is a delivery today.
+     */
+    public function test_a_verified_store_delivery_triggers_the_store_sync_over_a_wide_window(): void
+    {
+        app(ProviderConfigurationService::class)->save('salla', [
+            'client_id' => 'app-1',
+            'client_secret' => 'salla-secret',
+            'webhook_secret' => self::SECRET,
+        ]);
+
+        $credential = IntegrationCredential::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'provider' => 'salla', 'credential_scope' => 'tenant',
+            'credential_type' => 'oauth', 'encrypted_payload' => json_encode(['access_token' => 'tok']),
+            'status' => 'active',
+        ]);
+
+        $connection = ProviderConnection::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'credential_id' => $credential->getKey(),
+            'provider' => 'salla', 'connection_name' => 'Salla', 'status' => 'connected',
+        ]);
+
+        $store = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->getKey(),
+            'provider' => 'salla', 'external_id' => '778899', 'account_type' => 'store', 'name' => 'متجر',
+        ]);
+
+        $body = json_encode(['event' => 'order.updated', 'merchant' => '778899', 'event_id' => 'salla-evt-1']);
+
+        $this->call('POST', '/api/v1/webhooks/commerce/salla', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_X_SALLA_SIGNATURE' => hash_hmac('sha256', $body, self::SECRET),
+        ], $body)->assertOk();
+
+        $event = IntegrationWebhookEvent::query()->where('provider', 'salla')->firstOrFail();
+        $this->assertSame('processed', $event->status);
+        $this->assertSame('order.updated', $event->topic);
+        $this->assertSame($store->getKey(), $event->external_account_id);
+
+        Queue::assertPushed(SyncStoreJob::class, 1);
+        // And NOT the advertising job — the two families do not share a consumer.
+        Queue::assertNotPushed(SyncAccountMetricsJob::class);
     }
 
     // ── Meta's subscription handshake ─────────────────────────────────────────────────────────

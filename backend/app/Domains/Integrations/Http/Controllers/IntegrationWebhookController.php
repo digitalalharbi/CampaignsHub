@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Http\Controllers;
 
+use App\Domains\Commerce\Jobs\SyncStoreJob;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Catalogue\ProviderDefinition;
 use App\Domains\Integrations\Catalogue\ProviderKind;
@@ -43,8 +44,8 @@ use Illuminate\Support\Carbon;
  * with the platform's own reporting. The sync is the same one the scheduler runs, so the webhook only
  * ever makes the product FASTER at noticing, never a second source of truth.
  *
- * Commerce deliveries are recorded and verified here and consumed by the commerce domain; see
- * `docs/RESUME_STATE.md` for what does and does not yet read them.
+ * A commerce delivery does the same thing for a store: it triggers the store sync, over a wider window
+ * because a store event is frequently about an older order — a refund on a three-week-old purchase.
  */
 final class IntegrationWebhookController extends Controller
 {
@@ -105,8 +106,8 @@ final class IntegrationWebhookController extends Controller
         $result = $this->ingest->record($definition->key, $raw, $payload, verified: true);
         $event = $result['event'];
 
-        if (! $result['duplicate'] && $event->status === 'received' && $definition->kind === ProviderKind::Advertising) {
-            $this->scheduleSync($event);
+        if (! $result['duplicate'] && $event->status === 'received') {
+            $this->scheduleSync($event, $definition->kind);
         }
 
         // Always 2xx once the row is safe. A provider retries anything else, for hours.
@@ -114,23 +115,49 @@ final class IntegrationWebhookController extends Controller
     }
 
     /**
-     * Ask for a sync of the account this delivery named.
+     * Ask for a sync of the account or store this delivery named.
      *
-     * Deliberately the SAME job the scheduler runs, over the same short window. A webhook makes the
-     * product notice sooner; it does not become a second path by which numbers arrive, because two
-     * paths mean two answers and no way to tell which is right.
+     * Deliberately the SAME job the scheduler runs, over a short window. A webhook makes the product
+     * notice sooner; it does not become a second path by which numbers arrive, because two paths mean
+     * two answers and no way to tell which is right.
+     *
+     * ## Why a commerce delivery does not simply write the order it carries (COMMERCE-001)
+     *
+     * It is tempting: `order.created` arrives with the whole order in it. But an order changes for a
+     * fortnight afterwards — paid, shipped, returned, refunded — and each change is a separate delivery
+     * that may arrive out of order, late, or not at all. A receiver that wrote each payload as it
+     * landed would apply «قيد المعالجة» after «مكتمل» whenever two deliveries crossed, and a refund
+     * that never arrived would leave revenue on a client's report for ever.
+     *
+     * Re-reading the store's own window costs one queued job and cannot go backwards. The webhook is
+     * what makes it happen in seconds instead of within the hour.
      */
-    private function scheduleSync(IntegrationWebhookEvent $event): void
+    private function scheduleSync(IntegrationWebhookEvent $event, ProviderKind $kind): void
     {
         if ($event->external_account_id === null) {
             return;
         }
 
-        SyncAccountMetricsJob::dispatch(
-            (string) $event->external_account_id,
-            Carbon::now()->subDays(2)->toDateString(),
-            Carbon::now()->toDateString(),
-        );
+        $accountId = (string) $event->external_account_id;
+
+        match ($kind) {
+            ProviderKind::Advertising => SyncAccountMetricsJob::dispatch(
+                $accountId,
+                Carbon::now()->subDays(2)->toDateString(),
+                Carbon::now()->toDateString(),
+            ),
+            /*
+             * A wider window than the advertising one, because a store event is frequently ABOUT an
+             * older order: a refund on a three-week-old purchase is a delivery today, and asking only
+             * for the last two days would re-read everything except the order that changed.
+             */
+            ProviderKind::Commerce => SyncStoreJob::dispatch(
+                $accountId,
+                Carbon::now()->subDays(30)->toDateString(),
+                Carbon::now()->toDateString(),
+                ['source' => 'webhook', 'topic' => $event->topic],
+            ),
+        };
 
         $event->forceFill(['status' => 'processed', 'processed_at' => Carbon::now()])->save();
     }
