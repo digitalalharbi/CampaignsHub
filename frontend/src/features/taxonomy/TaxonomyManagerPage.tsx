@@ -45,7 +45,7 @@ export function TaxonomyManagerPage() {
           <div className="flex flex-col gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
         </div>
       ) : q.isError ? (
-        <ErrorState title={c.loadError} onRetry={() => q.refetch()} />
+        <ErrorState error={q.error} title={c.loadError} onRetry={() => q.refetch()} />
       ) : (
         <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
           <aside className="lg:sticky lg:top-4 lg:h-fit">

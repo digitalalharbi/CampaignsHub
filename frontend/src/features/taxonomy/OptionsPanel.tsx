@@ -108,7 +108,7 @@ export function OptionsPanel({ definition }: { definition: TaxonomyDefinition })
     )
   }
   if (q.isError) {
-    return <ErrorState title={c.loadError} onRetry={() => q.refetch()} />
+    return <ErrorState error={q.error} title={c.loadError} onRetry={() => q.refetch()} />
   }
 
   return (

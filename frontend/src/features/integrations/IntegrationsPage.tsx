@@ -241,7 +241,7 @@ export function AdPlatformsPanel() {
           ))}
         </div>
       ) : query.isError ? (
-        <ErrorState title={t('error')} onRetry={() => query.refetch()} />
+        <ErrorState error={query.error} title={t('error')} onRetry={() => query.refetch()} />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {connectors.map((c) => (

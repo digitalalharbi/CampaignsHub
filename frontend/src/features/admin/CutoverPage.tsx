@@ -61,6 +61,7 @@ export function CutoverPage() {
   if (readiness.isError || !readiness.data) {
     return (
       <ErrorState
+        error={readiness.error}
         title={ar ? 'تعذّر قراءة جاهزية الانتقال.' : 'Cutover readiness could not be read.'}
         onRetry={() => void readiness.refetch()}
       />

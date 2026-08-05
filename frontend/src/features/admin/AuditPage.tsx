@@ -66,7 +66,7 @@ export function AuditPage() {
       {query.isPending && <div className="grid gap-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16" />)}</div>}
 
       {query.isError && (
-        <ErrorState title={ar ? 'تعذّر تحميل السجل.' : 'The audit trail could not be loaded.'} onRetry={() => void query.refetch()} />
+        <ErrorState error={query.error} ar={ar} title={ar ? 'تعذّر تحميل السجل.' : 'The audit trail could not be loaded.'} onRetry={() => void query.refetch()} />
       )}
 
       {query.data && query.data.entries.length === 0 && (

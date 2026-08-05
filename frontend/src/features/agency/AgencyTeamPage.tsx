@@ -49,6 +49,7 @@ export function AgencyTeamPage() {
   if (team.isError || !team.data) {
     return (
       <ErrorState
+        error={team.error}
         title={ar ? 'تعذّر تحميل فريق الوكالة.' : 'The agency team could not be loaded.'}
         onRetry={() => void team.refetch()}
       />

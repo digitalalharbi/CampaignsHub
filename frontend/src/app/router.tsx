@@ -310,6 +310,16 @@ export const router = createBrowserRouter([
           // …but notifications DID have a real destination all along. The placeholder sat in front
           // of a working page instead of leading to it.
           { path: 'notifications', element: <Navigate to="/app/account/notifications" replace /> },
+          /*
+           * `team` is a section this portal offers — `Portal::App::sections()` says so, and the
+           * server sends it in `account.nav` — but the advertiser's team lives inside Settings
+           * rather than on the rail, deliberately (an advertiser has one workspace; an agency has
+           * clients to scope people to, which is why `/agency/team` is its own page).
+           *
+           * So the address existed in the catalogue and answered 404, while the identical address in
+           * the other portal worked. A moved section redirects: ADR 0002 decision 5.
+           */
+          { path: 'team', element: <Navigate to="/app/settings/permissions" replace /> },
           // User account settings (self). Workspace/org settings live under /settings/workspace.
           {
             // SYSTEM settings (sidebar). Workspace-wide only — no personal settings here.

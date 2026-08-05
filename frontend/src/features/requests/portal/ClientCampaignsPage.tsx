@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Megaphone } from 'lucide-react'
 import { formatDate, formatNumber, listClientCampaigns, type PortalCampaign } from './portalAccountApi'
 import { PortalShell } from './PortalShell'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 import { usePortalGuard } from './usePortalGuard'
 import { useUi } from '@/stores/ui'
 
@@ -53,7 +54,7 @@ export function ClientCampaignsPage() {
       {q.isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2">{[0, 1].map((i) => <div key={i} className="h-44 animate-pulse rounded-2xl bg-surface-secondary" />)}</div>
       ) : q.isError ? (
-        <div className="rounded-2xl border border-danger/30 bg-[var(--negative-background)] p-6 text-center text-sm text-danger">{t.error}</div>
+        <QueryFailure error={q.error} ar={ar} onRetry={() => void q.refetch()} fallbackTitle={t.error} testId="portal-failure" />
       ) : rows.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface p-12 text-center text-text-muted"><Megaphone size={26} /><span className="text-sm">{t.none}</span></div>
       ) : (

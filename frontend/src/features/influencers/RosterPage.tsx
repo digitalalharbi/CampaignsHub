@@ -71,6 +71,7 @@ export function RosterPage() {
 
       {query.isError && (
         <ErrorState
+          error={query.error}
           title={ar ? 'تعذّر تحميل القائمة.' : 'The roster could not be loaded.'}
           onRetry={() => void query.refetch()}
         />

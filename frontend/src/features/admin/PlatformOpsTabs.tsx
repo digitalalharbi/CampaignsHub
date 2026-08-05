@@ -17,7 +17,7 @@ export function PermissionsTab() {
 
   if (query.isPending) return <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-24" />)}</div>
   if (query.isError || !query.data) {
-    return <ErrorState title={ar ? 'تعذّر تحميل الصلاحيات.' : 'Permissions could not be loaded.'} onRetry={() => void query.refetch()} />
+    return <ErrorState error={query.error} ar={ar} title={ar ? 'تعذّر تحميل الصلاحيات.' : 'Permissions could not be loaded.'} onRetry={() => void query.refetch()} />
   }
 
   const d = query.data
@@ -70,7 +70,7 @@ export function IntegrationsTab() {
 
   if (query.isPending) return <div className="grid gap-2">{[0, 1].map((i) => <Skeleton key={i} className="h-24" />)}</div>
   if (query.isError || !query.data) {
-    return <ErrorState title={ar ? 'تعذّر تحميل التكاملات.' : 'Integrations could not be loaded.'} onRetry={() => void query.refetch()} />
+    return <ErrorState error={query.error} ar={ar} title={ar ? 'تعذّر تحميل التكاملات.' : 'Integrations could not be loaded.'} onRetry={() => void query.refetch()} />
   }
 
   return (
@@ -116,7 +116,7 @@ export function StatusTab() {
 
   if (query.isPending) return <Skeleton className="h-40" />
   if (query.isError || !query.data) {
-    return <ErrorState title={ar ? 'تعذّر قراءة الحالة التشغيلية.' : 'Operational status could not be read.'} onRetry={() => void query.refetch()} />
+    return <ErrorState error={query.error} title={ar ? 'تعذّر قراءة الحالة التشغيلية.' : 'Operational status could not be read.'} onRetry={() => void query.refetch()} />
   }
 
   const d = query.data

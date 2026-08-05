@@ -219,7 +219,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
   const platformAlloc = (platforms.data ?? []).map((p) => ({ name: providerLabel(p.provider, locale), value: Number(p.spend ?? 0) }))
 
   if (summary.isLoading) return <Skeleton className="h-64" />
-  if (summary.isError) return <ErrorState title="تعذّر تحميل الميزانية" onRetry={() => summary.refetch()} />
+  if (summary.isError) return <ErrorState error={summary.error} title="تعذّر تحميل الميزانية" onRetry={() => summary.refetch()} />
 
   return (
     <div className="space-y-4">
@@ -279,7 +279,7 @@ export function CampaignFunnelTab({ campaign, projectId, range }: { campaign: Un
   }, [stages])
 
   if (funnel.isLoading) return <Skeleton className="h-72" />
-  if (funnel.isError) return <ErrorState title="تعذّر تحميل القمع" onRetry={() => funnel.refetch()} />
+  if (funnel.isError) return <ErrorState error={funnel.error} title="تعذّر تحميل القمع" onRetry={() => funnel.refetch()} />
   if (!stages.length) return <EmptyState title="لا قمع" description="لا توجد بيانات قمع لهذه الحملة في الفترة المحددة." />
 
   return (
@@ -314,7 +314,7 @@ export function CampaignActivityTab({ campaign, projectId, limit }: { campaign: 
   const events = (activity.data ?? []).slice(0, limit)
 
   if (activity.isLoading) return <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12" />)}</div>
-  if (activity.isError) return <ErrorState title="تعذّر تحميل النشاط" onRetry={() => activity.refetch()} />
+  if (activity.isError) return <ErrorState error={activity.error} title="تعذّر تحميل النشاط" onRetry={() => activity.refetch()} />
   if (!events.length) return <EmptyState title="لا نشاط" description="لم تُسجَّل أحداث لهذه الحملة بعد." />
 
   return (
@@ -460,7 +460,7 @@ export function CampaignAlertsTab({ campaign, projectId }: { campaign: UnifiedCa
         ))}
       </div>
       {alerts.isLoading ? <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
-        : alerts.isError ? <ErrorState title="تعذّر تحميل التنبيهات" onRetry={() => alerts.refetch()} />
+        : alerts.isError ? <ErrorState error={alerts.error} title="تعذّر تحميل التنبيهات" onRetry={() => alerts.refetch()} />
         : rows.length === 0 ? <EmptyState title="لا تنبيهات" description="لا توجد تنبيهات لهذه الحملة ضمن هذا الفلتر." />
         : (
           <ul className="space-y-2">
@@ -486,7 +486,7 @@ export function CampaignReportsTab({ campaign, projectId }: { campaign: UnifiedC
   const rows = reports.data ?? []
 
   if (reports.isLoading) return <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
-  if (reports.isError) return <ErrorState title="تعذّر تحميل التقارير" onRetry={() => reports.refetch()} />
+  if (reports.isError) return <ErrorState error={reports.error} title="تعذّر تحميل التقارير" onRetry={() => reports.refetch()} />
   if (rows.length === 0) return <EmptyState title="لا تقارير" description="لا تقارير مرتبطة بهذه الحملة بعد. أنشئ تقريرًا من صفحة التقارير واربطه بالحملة." />
 
   const statusTone: Record<string, string> = { completed: 'text-success', processing: 'text-warning', failed: 'text-danger', draft: 'text-text-muted' }
@@ -585,7 +585,7 @@ export function CampaignNotesTab({ campaign, projectId, canUpdate, canApprove }:
   )
 
   if (annotations.isLoading) return <div className="grid gap-4 lg:grid-cols-2"><Skeleton className="h-40" /><Skeleton className="h-40" /></div>
-  if (annotations.isError) return <ErrorState title="تعذّر تحميل الملاحظات" onRetry={() => annotations.refetch()} />
+  if (annotations.isError) return <ErrorState error={annotations.error} title="تعذّر تحميل الملاحظات" onRetry={() => annotations.refetch()} />
 
   return (
     <div className="grid gap-4 lg:grid-cols-2" dir="rtl">
@@ -622,7 +622,7 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
   const rows = creatives.data ?? []
 
   if (creatives.isLoading) return <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-56" />)}</div>
-  if (creatives.isError) return <ErrorState title="تعذّر تحميل المحتويات" onRetry={() => creatives.refetch()} />
+  if (creatives.isError) return <ErrorState error={creatives.error} title="تعذّر تحميل المحتويات" onRetry={() => creatives.refetch()} />
   if (rows.length === 0) return <EmptyState title="لا محتويات" description="لا توجد محتويات مزامنة لهذه الحملة بعد. تظهر تلقائيًا بعد مزامنة الإعلانات من المنصة." />
 
   const cls = (k: string) => CREATIVE_CLASS[k] ?? CREATIVE_CLASS.insufficient_data

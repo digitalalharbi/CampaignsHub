@@ -69,6 +69,7 @@ export function DeliverablesPage() {
   if (query.isError || !query.data) {
     return (
       <ErrorState
+        error={query.error}
         title={ar ? 'تعذّر تحميل المخرجات.' : 'Deliverables could not be loaded.'}
         onRetry={() => void query.refetch()}
       />

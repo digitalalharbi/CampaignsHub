@@ -102,7 +102,7 @@ export function TenantsPage() {
       {list.isPending && <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-20" />)}</div>}
 
       {list.isError && (
-        <ErrorState title={ar ? 'تعذّر تحميل المستأجرين.' : 'Tenants could not be loaded.'} onRetry={() => void list.refetch()} />
+        <ErrorState error={list.error} ar={ar} title={ar ? 'تعذّر تحميل المستأجرين.' : 'Tenants could not be loaded.'} onRetry={() => void list.refetch()} />
       )}
 
       {list.data && list.data.tenants.length === 0 && (
@@ -208,7 +208,7 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
     <Modal open onClose={onClose} title={detail.data?.tenant.name ?? (ar ? 'مستأجر' : 'Tenant')}>
       {detail.isPending && <Skeleton className="h-40" />}
       {detail.isError && (
-        <ErrorState title={ar ? 'تعذّر تحميل المستأجر.' : 'The tenant could not be loaded.'} onRetry={() => void detail.refetch()} />
+        <ErrorState error={detail.error} ar={ar} title={ar ? 'تعذّر تحميل المستأجر.' : 'The tenant could not be loaded.'} onRetry={() => void detail.refetch()} />
       )}
       {detail.data && (
         <>

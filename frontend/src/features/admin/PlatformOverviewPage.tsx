@@ -53,6 +53,7 @@ export function PlatformOverviewPage() {
   if (query.isError || !query.data) {
     return (
       <ErrorState
+        error={query.error}
         title={ar ? 'تعذّر تحميل نظرة عامة على المنصة.' : 'The platform overview could not be loaded.'}
         onRetry={() => void query.refetch()}
       />

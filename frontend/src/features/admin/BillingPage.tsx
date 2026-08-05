@@ -106,7 +106,7 @@ function PlansTab({ ar }: { ar: boolean }) {
 
   if (plans.isPending) return <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-20" />)}</div>
   if (plans.isError || !plans.data) {
-    return <ErrorState title={ar ? 'تعذّر تحميل الخطط.' : 'Plans could not be loaded.'} onRetry={() => void plans.refetch()} />
+    return <ErrorState error={plans.error} title={ar ? 'تعذّر تحميل الخطط.' : 'Plans could not be loaded.'} onRetry={() => void plans.refetch()} />
   }
 
   return (
@@ -336,7 +336,7 @@ function RevenueTab({ ar }: { ar: boolean }) {
 
   if (revenue.isPending) return <Skeleton className="h-40" />
   if (revenue.isError || !revenue.data) {
-    return <ErrorState title={ar ? 'تعذّر تحميل الإيراد.' : 'Revenue could not be loaded.'} onRetry={() => void revenue.refetch()} />
+    return <ErrorState error={revenue.error} title={ar ? 'تعذّر تحميل الإيراد.' : 'Revenue could not be loaded.'} onRetry={() => void revenue.refetch()} />
   }
 
   const d = revenue.data
@@ -399,7 +399,7 @@ function StreamsTab({ ar }: { ar: boolean }) {
 
   if (q.isPending) return <Skeleton className="h-64" />
   if (q.isError || !q.data) {
-    return <ErrorState title={ar ? 'تعذّر تحميل مسارات المال.' : 'The money streams could not be loaded.'} onRetry={() => void q.refetch()} />
+    return <ErrorState error={q.error} title={ar ? 'تعذّر تحميل مسارات المال.' : 'The money streams could not be loaded.'} onRetry={() => void q.refetch()} />
   }
 
   /*

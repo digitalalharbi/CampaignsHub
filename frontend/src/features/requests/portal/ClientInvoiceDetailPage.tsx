@@ -5,6 +5,7 @@ import { AlertCircle, ArrowLeft, CreditCard, Loader2 } from 'lucide-react'
 import { getPortalInvoice, payPortalInvoice, formatDate, formatMoney, type PortalPayment } from './portalAccountApi'
 import { invoiceStatusMeta } from './ClientInvoicesPage'
 import { PortalShell } from './PortalShell'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 import { taxTreatmentLabel } from '@/features/billing/taxTreatment'
 import { usePortalGuard } from './usePortalGuard'
 import { toApiError } from '@/lib/api/client'
@@ -58,7 +59,7 @@ export function ClientInvoiceDetailPage() {
   })
 
   if (q.isLoading) return <PortalShell title={t.title} nav showLogout><div className="h-64 animate-pulse rounded-2xl bg-surface-secondary" /></PortalShell>
-  if (q.isError) return <PortalShell title={t.title} nav showLogout><div className="rounded-2xl border border-danger/30 bg-[var(--negative-background)] p-6 text-center text-sm text-danger">{t.error}</div></PortalShell>
+  if (q.isError) return <PortalShell title={t.title} nav showLogout><QueryFailure error={q.error} ar={ar} onRetry={() => void q.refetch()} fallbackTitle={t.error} testId="portal-failure" /></PortalShell>
   const invoice = q.data!
   const status = invoiceStatusMeta(invoice.payment_status, ar)
   const canPay = ['unpaid', 'partially_paid'].includes(invoice.payment_status)

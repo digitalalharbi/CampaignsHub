@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Loader2, Send } from 'lucide-react'
 import { getPortalThread, postPortalThreadMessage, type PortalMessage } from './portalAccountApi'
 import { PortalShell } from './PortalShell'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 import { usePortalGuard } from './usePortalGuard'
 import { useUi } from '@/stores/ui'
 import { useClientSpacePath } from './clientSpace'
@@ -40,7 +41,7 @@ export function ClientThreadPage() {
   })
 
   if (q.isLoading) return <PortalShell title={t.title} nav showLogout><div className="h-64 animate-pulse rounded-2xl bg-surface-secondary" /></PortalShell>
-  if (q.isError) return <PortalShell title={t.title} nav showLogout><div className="rounded-2xl border border-danger/30 bg-[var(--negative-background)] p-6 text-center text-sm text-danger">{t.error}</div></PortalShell>
+  if (q.isError) return <PortalShell title={t.title} nav showLogout><QueryFailure error={q.error} ar={ar} onRetry={() => void q.refetch()} fallbackTitle={t.error} testId="portal-failure" /></PortalShell>
   const { thread, messages } = q.data!
 
   return (

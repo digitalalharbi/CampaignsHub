@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Mail, Phone, ShieldCheck } from 'lucide-react'
 import { portalSession } from '../clientPortalApi'
 import { PortalShell } from './PortalShell'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 import { usePortalGuard } from './usePortalGuard'
 import { useUi } from '@/stores/ui'
 
@@ -34,7 +35,7 @@ export function ClientProfilePage() {
       {q.isLoading ? (
         <div className="h-40 animate-pulse rounded-2xl bg-surface-secondary" />
       ) : q.isError ? (
-        <div className="rounded-2xl border border-danger/30 bg-[var(--negative-background)] p-6 text-center text-sm text-danger">{t.error}</div>
+        <QueryFailure error={q.error} ar={ar} onRetry={() => void q.refetch()} fallbackTitle={t.error} testId="portal-failure" />
       ) : (
         <div className="rounded-2xl border border-border bg-surface p-5 sm:p-6">
           <dl className="space-y-4">

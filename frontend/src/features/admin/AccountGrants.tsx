@@ -57,6 +57,7 @@ export function AccountGrantsPanel({ tenantId, ar }: { tenantId: string; ar: boo
   if (grants.isError || !grants.data) {
     return (
       <ErrorState
+        error={grants.error}
         title={ar ? 'تعذّر تحميل المنح.' : 'Grants could not be loaded.'}
         onRetry={() => void grants.refetch()}
       />

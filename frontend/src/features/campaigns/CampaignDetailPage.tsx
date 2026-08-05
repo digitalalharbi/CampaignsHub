@@ -165,7 +165,7 @@ export function CampaignDetailPage() {
     )
   }
   if (campaignQuery.isError || !campaignQuery.data) {
-    return <ErrorState title={t('error')} onRetry={() => campaignQuery.refetch()} />
+    return <ErrorState error={campaignQuery.error} title={t('error')} onRetry={() => campaignQuery.refetch()} />
   }
 
   const c = campaignQuery.data
