@@ -1747,7 +1747,10 @@ The brief has six sections plus a marketing card. Order of execution, and where 
 | 1b | **INTEG-RETRY-001** — one retry/backoff policy, and the two platforms that answer 200 for a failure | **done, committed** `9566d24` |
 | 1c | **INTEG-SYNC-001 / INTEG-RAW-001** — scheduler, queue idempotency, token refresh ahead of need, raw payload retention | **done, committed** `6013252` |
 | 1d | **INTEG-UI-001b** — the four states, with the action each admits | **done, committed** `f62af29` |
-| 1e | Ad-platform **webhooks** (Meta/TikTok/Snapchat where supported) + safe polling elsewhere, with signature verification and event idempotency | **not started** |
+| 0c | **PROVCFG-001** — the system/tenant split: `provider_configurations`, the 8-provider catalogue, 5 honest states, real probe, full audit, secrets write-only | **done, committed** `97e9ea4` |
+| 0d | **PROVCFG-002** — `/admin/settings/integrations`, the operator's page | **done, committed** `551f007` |
+| 0e | **CONNECT-001** — the tenant's connect surface; system-config leak closed; `/agency/integrations` mounted; client picker | **done, committed** `e0883c7` |
+| 1e | Ad-platform **webhooks** (Meta/TikTok/Snapchat where supported) + safe polling elsewhere, with signature verification and event idempotency | **in progress** |
 | 1f | Ad **set / ad / creative** discovery through the new adapters (the tables exist; only campaigns and insights are wired) | **not started** |
 | 2 | Salla & Zid | not started |
 | 3 | Funnel & store analytics | not started |
@@ -1817,3 +1820,58 @@ section, the **interactive shareable client reports**, the **one-source unificat
   were regenerated and REVIEWED (not accepted blind), and the gate then returned **773/773, `EXIT=0`**
   at `517696c` with a clean working tree.
 - Do not edit source while a gate runs. A run with edits under it is void.
+
+---
+
+## The architecture the owner made binding (2026-08-05), and where it now stands
+
+    system provider configuration  →  user OAuth consent  →  external account  →  client  →  project
+
+**Left of the first arrow is `/admin` only.** `provider_configurations` (no `tenant_id`, credentials
+`encrypted:array`), `ProviderCatalogue` describing all eight providers AS THEMSELVES, five states
+(`not_configured` · `awaiting_credentials` · `ready_to_connect` · `configuration_error` ·
+`production_ready`), and a real probe. Secrets go in and never come out — there is no endpoint that
+returns a stored value to anybody, and the audit records field NAMES only.
+
+**Right of it is `/app` and `/agency` only.** The tenant board no longer names any system credential.
+`/agency/integrations` now exists (it never did). The client picker sends `client_workspace_id` into
+the single-use OAuth state, which is the `→ Client` link.
+
+### Decisions to keep
+
+31. **`production_ready` is earned by a round trip, never by a complete form.** A full form proves
+    somebody typed four strings — not that the app was approved, the developer token granted or the
+    redirect URI matched. Hence `ready_to_connect` exists as a separate state.
+32. **Editing a credential clears the previous test verdict.** A provider left `production_ready` on
+    a round trip made with a DIFFERENT secret is the most dangerous stale fact the table can hold.
+33. **The probe's direction of doubt is fixed.** Only a refusal positively identifiable as «your app
+    is fine, your code is not» is a pass; anything ambiguous is recorded as a failure with the
+    provider's own words. Any configured value is scrubbed out of the message before storage —
+    `last_test_message` is the one column that is neither encrypted nor hidden.
+34. **Disabling a provider deletes nothing** — no credential, connection, account or synced figure.
+    It requires a reason, is audited, and is refused at the OAuth start rather than only hidden.
+35. **A tenant is never told which system credential is missing.** It is an instruction for `/admin`
+    addressed to the wrong reader.
+36. **`config/ad_platforms.php` keeps the PROTOCOL half only.** Its `requires` lists are gone — they
+    were a second copy of the catalogue's, and two lists of required keys is one list that is wrong.
+
+### Live proof already on the record
+
+Google's own token endpoint answered "The OAuth client was not found" to the probe and the row moved
+to «خطأ إعداد». Snapchat was disabled as owner and read «غير متاح حاليًا» to an agency operator, whose
+`oauth/start` was refused 422 and whose `GET /admin/settings/integrations/providers` was 403. The dev
+database was restored afterwards.
+
+### Two real defects fixed on the way, both found by pressing things
+
+- **Three dead links** — `ProjectsPage`/`ProjectTeamPage` pointed at `/projects/{id}/…`, a route in
+  no portal. A client-side router answers a missing route with a blank page and an HTTP 200, which is
+  why nothing caught it. Fixed with `usePortalPath()` and pinned in both portals.
+- **`/agency/integrations` did not exist**, though the API had always accepted the agency portal.
+
+### Gate status
+
+**No full three-browser gate has been run since `c8753db`.** Backend 1150 · vitest 600 · tsc ·
+oxlint 0 errors · Pint clean, all at `e0883c7`. Kill the hand-started :8000 backend and :5173 Vite
+before the next gate — the suite reuses an existing :8000 and then skips its own
+`queue:work --queue=reports,default`, and the report-export specs hang at "processing".
