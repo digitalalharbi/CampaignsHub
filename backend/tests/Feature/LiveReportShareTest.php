@@ -6,6 +6,10 @@ namespace Tests\Feature;
 
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Commerce\Models\CommerceOrder;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
@@ -278,5 +282,113 @@ final class LiveReportShareTest extends TestCase
 
         $share = app(ShareService::class)->resolveActive($token);
         $this->assertSame(1, $share->logs()->where('action', 'view')->count());
+    }
+    // ── SHARE-SHORT-001 / FUNNEL-001 additions ───────────────────────────────────────────────
+
+    /**
+     * The link a client is actually sent is short, and still not guessable.
+     *
+     * 22 base62 characters is ~131 bits — more than an AES-128 key. The old 48-character form produced
+     * a URL that WhatsApp and Outlook both wrap across two lines, which is how a client ends up
+     * pasting half a link and reporting that the report is broken.
+     */
+    public function test_a_client_link_is_short_enough_to_send_and_long_enough_to_be_unguessable(): void
+    {
+        $token = $this->liveLink();
+
+        $this->assertSame(22, strlen($token));
+        $this->assertSame("/r/{$token}", ShareService::pathFor($token));
+        // And it opens without a session, which is the whole point of the link.
+        $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk();
+    }
+
+    /** A link issued at the old length keeps working: the length was never part of the contract. */
+    public function test_a_link_issued_at_the_old_length_still_opens(): void
+    {
+        $legacy = Str::random(48);
+
+        $share = app(ShareService::class)->resolveActive($this->liveLink());
+        $share->update(['token_hash' => app(ShareService::class)->hashToken($legacy)]);
+
+        $this->getJson("/api/v1/reports/shared/{$legacy}/live")->assertOk();
+    }
+
+    /**
+     * A project with no store gets NULL rather than a funnel of nulls.
+     *
+     * A section of empty rows reads as one that failed to load, and a client would ask why — about a
+     * store they never had.
+     */
+    public function test_a_live_link_omits_the_store_funnel_when_the_project_has_no_store(): void
+    {
+        $res = $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')->assertOk();
+
+        $this->assertNull($res->json('data.store_funnel'));
+    }
+
+    /**
+     * With a store, the client link carries the SAME funnel the operator reads.
+     *
+     * Computing it a second way for the client would be a second answer to «كم طلبًا جاء من الإعلان؟»,
+     * and the first time the two disagreed nobody would know which to believe.
+     */
+    public function test_a_live_link_carries_the_store_funnel_and_hides_revenue_there_too(): void
+    {
+        $this->seedStore();
+
+        $open = $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')->assertOk();
+
+        $this->assertNotNull($open->json('data.store_funnel'));
+        $this->assertSame(1, $open->json('data.store_funnel.coverage.stores'));
+        $this->assertSame(250.0, (float) $open->json('data.store_funnel.totals.revenue'));
+
+        // A share that hides revenue must hide it in the funnel too — otherwise the flag covers the
+        // KPI cards and leaks the exact figure one section further down.
+        [, $hidden] = app(ShareService::class)->create($this->report, [
+            'hide_revenue' => true,
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [$this->shared->id],
+                'providers' => ['meta'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $res = $this->getJson("/api/v1/reports/shared/{$hidden}/live")->assertOk();
+
+        $this->assertNull($res->json('data.store_funnel.totals.revenue'));
+        $this->assertNull($res->json('data.store_funnel.derived.roas'));
+        $this->assertNull($res->json('data.store_funnel.derived.aov'));
+        $this->assertSame([], $res->json('data.store_funnel.comparisons.products'));
+        // The order COUNT is not money and stays: hiding it would misrepresent the funnel's shape.
+        $this->assertSame(1, $res->json('data.store_funnel.totals.orders'));
+    }
+
+    /** A store with one order in the link's window, so the funnel has something to state. */
+    private function seedStore(): void
+    {
+        $connection = app(TokenVault::class)->open(
+            tenantId: (string) $this->report->tenant_id,
+            provider: 'salla',
+            tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addDays(30)),
+            connectionName: 'Salla',
+        );
+
+        $store = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->report->tenant_id,
+            'provider_connection_id' => $connection->getKey(),
+            'provider' => 'salla', 'account_type' => 'store', 'external_id' => 'store-1',
+            'name' => 'متجر', 'currency' => 'SAR', 'status' => 'active',
+        ]);
+
+        CommerceOrder::withoutGlobalScopes()->create([
+            'tenant_id' => $this->report->tenant_id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $store->getKey(),
+            'provider' => 'salla', 'external_id' => 'o-1', 'status' => 'completed',
+            'placed_at' => Carbon::parse('2026-07-15'), 'currency' => 'SAR', 'total' => 250,
+            'attribution_method' => 'none', 'attributed_at' => Carbon::now(),
+        ]);
     }
 }

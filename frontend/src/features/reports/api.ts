@@ -140,6 +140,22 @@ export interface ShareAccessLog {
 }
 
 /** The live payload — every figure recomputed inside the link's ceiling (LIVEREP-001). */
+export interface StoreFunnelPayload {
+  stages: Array<{
+    key: string
+    label_ar: string
+    label_en: string
+    value: number | null
+    state: 'measured' | 'partial' | 'unavailable'
+    source: { kind: 'stores' | 'ad_platforms' | 'none'; ar: string; en: string }
+    note_ar?: string | null
+    note_en?: string | null
+  }>
+  totals: { orders: number; revenue: number | null; attributed_orders: number }
+  derived: { roas: number | null; aov: number | null; cpa: number | null }
+  coverage: { stores: number; orders_in_window: number; store_last_synced_at: string | null }
+}
+
 export interface LivePayload {
   period: { from: string; to: string; days: number }
   currency: string
@@ -149,6 +165,15 @@ export interface LivePayload {
   platforms: Array<Record<string, unknown> & { provider: string; spend: number | null }>
   campaigns: Array<Record<string, unknown> & { campaign_name: string | null; provider: string | null; spend: number | null }>
   funnel: Array<{ stage: string; label: string; count: number; step_rate: number | null; cost_per: number | null }>
+  /**
+   * FUNNEL-001 — «الفانل والمتجر» for this link's project, or null when it has no store.
+   *
+   * Null rather than a funnel of nulls: a section of empty rows reads as one that failed to load, and
+   * a client would ask about a store they never had. Every figure here obeys the share's own
+   * hide-revenue and hide-spend flags, because a funnel is a second place a hidden number could reach
+   * a reader.
+   */
+  store_funnel: StoreFunnelPayload | null
   freshness: Array<{
     provider: string
     data_as_of: string | null

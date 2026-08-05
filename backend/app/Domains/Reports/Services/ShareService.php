@@ -17,15 +17,39 @@ use Illuminate\Support\Str;
  */
 final class ShareService
 {
+    /**
+     * SHARE-SHORT-001 — how long a client link's secret is, and why this number.
+     *
+     * The brief asks for a SHORT link, and the old one was not: a 48-character token behind
+     * `/reports/share/` produced a URL nobody could read out, and one that WhatsApp and Outlook both
+     * wrap across lines — which is how a client ends up pasting half a link and reporting that the
+     * report is broken.
+     *
+     * It cannot simply be shortened, because the token IS the credential: anyone holding it opens the
+     * report without signing in. 22 characters of `Str::random` (base62) is ~131 bits — more than an
+     * AES-128 key, and far past anything the endpoint's rate limiter would let somebody search. So the
+     * link becomes readable without becoming guessable.
+     *
+     * Existing 48-character links keep working untouched: lookup hashes whatever is presented, so the
+     * length was never part of the contract.
+     */
+    private const TOKEN_LENGTH = 22;
+
     public function hashToken(string $raw): string
     {
         return hash('sha256', $raw);
     }
 
+    /** The short public path for a raw token. One construction, so every caller agrees. */
+    public static function pathFor(string $rawToken): string
+    {
+        return "/r/{$rawToken}";
+    }
+
     /** @return array{0: ReportShare, 1: string} the share + the raw token (show once) */
     public function create(Report $report, array $opts, ?int $userId): array
     {
-        $raw = Str::random(48);
+        $raw = Str::random(self::TOKEN_LENGTH);
         $share = ReportShare::create([
             'tenant_id' => $report->tenant_id,
             'report_id' => $report->id,

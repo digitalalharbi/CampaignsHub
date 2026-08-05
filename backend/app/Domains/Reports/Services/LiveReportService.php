@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Services;
 
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\MetricsAggregator;
@@ -100,6 +101,17 @@ final class LiveReportService
             'platforms' => $engine->byProvider($from, $to),
             'campaigns' => $engine->byCampaign($from, $to),
             'funnel' => $engine->funnel($from, $to),
+            /*
+             * FUNNEL-001 in a client link — the same section the operator reads, for the same project.
+             *
+             * Built by the SAME service the analytics tab calls, deliberately: a client link that
+             * computed the funnel its own way would be a second answer to «كم طلبًا جاء من الإعلان؟»,
+             * and the first time the two disagreed nobody would know which to believe.
+             *
+             * Null when the project has no store, rather than a funnel of nulls the page would render
+             * as a section that failed to load.
+             */
+            'store_funnel' => $this->storeFunnel($share, $scope['project_id'], $from, $to),
             'freshness' => $this->freshness($scope['project_id'], $scope['providers']),
             /*
              * LIVEREP-002 — the metrics the operator chose, in the order they chose to show them.
@@ -260,6 +272,54 @@ final class LiveReportService
      * @param  list<string>  $providers
      * @return list<array<string, mixed>>
      */
+    /**
+     * The store funnel for this link's project, or null when there is no store to build one from.
+     *
+     * A share that hides revenue hides it HERE too. The funnel is a second place a figure could reach
+     * a client, and a hide flag that covered the KPI cards and not this would leak the exact number the
+     * operator chose to withhold — which is worse than never having offered the flag.
+     *
+     * @return array<string,mixed>|null
+     */
+    private function storeFunnel(ReportShare $share, string $projectId, Carbon $from, Carbon $to): ?array
+    {
+        $funnel = app(StoreFunnelService::class)->build((string) $share->tenant_id, $projectId, $from, $to);
+
+        if (($funnel['coverage']['stores'] ?? 0) === 0) {
+            return null;
+        }
+
+        if ($share->hide_revenue) {
+            $funnel['totals']['revenue'] = null;
+            $funnel['totals']['gross_revenue'] = null;
+            $funnel['totals']['attributed_revenue'] = null;
+            $funnel['derived']['roas'] = null;
+            $funnel['derived']['attributed_roas'] = null;
+            $funnel['derived']['aov'] = null;
+            $funnel['comparisons']['products'] = [];
+            $funnel['stages'] = array_map(static function (array $stage): array {
+                if ($stage['key'] === 'revenue') {
+                    $stage['value'] = null;
+                }
+
+                return $stage;
+            }, $funnel['stages']);
+        }
+
+        if ($share->hide_spend) {
+            $funnel['totals']['spend'] = null;
+            $funnel['derived']['cpa'] = null;
+            $funnel['derived']['cac'] = null;
+            // ROAS and attributed ROAS are spend-derived; leaving them would let a reader divide back
+            // to the figure the operator hid.
+            $funnel['derived']['roas'] = null;
+            $funnel['derived']['attributed_roas'] = null;
+            $funnel['comparisons']['platforms'] = [];
+        }
+
+        return $funnel;
+    }
+
     private function freshness(string $projectId, array $providers): array
     {
         if ($projectId === '' || $providers === []) {

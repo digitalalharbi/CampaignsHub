@@ -116,7 +116,7 @@ final class ClientReportsController
         [$share, $raw] = $this->shares->create($model, $opts, $request->user()->id);
         $audit->log(action: 'client.report_shared', entityType: 'client_workspace', entityId: (string) $c->id, after: ['report_id' => (string) $model->id]);
 
-        return response()->json(['data' => ['id' => $share->id, 'url' => "/reports/share/{$raw}", 'token' => $raw]], 201);
+        return response()->json(['data' => ['id' => $share->id, 'url' => ShareService::pathFor($raw), 'token' => $raw]], 201);
     }
 
     /** POST /app/clients/{client}/reports/{report}/shares/{share}/revoke */

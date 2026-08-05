@@ -324,6 +324,48 @@ export function LiveSharedReport({
             <ConversionFunnelChart stages={payload.funnel} currency={currency} />
           </ChartCard>
         </div>
+
+        {/*
+          * FUNNEL-001 — the store half, shown to the client only when there IS a store.
+          *
+          * Each row carries the system that produced it, exactly as the operator's own analytics tab
+          * does. A client asking «من أين جاء هذا الرقم؟» gets the same answer their agency would.
+          */}
+        {payload.store_funnel && (
+          <div data-testid="shared-store-funnel" className="rounded-2xl border border-border bg-surface p-4">
+            <h3 className="font-bold text-text-primary">{ar ? 'الفانل والمتجر' : 'Funnel & store'}</h3>
+            <ol className="mt-3 space-y-1.5">
+              {payload.store_funnel.stages.map((stage) => (
+                <li key={stage.key} data-testid={`shared-stage-${stage.key}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-sm">
+                  <span className="flex items-center gap-2">
+                    <span className="font-semibold text-text-primary">{ar ? stage.label_ar : stage.label_en}</span>
+                    <span className="text-[11px] text-text-muted">
+                      {stage.source.kind === 'stores'
+                        ? (ar ? 'المتجر' : 'Store')
+                        : stage.source.kind === 'ad_platforms'
+                          ? (ar ? 'بكسل المنصات' : 'Platform pixel')
+                          : (ar ? 'لا يوجد مصدر' : 'No source')}
+                    </span>
+                  </span>
+                  <span className="tnum font-extrabold text-text-primary">
+                    {stage.value === null
+                      ? <span className="text-xs font-semibold text-text-muted">{ar ? 'لا يُقاس' : 'Not measured'}</span>
+                      : stage.value.toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB')}
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-2 text-[11px] text-text-muted">
+              {ar ? 'الطلبات في الفترة' : 'Orders in the period'}:{' '}
+              <span className="tnum">{payload.store_funnel.coverage.orders_in_window}</span>
+              {payload.store_funnel.coverage.store_last_synced_at && (
+                <> · {ar ? 'آخر مزامنة للمتجر' : 'Store last synced'}:{' '}
+                  <span className="tnum">{new Date(payload.store_funnel.coverage.store_last_synced_at).toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB')}</span>
+                </>
+              )}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )

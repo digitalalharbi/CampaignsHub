@@ -203,6 +203,15 @@ export const router = createBrowserRouter([
   { path: '/portal/clients/:clientSlug/reports', element: <ClientReportsPage /> },
   { path: '/portal/clients/:clientSlug/profile', element: <ClientProfilePage /> },
 
+  /*
+   * SHARE-SHORT-001 — the short public path, and the long one it replaces.
+   *
+   * `/r/<22 chars>` is what a client is sent now: readable, and short enough that WhatsApp and Outlook
+   * do not wrap it across two lines — which is how a client ends up pasting half a link and reporting
+   * that the report is broken. The old `/reports/share/<48>` route stays for every link already in
+   * somebody's inbox; a shared link that stops working because we tidied a URL is a broken promise.
+   */
+  { path: '/r/:token', element: <PublicReport /> },
   { path: '/reports/share/:token', element: <PublicReport /> },
   { path: '/reports/print/:token', element: <PrintReport /> },
   // Email verification is public (the link can be opened on any device; the token verify endpoint is public).

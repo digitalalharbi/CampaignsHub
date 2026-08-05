@@ -66,7 +66,7 @@ final class ReportShareController extends Controller
         $audit->log(action: 'report.shared_link_created', entityType: ReportShare::class, entityId: (string) $share->id);
 
         return ApiResponse::success(
-            $this->shape($share) + ['url' => "/reports/share/{$raw}", 'token' => $raw],
+            $this->shape($share) + ['url' => ShareService::pathFor($raw), 'token' => $raw],
             'Secure link created. Copy it now — it is shown only once.',
             status: 201,
         );
