@@ -10,6 +10,7 @@ use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\MetricDefinition;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -200,6 +201,29 @@ final class MetricsController extends Controller
             $funnel['stages'],
             'Conversion funnel.',
             meta: $this->meta($from, $to) + ['spend' => $funnel['spend']],
+        );
+    }
+
+    /**
+     * Performance separated by marketing path, with Direct and Blended kept apart
+     * (REPORT-OBJECTIVE-001/003).
+     *
+     * The endpoint every objective-aware report reads. It never returns a bare `cpa` at the top
+     * level: `direct.cpa` is the sales path's own cost per order, `blended.blended_cpa` is what the
+     * whole programme cost per order, and both carry the formula and the campaigns they counted.
+     * Printing the second as «CPA» is the critical defect this exists to prevent.
+     */
+    public function objectivePerformance(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        $campaigns = array_values(array_filter((array) $request->input('campaign_ids', [])));
+
+        return ApiResponse::success(
+            (new ObjectivePerformance(campaignIds: $campaigns === [] ? null : $campaigns))->build($from, $to),
+            'Performance by objective.',
+            meta: $this->meta($from, $to),
         );
     }
 

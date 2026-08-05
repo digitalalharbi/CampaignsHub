@@ -828,8 +828,33 @@ final class TaxonomyEngineSeeder extends Seeder
                 'metadata' => ['kpi' => ['roas', 'cpa', 'revenue'], 'funnel' => 'conversion', 'template' => 'performance']],
             ['key' => 'conversions', 'label_ar' => 'التحويلات', 'label_en' => 'Conversions', 'color' => '#22c55e', 'icon' => 'target',
                 'metadata' => ['kpi' => ['conversions', 'cpa', 'conv_rate', 'roas'], 'funnel' => 'conversion', 'template' => 'performance']],
-            ['key' => 'other', 'label_ar' => 'أخرى', 'label_en' => 'Other', 'color' => '#6b7280', 'icon' => 'circle-dashed',
+            ['key' => 'other', 'label_ar' => 'هدف مخصّص', 'label_en' => 'Custom objective', 'color' => '#6b7280', 'icon' => 'circle-dashed',
                 'metadata' => ['kpi' => ['impressions', 'clicks'], 'funnel' => 'custom', 'template' => 'custom']],
+
+            /*
+             * REPORT-OBJECTIVE-002 — the six the canonical set was missing.
+             *
+             * Platforms distinguish all of these and the product was folding each into its nearest
+             * neighbour, which loses the very distinction a report is supposed to draw: `reach` and
+             * `awareness` buy different things, and `add_to_cart` is a conversion while
+             * `landing_page_views` is not.
+             *
+             * `TaxonomyAlignmentTest` is what forced this to be done at the same time as the enum —
+             * the definition must be a superset of the live enum or the SPA's objective filter would
+             * 422 on a value the product itself now writes.
+             */
+            ['key' => 'reach', 'label_ar' => 'الوصول', 'label_en' => 'Reach', 'color' => '#a78bfa', 'icon' => 'radio',
+                'metadata' => ['kpi' => ['reach', 'frequency', 'cpm'], 'funnel' => 'awareness', 'template' => 'brand']],
+            ['key' => 'video_views', 'label_ar' => 'مشاهدات الفيديو', 'label_en' => 'Video views', 'color' => '#c084fc', 'icon' => 'play',
+                'metadata' => ['kpi' => ['video_views', 'view_rate', 'cpv'], 'funnel' => 'awareness', 'template' => 'brand']],
+            ['key' => 'landing_page_views', 'label_ar' => 'زيارات صفحة الهبوط', 'label_en' => 'Landing page views', 'color' => '#38bdf8', 'icon' => 'file-text',
+                'metadata' => ['kpi' => ['landing_page_views', 'cost_per_lpv', 'ctr'], 'funnel' => 'consideration', 'template' => 'traffic']],
+            ['key' => 'store_visits', 'label_ar' => 'زيارات المتجر', 'label_en' => 'Store visits', 'color' => '#0891b2', 'icon' => 'store',
+                'metadata' => ['kpi' => ['store_visits', 'cost_per_visit'], 'funnel' => 'consideration', 'template' => 'traffic']],
+            ['key' => 'add_to_cart', 'label_ar' => 'الإضافة للسلة', 'label_en' => 'Add to cart', 'color' => '#84cc16', 'icon' => 'shopping-cart',
+                'metadata' => ['kpi' => ['add_to_cart', 'cost_per_atc', 'conv_rate'], 'funnel' => 'conversion', 'template' => 'performance']],
+            ['key' => 'purchases', 'label_ar' => 'المشتريات', 'label_en' => 'Purchases', 'color' => '#15803d', 'icon' => 'credit-card',
+                'metadata' => ['kpi' => ['purchases', 'cpa', 'revenue', 'roas'], 'funnel' => 'conversion', 'template' => 'performance']],
         ];
     }
 

@@ -90,6 +90,36 @@ final class UnifiedCampaignController extends Controller
         $validated = $this->validatePayload($request, creating: false, ignoreId: (string) $model->id);
         $before = $model->only(['name', 'status', 'objective', 'total_budget', 'stage', 'performance_label', 'priority']);
         $model->update($validated);
+
+        /*
+         * An objective change is recorded as a REVIEW, separately from the rest of the edit
+         * (REPORT-OBJECTIVE-002).
+         *
+         * This one field decides whether a campaign's spend lands in a client's cost-per-order, so
+         * `sales` in the column is not enough on its own — the report has to be able to say whether
+         * that was the platform's word, a person's correction, or an import default nobody has
+         * looked at. `objective_source` is set here rather than accepted from the request precisely
+         * so a caller cannot claim its classification came from the platform.
+         *
+         * It also gets its own audit action. Folded into `campaign.updated` it would be findable
+         * only by reading every campaign edit ever made and diffing the payloads.
+         */
+        if (array_key_exists('objective', $validated) && $validated['objective'] !== $before['objective']) {
+            $model->forceFill([
+                'objective_source' => 'manual',
+                'objective_corrected_by' => $request->user()->id,
+                'objective_corrected_at' => now(),
+            ])->save();
+
+            $audit->log(
+                action: 'campaign.objective.corrected',
+                entityType: UnifiedCampaign::class,
+                entityId: (string) $model->id,
+                before: ['objective' => $before['objective']],
+                after: ['objective' => $model->objective, 'objective_source' => 'manual'],
+            );
+        }
+
         $audit->log(action: 'campaign.updated', entityType: UnifiedCampaign::class, entityId: (string) $model->id, before: $before, after: $model->only(['name', 'status', 'objective', 'total_budget', 'stage', 'performance_label', 'priority']));
 
         return ApiResponse::success(new UnifiedCampaignResource($model), 'Unified campaign updated.');
