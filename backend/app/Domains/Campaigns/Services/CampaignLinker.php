@@ -21,6 +21,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class CampaignLinker
 {
+    public function __construct(private readonly CampaignObjectiveResolver $objectives) {}
+
     /**
      * Link an external campaign to a unified campaign. If it is already linked to a *different*
      * unified campaign and $confirm is false, returns a needs-confirmation result instead of moving it.
@@ -45,6 +47,17 @@ final class CampaignLinker
                 'linked_at' => now(),
                 'linked_by' => $userId,
             ])->save();
+
+            /*
+             * Linking is the moment the platform's objective becomes knowable, so it is the moment
+             * to adopt it (REPORT-OBJECTIVE-002). Before this line ran, an imported campaign kept
+             * the column default forever and the objective-based report classified from a value
+             * nobody had set.
+             *
+             * The resolver refuses to touch a `manual` objective, so a person's correction survives
+             * every later link and every later sync.
+             */
+            $this->objectives->sync($unified);
 
             return LinkResult::linked($external->refresh(), $previous);
         });

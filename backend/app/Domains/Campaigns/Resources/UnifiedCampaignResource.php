@@ -6,6 +6,7 @@ namespace App\Domains\Campaigns\Resources;
 
 use App\Domains\Campaigns\Enums\CampaignPerformanceLabel;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignObjectiveResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -21,6 +22,14 @@ final class UnifiedCampaignResource extends JsonResource
             'name' => $this->name,
             'client_display_name' => $this->client_display_name,
             'objective' => $this->objective,
+            /*
+             * Where the classification came from, beside the classification itself
+             * (REPORT-OBJECTIVE-002). This one field decides whether the campaign's spend reaches a
+             * client's cost per order, so «sales» on its own is not enough to act on — a screen has
+             * to be able to say whether that was the platform's word, a person's correction, or a
+             * default nobody has looked at.
+             */
+            'objective_provenance' => app(CampaignObjectiveResolver::class)->provenance($this->resource),
             'status' => $this->status,
             'stage' => $this->stage,
             'performance_label' => $this->performance_label,

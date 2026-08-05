@@ -6,6 +6,8 @@ namespace App\Domains\Campaigns\Actions;
 
 use App\Domains\Campaigns\Enums\CampaignStatus;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignObjectiveResolver;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Facades\DB;
@@ -41,8 +43,9 @@ final class ImportExternalCampaigns
         }
 
         $count = 0;
+        $touched = [];
 
-        DB::transaction(function () use ($account, $result, $projectId, &$count): void {
+        DB::transaction(function () use ($account, $result, $projectId, &$count, &$touched): void {
             foreach ($result->records as $row) {
                 $externalId = (string) ($row['id'] ?? $row['external_id'] ?? '');
                 if ($externalId === '') {
@@ -84,10 +87,42 @@ final class ImportExternalCampaigns
                     'last_synced_at' => now(),
                 ])->save();
 
+                if ($campaign->unified_campaign_id !== null) {
+                    $touched[] = (string) $campaign->unified_campaign_id;
+                }
+
                 $count++;
             }
         });
 
+        $this->refreshObjectives($touched);
+
         return $count;
+    }
+
+    /**
+     * Re-derive the objective of every unified campaign this import touched (REPORT-OBJECTIVE-002).
+     *
+     * Outside the transaction on purpose: adopting an objective writes an audit row, and a sweep that
+     * rolled back for an unrelated reason should not take the trail of what it decided with it.
+     *
+     * A platform can change a campaign's objective after it has been running — an advertiser
+     * switching a campaign from traffic to sales mid-month is ordinary — and until this ran, the
+     * classification was whatever it had been at first import. The resolver refuses to touch a
+     * `manual` objective, so a person's correction survives every sweep.
+     *
+     * @param  list<string>  $unifiedCampaignIds
+     */
+    private function refreshObjectives(array $unifiedCampaignIds): void
+    {
+        if ($unifiedCampaignIds === []) {
+            return;
+        }
+
+        $resolver = app(CampaignObjectiveResolver::class);
+
+        UnifiedCampaign::withoutGlobalScopes()
+            ->whereIn('id', array_unique($unifiedCampaignIds))
+            ->each(fn (UnifiedCampaign $campaign) => $resolver->sync($campaign));
     }
 }
