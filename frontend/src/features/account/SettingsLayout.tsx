@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Building2, ExternalLink, FileText, LayoutTemplate, Palette, Plug, Tags, Users } from 'lucide-react'
+import { Building2, ExternalLink, FileText, Palette, Plug, Tags, Users } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -25,7 +25,13 @@ const GROUPS = [
   {
     ar: 'الاتصال الخارجي', en: 'External surfaces',
     items: [
-      { to: '/settings/public-pages', ar: 'الواجهة الرئيسية والبوابات', en: 'Homepage & portals', icon: LayoutTemplate },
+      /*
+       * PAGES-001 — «الواجهة الرئيسية والبوابات» is not listed here any more.
+       *
+       * There is one marketing homepage and it belongs to the platform operator, so the entry pointed
+       * at a path that redirects into `/admin` — a console a tenant administrator cannot enter. A link
+       * whose only outcome is a refusal is a dead link with a label on it.
+       */
       { to: '/settings/portals', ar: 'ملاحظات البوابات', en: 'Portal notes', icon: FileText },
       { to: '/app/integrations', ar: 'التكاملات', en: 'Integrations', icon: Plug, external: true },
     ],

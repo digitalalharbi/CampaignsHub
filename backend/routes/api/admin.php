@@ -15,6 +15,7 @@ use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
+use App\Domains\Settings\Http\Controllers\PublicPageSettingsController;
 use App\Http\Controllers\Dev\DevStatusController;
 use Illuminate\Support\Facades\Route;
 
@@ -168,6 +169,21 @@ Route::middleware(['auth:sanctum', 'platform'])
 
         Route::get('/settings/platform', [PlatformSettingsController::class, 'show'])->name('settings.platform.show');
         Route::put('/settings/platform', [PlatformSettingsController::class, 'update'])->name('settings.platform.update');
+
+        /*
+         * PAGES-001 — the marketing homepage and the three public portals.
+         *
+         * These lived under `settings` with the tenant middleware, which put them out of reach of the
+         * `/admin` console that renders them — the operator holds no membership, so the tab could only
+         * ever show a load error — and in reach of every tenant administrator, who could rewrite the
+         * platform's own front page. There is one homepage; it has one owner.
+         *
+         * A draft is never live: `publish` is the only action that changes what a visitor sees.
+         */
+        Route::get('/settings/public-pages', [PublicPageSettingsController::class, 'index'])->name('public-pages.index');
+        Route::match(['put', 'patch'], '/settings/public-pages/{page}', [PublicPageSettingsController::class, 'update'])->name('public-pages.update');
+        Route::post('/settings/public-pages/{page}/publish', [PublicPageSettingsController::class, 'publish'])->name('public-pages.publish');
+        Route::post('/settings/public-pages/{page}/revert', [PublicPageSettingsController::class, 'revert'])->name('public-pages.revert');
 
         /*
          * PROD-001 — is the deployment actually working, in the terms an operator acts on.

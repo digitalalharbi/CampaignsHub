@@ -21,6 +21,7 @@ import { FormField, TextInput, TextareaField } from '@/components/ui/form'
 import { controlClass } from '@/components/ui/Field'
 import { DateField } from '@/components/ui/DateField'
 import { toApiError } from '@/lib/api/client'
+import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/PhoneField'
 import { useUi } from '@/stores/ui'
 
 interface UploadFile {
@@ -38,9 +39,13 @@ interface Applicant {
   contact_name: string
   contact_email: string
   contact_phone: string
+  /** The country chosen in the phone control, without a `+`. Never sent — it only sets the default region. */
+  dial_code: string
   company_name: string
 }
-const EMPTY_APPLICANT: Applicant = { contact_name: '', contact_email: '', contact_phone: '', company_name: '' }
+const EMPTY_APPLICANT: Applicant = {
+  contact_name: '', contact_email: '', contact_phone: '', dial_code: DEFAULT_DIAL_CODE, company_name: '',
+}
 
 type StepKey = 'services' | 'applicant' | 'brief' | 'tracking' | 'content' | 'review'
 
@@ -186,6 +191,15 @@ export function PaidMediaIntake() {
   const mutation = useMutation({ mutationFn: submitRequest })
   const apiError = mutation.isError ? toApiError(mutation.error) : null
 
+  /*
+   * The one canonical form of what is in the phone control, or null while it is not readable yet.
+   *
+   * Computed once and used for validation, for the OTP challenge and for the payload, so the number
+   * that gets verified is character-for-character the number that gets submitted. Sending the raw text
+   * to one and the tidied text to the other is how a customer ends up refused beside a green tick.
+   */
+  const canonicalPhone = phoneFieldValue(applicant.contact_phone, applicant.dial_code)
+
   function validate(key: StepKey): boolean {
     const e: Record<string, string> = {}
     if (key === 'services') {
@@ -195,7 +209,15 @@ export function PaidMediaIntake() {
     if (key === 'applicant') {
       if (applicant.contact_name.trim().length < 2) e.contact_name = copy.errName
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(applicant.contact_email)) e.contact_email = copy.errEmail
-      if (!/^\+[1-9]\d{7,14}$/.test(applicant.contact_phone.trim())) e.contact_phone = copy.errPhone
+      /*
+       * PHONE-001 — the rule the SERVER applies, not a stricter one nobody can see.
+       *
+       * This tested `/^\+[1-9]\d{7,14}$/`, which refused `0501234567` and `966532115582` — the two ways
+       * almost every customer here writes their own number — on a PUBLIC intake form, with a message
+       * demanding a «+» they had no reason to think was missing. The backend normalises all of these to
+       * E.164 anyway, so the browser was the only thing rejecting them.
+       */
+      if (canonicalPhone === null) e.contact_phone = copy.errPhone
       if (applicant.company_name.trim().length < 2) e.company_name = copy.errCompany
     }
     if (key === 'content' && anyUploading) e.files = copy.waitUploads
@@ -224,7 +246,7 @@ export function PaidMediaIntake() {
       type: paidType,
       contact_name: applicant.contact_name.trim(),
       contact_email: applicant.contact_email.trim(),
-      contact_phone: applicant.contact_phone || undefined,
+      contact_phone: canonicalPhone ?? undefined,
       company_name: applicant.company_name || undefined,
       objective: servicesSummary || undefined,
       budget: budgetRaw ? Number(budgetRaw) : undefined,
@@ -493,11 +515,31 @@ export function PaidMediaIntake() {
           {currentKey === 'applicant' && (
             <div className="space-y-4">
               <h2 className="text-base font-bold text-text-primary">{copy.applicantTitle}</h2>
-              <TextInput label={copy.name} value={applicant.contact_name} onChange={(e) => setApp('contact_name', e.target.value)} required error={errors.contact_name} />
-              <TextInput label={copy.email} type="email" value={applicant.contact_email} onChange={(e) => setApp('contact_email', e.target.value)} required error={errors.contact_email} />
+              {/*
+                Each field names what it holds (`autoComplete`). Without it the browser guesses from
+                position and drops an email address into «اسم النشاط أو الشركة», which is what an
+                unlabelled form gets on the second visit.
+              */}
+              <TextInput label={copy.name} autoComplete="name" value={applicant.contact_name} onChange={(e) => setApp('contact_name', e.target.value)} required error={errors.contact_name} />
+              <TextInput label={copy.email} type="email" autoComplete="email" value={applicant.contact_email} onChange={(e) => setApp('contact_email', e.target.value)} required error={errors.contact_email} />
               <div className="grid gap-4 sm:grid-cols-2">
-                <TextInput label={copy.phone} value={applicant.contact_phone} onChange={(e) => setApp('contact_phone', e.target.value)} inputMode="tel" dir="ltr" placeholder="+9665XXXXXXXX" required error={errors.contact_phone} />
-                <TextInput label={copy.company} value={applicant.company_name} onChange={(e) => setApp('company_name', e.target.value)} required error={errors.company_name} />
+                {/*
+                  PHONE-SA-001 — the product's one phone control, the same one registration uses.
+                  The country is a visible dropdown that opens on +966, so the national number people
+                  actually write needs no prefix and no «+».
+                */}
+                <PhoneField
+                  id="contact_phone"
+                  label={copy.phone}
+                  ar={ar}
+                  value={applicant.contact_phone}
+                  onChange={(v) => setApp('contact_phone', v)}
+                  dialCode={applicant.dial_code}
+                  onDialCodeChange={(v) => setApp('dial_code', v)}
+                  required
+                  error={errors.contact_phone}
+                />
+                <TextInput label={copy.company} autoComplete="organization" value={applicant.company_name} onChange={(e) => setApp('company_name', e.target.value)} required error={errors.company_name} />
               </div>
             </div>
           )}
@@ -564,6 +606,9 @@ export function PaidMediaIntake() {
                 {hasCustom && customRequest.trim() && <Row k={copy.customTitle} v={customRequest.trim()} />}
                 <Row k={copy.name} v={applicant.contact_name} />
                 <Row k={copy.email} v={applicant.contact_email} />
+                {/* The number in the form it will be verified and stored in — this is the last screen
+                    before an OTP goes to it, and a number nobody checked is a request nobody can answer. */}
+                {canonicalPhone && <Row k={copy.phone} v={canonicalPhone} />}
                 {applicant.company_name && <Row k={copy.company} v={applicant.company_name} />}
                 {fieldsForNeeds(needs).filter((f) => f.control !== 'files').map((f) => {
                   const raw = answers[f.token]
@@ -578,7 +623,7 @@ export function PaidMediaIntake() {
               <div className="rounded-xl border border-border bg-surface-secondary p-3">
                 <h3 className="text-base font-bold text-text-primary">{copy.verifyTitle}</h3>
                 <div className="mt-2">
-                  <ContactVerification phone={applicant.contact_phone.trim()} email={applicant.contact_email.trim()} ar={ar} onChange={(ids) => setVerifiedIds((p) => ({ ...p, ...ids }))} />
+                  <ContactVerification phone={canonicalPhone ?? ''} email={applicant.contact_email.trim()} ar={ar} onChange={(ids) => setVerifiedIds((p) => ({ ...p, ...ids }))} />
                 </div>
               </div>
 

@@ -56,7 +56,9 @@ function fillApplicant() {
   // Required-field labels carry a trailing " *", so match by prefix.
   fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Tester' } })
   fireEvent.change(screen.getByLabelText(/^Email/), { target: { value: 't@e.com' } })
-  fireEvent.change(screen.getByLabelText(/^Phone/), { target: { value: '+96650000000' } })
+  // PHONE-001 — the national form, with no country code and no «+», because that is the shape the
+  // form used to refuse and the one almost every customer in this market types.
+  fireEvent.change(screen.getByLabelText(/^Mobile number/), { target: { value: '0500000000' } })
   fireEvent.change(screen.getByLabelText(/^Company/), { target: { value: 'Acme' } })
 }
 const clickNext = () => fireEvent.click(screen.getByRole('button', { name: /^Next$/i }))

@@ -30,16 +30,16 @@ export interface PublicPageRow {
   defaults: PageContent
 }
 
-export const listPublicPages = () => getData<PublicPageRow[]>('/settings/public-pages')
+export const listPublicPages = () => getData<PublicPageRow[]>('/admin/settings/public-pages')
 
 export const savePublicPageDraft = (page: PublicPageKey, draft: PageContent) =>
-  putData<PublicPageRow>(`/settings/public-pages/${page}`, { draft })
+  putData<PublicPageRow>(`/admin/settings/public-pages/${page}`, { draft })
 
 export const publishPublicPage = (page: PublicPageKey) =>
-  postData<PublicPageRow>(`/settings/public-pages/${page}/publish`)
+  postData<PublicPageRow>(`/admin/settings/public-pages/${page}/publish`)
 
 export const revertPublicPageDraft = (page: PublicPageKey) =>
-  postData<PublicPageRow>(`/settings/public-pages/${page}/revert`)
+  postData<PublicPageRow>(`/admin/settings/public-pages/${page}/revert`)
 
 /** PUBLIC read (no auth) — what visitors actually get. */
 export const getPublishedPage = (page: PublicPageKey) =>

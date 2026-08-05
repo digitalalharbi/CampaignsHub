@@ -7,32 +7,45 @@ namespace App\Domains\Settings\Http\Controllers;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Settings\Models\PublicPageSetting;
 use App\Domains\Settings\Services\PublicPageDefaults;
-use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * System Settings → editable public surfaces (marketing homepage + the three external portals).
+ * `/admin/settings` → Public site: the marketing homepage and the three public portals.
  *
- * Draft/publish split: the editor writes `draft` and previews it; only `publish` promotes it to `published`,
- * which is the ONLY thing public visitors read. Every write is permission-gated (settings.manage), tenant
- * scoped, and recorded in the audit log with the before/after payload.
+ * ## Why this lives behind `platform` and not behind a tenant's settings
+ *
+ * PAGES-001. These were tenant-scoped, reachable at `/settings/public-pages` behind
+ * `portal:app,agency,influencers`, while the console that renders them is `/admin` — where the
+ * operator belongs to NO tenant. So the one screen that shows this editor could never load it: the
+ * request was refused before it reached the controller, and the tab showed «تعذّر تحميل إعدادات
+ * الصفحات» to the only person entitled to use it.
+ *
+ * The deeper problem the move fixes: there is one marketing homepage. When every tenant had a row and
+ * the public endpoint read whichever was published last, a customer could rewrite the platform's own
+ * front page — and the next customer to publish would take it from them. One document, one owner.
+ *
+ * ## Draft and published are separate on purpose
+ *
+ * The editor writes `draft` and previews it; only `publish` promotes it to `published`, which is the
+ * ONLY thing a visitor reads. Every write is recorded in the audit log with its before/after payload.
+ *
+ * There is no `settings.manage` check on these actions: the `platform` middleware on the route group
+ * is the gate, and a second permission test against a tenant role the operator does not hold is how
+ * this screen locked out its own audience in the first place.
  */
 final class PublicPageSettingsController extends Controller
 {
     public function __construct(
-        private readonly TenantContext $tenant,
         private readonly AuditLogger $audit,
     ) {}
 
-    /** GET /settings/public-pages — every editable page with its draft + published state. */
-    public function index(Request $request): JsonResponse
+    /** GET /admin/settings/public-pages — every editable page with its draft + published state. */
+    public function index(): JsonResponse
     {
-        abort_unless($request->user()?->hasPermission('settings.manage'), 403);
-
-        $rows = PublicPageSetting::query()->get()->keyBy('page');
+        $rows = PublicPageSetting::query()->platform()->get()->keyBy('page');
 
         $pages = collect(PublicPageSetting::PAGES)->map(function (string $page) use ($rows): array {
             $row = $rows->get($page);
@@ -53,20 +66,19 @@ final class PublicPageSettingsController extends Controller
         return ApiResponse::success($pages->all(), 'Public page settings.');
     }
 
-    /** PUT /settings/public-pages/{page} — save the DRAFT only (never live). */
+    /** PUT /admin/settings/public-pages/{page} — save the DRAFT only (never live). */
     public function update(Request $request, string $page): JsonResponse
     {
-        abort_unless($request->user()?->hasPermission('settings.manage'), 403);
         abort_unless(in_array($page, PublicPageSetting::PAGES, true), 404);
 
         $data = $request->validate([
             'draft' => ['required', 'array'],
         ]);
 
-        $row = PublicPageSetting::firstOrNew(['page' => $page]);
+        $row = $this->rowFor($page) ?? new PublicPageSetting(['page' => $page]);
+
         $before = $row->draft;
         $row->fill([
-            'tenant_id' => $this->tenant->tenantId(),
             'page' => $page,
             'draft' => $data['draft'],
             'updated_by' => $request->user()->id,
@@ -77,13 +89,12 @@ final class PublicPageSettingsController extends Controller
         return ApiResponse::success($this->shape($row), 'Draft saved.');
     }
 
-    /** POST /settings/public-pages/{page}/publish — promote draft → published (what visitors see). */
+    /** POST /admin/settings/public-pages/{page}/publish — promote draft → published (what visitors see). */
     public function publish(Request $request, string $page): JsonResponse
     {
-        abort_unless($request->user()?->hasPermission('settings.manage'), 403);
         abort_unless(in_array($page, PublicPageSetting::PAGES, true), 404);
 
-        $row = PublicPageSetting::where('page', $page)->first();
+        $row = $this->rowFor($page);
         abort_if($row === null || $row->draft === null, 422, 'Nothing to publish — save a draft first.');
 
         $before = $row->published;
@@ -99,13 +110,14 @@ final class PublicPageSettingsController extends Controller
         return ApiResponse::success($this->shape($row), 'Published.');
     }
 
-    /** POST /settings/public-pages/{page}/revert — discard draft changes back to what is published. */
-    public function revert(Request $request, string $page): JsonResponse
+    /** POST /admin/settings/public-pages/{page}/revert — discard draft changes back to what is published. */
+    public function revert(string $page): JsonResponse
     {
-        abort_unless($request->user()?->hasPermission('settings.manage'), 403);
         abort_unless(in_array($page, PublicPageSetting::PAGES, true), 404);
 
-        $row = PublicPageSetting::where('page', $page)->firstOrFail();
+        $row = $this->rowFor($page);
+        abort_if($row === null, 404);
+
         $row->forceFill(['draft' => $row->published ?? PublicPageDefaults::for($page)])->save();
 
         $this->audit->log('public_page.reverted', 'public_page_setting', (string) $row->getKey());
@@ -114,25 +126,19 @@ final class PublicPageSettingsController extends Controller
     }
 
     /**
-     * GET /public/pages/{page} — PUBLIC (no auth): the published content only, so marketing pages and the
-     * external portals render tenant-edited copy without a code change. Falls back to shipped defaults.
+     * GET /public/pages/{page} — PUBLIC (no auth): the published content only, so the marketing pages
+     * and the public portals render edited copy without a code change. Falls back to shipped defaults.
+     *
+     * Reads the platform's own row by name, rather than «whichever row was published most recently
+     * anywhere» — which is what previously let one tenant's publish decide what every visitor saw.
      */
-    public function publicShow(Request $request, string $page): JsonResponse
+    public function publicShow(string $page): JsonResponse
     {
         abort_unless(in_array($page, PublicPageSetting::PAGES, true), 404);
 
-        $validated = $request->validate([
-            'tenant' => ['nullable', 'string', 'max:64'],
-        ]);
-
-        $row = PublicPageSetting::withoutGlobalScopes()
+        $row = PublicPageSetting::query()->platform()
             ->where('page', $page)
-            ->when(
-                isset($validated['tenant']),
-                fn ($q) => $q->whereIn('tenant_id', fn ($sub) => $sub->select('id')->from('tenants')->where('slug', $validated['tenant'])),
-            )
             ->whereNotNull('published')
-            ->latest('published_at')
             ->first();
 
         return ApiResponse::success([
@@ -141,6 +147,11 @@ final class PublicPageSettingsController extends Controller
             'source' => $row !== null ? 'published' : 'defaults',
             'version' => $row?->version ?? 0,
         ], 'Public page content.');
+    }
+
+    private function rowFor(string $page): ?PublicPageSetting
+    {
+        return PublicPageSetting::query()->platform()->where('page', $page)->first();
     }
 
     /** @return array<string,mixed> */
@@ -154,6 +165,7 @@ final class PublicPageSettingsController extends Controller
             'has_unpublished_changes' => $row->draft !== $row->published,
             'version' => $row->version,
             'published_at' => optional($row->published_at)->toIso8601String(),
+            'defaults' => PublicPageDefaults::for($row->page),
         ];
     }
 }

@@ -175,7 +175,7 @@ test.describe('homepage → catalogue → intake → saved request', () => {
     // 4) Applicant.
     await page.getByLabel(/الاسم|Name/).first().fill('Journey QA')
     await page.getByLabel(/البريد|Email/).first().fill(`journey-${Date.now()}@example.test`)
-    await page.getByLabel(/رقم الجوال|Phone/).first().fill(`+96650${String(Date.now()).slice(-7)}`)
+    await page.getByLabel(/رقم الجوال|Mobile number/).first().fill(`+96650${String(Date.now()).slice(-7)}`)
     await page.getByLabel(/اسم النشاط أو الشركة|Company/).first().fill('Journey Co')
     await page.getByRole('button', { name: /التالي|Next/ }).click()
 

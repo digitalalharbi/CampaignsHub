@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\CRM\Models\Contact;
 use App\Domains\Requests\Models\ExternalRequest;
+use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -160,5 +161,47 @@ final class PhoneNormalisationTest extends TestCase
         ]);
 
         $this->assertSame('+966501234567', $request->fresh()->contact_phone);
+    }
+
+    /**
+     * A proof issued for a number is a proof for that number however it is written the second time.
+     *
+     * The intake form now accepts every shape of the same phone, which makes this reachable: the
+     * customer verifies «0501234567», the review step shows it back as «+966501234567», and a raw
+     * string comparison then calls that a different phone. The request is refused with «verify your
+     * phone and email» printed beside a green tick saying it already is — an error nobody can act on.
+     */
+    public function test_a_verification_proves_the_same_number_written_another_way(): void
+    {
+        $service = app(ContactVerificationService::class);
+        $started = $service->start('sms', '0501234567');
+        $service->verify($started['id'], (string) $started['dev_code']);
+
+        $this->assertTrue($service->consumeVerified($started['id'], '+966501234567'));
+    }
+
+    /** …and is still not a proof for a DIFFERENT number, which is the only thing this check is for. */
+    public function test_a_verification_does_not_prove_another_number(): void
+    {
+        $service = app(ContactVerificationService::class);
+        $started = $service->start('sms', '0501234567');
+        $service->verify($started['id'], (string) $started['dev_code']);
+
+        $this->assertFalse($service->consumeVerified($started['id'], '0509999999'));
+    }
+
+    /**
+     * An email is still matched exactly.
+     *
+     * Loosening the phone comparison must not loosen the others — for an address there is no second
+     * valid spelling to accommodate, so anything looser only widens what one proof can be replayed against.
+     */
+    public function test_an_email_verification_is_still_matched_exactly(): void
+    {
+        $service = app(ContactVerificationService::class);
+        $started = $service->start('email', 'guest@example.test');
+        $service->verify($started['id'], (string) $started['dev_code']);
+
+        $this->assertFalse($service->consumeVerified($started['id'], 'GUEST@example.test'));
     }
 }

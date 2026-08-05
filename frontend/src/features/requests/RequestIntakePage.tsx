@@ -1,4 +1,5 @@
-import { isReadablePhone, phoneError } from '@/lib/phone'
+import { phoneError } from '@/lib/phone'
+import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/PhoneField'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -46,6 +47,8 @@ interface FormState {
   contact_name: string
   contact_email: string
   contact_phone: string
+  /** The country chosen in the phone control, without a `+`. Never sent — it only sets the default region. */
+  dial_code: string
   company_name: string
   objective: string
   budget: string
@@ -57,7 +60,7 @@ interface FormState {
 }
 
 const EMPTY: FormState = {
-  type: '', contact_name: '', contact_email: '', contact_phone: '', company_name: '',
+  type: '', contact_name: '', contact_email: '', contact_phone: '', dial_code: DEFAULT_DIAL_CODE, company_name: '',
   objective: '', budget: '', currency: 'SAR', priority: 'medium', start_date: '', due_date: '', meta: {},
 }
 
@@ -178,6 +181,14 @@ function DefaultIntake() {
   }
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }))
+
+  /*
+   * The one canonical form of what is in the phone control, or null while it is not readable yet.
+   *
+   * Used for validation, for the OTP challenge and for the payload alike, so the number that gets
+   * verified is character-for-character the number that gets submitted.
+   */
+  const canonicalPhone = phoneFieldValue(form.contact_phone, form.dial_code)
   const setMeta = (k: string, v: unknown) => setForm((f) => ({ ...f, meta: { ...f.meta, [k]: v } }))
 
   // Attachments — the upload token lives in memory ONLY (a token is sensitive; never localStorage).
@@ -259,7 +270,7 @@ function DefaultIntake() {
        * backend that would have normalised it. The customer was told to add a country code they had no
        * reason to think was missing, on the public intake form, before they could ask for anything.
        */
-      if (!isReadablePhone(form.contact_phone)) e.contact_phone = phoneError(ar)
+      if (canonicalPhone === null) e.contact_phone = phoneError(ar)
       if (form.company_name.trim().length < 2) e.company_name = ar ? 'اسم المنشأة مطلوب' : 'Company name is required'
     }
     if (s === 2 && form.objective.trim().length < 5) e.objective = ar ? 'اذكر هدف الطلب باختصار' : 'Describe the objective'
@@ -278,7 +289,7 @@ function DefaultIntake() {
       type: form.type,
       contact_name: form.contact_name.trim(),
       contact_email: form.contact_email.trim(),
-      contact_phone: form.contact_phone || undefined,
+      contact_phone: canonicalPhone ?? undefined,
       company_name: form.company_name || undefined,
       objective: form.objective || undefined,
       budget: showBudget && form.budget ? Number(form.budget) : undefined,
@@ -397,7 +408,19 @@ function DefaultIntake() {
               <TextInput label={ar ? 'الاسم' : 'Name'} value={form.contact_name} onChange={(e) => set('contact_name', e.target.value)} required error={errors.contact_name} />
               <EmailInput label={ar ? 'البريد الإلكتروني' : 'Email'} value={form.contact_email} onChange={(e) => set('contact_email', e.target.value)} required error={errors.contact_email} />
               <div className="grid gap-4 sm:grid-cols-2">
-                <TextInput label={ar ? 'رقم الجوال' : 'Mobile number'} value={form.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} inputMode="tel" dir="ltr" placeholder={ar ? '0501234567' : '0501234567'} required error={errors.contact_phone} hint={ar ? 'بمفتاح الدولة أو بدونه — كلاهما مقبول.' : 'With or without a country code — both are accepted.'} />
+                {/* PHONE-SA-001 — the product's one phone control, the same one registration uses. */}
+                <PhoneField
+                  id="contact_phone"
+                  label={ar ? 'رقم الجوال' : 'Mobile number'}
+                  ar={ar}
+                  value={form.contact_phone}
+                  onChange={(v) => set('contact_phone', v)}
+                  dialCode={form.dial_code}
+                  onDialCodeChange={(v) => set('dial_code', v)}
+                  required
+                  error={errors.contact_phone}
+                  hint={ar ? 'بمفتاح الدولة أو بدونه — كلاهما مقبول.' : 'With or without a country code — both are accepted.'}
+                />
                 <TextInput label={ar ? 'اسم النشاط أو الشركة' : 'Company'} value={form.company_name} onChange={(e) => set('company_name', e.target.value)} required error={errors.company_name} />
               </div>
             </div>
@@ -514,7 +537,7 @@ function DefaultIntake() {
               <div className="rounded-xl border border-border bg-surface-secondary p-3">
                 <FieldTitle ar={ar} title={ar ? 'تحقّق من وسيلة التواصل' : 'Verify your contact'} />
                 <div className="mt-2">
-                  <ContactVerification phone={form.contact_phone.trim()} email={form.contact_email.trim()} ar={ar} onChange={(ids) => setVerifiedIds((p) => ({ ...p, ...ids }))} />
+                  <ContactVerification phone={canonicalPhone ?? ''} email={form.contact_email.trim()} ar={ar} onChange={(ids) => setVerifiedIds((p) => ({ ...p, ...ids }))} />
                 </div>
               </div>
 

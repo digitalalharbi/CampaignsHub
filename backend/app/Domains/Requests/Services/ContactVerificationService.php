@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Requests\Services;
 
 use App\Domains\Requests\Models\ContactVerification;
+use App\Support\PhoneNumber;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 
@@ -87,7 +88,7 @@ final class ContactVerificationService
         if ($v === null || ! $v->isVerified() || $v->consumed_at !== null || $v->purpose !== $purpose) {
             return false;
         }
-        if ($v->destination !== $destination) {
+        if (! self::sameDestination($v->channel, $v->destination, $destination)) {
             return false;
         }
         $window = (int) config('requests.verification.token_ttl_minutes', 30);
@@ -97,6 +98,27 @@ final class ContactVerificationService
         $v->forceFill(['consumed_at' => Carbon::now()])->save();
 
         return true;
+    }
+
+    /**
+     * Whether the proof was issued for the destination now being claimed.
+     *
+     * PHONE-001 — a phone is compared as a NUMBER, not as a string. The customer verifies
+     * «0501234567», then tidies it to «+966501234567» before pressing submit, and a raw `!==` calls
+     * that a different phone: the request is refused with «verify your phone and email» beside a
+     * green tick saying it already is. One phone, written twice, is one phone.
+     *
+     * Everything else stays an exact match. An email is normalised by its caller (lowercased) and has
+     * no second valid spelling, so loosening it would only widen what a single proof can be replayed
+     * against — which is the opposite of what this check is for.
+     */
+    private static function sameDestination(string $channel, string $issuedFor, string $claimed): bool
+    {
+        if ($channel === 'sms' || $channel === 'whatsapp') {
+            return PhoneNumber::same($issuedFor, $claimed);
+        }
+
+        return $issuedFor === $claimed;
     }
 
     private function providerKey(string $channel): string

@@ -180,7 +180,7 @@ export async function submitVerifiedRequest(
   await page.getByRole('button', { name: /Next|التالي/ }).click()
   await page.getByLabel(/Name|الاسم/).fill(opts.name)
   await page.getByLabel(/Email|البريد/).fill(opts.email)
-  await page.getByLabel(/Phone|رقم الجوال/).fill(opts.phone)
+  await page.getByLabel(/Mobile number|رقم الجوال/).fill(opts.phone)
   await page.getByLabel(/Company|اسم النشاط أو الشركة/).fill(opts.company)
   await page.getByRole('button', { name: /Next|التالي/ }).click()
   await page.getByLabel(/Objective|هدف الطلب/).fill(opts.objective)

@@ -331,6 +331,45 @@ final class TaxonomyEngineTest extends TestCase
             ->assertJsonPath('success', true);
     }
 
+    /**
+     * TAX-ADMIN-001 — the platform console can reach the shared layer it is supposed to administer.
+     *
+     * `/admin/settings` → «التصنيفات» mounts this manager, and the operator belongs to no tenant. With
+     * only the tenant-scoped group, the request was refused before the controller ran and the tab
+     * showed «تعذّر تحميل البيانات» to the one person entitled to edit these.
+     */
+    public function test_the_platform_operator_can_read_the_shared_taxonomy_layer(): void
+    {
+        $operator = User::create([
+            'name' => 'Operator', 'email' => 'tax-op-'.uniqid().'@platform.test',
+            'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
+        ]);
+        $operator->forceFill(['is_platform_admin' => true])->save();
+
+        $res = $this->actingAs($operator, 'sanctum')->getJson('/api/v1/admin/taxonomies')->assertOk();
+        $this->assertNotEmpty($res->json('data'));
+
+        // Every definition it offers is a PLATFORM one — the operator has no tenant whose options
+        // could be mixed in, and a console that showed one customer's private values would be a leak.
+        foreach ($res->json('data') as $definition) {
+            $this->assertNull($definition['tenant_id'], "{$definition['key']} is not a platform definition");
+        }
+
+        $this->actingAs($operator, 'sanctum')
+            ->getJson('/api/v1/admin/taxonomies/request.status/options')->assertOk();
+    }
+
+    /** …and a tenant user cannot enter through the platform door. */
+    public function test_a_tenant_user_cannot_use_the_platform_taxonomy_routes(): void
+    {
+        $owner = $this->userWith(['taxonomies.view']);
+
+        $this->actingAs($owner, 'sanctum')->getJson('/api/v1/admin/taxonomies')->assertForbidden();
+
+        // Their own route still works — this added a door, it did not move one.
+        $this->actingAs($owner, 'sanctum')->getJson('/api/v1/taxonomies')->assertOk();
+    }
+
     public function test_legacy_request_catalog_enums_are_untouched(): void
     {
         // The taxonomy engine is additive: the legacy request status/type catalog is a separate table and is

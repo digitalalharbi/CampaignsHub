@@ -21,7 +21,7 @@ const COPY = {
     revert: 'استرجاع المنشور', preview: 'معاينة المسودة',
     unpublished: 'تغييرات غير منشورة', published_v: 'منشور — إصدار', never: 'لم يُنشر بعد',
     loading: 'جارٍ التحميل…', error: 'تعذّر تحميل إعدادات الصفحات.', saved: 'حُفظت المسودة', publishedOk: 'تم النشر — ظهرت للزوار',
-    noPerm: 'تحتاج صلاحية إدارة الإعدادات لتحرير الصفحات العامة.',
+    noPerm: 'تحرير الموقع العام يخص مشغّل المنصة وحده.',
     previewTitle: 'معاينة المسودة قبل النشر', close: 'إغلاق', previewNote: 'هذه معاينة للمسودة — لم تظهر للزوار بعد.',
     hidden: 'مخفي من الصفحة العامة',
   },
@@ -36,7 +36,7 @@ const COPY = {
     revert: 'Revert to published', preview: 'Preview draft',
     unpublished: 'Unpublished changes', published_v: 'Published — version', never: 'Never published',
     loading: 'Loading…', error: 'Could not load page settings.', saved: 'Draft saved', publishedOk: 'Published — now live for visitors',
-    noPerm: 'You need the settings-manage permission to edit public pages.',
+    noPerm: 'Editing the public site belongs to the platform operator alone.',
     previewTitle: 'Preview the draft before publishing', close: 'Close', previewNote: 'This is a draft preview — visitors do not see it yet.',
     hidden: 'Hidden from the public page',
   },
@@ -54,7 +54,16 @@ function orderedSections(content: PageContent): [string, PageSection][] {
 export function PublicPagesSettingsPage() {
   const locale = useUi((s) => s.locale)
   const c = COPY[locale]
-  const canManage = useAuth((s) => s.hasPermission('settings.manage'))
+  /*
+   * PAGES-001 — platform operators, not holders of a tenant permission.
+   *
+   * This asked for `settings.manage`, a permission granted through a tenant ROLE. The platform
+   * operator holds no membership and therefore no role, so the honest answer to «may this person edit
+   * the platform's homepage?» is «are they the platform operator?». `hasPermission` happened to return
+   * true for them by short-circuit, which is why the screen rendered and then failed at the request
+   * instead of saying plainly who this is for.
+   */
+  const canManage = useAuth((s) => s.user?.is_platform_admin === true)
   const qc = useQueryClient()
 
   const [page, setPage] = useState<PublicPageKey>('home')

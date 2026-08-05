@@ -6,7 +6,6 @@ use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Settings\Http\Controllers\BrandingController;
 use App\Domains\Settings\Http\Controllers\NotificationPreferenceController;
 use App\Domains\Settings\Http\Controllers\OrganizationSettingsController;
-use App\Domains\Settings\Http\Controllers\PublicPageSettingsController;
 use App\Domains\Settings\Http\Controllers\SecurityController;
 use App\Domains\Settings\Http\Controllers\TeamController;
 use Illuminate\Support\Facades\Route;
@@ -17,11 +16,14 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     Route::get('organization', [OrganizationSettingsController::class, 'show'])->name('organization.show');
     Route::match(['put', 'patch'], 'organization', [OrganizationSettingsController::class, 'update'])->name('organization.update');
 
-    // Public surfaces (marketing homepage + external portals) — draft/preview/publish, settings.manage gated.
-    Route::get('public-pages', [PublicPageSettingsController::class, 'index'])->name('public-pages.index');
-    Route::match(['put', 'patch'], 'public-pages/{page}', [PublicPageSettingsController::class, 'update'])->name('public-pages.update');
-    Route::post('public-pages/{page}/publish', [PublicPageSettingsController::class, 'publish'])->name('public-pages.publish');
-    Route::post('public-pages/{page}/revert', [PublicPageSettingsController::class, 'revert'])->name('public-pages.revert');
+    /*
+     * PAGES-001 — the public marketing site is NOT here.
+     *
+     * The marketing homepage and the three public portals moved to `/admin/settings/public-pages`
+     * (routes/api/admin.php). There is one of each and they belong to the platform operator; behind
+     * this group they were unreachable from the only console that renders them, and reachable by every
+     * tenant administrator — who could rewrite the platform's own front page.
+     */
 
     // Branding.
     Route::get('branding', [BrandingController::class, 'show'])->name('branding.show');

@@ -21,7 +21,7 @@ test('homepage → request → dynamic form → submit → success with request 
   await expect(page.getByText(/الاسم مطلوب|Name is required/)).toBeVisible()
   await page.getByLabel(/الاسم|Name/).fill('QA Requester')
   await page.getByLabel(/البريد|Email/).fill('qa-requester@example.com')
-  await page.getByLabel(/رقم الجوال|Phone/).fill(`+96650${String(Date.now()).slice(-7)}`)
+  await page.getByLabel(/رقم الجوال|Mobile number/).fill(`+96650${String(Date.now()).slice(-7)}`)
   await page.getByLabel(/اسم النشاط أو الشركة|Company/).fill('QA Co')
   await page.getByRole('button', { name: /التالي|Next/ }).click()
 
@@ -63,7 +63,15 @@ test('after submit, the tracking link shows status and accepts a client reply', 
   await page.getByRole('button', { name: /التالي|Next/ }).click()
   await page.getByLabel(/الاسم|Name/).fill('Track Tester')
   await page.getByLabel(/البريد|Email/).fill('track@example.com')
-  await page.getByLabel(/رقم الجوال|Phone/).fill(`+96650${String(Date.now()).slice(-7)}`)
+  /*
+   * PHONE-001 — the NATIONAL form, with no country code and no «+».
+   *
+   * This is how almost every customer in this market writes their own number, and the browser used to
+   * refuse it before the server ever saw it. Filling it here means the whole journey — validation, the
+   * OTP challenge, and the submit that must match the number the OTP was issued for — is proved against
+   * the shape that was broken, not against the one shape that always worked.
+   */
+  await page.getByLabel(/رقم الجوال|Mobile number/).fill(`050${String(Date.now()).slice(-7)}`)
   await page.getByLabel(/اسم النشاط أو الشركة|Company/).fill('Track Co')
   await page.getByRole('button', { name: /التالي|Next/ }).click()
   await page.getByLabel(/هدف الطلب|Objective/).fill('Need advice on scaling our campaigns.')

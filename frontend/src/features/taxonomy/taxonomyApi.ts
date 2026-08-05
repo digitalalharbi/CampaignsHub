@@ -1,5 +1,6 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { api, deleteData, getData, patchData, postData } from '@/lib/api/client'
+import { useAuth } from '@/stores/auth'
 import type { ApiEnvelope } from '@/lib/api/types'
 import type { Option, OptionDraft } from '@/components/forms'
 
@@ -129,12 +130,27 @@ export function optionsForParent(options: Option[], parentKey: string | null | u
 
 // ---- API surface (matches OPTION_MANAGEMENT_SPEC endpoints) ------------------
 
+/**
+ * TAX-ADMIN-001 — which layer's options these calls address.
+ *
+ * This manager is mounted twice: in `/admin/settings` for the platform operator, and in a tenant's own
+ * settings for a customer. The engine behind it is the same one and it resolves «platform ∪ current
+ * tenant» from the session, so the ONLY difference is which route group the request enters through —
+ * and the operator holds no tenant, so the tenant-scoped group refused them before the controller ran.
+ * That is what made the التصنيفات tab show «تعذّر تحميل البيانات».
+ *
+ * Read from the store rather than threaded as a prop because it is a property of WHO IS SIGNED IN, not
+ * of where the component happens to sit: a platform operator has no tenant whose options they could be
+ * editing instead, so there is nothing here for a caller to get wrong.
+ */
+const base = () => (useAuth.getState().user?.is_platform_admin === true ? '/admin' : '')
+
 /** GET /taxonomies — every classification field visible to the caller. */
-export const getDefinitions = () => getData<TaxonomyDefinition[]>('/taxonomies')
+export const getDefinitions = () => getData<TaxonomyDefinition[]>(`${base()}/taxonomies`)
 
 /** GET /taxonomies/{key}/options?scope=… — effective option set for a field. */
 export async function getOptions(key: string, scope?: TaxonomyScope): Promise<TaxonomyOption[]> {
-  const res = await api.get<ApiEnvelope<TaxonomyOption[]>>(`/taxonomies/${encodeURIComponent(key)}/options`, {
+  const res = await api.get<ApiEnvelope<TaxonomyOption[]>>(`${base()}/taxonomies/${encodeURIComponent(key)}/options`, {
     params: scope ? { scope } : {},
   })
   return res.data.data ?? []
@@ -142,7 +158,7 @@ export async function getOptions(key: string, scope?: TaxonomyScope): Promise<Ta
 
 /** POST /taxonomies/{key}/options — create a tenant option. */
 export const createOption = (key: string, payload: OptionPayload) =>
-  postData<TaxonomyOption>(`/taxonomies/${encodeURIComponent(key)}/options`, payload)
+  postData<TaxonomyOption>(`${base()}/taxonomies/${encodeURIComponent(key)}/options`, payload)
 
 /** Slugify a free-text label into a stable option key (lowercase, non-alphanumerics → underscore). */
 export function slugifyKey(input: string): string {
@@ -168,28 +184,28 @@ export async function createOptionFromDraft(definitionKey: string, draft: Option
 
 /** PATCH /options/{id} — update (system options: label/translation/color/active only). */
 export const updateOption = (id: string, patch: Partial<OptionPayload>) =>
-  patchData<TaxonomyOption>(`/options/${encodeURIComponent(id)}`, patch)
+  patchData<TaxonomyOption>(`${base()}/options/${encodeURIComponent(id)}`, patch)
 
 /** POST /options/reorder — persist a new ordering (array of option ids in order). */
-export const reorderOptions = (ids: string[]) => postData<TaxonomyOption[]>('/options/reorder', { ids })
+export const reorderOptions = (ids: string[]) => postData<TaxonomyOption[]>(`${base()}/options/reorder`, { ids })
 
 /** POST /options/{id}/merge — reassign bound records to `into`, then soft-retire `id`. */
 export const mergeOption = (id: string, into: string) =>
-  postData<TaxonomyOption>(`/options/${encodeURIComponent(id)}/merge`, { into })
+  postData<TaxonomyOption>(`${base()}/options/${encodeURIComponent(id)}/merge`, { into })
 
 /** POST /options/{id}/reassign — move bound records to `into` without retiring `id`. */
 export const reassignOption = (id: string, into: string) =>
-  postData<TaxonomyOption>(`/options/${encodeURIComponent(id)}/reassign`, { into })
+  postData<TaxonomyOption>(`${base()}/options/${encodeURIComponent(id)}/reassign`, { into })
 
 /** POST /options/{id}/deactivate — soft-disable (never a hard delete when in use). */
 export const deactivateOption = (id: string) =>
-  postData<TaxonomyOption>(`/options/${encodeURIComponent(id)}/deactivate`)
+  postData<TaxonomyOption>(`${base()}/options/${encodeURIComponent(id)}/deactivate`)
 
 /** GET /options/{id}/usage — usage count + delete-protection verdict. */
-export const optionUsage = (id: string) => getData<OptionUsage>(`/options/${encodeURIComponent(id)}/usage`)
+export const optionUsage = (id: string) => getData<OptionUsage>(`${base()}/options/${encodeURIComponent(id)}/usage`)
 
 /** DELETE /options/{id} — only permitted for unused, non-system options. */
-export const deleteOption = (id: string) => deleteData<{ deleted: boolean }>(`/options/${encodeURIComponent(id)}`)
+export const deleteOption = (id: string) => deleteData<{ deleted: boolean }>(`${base()}/options/${encodeURIComponent(id)}`)
 
 // ---- react-query hooks ------------------------------------------------------
 
