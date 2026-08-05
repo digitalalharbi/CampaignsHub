@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\ClientWorkspaces\Services;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
@@ -28,6 +29,7 @@ final class ClientAnalyticsService
 
     public function __construct(
         private readonly MetricsAggregator $metrics,
+        private readonly DataFreshnessService $freshnessService,
         private readonly TenantContext $tenant,
     ) {}
 
@@ -152,36 +154,26 @@ final class ClientAnalyticsService
     }
 
     /**
+     * Freshness comes from {@see DataFreshnessService} (UNIFIED-001), not from a query of its own.
+     *
+     * This method used to compute it here, over `daily_metrics` alone. That made a client whose store
+     * had gone a week without a sweep read «محدَّث» on the strength of its ad platforms — while revenue,
+     * AOV and ROAS on the very same header came off that unswept store. The service counts every source
+     * feeding the client's projects, so the badge covers the figures beside it.
+     *
      * @param  list<string>  $ids
      * @return array<string,mixed>
      */
     private function freshness(string $tenantId, array $ids, Carbon $from, Carbon $to): array
     {
-        if ($ids === []) {
-            return ['state' => 'no_data', 'last_sync_at' => null, 'missing_days' => 0, 'sync_failed' => false];
-        }
-        $last = DB::table('daily_metrics')->where('tenant_id', $tenantId)->whereIn('project_id', $ids)
-            ->max('data_freshness_at');
-        $distinctDays = DB::table('daily_metrics')->where('tenant_id', $tenantId)->whereIn('project_id', $ids)
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-            ->distinct()->count('metric_date');
-        $rangeDays = $from->diffInDays($to) + 1;
-        $missing = max(0, $rangeDays - $distinctDays);
-
-        $failed = DB::table('metric_sync_runs')->where('tenant_id', $tenantId)->whereIn('project_id', $ids)
-            ->whereIn('status', ['failed', 'partial'])
-            ->where('finished_at', '>=', Carbon::now()->subDays(3))->exists();
-
-        $staleCutoff = Carbon::now()->subDays(2);
-        $stale = $last === null || Carbon::parse($last)->lt($staleCutoff);
-
-        $state = $failed ? 'sync_failed' : ($missing > 0 ? 'partial' : ($stale ? 'stale' : 'fresh'));
+        $state = $this->freshnessService->state($tenantId, $ids, $from, $to);
 
         return [
-            'state' => $state,
-            'last_sync_at' => $last ? Carbon::parse($last)->toIso8601String() : null,
-            'missing_days' => $missing,
-            'sync_failed' => $failed,
+            'state' => $state['state'],
+            'last_sync_at' => $state['last_sync_at'],
+            'missing_days' => $state['missing_days'],
+            'sync_failed' => $state['sync_failed'],
+            'sources' => $state['sources'],
         ];
     }
 

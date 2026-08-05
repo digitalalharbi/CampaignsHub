@@ -117,20 +117,77 @@ final class StoreFunnelTest extends TestCase
     /**
      * A store on a platform with no cart data makes the add-to-cart stage an UNDERCOUNT, and it says
      * so instead of reporting a near-perfect checkout rate.
+     *
+     * The Zid store files an order of its own, because that is what makes it THIS project's store
+     * (UNIFIED-001): a shop belongs to the project its data was filed under, not to every project of
+     * the tenant that owns it.
      */
     public function test_add_to_cart_is_partial_when_a_store_cannot_report_carts(): void
     {
         $this->holdingTenant((string) $this->tenant->id);
-        $this->account('zid', 'store');
+        $zid = $this->account('zid', 'store');
         app(TenantContext::class)->forget();
 
         $this->seedOrder('o1', total: 100, status: 'completed');
+        $this->seedOrder('z1', total: 80, status: 'completed', store: $zid, provider: 'zid');
 
         $stages = collect($this->funnel()->json('data.stages'))->keyBy('key');
 
         $this->assertSame('partial', $stages['add_to_cart']['state']);
         $this->assertNotEmpty($stages['add_to_cart']['note_ar']);
         $this->assertNotEmpty($this->funnel()->json('data.coverage.stores_without_cart_data'));
+    }
+
+    /**
+     * A shop belonging to a DIFFERENT project of the same tenant is not this project's problem.
+     *
+     * The funnel used to list every store in the tenant, so an agency running two clients out of two
+     * projects saw the other client's shop counted in `coverage.stores` and named in
+     * `stores_without_cart_data` — a store name crossing a project boundary, and a cart-completeness
+     * verdict decided by a shop the reader has nothing to do with.
+     */
+    public function test_a_store_belonging_to_another_project_does_not_appear_in_this_funnel(): void
+    {
+        $other = Project::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'name' => 'مشروع آخر',
+            'status' => 'active',
+        ]);
+
+        $this->holdingTenant((string) $this->tenant->id);
+        $elsewhere = $this->account('zid', 'store');
+        app(TenantContext::class)->forget();
+
+        $this->seedOrder('o1', total: 100, status: 'completed');
+        $this->seedOrder('x1', total: 500, status: 'completed', store: $elsewhere, provider: 'zid', projectId: (string) $other->id);
+
+        $coverage = $this->funnel()->json('data.coverage');
+        $stages = collect($this->funnel()->json('data.stages'))->keyBy('key');
+
+        $this->assertSame(1, $coverage['stores']);
+        $this->assertSame([], $coverage['stores_without_cart_data']);
+        // And the other project's revenue never reached this funnel either.
+        $this->assertSame(100.0, (float) $stages['revenue']['value']);
+        $this->assertSame('measured', $stages['add_to_cart']['state']);
+    }
+
+    /**
+     * A shop that is connected and has never been swept is reported as such, not as «no store».
+     *
+     * The two call for different actions — go and connect one, versus wait or go and see why the sweep
+     * has not run — and an operator told the first would try to reconnect a store already connected.
+     */
+    public function test_a_connected_store_awaiting_its_first_sync_is_named_rather_than_ignored(): void
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+        $this->account('zid', 'store');
+        app(TenantContext::class)->forget();
+
+        $coverage = $this->funnel()->json('data.coverage');
+
+        $this->assertSame(0, $coverage['stores']);
+        $this->assertContains('zid', array_column($coverage['stores_pending_first_sync'], 'provider'));
     }
 
     public function test_add_to_cart_counts_orders_and_the_carts_that_never_became_one(): void
@@ -377,14 +434,17 @@ final class StoreFunnelTest extends TestCase
         bool $cancelled = false,
         ?string $campaignId = null,
         string $method = 'none',
+        ?ExternalAccount $store = null,
+        string $provider = 'salla',
+        ?string $projectId = null,
     ): CommerceOrder {
         $this->holdingTenant((string) $this->tenant->id);
 
         $order = CommerceOrder::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id,
-            'project_id' => $this->project->id,
-            'external_account_id' => $this->store->getKey(),
-            'provider' => 'salla',
+            'project_id' => $projectId ?? $this->project->id,
+            'external_account_id' => ($store ?? $this->store)->getKey(),
+            'provider' => $provider,
             'external_id' => $externalId,
             'status' => $status,
             'placed_at' => Carbon::now()->subDay(),

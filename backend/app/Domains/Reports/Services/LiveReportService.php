@@ -6,8 +6,7 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Services\StoreFunnelService;
-use App\Domains\Metrics\Models\DailyMetric;
-use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\ReportShare;
@@ -112,7 +111,7 @@ final class LiveReportService
              * as a section that failed to load.
              */
             'store_funnel' => $this->storeFunnel($share, $scope['project_id'], $from, $to),
-            'freshness' => $this->freshness($scope['project_id'], $scope['providers']),
+            'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers']),
             /*
              * LIVEREP-002 — the metrics the operator chose, in the order they chose to show them.
              *
@@ -320,30 +319,40 @@ final class LiveReportService
         return $funnel;
     }
 
-    private function freshness(string $projectId, array $providers): array
+    /**
+     * Built by {@see DataFreshnessService} (UNIFIED-001) rather than queried here.
+     *
+     * The rows this method used to assemble described the ad platforms only, which was defensible while
+     * a report held nothing but ad figures. It now carries the store funnel — orders, revenue, AOV,
+     * ROAS — so a footer that vouched for the link's freshness while never once looking at the shop was
+     * making a promise about numbers it had not checked. Every source behind the link is listed, and the
+     * verdict on each is the same verdict the operator sees on their own dashboard.
+     *
+     * `state` keeps its previous vocabulary for a synced platform (`synced`), so a client page written
+     * against the old payload keeps working; the finer verdicts (`stale`, `failed`) arrive as
+     * `detailed_state` alongside.
+     *
+     * @param  list<string>  $providers
+     * @return list<array<string, mixed>>
+     */
+    private function freshness(string $tenantId, string $projectId, array $providers): array
     {
-        if ($projectId === '' || $providers === []) {
+        if ($projectId === '') {
             return [];
         }
 
-        $lastData = DailyMetric::query()
-            ->where('project_id', $projectId)
-            ->whereIn('provider', $providers)
-            ->selectRaw('provider, MAX(data_freshness_at) AS at')
-            ->groupBy('provider')
-            ->pluck('at', 'provider');
+        $sources = app(DataFreshnessService::class)->sources(
+            $tenantId,
+            [$projectId],
+            $providers === [] ? null : $providers,
+        );
 
-        $lastRun = MetricSyncRun::query()
-            ->where('project_id', $projectId)
-            ->whereIn('provider', $providers)
-            ->selectRaw('provider, MAX(finished_at) FILTER (WHERE status IN (\'success\', \'partial\')) AS at')
-            ->groupBy('provider')
-            ->pluck('at', 'provider');
-
-        return array_map(fn (string $provider): array => [
-            'provider' => $provider,
-            'data_as_of' => $this->iso($lastData[$provider] ?? null),
-            'last_checked_at' => $this->iso($lastRun[$provider] ?? null),
+        return array_map(static fn (array $source): array => [
+            'kind' => $source['kind'],
+            'provider' => $source['provider'],
+            'name' => $source['name'],
+            'data_as_of' => $source['data_as_of'],
+            'last_checked_at' => $source['last_checked_at'],
             /*
              * Never synced is stated, not implied by a zero.
              *
@@ -351,8 +360,9 @@ final class LiveReportService
              * genuinely spent nothing, and a client cannot tell those apart. This flag is what lets the
              * page say «awaiting credentials» in the place where the number would otherwise sit.
              */
-            'state' => isset($lastRun[$provider]) ? 'synced' : 'awaiting_credentials',
-        ], $providers);
+            'state' => $source['state'] === 'awaiting_credentials' ? 'awaiting_credentials' : 'synced',
+            'detailed_state' => $source['state'],
+        ], $sources);
     }
 
     private function iso(mixed $value): ?string

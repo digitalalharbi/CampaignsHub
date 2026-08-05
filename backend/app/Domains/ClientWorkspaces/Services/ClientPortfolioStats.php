@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\ClientWorkspaces\Services;
 
+use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +16,10 @@ use Illuminate\Support\Facades\DB;
  */
 final class ClientPortfolioStats
 {
-    public function __construct(private readonly TenantContext $tenant) {}
+    public function __construct(
+        private readonly TenantContext $tenant,
+        private readonly DataFreshnessService $freshness,
+    ) {}
 
     /**
      * @param  list<string>  $clientIds
@@ -65,10 +69,15 @@ final class ClientPortfolioStats
             ->groupBy('project_id')->select('project_id', DB::raw('sum(value) as v'))
             ->pluck('v', 'project_id');
 
-        $freshByProject = $projectIds === [] ? collect() : DB::table('daily_metrics')
-            ->where('tenant_id', $tenantId)->whereIn('project_id', $projectIds)
-            ->groupBy('project_id')->select('project_id', DB::raw('max(data_freshness_at) as f'))
-            ->pluck('f', 'project_id');
+        /*
+         * «آخر مزامنة» comes from the one freshness service (UNIFIED-001), in ONE bulk call for the
+         * whole page — not `max(data_freshness_at)` read here. The old query saw ad platforms only, so
+         * this column and the client's own analytics header could name different moments for the same
+         * client on the same afternoon, and a store's sweep never moved it at all.
+         */
+        $freshByProject = $projectIds === []
+            ? []
+            : $this->freshness->lastSyncByProject($tenantId, array_map('strval', $projectIds));
 
         $providersByClient = [];
         $currenciesByClient = [];

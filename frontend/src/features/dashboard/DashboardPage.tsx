@@ -126,12 +126,18 @@ export function DashboardPage() {
   const freshness = useFreshness(currentProjectId, range, filters)
 
   const cur = summary.data?.current
+  // Null when the project has no store at all — the strip is absent rather than empty, because an
+  // empty store panel reads as a store that sold nothing.
+  const commerce = summary.data?.commerce ?? null
   const points = series.data ?? []
 
   const alerts = useMemo(() => {
     const out: { kind: 'sync' | 'budget' | 'performance'; text: string }[] = []
     freshness.data?.forEach((f) => {
-      if (f.last_sync_status === 'failed') out.push({ kind: 'sync', text: ar ? `فشل مزامنة ${f.provider} — يتطلب إعادة ربط` : `${f.provider} sync failed — needs reconnecting` })
+      // The store's own name, when the failing source is a shop: «فشل مزامنة salla» names a platform
+      // where the operator connected «متجر العميل», and they have to guess which shop is meant.
+      const who = f.name ?? providerName(f.provider)
+      if (f.last_sync_status === 'failed') out.push({ kind: 'sync', text: ar ? `فشل مزامنة ${who} — يتطلب إعادة ربط` : `${who} sync failed — needs reconnecting` })
     })
     budget.data?.forEach((b) => {
       if ((b.pace ?? 0) > 1.4) out.push({ kind: 'budget', text: `${b.campaign_name}: ${dash('pacingAhead', ar)} (${ratio(b.pace ?? 0, '×')})` })
@@ -312,6 +318,73 @@ export function DashboardPage() {
           </Link>
         }
       />
+
+      {/*
+        UNIFIED-001 — the connected store, on the dashboard, from the funnel's own service.
+
+        The KPI cards above carry `revenue` as the ad platforms report it: a pixel's estimate of what
+        it believes its clicks caused. The shop's ledger is a different and better number, and the
+        product holds both. Showing only the first here while the analytics tab showed the second gave
+        two answers to «كم بعنا؟» with nothing to say which was which — so this strip is labelled as
+        the store's, sits beside the platforms' figures rather than replacing them, and links through
+        to the section that explains where each number came from.
+      */}
+      {commerce && (
+        <div data-testid="dashboard-store" className="rounded-2xl border border-border bg-surface p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-bold text-text-primary">{ar ? 'المتجر المرتبط' : 'Connected store'}</h2>
+              <p className="text-[13px] text-text-secondary">
+                {ar ? 'من سجل التاجر نفسه — لا من بكسل المنصات.' : 'From the merchant’s own ledger — not the platforms’ pixel.'}
+              </p>
+            </div>
+            <Link to="/app/analytics" className="inline-flex items-center gap-1 text-sm font-semibold text-text-secondary hover:text-text-primary">
+              {ar ? 'الفانل والمتجر' : 'Funnel & store'} <ArrowUpRight size={14} />
+            </Link>
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { key: 'revenue', label: ar ? 'إيرادات المتجر' : 'Store revenue', value: commerce.revenue == null ? '—' : money(commerce.revenue) },
+              { key: 'orders', label: ar ? 'الطلبات' : 'Orders', value: num(commerce.orders) },
+              { key: 'aov', label: ar ? 'متوسط قيمة الطلب' : 'Average order value', value: commerce.aov == null ? '—' : money(commerce.aov) },
+              { key: 'roas', label: ar ? 'العائد على الإنفاق' : 'ROAS', value: commerce.roas == null ? '—' : ratio(commerce.roas, '×') },
+            ].map((k) => (
+              <div key={k.key} data-testid={`store-kpi-${k.key}`} className="rounded-xl border border-border bg-surface-secondary px-3 py-2">
+                <p className="text-[13px] text-text-secondary">{k.label}</p>
+                <p className="tnum mt-0.5 text-xl font-bold text-text-primary">{k.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/*
+            When the rest of the page is narrowed and this block is not, the block says so.
+
+            An order does not belong to a platform the way a click does — a large share of them carry
+            no attribution at all — so these figures cover the whole shop whatever the filter above
+            says. Printing them silently under a heading the reader has just filtered to «Meta» is the
+            misreading this line exists to close.
+          */}
+          {commerce.filtered_view && (
+            <p data-testid="dashboard-store-unfiltered" className="mt-3 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-[13px] text-text-secondary">
+              {ar ? commerce.unfiltered_note_ar : commerce.unfiltered_note_en}
+            </p>
+          )}
+
+          {/*
+            Untraceable orders are shown, not folded in. A high share of them is a link-tagging
+            problem worth more than any figure on this strip, and a dashboard that spread those
+            orders across the campaigns would hide exactly that.
+          */}
+          {commerce.unattributed_orders > 0 && (
+            <p data-testid="dashboard-store-unattributed" className="mt-3 text-[13px] text-text-secondary">
+              {ar
+                ? `${num(commerce.unattributed_orders)} من ${num(commerce.orders)} طلبًا وصلت بلا إسناد لأي حملة.`
+                : `${num(commerce.unattributed_orders)} of ${num(commerce.orders)} orders arrived with no campaign attribution.`}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Deeper detail: daily trend + conversion funnel */}
       <div className="grid gap-4 lg:grid-cols-3">

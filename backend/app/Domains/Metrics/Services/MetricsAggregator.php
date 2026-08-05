@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Services;
 
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Projects\Concerns\ProjectScope;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -144,10 +145,35 @@ final class MetricsAggregator
         return $clone;
     }
 
+    /**
+     * When true the ACTIVE-project scope is lifted; the tenant scope always stays (see acrossProjects()).
+     */
+    private bool $acrossProjects = false;
+
+    /**
+     * A copy that is not confined to whichever project the request has open.
+     *
+     * For callers that already name the entity they mean and are not looking through a project's eyes —
+     * the alert evaluator being the case this exists for. It runs from the scheduler over one tenant's
+     * rules, and a campaign id already names exactly one project, so the active-project filter can only
+     * do harm: evaluated while some other project happened to be open, every rule would quietly match
+     * nothing and the run would report zero alerts raised rather than an error.
+     *
+     * The TENANT scope is untouched and non-negotiable. This lifts one bound, deliberately and by name.
+     */
+    public function acrossProjects(): self
+    {
+        $clone = clone $this;
+        $clone->acrossProjects = true;
+
+        return $clone;
+    }
+
     private function base(Carbon $from, Carbon $to): Builder
     {
         // Reuse the model's project/tenant scope, then drop to the query builder for aggregation.
         $query = DailyMetric::query()
+            ->when($this->acrossProjects, fn ($q) => $q->withoutGlobalScope(ProjectScope::class))
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
 
         if ($this->campaignId !== null) {

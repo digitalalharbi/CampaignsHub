@@ -70,15 +70,40 @@ final class StoreFunnelService
     /** Order statuses both providers use for an order that is genuinely paid for. */
     private const PAID_STATUSES = ['completed', 'delivered', 'shipped', 'paid', 'fulfilled', 'ready'];
 
+    public function __construct(private readonly ProjectStores $projectStores) {}
+
     /**
      * @return array<string,mixed>
      */
     public function build(string $tenantId, string $projectId, Carbon $from, Carbon $to): array
     {
-        $stores = ExternalAccount::withoutGlobalScopes()
-            ->where('tenant_id', $tenantId)
-            ->where('account_type', 'store')
-            ->get(['id', 'name', 'provider', 'currency', 'last_synced_at']);
+        /*
+         * The window covers whole DAYS, whoever asked and whatever time they put on it.
+         *
+         * Orders are timestamps; `daily_metrics` rows are dates. A caller that hands in a `to` of
+         * midnight — which is what a date picker means by «today», and what the metrics endpoints have
+         * always passed — matches every metric row for today and not one order placed since. The
+         * dashboard's store block and the analytics tab were reading the same service, over what looked
+         * like the same window, and disagreeing about today's revenue by every order of the day.
+         *
+         * Normalising here rather than at each caller is the point: the service owns what its window
+         * means, so a fifth caller cannot get it subtly wrong in a sixth way.
+         */
+        $from = $from->copy()->startOfDay();
+        $to = $to->copy()->endOfDay();
+
+        /*
+         * The stores of THIS PROJECT, not of the tenant (UNIFIED-001).
+         *
+         * This used to take every store in the tenant, so an agency running two clients out of two
+         * projects saw, on either project's funnel, the other client's shop counted in
+         * `coverage.stores` and named in `stores_without_cart_data` — a store name crossing a project
+         * boundary, and a cart-completeness verdict decided by a shop the reader has nothing to do
+         * with. The orders were project-scoped throughout, so the figures were right and everything
+         * said ABOUT them was wrong, which is the harder kind to spot.
+         */
+        $stores = $this->projectStores->forProject($tenantId, $projectId);
+        $pendingStores = $stores->isEmpty() ? $this->projectStores->unsynced($tenantId) : collect();
 
         $orders = CommerceOrder::withoutGlobalScopes()
             ->where('project_id', $projectId)
@@ -116,7 +141,7 @@ final class StoreFunnelService
                 'campaigns' => $this->byCampaign($orders),
                 'products' => $this->byProduct($orders),
             ],
-            'coverage' => $this->coverage($stores, $orders),
+            'coverage' => $this->coverage($stores, $pendingStores, $orders),
         ];
     }
 
@@ -487,13 +512,27 @@ final class StoreFunnelService
      * What this funnel could and could not see — the honest footer of the section.
      *
      * @param  Collection<int,ExternalAccount>  $stores
+     * @param  Collection<int,ExternalAccount>  $pending  connected to the tenant, not yet swept anywhere
      * @param  Collection<int,CommerceOrder>  $orders
      * @return array<string,mixed>
      */
-    private function coverage(Collection $stores, Collection $orders): array
+    private function coverage(Collection $stores, Collection $pending, Collection $orders): array
     {
         return [
             'stores' => $stores->count(),
+            /*
+             * A shop that is connected but has never been read is reported as its own fact.
+             *
+             * «لا يوجد متجر مربوط» and «المتجر مربوط ولم تصل بياناته بعد» call for different actions —
+             * the first says go and connect one, the second says wait or go and look at why the sweep
+             * has not run — and a funnel that could only say the first sent operators to reconnect a
+             * store that was already connected. Which project such a store will file under is not
+             * knowable until its first sweep decides, so it is not counted as this project's.
+             */
+            'stores_pending_first_sync' => $pending
+                ->map(fn (ExternalAccount $s) => ['id' => $s->getKey(), 'name' => $s->name, 'provider' => $s->provider])
+                ->values()
+                ->all(),
             'stores_without_cart_data' => $stores
                 ->filter(fn (ExternalAccount $s) => $s->provider === 'zid')
                 ->map(fn (ExternalAccount $s) => ['id' => $s->getKey(), 'name' => $s->name, 'provider' => $s->provider])

@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Http\Controllers;
 
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\MetricDefinition;
-use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Database\Query\Builder;
@@ -23,7 +26,10 @@ use Illuminate\Support\Carbon;
  */
 final class MetricsController extends Controller
 {
-    public function __construct(private readonly MetricsAggregator $agg) {}
+    public function __construct(
+        private readonly MetricsAggregator $agg,
+        private readonly DataFreshnessService $freshness,
+    ) {}
 
     /** KPI totals for the period + the same-length previous period, with per-metric deltas. */
     public function summary(Request $request): JsonResponse
@@ -47,7 +53,77 @@ final class MetricsController extends Controller
             'current' => $current,
             'previous' => $previous,
             'delta' => $deltas,
+            'commerce' => $this->commerce($request, $from, $to),
         ], 'Metrics summary.', meta: $this->meta($from, $to));
+    }
+
+    /**
+     * The store's own figures on the dashboard — taken from the funnel service, never recomputed here.
+     *
+     * ## Why the dashboard needs them at all
+     *
+     * `daily_metrics` carries `revenue` as the ad platforms report it: a pixel's estimate of what it
+     * believes its clicks caused. The shop's ledger is a different and better number, and after
+     * COMMERCE-001 the product holds both. A dashboard that showed only the first, while the analytics
+     * tab beside it showed the second, gave two answers to «كم بعنا؟» with nothing to say which was
+     * which — so the store block is labelled as the store's, and sits next to the platforms' rather
+     * than replacing them.
+     *
+     * ## Why the page's filters do not narrow it, and why it says so
+     *
+     * Spend and impressions narrow to the platform and objective the operator picked; an order does
+     * not. A large share of orders carry no usable attribution at all — that is exactly what
+     * `unattributed_orders` counts — so «Meta's share of the shop's revenue» is not a quantity that
+     * exists to be shown beside «Meta's spend».
+     *
+     * The first cut of this suppressed the block whenever a filter was on. That was wrong in practice
+     * as well as unhelpful: the dashboard opens on an objective filter, so the block would have shown
+     * a refusal permanently and its figures never. Whole-shop numbers with `filtered_view` set — and a
+     * line on the card saying the block is not filtered — carry the same warning without withholding
+     * the answer. The misreading the flag guards against is «this is Meta's revenue»; a label that
+     * says otherwise, on the card, closes it.
+     *
+     * @return array<string,mixed>|null
+     */
+    private function commerce(Request $request, Carbon $from, Carbon $to): ?array
+    {
+        $projectId = app(ProjectContext::class)->projectId();
+
+        if ($projectId === null) {
+            return null;
+        }
+
+        $funnel = app(StoreFunnelService::class)->build(
+            (string) app(TenantContext::class)->tenantId(),
+            (string) $projectId,
+            $from,
+            $to,
+        );
+
+        if (($funnel['coverage']['stores'] ?? 0) === 0) {
+            return null;
+        }
+
+        return [
+            'available' => true,
+            /*
+             * True when the rest of the page is narrowed and this block is not. The card renders a
+             * sentence off this, so nobody reads a whole-shop figure as one platform's share.
+             */
+            'filtered_view' => $this->providerFilter($request) !== [] || $this->objectiveFilter($request) !== [],
+            'unfiltered_note_ar' => 'أرقام المتجر لكامل المتجر ولا تتأثر بفلتر المنصة أو الهدف، لأن جزءًا من الطلبات يصل بلا إسناد.',
+            'unfiltered_note_en' => 'Store figures cover the whole shop and are not narrowed by the platform or objective filter — some orders arrive with no attribution.',
+            'orders' => $funnel['totals']['orders'],
+            'revenue' => $funnel['totals']['revenue'],
+            'attributed_orders' => $funnel['totals']['attributed_orders'],
+            'attributed_revenue' => $funnel['totals']['attributed_revenue'],
+            'unattributed_orders' => $funnel['totals']['unattributed_orders'],
+            'aov' => $funnel['derived']['aov'],
+            'roas' => $funnel['derived']['roas'],
+            'cac' => $funnel['derived']['cac'],
+            'stores' => $funnel['coverage']['stores'],
+            'store_last_synced_at' => $funnel['coverage']['store_last_synced_at'],
+        ];
     }
 
     public function timeseries(Request $request): JsonResponse
@@ -341,47 +417,79 @@ final class MetricsController extends Controller
         return array_values(array_diff($stored, MetricsAggregator::readKeys()));
     }
 
-    /** Per-platform data freshness: last sync run + newest metric date, and any missing days in range. */
+    /**
+     * Data freshness for the active project — every source, one set of rules (UNIFIED-001).
+     *
+     * This used to be a query in this method over `daily_metrics` and `metric_sync_runs`, which meant
+     * the dashboard strip could only ever describe the ad platforms. A project whose store had not been
+     * swept in a week showed nothing amiss here while revenue and ROAS on the same dashboard came off
+     * that store. It reads {@see DataFreshnessService} now, so stores appear as sources beside the
+     * platforms, and the verdict on the badge is the same verdict the client link and the client
+     * analytics header show.
+     *
+     * The response keeps its previous per-provider shape and adds the store rows and a rolled-up
+     * `summary` — no field was removed, so the existing strip keeps rendering.
+     */
     public function freshness(Request $request): JsonResponse
     {
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
-        $runs = MetricSyncRun::query()
-            ->orderByDesc('finished_at')
-            ->get()
-            ->groupBy('provider')
-            ->map(fn ($g) => $g->first());
+        $projectId = app(ProjectContext::class)->projectId();
+        $tenantId = (string) app(TenantContext::class)->tenantId();
+
+        if ($projectId === null) {
+            return ApiResponse::success([], 'Data freshness.', meta: $this->meta($from, $to));
+        }
 
         $providerFilter = $this->providerFilter($request);
-        $providers = DailyMetric::query()
+        $state = $this->freshness->state(
+            $tenantId,
+            [(string) $projectId],
+            $from,
+            $to,
+            $providerFilter === [] ? null : $providerFilter,
+        );
+
+        // Days-with-data stays per provider: it is the one figure the strip shows that is about THIS
+        // window rather than about the source, and the service reports gaps for the project as a whole.
+        $daysWithData = DailyMetric::query()
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->when($providerFilter !== [], fn ($q) => $q->whereIn('provider', $providerFilter))
             ->toBase()
             ->select('provider')
-            ->selectRaw('MAX(metric_date) AS latest_date')
-            ->selectRaw('MAX(data_freshness_at) AS freshness_at')
             ->selectRaw('COUNT(DISTINCT metric_date) AS days_with_data')
             ->groupBy('provider')
-            ->get();
+            ->pluck('days_with_data', 'provider');
 
         $periodDays = $from->diffInDays(Carbon::today()->min($to)) + 1;
-        $out = $providers->map(function ($p) use ($runs, $periodDays) {
-            $run = $runs->get($p->provider);
+
+        $out = array_map(function (array $source) use ($daysWithData, $periodDays): array {
+            $days = $source['kind'] === 'ad_platform' ? (int) ($daysWithData[$source['provider']] ?? 0) : null;
 
             return [
-                'provider' => $p->provider,
-                'latest_metric_date' => $p->latest_date ? Carbon::parse($p->latest_date)->toDateString() : null,
-                'data_freshness_at' => $p->freshness_at ? Carbon::parse($p->freshness_at)->toIso8601String() : null,
-                'days_with_data' => (int) $p->days_with_data,
-                'missing_days' => max(0, $periodDays - (int) $p->days_with_data),
-                'last_sync_status' => $run?->status,
-                'last_sync_at' => $run?->finished_at?->toIso8601String(),
-                'last_sync_error' => $run?->error,
+                'kind' => $source['kind'],
+                'provider' => $source['provider'],
+                'account_id' => $source['account_id'],
+                'name' => $source['name'],
+                'latest_metric_date' => $source['latest_metric_date'],
+                'data_freshness_at' => $source['data_as_of'],
+                'days_with_data' => $days,
+                'missing_days' => $days === null ? null : max(0, $periodDays - $days),
+                'last_sync_status' => $source['state'],
+                'last_sync_at' => $source['last_checked_at'],
+                'last_sync_error' => $source['last_sync_error'],
             ];
-        })->all();
+        }, $state['sources']);
 
-        return ApiResponse::success($out, 'Data freshness.', meta: $this->meta($from, $to));
+        return ApiResponse::success($out, 'Data freshness.', meta: $this->meta($from, $to) + [
+            'summary' => [
+                'state' => $state['state'],
+                'last_sync_at' => $state['last_sync_at'],
+                'missing_days' => $state['missing_days'],
+                'sync_failed' => $state['sync_failed'],
+            ],
+        ]);
     }
 
     // ---- helpers ----------------------------------------------------------------------------------

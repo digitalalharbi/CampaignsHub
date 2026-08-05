@@ -35,10 +35,40 @@ export interface MetricTotals {
   video_completion_rate: number | null
 }
 
+/**
+ * UNIFIED-001 — the connected store's own figures, beside the platforms' rather than instead of them.
+ *
+ * `MetricTotals.revenue` is what the ad platforms' pixels believe their clicks caused. This is the
+ * merchant's ledger. They are different numbers and both are worth having, so the dashboard labels
+ * which is which — and never quietly replaces one with the other.
+ *
+ * The page's platform and objective filters do NOT narrow these figures — spend narrows to the chosen
+ * platform and an order does not, and a large share of orders carry no attribution at all. So
+ * `filtered_view` is set whenever the rest of the page is narrowed and this block is not, and the card
+ * says so in words. The misreading it guards against is «this is Meta's revenue».
+ */
+export interface CommerceSummary {
+  available: boolean
+  filtered_view: boolean
+  unfiltered_note_ar: string
+  unfiltered_note_en: string
+  orders: number
+  revenue: number | null
+  attributed_orders: number
+  attributed_revenue: number | null
+  unattributed_orders: number
+  aov: number | null
+  roas: number | null
+  cac: number | null
+  stores: number
+  store_last_synced_at: string | null
+}
+
 export interface Summary {
   current: MetricTotals
   previous: MetricTotals
   delta: Partial<Record<keyof MetricTotals, number | null>>
+  commerce: CommerceSummary | null
 }
 export interface TimePoint extends MetricTotals {
   date: string
@@ -71,12 +101,26 @@ export interface BudgetRow {
   pace: number | null
   projected_spend: number
 }
+/**
+ * One source behind the project's figures — an ad platform OR a connected store (UNIFIED-001).
+ *
+ * Stores are on this list because they feed revenue, orders, AOV and ROAS. A freshness strip that
+ * listed only the ad platforms was vouching for the numbers it had never checked.
+ *
+ * `days_with_data` and `missing_days` are null for a store: they count metric DAYS, and a shop does
+ * not report a row per day. Null says «this question does not apply here», where a zero would say
+ * «the shop reported nothing on any day of the window».
+ */
 export interface FreshnessRow {
+  kind: 'ad_platform' | 'store'
   provider: string
+  account_id: string | null
+  name: string | null
   latest_metric_date: string | null
   data_freshness_at: string | null
-  days_with_data: number
-  missing_days: number
+  days_with_data: number | null
+  missing_days: number | null
+  /** `fresh` | `stale` | `failed` | `awaiting_credentials` — one vocabulary, every surface. */
   last_sync_status: string | null
   last_sync_at: string | null
   last_sync_error: string | null

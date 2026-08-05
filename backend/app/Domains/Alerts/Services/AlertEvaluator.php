@@ -9,6 +9,7 @@ use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -44,6 +45,7 @@ final class AlertEvaluator
 
     public function __construct(
         private readonly NotificationDispatcher $notifications,
+        private readonly MetricsAggregator $metrics,
         private readonly TenantContext $tenants,
     ) {}
 
@@ -267,15 +269,13 @@ final class AlertEvaluator
     private function budgetRisks(AlertRule $rule, Carbon $now): array
     {
         $ratio = (float) ($rule->threshold['ratio'] ?? 0.9); // spend / budget threshold
-        $from = $now->copy()->subDays(30)->toDateString();
+        $from = $now->copy()->subDays(30);
         $out = [];
 
         UnifiedCampaign::query()->where('total_budget', '>', 0)
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
             ->get()->each(function (UnifiedCampaign $c) use ($from, $now, $ratio, &$out) {
-                $spend = (float) DB::table('daily_metrics')
-                    ->where('unified_campaign_id', $c->id)->where('metric_key', 'spend')
-                    ->whereBetween('metric_date', [$from, $now->toDateString()])->sum('value');
+                $spend = (float) $this->totalsFor((string) $c->id, $from, $now)['spend'];
                 $budget = (float) $c->total_budget;
                 if ($budget > 0 && $spend / $budget >= $ratio) {
                     $out[] = [
@@ -296,20 +296,15 @@ final class AlertEvaluator
     private function noResults(AlertRule $rule, Carbon $now): array
     {
         $days = (int) ($rule->threshold['days'] ?? 3);
-        $from = $now->copy()->subDays($days)->toDateString();
+        $from = $now->copy()->subDays($days);
         $out = [];
 
         UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
             ->get()->each(function (UnifiedCampaign $c) use ($from, $now, $days, &$out) {
-                $agg = DB::table('daily_metrics')
-                    ->where('unified_campaign_id', $c->id)
-                    ->whereBetween('metric_date', [$from, $now->toDateString()])
-                    ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'),0) AS spend")
-                    ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'conversions'),0) AS conv")
-                    ->first();
-                $spend = (float) ($agg->spend ?? 0);
-                $conv = (float) ($agg->conv ?? 0);
+                $totals = $this->totalsFor((string) $c->id, $from, $now);
+                $spend = (float) $totals['spend'];
+                $conv = (float) $totals['conversions'];
                 if ($spend > 0 && $conv <= 0) {
                     $out[] = [
                         'entity_type' => UnifiedCampaign::class,
@@ -331,14 +326,14 @@ final class AlertEvaluator
         $pct = (float) ($rule->threshold['pct'] ?? 25); // % drop vs previous window
         $days = (int) ($rule->threshold['days'] ?? 7);
         $out = [];
-        $curFrom = $now->copy()->subDays($days)->toDateString();
-        $prevFrom = $now->copy()->subDays($days * 2)->toDateString();
-        $prevTo = $now->copy()->subDays($days + 1)->toDateString();
+        $curFrom = $now->copy()->subDays($days);
+        $prevFrom = $now->copy()->subDays($days * 2);
+        $prevTo = $now->copy()->subDays($days + 1);
 
         UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
             ->get()->each(function (UnifiedCampaign $c) use ($curFrom, $now, $prevFrom, $prevTo, $pct, &$out) {
-                $cur = $this->campaignRoas((string) $c->id, $curFrom, $now->toDateString());
+                $cur = $this->campaignRoas((string) $c->id, $curFrom, $now);
                 $prev = $this->campaignRoas((string) $c->id, $prevFrom, $prevTo);
                 if ($cur !== null && $prev !== null && $prev > 0 && ($prev - $cur) / $prev * 100 >= $pct) {
                     $out[] = [
@@ -355,16 +350,29 @@ final class AlertEvaluator
         return $out;
     }
 
-    /** ROAS (revenue / spend) for a campaign over a date range, or null when there was no spend. */
-    private function campaignRoas(string $campaignId, string $from, string $to): ?float
+    /**
+     * One campaign's figures, from the SAME engine every screen reads (UNIFIED-001).
+     *
+     * These handlers used to sum `daily_metrics` themselves and divide revenue by spend inline. The
+     * arithmetic agreed with {@see MetricsAggregator} on the day it was written and nothing held it
+     * there — so an alert firing on a ROAS the dashboard never showed was one edit away, and the reader
+     * who spotted the discrepancy would have had no way to tell which number was the real one. There is
+     * one definition of spend, of conversions and of ROAS now, and alerts read it.
+     *
+     * The aggregator is scoped by campaign only, deliberately: this runs from the scheduler with no
+     * request behind it and therefore no active project, and a campaign id already names exactly one
+     * project. The tenant scope is live throughout — {@see evaluateAll()} sets it per tenant.
+     *
+     * @return array<string,float|null>
+     */
+    private function totalsFor(string $campaignId, Carbon $from, Carbon $to): array
     {
-        $r = DB::table('daily_metrics')->where('unified_campaign_id', $campaignId)
-            ->whereBetween('metric_date', [$from, $to])
-            ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'revenue'),0) AS rev")
-            ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'),0) AS spend")
-            ->first();
-        $spend = (float) ($r->spend ?? 0);
+        return $this->metrics->acrossProjects()->forCampaign($campaignId)->totals($from, $to);
+    }
 
-        return $spend > 0 ? (float) $r->rev / $spend : null;
+    /** ROAS (revenue / spend) for a campaign over a date range, or null when there was no spend. */
+    private function campaignRoas(string $campaignId, Carbon $from, Carbon $to): ?float
+    {
+        return $this->totalsFor($campaignId, $from, $to)['roas'];
     }
 }

@@ -1,0 +1,165 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { screen } from '@testing-library/react'
+import { DashboardPage } from './DashboardPage'
+import { renderWithProviders, signInWith, signOut } from '@/test/utils'
+import { useProject } from '@/stores/project'
+import type { CommerceSummary, FreshnessRow } from '../analytics/api'
+
+/**
+ * UNIFIED-001 — the connected store's own figures, on the dashboard.
+ *
+ * The KPI cards carry `revenue` as the ad platforms report it: a pixel's estimate of what it believes
+ * its clicks caused. The store block carries the merchant's ledger. They are different numbers, and
+ * the whole point of putting both on one page is that the page says which is which — so these tests
+ * are about labelling and refusal, not about arithmetic.
+ */
+
+const EMPTY = { data: undefined, isLoading: false, isError: false }
+
+vi.mock('../analytics/hooks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../analytics/hooks')>()
+  return {
+    ...actual,
+    useSummary: vi.fn(),
+    useTimeseries: vi.fn(() => EMPTY),
+    usePlatforms: vi.fn(() => EMPTY),
+    useCampaigns: vi.fn(() => EMPTY),
+    useFunnel: vi.fn(() => EMPTY),
+    useBudget: vi.fn(() => EMPTY),
+    useFreshness: vi.fn(() => EMPTY),
+  }
+})
+
+vi.mock('./savedViews', () => ({
+  useSavedViews: () => ({ data: [], isLoading: false, isError: false }),
+}))
+
+vi.mock('./SavedViewsBar', () => ({ SavedViewsBar: () => null }))
+
+import { useFreshness, useSummary } from '../analytics/hooks'
+
+const TOTALS = {
+  impressions: 1000, clicks: 50, conversions: 2, spend: 500, revenue: 200,
+  reach: 0, video_views: 0, video_completions: 0, landing_page_views: 0, leads: 0,
+  qualified_leads: 0, purchases: 0, installs: 0, registrations: 0, in_app_events: 0,
+  engagements: 0, roas: 0.4, cpa: 250, ctr: 0.05, cpc: 10, cpm: 500, frequency: null,
+  cpl: null, cpi: null, cpe: null, aov: null, conversion_rate: 0.04,
+  engagement_rate: null, video_completion_rate: null,
+}
+
+const STORE: CommerceSummary = {
+  available: true, filtered_view: false,
+  unfiltered_note_ar: 'أرقام المتجر لكامل المتجر ولا تتأثر بفلتر المنصة أو الهدف، لأن جزءًا من الطلبات يصل بلا إسناد.',
+  unfiltered_note_en: 'Store figures cover the whole shop and are not narrowed by the filters.',
+  orders: 25, revenue: 5000, aov: 200, roas: 10, cac: 50,
+  attributed_orders: 15, attributed_revenue: 3000, unattributed_orders: 10,
+  stores: 1, store_last_synced_at: null,
+}
+
+function summary(commerce: CommerceSummary | null) {
+  return { data: { current: TOTALS, previous: TOTALS, delta: {}, commerce }, isLoading: false, isError: false }
+}
+
+describe('the dashboard store strip', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    signInWith(['campaigns.view'])
+    useProject.getState().setCurrentProjectId('p1')
+    vi.mocked(useFreshness).mockReturnValue(EMPTY as never)
+  })
+  afterEach(() => signOut())
+
+  /**
+   * The two revenues are both on the page, and each says whose it is.
+   *
+   * The platforms' `revenue` and the shop's ledger are different numbers. Showing one while the
+   * analytics tab shows the other gave two answers to «كم بعنا؟» with nothing to say which was which.
+   */
+  it('shows the store ledger beside the platforms figures, labelled as the stores', async () => {
+    vi.mocked(useSummary).mockReturnValue(summary(STORE) as never)
+
+    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+
+    const block = await screen.findByTestId('dashboard-store')
+    expect(block.textContent).toMatch(/سجل التاجر/)
+    expect(screen.getByTestId('store-kpi-orders').textContent).toContain('25')
+    expect(screen.getByTestId('store-kpi-roas').textContent).toContain('10')
+  })
+
+  /**
+   * Untraceable orders are stated, not folded into the campaigns.
+   *
+   * A high share of them is a link-tagging problem worth more than any figure on the strip, and a
+   * dashboard that spread those orders across the campaigns would hide exactly that.
+   */
+  it('says how many orders arrived with no campaign attribution', async () => {
+    vi.mocked(useSummary).mockReturnValue(summary(STORE) as never)
+
+    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+
+    const note = await screen.findByTestId('dashboard-store-unattributed')
+    expect(note.textContent).toMatch(/10/)
+    expect(note.textContent).toMatch(/بلا إسناد/)
+  })
+
+  /**
+   * When the page is filtered and this block is not, the block says so — and still shows its figures.
+   *
+   * Spend narrows to the chosen platform; an order does not. Suppressing the numbers was the first
+   * attempt and was worse than useless — the dashboard opens on an objective filter, so the store's
+   * figures would have been replaced by a refusal permanently and shown never. The sentence carries
+   * the same warning without withholding the answer.
+   */
+  it('states that the store block is not narrowed by the pages filters, and still shows them', async () => {
+    vi.mocked(useSummary).mockReturnValue(summary({
+      ...STORE, filtered_view: true,
+    }) as never)
+
+    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+
+    const note = await screen.findByTestId('dashboard-store-unfiltered')
+    expect(note.textContent).toMatch(/لكامل المتجر/)
+    // The figures are still there — the warning replaces nothing.
+    expect(screen.getByTestId('store-kpi-revenue')).toBeInTheDocument()
+  })
+
+  /** With no filter on, there is no warning to give. */
+  it('shows no unfiltered warning when nothing is filtered', async () => {
+    vi.mocked(useSummary).mockReturnValue(summary(STORE) as never)
+
+    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+
+    await screen.findByTestId('dashboard-store')
+    expect(screen.queryByTestId('dashboard-store-unfiltered')).toBeNull()
+  })
+
+  /** No store at all → no strip. An empty store panel reads as a store that sold nothing. */
+  it('shows no store strip when the project has no store', async () => {
+    vi.mocked(useSummary).mockReturnValue(summary(null) as never)
+
+    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+
+    await screen.findByTestId('dashboard-applied')
+    expect(screen.queryByTestId('dashboard-store')).toBeNull()
+  })
+
+  /**
+   * A failing STORE is named by its own name in the alert.
+   *
+   * «فشل مزامنة salla» names a platform where the operator connected «متجر العميل» — with two shops
+   * on one platform, the operator cannot tell which one to go and fix.
+   */
+  it('names the store rather than its platform when a store sync fails', async () => {
+    vi.mocked(useSummary).mockReturnValue(summary(null) as never)
+    const row: FreshnessRow = {
+      kind: 'store', provider: 'salla', account_id: 's1', name: 'متجر العميل',
+      latest_metric_date: null, data_freshness_at: null, days_with_data: null, missing_days: null,
+      last_sync_status: 'failed', last_sync_at: null, last_sync_error: 'boom',
+    }
+    vi.mocked(useFreshness).mockReturnValue({ data: [row], isLoading: false, isError: false } as never)
+
+    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+
+    expect(await screen.findByText(/متجر العميل/)).toBeInTheDocument()
+  })
+})
