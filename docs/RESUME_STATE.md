@@ -2001,9 +2001,23 @@ the same encrypted credential as an ad account.
 **Defect found by the live review and fixed:** the shared `percent()` helper takes a RATIO and this
 API states percentages, so 3.5% rendered as «350.0%». Now pinned by an assertion.
 
+### 4 — client links (`d262764`)
+
+Audit found most of it already built and correct: password, expiry, revoke, renew, open log, live
+filters intersected against a ceiling, templates, PDF/XLSX/CSV, fail-closed isolation. Two gaps
+closed:
+
+62. **The client link is now `/r/<22 chars>`** — ~131 bits, readable without becoming guessable. It
+    could not simply be truncated: the token IS the credential. The old `/reports/share/<48>` route
+    stays mounted and old links keep working, because lookup hashes whatever is presented.
+63. **The store funnel is in the client's copy**, built by the SAME service the analytics tab calls —
+    a link computing it its own way would be a second answer to «كم طلبًا جاء من الإعلان؟». It obeys
+    the share's hide flags, including the spend-derived ROAS and AOV a reader could divide back from;
+    the order COUNT stays because it is not money. Null when the project has no store.
+
 ### What is left of the brief, in order
 
-`4` interactive shareable client reports — audit the existing `ReportShare` / `ShareService` /
+~~`4` interactive shareable client reports~~ (done) — audit the existing `ReportShare` / `ShareService` /
 `LiveReportService` surface against the full requirement set (short link, live filters, funnel,
 comparisons, last-sync, password, expiry, revoke, renew, open log, templates, PDF + Excel,
 fail-closed) · `5` one synced source feeding dashboard, campaigns, content, analytics, funnel,
