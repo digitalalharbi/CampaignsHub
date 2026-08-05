@@ -10,11 +10,17 @@ use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Sandbox\SandboxAdvertisingConnector;
 use App\Domains\Integrations\ValueObjects\HealthResult;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 
 /**
  * Shared contract every advertising connector must satisfy. Runs against ALL registered connectors
  * so a new provider is automatically held to the same rules.
+ *
+ * It boots the framework (INTEG-OAUTH-001) because the six real connectors now read
+ * `config/ad_platforms.php` to decide whether they may call out at all. That is not test scaffolding
+ * leaking into production code — it IS the production rule: a platform is configured or it is not,
+ * and configuration is the only place that answer can honestly live. Without the container this
+ * suite asserted the contract against connectors that could not read their own configuration.
  */
 final class ConnectorContractTest extends TestCase
 {

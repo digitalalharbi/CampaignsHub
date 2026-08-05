@@ -7,6 +7,8 @@ namespace App\Domains\Metrics\Services;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
@@ -61,6 +63,24 @@ final class AccountMetricsSyncer
 
         if ($connector === null) {
             return $this->finish($run, 'failed', 0, "No connector is registered for provider '{$account->provider}'.");
+        }
+
+        /*
+         * Bind the account's own connection before asking the connector anything (INTEG-OAUTH-001).
+         *
+         * The registry hands out ONE instance per platform for the whole process, so an unbound
+         * connector has no tokens and — worse — a connector bound in place would carry one tenant's
+         * connection into the next tenant's job. `withConnection()` returns a clone for exactly that
+         * reason, and this is the only place in the sync path that binds one.
+         */
+        if ($connector instanceof ApiAdvertisingConnector) {
+            $connection = ProviderConnection::withoutGlobalScopes()->find($account->provider_connection_id);
+
+            if ($connection === null) {
+                return $this->finish($run, 'failed', 0, 'The ad account has no provider connection to sync through.');
+            }
+
+            $connector = $connector->withConnection($connection);
         }
 
         // Never pretend to call a platform we have no credentials for.

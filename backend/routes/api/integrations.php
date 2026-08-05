@@ -2,11 +2,26 @@
 
 declare(strict_types=1);
 
+use App\Domains\Integrations\Http\Controllers\AdPlatformOAuthController;
 use App\Domains\Integrations\Http\Controllers\IntegrationController;
 use App\Domains\Integrations\Http\Controllers\PlatformOverviewController;
 use App\Domains\Integrations\Http\Controllers\ProjectIntegrationController;
 use App\Domains\Integrations\Http\Controllers\ProviderConnectionController;
 use Illuminate\Support\Facades\Route;
+
+/*
+ * The OAuth callback is PUBLIC, and it has to be (INTEG-OAUTH-001).
+ *
+ * A platform redirects a BROWSER here; no session cookie, bearer token or tenant header survives that
+ * hop from an external origin. Everything the callback needs — tenant, user, workspace — therefore
+ * comes out of the single-use `state` it claims, never out of its own query string.
+ *
+ * Throttled because it is unauthenticated: a state we did not issue is refused, but refusing it should
+ * not be a free operation anybody can ask for ten thousand times a second.
+ */
+Route::get('oauth/ads/{provider}/callback', [AdPlatformOAuthController::class, 'callback'])
+    ->middleware('throttle:30,1')
+    ->name('oauth.ads.callback');
 
 // Tenant-level connector status board + provider connections.
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(function (): void {
@@ -15,6 +30,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
         Route::get('{key}/health', [IntegrationController::class, 'health'])->name('health');
         Route::post('{key}/connect', [IntegrationController::class, 'connect'])->name('connect');
         Route::post('{key}/sync', [IntegrationController::class, 'sync'])->name('sync');
+
+        // Start the authorisation for one of the six ad platforms. Returns a URL rather than a 302,
+        // because the caller is an SPA doing `fetch` and a cross-origin redirect would be swallowed.
+        Route::post('{provider}/oauth/start', [AdPlatformOAuthController::class, 'start'])->name('oauth.start');
     });
 
     Route::get('connections', [ProviderConnectionController::class, 'index'])->name('connections.index');
