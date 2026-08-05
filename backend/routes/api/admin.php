@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Integrations\Review\ReviewChecklistController;
 use App\Domains\Legal\Http\Controllers\LegalInboxController;
 use App\Domains\Legal\Http\Controllers\PlatformSettingsController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
@@ -144,6 +145,20 @@ Route::middleware(['auth:sanctum', 'platform'])
          * and a data request is a legal obligation with a deadline. One list sorted by date buries
          * the one with the deadline under the two without.
          */
+        /*
+         * REVIEW-001 — what each platform demands before it approves this application.
+         *
+         * One checklist per provider, never a shared one: Google approves the consent screen and the
+         * developer token on separate tracks, Meta wants business verification, TikTok whitelists
+         * advertiser ids in sandbox, Snapchat hangs accounts off an organisation, LinkedIn grants
+         * products individually, X gates on a paid tier, and Salla and Zid each need a partner app.
+         * A generic list would be wrong in both directions at once.
+         */
+        Route::get('/integrations/review', [ReviewChecklistController::class, 'index'])->name('integrations.review.index');
+        Route::get('/integrations/review/{provider}', [ReviewChecklistController::class, 'show'])->name('integrations.review.show');
+        Route::patch('/integrations/review/{provider}/{requirement}', [ReviewChecklistController::class, 'update'])
+            ->name('integrations.review.update');
+
         Route::get('/legal/contact-messages', [LegalInboxController::class, 'contactMessages'])->name('legal.contact.index');
         Route::patch('/legal/contact-messages/{message}', [LegalInboxController::class, 'updateContactMessage'])->name('legal.contact.update');
         Route::get('/legal/support-tickets', [LegalInboxController::class, 'supportTickets'])->name('legal.tickets.index');
