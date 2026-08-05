@@ -187,7 +187,7 @@ export function ConnectionCenterPage() {
     const AD_PLATFORM_ORDER = sortPlatforms(['meta_ads', 'google_ads', 'tiktok_ads', 'snapchat_ads', 'x_ads', 'linkedin_ads'])
     const isSandbox = (provider: string) => connectors.find((c) => c.provider === provider)?.is_sandbox === true
     const rank = (provider: string): number => {
-      const ad = AD_PLATFORM_ORDER.indexOf(provider)
+      const ad = (AD_PLATFORM_ORDER as string[]).indexOf(provider)
       if (ad !== -1) return ad
       if (isSandbox(provider)) return 999
 

@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { money } from '@/features/analytics/format'
 import { fmtDateTime } from '@/lib/datetime'
+import { QueryFailure } from '@/components/ui/QueryFailure'
+import { useUi } from '@/stores/ui'
 
 /**
  * CAMPDET-010 / STRUCT-001 — the real ad-set / ad hierarchy beneath a campaign.
@@ -124,6 +126,7 @@ function Ad({ ad }: { ad: AdRow }) {
 }
 
 export function CampaignStructureTab({ campaign, projectId }: { campaign: UnifiedCampaign; projectId: string }) {
+  const ar = useUi((s) => s.locale) === 'ar'
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const queryClient = useQueryClient()
   const key = ['projects', projectId, 'campaigns', campaign.id, 'structure']
@@ -148,7 +151,10 @@ export function CampaignStructureTab({ campaign, projectId }: { campaign: Unifie
   })
 
   if (q.isLoading) return <Skeleton className="h-56" />
-  if (q.isError || !q.data) return <EmptyState title="تعذّر تحميل بنية الحملة" description="حاول تحديث الصفحة." />
+  if (q.isError || !q.data) {
+    return <QueryFailure error={q.error} ar={ar} testId="campaign-structure-failure" onRetry={() => void q.refetch()}
+      fallbackTitle={ar ? 'تعذّر تحميل بنية الحملة.' : 'The campaign structure could not be loaded.'} />
+  }
 
   const {
     ad_sets: adSets,

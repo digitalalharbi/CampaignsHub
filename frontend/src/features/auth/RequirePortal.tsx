@@ -21,7 +21,15 @@ import { useUi } from '@/stores/ui'
  * and meet a rail filtered down to whatever the two portals happened to share — coherent-looking and
  * wrong. Hiding menu items was doing the work a guard should do.
  */
-export function RequirePortal({ portal, fallback = '/switch' }: { portal: PortalKey; fallback?: string }) {
+/*
+ * There is no `fallback` prop, deliberately.
+ *
+ * One was declared (`fallback = '/switch'`) and never read: this guard does not redirect, it renders
+ * a refusal with `AccessRecovery` beneath it — which is the whole point of ACCESS-EXIT-001, since
+ * `/switch` was the dead end people were being sent to. A prop that names a destination this
+ * component never navigates to is a promise to the caller that nothing keeps.
+ */
+export function RequirePortal({ portal }: { portal: PortalKey }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const state = useQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
 

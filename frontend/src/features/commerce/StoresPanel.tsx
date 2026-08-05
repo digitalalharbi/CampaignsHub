@@ -6,7 +6,8 @@ import { listClientWorkspaces } from '@/features/projects/api'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/Card'
-import { ErrorState, Skeleton } from '@/components/ui/States'
+import { Skeleton } from '@/components/ui/States'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 
@@ -125,7 +126,12 @@ export function StoresPanel() {
   })
 
   if (query.isLoading) return <Skeleton className="h-40" />
-  if (query.isError) return <ErrorState onRetry={() => query.refetch()} />
+  if (query.isError) {
+    return (
+      <QueryFailure error={query.error} ar={ar} testId="stores-failure" onRetry={() => void query.refetch()}
+        fallbackTitle={ar ? 'تعذّر تحميل المتاجر.' : 'The stores could not be loaded.'} />
+    )
+  }
 
   const providers = query.data ?? []
   const actionError = authorize.isError ? toApiError(authorize.error) : null

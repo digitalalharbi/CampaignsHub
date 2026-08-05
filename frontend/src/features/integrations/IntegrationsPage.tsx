@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/Card'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
-import { useT } from '@/lib/i18n'
+import { useT, type TranslationKey } from '@/lib/i18n'
 import { sortByPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
 
@@ -269,7 +269,7 @@ function ConnectorCard({
 }: {
   connector: Connector
   ar: boolean
-  t: (key: string) => string
+  t: (key: TranslationKey) => string
   onAuthorize: () => void
   onConnect: () => void
   onSync: () => void

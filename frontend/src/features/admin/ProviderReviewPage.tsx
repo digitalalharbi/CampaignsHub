@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, CircleDashed, Clock, Lock, ShieldCheck } from 'lucide-react'
 import { getReviewChecklists, setReviewRequirement, type ReviewChecklist, type ReviewItem, type ReviewStatus } from './reviewApi'
-import { EmptyState, Skeleton } from '@/components/ui/States'
+import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 
 /**
  * REVIEW-001 — eight checklists, one per platform, because there are eight different reviews.
@@ -64,7 +65,10 @@ export function ProviderReviewPage() {
   }[s])
 
   if (query.isLoading) return <div className="space-y-3"><Skeleton className="h-20" /><Skeleton className="h-64" /></div>
-  if (query.isError) return <EmptyState title={ar ? 'تعذّر تحميل قوائم المراجعة' : 'Could not load the review checklists'} />
+  if (query.isError) {
+    return <QueryFailure error={query.error} ar={ar} testId="provider-review-failure" onRetry={() => void query.refetch()}
+      fallbackTitle={ar ? 'تعذّر تحميل قوائم المراجعة.' : 'The review checklists could not be loaded.'} />
+  }
 
   const providers = query.data?.providers ?? []
 

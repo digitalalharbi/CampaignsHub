@@ -47,7 +47,6 @@ function StatusBadge({ status }: { status?: AuthUser['status'] }) {
 function MenuBody({ onNavigate }: { onNavigate: (to: string) => void }) {
   const t = useT()
   const { user } = useAuth()
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   /*

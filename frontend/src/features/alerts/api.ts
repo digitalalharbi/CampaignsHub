@@ -1,4 +1,4 @@
-import { api, getData, getEnvelope, postData } from '@/lib/api/client'
+import { api, getEnvelope, postData } from '@/lib/api/client'
 import type { ApiEnvelope } from '@/lib/api/types'
 
 /** An alert rule (config). Mirrors backend AlertRule. */

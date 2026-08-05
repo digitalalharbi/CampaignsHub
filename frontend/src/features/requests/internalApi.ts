@@ -43,7 +43,6 @@ export interface RequestDetail extends RequestRow {
   metadata: Record<string, unknown> | null
   /** REQ-DYNFIELDS-001 — the per-service intake answers, keyed by field token. */
   service_details: Record<string, unknown> | null
-  services_resolved?: Array<{ key: string; label_ar?: string | null; label_en?: string | null }>
   sla: { due_at: string | null; started_at: string | null; paused_at: string | null; breached_at: string | null; remaining_seconds: number | null }
   comments: RequestComment[]
   events: RequestEvent[]

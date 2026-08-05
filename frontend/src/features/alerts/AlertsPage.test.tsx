@@ -47,7 +47,7 @@ async function openRulesTab() {
 describe('AlertsPage — engine-fed rule form', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(listAlertRules).mockResolvedValue([])
+    vi.mocked(listAlertRules).mockResolvedValue({ rules: [], total: 0 })
     signInWith(['alerts.view', 'alerts.manage'])
   })
   afterEach(() => signOut())

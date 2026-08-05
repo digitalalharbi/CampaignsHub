@@ -15,6 +15,7 @@ import { useAuth } from '@/stores/auth'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 import { fieldDef } from './paidMediaFields'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 
 const STATUS_OPTIONS = ['under_review', 'waiting_client', 'qualified', 'approved', 'in_progress', 'completed', 'rejected', 'cancelled']
 const PRIORITY_OPTIONS = ['critical', 'high', 'medium', 'low']
@@ -45,7 +46,14 @@ export function RequestDetailPage() {
   const quoteMut = useMutation({ mutationFn: () => raiseQuoteFromRequest(requestId), onSuccess: refresh, onError: (e) => setActionError(toApiError(e).message) })
 
   if (query.isLoading) return <div className="mx-auto max-w-4xl"><div className="h-64 animate-pulse rounded-2xl bg-surface-secondary" /></div>
-  if (query.isError) return <div className="mx-auto max-w-4xl rounded-2xl border border-danger/30 bg-[var(--negative-background)] p-6 text-center text-sm text-danger">{t('error_generic')}</div>
+  if (query.isError) {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <QueryFailure error={query.error} ar={lang === 'ar'} testId="request-detail-failure" onRetry={() => void query.refetch()}
+          fallbackTitle={lang === 'ar' ? 'تعذّر تحميل الطلب.' : 'The request could not be loaded.'} />
+      </div>
+    )
+  }
   const d = query.data!
 
   return (

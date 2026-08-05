@@ -4,6 +4,7 @@ import { listInvoices, listQuotes } from '@/features/billing/api'
 import { TaxTreatmentChip } from '@/features/billing/QuotesPage'
 import { useUi } from '@/stores/ui'
 import { usePortalPath } from '@/app/portalPath'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 
 /**
  * Client billing tab — this client's quotes + invoices, filtered from the tenant billing ledger
@@ -20,7 +21,14 @@ export function TabBilling({ clientId }: { clientId: string }) {
   const outstanding = invoices.reduce((s, i) => s + Math.max(0, Number(i.total) - Number(i.amount_paid)), 0)
 
   if (quotesQ.isLoading || invoicesQ.isLoading) return <div className="h-40 animate-pulse rounded-xl bg-surface-secondary" />
-  if (quotesQ.isError || invoicesQ.isError) return <p className="rounded-xl border border-danger/30 bg-danger/5 p-6 text-center text-sm text-danger">{ar ? 'تعذّر تحميل بيانات الفوترة.' : 'Could not load billing data.'}</p>
+  // A member without `billing.view` is refused here — a boundary, not a failure to load.
+  if (quotesQ.isError || invoicesQ.isError) {
+    return (
+      <QueryFailure error={quotesQ.error ?? invoicesQ.error} ar={ar} testId="client-billing-failure"
+        onRetry={() => { void quotesQ.refetch(); void invoicesQ.refetch() }}
+        fallbackTitle={ar ? 'تعذّر تحميل بيانات الفوترة.' : 'Could not load billing data.'} />
+    )
+  }
 
   return (
     <div className="space-y-4 text-sm">

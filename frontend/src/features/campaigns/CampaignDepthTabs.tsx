@@ -7,6 +7,8 @@ import { EmptyState, Skeleton } from '@/components/ui/States'
 import type { Range } from '@/features/analytics/api'
 import { money, num } from '@/features/analytics/format'
 import { fmtDateTime } from '@/lib/datetime'
+import { QueryFailure } from '@/components/ui/QueryFailure'
+import { useUi } from '@/stores/ui'
 
 /**
  * CAMPDET-010 — the depth sections that were missing from the campaign detail page: who the campaign
@@ -71,11 +73,15 @@ const EVENT_ICON = { high: CheckCircle2, low: AlertCircle }
 
 /** Conversion events actually recorded, with cost per event and a mismatch warning. */
 export function CampaignEventsTab({ campaign, projectId, range }: { campaign: UnifiedCampaign; projectId: string; range: Range }) {
+  const ar = useUi((s) => s.locale) === 'ar'
   const q = useCampaignEvents(projectId, campaign.id, range)
   const cur = campaign.budget_currency || 'SAR'
 
   if (q.isLoading) return <Skeleton className="h-48" />
-  if (q.isError) return <EmptyState title="تعذّر تحميل الأحداث" description="حاول تحديث الصفحة أو تغيير الفترة." />
+  if (q.isError) {
+    return <QueryFailure error={q.error} ar={ar} testId="campaign-events-failure" onRetry={() => void q.refetch()}
+      fallbackTitle={ar ? 'تعذّر تحميل الأحداث.' : 'The events could not be loaded.'} />
+  }
 
   const data = q.data
   const events = data?.events ?? []
@@ -150,10 +156,14 @@ const SYNC_TONE: Record<string, { tone: 'success' | 'danger' | 'warning' | 'neut
 
 /** The real sync history for the accounts feeding this campaign — failures included, not hidden. */
 export function CampaignSyncLogTab({ campaign, projectId }: { campaign: UnifiedCampaign; projectId: string }) {
+  const ar = useUi((s) => s.locale) === 'ar'
   const q = useCampaignSyncLog(projectId, campaign.id)
 
   if (q.isLoading) return <Skeleton className="h-48" />
-  if (q.isError) return <EmptyState title="تعذّر تحميل سجل المزامنة" description="حاول تحديث الصفحة." />
+  if (q.isError) {
+    return <QueryFailure error={q.error} ar={ar} testId="campaign-sync-log-failure" onRetry={() => void q.refetch()}
+      fallbackTitle={ar ? 'تعذّر تحميل سجل المزامنة.' : 'The sync log could not be loaded.'} />
+  }
 
   const { linked_accounts: accounts = 0, runs = [] } = q.data ?? {}
 

@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { getClientAnalytics, type ClientAnalytics } from './api'
 import { useT } from '@/lib/i18n'
+import { QueryFailure } from '@/components/ui/QueryFailure'
+import { useUi } from '@/stores/ui'
 
 const num = (v: number | null | undefined, digits = 0): string =>
   v === null || v === undefined ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: digits })
@@ -44,10 +46,17 @@ function FreshnessBanner({ a, t }: { a: ClientAnalytics; t: ReturnType<typeof us
 
 export function TabAnalytics({ clientId }: { clientId: string }) {
   const t = useT()
+  const ar = useUi((s) => s.locale) === 'ar'
   const q = useQuery({ queryKey: ['app', 'client', clientId, 'analytics'], queryFn: () => getClientAnalytics(clientId) })
 
   if (q.isLoading) return <div className="h-40 animate-pulse rounded-xl bg-surface-secondary" />
-  if (q.isError) return <div className="rounded-xl border border-danger/30 bg-[var(--negative-background)] p-4 text-sm text-danger">{t('error_generic')}</div>
+  // `clients.view_analytics` is a real boundary here, so the refusal must not read as a broken tab.
+  if (q.isError) {
+    return (
+      <QueryFailure error={q.error} ar={ar} testId="client-analytics-failure" onRetry={() => void q.refetch()}
+        fallbackTitle={ar ? 'تعذّر تحميل التحليلات.' : 'Analytics could not be loaded.'} />
+    )
+  }
   const a = q.data!
   const cur = a.currency ? ` ${a.currency}` : ''
 

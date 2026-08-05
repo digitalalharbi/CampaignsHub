@@ -11,8 +11,10 @@ import {
   listReports,
   listShares,
   regenerateReport,
+  renewShare,
   revokeShare,
   sendReport,
+  shareLogs,
 } from './api'
 import type { CreatedShare, ReportDetail, ReportFormat, ReportRow, ShareRow } from './api'
 import { Button } from '@/components/ui/Button'

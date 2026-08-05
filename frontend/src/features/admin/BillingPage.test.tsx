@@ -121,7 +121,9 @@ describe('BillingPage', () => {
   })
 
   it('toggles a plan’s availability', async () => {
-    vi.mocked(updatePlan).mockResolvedValue({ plan: { id: 'p1', name: 'Growth', is_active: false } })
+    // Built from the same factory as every other fixture — a hand-written partial drifted out of
+    // shape and nothing caught it, because the typecheck was running against no files at all.
+    vi.mocked(updatePlan).mockResolvedValue({ plan: plan({ is_active: false }) })
     renderWithProviders(<BillingPage />, { route: '/admin/billing', locale: 'en' })
 
     await waitFor(() => expect(screen.getByTestId('plan-growth')).toBeInTheDocument())

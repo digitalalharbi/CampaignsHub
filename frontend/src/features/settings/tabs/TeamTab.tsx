@@ -10,16 +10,22 @@ import { Alert } from '@/components/ui/Alert'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 
 export function TeamTab() {
   const ar = useUi((u) => u.locale) === 'ar'
-  const { data, isLoading, isError } = useTeam()
+  const { data, error, isLoading, isError } = useTeam()
   const { invite, setRole, toggle, remove } = useTeamActions()
   const [form, setForm] = useState({ name: '', email: '', role: '' })
   const [err, setErr] = useState('')
 
   if (isLoading) return <div className="space-y-3"><Skeleton className="h-24" /><Skeleton className="h-48" /></div>
-  if (isError || !data) return <Alert severity="danger" title={ar ? 'تعذّر تحميل الفريق' : 'The team could not be loaded'}>{ar ? 'تحقق من صلاحية settings.manage.' : 'Check that you hold settings.manage.'}</Alert>
+  // It used to GUESS — «تحقق من صلاحية settings.manage» — on every failure, including a dead
+  // server. The status already knows which one it was.
+  if (isError || !data) {
+    return <QueryFailure error={error} ar={ar} testId="settings-team-failure"
+      fallbackTitle={ar ? 'تعذّر تحميل الفريق.' : 'The team could not be loaded.'} />
+  }
 
   const roleOptions = data.roles.map((r) => ({ value: r.slug, label: r.name }))
 

@@ -9,6 +9,7 @@ import { Alert } from '@/components/ui/Alert'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 
 const MODES = [
   { value: 'managed', ar: 'مُدار', en: 'Managed' },
@@ -18,13 +19,16 @@ const MODES = [
 
 export function ClientsTab() {
   const ar = useUi((u) => u.locale) === 'ar'
-  const { data, isLoading, isError } = useClients()
+  const { data, error, isLoading, isError } = useClients()
   const { create, update, archive } = useClientActions()
   const [form, setForm] = useState({ name: '', mode: 'managed' })
   const [err, setErr] = useState('')
 
   if (isLoading) return <div className="space-y-3"><Skeleton className="h-20" /><Skeleton className="h-48" /></div>
-  if (isError) return <Alert severity="danger" title={ar ? 'تعذّر تحميل العملاء' : 'The clients could not be loaded'}>{ar ? 'تحقق من صلاحية العرض.' : 'Check that you may view them.'}</Alert>
+  if (isError) {
+    return <QueryFailure error={error} ar={ar} testId="settings-clients-failure"
+      fallbackTitle={ar ? 'تعذّر تحميل العملاء.' : 'The clients could not be loaded.'} />
+  }
 
   const rows: ClientRow[] = Array.isArray(data) ? data : []
   const doCreate = async (e: React.FormEvent) => {

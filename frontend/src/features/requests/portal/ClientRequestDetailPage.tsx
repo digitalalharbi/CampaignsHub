@@ -8,6 +8,7 @@ import { PortalShell } from './PortalShell'
 import { usePortalGuard } from './usePortalGuard'
 import { useUi } from '@/stores/ui'
 import { useClientSpacePath } from './clientSpace'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 
 /** Bilingual labels for the main-line journey stages (keys mirror the backend RequestStage enum). */
 const STAGE_LABELS: Record<string, { ar: string; en: string }> = {
@@ -62,7 +63,14 @@ export function ClientRequestDetailPage() {
   }
 
   if (q.isLoading) return <PortalShell title={ar ? 'الطلب' : 'Request'} nav showLogout><div className="h-64 animate-pulse rounded-2xl bg-surface-secondary" /></PortalShell>
-  if (q.isError) return <PortalShell title={ar ? 'الطلب' : 'Request'} nav showLogout><div className="rounded-2xl border border-danger/30 bg-[var(--negative-background)] p-6 text-center text-sm text-danger">{ar ? 'تعذّر تحميل الطلب.' : 'Could not load the request.'}</div></PortalShell>
+  if (q.isError) {
+    return (
+      <PortalShell title={ar ? 'الطلب' : 'Request'} nav showLogout>
+        <QueryFailure error={q.error} ar={ar} testId="portal-request-failure" onRetry={() => void q.refetch()}
+          fallbackTitle={ar ? 'تعذّر تحميل الطلب.' : 'The request could not be loaded.'} />
+      </PortalShell>
+    )
+  }
   const d = q.data!
 
   return (

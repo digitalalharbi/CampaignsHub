@@ -9,6 +9,7 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { Switch } from '@/components/ui/Switch'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 
 /**
  * `/admin/billing` — plans, subscriptions and what the platform is owed (ADMIN-002).
@@ -290,7 +291,10 @@ function SubscriptionsTab({ ar }: { ar: boolean }) {
       </div>
 
       {subs.isPending && <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-14" />)}</div>}
-      {subs.isError && <ErrorState title={ar ? 'تعذّر تحميل الاشتراكات.' : 'Subscriptions could not be loaded.'} onRetry={() => void subs.refetch()} />}
+      {subs.isError && (
+        <QueryFailure error={subs.error} ar={ar} testId="admin-subscriptions-failure" onRetry={() => void subs.refetch()}
+          fallbackTitle={ar ? 'تعذّر تحميل الاشتراكات.' : 'Subscriptions could not be loaded.'} />
+      )}
 
       {subs.data && subs.data.subscriptions.length === 0 && (
         <p className="rounded-2xl border border-dashed border-border px-4 py-12 text-center text-sm text-text-muted">

@@ -11,6 +11,7 @@ import { Alert } from '@/components/ui/Alert'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 
 export function ProjectsTab() {
   const ar = useUi((u) => u.locale) === 'ar'
@@ -25,7 +26,10 @@ export function ProjectsTab() {
   const [err, setErr] = useState('')
 
   if (projects.isLoading) return <div className="space-y-3"><Skeleton className="h-20" /><Skeleton className="h-48" /></div>
-  if (projects.isError) return <Alert severity="danger" title={ar ? 'تعذّر تحميل المشاريع' : 'The projects could not be loaded'}>{ar ? 'تحقق من الصلاحية.' : 'Check your permissions.'}</Alert>
+  if (projects.isError) {
+    return <QueryFailure error={projects.error} ar={ar} testId="settings-projects-failure"
+      fallbackTitle={ar ? 'تعذّر تحميل المشاريع.' : 'The projects could not be loaded.'} />
+  }
 
   const clientName = (id: string) => clients.data?.find((c) => c.id === id)?.name ?? '—'
   const doCreate = async (e: React.FormEvent) => {

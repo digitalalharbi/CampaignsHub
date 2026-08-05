@@ -4,10 +4,12 @@ import {
 } from 'lucide-react'
 import { getData, postData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
-import { EmptyState, Skeleton } from '@/components/ui/States'
+import { Skeleton } from '@/components/ui/States'
 import { platformColor } from '@/features/analytics/components'
 import { useAuth } from '@/stores/auth'
 import { fmtDateTime } from '@/lib/datetime'
+import { QueryFailure } from '@/components/ui/QueryFailure'
+import { useUi } from '@/stores/ui'
 
 /**
  * PROJINT-001 / INTEG-UI-001 — project integrations rebuilt around the SIX REAL ad platforms.
@@ -50,6 +52,7 @@ const SYNC_TONE: Record<string, { ar: string; tone: 'success' | 'warning' | 'dan
 
 export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) {
   const qc = useQueryClient()
+  const ar = useUi((s) => s.locale) === 'ar'
   const canManage = useAuth((s) => s.hasPermission('integrations.connect'))
 
   const q = useQuery({
@@ -68,7 +71,10 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
   })
 
   if (q.isLoading) return <div className="grid gap-3 lg:grid-cols-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-48" />)}</div>
-  if (q.isError || !q.data) return <EmptyState title="تعذّر تحميل المنصات" description="حاول تحديث الصفحة." />
+  if (q.isError || !q.data) {
+    return <QueryFailure error={q.error} ar={ar} testId="project-platforms-failure" onRetry={() => void q.refetch()}
+      fallbackTitle={ar ? 'تعذّر تحميل المنصات.' : 'The platforms could not be loaded.'} />
+  }
 
   const { platforms, summary } = q.data
 

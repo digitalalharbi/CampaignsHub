@@ -314,7 +314,8 @@ function QualityTab({ projectId, range }: TabProps) {
           r.latest_metric_date ?? '—',
           r.last_sync_at ? new Date(r.last_sync_at).toLocaleString('en-GB') : '—',
           num(r.days_with_data),
-          r.missing_days > 0 ? <span key="m" className="font-semibold text-warning">{r.missing_days}</span> : '0',
+          r.missing_days === null ? '—'
+            : r.missing_days > 0 ? <span key="m" className="font-semibold text-warning">{r.missing_days}</span> : '0',
           <span
             key="s"
             className={`rounded-full px-2 py-0.5 text-xs font-semibold ${

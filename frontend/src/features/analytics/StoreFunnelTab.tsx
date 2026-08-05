@@ -6,6 +6,7 @@ import { getData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
+import { QueryFailure } from '@/components/ui/QueryFailure'
 
 /**
  * FUNNEL-001 — «الفانل والمتجر»: impression to riyal, with the source of every number on the row.
@@ -118,7 +119,10 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
 
   if (!projectId) return <EmptyState title={ar ? 'اختر مشروعًا' : 'Pick a project'} description={ar ? 'الفانل والمتجر يُقرآن على مستوى المشروع.' : 'The funnel is read per project.'} />
   if (q.isLoading) return <Skeleton className="h-96" />
-  if (q.isError || !q.data) return <EmptyState title={ar ? 'تعذّر تحميل الفانل' : 'Could not load the funnel'} description={ar ? 'حاول تحديث الصفحة.' : 'Try refreshing.'} />
+  if (q.isError || !q.data) {
+    return <QueryFailure error={q.error} ar={ar} testId="store-funnel-failure" onRetry={() => void q.refetch()}
+      fallbackTitle={ar ? 'تعذّر تحميل الفانل.' : 'The funnel could not be loaded.'} />
+  }
 
   const { stages, steps, totals, derived, comparisons, coverage } = q.data
   const stepFrom = new Map(steps.map((s) => [s.to, s]))
