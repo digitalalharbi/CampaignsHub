@@ -2379,3 +2379,26 @@ renew — with an empty console.
 2. **The client picker has no search and no pagination.** It renders all 269 as `<option>`s. Even at
    a realistic 50 clients that control is unusable, and it is the entry point to every project-scoped
    page. Real product defect, independent of the residue.
+
+## Session close — `8784656`
+
+| Commit | What |
+| --- | --- |
+| `3b3f7ed` | AGENCY-PERMS — refusals read as refusals; the client ceiling reaches the tenant-wide lists |
+| `23d64c2` | The typecheck was running on no files; 27 real errors fixed, incl. two live `ReferenceError`s |
+| `decf9b5` | The agency client picker can be filtered |
+
+Backend **1314** (7639 assertions) · Vitest **668** · `npm run typecheck` (`tsc -b`) clean ·
+`npm run build` clean · oxlint 0 errors · Pint clean · tree CLEAN.
+
+**Use `npm run typecheck`, never `npx tsc --noEmit`** — the latter checks nothing here.
+
+The full three-browser Playwright gate has NOT been re-run since `2ea6943`. Run it from a clean tree
+with nothing else touching the database, and take the verdict from Playwright's own exit code.
+
+### Exact next task
+
+Finish **PORTALS-SWEEP**: the live page-by-page walk of `/app` and `/portal` (`/admin` swept at
+`2ea6943`, `/agency` walked during AGENCY-PERMS). Then, in order: **IDENTITY-PROD** →
+**PIPELINE-12** → **REPORT-LINKS-13** → **REPORT-OBJECTIVE-14** (blocking) → **HANDOVER** → final
+gate.
