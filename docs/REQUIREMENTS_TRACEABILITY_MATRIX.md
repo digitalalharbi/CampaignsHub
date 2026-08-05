@@ -123,6 +123,8 @@ Commit = short hash. Test = suite that covers it. Review = route reviewed live.
 | QUEUE-WORKER-001 | — | The E2E suite requires a running queue worker | ✓ reports are queued on Redis | — | `report-pdf-download.spec.ts` had been failing/flaking for several runs and was carried as an unexplained defect. Root cause: no `queue:work` process, so the spec waited 90s for a completion that could not happen. With a worker: **Chromium 70/70 · Firefox 62/62 · WebKit 62/62** | **VERIFIED** | 916ce95 | Recorded in RESUME_STATE as a required service |
 | DEVSTATUS-001 | X | /dev/status shows requirement-tracking board | ✓ DevStatusController parses docs/REQUIREMENTS_TRACEABILITY_MATRIX.md — counts by status + the open rows | ✓ requirement board on /dev/status with status chips and the open list | Live: VERIFIED 41 · IMPLEMENTED_NOT_VERIFIED 9 · BLOCKED_EXTERNAL_CREDENTIALS 6 · NOT_STARTED 3 · PARTIAL 1 (total 60), 19 open rows listed | **VERIFIED** | 3ae5098 | Parsed from the matrix on purpose — a second hand-maintained list would drift  VERIFY-100: 3 browsers. Asserted on the SHAPE — that it names statuses and counts them — rather than on any particular number, which changes with every requirement closed. |
 | ADAUDIT-001 | — | docs/AD_PLATFORM_INTEGRATIONS_AUDIT.md per-platform matrix | ✓ audit written against the code at HEAD: shared machinery inventory, per-platform table (OAuth/accounts/campaigns/ad-sets/insights), demo-mode labelling, definition-of-done | — | Found and fixed 2 real defects while auditing: the google/google_ads registry key drift (a Google account resolved to NO connector and reported a misleading failure) and a sync gate on the non-existent `integrations.manage` permission | **VERIFIED** | b4b3ba2 | Every ⬜ is the honest awaiting-credentials path — no cell marked done on a mock |
+| MKT-UGC-001 | A HOME | Influencer & UGC announced on the marketing page as a card with a «قريبًا» badge — no sign-up, no request, no activation, no operational path; sub-system stays off behind `influencers_ugc_enabled=false` | n/a (nothing is offered, so nothing is served) | ✓ inert card in the services grid | 5 PublicHomePage vitest | **VERIFIED** | (this commit) | Live-reviewed at 375 and 1280, ar+en, light+dark: 11 cards, all 357×132 (desktop) / 343×156 (phone), no link and no button inside the card |
+| MKT-FIX-001 | A HOME | Two defects found while live-reviewing MKT-UGC-001: the marketing page scrolled sideways 31px on a 375px phone, and React warned about duplicate keys on every render | n/a | ✓ wordmark yields below 480px; footer/account links keyed by label | full marketing vitest + live console read (0 errors after a full remount) | **VERIFIED** | (this commit) | Neither was in the brief; both were invisible to a status check and visible in one minute of live review |
 
 ## UNIMPLEMENTED REQUIREMENTS CHECK (run after each module)
 This list is transcribed from the table above and had drifted: it still named PROJINT-001, INTEG-UI-001,
@@ -923,3 +925,37 @@ and both are the kind of defect a status check cannot see.
 | --- | --- | --- |
 | `OnboardingGate` read `account: null` as "onboarded" | It is null for two different reasons: the platform owner holds no membership BY DESIGN, and a payload whose workspace could not be resolved. Reading both the same way put a brand-new customer on a portal home for a workspace the payload could not even name — and left them there, because nothing re-decides once the navigation has happened. | The owner passes on the flag; anyone else with no account goes to `/switch`, the destination `resolvePostAuthOutcome` already falls back to. `OnboardingGate.test.tsx` (6 tests) covers both null cases and the loop the exemption prevents. |
 | `GET /alerts/rules` returned every row | Fine on the day a workspace writes its third rule and wrong forever after: the payload and the number of cards rendered both grow without limit, so the page a customer opens to ADD a rule gets slower every time anybody adds one. The acceptance suite reached 316 and took the third browser of a run past ten seconds to paint. | Bounded at 100, newest first — so the rule just created is the one at the top and a cap can never hide it — with `meta.total` travelling alongside so the page says «تُعرض أحدث 100 قاعدة من 316» rather than presenting a truncated list as the whole set. `AlertsIsolationTest` «the rules list is bounded and leads with the newest». |
+
+---
+
+## MKT-UGC-001 — announcing a service that is switched off
+
+The brief asks for two things that pull against each other: **tell visitors the influencer/UGC service
+is coming**, and **keep the sub-system disabled behind `influencers_ugc_enabled=false`** — out of the
+plans, the permissions, the internal menus, registration and the portal switcher, with no request or
+account able to be created against it.
+
+So the card is deliberately the one thing in the services grid that cannot be pressed.
+
+| Decision | Why |
+| --- | --- |
+| A plain `<div>`, not a `<Link>` | While the flag is off there is no catalogue entry to open, no intake to pre-select and no portal to reach. A card that looked like its neighbours would be a dead end dressed as a service. |
+| Rendered in the services grid, not a new band | The grid is `auto-rows-fr` at `sm:2 / lg:3`, so the card inherits the exact card size, radius, padding and type scale of the real categories. Measured live: 11 cards, every one 357×132 at 1280 and 343×156 at 375. The page did not grow and nothing shifted. |
+| Dashed border + muted `STATUS_TONE.soon` badge | The same token the platform cards on this page already use for a "coming" state. The card reads as different without inventing a second visual language. |
+| Copy lives in `homeCopy.ts` under `serviceAreas.soon` | It has no `to` and no `key` — nothing an intake or a catalogue could resolve, by construction rather than by discipline. |
+| Hidden when the flag turns ON | Then the real service is in the catalogue above it, and announcing it twice would read worse than not announcing it. |
+| Hidden when the catalogue fails to load | The grid itself is not rendered in that state; an announcement floating where a failed list should be would misrepresent the failure. |
+
+`PublicHomePage.test.tsx` covers all six: the Arabic wording and badge, the English wording and badge,
+**that the card contains no link and no button and that no href anywhere on the page mentions
+`influencer`**, that it sits inside the real grid without displacing a category, and that it vanishes
+on a catalogue error.
+
+### MKT-FIX-001 — two defects the live review turned up
+
+Neither was in the brief, and neither is visible from a passing test suite.
+
+| Defect | What it actually cost | Fix |
+| --- | --- | --- |
+| The public homepage scrolled sideways on a phone | At 375px the header asked for 423px — logo 163, the two toggles 76, «Create account» 128 — so `scrollWidth` exceeded `clientWidth` by 31px and **every section of the page**, not just the header, could be dragged off-centre. Nothing in the row was droppable: the language and theme toggles are how an Arabic-first product is read at all, and the CTA is what the page is for. | The wordmark yields below 480px (`max-[479px]:hidden`) and the row tightens to `gap-2` on mobile; the gradient mark keeps the brand in a third of the width. Measured after: overflow 0 at 375 in both languages and both themes, wordmark back at 1280. |
+| React warned «two children with the same key: /login» on every render | The footer's product column keys its links by route, and since the portals merged (LOGIN-UNIFIED-001) «تسجيل الدخول» and «متابعة طلباتي» are two different invitations to ONE door. React was free to reuse the wrong node between them, and the console error buried anything real that might have been logged beside it. | Keyed by label at both sites — the footer column and the hero's account actions. Verified by hooking `console.error` and remounting the whole page through an SPA navigation: zero errors. |

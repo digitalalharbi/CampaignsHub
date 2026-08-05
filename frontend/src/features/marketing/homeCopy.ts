@@ -104,7 +104,18 @@ export interface HomeCopy {
     custom: string; customDesc: string; empty: string; close: string; errorTitle: string; errorDesc: string; retry: string
   }
   steps: { title: string; subtitle: string; items: { title: string; desc: string }[] }
-  serviceAreas: { title: string; subtitle: string; cta: string; items: { title: string; desc: string }[] }
+  serviceAreas: {
+    title: string; subtitle: string; cta: string; items: { title: string; desc: string }[]
+    /**
+     * A service being ANNOUNCED, not offered (MKT-UGC-001).
+     *
+     * Deliberately shaped unlike every other entry in this block: no `to`, no `key` a catalogue could
+     * resolve, nothing an intake form could pre-select. It carries a badge and two sentences, because
+     * a card that could be clicked would be a promise the sub-system behind it cannot keep while
+     * `influencers_ugc_enabled` is false.
+     */
+    soon: { badge: string; title: string; desc: string }
+  }
   features: { title: string; subtitle: string; items: { title: string; desc: string }[] }
   platforms: {
     title: string; subtitle: string; note: string
@@ -337,6 +348,11 @@ const ar: HomeCopy = {
       { title: 'التقارير', desc: 'تقارير واضحة حسب هدف الحملة، جاهزة للمشاركة.' },
       { title: 'الاستشارات', desc: 'جلسات ومراجعات لخطة الإعلان واختيار المنصات.' },
     ],
+    soon: {
+      badge: 'قريبًا',
+      title: 'علاقات المؤثرين وUGC',
+      desc: 'إدارة حملات المؤثرين والمحتوى والتعاونات من مكان واحد.',
+    },
   },
   features: {
     title: 'أهم المميزات',
@@ -634,6 +650,11 @@ const en: HomeCopy = {
       { title: 'Reporting', desc: 'Clear reports by campaign objective, ready to share.' },
       { title: 'Consulting', desc: 'Sessions and reviews for ad strategy and platform selection.' },
     ],
+    soon: {
+      badge: 'Coming soon',
+      title: 'Influencer relations & UGC',
+      desc: 'Run influencer campaigns, content and collaborations from one place.',
+    },
   },
   features: {
     title: 'Key features',

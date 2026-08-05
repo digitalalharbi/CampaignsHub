@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Activity, ArrowLeft, ArrowRight, BarChart3, Bell, CheckCircle2, FileText, LayoutDashboard, LogIn,
-  Megaphone, Moon, ShieldCheck, Sun, Target, UserCircle, Wallet,
+  Megaphone, Moon, ShieldCheck, Sparkles, Sun, Target, UserCircle, Wallet,
 } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
 import { HOME_COPY, type Locale } from './homeCopy'
@@ -118,10 +118,21 @@ export function PublicHomePage() {
     <div className="min-h-screen bg-background text-text-primary" dir={c.dir}>
       {/* Header — external actions only: log in · create account · request a service · track my requests. */}
       <header className="sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-6xl items-center gap-2 px-4 sm:gap-4 sm:px-6">
+          {/*
+            * The wordmark stands down on a narrow phone (MKT-UGC-001, found in live review).
+            *
+            * At 375px the row asked for 423px — logo 163, the two toggles 76, and «Create account»
+            * 128 — so the whole PAGE scrolled sideways by 31px on every phone visit, on every section,
+            * not just the header. Nothing here was droppable: the language and theme toggles are how
+            * an Arabic-first product is read at all, and the primary CTA is what the page is for.
+            *
+            * So the wordmark yields below 480px and the mark keeps the brand, which is the one part of
+            * this row that says the same thing in a third of the width.
+            */}
           <Link to="/" className="flex shrink-0 items-center gap-2 sm:gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={18} /></span>
-            <span className="font-heading text-base font-extrabold tracking-tight sm:text-lg">CampaignsHub</span>
+            <span className="font-heading text-base font-extrabold tracking-tight max-[479px]:hidden sm:text-lg">CampaignsHub</span>
           </Link>
           <nav className="ms-6 hidden items-center gap-5 text-sm font-medium text-text-secondary lg:flex">
             <a href="#features" className="hover:text-text-primary">{c.nav.features}</a>
@@ -171,7 +182,10 @@ export function PublicHomePage() {
                 </Link>
                 {c.options.login.actions.map((a, i) => {
                   const Icon = ACCOUNT_ICONS[i] ?? LogIn
-                  return <Link key={a.to} to={a.to}><Button variant="secondary" size="lg"><Icon size={16} /> {a.label}</Button></Link>
+                  // Keyed by LABEL, not route: both actions land on `/login` since the portals merged
+                  // (LOGIN-UNIFIED-001), so keying by `to` gave React two children with the same key
+                  // and it warned on every render of this block.
+                  return <Link key={a.label} to={a.to}><Button variant="secondary" size="lg"><Icon size={16} /> {a.label}</Button></Link>
                 })}
               </div>
             </div>
@@ -273,6 +287,35 @@ export function PublicHomePage() {
                   </li>
                 )
               })}
+
+              {/*
+                * Announced, not offered (MKT-UGC-001).
+                *
+                * The one card in this grid that is not a link, and that is the whole point: while
+                * `influencers_ugc_enabled` is false there is no catalogue entry to open, no intake to
+                * pre-select and no portal to reach. A card that looked like the others would be a
+                * dead end dressed as a service, so this one is deliberately inert — a dashed border,
+                * a «قريبًا» badge, and nothing to press.
+                *
+                * It disappears the moment the flag turns on, because then the real service is in the
+                * catalogue above and announcing it twice would be worse than not announcing it.
+                */}
+              {!features.influencersUgc && (
+                <li className="h-full" data-testid="home-service-soon-influencers">
+                  <div className="flex h-full flex-col rounded-2xl border border-dashed border-border-strong bg-surface p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-secondary text-text-muted">
+                        <Sparkles size={18} />
+                      </span>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_TONE.soon}`}>
+                        {c.serviceAreas.soon.badge}
+                      </span>
+                    </div>
+                    <h3 className="mt-3 text-base font-bold text-text-primary">{c.serviceAreas.soon.title}</h3>
+                    <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">{c.serviceAreas.soon.desc}</p>
+                  </div>
+                </li>
+              )}
             </ul>
           )}
         </div>
@@ -438,7 +481,10 @@ export function PublicHomePage() {
               <div className="text-sm font-bold text-text-primary">{group.title}</div>
               <ul className="mt-3 space-y-2">
                 {group.links.map((l) => (
-                  <li key={l.to}><Link to={l.to} className="text-sm text-text-secondary hover:text-brand-600">{l.label}</Link></li>
+                  // Keyed by label for the same reason as the hero's account actions: «تسجيل الدخول»
+                  // and «متابعة طلباتي» are two different invitations to ONE door since the portals
+                  // merged, so the route is not a unique identity for a footer link.
+                  <li key={l.label}><Link to={l.to} className="text-sm text-text-secondary hover:text-brand-600">{l.label}</Link></li>
                 ))}
               </ul>
             </div>

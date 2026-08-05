@@ -327,3 +327,69 @@ describe('PublicHomePage — inline paid-media services', () => {
     expect(screen.queryByTestId('portal-preview')).not.toBeInTheDocument()
   })
 })
+
+/**
+ * MKT-UGC-001 — the influencer/UGC service is ANNOUNCED while it stays switched off.
+ *
+ * The announcement and the withdrawal have to hold at the same time, which is the only interesting
+ * thing about this card. So the tests below check both halves: the visitor is told the service is
+ * coming, and is given no way at all to ask for it — no link, no button, nothing that would land them
+ * in an intake the backend refuses.
+ */
+describe('PublicHomePage — the influencer & UGC announcement', () => {
+  afterEach(() => {
+    catalogState.isError = false
+    signOut()
+  })
+
+  it('announces the service in Arabic with a «قريبًا» badge', () => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { route: '/', locale: 'ar' })
+
+    const card = screen.getByTestId('home-service-soon-influencers')
+    expect(within(card).getByText('علاقات المؤثرين وUGC')).toBeInTheDocument()
+    expect(within(card).getByText('إدارة حملات المؤثرين والمحتوى والتعاونات من مكان واحد.')).toBeInTheDocument()
+    expect(within(card).getByText('قريبًا')).toBeInTheDocument()
+  })
+
+  it('announces it in English too', () => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { route: '/', locale: 'en' })
+
+    const card = screen.getByTestId('home-service-soon-influencers')
+    expect(within(card).getByText('Influencer relations & UGC')).toBeInTheDocument()
+    expect(within(card).getByText('Coming soon')).toBeInTheDocument()
+  })
+
+  /** The claim that matters: an announcement is not an offer. */
+  it('offers nothing to press — no link, no button, no route into the withdrawn sub-system', () => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { route: '/', locale: 'ar' })
+
+    const card = screen.getByTestId('home-service-soon-influencers')
+    expect(within(card).queryAllByRole('link')).toHaveLength(0)
+    expect(within(card).queryAllByRole('button')).toHaveLength(0)
+    expect(linkHrefs().some((h) => h?.includes('influencer'))).toBe(false)
+  })
+
+  /** It sits inside the services grid, so it inherits that grid's sizing rather than adding a row of its own. */
+  it('lives in the services grid beside the real categories', () => {
+    signOut()
+    renderWithProviders(<PublicHomePage />, { route: '/', locale: 'en' })
+
+    const grid = screen.getByTestId('home-service-categories')
+    expect(within(grid).getByTestId('home-service-soon-influencers')).toBeInTheDocument()
+    // The three mocked categories are still there — announcing did not displace anything.
+    expect(within(grid).getByText('Launch & manage')).toBeInTheDocument()
+    expect(grid.children).toHaveLength(4)
+  })
+
+  /** A catalogue that failed to load renders no grid at all — and no announcement inside a missing grid. */
+  it('is not shown when the services catalogue could not be loaded', () => {
+    catalogState.isError = true
+    signOut()
+    renderWithProviders(<PublicHomePage />, { route: '/', locale: 'en' })
+
+    expect(screen.queryByTestId('home-service-soon-influencers')).not.toBeInTheDocument()
+  })
+})

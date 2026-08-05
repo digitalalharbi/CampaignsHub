@@ -1732,3 +1732,43 @@ three conditions — BLOCKED_OPERATIONAL_EVIDENCE, not code.
 
 **The gate:** 922 backend · 483 vitest · 505+ E2E on chromium, firefox and webkit. `retries: 0`,
 nothing skipped.
+
+---
+
+## Session — the production-integrations brief (started at `4eb36fa`)
+
+The brief has six sections plus a marketing card. Order of execution, and where it stands:
+
+| # | Unit | State |
+| --- | --- | --- |
+| 0 | **MKT-UGC-001** — the influencer/UGC «قريبًا» card, sub-system still off | **done, committed** |
+| 0b | **MKT-FIX-001** — mobile horizontal scroll + duplicate React keys, both found live | **done, committed** |
+| 1 | Ad-platform integrations: OAuth, ad accounts, campaigns/ad sets/ads/creatives/budgets/metrics, scheduler + queues, retry/backoff/idempotency, webhooks or polling, token refresh, sync log, raw + normalised storage, fail-closed isolation | next |
+| 2 | Salla & Zid | not started |
+| 3 | Funnel & store analytics | not started |
+| 4 | Interactive shareable client reports | not started |
+| 5 | One synced source feeding dashboard/campaigns/analytics/funnel/reports/alerts/share links | not started |
+| 6 | Production readiness sweep | not started |
+
+### What the survey found before writing anything (unit 1)
+
+`docs/AD_PLATFORM_INTEGRATIONS_AUDIT.md` is accurate and was re-read against the code. The shared
+machinery is real and tested — connector contract, registry with the `google → google_ads` alias,
+encrypted `IntegrationCredential`, `ProviderConnection` / `ExternalAccount` / `ExternalCampaign` /
+`ExternalAdSet` / `ExternalAds`, `AccountMetricsSyncer` + `SyncAccountMetricsJob`, `MetricSyncRun` and
+the per-platform UI. All six providers extend `AwaitingCredentialsConnector`, which refuses honestly
+and never fabricates a row.
+
+What is genuinely absent, and is therefore unit 1's actual scope: a **real OAuth exchange and refresh**
+per platform, **raw payload retention beside the normalised rows**, **retry/backoff with an idempotency
+key on the sync path**, a **scheduler entry** that drives syncs (only reports/alerts/SLA/lifecycle are
+scheduled today — nothing syncs a platform on a timer), **webhook or polling ingestion**, and the
+four-state `Connected | Syncing | Error | Awaiting Credentials` display.
+
+### Discipline reminders that still bind
+
+- Do not start a backend on :8000 by hand before a Playwright run — the suite reuses it and then skips
+  its own `queue:work --queue=reports,default`, and the report-export specs hang at "processing".
+  **Kill the hand-started backend and Vite before the gate.** (Both are running right now, for the live
+  review; they must be killed before the next full run.)
+- Do not edit source while a gate runs. A run with edits under it is void.
