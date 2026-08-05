@@ -77,7 +77,19 @@ return Application::configure(basePath: dirname(__DIR__))
          * webhook, which verifies the signature before anything moves; a forged post reaches a
          * verification it cannot pass. The route only exists outside production.
          */
-        $middleware->validateCsrfTokens(except: ['api/v1/payments/sandbox/*']);
+        /*
+         * WEBHOOK-001 — a provider's server has no CSRF token and never will.
+         *
+         * Excluding these changes no security property for the same reason as above: the endpoint
+         * grants nothing and verifies an HMAC over the raw body before a single row is written. A
+         * forged POST reaches a signature check it cannot pass and is answered 401 with nothing
+         * stored. CSRF protects a BROWSER session from being used by another origin; there is no
+         * session here to protect.
+         */
+        $middleware->validateCsrfTokens(except: [
+            'api/v1/payments/sandbox/*',
+            'api/v1/webhooks/*',
+        ]);
 
         /*
          * An unauthenticated API call is a 401, not a redirect (LOGIN-003).

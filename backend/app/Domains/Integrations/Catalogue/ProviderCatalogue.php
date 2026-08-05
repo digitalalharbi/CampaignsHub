@@ -121,7 +121,7 @@ final class ProviderCatalogue
             supportsRefresh: true,
             tokenNote: 'Access tokens are short-lived (around 30 minutes) and are refreshed with the refresh token.',
             tokenNoteAr: 'رمز الوصول قصير العمر (نحو 30 دقيقة) ويُجدَّد عبر رمز التجديد.',
-            webhooks: WebhookSupport::RequiresConfirmation,
+            webhooks: WebhookSupport::PollingOnly,
             webhookSignatureHeader: null,
             prerequisites: [
                 'A Snapchat Business Manager organisation that owns the ad accounts.',
@@ -136,6 +136,9 @@ final class ProviderCatalogue
             docsUrl: 'https://developers.snap.com/api/marketing-api/Ads-API/introduction',
             rateLimitNote: 'Throttled with HTTP 429 and a Retry-After header; the shared retry policy honours it.',
             paginationNote: 'Cursor pagination through `paging.next_link`.',
+            // Snapchat publishes no change-notification webhook for the objects we read, and this
+            // install holds no keys to discover one behind a partner programme. The 30-minute poll is
+            // the honest answer; an endpoint we would refuse every call to is worse than none.
         );
     }
 
@@ -162,7 +165,7 @@ final class ProviderCatalogue
                 .'only when the advertiser revokes it, which is a re-authorisation, not a refresh.',
             tokenNoteAr: 'رمز الوصول للأعمال لا تنتهي صلاحيته ولا يوجد له منح تجديد. يتوقف فقط عند إلغاء المعلن للتفويض، '
                 .'وهذا يتطلب إعادة ربط لا تجديدًا.',
-            webhooks: WebhookSupport::RequiresConfirmation,
+            webhooks: WebhookSupport::PollingOnly,
             webhookSignatureHeader: null,
             prerequisites: [
                 'A TikTok for Business developer account and an app created in the Marketing API portal.',
