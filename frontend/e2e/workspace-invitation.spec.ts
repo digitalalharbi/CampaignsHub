@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, csrfHeaders, switchToEnglish } from './helpers'
+import { AUTH, csrfHeaders, E2E_ORIGIN, switchToEnglish } from './helpers'
 
 /**
  * Workspace invitation acceptance: the owner invites a member (secure token), and the invitee — with no
@@ -13,7 +13,7 @@ test('owner invites a member → invitee accepts → joins the workspace', async
   const email = `member.${tag}@example.com`.toLowerCase()
 
   // 1) Owner creates the invitation via the API (dev link is returned in non-prod).
-  const ownerCtx = await browser.newContext({ storageState: AUTH.owner, baseURL: 'http://localhost:5173' })
+  const ownerCtx = await browser.newContext({ storageState: AUTH.owner, baseURL: E2E_ORIGIN })
   const headers = await csrfHeaders(ownerCtx.request)
   const res = await ownerCtx.request.post('/api/v1/app/team/invitations', {
     headers, data: { email, role_slug: 'analyst' },

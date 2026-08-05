@@ -1,4 +1,12 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
+import { E2E_ORIGIN } from './env'
+
+/**
+ * Re-exported so a spec that needs the gate's origin has one obvious place to take it from — the
+ * same module it already imports `AUTH` and `csrfHeaders` from. Six specs held it as a literal, and
+ * a literal is exactly what breaks the day the gate moves off the shared port.
+ */
+export { E2E_ORIGIN }
 
 export const AUTH = {
   owner: 'e2e/.auth/owner.json',
@@ -28,8 +36,8 @@ export const AUTH = {
  */
 export const API_HEADERS: Record<string, string> = {
   Accept: 'application/json',
-  Origin: 'http://localhost:5173',
-  Referer: 'http://localhost:5173/',
+  Origin: E2E_ORIGIN,
+  Referer: `${E2E_ORIGIN}/`,
 }
 
 /** Prime the Sanctum CSRF cookie and return the headers needed for unsafe (POST/DELETE) API calls. */

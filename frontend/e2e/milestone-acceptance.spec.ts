@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, API_HEADERS, csrfHeaders, switchToEnglish } from './helpers'
+import { AUTH, API_HEADERS, csrfHeaders, E2E_ORIGIN, switchToEnglish } from './helpers'
 
 /**
  * Milestone acceptance (browser-observable slice) against the LIVE server, on Chromium/Firefox/WebKit:
@@ -13,7 +13,7 @@ test.use({ storageState: AUTH.owner }) // the UI test's `page` acts as the owner
 
 test.describe('milestone acceptance', () => {
   test('alerts API persists and the delivery ledger stays honest', async ({ browser }, testInfo) => {
-    const ownerCtx = await browser.newContext({ storageState: AUTH.owner, baseURL: 'http://localhost:5173' })
+    const ownerCtx = await browser.newContext({ storageState: AUTH.owner, baseURL: E2E_ORIGIN })
     const headers = await csrfHeaders(ownerCtx.request)
     const name = `Budget risk ${testInfo.project.name}-${Date.now()}`
 
@@ -44,7 +44,7 @@ test.describe('milestone acceptance', () => {
   })
 
   test('a limited member is denied alert-rule creation (fail-closed)', async ({ browser }) => {
-    const analystCtx = await browser.newContext({ storageState: AUTH.analyst, baseURL: 'http://localhost:5173' })
+    const analystCtx = await browser.newContext({ storageState: AUTH.analyst, baseURL: E2E_ORIGIN })
     const headers = await csrfHeaders(analystCtx.request)
     const res = await analystCtx.request.post('/api/v1/alerts/rules', {
       headers, data: { type: 'budget_risk', name: 'nope' },

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, seededProject } from './helpers'
+import { AUTH, E2E_ORIGIN, seededProject } from './helpers'
 
 /**
  * The integrations surfaces lead with the six real ad platforms (PROJINT-001, INTEG-UI-001).
@@ -149,7 +149,7 @@ test.describe('a project’s integrations', () => {
    */
   test('say plainly that no real keys exist yet', async ({ page }) => {
     const projects = await page.request.get('/api/v1/projects', {
-      headers: { Accept: 'application/json', Origin: 'http://localhost:5173' },
+      headers: { Accept: 'application/json', Origin: E2E_ORIGIN },
     })
     const projectId = (await projects.json()).data[0].id as string
 

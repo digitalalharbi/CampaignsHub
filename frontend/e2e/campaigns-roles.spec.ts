@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { API_HEADERS, AUTH, csrfHeaders, switchToEnglish } from './helpers'
+import { API_HEADERS, AUTH, csrfHeaders, E2E_ORIGIN, switchToEnglish } from './helpers'
 
 /**
  * Role / RBAC E2E — proves authorization is enforced by the SERVER, not just hidden buttons.
@@ -115,7 +115,7 @@ test.describe('Client Viewer (scoped to one project)', () => {
 
     // A project they are NOT a member of (from the owner's full list) → 403, even by hand-swapping the id.
     const owner = await playwright.request.newContext({
-      baseURL: 'http://localhost:5173',
+      baseURL: E2E_ORIGIN,
       storageState: AUTH.owner,
       extraHTTPHeaders: API_HEADERS,
     })

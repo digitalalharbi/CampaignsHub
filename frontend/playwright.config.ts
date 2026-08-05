@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import { E2E_API_TARGET, E2E_BACKEND_ENV, E2E_BACKEND_PORT, E2E_FRONTEND_PORT, E2E_ORIGIN } from './e2e/env'
 
 /**
  * E2E config. Self-contained: Playwright starts BOTH servers itself.
@@ -19,8 +20,16 @@ export default defineConfig({
   retries: 0, // root causes are fixed, not masked; a genuine flake should fail the gate
   workers: 1,
   reporter: [['list']],
+  /*
+   * Creates and resets `mediabuying_e2e` before either server starts (E2E-ISO-001).
+   *
+   * The gate used to serve the DEVELOPMENT database, so every run left a whole registration journey
+   * behind; the residue reached 485 tenants and 2105 tasks and made live review of any list
+   * meaningless. See `e2e/global-setup.ts` for the full account.
+   */
+  globalSetup: './e2e/global-setup.ts',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: E2E_ORIGIN,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     locale: 'en-US',
@@ -63,18 +72,35 @@ export default defineConfig({
        * 502 (Vite proxying to a backend that was no longer there) and, on another attempt, 401.
        * Both looked like authentication defects and neither was.
        */
-      command: 'sh -c \'trap "kill 0" EXIT INT TERM; php artisan queue:work --queue=reports,default --tries=3 --sleep=1 --quiet & php artisan serve --no-reload --port=8000 >> storage/logs/serve-requests.log\'',
+      command: `sh -c 'trap "kill 0" EXIT INT TERM; php artisan queue:work --queue=reports,default --tries=3 --sleep=1 --quiet & php artisan serve --no-reload --port=${E2E_BACKEND_PORT} >> storage/logs/serve-requests.log'`,
       cwd: '../backend',
-      url: 'http://localhost:8000/up',
+      url: `${E2E_API_TARGET}/up`,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
-      env: { PHP_CLI_SERVER_WORKERS: '4' },
+      /*
+       * The gate's own database, Redis keyspace and Sanctum origin, passed through the process
+       * environment rather than a checked-in `.env.e2e`.
+       *
+       * Laravel's env repository is immutable, so a variable already present in the environment wins
+       * over `.env` — which is what makes this work with no extra file on disk and nothing secret in
+       * the repository. `e2e/global-setup.ts` has already created and seeded that database.
+       */
+      env: { ...E2E_BACKEND_ENV, PHP_CLI_SERVER_WORKERS: '4' },
     },
     {
-      command: 'npm run dev',
-      url: 'http://localhost:5173',
+      /*
+       * :5273, not :5173 — and that is load-bearing, not cosmetic.
+       *
+       * `reuseExistingServer` is on outside CI. On the shared port, a dev stack left running against
+       * the DEVELOPMENT database would simply be adopted by the gate, and every isolation measure
+       * above would be bypassed silently, with a green run to show for it. A port nothing else uses
+       * makes that impossible instead of merely unlikely.
+       */
+      command: `npm run dev -- --port ${E2E_FRONTEND_PORT}`,
+      url: E2E_ORIGIN,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
+      env: { VITE_API_TARGET: E2E_API_TARGET },
     },
   ],
 })

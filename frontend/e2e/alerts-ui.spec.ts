@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, csrfHeaders, switchToEnglish } from './helpers'
+import { AUTH, csrfHeaders, E2E_ORIGIN, switchToEnglish } from './helpers'
 
 /**
  * Alerts management UI (/agency/alerts) on Chromium/Firefox/WebKit: the page renders the operator surface for the
@@ -53,7 +53,7 @@ test('alerts page renders all sections and a rule created in the UI persists', a
 
 test('the notification bell links to the alerts page', async ({ browser, page }) => {
   // Raise a tenant-wide alert via the API so the bell has something to link to.
-  const ctx = await browser.newContext({ storageState: AUTH.owner, baseURL: 'http://localhost:5173' })
+  const ctx = await browser.newContext({ storageState: AUTH.owner, baseURL: E2E_ORIGIN })
   const headers = await csrfHeaders(ctx.request)
   // A rule is enough to prove the wiring. The bell's own action_url is still '/app/alerts' (see
   // AlertEvaluator); what this asserts is the RAIL entry, which is per-portal — an agency operator's
