@@ -31,4 +31,8 @@ return [
     // Password reset, answered identically for a known and an unknown address so the endpoint does
     // not become a way to discover who has an account.
     'password_reset_sent' => 'إذا كان هناك حساب مرتبط بهذا البريد، فسيصلك رابط إعادة التعيين.',
+
+    'contact_received' => 'شكرًا لك — وصلتنا رسالتك وسنرد عبر البريد الإلكتروني.',
+    'support_ticket_created' => 'أُنشئت تذكرتك. احتفظ بالرقم المرجعي لمتابعتها.',
+    'data_request_received' => 'سُجّل طلبك وسيُراجَع.',
 ];

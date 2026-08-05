@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Legal\Http\Controllers\LegalInboxController;
 use App\Domains\Legal\Http\Controllers\PlatformSettingsController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
@@ -136,6 +137,20 @@ Route::middleware(['auth:sanctum', 'platform'])
          * considerable problem. Unknown facts stay unset — nothing on this screen is defaulted to a
          * plausible-looking company, because a default here ends up on a published policy.
          */
+        /*
+         * LEGAL-002 — the operator's three queues.
+         *
+         * Separate endpoints rather than one merged inbox: an enquiry is sales, a ticket is support,
+         * and a data request is a legal obligation with a deadline. One list sorted by date buries
+         * the one with the deadline under the two without.
+         */
+        Route::get('/legal/contact-messages', [LegalInboxController::class, 'contactMessages'])->name('legal.contact.index');
+        Route::patch('/legal/contact-messages/{message}', [LegalInboxController::class, 'updateContactMessage'])->name('legal.contact.update');
+        Route::get('/legal/support-tickets', [LegalInboxController::class, 'supportTickets'])->name('legal.tickets.index');
+        Route::patch('/legal/support-tickets/{ticket}', [LegalInboxController::class, 'updateSupportTicket'])->name('legal.tickets.update');
+        Route::get('/legal/data-requests', [LegalInboxController::class, 'dataRequests'])->name('legal.data-requests.index');
+        Route::patch('/legal/data-requests/{dataRequest}', [LegalInboxController::class, 'updateDataRequest'])->name('legal.data-requests.update');
+
         Route::get('/settings/platform', [PlatformSettingsController::class, 'show'])->name('settings.platform.show');
         Route::put('/settings/platform', [PlatformSettingsController::class, 'update'])->name('settings.platform.update');
 

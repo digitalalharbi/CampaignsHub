@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Legal\Http\Controllers\PublicIntakeController;
 use App\Domains\Legal\Http\Controllers\PublicLegalController;
 use App\Domains\Reports\Http\Controllers\PublicReportController;
 use App\Domains\Reports\Http\Controllers\ReportDownloadController;
@@ -37,6 +38,21 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
      * domain. A policy surface behind a login fails those reviews with no explanation.
      */
     Route::get('/legal', PublicLegalController::class)->name('legal');
+
+    /*
+     * LEGAL-002 — what a visitor can actually send us.
+     *
+     * Unauthenticated by necessity: the people most likely to need the contact form are not customers
+     * yet, and somebody asking for their data to be deleted may have lost access to the account. Rate
+     * limited per IP because a public write endpoint without one is an invitation, and each carries a
+     * honeypot field in the controller.
+     */
+    Route::post('/contact', [PublicIntakeController::class, 'contact'])
+        ->middleware('throttle:5,1')->name('contact');
+    Route::post('/support/tickets', [PublicIntakeController::class, 'support'])
+        ->middleware('throttle:5,1')->name('support.tickets');
+    Route::post('/data-requests', [PublicIntakeController::class, 'dataRequest'])
+        ->middleware('throttle:5,1')->name('data-requests');
 
     // Public, token-gated, expiring report download (the shareable secure link).
     Route::get('/reports/download/{token}', ReportDownloadController::class)->name('reports.download');
