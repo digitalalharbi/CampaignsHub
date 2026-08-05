@@ -2402,3 +2402,70 @@ Finish **PORTALS-SWEEP**: the live page-by-page walk of `/app` and `/portal` (`/
 `2ea6943`, `/agency` walked during AGENCY-PERMS). Then, in order: **IDENTITY-PROD** →
 **PIPELINE-12** → **REPORT-LINKS-13** → **REPORT-OBJECTIVE-14** (blocking) → **HANDOVER** → final
 gate.
+
+## Session of 2026-08-09 — five units, from `060adcb` to `42b2dbe`
+
+| Commit | Unit | What |
+| --- | --- | --- |
+| `5f0750f` | **E2E-ISO** | The gate had no database of its own |
+| `b84e725` | **PORTALS-SWEEP** | The shared error panel says which failure it was |
+| `1c1996c` | **IDENTITY-PROD** | One domain, one address, spelled one way |
+| `a08a6b2` | **UNIFIED-002** | The funnel states the spend it is built on |
+| `42b2dbe` | **REPORT-OBJECTIVE** (part 1) | Awareness spend never reaches a sales CPA |
+
+**Backend 1341 (7778 assertions) · Vitest 673 (97 files) · `npm run typecheck` (`tsc -b`) clean ·
+`npm run build` clean · oxlint 0 errors · Pint clean · tree CLEAN.**
+
+**Use `npm run typecheck`, never `npx tsc --noEmit`** — the latter reads a solution file with
+`"files": []` and checks nothing.
+
+### The gate now has its own everything
+
+`mediabuying_e2e`, reset by `migrate:fresh --seed` before every run, on **:8100 and :5273** with its
+own Redis prefix. The ports are load-bearing: `reuseExistingServer` is on outside CI, so on :8000 /
+:5173 a dev stack left running would be ADOPTED and every other isolation measure bypassed silently,
+with a green run to show for it. `frontend/e2e/env.ts` is the single source of ports, origin and
+backend environment; nothing secret is committed, because Laravel's env repository is immutable and a
+variable already in the process environment wins over `.env`.
+
+The development database was rebuilt from the seed — **12 tenants · 13 users · 7 client spaces ·
+1 task**, down from 485 / 610 / 791 / 2105. `db:purge-e2e-residue` exists for databases where a
+rebuild is not an option; it keys on RFC 2606 / 6761 reserved email domains, never on names, and six
+of its seven tests are refusals.
+
+### The live sweep
+
+`/app` (13 routes), `/portal` (9) and `/admin` walked in a real browser under their own accounts:
+**zero console errors, zero failure panels, zero empty pages.** `/agency` was walked during
+AGENCY-PERMS.
+
+### Found and not fixed — the next demo-data unit owns these
+
+- **`client@demo-portal.local` has nothing in any of its eight sections.** No requests, quotes,
+  invoices, campaigns, reports, files or messages. Every page is correct and every page is empty, so
+  the client portal cannot be demonstrated by signing in to it. This is item 14 of the programme
+  (Demo Data), and it is now the biggest gap in a live review.
+- **The objective is never derived from the platform.** Unified campaigns are created by hand or by
+  request conversion; nothing maps `external_campaigns.objective` onto them, so `objective_source` is
+  `unset` on every imported campaign. It fails safe (an unrecognised objective is not a sales
+  campaign), but §14.1's «يُستخرج الهدف من المنصة تلقائيًا» is not met.
+
+### Exact next task
+
+**REPORT-OBJECTIVE part 2 — the reports themselves.** The engine is done and proven
+(`GET /projects/{id}/metrics/objective-performance` returns `paths`, `direct`, `blended`, each with
+its formula and its included/excluded campaigns). What is left is everything that reads it:
+
+1. §14.5 scope customisation — campaigns, exclusions, paths, platforms, accounts, period, visible
+   metrics; saved as a template; editable without creating a new report.
+2. §14.6 objective-aware layouts — an awareness report does not lead with CPA/ROAS unless sales
+   campaigns are in scope; a multi-path report gives each path its own section.
+3. §14.7–14.8 comparisons, recommendations, creative analysis BY objective.
+4. §14.9 attribution transparency and de-duplication (`REPORT-OBJECTIVE-005`, still `NOT_STARTED`).
+5. **REPORT-LINKS-13** — executive-summary vs detailed as two link types on
+   `https://campaignshub.io/r/<token>`; `ShareService` today separates live-vs-snapshot, not
+   summary-vs-detail.
+
+Then: **Demo data** (item 14) → **`PRODUCTION_HANDOVER.md`** (does not exist) → **Clean install +
+upgrade path** → **the final three-browser gate**, whose verdict comes from Playwright's own exit
+code. The full gate has NOT been run since `2ea6943`.
