@@ -51,6 +51,17 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
 {
     protected ?ProviderConnection $connection = null;
 
+    /**
+     * Every body this connector has been handed since the last time somebody took them.
+     *
+     * Collected here rather than in each connector because it must be impossible to add a platform
+     * and forget: `read()` is the only way any of the six is allowed to look at a response, so
+     * everything that arrives is recorded by construction (INTEG-RAW-001).
+     *
+     * @var list<array<string,mixed>>
+     */
+    protected array $rawResponses = [];
+
     /** The platform key in `config/ad_platforms.php` — usually the same as `key()`. */
     abstract protected function platform(): string;
 
@@ -302,6 +313,24 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
         /** @var array<string,mixed> $body */
         $body = $response->json() ?? [];
 
+        $this->rawResponses[] = $body;
+
         return $body;
+    }
+
+    /**
+     * Take the raw bodies collected so far, and forget them.
+     *
+     * Draining rather than reading, because a connector instance is bound per sync and holding the
+     * previous window's payloads into the next one would attach a January response to a February run.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function takeRawResponses(): array
+    {
+        $taken = $this->rawResponses;
+        $this->rawResponses = [];
+
+        return $taken;
     }
 }

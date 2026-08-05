@@ -7,6 +7,7 @@ namespace App\Domains\Metrics\Services;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
@@ -105,6 +106,17 @@ final class AccountMetricsSyncer
 
         [$upserted, $skipped] = $this->ingest($account, $result->records);
 
+        /*
+         * Keep what the platform said, beside what we made of it (INTEG-RAW-001).
+         *
+         * Written after the ingest so `normalised_rows` can record how many metrics came OUT of this
+         * payload — a body with four hundred rows that produced zero metrics is the signature of a
+         * mapping bug, and that comparison is invisible from either half alone.
+         */
+        if ($connector instanceof ApiAdvertisingConnector) {
+            $this->retainRaw($account, $run, $connector->takeRawResponses(), $from, $to, $upserted);
+        }
+
         // "Partial" is a real outcome: the provider answered, but some rows could not be mapped.
         $status = $skipped > 0 ? 'partial' : 'success';
         $message = $skipped > 0
@@ -169,6 +181,42 @@ final class AccountMetricsSyncer
         }
 
         return [count($metrics), $skipped];
+    }
+
+    /**
+     * Store the platform's own bodies for this run.
+     *
+     * One row per response — not one concatenated blob — because a window that needed three paginated
+     * calls is three answers, and a dispute about one of them should not require unpicking the others.
+     *
+     * @param  list<array<string,mixed>>  $payloads
+     */
+    private function retainRaw(
+        ExternalAccount $account,
+        MetricSyncRun $run,
+        array $payloads,
+        Carbon $from,
+        Carbon $to,
+        int $normalisedRows,
+    ): void {
+        foreach ($payloads as $index => $payload) {
+            IntegrationRawPayload::withoutGlobalScopes()->create([
+                'tenant_id' => $account->tenant_id,
+                'external_account_id' => $account->id,
+                'sync_run_id' => $run->getKey(),
+                'provider' => $account->provider,
+                'resource' => 'insights',
+                'window_start' => $from->toDateString(),
+                'window_end' => $to->toDateString(),
+                'payload' => $payload,
+                // The count belongs to the run, so it is attributed to the first payload rather than
+                // divided by a guess about which call produced which row.
+                'normalised_rows' => $index === 0 ? $normalisedRows : 0,
+                'fetched_at' => Carbon::now(),
+            ]);
+        }
+
+        $account->forceFill(['last_synced_at' => Carbon::now()])->save();
     }
 
     private function finish(MetricSyncRun $run, string $status, int $upserted, ?string $error): MetricSyncRun

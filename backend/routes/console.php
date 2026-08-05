@@ -37,3 +37,30 @@ if (! app()->environment('production')) {
 
 // Evaluate alert rules (budget risk, no results, ROAS drop, sync failure, token expiry) every 15 minutes.
 Schedule::command('alerts:evaluate')->everyFifteenMinutes();
+
+/*
+ * The ad-platform sweep (INTEG-SYNC-001).
+ *
+ * Every half hour, and it re-asks for the last seven days rather than only today — every platform
+ * restates recent figures as conversions attribute late and spend is corrected, so a sweep that only
+ * asked for today would freeze each day at its most wrong. The upsert is idempotent and the job is
+ * unique per (account, window), so an overlapping manual sync adds nothing.
+ *
+ * `withoutOverlapping` because a slow sweep must not have a second one starting behind it: the work
+ * is deduplicated, but two sweeps racing to enqueue the same thousand jobs is a needless way to find
+ * that out.
+ */
+Schedule::command('integrations:sync')->everyThirtyMinutes()->withoutOverlapping();
+
+/*
+ * Refresh tokens BEFORE a sync needs them.
+ *
+ * The vault refreshes on use too, but discovering a revoked authorisation from a queue worker at 3am
+ * surfaces it as a sync failure rather than as «أعد ربط حسابك» on the integrations page, hours before
+ * the figures would have stopped arriving.
+ */
+Schedule::command('integrations:refresh-tokens')->hourly()->withoutOverlapping();
+
+// Retain raw platform payloads for ninety days — long enough to settle a dispute about a figure,
+// short enough that the audit trail does not become the largest table in the database.
+Schedule::command('integrations:prune-raw')->dailyAt('03:30');

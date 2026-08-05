@@ -8,6 +8,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Metrics\Services\AccountMetricsSyncer;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -21,7 +22,7 @@ use Illuminate\Support\Carbon;
  * The job carries ids only (never a serialized model) so a retry always reads current state, and it
  * re-establishes the tenant context itself — a queue worker has no request to inherit it from.
  */
-final class SyncAccountMetricsJob implements ShouldQueue
+final class SyncAccountMetricsJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -29,6 +30,44 @@ final class SyncAccountMetricsJob implements ShouldQueue
     use SerializesModels;
 
     public int $tries = 3;
+
+    /**
+     * How long a duplicate is refused for (INTEG-SYNC-001).
+     *
+     * The same account and window can be asked for from three places at once — the scheduler's sweep,
+     * an operator pressing sync, and a webhook saying something changed. Each would open its own
+     * `MetricSyncRun`, call a rate-limited API for identical data, and write identical rows. The
+     * upsert makes the WRITE idempotent; this makes the WORK idempotent.
+     *
+     * An hour, because that is longer than any real sync and shorter than the gap between sweeps.
+     */
+    public int $uniqueFor = 3600;
+
+    /**
+     * Wait longer between attempts than a web request ever would.
+     *
+     * A platform that failed is usually rate-limited or briefly down, and retrying in a second is how
+     * three attempts are spent inside the same bad minute. `PlatformHttp` already backs off inside a
+     * single call; this is the backoff BETWEEN attempts at the whole window.
+     *
+     * @return list<int>
+     */
+    public function backoff(): array
+    {
+        return [60, 300];
+    }
+
+    /**
+     * One in-flight job per account per window.
+     *
+     * The window is part of the key on purpose: refusing a second job for a DIFFERENT window would
+     * make a backfill wait behind the daily sweep, which is a correctness-shaped fix to a problem
+     * nobody has.
+     */
+    public function uniqueId(): string
+    {
+        return "sync-metrics:{$this->accountId}:{$this->from}:{$this->to}";
+    }
 
     /** @param array<string,mixed> $meta */
     public function __construct(

@@ -179,6 +179,11 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector
         /** @var array<int,array<string,mixed>> $chunks */
         $chunks = $response->json() ?? [];
 
+        // Recorded by hand because a stream is a JSON ARRAY, so it cannot go through `read()` — which
+        // takes an object — and a platform whose payloads were never retained would be the one nobody
+        // could audit (INTEG-RAW-001).
+        $this->rawResponses[] = ['stream' => $chunks];
+
         $results = [];
 
         foreach ($chunks as $chunk) {

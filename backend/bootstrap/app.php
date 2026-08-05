@@ -5,6 +5,9 @@ declare(strict_types=1);
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
+use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
+use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
+use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Reports\Console\DispatchScheduledReports;
 use App\Domains\Reports\Console\InvalidateLegacyExportsCommand;
@@ -54,6 +57,11 @@ return Application::configure(basePath: dirname(__DIR__))
         PruneUploadSessions::class,
         EvaluateSla::class,
         EvaluateAlerts::class,
+        // INTEG-SYNC-001 — the sweep that drives synced data, the token refresh that runs ahead of
+        // need, and the retention that keeps raw payloads from becoming the largest table here.
+        SyncAdPlatformsCommand::class,
+        RefreshAdPlatformTokensCommand::class,
+        PruneRawPayloadsCommand::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.
