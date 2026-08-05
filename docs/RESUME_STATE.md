@@ -2349,3 +2349,33 @@ or the demo-data unit.
 **PORTALS-SWEEP** — `/admin` was swept clean at `2ea6943`; `/app`, `/agency`, `/portal` remain.
 While sweeping, apply the `QueryFailure` treatment to the other ~35 surfaces that still hardcode
 «تعذّر تحميل…» (`grep -rn 'تعذّر تحميل' frontend/src`).
+
+## Unit 2 — PORTALS-SWEEP, part 1 (`23d64c2`)
+
+### The typecheck was checking nothing
+
+`npx tsc --noEmit` in `frontend/` reads the root `tsconfig.json`, which is `{"files": [],
+"references": [...]}` — a solution file. With no files and no `-b`, tsc exits 0 having compiled
+nothing. **Every «tsc clean» in this project's history was vacuous.** Use `npm run typecheck`
+(`tsc -b`); `npm run build` runs it too, so a real build would also have caught this.
+
+It found 27 errors. Two were live crashes: `ReportsPage` used `renewShare()` and `shareLogs()`
+without importing them, so «تمديد شهر» and «سجل الفتح» both threw `ReferenceError`. Verified fixed
+by driving the whole journey — create report → generate → issue secure link → open access history →
+renew — with an empty console.
+
+### Still open in this unit
+
+- The live page-by-page walk of `/app` and `/portal` has **not** been done. `/admin` was swept at
+  `2ea6943`; `/agency` was walked during AGENCY-PERMS (dashboard, tasks, messages, finance, reports).
+- ~20 surfaces still hardcode a load-failure sentence: the inline `optionsError` on taxonomy selects
+  and the influencer pages (feature flag off). `grep -rn 'تعذّر تحميل' frontend/src`.
+
+### Two things worth a decision
+
+1. **The dev database is full of test residue.** `demo-agency` holds **269 client workspaces** and
+   **2105 tasks**, nearly all named `CC Co chromium-1785594333382`. The Playwright `webServer` runs
+   `artisan serve` against the dev database, so every gate leaves rows behind.
+2. **The client picker has no search and no pagination.** It renders all 269 as `<option>`s. Even at
+   a realistic 50 clients that control is unusable, and it is the entry point to every project-scoped
+   page. Real product defect, independent of the residue.
