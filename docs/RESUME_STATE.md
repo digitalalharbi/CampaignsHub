@@ -2616,3 +2616,49 @@ Then, in order:
 3. **`PRODUCTION_HANDOVER.md`** — does not exist.
 4. **Clean install + upgrade path**, then the **full three-browser gate**, whose verdict comes from
    Playwright's own exit code. It has NOT been run since `2ea6943`.
+
+---
+
+## Session — §15 creative analysis, slices 1–3 (`1687b27` → `19e5f2d`)
+
+§15 was added to the contract mid-session as a core part of Dashboard and reports. It is a
+programme, not a unit; three slices are in.
+
+**`1687b27` — the model.** 18 canonical columns on `external_creatives`, `creative_groups`, and
+video metrics made NULLABLE so «the platform does not report this» stops being «zero». Services:
+`CreativeMetrics` (objective-aware headline metrics, ratios that return null rather than 0, a
+`reported` map) and `CreativeFatigue` (weighted signals, `insufficient_data` as a verdict).
+
+**`dd9068d` — the read surface.** `CreativeAnalysisController`: library, detail, compare, group,
+ungroup. `CreativePresenter` decides what an asset link may become — withheld / expired /
+unavailable / available. Comparison across marketing paths refuses an overall winner and says why.
+
+**`7273d4f` — the ten fixtures**, plus the two defects they exposed (varchar(255) URL columns;
+inline images blocked by the credential guard).
+
+**Gates at `19e5f2d`:** backend **1423 passed** (8110 assertions) · Pint clean. Frontend untouched
+by these slices, so `tsc -b` / vitest / build unchanged from `3afdd44`.
+
+### Exact next task
+
+**§15 slice 4 — the Creative Library UI.** `/app/content` and the agency equivalent: grid and list
+views, real thumbnails, an in-app video player (play/pause/seek/mute/fullscreen/speed/poster,
+lazy, never autoplaying all, pausing on navigation), full-size open with keyboard navigation between
+creatives, the §15.2 filters, and side-by-side comparison. The backend it needs is live at
+`GET/POST /api/v1/projects/{project}/creatives*`.
+
+Then, in order: dashboard integration (§15.11) · executive + detailed report sections (§15.12) ·
+share-level creative permissions, fail-closed (§15.12) · recommendations (§15.10) · §14.6 objective
+layouts · §14.7–14.8 comparisons · REPORT-OBJECTIVE-005 attribution · `PRODUCTION_HANDOVER.md` ·
+clean install + upgrade path · the full three-browser gate (not run since `2ea6943`).
+
+### Open, and not to be closed by a re-run
+
+One full-suite run showed `DemoClientPortalTest` failing two cases (the counters case and the
+branding case). The same suite passed immediately after, and those three classes passed twice more
+together. It is recorded in the matrix as open. Root-cause it before the final gate — «إعادة تشغيل
+الاختبار ليست إصلاحًا».
+
+### The warning that has now cost two cycles
+
+`artisan serve` AND `queue:work` both hold code in memory. Restart BOTH before any live verification.
