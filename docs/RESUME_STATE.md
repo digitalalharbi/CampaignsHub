@@ -12,7 +12,7 @@
 
 ## Session — 2026-08-06 (later still) · §15.13 groups, dashboard findings, and carousels
 
-**HEAD `PENDING`. Tree clean.**
+**HEAD `ff533e1`. Tree clean. Backend 1524 passed (8646 assertions) · Pint clean · vitest 775 / 106 files · `tsc -b` · oxlint 0 errors · production build clean.**
 
 ### Carousels — a wrong answer, fixed down to the column
 
