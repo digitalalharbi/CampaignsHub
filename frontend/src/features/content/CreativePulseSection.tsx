@@ -524,7 +524,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
            * has nothing to be told, and an empty «Findings» panel reads as a broken one.
            */}
           {data.insights.items.length > 0 && (
-            <div className="rounded-2xl border border-border bg-surface p-5">
+            <div className="rounded-2xl border border-border bg-surface p-5" data-testid="creative-findings">
               <h3 className="text-sm font-semibold text-text">{t.findings}</h3>
               <p className="mt-1 text-xs text-text-muted">
                 {t.findingsHint}{' '}
