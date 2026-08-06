@@ -6,10 +6,10 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Disclaimers\Services\DisclaimerResolver;
 use App\Domains\Metrics\Services\MetricsAggregator;
-use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
+use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -36,19 +36,42 @@ final class ReportGenerator
         $to = $report->period_end ? Carbon::parse($report->period_end) : Carbon::today();
         $from = $report->period_start ? Carbon::parse($report->period_start) : $to->copy()->subDays(29);
 
-        $totals = $this->agg->totals($from, $to);
+        /*
+         * The report's own scope (§14.5), applied ONCE to the engine every figure below comes from.
+         *
+         * Applying it here rather than per section is what makes «excluded means excluded» true: the
+         * KPIs, the platform table, the campaign ranking, the timeseries, the funnel and the budget
+         * pacing all read the same bounded engine, so a campaign taken out of the scope leaves every
+         * card, chart and table at once. A scope honoured by four of those seven and forgotten by
+         * three would be worse than none, because the totals would no longer equal their own parts.
+         *
+         * An unbounded scope returns the singleton unchanged, so a report that names no scope behaves
+         * exactly as it did before this existed.
+         */
+        $scope = ReportScope::fromArray($report->scope);
+        $agg = $scope->applyTo($this->agg);
+
+        // A scope may narrow the window, never widen it past the period the report was created for.
+        if ($scope->from !== null && Carbon::parse($scope->from)->greaterThan($from)) {
+            $from = Carbon::parse($scope->from);
+        }
+        if ($scope->to !== null && Carbon::parse($scope->to)->lessThan($to)) {
+            $to = Carbon::parse($scope->to);
+        }
+
+        $totals = $agg->totals($from, $to);
         $len = $from->diffInDays($to) + 1;
         $prevTo = $from->copy()->subDay();
         $prevFrom = $prevTo->copy()->subDays($len - 1);
-        $previous = $this->agg->totals($prevFrom, $prevTo);
+        $previous = $agg->totals($prevFrom, $prevTo);
         $delta = [];
         foreach ($totals as $k => $v) {
             $p = $previous[$k] ?? null;
             $delta[$k] = is_numeric($v) && is_numeric($p) && $p != 0 ? round(($v - $p) / abs($p), 4) : null;
         }
 
-        $platforms = $this->agg->byProvider($from, $to);
-        $campaigns = $this->agg->byCampaign($from, $to);
+        $platforms = $agg->byProvider($from, $to);
+        $campaigns = $agg->byCampaign($from, $to);
 
         $objective = $report->campaign_objective ?: $this->inferObjective($campaigns);
         $providerList = array_values(array_map(fn ($p) => $p['provider'], $platforms));
@@ -71,8 +94,8 @@ final class ReportGenerator
             'kpis' => $totals,
             'previous' => $previous,
             'delta' => $delta,
-            'timeseries' => $this->agg->timeseries($from, $to),
-            'platform_series' => $this->agg->timeseriesByProvider($from, $to),
+            'timeseries' => $agg->timeseries($from, $to),
+            'platform_series' => $agg->timeseriesByProvider($from, $to),
             'platforms' => $platforms,
             'best' => [
                 'platform_by_roas' => collect($platforms)->sortByDesc('roas')->first()['provider'] ?? null,
@@ -94,9 +117,9 @@ final class ReportGenerator
              * than reverted, because the spend is exactly what made the funnel reconcilable with the
              * dashboard.
              */
-            'funnel' => ($adFunnel = $this->agg->funnel($from, $to))['stages'],
+            'funnel' => ($adFunnel = $agg->funnel($from, $to))['stages'],
             'funnel_spend' => $adFunnel['spend'],
-            'budget' => $this->agg->budgetPacing($from, $to, Carbon::today()),
+            'budget' => $agg->budgetPacing($from, $to, Carbon::today()),
             /*
              * Spend and results split by marketing path, with Direct and Blended apart
              * (REPORT-OBJECTIVE-001/003).
@@ -110,7 +133,7 @@ final class ReportGenerator
              * Built from the same `daily_metrics` the rest of the snapshot comes from — not a second
              * source — so the report's Direct CPA and the dashboard's agree by construction.
              */
-            'objective_performance' => (new ObjectivePerformance)->build($from, $to),
+            'objective_performance' => $scope->objectivePerformance()->build($from, $to),
             'summary' => $this->executiveSummary($totals, $delta, $platforms, $campaigns, $report->currency),
             // Structured two-column content: findings (left) + recommendations (right). Cards, not prose.
             'findings' => $this->tagAnnotations($this->findings($totals, $delta, $platforms, $campaigns, $report->currency), 'finding', $report),

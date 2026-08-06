@@ -42,10 +42,22 @@ use Illuminate\Support\Collection;
  */
 final class ObjectivePerformance
 {
-    /** @param  list<string>|null  $projectIds  null = whatever the project scope already bounds */
+    /**
+     * @param  list<string>|null  $projectIds  null = whatever the project scope already bounds
+     * @param  list<string>|null  $campaignIds  null = every campaign in that bound
+     * @param  list<string>|null  $providers  null = every platform (§14.5 — the report scope's platform axis)
+     * @param  list<string>|null  $accountIds  null = every ad account (§14.5 — the account axis)
+     *
+     * Platforms and accounts are accepted here rather than being approximated by the caller, because
+     * this service is where the split slide's figures come from. A report scoped to one platform whose
+     * Direct/Blended block still counted the others would contradict its own KPI cards — and that
+     * block is the one a reader consults precisely when the headline number looks wrong.
+     */
     public function __construct(
         private readonly ?array $projectIds = null,
         private readonly ?array $campaignIds = null,
+        private readonly ?array $providers = null,
+        private readonly ?array $accountIds = null,
     ) {}
 
     /** @return array<string,mixed> */
@@ -163,6 +175,12 @@ final class ObjectivePerformance
             ->when($this->campaignIds !== null, fn ($q) => $q->whereIn(
                 'daily_metrics.unified_campaign_id',
                 $this->campaignIds ?: ['00000000-0000-0000-0000-000000000000'],
+            ))
+            // Empty list → match nothing, the same fail-closed reading the other bounds use.
+            ->when($this->providers !== null, fn ($q) => $q->whereIn('daily_metrics.provider', $this->providers ?: ['__none__']))
+            ->when($this->accountIds !== null, fn ($q) => $q->whereIn(
+                'daily_metrics.external_account_id',
+                $this->accountIds ?: ['00000000-0000-0000-0000-000000000000'],
             ))
             ->groupBy('daily_metrics.unified_campaign_id', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
             ->select('daily_metrics.unified_campaign_id', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')

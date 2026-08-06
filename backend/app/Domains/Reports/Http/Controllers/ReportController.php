@@ -12,6 +12,7 @@ use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\ReportDeliveryAudienceGuard;
 use App\Domains\Reports\Services\ReportTemplateEngine;
+use App\Domains\Reports\Support\ReportScope;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -78,6 +79,7 @@ final class ReportController extends Controller
             'period_end' => ['nullable', 'date'],
             'currency' => ['nullable', 'string', 'size:3'],
             'config' => ['nullable', 'array'],
+            'scope' => ['nullable', 'array'],
         ]);
 
         $report = Report::create([
@@ -94,6 +96,18 @@ final class ReportController extends Controller
             'period_end' => $data['period_end'] ?? Carbon::today(),
             'currency' => $data['currency'] ?? 'SAR',
             'config' => $data['config'] ?? null,
+            /*
+             * What the report covers, from the moment it is created (§14.5).
+             *
+             * Normalised through `ReportScope` rather than stored raw, so an unknown axis or a junk
+             * value cannot reach the generator — and so a scope that bounds nothing is stored as
+             * null rather than as an empty object nobody can distinguish from «not chosen yet».
+             *
+             * Ids are NOT validated against the project here: this endpoint creates a report for the
+             * project the route already names, and `ReportScopeController::update()` — the surface an
+             * operator actually picks with — is where a foreign id is filtered out.
+             */
+            'scope' => ($scope = ReportScope::fromArray($data['scope'] ?? null))->isUnbounded() ? null : $scope->toArray(),
             'created_by' => $request->user()->id,
         ]);
 
@@ -225,6 +239,9 @@ final class ReportController extends Controller
             'period' => ['from' => $r->period_start?->toDateString(), 'to' => $r->period_end?->toDateString()],
             'currency' => $r->currency,
             'config' => $r->config,
+            // What the report covers (§14.5) — a list that hides it cannot tell a whole-project
+            // report from one narrowed to a single platform.
+            'scope' => $r->scope,
             'is_demo' => $r->is_demo,
             'generated_at' => $r->generated_at?->toIso8601String(),
             'last_sent_at' => $r->last_sent_at?->toIso8601String(),

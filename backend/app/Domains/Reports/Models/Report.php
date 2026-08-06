@@ -19,13 +19,14 @@ final class Report extends Model
     protected $fillable = [
         'tenant_id', 'project_id', 'campaign_id', 'name', 'type', 'form', 'audience', 'mode', 'version', 'campaign_objective', 'status',
         'period_start', 'period_end', 'currency', 'timezone', 'attribution_window', 'data_source',
-        'config', 'data', 'error', 'created_by', 'generated_at', 'last_sent_at', 'is_demo',
+        'config', 'scope', 'data', 'error', 'created_by', 'generated_at', 'last_sent_at', 'is_demo',
     ];
 
     protected $casts = [
         'period_start' => 'date',
         'period_end' => 'date',
         'config' => 'array',
+        'scope' => 'array',
         'data' => 'array',
         'generated_at' => 'datetime',
         'last_sent_at' => 'datetime',

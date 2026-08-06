@@ -16,6 +16,7 @@ use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
 use App\Domains\Reports\Http\Controllers\ReportController;
 use App\Domains\Reports\Http\Controllers\ReportPrintController;
 use App\Domains\Reports\Http\Controllers\ReportScheduleController;
+use App\Domains\Reports\Http\Controllers\ReportScopeController;
 use App\Domains\Reports\Http\Controllers\ReportShareController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;
@@ -96,10 +97,25 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::delete('reports/schedules/{schedule}', [ReportScheduleController::class, 'destroy'])->name('reports.schedules.destroy');
 
     Route::get('reports/template', [ReportController::class, 'template'])->name('reports.template');
+
+    /*
+     * §14.5 — what a report covers, and a scope worth using again.
+     *
+     * `reports/scope/options` and `reports/scope-templates` are declared BEFORE `reports/{report}`
+     * for the same reason `reports/schedules` is: a wildcard segment would otherwise swallow them and
+     * the picker would ask for a report whose id is the word "scope".
+     */
+    Route::get('reports/scope/options', [ReportScopeController::class, 'options'])->name('reports.scope.options');
+    Route::get('reports/scope-templates', [ReportScopeController::class, 'templates'])->name('reports.scope-templates.index');
+    Route::post('reports/scope-templates', [ReportScopeController::class, 'storeTemplate'])->name('reports.scope-templates.store');
+    Route::match(['put', 'patch'], 'reports/scope-templates/{template}', [ReportScopeController::class, 'updateTemplate'])->name('reports.scope-templates.update');
+    Route::delete('reports/scope-templates/{template}', [ReportScopeController::class, 'destroyTemplate'])->name('reports.scope-templates.destroy');
     Route::post('reports', [ReportController::class, 'store'])->name('reports.store');
     Route::get('reports/{report}', [ReportController::class, 'show'])->name('reports.show');
     Route::match(['put', 'patch'], 'reports/{report}', [ReportController::class, 'update'])->name('reports.update');
     Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->name('reports.regenerate');
+    Route::get('reports/{report}/scope', [ReportScopeController::class, 'show'])->name('reports.scope.show');
+    Route::match(['put', 'patch'], 'reports/{report}/scope', [ReportScopeController::class, 'update'])->name('reports.scope.update');
     Route::get('reports/{report}/annotations', [ReportAnnotationController::class, 'index'])->name('reports.annotations.index');
     Route::post('reports/{report}/annotations/{annotation}/status', [ReportAnnotationController::class, 'updateStatus'])->name('reports.annotations.status');
     Route::get('reports/{report}/validation', [ReportController::class, 'validation'])->name('reports.validation');

@@ -70,6 +70,9 @@ final class MetricsAggregator
     /** When set, every aggregation is scoped to campaigns with these objectives (objective-KPI filter). */
     private ?array $objectives = null;
 
+    /** When set, every aggregation is scoped to these ad accounts (a report scope's account axis). */
+    private ?array $accountIds = null;
+
     /**
      * Return a campaign-scoped copy of the aggregator — every subsequent totals/byProvider/timeseries/
      * funnel/budget call is filtered to this campaign's metrics (on top of the project/tenant scope).
@@ -146,6 +149,25 @@ final class MetricsAggregator
     }
 
     /**
+     * Return a copy scoped to a set of ad accounts (§14.5 — the report scope's account axis).
+     *
+     * `daily_metrics.external_account_id` is the account the row was ingested for, so this is a real
+     * bound on every figure rather than a label. Empty → no account filter, matching `forProviders()`:
+     * this axis is one an operator ADDS to narrow, and an unset axis has never meant «nothing» here.
+     * The fail-closed spelling for «nothing matches» belongs to the scope object, which writes an
+     * impossible id rather than an empty list.
+     *
+     * @param  list<string>  $accountIds
+     */
+    public function forAccounts(array $accountIds): self
+    {
+        $clone = clone $this;
+        $clone->accountIds = $accountIds === [] ? null : array_values(array_unique($accountIds));
+
+        return $clone;
+    }
+
+    /**
      * When true the ACTIVE-project scope is lifted; the tenant scope always stays (see acrossProjects()).
      */
     private bool $acrossProjects = false;
@@ -198,6 +220,10 @@ final class MetricsAggregator
 
         if ($this->providers !== null) {
             $query->whereIn('daily_metrics.provider', $this->providers);
+        }
+
+        if ($this->accountIds !== null) {
+            $query->whereIn('daily_metrics.external_account_id', $this->accountIds);
         }
 
         if ($this->objectives !== null) {
