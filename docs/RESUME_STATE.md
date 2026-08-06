@@ -2469,3 +2469,63 @@ its formula and its included/excluded campaigns). What is left is everything tha
 Then: **Demo data** (item 14) → **`PRODUCTION_HANDOVER.md`** (does not exist) → **Clean install +
 upgrade path** → **the final three-browser gate**, whose verdict comes from Playwright's own exit
 code. The full gate has NOT been run since `2ea6943`.
+
+## Session of 2026-08-09 (continued) — the reports programme, `022461f` → `fea982a`
+
+| Commit | Unit | What |
+| --- | --- | --- |
+| `bdbb228` | **REPORT-OBJECTIVE-002** | The objective comes from the platform, and keeps what it said |
+| `37d7e99` | **REPORT-LINKS-13** part 1 | A summary and a full report of the same project |
+| `fea982a` | **REPORT-OBJECTIVE-003/004** | Direct and Blended shown apart, in the report and on the link |
+
+**Backend 1362 (7874 assertions) · Vitest 673 · `tsc -b` clean · build clean · oxlint 0 errors ·
+Pint clean · tree CLEAN.**
+
+### What is now true end to end
+
+Six providers' objective vocabularies map onto one canonical set (`PlatformObjectiveMap`), adopted
+on link and after every import sweep, refusing to touch a `manual` correction and refusing to guess
+at anything it does not recognise. `objective_platform_value` keeps the platform's raw string so «the
+platform is wrong» stays distinguishable from «the platform never said».
+
+`reports.form` is `executive_summary` or `detailed`, independent of `mode`, and the shared link
+honours it — it did not before, so a report built as a summary arrived at the client in full detail.
+The share URL is now the server's canonical `brand.frontend_url` + `/r/<token>` rather than one
+assembled from `window.location.origin`.
+
+Every report carries `objective_performance` and a section that shows Direct against Blended with
+formulas and excluded campaigns. Live on the demo store: **Direct CPA 73.72 · Blended CPA 90.95**,
+16,839 SAR of non-sales spend named.
+
+### Two of my own defects, found by driving the product
+
+1. `form` was validated by the endpoint and then dropped — `store()` builds attributes explicitly.
+   Every test passed because they all built fixtures with `Report::create()`.
+2. Changing `MetricsAggregator::funnel()` to return `['stages','spend']` at `a08a6b2` emptied the
+   funnel slide of every report. The whole backend suite passed: nothing asserted the shape of a key
+   whose only consumer is a React component. Both are now pinned by tests.
+
+**Note for live review:** `artisan serve` and `queue:work` hold code in memory. After changing a
+service or a slide template, restart BOTH or the browser will show the previous build and the
+difference reads as a defect in the change.
+
+### Exact next task
+
+**§14.5 — report scope customisation.** The engine and the two forms exist; what is missing is the
+creator-side picker and the ceiling it writes: platforms, accounts, campaigns, ad sets, ads,
+creatives, objectives, marketing paths, date range and visible metrics, saved as a reusable template
+and editable without creating a new report. `ShareService` already enforces a fail-closed scope
+ceiling for live links (`LiveReportShareTest`, 14 cases) — the picker writes into that.
+
+Then, in order:
+
+1. **§14.7–14.8** — period comparison, budget pacing, platform/campaign/creative comparison, funnel
+   drop-off, creative fatigue, anomaly detection, and recommendations built from the report's own
+   data rather than fixed sentences.
+2. **REPORT-OBJECTIVE-005** (`NOT_STARTED`) — attribution model, window, click- vs view-through,
+   platform-reported vs store-confirmed, dedup status beside every figure.
+3. **Client-portal demo data** — `client@demo-portal.local` still has nothing in any of its eight
+   sections, so that portal cannot be demonstrated by signing in.
+4. **`PRODUCTION_HANDOVER.md`** — does not exist.
+5. **Clean install + upgrade path**, then the **full three-browser gate**, whose verdict comes from
+   Playwright's own exit code. It has NOT been run since `2ea6943`.
