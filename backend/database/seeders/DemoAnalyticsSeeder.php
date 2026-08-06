@@ -113,14 +113,27 @@ final class DemoAnalyticsSeeder extends Seeder
 
             for ($d = 0; $d < self::DAYS; $d++) {
                 $date = $start->copy()->addDays($d);
-                $impr = $this->impressions($i, $d, $spendScale, $phase, $seasonal);
+                /*
+                 * Every COUNT is whole where it is computed, not where it is written.
+                 *
+                 * These were rounded at the `$add()` call and left fractional in the arithmetic
+                 * behind it, so spend was `1,043.7 clicks × CPC` while the report showed 1,044
+                 * clicks — a CPC nobody could reproduce by dividing the two figures printed beside
+                 * each other. Conversions kept two decimals all the way to the client, which is how
+                 * «1,288.75 طلبًا» reached a card: an impression is a real event that happened a
+                 * whole number of times, and a fraction of one is not a measurement.
+                 *
+                 * Money stays fractional — a riyal genuinely has halalas — and every derived figure
+                 * is now the exact quotient of two numbers the reader can see.
+                 */
+                $impr = round($this->impressions($i, $d, $spendScale, $phase, $seasonal));
                 if ($impr <= 0) {
                     continue;
                 }
-                $clicks = $impr * $ctr;
+                $clicks = round($impr * $ctr);
                 // Late attribution: last 3 days show only ~55% of conversions/revenue (not yet attributed).
                 $lateFactor = $d >= self::DAYS - 3 ? 0.55 + 0.15 * ($d - (self::DAYS - 3)) : 1.0;
-                $conv = $clicks * $cvr * 0.42 * $lateFactor;
+                $conv = round($clicks * $cvr * 0.42 * $lateFactor);
                 $spendOrig = $clicks * $cpc;
                 $revenueOrig = $conv * $aov;
 
@@ -155,17 +168,18 @@ final class DemoAnalyticsSeeder extends Seeder
                     );
                 };
 
-                // Conversion funnel with realistic stage drop-off (deterministic).
-                $landing = $clicks * 0.86;
-                $addToCart = $landing * 0.34;
-                $checkout = $addToCart * 0.52;
+                // Conversion funnel with realistic stage drop-off (deterministic), stage by stage in
+                // whole events — a funnel of fractions cannot describe people walking through it.
+                $landing = round($clicks * 0.86);
+                $addToCart = round($landing * 0.34);
+                $checkout = round($addToCart * 0.52);
 
-                $add('impressions', round($impr));
-                $add('clicks', round($clicks));
-                $add('landing_page_views', round($landing));
-                $add('add_to_cart', round($addToCart));
-                $add('checkout', round($checkout));
-                $add('conversions', round($conv, 2));
+                $add('impressions', $impr);
+                $add('clicks', $clicks);
+                $add('landing_page_views', $landing);
+                $add('add_to_cart', $addToCart);
+                $add('checkout', $checkout);
+                $add('conversions', $conv);
                 /*
                  * `purchases` as well as `conversions`, because a store reports both and they are not
                  * the same column.
@@ -178,7 +192,7 @@ final class DemoAnalyticsSeeder extends Seeder
                  * Equal to conversions here because for this demo store the conversion IS the purchase.
                  * A product with several conversion events would seed them apart.
                  */
-                $add('purchases', round($conv, 2));
+                $add('purchases', $conv);
                 $add('spend', 0, $spendOrig);
                 $add('revenue', 0, $revenueOrig);
             }

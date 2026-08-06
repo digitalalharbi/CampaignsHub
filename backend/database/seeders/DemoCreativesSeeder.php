@@ -19,7 +19,13 @@ use Illuminate\Support\Str;
  */
 final class DemoCreativesSeeder extends Seeder
 {
-    /** Deterministic per-creative daily shape: [format, spend/day, ctr, conv/day, rev-multiple, viewrate]. */
+    /**
+     * Deterministic per-creative daily shape: [format, spend/day, ctr, conv/day, rev-multiple, viewrate].
+     *
+     * `conv/day` is an AVERAGE, and the daily figure derived from it is rounded to a whole order —
+     * see {@see run()}. The average may sit below one (the carousel's 0.4 is «about two orders every
+     * five days»); what may not happen is a stored row claiming 0.4 of a purchase took place.
+     */
     private const TEMPLATES = [
         ['video', 220.0, 0.031, 6.0, 5.2, 0.42],   // strong
         ['image', 140.0, 0.018, 3.0, 3.1, 0.0],    // mid
@@ -67,7 +73,23 @@ final class DemoCreativesSeeder extends Seeder
                     $wobble = 0.85 + (($d->day + $i) % 7) / 20;
                     $impr = round(($spendDay / max($ctr, 0.001)) * 0.02 * $wobble);
                     $spend = round($spendDay * $wobble, 2);
-                    $conv = round($convDay * $wobble, 2);
+                    /*
+                     * Whole clicks and whole orders.
+                     *
+                     * These carried two decimals, and the aggregate they rolled up into read
+                     * «Orders 1,288.75» on the dashboard's creative section — a purchase is an event
+                     * that either happened or did not, so three quarters of one is not a smaller
+                     * measurement, it is a number that describes nothing. Rounding it away at
+                     * DISPLAY time would have hidden the source instead of correcting it, and the
+                     * formatter would then have been lying on behalf of any platform that really
+                     * does report fractions.
+                     *
+                     * Revenue follows the whole order count at a fixed basket value, so the demo's
+                     * AOV divides exactly and its ROAS stays what the template asked for on average.
+                     */
+                    $clicks = round($impr * $ctr);
+                    $conv = round($convDay * $wobble);
+                    $aov = $spendDay * $revX / max($convDay, 0.0001);
                     $rows[] = [
                         'id' => (string) Str::uuid(),
                         'tenant_id' => $campaign->tenant_id, 'project_id' => $campaign->project_id,
@@ -75,9 +97,9 @@ final class DemoCreativesSeeder extends Seeder
                         'metric_date' => $d->toDateString(),
                         'spend' => $spend,
                         'impressions' => $impr,
-                        'clicks' => round($impr * $ctr, 2),
+                        'clicks' => $clicks,
                         'conversions' => $conv,
-                        'revenue' => round($spend * $revX, 2),
+                        'revenue' => round($conv * $aov, 2),
                         'video_views' => $format === 'video' ? round($impr * 0.6) : 0,
                         'video_completions' => $format === 'video' ? round($impr * 0.6 * $viewRate) : 0,
                         'is_demo' => true,
