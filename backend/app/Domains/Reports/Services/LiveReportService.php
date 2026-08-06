@@ -99,7 +99,10 @@ final class LiveReportService
             'timeseries' => $engine->timeseries($from, $to),
             'platforms' => $engine->byProvider($from, $to),
             'campaigns' => $engine->byCampaign($from, $to),
-            'funnel' => $engine->funnel($from, $to),
+            // The stage list, as every reader of this payload expects. See ReportGenerator for why
+            // the aggregator returns the spend alongside it now, and why it is unpacked here.
+            'funnel' => ($adFunnel = $engine->funnel($from, $to))['stages'],
+            'funnel_spend' => $adFunnel['spend'],
             /*
              * FUNNEL-001 in a client link — the same section the operator reads, for the same project.
              *

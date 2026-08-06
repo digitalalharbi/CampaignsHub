@@ -109,7 +109,19 @@ final class ClientReportView
     }
 
     /** Executive report is lean (5–7 pages): summary + comparison + budget + next steps, no per-platform detail. */
-    private const EXECUTIVE_SLIDE_TYPES = ['cover', 'executive_summary', 'platform_comparison', 'budget', 'next_steps'];
+    private const EXECUTIVE_SLIDE_TYPES = [
+        'cover', 'executive_summary',
+        /*
+         * Kept in the SHORT form deliberately (REPORT-OBJECTIVE-004).
+         *
+         * A summary is where a blended cost per order does the most damage: it is the version that
+         * gets forwarded and quoted, with no per-platform pages behind it to argue with. Trimming
+         * the one section that says which figure is which would leave the shortest, most-read
+         * document as the least qualified one.
+         */
+        'objective_performance',
+        'platform_comparison', 'budget', 'next_steps',
+    ];
 
     /**
      * Executive view = the client filter PLUS a trimmed slide set (drop per-platform detail, funnel,

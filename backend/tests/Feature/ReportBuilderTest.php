@@ -20,10 +20,19 @@ final class ReportBuilderTest extends TestCase
         $this->assertContains('roas', $config['metric_set']);
 
         $types = array_column($config['slides'], 'type');
-        $this->assertSame(['cover', 'recommendations', 'executive_summary'], array_slice($types, 0, 3));
-        // 3 fixed (cover + recommendations + executive_summary) + 1 rich slide per platform × 2 platforms
-        // + closing (platform_comparison, funnel since sales, budget, next_steps) = 3 + 2 + 4 = 9.
-        $this->assertCount(9, $config['slides']);
+        /*
+         * `objective_performance` is fourth, immediately after the summary it qualifies
+         * (REPORT-OBJECTIVE-004). Placed further down, a reader would already have taken the
+         * headline cost per order at face value and would meet the Direct/Blended distinction only
+         * after acting on it.
+         */
+        $this->assertSame(
+            ['cover', 'recommendations', 'executive_summary', 'objective_performance'],
+            array_slice($types, 0, 4),
+        );
+        // 4 fixed + 1 rich slide per platform × 2 platforms
+        // + closing (platform_comparison, funnel since sales, budget, next_steps) = 4 + 2 + 4 = 10.
+        $this->assertCount(10, $config['slides']);
         $this->assertContains('platform_comparison', $types);
         $this->assertContains('funnel', $types);
         $this->assertContains('budget', $types);

@@ -17,6 +17,10 @@ use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Jobs\GenerateReportJob;
+use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Services\ReportGenerator;
+use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\DTOs\MembershipGrant;
 use App\Domains\Tenancy\Enums\Portal;
@@ -233,6 +237,54 @@ final class ObjectivePerformanceTest extends TestCase
         $this->assertNull($data['blended']['blended_cpa']);
     }
 
+    /**
+     * The generated report carries the split, and its shared link passes it to the client.
+     *
+     * The engine being right is not the deliverable — the report is. Before this, the snapshot's
+     * `kpis.cpa` was the only cost-per-order in it, and that figure divides EVERY campaign's spend
+     * by the sales campaigns' orders: 6000 ÷ 50 = 120 against a real cost of 20. A client reading
+     * the report had no way to know which of the two they were looking at, because only one was
+     * there.
+     */
+    public function test_the_generated_report_and_its_client_link_keep_the_two_figures_apart(): void
+    {
+        $report = Report::create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'name' => 'تقرير المبيعات — يوليو',
+            'type' => 'monthly',
+            'form' => 'executive_summary',
+            'status' => 'processing',
+            'period_start' => self::FROM,
+            'period_end' => self::TO,
+            'currency' => 'SAR',
+        ]);
+
+        (new GenerateReportJob((string) $report->id))
+            ->handle(app(ReportGenerator::class));
+
+        $data = $report->refresh()->data;
+        $this->assertSame('completed', $report->status);
+
+        // The blended figure the report used to print unqualified…
+        $this->assertSame(120.0, round((float) $data['kpis']['cpa'], 2));
+        // …beside the one that answers what an order actually costs.
+        $this->assertSame(20.0, (float) $data['objective_performance']['direct']['cpa']);
+        $this->assertSame(120.0, (float) $data['objective_performance']['blended']['blended_cpa']);
+        $this->assertSame(5000.0, (float) $data['objective_performance']['blended']['includes_non_sales_spend']);
+
+        // The section is FOURTH — immediately after the summary it qualifies.
+        $this->assertSame('objective_performance', array_column($data['slides'], 'type')[3]);
+
+        // …and it survives into the five-page summary a client is sent, which is the version that
+        // gets forwarded and quoted with no per-platform pages behind it to argue with.
+        [, $token] = app(ShareService::class)->create($report, [], $this->operator->id);
+        $shared = $this->getJson("/api/v1/reports/shared/{$token}")->assertOk();
+
+        $this->assertContains('objective_performance', array_column($shared->json('data.data.slides'), 'type'));
+        $this->assertSame(20.0, (float) $shared->json('data.data.objective_performance.direct.cpa'));
+    }
+
     /** Every objective in the catalogue lands in exactly one path — no case falls through. */
     public function test_every_objective_belongs_to_one_path(): void
     {
@@ -318,8 +370,10 @@ final class ObjectivePerformanceTest extends TestCase
         ]);
 
         foreach ([
+            // `conversions` is the product's one definition of an order — the same key the
+            // dashboard, the analytics breakdowns and the report's own `kpis` divide spend by.
             'spend' => $spend, 'impressions' => $impressions, 'clicks' => $clicks,
-            'purchases' => $orders, 'revenue' => $revenue,
+            'conversions' => $orders, 'revenue' => $revenue,
         ] as $key => $value) {
             if ($value === 0.0) {
                 continue;

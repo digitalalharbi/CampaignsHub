@@ -99,6 +99,33 @@ final class ReportsTest extends TestCase
         $this->assertNotEmpty($report->data['summary']);
     }
 
+    /**
+     * The snapshot's `funnel` is a LIST of stages, and it stays one.
+     *
+     * `MetricsAggregator::funnel()` was changed to return `['stages' => …, 'spend' => …]` so the
+     * funnel could state the spend every `cost_per` on it divides by (UNIFIED-002). The report
+     * generator stored that array whole, which silently emptied the funnel slide of every report —
+     * `InteractiveReport` maps over `data.funnel`, and an object is not an array.
+     *
+     * The entire backend suite passed with it broken, because nothing asserted the SHAPE of a key
+     * whose only consumer is a React component. That is the gap this closes: a payload the frontend
+     * iterates is a contract, and it is worth one assertion here rather than a blank page there.
+     */
+    public function test_the_snapshot_funnel_stays_a_list_of_stages(): void
+    {
+        $report = $this->report();
+        (new GenerateReportJob((string) $report->id))->handle(app(ReportGenerator::class));
+
+        $funnel = $report->refresh()->data['funnel'];
+
+        $this->assertIsList($funnel);
+        $this->assertArrayHasKey('stage', $funnel[0]);
+        $this->assertArrayHasKey('cost_per', $funnel[0]);
+        // …and the spend those `cost_per` figures come from is stated beside it, not thrown away.
+        $this->assertArrayHasKey('funnel_spend', $report->data);
+        $this->assertEquals($report->data['kpis']['spend'], $report->data['funnel_spend']);
+    }
+
     public function test_export_produces_downloadable_file(): void
     {
         Storage::fake('local');

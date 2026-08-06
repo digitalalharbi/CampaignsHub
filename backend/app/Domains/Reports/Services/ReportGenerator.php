@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Disclaimers\Services\DisclaimerResolver;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
@@ -83,8 +84,33 @@ final class ReportGenerator
             'top_creatives' => $topCreatives,
             'creative_level' => 'campaign', // ad-level arrives once connectors provide it
             'platform_notes' => $this->platformNotes($platforms, $report->currency),
-            'funnel' => $this->agg->funnel($from, $to),
+            /*
+             * `funnel` stays the stage LIST, and the spend it is derived from rides beside it.
+             *
+             * `MetricsAggregator::funnel()` began returning `['stages' => …, 'spend' => …]` when the
+             * funnel was made to state its own spend (UNIFIED-002), and storing that whole array here
+             * would have silently emptied the funnel slide of every report: `InteractiveReport` maps
+             * over `data.funnel`, and an object is not an array. Unpacked at the call site rather
+             * than reverted, because the spend is exactly what made the funnel reconcilable with the
+             * dashboard.
+             */
+            'funnel' => ($adFunnel = $this->agg->funnel($from, $to))['stages'],
+            'funnel_spend' => $adFunnel['spend'],
             'budget' => $this->agg->budgetPacing($from, $to, Carbon::today()),
+            /*
+             * Spend and results split by marketing path, with Direct and Blended apart
+             * (REPORT-OBJECTIVE-001/003).
+             *
+             * `kpis` above is the whole scope rolled together, and its `cpa` is therefore a BLENDED
+             * cost per order: it divides every campaign's spend by the orders the sales campaigns
+             * produced. That is the right number for «what did this programme cost me» and the wrong
+             * one for «what does an order cost», and until this key existed a report had no way to
+             * say which one it was showing.
+             *
+             * Built from the same `daily_metrics` the rest of the snapshot comes from — not a second
+             * source — so the report's Direct CPA and the dashboard's agree by construction.
+             */
+            'objective_performance' => (new ObjectivePerformance)->build($from, $to),
             'summary' => $this->executiveSummary($totals, $delta, $platforms, $campaigns, $report->currency),
             // Structured two-column content: findings (left) + recommendations (right). Cards, not prose.
             'findings' => $this->tagAnnotations($this->findings($totals, $delta, $platforms, $campaigns, $report->currency), 'finding', $report),

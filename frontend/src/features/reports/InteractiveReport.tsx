@@ -38,6 +38,15 @@ export interface ReportData {
   recommendations?: NoteCardData[]
   next_steps?: NextStep[]
   audience?: string
+  /**
+   * REPORT-OBJECTIVE-003 — spend and results split by marketing path, Direct apart from Blended.
+   *
+   * `kpis` above is the whole scope rolled together, so its `cpa` divides EVERY campaign's spend by
+   * the orders the sales campaigns produced. That is the right answer to «what did this programme
+   * cost me» and the wrong one to «what does an order cost», and the two differ by the entire brand
+   * budget. This block is what lets the report say which it is showing.
+   */
+  objective_performance?: ObjectivePerformance
   slides?: Slide[]
   disclaimer?: ResolvedDisclaimer | null
   mode?: string
@@ -46,6 +55,43 @@ export interface ReportData {
   attribution_window?: string | null
   timezone?: string
   checksum?: string
+}
+export interface ObjectivePath {
+  path: 'awareness' | 'traffic' | 'conversion'
+  label_ar: string
+  label_en: string
+  headline_metrics: string[]
+  spend: number
+  impressions: number
+  clicks: number
+  orders: number
+  revenue: number
+  cpm: number | null
+  cpc: number | null
+  ctr: number | null
+  cpa: number | null
+  roas: number | null
+  /** False on the paths that were never meant to sell — their CPA and ROAS are null, not zero. */
+  result_metrics_apply: boolean
+  campaigns: Array<{ id: string; name: string; objective: string; objective_label_ar: string; spend: number }>
+}
+export interface ObjectivePerformance {
+  paths: ObjectivePath[]
+  direct: {
+    label_ar: string; label_en: string
+    spend: number; orders: number; revenue: number
+    cpa: number | null; roas: number | null; aov: number | null
+    formula: { cpa: string; roas: string }
+    included_campaigns: Array<{ id: string; name: string; objective: string }>
+    excluded_campaigns: Array<{ id: string; name: string; objective: string; spend: number; reason: string }>
+  }
+  blended: {
+    label_ar: string; label_en: string
+    spend: number; orders: number; revenue: number
+    blended_cpa: number | null; blended_roas: number | null
+    formula: { blended_cpa: string; blended_roas: string }
+    includes_non_sales_spend: number
+  }
 }
 export interface NoteCardData {
   severity?: 'positive' | 'warning' | 'critical' | 'info'
@@ -79,6 +125,7 @@ export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportDat
     case 'top_creatives': return <CreativesSlide data={data} platform={slide.platform!} />
     case 'platform_notes': return <NotesSlide data={data} platform={slide.platform!} />
     case 'platform_comparison': return <ComparisonSlide data={data} />
+    case 'objective_performance': return <ObjectiveSplitSlide data={data} />
     case 'funnel': return <FunnelSlide data={data} />
     case 'budget': return <BudgetSlide data={data} />
     case 'next_steps': return <NextStepsSlide data={data} />
@@ -253,6 +300,10 @@ function RecommendationsSlide({ data }: { data: ReportData }) {
 function ExecutiveSlide({ data }: { data: ReportData }) {
   const k = data.kpis
   const d = data.delta ?? {}
+  // Present on every report generated since REPORT-OBJECTIVE-001; absent on older snapshots, which
+  // then keep the figures they were generated with rather than showing blanks.
+  const op = data.objective_performance
+  const direct = op?.direct
   const donut = data.platforms.map((p) => ({ name: String(p.provider), value: Number(p.spend ?? 0) }))
   const totalSpend = donut.reduce((a, b) => a + b.value, 0)
   return (
@@ -261,9 +312,17 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Kpi label="الإنفاق" value={money(k.spend, data.currency)} delta={d.spend} invert spark={seriesOf(data.timeseries, 'spend')} accent="var(--brand-600)" />
         <Kpi label="الإيرادات" value={money(k.revenue, data.currency)} delta={d.revenue} spark={seriesOf(data.timeseries, 'revenue')} accent="var(--info)" />
-        <Kpi label="ROAS" value={ratio(k.roas ?? null)} delta={d.roas} spark={seriesOf(data.timeseries, 'roas')} accent="var(--info)" />
+        {/*
+          The DIRECT figures lead, and they say so (REPORT-OBJECTIVE-003).
+
+          These two cards used to read «ROAS» and «CPA» from `kpis`, which rolls every path together
+          — so a month with a large brand campaign showed a cost per order inflated by the whole
+          brand budget, under a label that claimed to be the cost of an order. The blended pair is a
+          real figure answering a different question, and it is shown below under its own name.
+        */}
+        <Kpi label={direct ? 'ROAS (مبيعات مباشرة)' : 'ROAS'} value={ratio((direct ? direct.roas : k.roas) ?? null)} delta={direct ? undefined : d.roas} spark={seriesOf(data.timeseries, 'roas')} accent="var(--info)" />
         <Kpi label="النتائج" value={num(k.conversions)} delta={d.conversions} spark={seriesOf(data.timeseries, 'conversions')} accent="var(--purple)" />
-        <Kpi label="CPA" value={money(k.cpa, data.currency)} delta={d.cpa} invert spark={seriesOf(data.timeseries, 'cpa')} accent="var(--purple)" />
+        <Kpi label={direct ? 'CPA (مبيعات مباشرة)' : 'CPA'} value={money(direct ? direct.cpa : k.cpa, data.currency)} delta={direct ? undefined : d.cpa} invert spark={seriesOf(data.timeseries, 'cpa')} accent="var(--purple)" />
         <Kpi label="CTR" value={percent(k.ctr, 2)} delta={d.ctr} spark={seriesOf(data.timeseries, 'ctr')} accent="var(--teal)" />
       </div>
       {/* Exact figures (compact strip) so precise values are always in the report + PDF-extractable. */}
@@ -271,7 +330,13 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
         <span>الإنفاق {moneyExact(k.spend, data.currency)}</span>
         <span>الإيرادات {moneyExact(k.revenue, data.currency)}</span>
         <span>النتائج {num(k.conversions)}</span>
-        <span>CPA {moneyExact(k.cpa, data.currency)}</span>
+        {/*
+          Qualified, like the card above it. `k.cpa` divides ALL spend by ALL conversions — a third
+          number again, and printing it here as a bare «CPA» would undo the labelling one line up.
+        */}
+        {direct
+          ? <span>CPA (مبيعات مباشرة) {moneyExact(direct.cpa, data.currency)}</span>
+          : <span>CPA {moneyExact(k.cpa, data.currency)}</span>}
       </div>
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
         <ChartCard title="الإنفاق مقابل الإيرادات" subtitle="الاتجاه اليومي" className="lg:col-span-2"><SpendRevenueAreaChart data={data.timeseries} currency={data.currency} height={200} /></ChartCard>
@@ -523,6 +588,103 @@ function NextStepsSlide({ data }: { data: ReportData }) {
               </div>
             )
           })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Direct against Blended, side by side, with what each one counted (REPORT-OBJECTIVE-003/004).
+ *
+ * The whole section exists to make one substitution impossible. `Total spend ÷ sales orders` is a
+ * real figure and a legitimate question — «what did this programme cost per order?» — but it is not
+ * the cost of an order, and a month with a large brand campaign makes the two differ by the entire
+ * brand budget. Printing the second under the first's name is the critical defect §14.3 names.
+ *
+ * So both are here, under names that cannot be confused, each with its formula printed beneath it
+ * and the campaigns it counted named. A reader who disagrees with a number can see exactly which
+ * spend produced it rather than having to trust it.
+ */
+function ObjectiveSplitSlide({ data }: { data: ReportData }) {
+  const op = data.objective_performance
+  if (!op) {
+    return (
+      <div>
+        <Title sub="لم يُحتسب هذا القسم في هذه النسخة من التقرير">الأداء حسب هدف الحملة</Title>
+        <p className="text-sm text-text-muted">أعد توليد التقرير لعرض الفصل بين الأداء المباشر والمدمج.</p>
+      </div>
+    )
+  }
+
+  const c = data.currency
+  const excluded = op.direct.excluded_campaigns
+
+  return (
+    <div data-testid="objective-split">
+      <Title sub="إنفاق حملات المبيعات وحدها مقابل إنفاق البرنامج كله — رقمان مختلفان لسؤالين مختلفين">
+        الأداء حسب هدف الحملة
+      </Title>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div data-testid="direct-block" className="rounded-2xl border border-brand-500/40 bg-brand-500/5 p-4">
+          <h4 className="text-sm font-extrabold text-text-primary">{op.direct.label_ar}</h4>
+          <p className="mt-0.5 text-[11px] text-text-secondary">حملات المبيعات وحدها. هذا هو الرقم الذي يُقاس عليه القرار.</p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <Highlight label="الإنفاق" value={money(op.direct.spend, c)} />
+            <Highlight label="CPA" value={money(op.direct.cpa, c)} />
+            <Highlight label="ROAS" value={ratio(op.direct.roas)} />
+          </div>
+          <p className="tnum mt-2 text-[11px] text-text-muted" dir="ltr">{op.direct.formula.cpa}</p>
+          <p className="tnum text-[11px] text-text-muted" dir="ltr">{op.direct.formula.roas}</p>
+        </div>
+
+        <div data-testid="blended-block" className="rounded-2xl border border-border bg-surface-secondary p-4">
+          <h4 className="text-sm font-extrabold text-text-primary">{op.blended.label_ar}</h4>
+          <p className="mt-0.5 text-[11px] text-text-secondary">
+            كل المسارات مقابل نفس الطلبات. يجيب عن «كم كلّفني البرنامج كله لكل طلب» — ولا يحل محل الرقم المباشر.
+          </p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <Highlight label="الإنفاق" value={money(op.blended.spend, c)} />
+            <Highlight label="Blended CPA" value={money(op.blended.blended_cpa, c)} />
+            <Highlight label="Blended ROAS" value={ratio(op.blended.blended_roas)} />
+          </div>
+          <p className="mt-2 text-[11px] text-text-muted">
+            يشمل {money(op.blended.includes_non_sales_spend, c)} من إنفاق لا يستهدف المبيعات.
+          </p>
+        </div>
+      </div>
+
+      {/* Every path, including the ones that were never meant to sell — where CPA is absent, not zero. */}
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        {op.paths.map((p) => (
+          <div key={p.path} data-testid={`path-${p.path}`} className="rounded-xl border border-border bg-surface p-3">
+            <div className="text-xs font-bold text-text-primary">{p.label_ar}</div>
+            <div className="tnum mt-1 text-lg font-extrabold text-text-primary">{money(p.spend, c)}</div>
+            <div className="mt-1 space-y-0.5 text-[11px] text-text-muted">
+              {p.path === 'awareness' && <div>CPM {p.cpm === null ? '—' : p.cpm}</div>}
+              {p.path === 'traffic' && <div>CPC {money(p.cpc, c)}</div>}
+              {p.result_metrics_apply
+                ? <div>CPA {money(p.cpa, c)} · ROAS {ratio(p.roas)}</div>
+                : <div>لا تنطبق تكلفة الطلب على هذا المسار</div>}
+              <div>{p.campaigns.length} حملة</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {excluded.length > 0 && (
+        <div data-testid="excluded-campaigns" className="mt-3 rounded-xl border border-dashed border-border p-3">
+          <div className="text-xs font-bold text-text-primary">حملات خارج حساب الأداء المباشر</div>
+          <p className="mt-0.5 text-[11px] text-text-secondary">إنفاقها حقيقي ومحسوب في المدمج، ولا يدخل في تكلفة الطلب.</p>
+          <ul className="mt-2 space-y-1 text-[11px] text-text-muted">
+            {excluded.map((e) => (
+              <li key={e.id} className="flex items-center justify-between gap-3">
+                <span className="truncate">{e.name}</span>
+                <span className="tnum whitespace-nowrap" dir="ltr">{money(e.spend, c)}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

@@ -50,8 +50,21 @@ final class ReportTemplateEngine
             ['id' => 'cover', 'type' => 'cover', 'order' => 1, 'visible' => true],
             ['id' => 'recommendations', 'type' => 'recommendations', 'order' => 2, 'visible' => true],
             ['id' => 'executive_summary', 'type' => 'executive_summary', 'order' => 3, 'visible' => true],
+            /*
+             * Direct against Blended, immediately after the summary (REPORT-OBJECTIVE-003/004).
+             *
+             * It sits this high because it qualifies the figures the summary just showed. Placed
+             * further down, a reader would already have taken the headline cost per order at face
+             * value and would meet the distinction only after acting on it.
+             *
+             * It is in EVERY objective's template, including awareness. A brand report is exactly
+             * where somebody asks «and what did that cost per sale?», and the honest answer is that
+             * this money did not buy sales — which the section states, rather than leaving the
+             * question to be answered by a blended figure elsewhere.
+             */
+            ['id' => 'objective_performance', 'type' => 'objective_performance', 'order' => 4, 'visible' => true],
         ];
-        $order = 4;
+        $order = 5; // 1–4 are the fixed opening: cover, recommendations, summary, objective split.
         foreach ($ordered as $platform) {
             foreach (self::PER_PLATFORM_SLIDES as $type) {
                 $slides[] = [

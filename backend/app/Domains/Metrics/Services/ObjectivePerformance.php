@@ -171,11 +171,22 @@ final class ObjectivePerformance
             ->selectRaw($this->sum('clicks'))
             ->selectRaw($this->sum('landing_page_views'))
             ->selectRaw($this->sum('revenue'))
-            // An «order» is a purchase where the store confirmed one, and a platform-reported
-            // conversion otherwise. Summing both keys would count the same sale twice on any
-            // integration that reports it under each.
-            ->selectRaw("COALESCE(SUM(daily_metrics.value) FILTER (WHERE metric_key = 'purchases'), 0)
-                       + COALESCE(SUM(daily_metrics.value) FILTER (WHERE metric_key = 'conversions'), 0) AS orders");
+            /*
+             * An «order» is a `conversions` row, and ONLY a `conversions` row.
+             *
+             * `purchases` is also stored and also read — `MetricsAggregator` reports it as its own
+             * figure — but the product's cost-per-order has always been `spend ÷ conversions`, on
+             * the dashboard, in the analytics breakdowns and in the report's own `kpis`. Counting
+             * `purchases + conversions` here made this service more complete and made it DISAGREE
+             * with every other surface, which is worse: two definitions of an order means the
+             * report's CPA and the dashboard's differ for the same scope, and nobody can say which
+             * is the product's answer. One definition, applied everywhere, beats a better
+             * definition applied in one place.
+             *
+             * Summing them would also double-count outright on any integration that reports the same
+             * sale under both keys.
+             */
+            ->selectRaw("COALESCE(SUM(daily_metrics.value) FILTER (WHERE metric_key = 'conversions'), 0) AS orders");
 
         return $query->toBase()->get();
     }
