@@ -92,8 +92,11 @@ const LABELS: Record<string, { ar: string; en: string }> = {
 export const metricLabel = (key: string, locale: Locale): string =>
   LABELS[key] ? LABELS[key][locale === 'ar' ? 'ar' : 'en'] : key
 
-const RATE = new Set(['ctr', 'conversion_rate', 'view_rate', 'completion_rate'])
-const MONEY = new Set(['spend', 'revenue', 'cpc', 'cpm', 'cpa'])
+const RATE = new Set(['ctr', 'conversion_rate', 'view_rate', 'completion_rate', 'hook_rate'])
+// Every cost carries its currency. `aov`, `cost_per_view` and `cost_per_lpv` were missing, so three
+// headline figures rendered as bare numbers beside ones that named the currency — which reads as a
+// count rather than as money.
+const MONEY = new Set(['spend', 'revenue', 'cpc', 'cpm', 'cpa', 'aov', 'cost_per_view', 'cost_per_lpv'])
 
 /**
  * A metric as text — Latin digits in both languages, per the contract.
