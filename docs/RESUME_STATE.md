@@ -10,6 +10,93 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## GATE — 2026-08-07 · FAILING. `Failed=21`, and the verdict stands until it is 0
+
+**`PLAYWRIGHT_EXIT_CODE=1` · 788 passed · 21 failed · 41.6m · `retries: 0`, so `Flaky=0` and
+`Retries=0` are properties of the run, not a claim about it.** Run at `235803d`, three browsers, one
+worker, with no file or database change during it.
+
+**21 = 7 distinct specs × 3 browsers. Every single failure reproduces in chromium, firefox AND
+webkit.** That is what makes them defects rather than noise: the cascade this config already
+documents once — a stalled stdout pipe corrupting JSON late in a long run — degrades erratically and
+browser-by-browser. Perfect 3/3 reproduction is a product that is broken.
+
+### Three root causes
+
+**A · `/agency/content` lost its filter control — 9 of the 21. THIS IS OURS.**
+
+`383fc63` («the creative library, on one pipeline») **removed `ViewCustomiser`** from
+`CreativesPage.tsx` and replaced the one folded control with an open row of selects. That component's
+own docblock names Content as one of the five pages SIMPLIFY-001 was applied to, so the §15 rebuild
+silently reverted a shipped product decision.
+
+Three specs pin it and all three fail on the same locator, `content-customise`:
+`simplification-agency.spec.ts:111` and `:120`, and `simplification-appearance.spec.ts:62` (which
+also covers phone/desktop, light/dark, Arabic/English on that page).
+
+It has been in the branch since `383fc63` and went undetected because **the gate had not been run
+since `2ea6943`** — through several units this session recorded as VERIFIED. Whether `/app/content` is
+equally affected is NOT known: the failing spec only walks the agency path.
+
+The fix is to restore `ViewCustomiser` on the library with an honest applied-summary — «what is
+applied, in words», never the internal filter keys — then review it live in BOTH portals and re-run
+the full gate. Search must stay outside it, and so must the grid/list switcher; the component says
+why.
+
+**B · The registration journey hangs — 9 of the 21.**
+
+`registration-onboarding.spec.ts:114` and `:138`, plus `login-paths.spec.ts:76`, which walks the same
+`openAccount` journey. All three freeze on the signup status page showing «جارٍ التحقق…», with
+`registration-status` never rendered.
+
+`AccountStatusPage` renders that spinner whenever `reg` is undefined, and its `error` state is set
+ONLY by a failed mutation — a failed or pending QUERY shows no message at all. So whatever the
+underlying cause, **the page spins silently forever instead of saying anything, and that is a defect
+on its own terms.** Fix the silent spinner regardless; then find why `fetchRegistration` does not
+resolve.
+
+**C · The Arabic PDF export — 3 of the 21.**
+
+`report-pdf-download.spec.ts:22`, ~1.6m per browser. Not diagnosed.
+
+### What this costs the matrix
+
+Every §15 row recorded as VERIFIED was verified against unit tests and a live browser review, and
+NOT against a passing three-browser gate — because there has not been one since `2ea6943`. The rows
+are not withdrawn, but **no §15 claim should be read as gate-backed until the gate is green.**
+
+### Exact next task
+
+1. **Restore `ViewCustomiser` on `CreativesPage`** (root cause A) — both portals, live review,
+   then `simplification-agency` and `simplification-appearance` green.
+2. **Give `AccountStatusPage` an error branch for a failed query**, then root-cause why the
+   registration status query never resolves (root cause B). Do not fix it with a retry.
+3. **Diagnose the PDF export** (root cause C).
+4. **Re-run the full three-browser gate** and take Playwright's own exit code. It must read 0.
+
+Only then the platform integrations, in the mandated order and ONE AT A TIME: **Snapchat, TikTok,
+Meta, Google Ads, X, LinkedIn**, each staying `BLOCKED_EXTERNAL_CREDENTIALS` until a real OAuth round
+trip, account discovery and an actual sync.
+
+**Snapchat is already scoped** against the current official Marketing API measurement reference, so
+that unit can start from the mapping rather than from the documentation:
+
+| canonical | Snapchat field | note |
+|---|---|---|
+| `spend` | `spend` | micro-currency ÷ 1e6 |
+| `impressions` | `impressions` | |
+| `clicks` | `swipes` | a swipe-up IS Snapchat's click |
+| `reach` | `uniques` | |
+| `frequency` | `frequency` | derived elsewhere, never summed |
+| `landing_page_views` | `landing_page_views` | the delivery metric, NOT `conversion_page_views` |
+| `video_views` | `video_views` | 2s+; do NOT also add `video_views_5s`/`_15s` |
+| `video_completions` | `view_completion` | |
+| `add_to_cart` | `conversion_add_cart` | NOT `conversion_view_content` |
+| `purchases` | `conversion_purchases` | NOT `conversion_start_checkout` |
+| `revenue` | `conversion_purchases_value` | micro; kept apart from the count |
+| `engagements` | — | Snapchat publishes `shares`, `saves`, `story_opens` separately and no single
+total. Summing them would manufacture a metric the platform never reported, so it stays null. |
+
 ## Session — 2026-08-07 · REPORT-OBJECTIVE-005, attribution and de-duplication
 
 **HEAD `d4f2486`. Tree clean. Backend 1551 passed (8739 assertions), exit 0 · Pint clean · vitest 790 /
