@@ -16,6 +16,13 @@ interface Shared {
   generated_at: string | null
   /** LIVEREP-001 — `live` renders the filterable dashboard; `snapshot` renders the generated document. */
   mode?: 'live' | 'snapshot'
+  /**
+   * REPORT-LINKS-13 — what the report IS, independent of where its numbers come from.
+   *
+   * A reader who opens a five-page summary needs to know it is a summary, or the absence of the
+   * per-platform pages reads as data missing rather than as a deliberately shorter document.
+   */
+  form?: 'executive_summary' | 'detailed'
   branding?: { name: string | null; logo_url: string | null; accent: string | null }
   settings: { allow_download: boolean; watermark: boolean }
   data: Record<string, unknown>
@@ -122,7 +129,22 @@ export function PublicReport() {
               </div>
             )}
             <div className="relative z-[1]">
-              <h1 className="mb-4 font-heading text-xl font-extrabold tracking-tight sm:text-2xl">{report.name}</h1>
+              <h1 className="mb-2 font-heading text-xl font-extrabold tracking-tight sm:text-2xl">{report.name}</h1>
+
+              {/*
+                Says which document this is, beside its own title. Without it, a client opening the
+                summary sees no per-platform section and reasonably concludes the report is
+                incomplete — the one reading the trimming was meant to prevent.
+              */}
+              <p data-testid="report-form-label" className="mb-4 text-xs font-semibold text-text-secondary">
+                {report.form === 'executive_summary'
+                  ? (locale === 'ar'
+                      ? 'ملخص تنفيذي — أبرز النتائج والقرارات. التفاصيل الكاملة في التقرير التفصيلي.'
+                      : 'Executive summary — the headline results and decisions. Full detail lives in the detailed report.')
+                  : (locale === 'ar'
+                      ? 'تقرير تفصيلي — كل المنصات والحملات والمحتويات.'
+                      : 'Detailed report — every platform, campaign and creative.')}
+              </p>
 
               {/*
                 A live link is a dashboard the client filters; a snapshot link is the document that was

@@ -46,6 +46,23 @@ final class ShareService
         return "/r/{$rawToken}";
     }
 
+    /**
+     * The canonical, absolute link an operator copies and sends — `https://campaignshub.io/r/…`.
+     *
+     * Stated by the SERVER rather than assembled in the browser from `window.location.origin`, which
+     * is what the reports page did. That worked on production and quietly produced a link nobody
+     * outside could open anywhere else: an operator reviewing on staging, on a preview deployment or
+     * on `localhost` copied a host only they could reach and sent it to a client. The failure is
+     * silent on the sending side and total on the receiving one.
+     *
+     * The host comes from `brand.frontend_url`, the same setting the rest of the product's outbound
+     * links use, so there is one place to change it and no second opinion.
+     */
+    public static function urlFor(string $rawToken): string
+    {
+        return rtrim((string) config('brand.frontend_url'), '/').self::pathFor($rawToken);
+    }
+
     /** @return array{0: ReportShare, 1: string} the share + the raw token (show once) */
     public function create(Report $report, array $opts, ?int $userId): array
     {

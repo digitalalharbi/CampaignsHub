@@ -27,6 +27,17 @@ final class ReportController extends Controller
 {
     private const TYPES = ['executive', 'project', 'campaign', 'platform', 'platform_comparison', 'weekly', 'monthly', 'custom'];
 
+    /**
+     * What the report IS — a decision-length summary, or the full account (REPORT-LINKS-13).
+     *
+     * A separate axis from `type` (what it is about) and from `mode` (whether a link recomputes), so
+     * a summary and a detailed report of the SAME project are both expressible, and either can be
+     * shared live or as a snapshot. Before this existed, «executive» sat inside `type` beside
+     * `campaign` and `weekly`, so asking for a summary meant claiming to be a different kind of
+     * report altogether.
+     */
+    private const FORMS = ['executive_summary', 'detailed'];
+
     public function index(Request $request): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
@@ -61,6 +72,7 @@ final class ReportController extends Controller
             'type' => ['required', Rule::in(self::TYPES)],
             'mode' => ['nullable', Rule::in(['live', 'snapshot'])],
             'campaign_objective' => ['nullable', Rule::in(['sales', 'awareness', 'traffic', 'leads', 'app_installs', 'video', 'custom'])],
+            'form' => ['nullable', Rule::in(self::FORMS)],
             'audience' => ['nullable', Rule::in(['client', 'internal', 'executive'])],
             'period_start' => ['nullable', 'date'],
             'period_end' => ['nullable', 'date'],
@@ -71,6 +83,9 @@ final class ReportController extends Controller
         $report = Report::create([
             'name' => $data['name'],
             'type' => $data['type'],
+            // Defaults to the FULL report, never the summary: a report that silently trimmed itself
+            // would drop pages its reader was expecting and give no sign that it had.
+            'form' => $data['form'] ?? 'detailed',
             'audience' => $data['audience'] ?? 'client',
             'mode' => $data['mode'] ?? 'snapshot',
             'campaign_objective' => $data['campaign_objective'] ?? null,
@@ -83,7 +98,7 @@ final class ReportController extends Controller
         ]);
 
         GenerateReportJob::dispatch((string) $report->id);
-        $audit->log(action: 'report.created', entityType: Report::class, entityId: (string) $report->id, after: ['type' => $report->type]);
+        $audit->log(action: 'report.created', entityType: Report::class, entityId: (string) $report->id, after: ['type' => $report->type, 'form' => $report->form]);
 
         return ApiResponse::success($this->shape($report), 'Report queued for generation.', status: 201);
     }
@@ -198,6 +213,10 @@ final class ReportController extends Controller
             'id' => $r->id,
             'name' => $r->name,
             'type' => $r->type,
+            // What the report IS, beside where its numbers come from — two independent facts, and a
+            // list that shows only one of them cannot tell a five-page summary from a thirty-page
+            // account of the same project.
+            'form' => $r->form,
             'mode' => $r->mode,
             'campaign_objective' => $r->campaign_objective,
             'version' => $r->version,

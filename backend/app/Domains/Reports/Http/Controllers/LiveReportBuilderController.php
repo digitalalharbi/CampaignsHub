@@ -200,7 +200,7 @@ final class LiveReportBuilderController extends Controller
         return ApiResponse::success([
             'report_id' => (string) $report->id,
             'share_id' => (string) $share->id,
-            'url' => ShareService::pathFor($raw),
+            'url' => ShareService::urlFor($raw), 'path' => ShareService::pathFor($raw),
             'token' => $raw,
         ], 'Live link created. Copy it now — it is shown only once.', status: 201);
     }

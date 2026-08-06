@@ -458,6 +458,15 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
   const ar = useAr()
   const [name, setName] = useState('')
   const [type, setType] = useState<string | null>('executive')
+  /*
+   * What the report IS — a decision-length summary, or the full account (REPORT-LINKS-13).
+   *
+   * A separate question from the type (what it is about) and from live-versus-snapshot (where its
+   * numbers come from), and all four combinations are real. It defaults to the summary because that
+   * is the one somebody sends a client; the full report is what you open when the summary raises a
+   * question.
+   */
+  const [form, setForm] = useState<'executive_summary' | 'detailed'>('executive_summary')
   const [audience, setAudience] = useState<string | null>('client')
   const [from, setFrom] = useState(daysAgo(29))
   const [to, setTo] = useState(today())
@@ -470,6 +479,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
       createReport(projectId, {
         name: name || (ar ? 'تقرير' : 'Report'),
         type: type ?? 'executive',
+        form,
         audience: audience ?? 'client',
         period_start: from,
         period_end: to,
@@ -498,6 +508,30 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
           onRetry={() => types.refetch()}
           clearable={false}
         />
+        <Field label={ar ? 'شكل التقرير' : 'Report form'}>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { key: 'executive_summary' as const, ar: 'ملخص تنفيذي', en: 'Executive summary',
+                hintAr: 'صفحات قليلة للقرار', hintEn: 'A few pages, for the decision' },
+              { key: 'detailed' as const, ar: 'تقرير تفصيلي', en: 'Detailed report',
+                hintAr: 'كل المنصات والفانل والمحتويات', hintEn: 'Every platform, funnel and creative' },
+            ]).map((o) => (
+              <button
+                key={o.key}
+                type="button"
+                data-testid={`rb-form-${o.key}`}
+                aria-pressed={form === o.key}
+                onClick={() => setForm(o.key)}
+                className={`rounded-xl border p-3 text-start transition-colors ${
+                  form === o.key ? 'border-brand-500 bg-brand-500/5' : 'border-border hover:border-border-strong'
+                }`}
+              >
+                <span className="block text-sm font-bold text-text-primary">{ar ? o.ar : o.en}</span>
+                <span className="mt-0.5 block text-[11px] text-text-secondary">{ar ? o.hintAr : o.hintEn}</span>
+              </button>
+            ))}
+          </div>
+        </Field>
         <SelectField
           label={ar ? 'هذا التقرير موجّه إلى' : 'This report is for'}
           value={audience}
@@ -617,7 +651,15 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
     onSuccess: () => qc.invalidateQueries({ queryKey: ['shares', projectId, reportId] }),
   })
 
-  const fullUrl = created ? `${window.location.origin}${created.url}` : ''
+  /*
+   * The link the SERVER says it is, not one assembled from whatever host this tab happens to be on.
+   *
+   * This used to be `window.location.origin + created.url`, which is right on production and quietly
+   * wrong everywhere else: an operator reviewing on staging, on a preview deployment or on localhost
+   * copied a host only they could reach and sent it to a client. Silent on the sending side, total
+   * on the receiving one. `created.url` is now the canonical `https://campaignshub.io/r/…`.
+   */
+  const fullUrl = created?.url ?? ''
   const copy = () => {
     navigator.clipboard.writeText(fullUrl).then(() => {
       setCopied(true)

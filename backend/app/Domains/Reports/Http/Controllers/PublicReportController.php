@@ -51,9 +51,20 @@ final class PublicReportController extends Controller
         $share->update(['last_viewed_at' => now()]);
         $this->shares->log($share, 'view', $request);
 
-        // Shared links are CLIENT-facing: approved recommendations only, client campaign names, no
-        // internal/technical fields — then the per-share hide flags (spend/revenue/names).
-        $data = app(ClientReportView::class)->filter($report->data ?? []);
+        /*
+         * Shared links are CLIENT-facing: approved recommendations only, client campaign names, no
+         * internal/technical fields — then the per-share hide flags (spend/revenue/names).
+         *
+         * The FORM is applied here too, and it was not before (REPORT-LINKS-13). Every shared link
+         * ran the plain client filter, so a report an operator had deliberately built as an
+         * executive summary arrived at the client in full detail — the one setting that says «this
+         * is five pages, not thirty» was honoured in the PDF export and dropped on the link, which
+         * is the copy most clients actually open.
+         */
+        $view = app(ClientReportView::class);
+        $data = $report->form === 'executive_summary'
+            ? $view->executive($report->data ?? [])
+            : $view->filter($report->data ?? []);
         $data = $this->shares->sanitize($data, $share);
 
         return ApiResponse::success([
@@ -61,6 +72,12 @@ final class PublicReportController extends Controller
             'currency' => $report->currency,
             'is_demo' => $report->is_demo,
             'generated_at' => $report->generated_at?->toIso8601String(),
+            /*
+             * Two independent facts, and the client page needs both: `form` is what the report is,
+             * `mode` is where its numbers come from. A summary can be live and a detailed report can
+             * be a snapshot — the contract asks for all four combinations.
+             */
+            'form' => $report->form,
             'mode' => $share->isLive() ? 'live' : 'snapshot',
             'branding' => $this->branding($report),
             'settings' => [
@@ -114,7 +131,10 @@ final class PublicReportController extends Controller
 
         $this->shares->log($share, 'view', $request, 'live');
 
-        return ApiResponse::success($payload + ['is_demo' => $report->is_demo], 'Live figures.');
+        return ApiResponse::success(
+            $payload + ['is_demo' => $report->is_demo, 'form' => $report->form],
+            'Live figures.',
+        );
     }
 
     /**
