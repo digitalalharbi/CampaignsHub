@@ -10,6 +10,87 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## Session — 2026-08-06 (later) · §15.6, the creative details page
+
+**HEAD `75017fb`. Tree clean. Backend 1500 passed (8538 assertions) · Pint clean · vitest 104 files
+· `tsc -b` · oxlint 0 errors · production build clean.**
+
+### What it is
+
+`/app/content/:creativeId` and `/agency/content/:creativeId`, over `GET /creatives/{creative}` —
+**no project id in the address**, because the library spans projects and a card does not carry one,
+so a route that required it could not be linked to from the page that lists them. The ceiling is the
+caller's membership, applied to the LOOKUP rather than checked after it, so cross-tenant,
+cross-client and cross-project all fail at the same line. **404, never 403.** The project-pinned
+address stays and answers identically; a test asserts that, because two routes into one page is how
+a second implementation appears.
+
+The page carries: the asset with zoom and a fullscreen that reuses `CreativeViewer`, the identity
+and lineage block (platform, campaign, ad set, ad, objective, path, first seen, last active, last
+sync, source-updated, currency, timezone, both windows, attribution), the ad copy as text with the
+destination URL never clickable, the objective's own headline metrics with previous-period deltas,
+the funnel, a daily/weekly trend, per-platform, the same-path benchmark, fatigue with its evidence,
+and the findings.
+
+**The only control is the period.** Platform, campaign, objective and path are PROPERTIES of one
+creative, not filters over it — offering them would be the dead control the contract forbids. The
+period is in the address and genuinely moves every figure (verified live: spend 3,546.45 → 15,978.6
+as the window widened).
+
+### `CreativeFunnel` — no query in it
+
+It reshapes the figures already fetched, so it cannot disagree with the cards beside it. A stage the
+platform never reported is LEFT OUT and named in `missing`; each rate is against the stage that
+SURVIVED that filter. Live, an awareness video showed impressions → views → clicks → landing-page
+views and named add-to-cart, checkout and purchase as unreported.
+
+### Findings need peers
+
+Ten of §15.10's rules compare a creative to itself; five compare it to the median of its own path,
+and on a one-row set that median IS the creative — so those five would silently never fire and the
+page would look complete while missing a third of the analysis. The same-path peers are fetched and
+the whole set is assessed by the same engine. The cap (120) and what was compared are in the
+response and on screen.
+
+`peerAverages` claimed in its own docstring to average only the same path and never consulted the
+objective. Fixed and tested.
+
+### On the client's link
+
+`?creative=<id>` on the shared report — refresh-safe and deep-linkable, and a query parameter rather
+than a nested route because a password-gated link holds its accepted password in that tree and a
+remount would re-prompt on every creative. The detail runs through the same bounded query, so an
+excluded creative 404s there too. The per-stage cost goes when the link withholds spend; the stages
+and rates stay.
+
+### Found live
+
+The funnel bars printed «0 SAR» beside a cost of 0.026 (the chart rounds money to whole units) while
+the table said 0.03. The bars no longer carry money; the table does.
+
+### Two things NOT fixed here, recorded honestly
+
+1. **The operator dashboard still does not render its own findings.** `GET /creatives/pulse` has
+   returned `insights` since `bbcddce` and `CreativePulseSection` never draws them — an API without
+   a UI. Small addition to that one component; take it with §15.13.
+2. **2,040 stale demo rows in the DEV database** carry fractional clicks and conversions, all
+   written 2026-08-05 22:09, before the seeder fix at `93897cc`. The guard test re-seeds and passes,
+   so the seeders are correct; the dev database still holds the old rows, and a client link opened
+   against it shows «178.2 orders». Re-seeding the demo data clears it.
+
+**Environment note:** in this headless browser `document.timeline.currentTime` is frozen at 0, so a
+CSS transition never advances and anything with `transition-transform` computes to the identity
+matrix regardless of its inline transform. Remove the class and the same element scales exactly as
+specified (496px → 992px at 200%). Zoom works; the clock is stopped.
+
+### Exact next task
+
+**§15.13 — the Creative Groups UI** (endpoints exist, no UI), and with it the dashboard findings
+block above. Then §14.6 objective layouts · §14.7–14.8 comparisons, pacing, funnel drop-off, anomaly
+detection · REPORT-OBJECTIVE-005 attribution and deduplication · `PRODUCTION_HANDOVER.md` · clean
+install + upgrade path · **the full three-browser Playwright gate, still not run since `2ea6943`** —
+its verdict must come from Playwright's own exit code, with no file or database change during it.
+
 ## Session — 2026-08-06 · §15.12, the content inside a client's report
 
 **HEAD `a456043`. Tree clean. Backend 1487+ passed · Pint clean · vitest 731 / 103 files · `tsc -b`
