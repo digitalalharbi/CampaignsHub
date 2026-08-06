@@ -105,13 +105,6 @@ final class CreativeMetrics
     {
         $num = static fn (string $key): ?float => $row[$key] === null ? null : (float) $row[$key];
 
-        $spend = $num('spend');
-        $impressions = $num('impressions');
-        $clicks = $num('clicks');
-        $conversions = $num('conversions');
-        $revenue = $num('revenue');
-        $videoViews = $num('video_views');
-
         $figures = [];
         foreach (array_keys(self::SUMS) as $key) {
             $figures[$key] = $num($key);
@@ -121,8 +114,52 @@ final class CreativeMetrics
         $figures['video_avg_watch_seconds'] = $num('video_avg_watch_seconds');
         $figures['active_days'] = (int) ($row['active_days'] ?? 0);
 
-        // Derived KPIs. Every one is null when its denominator is missing or zero — a ratio over
-        // nothing is «there is nothing to divide», and 0 reads as «it costs nothing».
+        $figures = $this->derive($figures);
+
+        /*
+         * What the platform actually sent.
+         *
+         * The frontend needs this to tell «0» from «not reported», and it cannot infer it from the
+         * value alone: a genuine zero and a missing metric both arrive as falsy in JavaScript.
+         */
+        $figures['reported'] = [];
+        // `orders` shares `conversions`' answer, because it shares its column. Without this it is
+        // absent from the map and renders as «no data» rather than «not provided» on an awareness
+        // creative, which is the weaker of the two true statements.
+        $figures['reported']['orders'] = $row['conversions'] !== null;
+        foreach (array_keys(self::SUMS) as $key) {
+            $figures['reported'][$key] = $row[$key] !== null;
+        }
+        $figures['reported']['frequency'] = $row['frequency'] !== null;
+        $figures['reported']['video_avg_watch_seconds'] = $row['video_avg_watch_seconds'] !== null;
+
+        return $figures;
+    }
+
+    /**
+     * The derived KPIs, from raw figures — the ONLY place a ratio in this system is written down.
+     *
+     * Called for one creative's sums and for a set of creatives summed together. Two copies of this
+     * arithmetic is exactly how a dashboard's «image vs video ROAS» ends up disagreeing with the ROAS
+     * on the cards it was computed from, so the aggregate does not get its own version: it sums the
+     * raw figures and comes through here.
+     *
+     * @param  array<string, mixed>  $figures  raw sums, nulls intact
+     * @return array<string, mixed>
+     */
+    private function derive(array $figures): array
+    {
+        $num = static fn (string $key): ?float => is_numeric($figures[$key] ?? null) ? (float) $figures[$key] : null;
+
+        $spend = $num('spend');
+        $impressions = $num('impressions');
+        $clicks = $num('clicks');
+        $conversions = $num('conversions');
+        $revenue = $num('revenue');
+        $videoViews = $num('video_views');
+
+        // Every one is null when its denominator is missing or zero — a ratio over nothing is «there
+        // is nothing to divide», and 0 reads as «it costs nothing».
         $figures['ctr'] = $this->ratio($clicks, $impressions);
         $figures['cpc'] = $this->ratio($spend, $clicks);
         $figures['cpm'] = $impressions ? $this->ratio($spend, $impressions / 1000) : null;
@@ -151,24 +188,108 @@ final class CreativeMetrics
         $figures['orders'] = $conversions;
         $figures['cost_per_lpv'] = $this->ratio($spend, $num('landing_page_views'));
 
-        /*
-         * What the platform actually sent.
-         *
-         * The frontend needs this to tell «0» from «not reported», and it cannot infer it from the
-         * value alone: a genuine zero and a missing metric both arrive as falsy in JavaScript.
-         */
-        $figures['reported'] = [];
-        // `orders` shares `conversions`' answer, because it shares its column. Without this it is
-        // absent from the map and renders as «no data» rather than «not provided» on an awareness
-        // creative, which is the weaker of the two true statements.
-        $figures['reported']['orders'] = $row['conversions'] !== null;
-        foreach (array_keys(self::SUMS) as $key) {
-            $figures['reported'][$key] = $row[$key] !== null;
+        return $figures;
+    }
+
+    /**
+     * Several creatives' figures summed into one — for «images vs videos», a group, or a path total.
+     *
+     * ## Null survives addition
+     *
+     * A key nobody reported stays null rather than becoming 0, exactly as it does for one creative.
+     * A key SOME reported sums what was actually sent and says so: an aggregate that quietly treated
+     * the silent half as zero would report a completion rate over a denominator missing most of its
+     * views, which is a worse lie than «not provided» because it looks like an answer.
+     *
+     * `active_days` is the maximum rather than the sum — a set of creatives that each ran seven days
+     * over the same week was delivering for seven days, not for seventy.
+     *
+     * @param  list<array<string, mixed>>  $sets  rows from `forCreatives()`
+     * @return array<string, mixed>|null null when there is nothing at all to add up
+     */
+    public function aggregate(array $sets): ?array
+    {
+        $sets = array_values(array_filter($sets, static fn ($s): bool => is_array($s)));
+
+        if ($sets === []) {
+            return null;
         }
-        $figures['reported']['frequency'] = $row['frequency'] !== null;
-        $figures['reported']['video_avg_watch_seconds'] = $row['video_avg_watch_seconds'] !== null;
+
+        $figures = [];
+        $reported = [];
+
+        foreach (array_keys(self::SUMS) as $key) {
+            $total = null;
+            foreach ($sets as $set) {
+                if (is_numeric($set[$key] ?? null)) {
+                    $total = ($total ?? 0.0) + (float) $set[$key];
+                }
+            }
+            $figures[$key] = $total;
+            $reported[$key] = $total !== null;
+        }
+
+        /*
+         * Frequency is impression-weighted, because it is an average and averages do not add.
+         *
+         * A creative shown twice to a hundred thousand people and one shown eight times to two
+         * hundred do not average to five: the plain mean lets a rounding error of a creative dominate
+         * the figure that is supposed to describe the audience's exposure.
+         */
+        $figures['frequency'] = $this->weightedMean($sets, 'frequency', 'impressions');
+        $figures['video_avg_watch_seconds'] = $this->weightedMean($sets, 'video_avg_watch_seconds', 'video_views');
+        $reported['frequency'] = $figures['frequency'] !== null;
+        $reported['video_avg_watch_seconds'] = $figures['video_avg_watch_seconds'] !== null;
+
+        $figures['active_days'] = (int) max(array_map(
+            static fn (array $s): int => (int) ($s['active_days'] ?? 0),
+            $sets,
+        ));
+
+        $figures = $this->derive($figures);
+        $reported['orders'] = $reported['conversions'];
+        $figures['reported'] = $reported;
+        $figures['creatives'] = count($sets);
 
         return $figures;
+    }
+
+    /**
+     * A mean weighted by the figure that gives each row its size, or null when nothing reported it.
+     *
+     * Falls back to the plain mean when no weight is available — a weighted mean with no weights is
+     * not more accurate than an unweighted one, it is undefined, and returning null there would
+     * throw away a figure every row actually reported.
+     *
+     * @param  list<array<string, mixed>>  $sets
+     */
+    private function weightedMean(array $sets, string $key, string $weightKey): ?float
+    {
+        $sum = 0.0;
+        $weight = 0.0;
+        $plain = [];
+
+        foreach ($sets as $set) {
+            if (! is_numeric($set[$key] ?? null)) {
+                continue;
+            }
+
+            $value = (float) $set[$key];
+            $plain[] = $value;
+
+            if (is_numeric($set[$weightKey] ?? null) && (float) $set[$weightKey] > 0) {
+                $sum += $value * (float) $set[$weightKey];
+                $weight += (float) $set[$weightKey];
+            }
+        }
+
+        if ($plain === []) {
+            return null;
+        }
+
+        return $weight > 0
+            ? round($sum / $weight, 4)
+            : round(array_sum($plain) / count($plain), 4);
     }
 
     /** A ratio, or null when there is nothing to divide by. Never 0 — see the class note. */

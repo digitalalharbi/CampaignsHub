@@ -30,7 +30,7 @@ import { useSavedViews, type SavedView } from './savedViews'
 import { OBJECTIVE_KEYS, dash, metricLabel, objectiveLabel } from '@/features/analytics/metricLabels'
 import { Modal } from '@/components/ui/Modal'
 import { useUi } from '@/stores/ui'
-import { sortPlatforms } from '@/lib/platforms'
+import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
 
 /**
  * The six paid platforms CampaignsHub unifies — the dashboard platform filter.
@@ -79,6 +79,8 @@ function objectiveKpis(objective: string, cur: MetricTotals | undefined, activeC
   }
 }
 import { useProject } from '@/stores/project'
+import { CreativePulseSection } from '@/features/content/CreativePulseSection'
+import type { LibraryQuery } from '@/features/content/api'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
 const axis = { stroke: 'var(--text-muted)', fontSize: 12 }
@@ -96,6 +98,27 @@ export function DashboardPage() {
   // The filters live in a dialog now; the page leads with answers. See the note by the button.
   const [customising, setCustomising] = useState(false)
   const filters = useMemo(() => ({ provider: providers, objective: objective === 'all' ? [] : [objective] }), [providers, objective])
+
+  /**
+   * The same selection, in the creative library's own vocabulary (§15.11).
+   *
+   * Two translations happen here and both matter. The platform keys are canonicalised, because this
+   * page filters metrics with `google_ads` while `external_creatives.provider` stores `google` —
+   * passing the page's spelling through would have returned an empty Google section on an account
+   * that runs Google. And the project travels as a FILTER rather than in the path, so the same value
+   * survives into the drill-down links; a section pinned by URL would link into a library that was
+   * not pinned at all.
+   */
+  const creativeFilters: LibraryQuery = useMemo(
+    () => ({
+      from: range.from,
+      to: range.to,
+      providers: providers.length > 0 ? providers.map(canonicalPlatform) : undefined,
+      objectives: objective === 'all' ? undefined : [objective],
+      project_ids: currentProjectId ? [currentProjectId] : undefined,
+    }),
+    [range.from, range.to, providers, objective, currentProjectId],
+  )
   const toggleProvider = (key: string) =>
     setProviders((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]))
 
@@ -385,6 +408,21 @@ export function DashboardPage() {
           )}
         </div>
       )}
+
+      {/*
+        §15.11 — the creative section, on the dashboard's own filters.
+
+        It is handed this page's window, platform selection and objective, and sends them to the
+        endpoint the creative library reads. So it narrows when the page narrows, and every card
+        links into the library carrying the same selection it was computed under. It renders the two
+        axes this page does not own — client and creative type — and nothing else, so there is one
+        control per filter rather than two that can disagree.
+      */}
+      <CreativePulseSection
+        libraryPath="/app/content"
+        axes={['clients', 'kinds']}
+        filters={creativeFilters}
+      />
 
       {/* Deeper detail: daily trend + conversion funnel */}
       <div className="grid gap-4 lg:grid-cols-3">

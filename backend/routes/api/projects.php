@@ -82,6 +82,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * `creatives/compare` is not read as a creative whose id is the word "compare".
      */
     Route::get('creatives', [CreativeAnalysisController::class, 'index'])->name('creatives.index');
+    // Before `creatives/{creative}` for the same reason as `compare` — otherwise the dashboard
+    // section is looked up as a creative whose id is the word "pulse".
+    Route::get('creatives/pulse', [CreativeAnalysisController::class, 'pulse'])->name('creatives.pulse');
     Route::post('creatives/compare', [CreativeAnalysisController::class, 'compare'])->name('creatives.compare');
     Route::post('creatives/group', [CreativeAnalysisController::class, 'group'])->name('creatives.group');
     Route::get('creatives/{creative}', [CreativeAnalysisController::class, 'show'])->name('creatives.show');

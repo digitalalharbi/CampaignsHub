@@ -1,0 +1,438 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { CreativePulseSection } from './CreativePulseSection'
+import type { CreativeCard, CreativeMetrics } from './api'
+import type { CreativePulse } from './pulse'
+import { renderWithProviders } from '@/test/utils'
+
+vi.mock('./pulse', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./pulse')>()
+  return { ...actual, getCreativePulse: vi.fn() }
+})
+
+import { getCreativePulse } from './pulse'
+
+/**
+ * §15.11's acceptance claims for the dashboard section.
+ *
+ * These are the checks a reviewer would make by hand, not «it renders»:
+ *
+ *   - the host's filters reach the SERVER, so the section narrows when the dashboard narrows;
+ *   - a card links into the library carrying the same selection it was computed under;
+ *   - every winner names its metric and its marketing path, and none of them is «best creative»;
+ *   - a winner with thin evidence says so instead of being presented as a finding;
+ *   - an unreported metric renders «Not provided», never 0;
+ *   - no `<video>` element mounts on a dashboard.
+ */
+
+const metrics = (over: Partial<CreativeMetrics> = {}): CreativeMetrics => ({
+  spend: 900,
+  impressions: 40000,
+  clicks: 200,
+  conversions: 20,
+  revenue: 4500,
+  video_views: null,
+  video_p25: null,
+  video_p50: null,
+  video_p75: null,
+  video_p100: null,
+  frequency: 1.2,
+  ctr: 0.005,
+  cpc: 4.5,
+  cpm: 22.5,
+  cpa: 45,
+  roas: 5,
+  conversion_rate: 0.1,
+  view_rate: null,
+  completion_rate: null,
+  active_days: 12,
+  reported: {
+    spend: true, impressions: true, clicks: true, conversions: true, revenue: true,
+    video_views: false, video_p25: false, video_p50: false, video_p75: false, video_p100: false,
+  },
+  ...over,
+})
+
+const card = (over: Partial<CreativeCard> = {}): CreativeCard =>
+  ({
+    id: 'cr-1',
+    name: 'Hero image',
+    format: 'image',
+    provider: 'meta',
+    status: 'active',
+    campaign_id: 'c1',
+    campaign_name: 'National Day Sale',
+    ad_set_id: 'set-1',
+    ad_id: 'ad-1',
+    preview: {
+      state: 'available',
+      kind: 'image',
+      image_url: 'https://cdn.example.com/a.jpg',
+      video_url: null,
+      thumbnail_url: 'https://cdn.example.com/a-thumb.jpg',
+      expires_at: null,
+      note_ar: null,
+      note_en: null,
+    },
+    aspect_ratio: '1:1',
+    duration_seconds: null,
+    width: 1080,
+    height: 1080,
+    file_size: 204800,
+    grouped: false,
+    group_id: null,
+    is_demo: false,
+    freshness: {
+      last_synced_at: '2026-08-05T10:00:00+00:00',
+      source_updated_at: null,
+      first_seen_at: null,
+      last_active_at: null,
+    },
+    objective: 'sales',
+    path: 'conversion',
+    headline_metrics: ['spend', 'orders', 'roas'],
+    metrics: metrics(),
+    fatigue: { status: 'stable', signals: [], reason_ar: '', reason_en: '' },
+    ...over,
+  }) as CreativeCard
+
+const empty = { items: [], total: 0, shown: 0 }
+
+const pulse = (over: Partial<CreativePulse> = {}): CreativePulse => ({
+  period: { from: '2026-07-08', to: '2026-08-06', days: 30 },
+  previous_period: { from: '2026-06-08', to: '2026-07-07' },
+  totals: { creatives: 4, with_metrics: 3, without_metrics: 1 },
+  evidence: { min_impressions: 1000, min_change: 0.1 },
+  best_by_objective: [
+    {
+      objective: 'sales',
+      path: 'conversion',
+      creatives: 3,
+      spend: 2700,
+      metric: 'roas',
+      higher_wins: true,
+      value: 5,
+      candidates: 3,
+      evidenced: 3,
+      low_evidence: false,
+      creative: card(),
+    },
+  ],
+  best_image: [
+    {
+      kind: 'image',
+      path: 'conversion',
+      creatives: 2,
+      spend: 1800,
+      metric: 'roas',
+      higher_wins: true,
+      value: 5,
+      candidates: 2,
+      evidenced: 2,
+      low_evidence: false,
+      creative: card(),
+    },
+  ],
+  best_video: [
+    {
+      kind: 'video',
+      path: 'awareness',
+      creatives: 1,
+      spend: 900,
+      metric: 'cpm',
+      higher_wins: false,
+      value: 12.5,
+      candidates: 1,
+      evidenced: 0,
+      low_evidence: true,
+      creative: card({
+        id: 'cr-2',
+        name: 'Brand film',
+        format: 'video',
+        objective: 'awareness',
+        path: 'awareness',
+        preview: {
+          state: 'available',
+          kind: 'video',
+          image_url: null,
+          video_url: 'https://cdn.example.com/v.mp4',
+          thumbnail_url: 'https://cdn.example.com/v-thumb.jpg',
+          expires_at: null,
+          note_ar: null,
+          note_en: null,
+        },
+        metrics: metrics({ cpm: 12.5, roas: null, revenue: null }),
+      }),
+    },
+  ],
+  fastest_growing: empty,
+  declining: empty,
+  fatigue: {
+    counts: { improving: 1, stable: 2, watch: 0, fatigued: 1, insufficient_data: 0 },
+    fatigued: empty,
+    watch: empty,
+    insufficient_data: empty,
+    alerts: empty,
+    spend_at_risk: 0,
+  },
+  spend_by_kind: [
+    { kind: 'image', spend: 1800, share: 0.667, creatives: 2, spend_not_reported: 1 },
+    { kind: 'video', spend: 900, share: 0.333, creatives: 1, spend_not_reported: 0 },
+  ],
+  image_vs_video: [],
+  best_platform: empty,
+  freshness: {
+    last_synced_at: '2026-08-05T10:00:00+00:00',
+    providers: [
+      { provider: 'meta', creatives: 3, with_metrics: 3, without_metrics: 0, last_synced_at: '2026-08-05T10:00:00+00:00' },
+    ],
+    quality: {
+      previews_withheld: 0, previews_expired: 0, previews_unavailable: 0,
+      without_metrics: 1, insufficient_data: 0, never_synced: 0,
+    },
+  },
+  filters: {
+    providers: ['meta', 'tiktok'],
+    formats: ['image', 'video'],
+    statuses: ['active'],
+    kinds: ['image', 'video', 'carousel'],
+    campaigns: [{ id: 'c1', name: 'National Day Sale', objective: 'sales' }],
+    ad_sets: ['set-1'],
+    ads: ['ad-1'],
+    objectives: ['sales', 'awareness'],
+    paths: ['awareness', 'traffic', 'conversion'],
+    projects: [{ id: 'p1', name: 'Q3 Launch', client_id: 'cl1' }],
+    clients: [{ id: 'cl1', name: 'Acme' }],
+    health: ['improving', 'stable', 'watch', 'fatigued', 'insufficient_data'],
+  },
+  ...over,
+})
+
+const mocked = vi.mocked(getCreativePulse)
+
+describe('CreativePulseSection', () => {
+  beforeEach(() => {
+    mocked.mockReset()
+    mocked.mockResolvedValue(pulse())
+  })
+
+  const render = (props: Partial<Parameters<typeof CreativePulseSection>[0]> = {}) =>
+    renderWithProviders(
+      <CreativePulseSection
+        libraryPath="/app/content"
+        filters={{ from: '2026-07-08', to: '2026-08-06', providers: ['meta'] }}
+        {...props}
+      />,
+      { locale: 'en' },
+    )
+
+  it('sends the host dashboard’s filters to the server rather than filtering in the browser', async () => {
+    render()
+
+    await screen.findByText('Best image')
+
+    expect(mocked).toHaveBeenCalledWith(
+      expect.objectContaining({ from: '2026-07-08', to: '2026-08-06', providers: ['meta'] }),
+      undefined,
+    )
+  })
+
+  /**
+   * The two things that make a ranking checkable: which metric, and which marketing path.
+   *
+   * A dashboard card reading «best video» with neither is a verdict nobody can verify, and one
+   * computed across paths would be judging an awareness film by a sales figure.
+   */
+  it('names the metric and the marketing path behind every winner', async () => {
+    render()
+
+    const image = (await screen.findByText('Best image')).closest('article') as HTMLElement
+    expect(within(image).getByText('ROAS')).toBeInTheDocument()
+    expect(within(image).getByText('Conversion & sales')).toBeInTheDocument()
+
+    const video = (await screen.findByText('Best video')).closest('article') as HTMLElement
+    expect(within(video).getByText('CPM')).toBeInTheDocument()
+    expect(within(video).getByText('Awareness')).toBeInTheDocument()
+
+    // And there is no card claiming an overall winner across the paths.
+    expect(screen.queryByText(/best creative/i)).not.toBeInTheDocument()
+  })
+
+  /** A winner nothing evidenced is offered as provisional — not as a finding. */
+  it('says when a winner was chosen with thin evidence', async () => {
+    render()
+
+    const video = (await screen.findByText('Best video')).closest('article') as HTMLElement
+    expect(within(video).getByText(/Provisional/)).toBeInTheDocument()
+
+    const image = screen.getByText('Best image').closest('article') as HTMLElement
+    expect(within(image).getByText('Chosen from 2 creatives')).toBeInTheDocument()
+    expect(within(image).queryByText(/Provisional/)).not.toBeInTheDocument()
+  })
+
+  /**
+   * A card links into the library carrying the selection it was computed under, plus the creative.
+   *
+   * A drill-down that dropped the dashboard's period would land on a different set of creatives
+   * than the card the reader clicked.
+   */
+  it('links into the library carrying the filters and the creative', async () => {
+    render()
+
+    // The same creative is both the objective winner and the best image, so it legitimately appears
+    // twice; either link has to carry the whole selection.
+    const links = await screen.findAllByRole('link', { name: 'Hero image' })
+    const href = links[0].getAttribute('href') ?? ''
+
+    expect(href).toContain('/app/content?')
+    expect(href).toContain('from=2026-07-08')
+    expect(href).toContain('to=2026-08-06')
+    expect(href).toContain('providers%5B%5D=meta')
+    expect(href).toContain('creative=cr-1')
+  })
+
+  /** The drill-down chain is Platform › Campaign › Ad set › Ad › Creative, each one narrower. */
+  it('offers the full drill-down from platform down to the creative', async () => {
+    render()
+
+    const nav = (await screen.findAllByRole('navigation', { name: 'Drill down' }))[0]
+
+    const campaign = within(nav).getByRole('link', { name: 'National Day Sale' })
+    expect(campaign.getAttribute('href')).toContain('campaign_ids%5B%5D=c1')
+
+    const adSet = within(nav).getByRole('link', { name: 'Ad set' })
+    expect(adSet.getAttribute('href')).toContain('ad_set_ids%5B%5D=set-1')
+    expect(adSet.getAttribute('href')).toContain('campaign_ids%5B%5D=c1')
+
+    const ad = within(nav).getByRole('link', { name: 'Ad' })
+    expect(ad.getAttribute('href')).toContain('ad_ids%5B%5D=ad-1')
+  })
+
+  /** A dashboard is the worst page to mount players on — it is the one most often left open. */
+  it('mounts no video element, whatever the creative is', async () => {
+    const { container } = render()
+
+    await screen.findByText('Best video')
+
+    expect(container.querySelectorAll('video')).toHaveLength(0)
+  })
+
+  /** The fatigue states are links into the library, so a count is a way in rather than a fact. */
+  it('turns each fatigue state into a way into the library', async () => {
+    render()
+
+    const fatigued = await screen.findByRole('link', { name: /Fatigued 1/ })
+    expect(fatigued.getAttribute('href')).toContain('health=fatigued')
+  })
+
+  /**
+   * A control the section owns narrows the SAME query — it does not slice what was already fetched.
+   *
+   * The axis is added to the request; nothing is filtered in the browser, so the totals and the
+   * rankings are recomputed over the narrowed set rather than over a subset of the wide one.
+   */
+  it('refetches with the added axis when its own filter changes', async () => {
+    render({ axes: ['clients'] })
+
+    const select = await screen.findByLabelText('Client')
+    fireEvent.change(select, { target: { value: 'cl1' } })
+
+    await waitFor(() =>
+      expect(mocked).toHaveBeenLastCalledWith(expect.objectContaining({ client_ids: ['cl1'] }), undefined),
+    )
+  })
+
+  /** «Six of nineteen» — a section showing part of a list and not saying so reads as the whole. */
+  it('states the real total when a list is longer than what it shows', async () => {
+    mocked.mockResolvedValue(
+      pulse({
+        declining: {
+          items: [
+            {
+              metric: 'roas', higher_wins: true, current: 2, previous: 5,
+              change: -0.6, improvement: -0.6, creative: card({ id: 'cr-9', name: 'Tired ad' }),
+            },
+          ],
+          total: 19,
+          shown: 1,
+        },
+      }),
+    )
+
+    render()
+
+    expect(await screen.findByText('Showing 1 of 19')).toBeInTheDocument()
+  })
+
+  /**
+   * An images-versus-videos table marks the winner per metric and never overall — and a metric the
+   * platform did not report reads «Not provided», not 0.
+   */
+  it('compares images and videos metric by metric, and never invents a zero', async () => {
+    mocked.mockResolvedValue(
+      pulse({
+        image_vs_video: [
+          {
+            path: 'conversion',
+            headline_metrics: ['spend', 'roas', 'video_views'],
+            image: metrics({ roas: 5 }),
+            video: metrics({ roas: 9 }),
+          },
+        ],
+      }),
+    )
+
+    render()
+
+    const table = (await screen.findByText('Images vs videos')).closest('div') as HTMLElement
+    // Neither side reported video views — so neither shows a zero, and neither wins the row.
+    const unreported = within(table).getByText('Video views').closest('tr') as HTMLElement
+    expect(within(unreported).getAllByText('Not provided')).toHaveLength(2)
+
+    // And the metric both sides DID report marks its winner — per metric, never overall.
+    const roasRow = within(table).getByText('ROAS').closest('tr') as HTMLElement
+    const winner = within(roasRow).getByText('9.00×')
+    expect(winner).toBeInTheDocument()
+    expect(winner.className).toContain('text-success')
+    expect(within(roasRow).getByText('5.00×').className).not.toContain('text-success')
+  })
+
+  /**
+   * Nothing to show says so — and says what narrowed it to nothing.
+   *
+   * Found live on `/app`, where the dashboard's filters sit behind a «customise» dialog: the section
+   * read «no creatives match this selection» on a workspace with four creatives, because the page
+   * defaults to the awareness objective and that workspace runs only sales. Both statements were
+   * true and the reader could see neither the cause nor the cure.
+   */
+  it('says there is nothing, and names the filter that made it nothing', async () => {
+    mocked.mockResolvedValue(
+      pulse({
+        totals: { creatives: 0, with_metrics: 0, without_metrics: 0 },
+        best_by_objective: [],
+        best_image: [],
+        best_video: [],
+      }),
+    )
+
+    renderWithProviders(
+      <CreativePulseSection
+        libraryPath="/app/content"
+        filters={{ from: '2026-07-08', to: '2026-08-06', objectives: ['awareness'], providers: ['meta'] }}
+      />,
+      { locale: 'en' },
+    )
+
+    expect(await screen.findByText('No creatives match this selection.')).toBeInTheDocument()
+    expect(screen.getByText(/Filtered by: Platform: Meta · Objective: Awareness/)).toBeInTheDocument()
+  })
+
+  /** An unfiltered dashboard carries no line saying it is unfiltered. */
+  it('says nothing about filters when none are applied', async () => {
+    renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
+
+    await screen.findByText('Best image')
+
+    expect(screen.queryByText(/Filtered by/)).not.toBeInTheDocument()
+  })
+})

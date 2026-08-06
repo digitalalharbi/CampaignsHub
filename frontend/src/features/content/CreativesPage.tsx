@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { GitCompare, LayoutGrid, Rows3, Search } from 'lucide-react'
 import { CreativeViewer } from './CreativeViewer'
 import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { imageLoading } from './format'
-import { listCreatives, type CreativeCard, type FatigueStatus, type LibraryQuery } from './api'
+import { libraryQueryString, listCreatives, type CreativeCard, type FatigueStatus, type LibraryQuery } from './api'
 import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -155,6 +156,17 @@ const KIND_LABEL: Record<string, { ar: string; en: string }> = {
   carousel: { ar: 'دوّار', en: 'Carousel' },
 }
 
+/**
+ * The filter axes the address may carry, and the library may be opened on.
+ *
+ * Named in one place because both ends read it: the drill-down writes these keys and this page
+ * seeds its state from them. A key on one side only is a filter that silently fails to travel.
+ */
+const AXIS_KEYS = [
+  'client_ids', 'project_ids', 'providers', 'campaign_ids', 'ad_set_ids',
+  'ad_ids', 'objectives', 'paths', 'kinds', 'statuses',
+] as const
+
 const isoDaysAgo = (days: number) => {
   const d = new Date()
   d.setDate(d.getDate() - days)
@@ -201,14 +213,35 @@ export function CreativesPage() {
   const t = COPY[ar ? 'ar' : 'en']
   const { currentProjectId } = useProject()
 
+  /*
+   * The address is the opening state (§15.11's drill-down).
+   *
+   * The dashboard's creative cards link here carrying the filters and period they were computed
+   * under, so «best video» has to land on a library narrowed the same way — otherwise the reader
+   * arrives at a different set of creatives than the card they clicked and the two surfaces look
+   * like they disagree. Read once, as the initial value: after that the controls own the state, and
+   * the effect below writes it back so a refresh or a shared link reopens the same page.
+   */
+  const [params, setParams] = useSearchParams()
+  const initial = useRef(params)
+  const opened = useRef(false)
+
   const [view, setView] = useState<'grid' | 'list'>('grid')
-  const [search, setSearch] = useState('')
-  const [from, setFrom] = useState(isoDaysAgo(29))
-  const [to, setTo] = useState(isoDaysAgo(0))
-  const [sort, setSort] = useState('recent')
+  const [search, setSearch] = useState(() => initial.current.get('search') ?? '')
+  const [from, setFrom] = useState(() => initial.current.get('from') ?? isoDaysAgo(29))
+  const [to, setTo] = useState(() => initial.current.get('to') ?? isoDaysAgo(0))
+  const [sort, setSort] = useState(() => initial.current.get('sort') ?? 'recent')
   const [page, setPage] = useState(1)
-  const [axes, setAxes] = useState<Record<string, string[]>>({})
-  const [health, setHealth] = useState('')
+  const [axes, setAxes] = useState<Record<string, string[]>>(() => {
+    const seeded: Record<string, string[]> = {}
+    for (const key of AXIS_KEYS) {
+      const values = initial.current.getAll(`${key}[]`)
+      // Absent, not empty: an axis sent as `[]` is a bound of «nothing» on a fail-closed server.
+      if (values.length > 0) seeded[key] = values
+    }
+    return seeded
+  })
+  const [health, setHealth] = useState(() => initial.current.get('health') ?? '')
   const [selected, setSelected] = useState<string[]>([])
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [comparing, setComparing] = useState(false)
@@ -246,6 +279,20 @@ export function CreativesPage() {
     placeholderData: keepPreviousData,
   })
 
+  /*
+   * The address follows the controls — so a refresh, a Back, or a shared link reopens this view.
+   *
+   * `replace` deliberately: typing in the search box would otherwise push a history entry per
+   * keystroke, and Back would walk the reader backwards through their own typing.
+   */
+  useEffect(() => {
+    const next = libraryQueryString(query).replace(/^\?/, '')
+    const creative = params.get('creative')
+    setParams(creative ? `${next}${next ? '&' : ''}creative=${creative}` : next, { replace: true })
+    // `params` is deliberately absent: including it would re-run this on the write it just made.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, setParams])
+
   const setAxis = (key: string, values: string[]) => {
     setPage(1)
     setAxes((prev) => {
@@ -264,6 +311,27 @@ export function CreativesPage() {
   const total = data?.total ?? 0
   const perPage = data?.per_page ?? 24
   const lastPage = Math.max(1, Math.ceil(total / perPage))
+
+  /*
+   * `?creative=<id>` opens that creative once, when the page it is on has arrived.
+   *
+   * Once, and only when it is actually in the list: reopening on every fetch would fight the reader
+   * closing it, and an id that is filtered out has to leave the library open rather than opening
+   * something else that happens to be at the same index.
+   */
+  useEffect(() => {
+    if (opened.current) return
+    const wanted = initial.current.get('creative')
+    const rows = data?.creatives ?? []
+    if (!wanted || rows.length === 0) return
+
+    opened.current = true
+    const index = rows.findIndex((c) => c.id === wanted)
+    if (index >= 0) setViewerIndex(index)
+    // `data`, not `creatives`: the latter is a fresh array on every render, so the effect would run
+    // on every render and lean on the guard above instead of on its dependencies.
+  }, [data])
+
 
   const toggleSelected = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))

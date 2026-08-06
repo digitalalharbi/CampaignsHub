@@ -5,6 +5,8 @@ import { fetchAgencyDashboard, type AgencyDashboard } from './api'
 import { Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
+import { CreativePulseSection } from '@/features/content/CreativePulseSection'
+import type { LibraryQuery } from '@/features/content/api'
 
 /**
  * `/agency/dashboard` — the agency's own overview (ADR 0002, AGENCY-002).
@@ -256,9 +258,33 @@ export function AgencyDashboardPage() {
           </ul>
         </section>
       </div>
+
+      {/*
+        §15.11 — the creative section, over the clients this operator actually reaches.
+
+        This page carries no filters of its own, so the section renders its own: period, client,
+        project, platform, objective and creative type. Every one of them narrows inside the
+        membership ceiling the banner above describes — a control here cannot widen what the scope
+        already decided, and the same options populate it that populate the library's filter bar.
+      */}
+      <div className="mt-4">
+        <CreativePulseSection
+          libraryPath="/agency/content"
+          axes={['period', 'clients', 'projects', 'providers', 'objectives', 'kinds']}
+          filters={AGENCY_WINDOW}
+        />
+      </div>
     </div>
   )
 }
+
+/**
+ * The section's starting window, defined once outside the component.
+ *
+ * A fresh object literal on every render is a new query key on every render, which turns a cached
+ * section into one that refetches whenever anything else on the page changes.
+ */
+const AGENCY_WINDOW: LibraryQuery = {}
 
 function AttentionRow({ to, label, value, ar }: { to: string; label: string; value: number; ar: boolean }) {
   return (

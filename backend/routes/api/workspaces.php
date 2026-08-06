@@ -75,6 +75,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
      * discrepancy, and this is the removal of the one that existed.
      */
     Route::get('creatives', [CreativeAnalysisController::class, 'index'])->name('creatives.library');
+    // §15.11 — the dashboard's creative section, over the same query as the library above.
+    Route::get('creatives/pulse', [CreativeAnalysisController::class, 'pulse'])->name('creatives.pulse');
     Route::post('creatives/compare', [CreativeAnalysisController::class, 'compare'])->name('creatives.compare');
     Route::get('files/library', [FilesLibraryController::class, 'index'])->name('files.library');
 });

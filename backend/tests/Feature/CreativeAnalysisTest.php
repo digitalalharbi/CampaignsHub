@@ -319,4 +319,66 @@ final class CreativeAnalysisTest extends TestCase
         $this->assertEqualsWithDelta(3.0, $figures['frequency'], 0.01);
         $this->assertSame(2, $figures['active_days']);
     }
+
+    /**
+     * Summing creatives together keeps «not reported» — it does not become a zero in the total.
+     *
+     * This is the aggregate the dashboard's images-versus-videos comparison is built from. If the
+     * sum treated a silent metric as 0, the comparison would report a completion rate over a
+     * denominator missing most of its views and present it as a measurement.
+     */
+    public function test_an_aggregate_keeps_a_metric_nobody_reported_null(): void
+    {
+        $totals = app(CreativeMetrics::class)->aggregate([
+            ['spend' => 100.0, 'impressions' => 10000.0, 'clicks' => 200.0, 'video_views' => null, 'active_days' => 5],
+            ['spend' => 300.0, 'impressions' => 30000.0, 'clicks' => 400.0, 'video_views' => null, 'active_days' => 7],
+        ]);
+
+        $this->assertSame(400.0, $totals['spend']);
+        $this->assertNull($totals['video_views'], 'a metric neither creative reported was summed to zero');
+        $this->assertFalse($totals['reported']['video_views']);
+        $this->assertNull($totals['view_rate'], 'a rate was derived from an unreported numerator');
+        $this->assertEqualsWithDelta(0.015, $totals['ctr'], 0.0001);
+        // The window is seven days long, not twelve: the same days, delivered twice.
+        $this->assertSame(7, $totals['active_days']);
+        $this->assertSame(2, $totals['creatives']);
+    }
+
+    /** A metric only SOME creatives reported sums what was actually sent, and says it was reported. */
+    public function test_an_aggregate_sums_what_was_reported_when_only_some_reported_it(): void
+    {
+        $totals = app(CreativeMetrics::class)->aggregate([
+            ['spend' => 100.0, 'impressions' => 10000.0, 'conversions' => 5.0, 'revenue' => 900.0],
+            ['spend' => 100.0, 'impressions' => 10000.0, 'conversions' => null, 'revenue' => null],
+        ]);
+
+        $this->assertSame(5.0, $totals['conversions']);
+        $this->assertTrue($totals['reported']['conversions']);
+        $this->assertTrue($totals['reported']['orders']);
+        $this->assertEqualsWithDelta(4.5, $totals['roas'], 0.001);
+    }
+
+    /**
+     * Frequency across creatives is weighted by impressions, because an average is not a sum.
+     *
+     * A creative shown twice to a hundred thousand people and one shown eight times to two hundred
+     * do not average to five. The plain mean would let the smaller creative dominate the figure that
+     * describes the audience's exposure.
+     */
+    public function test_an_aggregate_weights_frequency_by_impressions(): void
+    {
+        $totals = app(CreativeMetrics::class)->aggregate([
+            ['impressions' => 100000.0, 'frequency' => 2.0],
+            ['impressions' => 200.0, 'frequency' => 8.0],
+        ]);
+
+        $this->assertEqualsWithDelta(2.012, $totals['frequency'], 0.01);
+        $this->assertNotEqualsWithDelta(5.0, $totals['frequency'], 0.5, 'the plain mean of two averages was used');
+    }
+
+    /** Nothing to add up is null — never a row of zeroes that reads as a measured result. */
+    public function test_an_aggregate_of_nothing_is_null(): void
+    {
+        $this->assertNull(app(CreativeMetrics::class)->aggregate([]));
+    }
 }

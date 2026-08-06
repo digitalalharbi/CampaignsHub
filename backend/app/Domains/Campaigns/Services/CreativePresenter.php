@@ -54,6 +54,15 @@ final class CreativePresenter
             'status' => $creative->status,
             'campaign_id' => $creative->campaign_id === null ? null : (string) $creative->campaign_id,
             'campaign_name' => $campaign?->name,
+            /*
+             * The two rungs between the campaign and the creative.
+             *
+             * The dashboard's drill-down is campaign → ad set → ad → creative, and every step of it
+             * has to be a link the card can build. Without these the chain stops at the campaign and
+             * the last two steps become filters the reader has to set by hand.
+             */
+            'ad_set_id' => $creative->external_ad_set_id === null ? null : (string) $creative->external_ad_set_id,
+            'ad_id' => $creative->external_ad_id === null ? null : (string) $creative->external_ad_id,
             'preview' => $preview,
             'aspect_ratio' => $creative->aspect_ratio,
             'duration_seconds' => $creative->duration_seconds,
@@ -64,6 +73,9 @@ final class CreativePresenter
             'height' => $creative->height,
             'file_size' => $creative->file_size === null ? null : (int) $creative->file_size,
             'grouped' => $creative->creative_group_id !== null,
+            // The group itself, not only the fact of one: «this asset ran on three platforms» is a
+            // per-GROUP question, and a boolean cannot be grouped by. Null for a lone creative.
+            'group_id' => $creative->creative_group_id === null ? null : (string) $creative->creative_group_id,
             'is_demo' => (bool) $creative->is_demo,
             'freshness' => [
                 'last_synced_at' => $creative->last_synced_at?->toIso8601String(),

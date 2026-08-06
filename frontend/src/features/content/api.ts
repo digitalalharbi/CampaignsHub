@@ -74,6 +74,9 @@ export interface CreativeCard {
   status: string
   campaign_id: string | null
   campaign_name: string | null
+  /** The two rungs between the campaign and the creative — the dashboard's drill-down needs both. */
+  ad_set_id: string | null
+  ad_id: string | null
   preview: CreativePreview
   aspect_ratio: string | null
   duration_seconds: number | null
@@ -81,6 +84,8 @@ export interface CreativeCard {
   height: number | null
   file_size: number | null
   grouped: boolean
+  /** The group itself, not only that there is one — «best platform» is a per-group question. */
+  group_id: string | null
   is_demo: boolean
   freshness: {
     last_synced_at: string | null

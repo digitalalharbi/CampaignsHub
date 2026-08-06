@@ -13,6 +13,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CreativeFatigue;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativePresenter;
+use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -100,6 +101,52 @@ final class CreativeAnalysisController extends Controller
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'filters' => $this->filterOptions($request, $project),
         ], 'Creative library.');
+    }
+
+    /**
+     * The dashboard's creative section (§15.11) — the same creatives the library lists, read as an answer.
+     *
+     * It takes the SAME query as `index()`: the same reach, the same filters, the same window. That
+     * is the whole design. A dashboard section built on its own query is a section that can disagree
+     * with the page it links into — the operator clicks «best video», lands on the library, and finds
+     * a different video at the top. Here, changing a filter changes both because there is one query
+     * and one aggregation behind them.
+     *
+     * Query count does not grow with the number of creatives: the rows are fetched once, this window
+     * and the previous one are two grouped queries, and the campaigns are a third. A project with a
+     * thousand creatives costs the same four queries as one with ten (§15.14).
+     */
+    public function pulse(Request $request, CreativePulse $pulse, ?string $project = null): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+
+        [$from, $to] = $this->window($request);
+
+        $query = ExternalCreative::query();
+
+        if ($project !== null) {
+            $query->where('project_id', $project);
+        }
+
+        $this->applyReach($query, $request);
+        $this->applyFilters($query, $request);
+
+        $rows = $this->present($query->get(), $from, $to, withFatigue: true, withPrevious: true);
+
+        return ApiResponse::success(
+            $pulse->build($rows, $from, $to) + [
+                /*
+                 * The same options the library's filter bar is built from.
+                 *
+                 * The section carries its own controls on a dashboard that has none of its own — and
+                 * a control populated from an enum would offer platforms this account has never run,
+                 * which is a filter that returns nothing and reads as «no data». Derived from the
+                 * rows in reach, exactly as the library's are.
+                 */
+                'filters' => $this->filterOptions($request, $project),
+            ],
+            'Creative pulse.',
+        );
     }
 
     /**
@@ -466,7 +513,7 @@ final class CreativeAnalysisController extends Controller
      * @param  Collection<int, ExternalCreative>  $creatives
      * @return list<array<string, mixed>>
      */
-    private function present(mixed $creatives, Carbon $from, Carbon $to, bool $withFatigue): array
+    private function present(mixed $creatives, Carbon $from, Carbon $to, bool $withFatigue, bool $withPrevious = false): array
     {
         $ids = array_map('strval', $creatives->modelKeys());
         if ($ids === []) {
@@ -476,7 +523,7 @@ final class CreativeAnalysisController extends Controller
         $figures = $this->metrics->forCreatives($ids, $from, $to);
 
         $previous = [];
-        if ($withFatigue) {
+        if ($withFatigue || $withPrevious) {
             $days = $from->diffInDays($to) + 1;
             $prevTo = $from->copy()->subDay();
             $previous = $this->metrics->forCreatives($ids, $prevTo->copy()->subDays($days - 1), $prevTo);
@@ -501,6 +548,17 @@ final class CreativeAnalysisController extends Controller
 
             if ($withFatigue) {
                 $row['fatigue'] = $this->fatigue->assess($figures[$id] ?? ['active_days' => 0], $previous[$id] ?? null);
+            }
+
+            /*
+             * The previous period's figures, on the row, for the dashboard only.
+             *
+             * «Fastest growing» is a comparison, and the comparison has to be made where the two
+             * periods are both in hand. The library does not carry this — a page of 24 cards would
+             * double its payload for a figure no card shows.
+             */
+            if ($withPrevious) {
+                $row['previous'] = $previous[$id] ?? null;
             }
 
             $out[] = $row;

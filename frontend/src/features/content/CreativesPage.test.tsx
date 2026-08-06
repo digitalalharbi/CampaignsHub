@@ -253,6 +253,58 @@ describe('CreativesPage', () => {
     expect(await screen.findByText(/carries a credential/)).toBeInTheDocument()
   })
 
+  /**
+   * The landing half of §15.11's drill-down: the address IS the opening selection.
+   *
+   * The dashboard's cards link here carrying the filters and period they were computed under. If the
+   * page ignored them, «best video» would land on an unfiltered library — a different set of
+   * creatives than the card the reader clicked, which is how two surfaces come to look like they
+   * disagree when they are reading the same pipeline.
+   */
+  it('opens on the filters the address carries', async () => {
+    renderWithProviders(<CreativesPage />, {
+      locale: 'en',
+      route: '/app/content?from=2026-01-01&to=2026-01-31&providers[]=tiktok&campaign_ids[]=c1&health=fatigued',
+    })
+
+    await screen.findByRole('article')
+
+    expect(vi.mocked(listCreatives)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: '2026-01-01',
+        to: '2026-01-31',
+        providers: ['tiktok'],
+        campaign_ids: ['c1'],
+        health: 'fatigued',
+      }),
+      null,
+    )
+  })
+
+  /** `?creative=<id>` is the last rung of the drill-down — it opens that creative, not that index. */
+  it('opens the creative the address names', async () => {
+    vi.mocked(listCreatives).mockResolvedValue(
+      page({
+        creatives: [card({ id: 'cr-1', name: 'Hero image' }), card({ id: 'cr-2', name: 'Brand film' })],
+        total: 2,
+      }),
+    )
+
+    renderWithProviders(<CreativesPage />, { locale: 'en', route: '/app/content?creative=cr-2' })
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Brand film')).toBeInTheDocument()
+  })
+
+  /** An id that this selection filtered out leaves the library open — it does not open a neighbour. */
+  it('opens nothing when the named creative is not in the results', async () => {
+    renderWithProviders(<CreativesPage />, { locale: 'en', route: '/app/content?creative=cr-missing' })
+
+    await screen.findByRole('article')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('switches between grid and list without refetching', async () => {
     renderWithProviders(<CreativesPage />, { locale: 'en' })
     await screen.findByRole('article')
