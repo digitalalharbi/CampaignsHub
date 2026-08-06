@@ -10,6 +10,85 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## Session — 2026-08-06 (later still) · §15.13, creative groups + the dashboard findings
+
+**Tree clean. Backend full suite green · Pint clean · vitest 767 / 105 files · `tsc -b` · oxlint 0
+errors · production build clean.**
+
+### The group as a unit
+
+`/app/content/groups` and `/agency/content/groups`, over `GET /creatives/groups` and
+`/creatives/groups/{group}` — reach-scoped, like the detail page and for the same reason: a library
+card carries no project id, so a route that demanded one could not be linked to from the page that
+lists them. The group is derived from the members that survived the reach, so a group in another
+client is NOT FOUND rather than found-and-refused.
+
+**Nothing on the page computes a figure.** The roll-up is `CreativeMetrics::aggregate` over the rows
+`CreativeRows` already presents — the library's own rows — and the per-platform lines are the same
+summation one level down, so they add back to the total by construction rather than by both being
+computed correctly. Live: 12,742.65 + 22,653 = 35,395.65 exactly.
+
+### What a group refuses to say
+
+Spend and impressions add across platforms. CPA and ROAS do NOT add across OBJECTIVES. When the
+members disagree, `groupSummary` sends `mixed_objectives`, an EMPTY `headline_metrics` and a stated
+reason, and the page prints the reason where the number would have been — a reader who only sees an
+absent ROAS concludes the sync broke. Verified live by merging an awareness cut with a sales cut:
+spend, impressions and clicks; no ROAS anywhere on the screen.
+
+The rule lives in the RESPONSE, not in the page. A UI-side rule is one every other surface has to
+remember separately, and the first surface that forgets prints the blended figure.
+
+### Merge and split
+
+`POST /creatives/group` derives the project from the SELECTION and refuses one that spans two —
+a group is one asset and one asset cannot sit in two clients' books; no later split takes it back
+out of a report already sent. The reach is applied to the selection rather than checked after, so an
+id outside the ceiling is dropped on the way IN and the merge simply has fewer than two candidates.
+A creative already grouped MOVES, and any group left holding fewer than two members is dissolved.
+
+The project-pinned pair still answers; both routes share `mergeCandidates` / `splitCreative`, and a
+test asserts it, because two routes into one behaviour is how a second implementation appears.
+
+The audit trail is read from the append-only log BY ENTITY ID, so a split that dissolved a group
+still has its record. Live: «دمج · بواسطة Demo Owner».
+
+### The dashboard findings — the API-without-a-UI closed
+
+`GET /creatives/pulse` had returned `insights` since `bbcddce` and `CreativePulseSection` drew none
+of them. Now it draws them through the SAME `CreativeInsightCard` the detail page uses, extracted so
+a finding cannot be worded one way on the dashboard and another way on the page it links into.
+
+### Three defects found LIVE, not by the suite
+
+1. **Findings were being silently dropped.** `key` is the RULE, and `spend_without_evidence` fires
+   once per thin creative — React collapsed the repeats, so the panel rendered nine while the honest
+   total beside it read «12 of 91». `CreativeInsights::finding` now carries an `id` (rule + creative)
+   and both render sites key on it. A list that drops rows while reporting the full count is worse
+   than one that reports fewer.
+2. **A group was named differently from its own members.** The unnamed default took `name`; the
+   cards show `client_display_name ?: name`. Live, a group headed «Creative 0 — video» sat above two
+   members both labelled «Hero Video».
+3. Both now have tests that fail on the previous code.
+
+### Still true, still recorded
+
+The 2,040 stale demo rows with fractional counts are still in the DEV database (visible above as
+«254.08 clicks»). The seeders are correct — the guard re-seeds and passes. Re-seeding clears it.
+
+### Exact next task
+
+**§14.6 objective layouts · §14.7–14.8 comparisons, pacing, funnel drop-off, anomaly detection ·
+REPORT-OBJECTIVE-005 attribution and deduplication · `PRODUCTION_HANDOVER.md` · clean install +
+upgrade path · the E2E half of the §15 acceptance tests · **the full three-browser Playwright gate,
+still not run since `2ea6943`** — its verdict must come from Playwright's own exit code, with no
+file or database change during it.
+
+Then the platform integrations, in the mandated order and one at a time: **Snapchat, TikTok, Meta,
+Google Ads, X, LinkedIn.** Each gets its own read-only adapter wired into every section before the
+next one starts, and each stays `BLOCKED_EXTERNAL_CREDENTIALS` until a real OAuth round trip,
+account discovery and an actual sync have happened.
+
 ## Session — 2026-08-06 (later) · §15.6, the creative details page
 
 **HEAD `75017fb`. Tree clean. Backend 1500 passed (8538 assertions) · Pint clean · vitest 104 files
@@ -83,7 +162,7 @@ CSS transition never advances and anything with `transition-transform` computes 
 matrix regardless of its inline transform. Remove the class and the same element scales exactly as
 specified (496px → 992px at 200%). Zoom works; the clock is stopped.
 
-### Exact next task
+### Exact next task — DONE, superseded by the §15.13 section above
 
 **§15.13 — the Creative Groups UI** (endpoints exist, no UI), and with it the dashboard findings
 block above. Then §14.6 objective layouts · §14.7–14.8 comparisons, pacing, funnel drop-off, anomaly

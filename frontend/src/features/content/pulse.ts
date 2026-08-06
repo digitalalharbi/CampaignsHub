@@ -2,6 +2,7 @@ import { getData } from '@/lib/api/client'
 import {
   libraryQueryString,
   type CreativeCard,
+  type CreativeInsight,
   type CreativeMetrics,
   type FatigueStatus,
   type LibraryFilterOptions,
@@ -135,6 +136,21 @@ export interface CreativePulse {
   best_platform: PulseList<PlatformComparison>
   /** The same options the library's filter bar offers — derived from the rows in reach, not an enum. */
   filters: LibraryFilterOptions
+  /**
+   * §15.10 — the same rows, read as findings rather than as rankings.
+   *
+   * Built by `CreativeInsights` from the array the section is already holding, so a finding can
+   * never cite a figure the cards beside it disagree with. `shown` and `total` are both here because
+   * a truncated list that reports only what fits reads as «this is everything».
+   */
+  insights: {
+    items: CreativeInsight[]
+    total: number
+    shown: number
+    evidence: { min_impressions: number; min_change: number }
+    period: { from: string; to: string; days: number }
+    previous_period: { from: string; to: string }
+  }
   freshness: {
     last_synced_at: string | null
     providers: Array<{

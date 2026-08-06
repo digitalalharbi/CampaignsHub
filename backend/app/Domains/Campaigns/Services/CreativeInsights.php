@@ -605,6 +605,16 @@ final class CreativeInsights
         }
 
         return [
+            /*
+             * The identity of this FINDING, as distinct from the identity of the RULE.
+             *
+             * `key` is the rule — «ctr fell» — and it fires once per creative, so any surface
+             * listing findings across a whole account receives the same `key` many times. Anything
+             * de-duplicating by it silently drops findings while still reporting the honest total:
+             * live, a dashboard promising «12 of 91» rendered nine, because React collapsed the
+             * repeats of `spend_without_evidence`. The rule stays readable; this is what is unique.
+             */
+            'id' => $key.':'.($row['id'] ?? ''),
             'key' => $key,
             'severity' => $severity,
             'comparison' => $peerBased ? 'peers' : 'previous_period',

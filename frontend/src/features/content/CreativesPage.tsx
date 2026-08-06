@@ -1,15 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { GitCompare, LayoutGrid, Rows3, Search } from 'lucide-react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { GitCompare, Layers, LayoutGrid, Rows3, Search } from 'lucide-react'
 import { CreativeViewer } from './CreativeViewer'
 import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { imageLoading } from './format'
-import { libraryQueryString, listCreatives, type CreativeCard, type FatigueStatus, type LibraryQuery } from './api'
+import {
+  groupCreatives,
+  libraryQueryString,
+  listCreatives,
+  type CreativeCard,
+  type FatigueStatus,
+  type LibraryQuery,
+} from './api'
 import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
+import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
 import { campaignStatusLabel, marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
@@ -70,6 +78,12 @@ const COPY = {
     compare: 'مقارنة',
     compareHint: 'اختر محتويين أو أكثر للمقارنة.',
     selected: 'محدَّد',
+    merge: 'دمج كأصل واحد',
+    merging: 'جارٍ الدمج…',
+    merged: 'تم دمج {n} محتويات كأصل واحد.',
+    mergeFailed: 'تعذّر الدمج. تأكد أن المحتويات المختارة تتبع المشروع نفسه.',
+    openGroup: 'فتح المجموعة',
+    groups: 'المجموعات',
     clearSelection: 'إلغاء التحديد',
     empty: 'لا توجد محتويات تطابق هذا التحديد.',
     emptyAll: 'لا توجد محتويات بعد — تظهر هنا بعد مزامنة الحملات.',
@@ -116,6 +130,12 @@ const COPY = {
     compare: 'Compare',
     compareHint: 'Select two or more creatives to compare.',
     selected: 'selected',
+    merge: 'Merge as one asset',
+    merging: 'Merging…',
+    merged: '{n} creatives were merged as one asset.',
+    mergeFailed: 'The merge failed. Check that the selected creatives belong to the same project.',
+    openGroup: 'Open group',
+    groups: 'Groups',
     clearSelection: 'Clear selection',
     empty: 'No creatives match this selection.',
     emptyAll: 'No creatives yet — they appear here after campaigns sync.',
@@ -256,6 +276,25 @@ export function CreativesPage() {
   const [selected, setSelected] = useState<string[]>([])
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [comparing, setComparing] = useState(false)
+  const [mergeNotice, setMergeNotice] = useState<{ message: string; groupId: string | null } | null>(null)
+
+  /*
+   * §15.8 — merging is `campaigns.link`, the permission that already means «these two platform
+   * records are one thing». The button is absent rather than disabled without it: a control that
+   * always refuses teaches the reader nothing about what they may do.
+   */
+  const canLink = useAuth((s) => s.hasPermission('campaigns.link'))
+  const queryClient = useQueryClient()
+
+  const merge = useMutation({
+    mutationFn: (ids: string[]) => groupCreatives(ids),
+    onSuccess: (group) => {
+      setMergeNotice({ message: t.merged.replace('{n}', String(group.creative_ids.length)), groupId: group.id })
+      setSelected([])
+      void queryClient.invalidateQueries({ queryKey: ['creative-library'] })
+      void queryClient.invalidateQueries({ queryKey: ['creative-groups'] })
+    },
+  })
 
   const query: LibraryQuery = useMemo(
     () => ({
@@ -387,6 +426,15 @@ export function CreativesPage() {
             {t.compare}
             {selected.length > 0 && <span dir="ltr"> ({selected.length})</span>}
           </Button>
+
+          {/* Relative, so one component serves both portals without being told which mounted it. */}
+          <Link
+            to="groups"
+            className="flex items-center gap-1 rounded-md border border-border px-3 py-2 text-sm text-text-secondary hover:bg-surface-hover"
+          >
+            <Layers className="h-4 w-4" aria-hidden />
+            {t.groups}
+          </Link>
         </div>
       </header>
 
@@ -523,13 +571,41 @@ export function CreativesPage() {
         )}
 
         {selected.length > 0 && (
-          <div className="flex items-center gap-2 text-xs text-text-secondary">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
             <span dir="ltr">{selected.length}</span>
             <span>{t.selected}</span>
             <button type="button" onClick={() => setSelected([])} className="underline">
               {t.clearSelection}
             </button>
+            {canLink && (
+              <button
+                type="button"
+                disabled={selected.length < 2 || merge.isPending}
+                onClick={() => merge.mutate(selected)}
+                className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-text-primary hover:bg-surface-hover disabled:opacity-50"
+              >
+                <Layers className="h-3.5 w-3.5" aria-hidden />
+                {merge.isPending ? t.merging : t.merge}
+              </button>
+            )}
           </div>
+        )}
+
+        {mergeNotice && (
+          <p className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface-hover p-2 text-xs" role="status">
+            <span className="text-text-primary">{mergeNotice.message}</span>
+            {mergeNotice.groupId && (
+              <Link to={`groups?group=${mergeNotice.groupId}`} className="text-primary underline">
+                {t.openGroup}
+              </Link>
+            )}
+          </p>
+        )}
+
+        {merge.isError && (
+          <p className="rounded-md border border-danger/40 bg-danger/10 p-2 text-xs text-text-primary" role="alert">
+            {t.mergeFailed}
+          </p>
         )}
       </section>
 

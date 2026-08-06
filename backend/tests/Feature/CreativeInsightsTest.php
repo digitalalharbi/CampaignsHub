@@ -408,4 +408,30 @@ final class CreativeInsightsTest extends TestCase
 
         $this->assertSame([], $this->insights());
     }
+
+    /**
+     * A finding's id is unique; its `key` is the RULE and is deliberately not.
+     *
+     * Found live on the dashboard: `spend_without_evidence` fires once per thin creative, so a list
+     * spanning an account held twelve items and several shared that key. React de-duplicates by key,
+     * so the panel rendered nine while the honest total beside it still said «12 of 91» — findings
+     * silently dropped by a list that looked complete.
+     */
+    public function test_findings_are_uniquely_identified_even_when_one_rule_fires_many_times(): void
+    {
+        // Three creatives, each carrying spend behind almost no delivery — one rule, three findings.
+        foreach (['a', 'b', 'c'] as $slug) {
+            $creative = $this->creative(['name' => 'Thin '.$slug]);
+            $this->now($creative, ['spend' => 500, 'impressions' => 40]);
+        }
+
+        $items = $this->insights();
+        $keys = array_column($items, 'key');
+        $ids = array_column($items, 'id');
+
+        $this->assertGreaterThanOrEqual(3, count($items));
+        // The rule repeats — that is correct, and it is why the id has to be something else.
+        $this->assertLessThan(count($keys), count(array_unique($keys)));
+        $this->assertSame(count($ids), count(array_unique($ids)), 'two findings share one id');
+    }
 }

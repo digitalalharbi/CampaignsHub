@@ -4,9 +4,10 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Maximize2, Minus, Plus, RotateCcw } from 'lucide-react'
 import { CreativeViewer } from './CreativeViewer'
 import { CreativeVideoPlayer } from './CreativeVideoPlayer'
+import { CreativeInsightCard } from './CreativeInsightCard'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { formatBytes, imageLoading } from './format'
-import { getCreativeInReach, type CreativeInsight, type CreativeMetrics, type FunnelStage } from './api'
+import { getCreativeInReach, type CreativeMetrics, type FunnelStage } from './api'
 import { ConversionFunnelChart, MetricLineChart } from '@/features/analytics/charts'
 import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -221,17 +222,7 @@ const FATIGUE_LABEL: Record<string, { ar: string; en: string }> = {
   insufficient_data: { ar: 'بيانات غير كافية', en: 'Insufficient data' },
 }
 
-const CONFIDENCE_LABEL: Record<string, { ar: string; en: string }> = {
-  high: { ar: 'مرتفع', en: 'High' },
-  medium: { ar: 'متوسط', en: 'Medium' },
-  insufficient_data: { ar: 'بيانات غير كافية', en: 'Insufficient data' },
-}
 
-const SEVERITY_TONE: Record<string, string> = {
-  warning: 'border-danger/40 bg-danger/5',
-  opportunity: 'border-brand-500/40 bg-brand-500/5',
-  positive: 'border-success/40 bg-success/5',
-}
 
 const ZOOM_MIN = 0.5
 const ZOOM_MAX = 4
@@ -698,7 +689,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         ) : (
           <ul className="mt-3 space-y-3">
             {data.insights.items.map((item) => (
-              <InsightCard key={item.key} item={item} ar={ar} t={t} />
+              <CreativeInsightCard key={item.id} item={item} locale={locale} />
             ))}
           </ul>
         )}
@@ -839,29 +830,3 @@ function FunnelTable({
 }
 
 /** One finding — with the creative, the window, the figures behind it, and what to do. */
-function InsightCard({ item, ar, t }: { item: CreativeInsight; ar: boolean; t: (typeof COPY)['ar'] }) {
-  const action = ar ? item.action_ar : item.action_en
-
-  return (
-    <li className={`rounded-md border p-3 ${SEVERITY_TONE[item.severity] ?? 'border-border'}`}>
-      <p className="text-sm font-semibold text-text-primary">{ar ? item.title_ar : item.title_en}</p>
-      <p className="mt-1 text-sm text-text-secondary">{ar ? item.detail_ar : item.detail_en}</p>
-      {action && (
-        <p className="mt-2 text-sm text-text-primary">
-          <span className="font-medium">{t.action}:</span> {action}
-        </p>
-      )}
-      <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-secondary">
-        <span>
-          {t.confidence}: {CONFIDENCE_LABEL[item.confidence]?.[ar ? 'ar' : 'en'] ?? item.confidence}
-        </span>
-        <span dir="ltr">{item.period.from} → {item.period.to}</span>
-        <span dir="ltr">{t.previousPeriod}: {item.previous_period.from} → {item.previous_period.to}</span>
-        {/* Declared, always. A model-written finding must never reach a decision undeclared. */}
-        {item.needs_human_review && (
-          <span className="rounded bg-warning/15 px-1.5 py-0.5 text-warning">{t.aiReview}</span>
-        )}
-      </p>
-    </li>
-  )
-}

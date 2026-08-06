@@ -107,7 +107,21 @@ export type SharedCreativeMove = Omit<CreativeMove, 'current' | 'previous'> &
   Withheld & { current: number | null; previous: number | null }
 
 export interface SharedCreativeSummaryPayload
-  extends Omit<CreativePulse, 'filters' | 'best_by_objective' | 'best_image' | 'best_video' | 'fastest_growing' | 'declining'> {
+  extends Omit<
+    CreativePulse,
+    | 'filters'
+    | 'best_by_objective'
+    | 'best_image'
+    | 'best_video'
+    | 'fastest_growing'
+    | 'declining'
+    /*
+     * Omitted and redeclared, because the client's link is not the operator's dashboard: findings
+     * are OPTIONAL here (a link that grants none sends none) and each item is the redacted shape
+     * that has already had its withheld figures removed from the payload — not hidden by the UI.
+     */
+    | 'insights'
+  > {
   best_by_objective: SharedObjectiveWinner[]
   best_image: SharedKindWinner[]
   best_video: SharedKindWinner[]

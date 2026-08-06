@@ -6,10 +6,18 @@ import { renderWithProviders } from '@/test/utils'
 
 vi.mock('./api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./api')>()
-  return { ...actual, listCreatives: vi.fn(), compareCreatives: vi.fn() }
+  return { ...actual, listCreatives: vi.fn(), compareCreatives: vi.fn(), groupCreatives: vi.fn() }
 })
 
-import { listCreatives } from './api'
+import { groupCreatives, listCreatives } from './api'
+import { useAuth } from '@/stores/auth'
+import type { AuthUser } from '@/lib/api/types'
+
+const signIn = (permissions: string[]) =>
+  useAuth.setState({
+    user: { id: '1', name: 'Op', permissions, is_platform_admin: false } as unknown as AuthUser,
+    status: 'authenticated',
+  })
 
 /**
  * The library's acceptance claims (§15.2, §15.4, §15.15).
@@ -123,6 +131,7 @@ const page = (over: Partial<LibraryPage> = {}): LibraryPage => ({
 describe('CreativesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    signIn(['campaigns.view', 'campaigns.link'])
     vi.mocked(listCreatives).mockResolvedValue(page())
   })
 
@@ -314,5 +323,69 @@ describe('CreativesPage', () => {
 
     expect(await screen.findByRole('table')).toBeInTheDocument()
     expect(vi.mocked(listCreatives).mock.calls.length).toBe(before)
+  })
+  /**
+   * §15.8 — merging is offered from the library, because that is where the duplicates are visible.
+   *
+   * The address of the resulting group is offered straight away: a merge whose only confirmation is
+   * a toast leaves the reader to go and find the thing they just made.
+   */
+  it('merges a selection into one asset and offers the group it made', async () => {
+    vi.mocked(groupCreatives).mockResolvedValue({
+      id: 'grp-9',
+      name: 'Brand film',
+      method: 'manual',
+      creative_ids: ['cr-1', 'cr-2'],
+    })
+
+    vi.mocked(listCreatives).mockResolvedValue(
+      page({ creatives: [card(), card({ id: 'cr-2', name: 'Brand film' })], total: 2 }),
+    )
+
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+    await screen.findAllByRole('article')
+
+    for (const name of ['Compare: Hero image', 'Compare: Brand film']) {
+      fireEvent.click(screen.getByRole('checkbox', { name }))
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: /Merge as one asset/ }))
+
+    await waitFor(() => expect(vi.mocked(groupCreatives)).toHaveBeenCalledWith(['cr-1', 'cr-2']))
+    expect(await screen.findByText('2 creatives were merged as one asset.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open group' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('groups?group=grp-9'),
+    )
+  })
+
+  /** Without `campaigns.link` the control is absent — not present and refusing. */
+  it('offers no merge control without the link permission', async () => {
+    signIn(['campaigns.view'])
+
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+    await screen.findByRole('article')
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Compare: Hero image' }))
+
+    expect(screen.queryByRole('button', { name: /Merge as one asset/ })).not.toBeInTheDocument()
+  })
+
+  it('says plainly when a merge was refused rather than failing silently', async () => {
+    vi.mocked(groupCreatives).mockRejectedValue(new Error('422'))
+
+    vi.mocked(listCreatives).mockResolvedValue(
+      page({ creatives: [card(), card({ id: 'cr-2', name: 'Brand film' })], total: 2 }),
+    )
+
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+    await screen.findAllByRole('article')
+
+    for (const name of ['Compare: Hero image', 'Compare: Brand film']) {
+      fireEvent.click(screen.getByRole('checkbox', { name }))
+    }
+    fireEvent.click(screen.getByRole('button', { name: /Merge as one asset/ }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/same project/)
   })
 })

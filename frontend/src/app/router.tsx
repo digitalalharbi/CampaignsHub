@@ -67,6 +67,7 @@ import { DrivePage } from '@/features/drive/DrivePage'
 import { TasksPage } from '@/features/tasks/TasksPage'
 import { CreativesPage } from '@/features/content/CreativesPage'
 import { CreativeDetailPage } from '@/features/content/CreativeDetailPage'
+import { CreativeGroupsPage } from '@/features/content/CreativeGroupsPage'
 import { FilesLibraryPage } from '@/features/files/FilesLibraryPage'
 import { BrandingCenterPage } from '@/features/branding/BrandingCenterPage'
 import { AppShell } from '@/layouts/AppShell'
@@ -301,6 +302,10 @@ export const router = createBrowserRouter([
            * required it could not be linked to from the page that lists them. The ceiling is the
            * membership's, applied on the server to the lookup itself.
            */
+          // Before `content/:creativeId` in the file for legibility; React Router ranks the static
+          // segment above the dynamic one either way, so `/app/content/groups` is the groups page and
+          // never a creative whose id is the word "groups".
+          { path: 'content/groups', element: <CreativeGroupsPage portal="app" /> },
           { path: 'content/:creativeId', element: <CreativeDetailPage portal="app" /> },
           { path: 'reports', element: <ReportsPage /> },
           { path: 'tasks', element: <TasksPage /> },
@@ -440,6 +445,7 @@ export const router = createBrowserRouter([
             { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
             { path: 'content', element: <CreativesPage /> },
             // MOUNTED, not copied — the same page, told which portal to return to (ADR 0002).
+            { path: 'content/groups', element: <CreativeGroupsPage portal="agency" /> },
             { path: 'content/:creativeId', element: <CreativeDetailPage portal="agency" /> },
             { path: 'reports', element: <ReportsPage /> },
             { path: 'alerts', element: <AlertsPage /> },

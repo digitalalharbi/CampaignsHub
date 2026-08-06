@@ -79,6 +79,18 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     Route::get('creatives/pulse', [CreativeAnalysisController::class, 'pulse'])->name('creatives.pulse');
     Route::post('creatives/compare', [CreativeAnalysisController::class, 'compare'])->name('creatives.compare');
     /*
+     * §15.13 — the same asset across platforms, read as one unit.
+     *
+     * Before `creatives/{creative}` for the reason above: `groups` would otherwise be looked up as a
+     * creative whose id is the word "groups". Reach-scoped rather than project-pinned because the
+     * page that lists creatives cannot construct a project id, and the merge derives the project from
+     * the selection instead — refusing a selection that spans two.
+     */
+    Route::get('creatives/groups', [CreativeAnalysisController::class, 'groups'])->name('creatives.groups');
+    Route::get('creatives/groups/{group}', [CreativeAnalysisController::class, 'groupShow'])->name('creatives.groups.show');
+    Route::post('creatives/group', [CreativeAnalysisController::class, 'merge'])->name('creatives.merge');
+    Route::delete('creatives/{creative}/group', [CreativeAnalysisController::class, 'split'])->name('creatives.split');
+    /*
      * §15.6 — the Creative Details page's own address, LAST in this group.
      *
      * After `pulse` and `compare`, or those two would be looked up as creatives whose ids are the

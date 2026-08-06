@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, ImageIcon, PlayCircle, TriangleAlert } from 'lucide-react'
+import { CreativeInsightCard } from './CreativeInsightCard'
 import { getCreativePulse, type CreativeMove, type CreativeWinner, type PathComparison, type SpendByKind } from './pulse'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { imageLoading } from './format'
@@ -77,6 +78,8 @@ const COPY = {
     withoutMetrics: 'بلا أرقام في هذه الفترة',
     withheld: 'روابط محجوبة لحماية بيانات الاعتماد',
     drill: 'التفصيل',
+    findings: 'ما تقوله الأرقام',
+    findingsHint: 'ملاحظات مبنية على هذه الفترة ومقارنتها بالسابقة — المعروض من الإجمالي:',
     platform: 'المنصة',
     campaign: 'الحملة',
     adSet: 'المجموعة الإعلانية',
@@ -138,6 +141,8 @@ const COPY = {
     withoutMetrics: 'No figures in this period',
     withheld: 'Links withheld to protect credentials',
     drill: 'Drill down',
+    findings: 'What the figures say',
+    findingsHint: 'Findings from this period against the previous one — showing:',
     platform: 'Platform',
     campaign: 'Campaign',
     adSet: 'Ad set',
@@ -504,6 +509,39 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                 ))}
               </ul>
               <Counted list={data.fatigue.alerts} t={t} />
+            </div>
+          )}
+
+          {/*
+           * §15.10 on the dashboard — the findings the endpoint has always returned.
+           *
+           * `GET /creatives/pulse` carried `insights` from the day the engine landed and this
+           * section drew none of them: an API without a UI, which is the same defect as a page
+           * without data. Rendered through the SAME card the creative detail page uses, so a finding
+           * cannot be worded one way here and another way on the page it links into.
+           *
+           * Empty is a legitimate answer and gets no box: an account where nothing moved materially
+           * has nothing to be told, and an empty «Findings» panel reads as a broken one.
+           */}
+          {data.insights.items.length > 0 && (
+            <div className="rounded-2xl border border-border bg-surface p-5">
+              <h3 className="text-sm font-semibold text-text">{t.findings}</h3>
+              <p className="mt-1 text-xs text-text-muted">
+                {t.findingsHint}{' '}
+                <span dir="ltr">
+                  {data.insights.shown}/{data.insights.total}
+                </span>
+              </p>
+              <ul className="mt-3 flex flex-col gap-2">
+                {data.insights.items.map((item) => (
+                  <CreativeInsightCard
+                    key={item.id}
+                    item={item}
+                    locale={ar ? 'ar' : 'en'}
+                    creativeHref={item.creative_id ? drill({ creative: item.creative_id }) : null}
+                  />
+                ))}
+              </ul>
             </div>
           )}
 

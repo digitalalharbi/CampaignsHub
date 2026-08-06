@@ -1,4 +1,4 @@
-import { getData, postData } from '@/lib/api/client'
+import { deleteData, getData, postData } from '@/lib/api/client'
 
 /**
  * §15 — the creative library, over one pipeline.
@@ -211,6 +211,14 @@ export interface CreativeFunnelShape {
 
 /** §15.10's findings, for one creative. Every field is evidence for the sentence it carries. */
 export interface CreativeInsight {
+  /**
+   * The identity of this FINDING — the rule plus the creative it is about.
+   *
+   * `key` alone is the RULE, and one rule fires once per creative, so a list spanning an account
+   * holds many items with the same `key`. Keying a list on it drops findings silently while the
+   * total beside them stays honest.
+   */
+  id: string
   key: string
   severity: 'warning' | 'opportunity' | 'positive'
   comparison: 'previous_period' | 'peers'
@@ -286,6 +294,86 @@ export const getCreative = (projectId: string, creativeId: string, window: { fro
  */
 export const getCreativeInReach = (creativeId: string, window: { from?: string; to?: string }) =>
   getData<CreativeDetail>(`/creatives/${creativeId}${libraryQueryString(window)}`)
+
+/**
+ * §15.8, §15.13 — the same asset on more than one platform.
+ *
+ * `mixed_objectives` is the field that keeps this honest. Spend and impressions add across
+ * platforms; CPA and ROAS do not add across OBJECTIVES, so a group holding an awareness cut and a
+ * sales cut of one film carries an empty `headline_metrics` and a stated reason instead of a blended
+ * figure that answers neither question.
+ */
+export interface CreativeGroupSummary {
+  id: string
+  name: string
+  /** Ordered by how much it proves: a hash is evidence, a person's judgement is a decision. */
+  method: string
+  confirmed: boolean
+  confirmed_at: string | null
+  project_id: string
+  creative_count: number
+  providers: string[]
+  objectives: string[]
+  paths: string[]
+  objective: string | null
+  mixed_objectives: boolean
+  /** Empty exactly when the members disagree about the objective — never a fallback KPI set. */
+  headline_metrics: string[]
+  metrics: CreativeMetrics | null
+  mixed_reason_ar: string | null
+  mixed_reason_en: string | null
+}
+
+export interface CreativeGroupAuditEntry {
+  id: string
+  action: string
+  at: string | null
+  actor: string | null
+  creative_ids: string[]
+  group_dissolved: boolean
+}
+
+export interface CreativeGroupDetail extends CreativeGroupSummary {
+  members: CreativeCard[]
+  by_platform: Array<{
+    provider: string
+    creative_count: number
+    creative_ids: string[]
+    metrics: CreativeMetrics | null
+  }>
+  period: { from: string; to: string }
+  audit: CreativeGroupAuditEntry[]
+}
+
+export interface CreativeGroupsPage {
+  groups: CreativeGroupSummary[]
+  page: number
+  per_page: number
+  total: number
+  period: { from: string; to: string }
+}
+
+export const listCreativeGroups = (query: LibraryQuery) =>
+  getData<CreativeGroupsPage>(`/creatives/groups${libraryQueryString(query)}`)
+
+export const getCreativeGroup = (groupId: string, window: { from?: string; to?: string }) =>
+  getData<CreativeGroupDetail>(`/creatives/groups/${groupId}${libraryQueryString(window)}`)
+
+/**
+ * Merge a selection into one asset.
+ *
+ * No project id: the library spans projects and a card does not carry one, so the backend derives
+ * the project from the selection — and refuses a selection that spans two, because a group is one
+ * asset and one asset cannot belong to two clients' books.
+ */
+export const groupCreatives = (creativeIds: string[], name?: string) =>
+  postData<{ id: string; name: string; method: string; creative_ids: string[] }>('/creatives/group', {
+    creative_ids: creativeIds,
+    ...(name ? { name } : {}),
+  })
+
+export const ungroupCreative = (creativeId: string) =>
+  deleteData<{ creative_id: string; group_dissolved: boolean }>(`/creatives/${creativeId}/group`)
 
 export interface CreativeComparison {
   creatives: CreativeCard[]

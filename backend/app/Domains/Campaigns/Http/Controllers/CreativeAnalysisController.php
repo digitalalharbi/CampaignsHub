@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Campaigns\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Models\CreativeGroup;
 use App\Domains\Campaigns\Models\ExternalCreative;
@@ -17,6 +18,7 @@ use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -356,81 +358,123 @@ final class CreativeAnalysisController extends Controller
      */
     public function group(Request $request, AuditLogger $audit, string $project): JsonResponse
     {
-        /*
-         * `campaigns.link` — the permission that already means «say two platform records are one
-         * thing». Grouping creatives across platforms is the same judgement one level down, and
-         * inventing a `campaigns.manage` key nobody grants would have made this endpoint unreachable
-         * for every existing role.
-         */
-        abort_unless($request->user()?->hasPermission('campaigns.link'), 403);
+        $creatives = $this->mergeCandidates($request, ExternalCreative::query()->where('project_id', $project));
 
-        $data = $request->validate([
-            'creative_ids' => ['required', 'array', 'min:2'],
-            'creative_ids.*' => ['string'],
-            'name' => ['nullable', 'string', 'max:200'],
-        ]);
+        return $this->mergeCreatives($request, $audit, $creatives, $project);
+    }
 
-        $creatives = ExternalCreative::query()
-            ->where('project_id', $project)
-            ->whereIn('id', $data['creative_ids'])
-            ->get();
+    /**
+     * The same merge, addressed across the caller's whole reach — `POST /creatives/group` (§15.13).
+     *
+     * The library spans projects and a card carries no project id, so the page that lists creatives
+     * cannot construct the pinned address above. The project is DERIVED from the creatives instead,
+     * and a selection spanning two of them is refused: a group is the same asset on more than one
+     * platform, and two projects are two clients' books. Merging across them would put one client's
+     * spend inside another's roll-up, which no later split undoes in a report already sent.
+     */
+    public function merge(Request $request, AuditLogger $audit): JsonResponse
+    {
+        $creatives = $this->mergeCandidates($request, ExternalCreative::query());
 
-        abort_if($creatives->count() < 2, 422, 'At least two creatives from this project are needed to group.');
+        $projects = $creatives->pluck('project_id')->map(static fn ($id): string => (string) $id)->unique();
+        abort_if($projects->count() > 1, 422, 'Creatives from two different projects cannot be one asset.');
 
-        $group = CreativeGroup::create([
-            'project_id' => $project,
-            'name' => $data['name'] ?? $creatives->first()->name,
-            'method' => 'manual',
-            'confirmed_by' => $request->user()->id,
-            'confirmed_at' => Carbon::now(),
-        ]);
-
-        ExternalCreative::query()->whereIn('id', $creatives->modelKeys())
-            ->update(['creative_group_id' => $group->getKey()]);
-
-        $audit->log(
-            action: 'creative.group.created',
-            entityType: CreativeGroup::class,
-            entityId: (string) $group->getKey(),
-            after: ['creatives' => $creatives->modelKeys(), 'method' => 'manual'],
-        );
-
-        return ApiResponse::success([
-            'id' => (string) $group->getKey(),
-            'name' => $group->name,
-            'method' => $group->method,
-            'creative_ids' => array_map('strval', $creatives->modelKeys()),
-        ], 'Creatives grouped.', status: 201);
+        return $this->mergeCreatives($request, $audit, $creatives, (string) $projects->first());
     }
 
     /** Split a creative out of its group — the undo §15.8 requires for a wrong automatic match. */
     public function ungroup(Request $request, AuditLogger $audit, string $project, string $creative): JsonResponse
     {
-        abort_unless($request->user()?->hasPermission('campaigns.link'), 403);
-
-        $model = ExternalCreative::query()->where('project_id', $project)->findOrFail($creative);
-        $groupId = $model->creative_group_id;
-
-        abort_if($groupId === null, 422, 'This creative is not grouped.');
-
-        $model->forceFill(['creative_group_id' => null])->save();
-
-        // A group of one is not a group. Removing it keeps «grouped» meaning «shared with another
-        // platform», so a lone survivor is not left wearing a badge that promises company.
-        $remaining = ExternalCreative::query()->where('creative_group_id', $groupId)->count();
-        if ($remaining < 2) {
-            ExternalCreative::query()->where('creative_group_id', $groupId)->update(['creative_group_id' => null]);
-            CreativeGroup::query()->whereKey($groupId)->delete();
-        }
-
-        $audit->log(
-            action: 'creative.group.split',
-            entityType: CreativeGroup::class,
-            entityId: (string) $groupId,
-            after: ['creative_id' => (string) $model->getKey(), 'group_dissolved' => $remaining < 2],
+        return $this->splitCreative(
+            $request,
+            $audit,
+            ExternalCreative::query()->where('project_id', $project),
+            $creative,
         );
+    }
 
-        return ApiResponse::success(['creative_id' => (string) $model->getKey()], 'Creative split from its group.');
+    /** The same split, across the caller's reach — `DELETE /creatives/{creative}/group` (§15.13). */
+    public function split(Request $request, AuditLogger $audit, string $creative): JsonResponse
+    {
+        return $this->splitCreative($request, $audit, ExternalCreative::query(), $creative);
+    }
+
+    /**
+     * Every group the caller may reach, with the roll-up each one actually supports (§15.13).
+     *
+     * The members are read through `CreativeRows` — the library's own selection — so a group's figures
+     * are the sum of the rows the library shows, and cannot drift from them. `CreativeMetrics::aggregate`
+     * does the summing, which is why an average like frequency is impression-weighted here rather than
+     * meaned into a number that describes nobody.
+     */
+    public function groups(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+
+        [$from, $to] = $this->window($request);
+
+        $bounded = ExternalCreative::query()->whereNotNull('creative_group_id');
+        $this->applyReach($bounded, $request);
+
+        $groupIds = (clone $bounded)->distinct()->pluck('creative_group_id')
+            ->filter()->map(static fn ($id): string => (string) $id)->values();
+
+        $total = $groupIds->count();
+        $perPage = min((int) $request->integer('per_page', 24) ?: 24, self::PER_PAGE_MAX);
+        $page = max((int) $request->integer('page', 1), 1);
+
+        $groups = CreativeGroup::query()->whereIn('id', $groupIds->all())
+            ->orderBy('name')->orderBy('id')
+            ->forPage($page, $perPage)->get();
+
+        // One members query and one presentation for the whole page — a per-group lookup would make
+        // this page's cost grow with the number of groups on it (§15.14).
+        $members = (clone $bounded)->whereIn('creative_group_id', $groups->modelKeys())->get();
+        $rows = $this->present($members, $from, $to, withFatigue: true, withPrevious: true);
+        $byGroup = $this->rowsByGroup($members, $rows);
+
+        return ApiResponse::success([
+            'groups' => $groups->map(fn (CreativeGroup $g): array => $this->groupSummary($g, $byGroup[(string) $g->getKey()] ?? []))->all(),
+            'page' => $page,
+            'per_page' => $perPage,
+            'total' => $total,
+            'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+        ], 'Creative groups.');
+    }
+
+    /**
+     * One group: its roll-up, its members, its per-platform split, its provenance and its audit trail.
+     *
+     * Reach is applied to the MEMBER query and the group is derived from what survived, so a group
+     * belonging to another client is not found rather than found-and-refused — 404 for the same reason
+     * a creative outside the ceiling gives 404.
+     */
+    public function groupShow(Request $request, string $group): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+
+        [$from, $to] = $this->window($request);
+
+        $bounded = ExternalCreative::query()->where('creative_group_id', $group);
+        $this->applyReach($bounded, $request);
+        $members = $bounded->get();
+
+        abort_if($members->isEmpty(), 404, 'Creative group not found.');
+
+        $model = CreativeGroup::query()->find($group);
+        abort_if($model === null, 404, 'Creative group not found.');
+
+        $rows = $this->present($members, $from, $to, withFatigue: true, withPrevious: true);
+
+        return ApiResponse::success(
+            $this->groupSummary($model, $rows) + [
+                'members' => $rows,
+                'by_platform' => $this->groupByPlatform($rows),
+                'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+                'audit' => $this->groupAudit($model),
+            ],
+            'Creative group.',
+        );
     }
 
     // ---- internals ----------------------------------------------------------------------------
@@ -810,6 +854,291 @@ final class CreativeAnalysisController extends Controller
         }
 
         return $out;
+    }
+
+    /**
+     * The creatives a merge may actually touch, under the caller's ceiling.
+     *
+     * `campaigns.link` — the permission that already means «say two platform records are one thing».
+     * Grouping creatives across platforms is the same judgement one level down, and inventing a
+     * `campaigns.manage` key nobody grants would have made this unreachable for every existing role.
+     *
+     * The reach is applied to the SELECTION, not checked after it, so an id the caller may not see is
+     * dropped on the way in rather than merged because it was asked for. A list of ids arriving
+     * straight from a browser is exactly the shape that gets trusted by accident.
+     *
+     * @return Collection<int, ExternalCreative>
+     */
+    private function mergeCandidates(Request $request, mixed $scope): Collection
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.link'), 403);
+
+        $data = $request->validate([
+            'creative_ids' => ['required', 'array', 'min:2'],
+            'creative_ids.*' => ['string'],
+            'name' => ['nullable', 'string', 'max:200'],
+        ]);
+
+        $this->applyReach($scope, $request);
+
+        $creatives = $scope->whereIn('id', $data['creative_ids'])->get();
+
+        abort_if($creatives->count() < 2, 422, 'At least two creatives you can reach are needed to group.');
+
+        return $creatives;
+    }
+
+    /**
+     * Put a selection into one group — `manual`, because a person said so.
+     *
+     * Automatic grouping by file hash happens in the sync; a person confirming one is what turns it
+     * into `confirmed`. A creative that was already in another group MOVES, and any group left holding
+     * fewer than two members is dissolved — the same rule the split applies, because a group of one is
+     * a badge that promises company nobody is keeping.
+     *
+     * @param  Collection<int, ExternalCreative>  $creatives
+     */
+    private function mergeCreatives(Request $request, AuditLogger $audit, Collection $creatives, string $project): JsonResponse
+    {
+        $vacated = $creatives->pluck('creative_group_id')->filter()
+            ->map(static fn ($id): string => (string) $id)->unique()->values();
+
+        $name = $request->string('name')->toString();
+
+        /*
+         * The DISPLAYED name, not the raw one.
+         *
+         * `CreativePresenter::card()` shows `client_display_name ?: name`, so falling back to `name`
+         * here produced a group called «Creative 0 — video» sitting directly above two members both
+         * labelled «Hero Video» — one asset apparently named two different things on the same screen.
+         */
+        $first = $creatives->first();
+
+        $group = CreativeGroup::create([
+            'project_id' => $project,
+            'name' => $name !== '' ? $name : ($first->client_display_name ?: $first->name),
+            'method' => 'manual',
+            'confirmed_by' => $request->user()->id,
+            'confirmed_at' => Carbon::now(),
+        ]);
+
+        ExternalCreative::query()->whereIn('id', $creatives->modelKeys())
+            ->update(['creative_group_id' => $group->getKey()]);
+
+        $dissolved = [];
+        foreach ($vacated as $old) {
+            if ($this->dissolveIfAlone($old)) {
+                $dissolved[] = $old;
+            }
+        }
+
+        $audit->log(
+            action: 'creative.group.created',
+            entityType: CreativeGroup::class,
+            entityId: (string) $group->getKey(),
+            after: [
+                'creatives' => $creatives->modelKeys(),
+                'method' => 'manual',
+                'groups_dissolved' => $dissolved,
+            ],
+        );
+
+        return ApiResponse::success([
+            'id' => (string) $group->getKey(),
+            'name' => $group->name,
+            'method' => $group->method,
+            'creative_ids' => array_map('strval', $creatives->modelKeys()),
+        ], 'Creatives grouped.', status: 201);
+    }
+
+    private function splitCreative(Request $request, AuditLogger $audit, mixed $scope, string $creative): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.link'), 403);
+
+        $this->applyReach($scope, $request);
+
+        $model = $scope->whereKey($creative)->first();
+        abort_if($model === null, 404, 'Creative not found.');
+
+        $groupId = $model->creative_group_id === null ? null : (string) $model->creative_group_id;
+
+        abort_if($groupId === null, 422, 'This creative is not grouped.');
+
+        $model->forceFill(['creative_group_id' => null])->save();
+
+        $dissolved = $this->dissolveIfAlone($groupId);
+
+        $audit->log(
+            action: 'creative.group.split',
+            entityType: CreativeGroup::class,
+            entityId: $groupId,
+            after: ['creative_id' => (string) $model->getKey(), 'group_dissolved' => $dissolved],
+        );
+
+        return ApiResponse::success([
+            'creative_id' => (string) $model->getKey(),
+            'group_dissolved' => $dissolved,
+        ], 'Creative split from its group.');
+    }
+
+    /**
+     * A group of one is not a group.
+     *
+     * Counted WITHOUT the caller's reach on purpose: whether a group still has company is a fact about
+     * the group, not about who is looking. Counting only the members this caller can see would dissolve
+     * a live cross-client grouping because the person doing the split could see one half of it.
+     */
+    private function dissolveIfAlone(string $groupId): bool
+    {
+        if (ExternalCreative::query()->where('creative_group_id', $groupId)->count() >= 2) {
+            return false;
+        }
+
+        ExternalCreative::query()->where('creative_group_id', $groupId)->update(['creative_group_id' => null]);
+        CreativeGroup::query()->whereKey($groupId)->delete();
+
+        return true;
+    }
+
+    /**
+     * @param  Collection<int, ExternalCreative>  $members
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<string, array<int, array<string, mixed>>>
+     */
+    private function rowsByGroup(Collection $members, array $rows): array
+    {
+        $groupOf = [];
+        foreach ($members as $member) {
+            $groupOf[(string) $member->getKey()] = (string) $member->creative_group_id;
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            $group = $groupOf[(string) ($row['id'] ?? '')] ?? null;
+            if ($group !== null) {
+                $out[$group][] = $row;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * One group, read as a unit — and honest about when it cannot be read as one.
+     *
+     * Spend and impressions add across platforms. CPA and ROAS do not add across OBJECTIVES: an
+     * awareness cut and a sales cut of the same film are the same asset and are not the same question,
+     * and a single blended figure over both is the mixing §14 forbids. So when the members disagree
+     * about the objective, this says so and offers NO headline set — the per-platform table below it
+     * is the answer, not a number that averages two questions.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<string, mixed>
+     */
+    private function groupSummary(CreativeGroup $group, array $rows): array
+    {
+        $objectives = array_values(array_unique(array_filter(
+            array_map(static fn (array $r): ?string => $r['objective'] ?? null, $rows),
+            static fn (?string $o): bool => $o !== null && $o !== '',
+        )));
+        $paths = array_values(array_unique(array_map(static fn (array $r): string => (string) ($r['path'] ?? ''), $rows)));
+        $shared = count($objectives) === 1 ? $objectives[0] : null;
+        $mixed = count($objectives) > 1 || count($paths) > 1;
+
+        return [
+            'id' => (string) $group->getKey(),
+            'name' => $group->name,
+            'method' => $group->method,
+            'confirmed' => $group->isConfirmed(),
+            'confirmed_at' => $group->confirmed_at?->toIso8601String(),
+            'project_id' => (string) $group->project_id,
+            'creative_count' => count($rows),
+            'providers' => array_values(array_unique(array_map(
+                static fn (array $r): string => (string) ($r['provider'] ?? ''),
+                $rows,
+            ))),
+            'objectives' => $objectives,
+            'paths' => $paths,
+            'objective' => $shared,
+            'mixed_objectives' => $mixed,
+            'headline_metrics' => $mixed ? [] : $this->metrics->headline($shared),
+            'metrics' => $this->metrics->aggregate(array_map(
+                static fn (array $r): mixed => $r['metrics'] ?? null,
+                $rows,
+            )),
+            'mixed_reason_ar' => $mixed
+                ? 'أعضاء هذه المجموعة لا يشتركون في هدف واحد، فلا يُعلن رقم موحّد للتكلفة أو العائد.'
+                : null,
+            'mixed_reason_en' => $mixed
+                ? 'The members of this group do not share one objective, so no single cost or return figure is stated.'
+                : null,
+        ];
+    }
+
+    /**
+     * The group per platform (§15.13) — two ads on one platform roll up into that platform's line.
+     *
+     * The same `aggregate()` the group total uses, applied one level down, so the platform lines add
+     * back to the total by construction rather than by both being computed correctly.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function groupByPlatform(array $rows): array
+    {
+        $buckets = [];
+        foreach ($rows as $row) {
+            $buckets[(string) ($row['provider'] ?? 'unknown')][] = $row;
+        }
+        ksort($buckets);
+
+        $out = [];
+        foreach ($buckets as $provider => $group) {
+            $out[] = [
+                'provider' => $provider,
+                'creative_count' => count($group),
+                'creative_ids' => array_map(static fn (array $r): string => (string) ($r['id'] ?? ''), $group),
+                'metrics' => $this->metrics->aggregate(array_map(
+                    static fn (array $r): mixed => $r['metrics'] ?? null,
+                    $group,
+                )),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Who merged or split this group, and when (§15.13).
+     *
+     * Read by entity id from the append-only log rather than kept on the group row, so a split that
+     * dissolved a group still has its record — the trail has to outlive the thing it is about, or the
+     * only history is of decisions that were never reversed.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function groupAudit(CreativeGroup $group): array
+    {
+        $entries = AuditLog::query()
+            ->where('entity_type', CreativeGroup::class)
+            ->where('entity_id', (string) $group->getKey())
+            ->when($group->tenant_id !== null, fn ($q) => $q->where('tenant_id', $group->tenant_id))
+            ->orderByDesc('created_at')
+            ->limit(50)
+            ->get(['id', 'action', 'user_id', 'after', 'created_at']);
+
+        $actors = User::query()
+            ->whereIn('id', $entries->pluck('user_id')->filter()->unique()->all())
+            ->pluck('name', 'id');
+
+        return $entries->map(static fn (AuditLog $entry): array => [
+            'id' => (string) $entry->getKey(),
+            'action' => $entry->action,
+            'at' => $entry->created_at?->toIso8601String(),
+            'actor' => $entry->user_id === null ? null : ($actors[$entry->user_id] ?? null),
+            'creative_ids' => array_map('strval', (array) ($entry->after['creatives'] ?? array_filter([$entry->after['creative_id'] ?? null]))),
+            'group_dissolved' => (bool) ($entry->after['group_dissolved'] ?? false),
+        ])->all();
     }
 
     /** @return array<string, mixed>|null */

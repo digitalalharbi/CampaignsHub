@@ -103,6 +103,14 @@ const pulse = (over: Partial<CreativePulse> = {}): CreativePulse => ({
   previous_period: { from: '2026-06-08', to: '2026-07-07' },
   totals: { creatives: 4, with_metrics: 3, without_metrics: 1 },
   evidence: { min_impressions: 1000, min_change: 0.1 },
+  insights: {
+    items: [],
+    total: 0,
+    shown: 0,
+    evidence: { min_impressions: 1000, min_change: 0.1 },
+    period: { from: '2026-07-08', to: '2026-08-06', days: 30 },
+    previous_period: { from: '2026-06-08', to: '2026-07-07' },
+  },
   best_by_objective: [
     {
       objective: 'sales',
@@ -436,5 +444,126 @@ describe('CreativePulseSection', () => {
     await screen.findByText('Best image')
 
     expect(screen.queryByText(/Filtered by/)).not.toBeInTheDocument()
+  })
+
+  /**
+   * §15.10 on the dashboard — the findings the endpoint has always returned.
+   *
+   * The defect this closes is not a missing feature: `GET /creatives/pulse` carried `insights` from
+   * the day the engine landed and this section drew none of them. An API without a UI is the same
+   * defect as a page without data, and it is invisible in every test that only checks the cards.
+   */
+  it('draws the findings its own endpoint returns, with their evidence', async () => {
+    vi.mocked(getCreativePulse).mockResolvedValue(
+      pulse({
+        insights: {
+          items: [
+            {
+              id: 'roas_drop:cr-1',
+              key: 'roas_drop',
+              severity: 'warning',
+              comparison: 'previous_period',
+              title_ar: 'تراجع العائد',
+              title_en: 'ROAS fell on Brand film',
+              detail_ar: 'من 5.00× إلى 2.10×',
+              detail_en: 'From 5.00× to 2.10× against the previous period.',
+              action_ar: 'راجع الصفحة المقصودة',
+              action_en: 'Review the landing page before adding budget.',
+              supporting_metrics: { roas: 2.1 },
+              previous_metrics: { roas: 5 },
+              movement: { metric: 'roas', current: 2.1, previous: 5, change: -0.58 },
+              confidence: 'high',
+              creative_id: 'cr-1',
+              creative_name: 'Brand film',
+              objective: 'sales',
+              path: 'conversion',
+              provider: 'meta',
+              campaign_name: 'Sale',
+              period: { from: '2026-07-08', to: '2026-08-06', days: 30 },
+              previous_period: { from: '2026-06-08', to: '2026-07-07' },
+              generated_by: 'rules',
+              needs_human_review: false,
+            },
+          ],
+          total: 3,
+          shown: 1,
+          evidence: { min_impressions: 1000, min_change: 0.1 },
+          period: { from: '2026-07-08', to: '2026-08-06', days: 30 },
+          previous_period: { from: '2026-06-08', to: '2026-07-07' },
+        },
+      }),
+    )
+
+    renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
+
+    expect(await screen.findByText('ROAS fell on Brand film')).toBeInTheDocument()
+    expect(screen.getByText('From 5.00× to 2.10× against the previous period.')).toBeInTheDocument()
+    // The action, the confidence and BOTH windows — a movement with no «against what» is not evidence.
+    expect(screen.getByText('Review the landing page before adding budget.').parentElement).toHaveTextContent(
+      'Suggested action',
+    )
+    expect(screen.getByText('Confidence: High confidence')).toBeInTheDocument()
+    expect(screen.getByText(/Previous period: 2026-06-08/)).toBeInTheDocument()
+    // A truncated list says so, rather than reading as «this is everything».
+    expect(screen.getByText('1/3')).toBeInTheDocument()
+    // And the finding links into the creative it names, carrying the dashboard's own window.
+    expect(screen.getByRole('link', { name: /Open creative: Brand film/ })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/app/content/cr-1'),
+    )
+  })
+
+  /** A model-written finding must never reach a decision undeclared. */
+  it('marks a generated finding as needing human review', async () => {
+    vi.mocked(getCreativePulse).mockResolvedValue(
+      pulse({
+        insights: {
+          items: [
+            {
+              id: 'ai:cr-1',
+              key: 'ai',
+              severity: 'opportunity',
+              comparison: 'peers',
+              title_ar: 'اقتراح',
+              title_en: 'A generated suggestion',
+              detail_ar: '…',
+              detail_en: 'Written by a model.',
+              supporting_metrics: {},
+              previous_metrics: null,
+              movement: null,
+              confidence: 'medium',
+              creative_id: null,
+              creative_name: null,
+              objective: null,
+              path: null,
+              provider: null,
+              campaign_name: null,
+              period: { from: '2026-07-08', to: '2026-08-06', days: 30 },
+              previous_period: { from: '2026-06-08', to: '2026-07-07' },
+              generated_by: 'model',
+              needs_human_review: true,
+            },
+          ],
+          total: 1,
+          shown: 1,
+          evidence: { min_impressions: 1000, min_change: 0.1 },
+          period: { from: '2026-07-08', to: '2026-08-06', days: 30 },
+          previous_period: { from: '2026-06-08', to: '2026-07-07' },
+        },
+      }),
+    )
+
+    renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
+
+    expect(await screen.findByText('Generated — needs human review')).toBeInTheDocument()
+  })
+
+  /** An account where nothing moved has nothing to be told — and an empty panel reads as a broken one. */
+  it('draws no findings panel when there are none', async () => {
+    renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
+
+    await screen.findByText('Best image')
+
+    expect(screen.queryByText('What the figures say')).not.toBeInTheDocument()
   })
 })
