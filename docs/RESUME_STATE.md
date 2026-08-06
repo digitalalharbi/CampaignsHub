@@ -10,6 +10,91 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## Session — 2026-08-07 · REPORT-OBJECTIVE-005, attribution and de-duplication
+
+**HEAD `d4f2486`. Tree clean. Backend 1551 passed (8739 assertions), exit 0 · Pint clean · vitest 790 /
+108 files · `tsc -b` · oxlint 0 errors · production build clean.**
+
+### Two systems, never one figure
+
+Each ad platform counts the conversions IT believes its ads caused, under ITS window, from ITS pixel.
+The store keeps the merchant's ledger, one row per sale with an order id. `GET metrics/attribution`
+returns both, labelled, and the operator's «جودة البيانات والإسناد» tab renders them apart.
+
+**`total_orders` is null and the reason travels with it.** A sale clicked from Snapchat on Tuesday and
+Meta on Thursday is reported in full by both — each is answering «did my ad contribute?» and each is
+right. Deduplicating them needs a key neither carries: conversion payloads name no order id, and none
+of the six platforms exposes a click-to-order lookup. A test walks every numeric leaf of the block to
+prove the sum appears under no key, so a field added later cannot reintroduce it.
+
+The useful figure is per platform: its own claim beside the orders the SHOP recorded for it. Live,
+Meta claimed 472 against 74 confirmed. Neither is adjusted to match the other — we do not know which
+is wrong.
+
+### The duplicate the database cannot stop
+
+`commerce_orders` is unique on `(external_account_id, external_id)`, which stops a re-sync and NOT the
+case that happens: **one shop connected twice.** A reconnect, or two people running the OAuth flow,
+gives one shop two `external_accounts` rows; each syncs the same orders under a different account id;
+both satisfy the index. Revenue doubles, order count doubles, **AOV stays exactly right** — which is
+why nobody notices.
+
+`ProjectOrders` is the one loader, keyed `(provider, SHOP id, ORDER id)`. The shop is in the key
+because two merchants both numbering an order `1001` are two orders. The survivor is the
+earliest-created copy, so identity does not change the day a second connection appears. An order whose
+shop cannot be read is KEPT.
+
+The funnel reads through the same loader. Live: 657 rows duplicated to 1,314, and both the funnel and
+the attribution page still answered **457 orders / 303,720 SAR**, with 469 copies collapsed and the
+shop named on screen.
+
+### Three defects found LIVE
+
+1. **The dashboard printed «النتائج 1,169» bare** — `SUM(conversions)` over four platforms, which is
+   exactly the «unique unified orders» the contract forbids, on the most-read screen in the product.
+   The figure stays (it is the only conversion number before a store is connected); the missing
+   sentence now ships in the payload via `MetricsAggregator::conversionsBasis()`, so the dashboard,
+   the report and the client's link cannot differ. Only shown when >1 platform contributed.
+2. **The «unattributed» breakdown was grouped over every order**, so `utm_campaign_id` headed a block
+   titled «طلبات بلا إسناد». The count above it was right; only the breakdown lied.
+3. **An order count and a money amount rendered as one token** — «26794K SAR». Fixed by stacking them
+   with their units; a four-pixel margin is not a separator. Also fixed the page overflowing at 375px
+   (`min-w-0`: a grid item refuses to shrink below its content, so the table's `min-w-[620px]`
+   propagated out to the document) and the Arabic dual («مربوط مرتين», not «2 مرات»).
+
+### Two gaps closed on the way
+
+- **`DemoCommerceSeeder`** — COMMERCE-001 shipped connectors, tables, resolver and the store half of
+  the funnel, and no seeder ever wrote one order. Every install said «لا يوجد متجر مربوط» and nobody
+  had seen that code run. 657 orders across 90 days, spanning every case the resolver distinguishes.
+  All `is_demo`; Salla and Zid stay **Awaiting Credentials**.
+- **`/agency/analytics`** — every metrics route is `portal:app,agency` on the server and always was;
+  only the link and the URL were missing, so it answered 404. Mounted, not copied.
+
+### Also cleared
+
+The stale fractional demo conversions (`417.61 طلب`) — 1,336 rows written before `93897cc` and one
+orphan seeded day outside the current window. Re-seeded and removed; zero fractional order rows now.
+
+### Exact next task
+
+**`PRODUCTION_HANDOVER.md` · the E2E half of the §15 acceptance tests (creative library, details,
+groups, carousel, dashboard, reports, client links) · the full three-browser Playwright gate, still
+not run since `2ea6943`** — its verdict must come from Playwright's own exit code, with no file or
+database change during it. Then §14.6 objective layouts and §14.7–14.8 comparisons, pacing, funnel
+drop-off and anomaly detection.
+
+Then the platform integrations, in the mandated order and ONE AT A TIME: **Snapchat, TikTok, Meta,
+Google Ads, X, LinkedIn.** Each gets its own read-only adapter wired into every section before the
+next one starts, and each stays `BLOCKED_EXTERNAL_CREDENTIALS` until a real OAuth round trip, account
+discovery and an actual sync have happened.
+
+Carried, named rather than left implicit: the attribution PANEL is on the operator's tab. The client's
+link carries `conversions_basis` (so its «conversions» figure states what it is), but the full
+Platform-Reported / Store-Confirmed section is not yet something a client can open — that needs its own
+visibility switch on the link builder, since a new client-visible block without an operator toggle
+would show figures nobody chose to share.
+
 ## Session — 2026-08-06 (later still) · §15.13 groups, dashboard findings, and carousels
 
 **HEAD `ff533e1`. Tree clean. Backend 1524 passed (8646 assertions) · Pint clean · vitest 775 / 106 files · `tsc -b` · oxlint 0 errors · production build clean.**
