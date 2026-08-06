@@ -62,6 +62,20 @@ shop named on screen.
    (`min-w-0`: a grid item refuses to shrink below its content, so the table's `min-w-[620px]`
    propagated out to the document) and the Arabic dual («مربوط مرتين», not «2 مرات»).
 
+### `PRODUCTION_HANDOVER.md` — written, and its claims proved
+
+The developer's orientation document: what the product is, the four files to read first, the
+load-bearing decisions and why, the honest state of every integration, what is deliberately absent,
+and the working loop with its gates. It does NOT repeat operations — `PRODUCTION_RUNBOOK.md` stays the
+authority for running, upgrading, backing up and rotating secrets.
+
+**The clean-install and upgrade drills were RUN, not just written.** Clean install: 129 tables, 111
+permissions, **0 users, 0 tenants, 0 credentials of any kind**. Upgrade: a database migrated at
+`v1.0.0-baseline` (74 tables) brought forward to HEAD, then compared with the clean install column by
+column — **1,898 columns, identical**. An install that upgraded and an install created today are the
+same product, which is the property that makes the two paths interchangeable. No migration between the
+baseline and HEAD drops a column.
+
 ### Two gaps closed on the way
 
 - **`DemoCommerceSeeder`** — COMMERCE-001 shipped connectors, tables, resolver and the store half of
@@ -78,9 +92,8 @@ orphan seeded day outside the current window. Re-seeded and removed; zero fracti
 
 ### Exact next task
 
-**`PRODUCTION_HANDOVER.md` · the E2E half of the §15 acceptance tests (creative library, details,
-groups, carousel, dashboard, reports, client links) · the full three-browser Playwright gate, still
-not run since `2ea6943`** — its verdict must come from Playwright's own exit code, with no file or
+**The E2E half of the §15 acceptance tests (creative library, details, groups, carousel, dashboard,
+reports, client links) · the full three-browser Playwright gate, still not run since `2ea6943`** — its verdict must come from Playwright's own exit code, with no file or
 database change during it. Then §14.6 objective layouts and §14.7–14.8 comparisons, pacing, funnel
 drop-off and anomaly detection.
 
