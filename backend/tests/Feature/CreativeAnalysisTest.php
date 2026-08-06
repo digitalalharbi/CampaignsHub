@@ -156,7 +156,12 @@ final class CreativeAnalysisTest extends TestCase
     public function test_a_ratio_with_no_denominator_is_null_rather_than_zero(): void
     {
         $creative = $this->creative('No orders', $this->salesCampaign, 'image');
-        $this->day($creative, '2026-07-01', ['spend' => 900, 'impressions' => 20000, 'clicks' => 300, 'conversions' => 0]);
+        // `revenue => 0` is now stated rather than inherited. The column used to be NOT NULL DEFAULT
+        // 0, so omitting it meant «zero»; since it can express «not reported», omitting it means
+        // that instead — and the whole point of this case is a MEASURED zero on both sides.
+        $this->day($creative, '2026-07-01', [
+            'spend' => 900, 'impressions' => 20000, 'clicks' => 300, 'conversions' => 0, 'revenue' => 0,
+        ]);
 
         $figures = app(CreativeMetrics::class)->forCreatives(
             [(string) $creative->getKey()],
@@ -176,6 +181,31 @@ final class CreativeAnalysisTest extends TestCase
          */
         $this->assertSame(0.0, $figures['roas']);
         $this->assertEqualsWithDelta(900.0, $figures['spend'], 0.01, 'the spend is real and must still show');
+    }
+
+    /**
+     * The other half of the same distinction: a creative that reported NO revenue at all.
+     *
+     * An awareness image is not «a sales creative that earned nothing» — no purchase figure was ever
+     * reported for it. Stored as NULL rather than 0, its ROAS is null and the surfaces say «not
+     * provided»; the case above, where the platform reported a real 0, still reads 0.00×. Both rows
+     * look identical in the database until you check nullability, which is why both are asserted.
+     */
+    public function test_a_creative_the_platform_reported_no_revenue_for_has_no_roas(): void
+    {
+        $creative = $this->creative('Reach only', $this->awarenessCampaign, 'image');
+        $this->day($creative, '2026-07-01', ['spend' => 900, 'impressions' => 20000, 'clicks' => 300]);
+
+        $figures = app(CreativeMetrics::class)->forCreatives(
+            [(string) $creative->getKey()],
+            Carbon::parse('2026-07-01'),
+            Carbon::parse('2026-07-31'),
+        )[(string) $creative->getKey()];
+
+        $this->assertNull($figures['revenue'], 'an unreported revenue became a measured zero');
+        $this->assertNull($figures['roas'], 'an awareness creative was told it returned nothing');
+        $this->assertFalse($figures['reported']['revenue']);
+        $this->assertFalse($figures['reported']['orders'], '«orders» must answer for conversions');
     }
 
     /** Awareness content is judged on reach and attention; sales content on orders. */

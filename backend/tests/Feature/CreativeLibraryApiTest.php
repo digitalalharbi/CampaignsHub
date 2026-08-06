@@ -353,6 +353,228 @@ final class CreativeLibraryApiTest extends TestCase
         $this->actingAs($stranger, 'sanctum')->getJson($this->url($this->window()))->assertForbidden();
     }
 
+    /**
+     * A second project under a second client, for the library's own scope tests.
+     *
+     * @return array{0: ClientWorkspace, 1: Project, 2: ExternalCreative}
+     */
+    private function secondClient(): array
+    {
+        $client = ClientWorkspace::create([
+            'tenant_id' => $this->tenant->getKey(), 'name' => 'Other client', 'slug' => 'other-'.uniqid(),
+            'mode' => 'managed', 'status' => 'active',
+        ]);
+        $project = Project::create([
+            'tenant_id' => $this->tenant->getKey(), 'client_workspace_id' => $client->getKey(),
+            'name' => 'Other project', 'status' => 'active',
+        ]);
+        $creative = $this->creative([
+            'name' => 'Other creative', 'project_id' => $project->getKey(), 'campaign_id' => null,
+        ]);
+
+        return [$client, $project, $creative];
+    }
+
+    /**
+     * `/creatives` spans the caller's whole reach, and the Project filter narrows it (§15.2).
+     *
+     * The library used to be a separate controller with no project axis at all, so «which project is
+     * this creative from?» could not be asked or answered. Spanning is the point — a Client filter
+     * over one project is a control with one option.
+     */
+    public function test_the_library_spans_the_projects_in_reach_and_the_project_filter_narrows_it(): void
+    {
+        $mine = $this->creative(['name' => 'This project']);
+        [, $other, $theirs] = $this->secondClient();
+
+        // The library is not a project page: whatever project this test bound, it must not leak in
+        // as a hidden filter, or the assertion below would pass without the reach doing any work.
+        app(ProjectContext::class)->forget();
+
+        $names = collect($this->actingAs($this->operator, 'sanctum')
+            ->getJson('/api/v1/creatives'.$this->window())
+            ->assertOk()->json('data.creatives'))->pluck('name');
+
+        $this->assertContains($mine->name, $names);
+        $this->assertContains($theirs->name, $names, 'the library stopped at one project');
+
+        $narrowed = collect($this->actingAs($this->operator, 'sanctum')
+            ->getJson('/api/v1/creatives'.$this->window().'&project_ids[]='.$other->getKey())
+            ->assertOk()->json('data.creatives'))->pluck('name');
+
+        $this->assertSame([$theirs->name], $narrowed->all());
+    }
+
+    /**
+     * The ceiling is the membership's, and asking for another client's project does not lift it.
+     *
+     * NEGATIVE, and the reason the library reads `ClientScopeResolver` rather than the tenant scope
+     * alone: the tenant scope would have let an account manager confined to one client browse the
+     * agency's entire content library, which is most of its book of business.
+     */
+    public function test_a_manager_confined_to_one_client_cannot_reach_another_clients_creatives(): void
+    {
+        $mine = $this->creative(['name' => 'In scope']);
+        [$otherClient, $otherProject, $theirs] = $this->secondClient();
+
+        $confined = User::create([
+            'name' => 'Confined', 'email' => 'confined@creatives.local',
+            'password' => 'secret123', 'email_verified_at' => now(),
+        ]);
+        $role = Role::create(['tenant_id' => $this->tenant->getKey(), 'name' => 'M', 'slug' => 'm-'.uniqid()]);
+        $role->givePermissionTo('campaigns.view');
+        $confined->assignRole($role);
+        $this->grantMembership(
+            $confined, $this->tenant, clientIds: [(string) $this->project->client_workspace_id],
+        );
+
+        app(ProjectContext::class)->forget();
+
+        $names = collect($this->actingAs($confined, 'sanctum')
+            ->getJson('/api/v1/creatives'.$this->window())
+            ->assertOk()->json('data.creatives'))->pluck('name');
+
+        $this->assertContains($mine->name, $names);
+        $this->assertNotContains($theirs->name, $names, 'a confined manager reached another client’s creative');
+
+        // And naming the other client explicitly does not widen it — the filter narrows within the
+        // ceiling, it never replaces it.
+        $asked = $this->actingAs($confined, 'sanctum')
+            ->getJson('/api/v1/creatives'.$this->window().'&client_ids[]='.$otherClient->getKey())
+            ->assertOk()->json('data.creatives');
+
+        $this->assertSame([], $asked);
+
+        /*
+         * Nor does the project-scoped address — and it refuses rather than answering emptily.
+         *
+         * `ResolveProject` rejects the binding before the controller runs, so this is 403 and not an
+         * empty 200. That is the stronger of the two: an empty list is also what a project with no
+         * creatives yet looks like, so a leak that regressed into «200 with rows» would have to be
+         * caught by counting, whereas a refusal that regressed into a 200 is visible immediately.
+         */
+        $this->actingAs($confined, 'sanctum')
+            ->getJson("/api/v1/projects/{$otherProject->getKey()}/creatives".$this->window())
+            ->assertForbidden();
+
+        $this->assertNotNull($theirs->getKey());
+    }
+
+    /**
+     * A marketing path is a set of objectives, and combining it with an objective INTERSECTS.
+     *
+     * Applied as two independent `whereIn`s the pair would widen — asking for «sales» and «awareness
+     * path» would answer with both, which is the opposite of what adding a second filter means.
+     */
+    public function test_filtering_by_marketing_path_selects_only_that_paths_objectives(): void
+    {
+        $brand = $this->creative(['name' => 'Brand film', 'campaign_id' => $this->awareness->getKey()]);
+        $sale = $this->creative(['name' => 'Sale image', 'campaign_id' => $this->sales->getKey()]);
+
+        $awareness = collect($this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url($this->window().'&paths[]=awareness'))
+            ->assertOk()->json('data.creatives'))->pluck('name');
+
+        $this->assertContains($brand->name, $awareness);
+        $this->assertNotContains($sale->name, $awareness);
+
+        // Contradictory pair: sales objective on the awareness path is nothing, not everything.
+        $both = $this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url($this->window().'&paths[]=awareness&objectives[]=sales'))
+            ->assertOk()->json('data.creatives');
+
+        $this->assertSame([], $both, 'two filters that cannot both hold answered with rows');
+    }
+
+    /** The structural axes §15.2 asks for reach the query, not just the filter panel. */
+    public function test_filtering_by_ad_set_and_by_creative_type_narrows_the_list(): void
+    {
+        $adSet = (string) Str::uuid();
+        $inSet = $this->creative(['name' => 'In the ad set', 'external_ad_set_id' => $adSet, 'format' => 'video']);
+        $this->creative(['name' => 'Elsewhere', 'format' => 'image']);
+
+        $bySet = collect($this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url($this->window().'&ad_set_ids[]='.$adSet))
+            ->assertOk()->json('data.creatives'))->pluck('name');
+
+        $this->assertSame([$inSet->name], $bySet->all());
+
+        // `kinds` matches the provider's own format string the way the card's badge does, so the
+        // filter and the label can never disagree about what a creative is.
+        $byKind = collect($this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url($this->window().'&kinds[]=video'))
+            ->assertOk()->json('data.creatives'))->pluck('name');
+
+        $this->assertSame([$inSet->name], $byKind->all());
+    }
+
+    /**
+     * Sorting by spend orders the WHOLE set, not the page that happens to be on screen.
+     *
+     * Sorted in PHP after fetching, this test passes on page one and fails on page two — which is
+     * exactly the bug that survives a casual check. Asking for a one-row page makes the difference
+     * visible: the top spender must be the row returned, not the most recent creative.
+     */
+    public function test_sorting_by_spend_orders_across_pages_and_not_within_one(): void
+    {
+        $cheap = $this->creative(['name' => 'Cheap', 'last_active_at' => now()]);
+        $dear = $this->creative(['name' => 'Dear', 'last_active_at' => now()->subDays(5)]);
+        $silent = $this->creative(['name' => 'Never reported', 'last_active_at' => now()->subDay()]);
+
+        $this->day($cheap, now()->subDay()->toDateString(), ['spend' => 10, 'impressions' => 100]);
+        $this->day($dear, now()->subDay()->toDateString(), ['spend' => 9000, 'impressions' => 100]);
+
+        $first = $this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url($this->window().'&sort=spend&per_page=1&page=1'))
+            ->assertOk()->json('data.creatives');
+
+        $this->assertSame($dear->name, $first[0]['name'], 'the top spender was not the first row');
+
+        // Three rows over three single-row pages, each one distinct: a sort with ties repeats and
+        // skips rows across pages, and the reader sees neither happen.
+        $seen = [];
+        foreach ([1, 2, 3] as $page) {
+            $rows = $this->actingAs($this->operator, 'sanctum')
+                ->getJson($this->url($this->window()."&sort=spend&per_page=1&page={$page}"))
+                ->assertOk()->json('data.creatives');
+            $seen[] = $rows[0]['name'];
+        }
+
+        $this->assertCount(3, array_unique($seen), 'paging a sorted library repeated or skipped a creative');
+        // A creative the platform reported nothing for is last, not cheapest.
+        $this->assertSame($silent->name, $seen[2]);
+    }
+
+    /**
+     * The two addresses are one pipeline: same creative, same window, same figures (§15.21).
+     *
+     * This is the assertion the old `CreativeLibraryController` could not have passed. It summed the
+     * same table with its own SQL and coalesced every null to `0`, so the tenant-wide page and the
+     * project analysis could disagree about one creative and both look plausible.
+     */
+    public function test_the_library_and_the_project_endpoint_report_the_same_figures(): void
+    {
+        $creative = $this->creative(['name' => 'One truth']);
+        $this->day($creative, now()->subDays(3)->toDateString(), [
+            'spend' => 640, 'impressions' => 51000, 'clicks' => 900, 'conversions' => 16, 'revenue' => 5120,
+        ]);
+
+        $scoped = collect($this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url($this->window()))
+            ->assertOk()->json('data.creatives'))->firstWhere('name', 'One truth');
+
+        app(ProjectContext::class)->forget();
+
+        $wide = collect($this->actingAs($this->operator, 'sanctum')
+            ->getJson('/api/v1/creatives'.$this->window())
+            ->assertOk()->json('data.creatives'))->firstWhere('name', 'One truth');
+
+        $this->assertNotNull($wide, 'the creative was missing from the tenant-wide library');
+        $this->assertSame($scoped['metrics'], $wide['metrics']);
+        $this->assertSame($scoped['headline_metrics'], $wide['headline_metrics']);
+        $this->assertSame($scoped['fatigue']['status'], $wide['fatigue']['status']);
+    }
+
     /** Grouping is a linking decision, not a viewing one — `campaigns.link`, not `campaigns.view`. */
     public function test_grouping_needs_the_manage_permission(): void
     {

@@ -136,12 +136,32 @@ final class CreativeMetrics
         $figures['hook_rate'] = $this->ratio($num('video_views_3s'), $impressions);
 
         /*
+         * The two headline metrics the sales path names but this service never produced.
+         *
+         * `MarketingPath::headlineMetrics()` asks the conversion path for `orders` and the traffic
+         * path for `cost_per_lpv`. Neither key existed here, and an absent key reads as «no data» —
+         * so a sales creative with 850 orders showed «Orders: No data» on the row that is supposed to
+         * carry its most important figure, and two of the seven sales headlines were dead.
+         *
+         * `orders` is `conversions` under the name the marketing paths use, kept as an alias rather
+         * than renamed: `conversions` is the column, the canonical metric and what every other
+         * surface reads, and one concept with two names is better than a rename that leaves half the
+         * system pointing at the old one.
+         */
+        $figures['orders'] = $conversions;
+        $figures['cost_per_lpv'] = $this->ratio($spend, $num('landing_page_views'));
+
+        /*
          * What the platform actually sent.
          *
          * The frontend needs this to tell «0» from «not reported», and it cannot infer it from the
          * value alone: a genuine zero and a missing metric both arrive as falsy in JavaScript.
          */
         $figures['reported'] = [];
+        // `orders` shares `conversions`' answer, because it shares its column. Without this it is
+        // absent from the map and renders as «no data» rather than «not provided» on an awareness
+        // creative, which is the weaker of the two true statements.
+        $figures['reported']['orders'] = $row['conversions'] !== null;
         foreach (array_keys(self::SUMS) as $key) {
             $figures['reported'][$key] = $row[$key] !== null;
         }

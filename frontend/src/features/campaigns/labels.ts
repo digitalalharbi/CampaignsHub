@@ -12,6 +12,15 @@ const status: Record<string, { ar: string; en: string; tone: Tone }> = {
   unknown: { ar: 'غير معروفة', en: 'Unknown', tone: 'neutral' },
 }
 
+/*
+ * Every case of `CampaignObjective`, not the common eight.
+ *
+ * The six below the first block were missing, and `objectiveLabel` falls back to the raw key — so a
+ * Snapchat reach campaign or a Google store-visits campaign rendered the literal `reach` and
+ * `store_visits` in the middle of Arabic copy, on every surface that names an objective. Found by
+ * opening the creative library's objective filter, which is the first control that lists the whole
+ * enum rather than whichever objectives a demo happened to seed.
+ */
 const objective: Record<string, { ar: string; en: string }> = {
   awareness: { ar: 'الوعي', en: 'Awareness' },
   traffic: { ar: 'الزيارات', en: 'Traffic' },
@@ -21,6 +30,25 @@ const objective: Record<string, { ar: string; en: string }> = {
   sales: { ar: 'المبيعات', en: 'Sales' },
   conversions: { ar: 'التحويلات', en: 'Conversions' },
   other: { ar: 'أخرى', en: 'Other' },
+  reach: { ar: 'الوصول', en: 'Reach' },
+  video_views: { ar: 'مشاهدات الفيديو', en: 'Video views' },
+  landing_page_views: { ar: 'زيارات صفحة الهبوط', en: 'Landing page views' },
+  add_to_cart: { ar: 'الإضافة إلى السلة', en: 'Add to cart' },
+  purchases: { ar: 'الشراء', en: 'Purchases' },
+  store_visits: { ar: 'زيارات المتجر', en: 'Store visits' },
+}
+
+/**
+ * The three marketing PATHS — the buckets objectives fall into, not objectives themselves.
+ *
+ * Kept beside the objectives deliberately: they were duplicated into a page as a four-entry map that
+ * included `leads` and `sales`, neither of which is a path, and omitted `conversion`, which is. The
+ * result was an unlabelled option reading `conversion` in Arabic.
+ */
+const marketingPath: Record<string, { ar: string; en: string }> = {
+  awareness: { ar: 'الوعي', en: 'Awareness' },
+  traffic: { ar: 'الزيارات', en: 'Traffic' },
+  conversion: { ar: 'التحويل والمبيعات', en: 'Conversion & sales' },
 }
 
 const provider: Record<string, { ar: string; en: string }> = {
@@ -102,4 +130,8 @@ export function objectiveLabel(key: string, locale: Locale): string {
 
 export function providerLabel(key: string, locale: Locale): string {
   return provider[key]?.[locale] ?? key
+}
+
+export function marketingPathLabel(key: string, locale: Locale): string {
+  return marketingPath[key]?.[locale] ?? key
 }

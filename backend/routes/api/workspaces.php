@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\AI\Http\Controllers\AICredentialController;
 use App\Domains\Alerts\Http\Controllers\AlertController;
-use App\Domains\Campaigns\Http\Controllers\CreativeLibraryController;
+use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\ClientWorkspaces\Http\Controllers\ClientWorkspaceController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\FilesLibraryController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
@@ -65,6 +65,16 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
  * engine over the tenant's stores rather than three copies with different names.
  */
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->group(function (): void {
-    Route::get('creatives', [CreativeLibraryController::class, 'index'])->name('creatives.library');
+    /*
+     * The library reads the SAME controller as the project-scoped analysis, deliberately (§15.20).
+     *
+     * It used to be `CreativeLibraryController`, which summed `creative_daily_metrics` itself and
+     * coalesced every null to `0` — so a platform that reports no conversions and a creative that
+     * genuinely earned none produced the identical row, and the page contradicted Creative Analysis
+     * about the same creative. §15.17 calls a second source an architectural defect rather than a
+     * discrepancy, and this is the removal of the one that existed.
+     */
+    Route::get('creatives', [CreativeAnalysisController::class, 'index'])->name('creatives.library');
+    Route::post('creatives/compare', [CreativeAnalysisController::class, 'compare'])->name('creatives.compare');
     Route::get('files/library', [FilesLibraryController::class, 'index'])->name('files.library');
 });

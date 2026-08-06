@@ -1,387 +1,695 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { ExternalLink, Image as ImageIcon, LayoutGrid, Play, Rows3, Search, Images, X } from 'lucide-react'
-import { FilterGroup, ViewCustomiser } from '@/components/ui/ViewCustomiser'
+import { useMemo, useState } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { GitCompare, LayoutGrid, Rows3, Search } from 'lucide-react'
+import { CreativeViewer } from './CreativeViewer'
+import { CreativeCompare } from './CreativeCompare'
+import { formatMetric, metricLabel, metricState } from './metrics'
+import { imageLoading } from './format'
+import { listCreatives, type CreativeCard, type FatigueStatus, type LibraryQuery } from './api'
+import { Button } from '@/components/ui/Button'
+import { DateField } from '@/components/ui/DateField'
+import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
-import { fmtDate } from '@/lib/datetime'
-import { listCreatives, type Creative } from './api'
+import { useProject } from '@/stores/project'
+import { campaignStatusLabel, marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
+
+/**
+ * §15.2 — the Creative Library, in `/app` and `/agency`.
+ *
+ * ## One pipeline, and why this page was rewritten rather than extended
+ *
+ * It used to read `GET /creatives`, a controller that summed `creative_daily_metrics` with its own
+ * SQL and coalesced every missing value to `0`. Two consequences, both visible to a customer: this
+ * page and Creative Analysis could report different numbers for the same creative, and a metric the
+ * platform never sends rendered as a measured zero. §15.17 calls an independent source an
+ * architectural defect rather than a discrepancy, so the fix is not a reconciliation — it is that
+ * the second source no longer exists. Everything here comes from `CreativeAnalysisController`, the
+ * same controller the detail view, the dashboard cards and the client report read.
+ *
+ * ## The filters narrow; they never widen
+ *
+ * Every axis is sent only when it has a value (`libraryQueryString` omits the empty ones), and the
+ * server intersects them against the caller's membership ceiling. Asking for another client's id
+ * returns nothing rather than that client's creatives — the URL is not a permission.
+ *
+ * ## Nothing autoplays and nothing preloads
+ *
+ * Cards render a poster image, never a `<video>`; a real player is mounted only inside the viewer,
+ * once somebody opens a creative and presses play. A grid of twenty videos that preloaded their
+ * streams would cost a phone tens of megabytes to open a page.
+ */
 
 const COPY = {
   ar: {
-    title: 'المحتويات', subtitle: 'مكتبة الإعلانات المزامَنة عبر منصاتك — استعرضها وحلّل أداءها في مكان واحد.',
-    search_ph: 'ابحث بالاسم أو الحملة…', all: 'الكل',
-    sum_total: 'إجمالي المحتويات', sum_active: 'نشِطة', sum_paused: 'متوقفة', sum_spend: 'الإنفاق (30 يومًا)',
-    none: 'لا توجد محتويات بعد — تظهر هنا بعد مزامنة الحملات.', no_match: 'لا محتويات تطابق البحث أو الفلاتر.',
-    loading: 'جارٍ التحميل…', error: 'تعذّر تحميل المحتويات.',
-    provider: 'المنصة', format: 'النوع', status: 'الحالة', campaign: 'الحملة', spend: 'الإنفاق', impressions: 'الظهور',
-    details: 'تفاصيل المحتوى', no_preview: 'لا تتوفر معاينة من المنصة', open_dest: 'فتح الوجهة', last_sync: 'آخر مزامنة', close: 'إغلاق',
-    view_grid: 'شبكة', view_table: 'جدول', demo: 'تجريبي',
-    perf_all: 'الكل', perf_top: 'أفضل المحتويات', perf_attention: 'تحتاج تدخلًا', perf_reason: 'السبب',
-    clicks: 'النقرات', conversions: 'التحويلات', ctr: 'نسبة النقر', roas: 'العائد',
+    title: 'مكتبة المحتويات',
+    subtitle: 'كل محتوى إعلاني مزامَن — بأرقامه الحقيقية، ومقارنته بمسار هدفه.',
+    search: 'ابحث بالاسم أو نص الإعلان…',
+    grid: 'شبكة',
+    list: 'قائمة',
+    all: 'الكل',
+    client: 'العميل',
+    project: 'المشروع',
+    platform: 'المنصة',
+    campaign: 'الحملة',
+    adSet: 'المجموعة الإعلانية',
+    ad: 'الإعلان',
+    objective: 'الهدف',
+    path: 'المسار التسويقي',
+    kind: 'نوع المحتوى',
+    status: 'الحالة',
+    health: 'حالة الإجهاد',
+    from: 'من',
+    to: 'إلى',
+    sort: 'الترتيب',
+    sortRecent: 'الأحدث نشاطًا',
+    sortSpend: 'الأعلى إنفاقًا',
+    sortImpressions: 'الأعلى ظهورًا',
+    sortConversions: 'الأعلى نتائج',
+    sortName: 'الاسم',
+    compare: 'مقارنة',
+    compareHint: 'اختر محتويين أو أكثر للمقارنة.',
+    selected: 'محدَّد',
+    clearSelection: 'إلغاء التحديد',
+    empty: 'لا توجد محتويات تطابق هذا التحديد.',
+    emptyAll: 'لا توجد محتويات بعد — تظهر هنا بعد مزامنة الحملات.',
+    error: 'تعذّر تحميل المكتبة.',
+    demo: 'وضع تجريبي',
+    grouped: 'مجمَّع عبر المنصات',
+    noPreview: 'لا تتوفر معاينة',
+    lastSync: 'آخر مزامنة',
+    never: 'لم تتم بعد',
+    showing: 'المعروض',
+    of: 'من',
+    prev: 'السابق',
+    next: 'التالي',
+    open: 'فتح المحتوى',
+    source: 'المصدر: منصة الإعلان',
   },
   en: {
-    title: 'Content', subtitle: 'The ad library synced across your platforms — browse and analyze it in one place.',
-    search_ph: 'Search by name or campaign…', all: 'All',
-    sum_total: 'Total content', sum_active: 'Active', sum_paused: 'Paused', sum_spend: 'Spend (30d)',
-    none: 'No content yet — creatives appear here after campaigns sync.', no_match: 'No content matches your search or filters.',
-    loading: 'Loading…', error: 'Could not load content.',
-    provider: 'Platform', format: 'Format', status: 'Status', campaign: 'Campaign', spend: 'Spend', impressions: 'Impressions',
-    details: 'Creative details', no_preview: 'No preview provided by the platform', open_dest: 'Open destination', last_sync: 'Last sync', close: 'Close',
-    view_grid: 'Grid', view_table: 'Table', demo: 'Demo',
-    perf_all: 'All', perf_top: 'Top content', perf_attention: 'Needs attention', perf_reason: 'Reason',
-    clicks: 'Clicks', conversions: 'Conversions', ctr: 'CTR', roas: 'ROAS',
+    title: 'Creative library',
+    subtitle: 'Every synced creative — with its real figures, judged against its own objective.',
+    search: 'Search by name or ad copy…',
+    grid: 'Grid',
+    list: 'List',
+    all: 'All',
+    client: 'Client',
+    project: 'Project',
+    platform: 'Platform',
+    campaign: 'Campaign',
+    adSet: 'Ad set',
+    ad: 'Ad',
+    objective: 'Objective',
+    path: 'Marketing path',
+    kind: 'Creative type',
+    status: 'Status',
+    health: 'Fatigue',
+    from: 'From',
+    to: 'To',
+    sort: 'Sort',
+    sortRecent: 'Most recently active',
+    sortSpend: 'Highest spend',
+    sortImpressions: 'Most impressions',
+    sortConversions: 'Most results',
+    sortName: 'Name',
+    compare: 'Compare',
+    compareHint: 'Select two or more creatives to compare.',
+    selected: 'selected',
+    clearSelection: 'Clear selection',
+    empty: 'No creatives match this selection.',
+    emptyAll: 'No creatives yet — they appear here after campaigns sync.',
+    error: 'Could not load the library.',
+    demo: 'Demo',
+    grouped: 'Grouped across platforms',
+    noPreview: 'No preview available',
+    lastSync: 'Last sync',
+    never: 'Not yet',
+    showing: 'Showing',
+    of: 'of',
+    prev: 'Previous',
+    next: 'Next',
+    open: 'Open creative',
+    source: 'Source: ad platform',
   },
 }
-type Copy = (typeof COPY)['ar']
 
-const PROVIDER: Record<string, { label: string; color: string }> = {
-  meta: { label: 'Meta', color: '#1877F2' },
-  google: { label: 'Google Ads', color: '#4285F4' },
-  snapchat: { label: 'Snapchat', color: '#F5B800' },
-  tiktok: { label: 'TikTok', color: '#111111' },
-  x: { label: 'X', color: '#111111' },
-  linkedin: { label: 'LinkedIn', color: '#0A66C2' },
+const FATIGUE_TONE: Record<FatigueStatus, string> = {
+  improving: 'bg-success/15 text-success',
+  stable: 'bg-surface-hover text-text-secondary',
+  watch: 'bg-warning/15 text-warning',
+  fatigued: 'bg-danger/15 text-danger',
+  insufficient_data: 'bg-surface-hover text-text-secondary',
 }
-const providerLabel = (p: string) => PROVIDER[p]?.label ?? p
-const providerColor = (p: string) => PROVIDER[p]?.color ?? '#64748b'
 
-const FORMAT_LABEL: Record<string, { ar: string; en: string }> = {
-  video: { ar: 'فيديو', en: 'Video' },
+const FATIGUE_LABEL: Record<FatigueStatus, { ar: string; en: string }> = {
+  improving: { ar: 'يتحسّن', en: 'Improving' },
+  stable: { ar: 'مستقر', en: 'Stable' },
+  watch: { ar: 'يحتاج متابعة', en: 'Watch' },
+  fatigued: { ar: 'مُجهَد', en: 'Fatigued' },
+  // Never «stable» — «we have not looked» and «we looked and it is fine» are different claims.
+  insufficient_data: { ar: 'بيانات غير كافية', en: 'Insufficient data' },
+}
+
+const KIND_LABEL: Record<string, { ar: string; en: string }> = {
   image: { ar: 'صورة', en: 'Image' },
+  video: { ar: 'فيديو', en: 'Video' },
   carousel: { ar: 'دوّار', en: 'Carousel' },
 }
-const formatLabel = (f: string, ar: boolean) => (FORMAT_LABEL[f] ? (ar ? FORMAT_LABEL[f].ar : FORMAT_LABEL[f].en) : f)
 
-const STATUS_LABEL: Record<string, { ar: string; en: string; tone: string }> = {
-  active: { ar: 'نشِط', en: 'Active', tone: 'bg-success/15 text-success' },
-  paused: { ar: 'متوقف', en: 'Paused', tone: 'bg-warning/15 text-warning' },
+const isoDaysAgo = (days: number) => {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  return d.toISOString().slice(0, 10)
 }
-const statusMeta = (s: string) => STATUS_LABEL[s] ?? { ar: s, en: s, tone: 'bg-surface-hover text-text-secondary' }
 
-const money = (n: number) => `${n.toLocaleString('en-US', { maximumFractionDigits: 0 })} SAR`
-const compact = (n: number) => n.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 })
+/** A multi-select rendered as a plain `<select multiple>` — keyboard-navigable and screen-readable. */
+function AxisSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: string[]
+  options: Array<{ value: string; label: string }>
+  onChange: (next: string[]) => void
+}) {
+  if (options.length === 0) return null
 
-/** Render a creative's objective-group KPI (ROAS/CPA/CPM/CTR) in its natural unit. */
-function kpiDisplay(x: Creative): string {
-  const v = x.kpi?.value
-  if (v == null) return '—'
-  switch (x.kpi.name) {
-    case 'roas': return `ROAS ${v.toFixed(2)}x`
-    case 'cpa': return `CPA ${v.toLocaleString('en-US')}`
-    case 'cpm': return `CPM ${v.toLocaleString('en-US')}`
-    default: return `CTR ${(v * 100).toFixed(2)}%`
-  }
+  return (
+    <label className="flex min-w-40 flex-col gap-1 text-xs">
+      <span className="font-medium text-text-secondary">{label}</span>
+      <select
+        multiple
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(Array.from(e.target.selectedOptions, (o) => o.value))}
+        className="h-20 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text-primary"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
 }
 
 export function CreativesPage() {
-  const locale = useUi((s) => s.locale)
+  const { locale } = useUi()
   const ar = locale === 'ar'
-  const c = COPY[locale]
+  const t = COPY[ar ? 'ar' : 'en']
+  const { currentProjectId } = useProject()
 
-  const [term, setTerm] = useState('')
-  const [provider, setProvider] = useState<'all' | string>('all')
-  const [format, setFormat] = useState<'all' | string>('all')
-  const [status, setStatus] = useState<'all' | string>('all')
-  const [perf, setPerf] = useState<'all' | 'top' | 'needs_attention'>('all')
-  const [view, setView] = useState<'grid' | 'table'>('grid')
-  const [selected, setSelected] = useState<Creative | null>(null)
+  const [view, setView] = useState<'grid' | 'list'>('grid')
+  const [search, setSearch] = useState('')
+  const [from, setFrom] = useState(isoDaysAgo(29))
+  const [to, setTo] = useState(isoDaysAgo(0))
+  const [sort, setSort] = useState('recent')
+  const [page, setPage] = useState(1)
+  const [axes, setAxes] = useState<Record<string, string[]>>({})
+  const [health, setHealth] = useState('')
+  const [selected, setSelected] = useState<string[]>([])
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null)
+  const [comparing, setComparing] = useState(false)
 
-  const q = useQuery({ queryKey: ['creatives', 'all'], queryFn: listCreatives })
-  const all = q.data ?? []
+  const query: LibraryQuery = useMemo(
+    () => ({
+      from,
+      to,
+      page,
+      per_page: 24,
+      sort,
+      search: search.trim() || undefined,
+      health: health || undefined,
+      client_ids: axes.client_ids,
+      project_ids: axes.project_ids,
+      providers: axes.providers,
+      campaign_ids: axes.campaign_ids,
+      ad_set_ids: axes.ad_set_ids,
+      ad_ids: axes.ad_ids,
+      objectives: axes.objectives,
+      paths: axes.paths,
+      kinds: axes.kinds,
+      statuses: axes.statuses,
+    }),
+    [from, to, page, sort, search, health, axes],
+  )
 
-  const providers = [...new Set(all.map((x) => x.provider))]
-  const formats = [...new Set(all.map((x) => x.format))]
-  const statuses = [...new Set(all.map((x) => x.status))]
+  const libraryQuery = useQuery({
+    // The whole query is the key, so changing any filter refetches and the two never disagree
+    // about what is on screen.
+    queryKey: ['creative-library', currentProjectId, query],
+    queryFn: () => listCreatives(query, null),
+    // The previous page stays visible while the next one loads, instead of the list collapsing to a
+    // skeleton on every keystroke.
+    placeholderData: keepPreviousData,
+  })
 
-  const summary = {
-    total: all.length,
-    active: all.filter((x) => x.status === 'active').length,
-    paused: all.filter((x) => x.status === 'paused').length,
-    spend: all.reduce((s, x) => s + (x.metrics?.spend ?? 0), 0),
+  const setAxis = (key: string, values: string[]) => {
+    setPage(1)
+    setAxes((prev) => {
+      const next = { ...prev }
+      // Deleted, not emptied: an axis sent as `[]` is a bound of «nothing» on a fail-closed server,
+      // while an absent axis is «unbounded». They are not the same request.
+      if (values.length === 0) delete next[key]
+      else next[key] = values
+      return next
+    })
   }
 
-  const topCount = all.filter((x) => x.performance?.class === 'top').length
-  const attentionCount = all.filter((x) => x.performance?.class === 'needs_attention').length
+  const data = libraryQuery.data
+  const creatives = data?.creatives ?? []
+  const options = data?.filters
+  const total = data?.total ?? 0
+  const perPage = data?.per_page ?? 24
+  const lastPage = Math.max(1, Math.ceil(total / perPage))
 
-  const needle = term.trim().toLowerCase()
-  const items = all
-    .filter((x) => {
-      if (perf !== 'all' && x.performance?.class !== perf) return false
-      if (provider !== 'all' && x.provider !== provider) return false
-      if (format !== 'all' && x.format !== format) return false
-      if (status !== 'all' && x.status !== status) return false
-      if (needle && !`${x.name ?? ''} ${x.client_display_name ?? ''} ${x.campaign_name ?? ''}`.toLowerCase().includes(needle)) return false
-      return true
-    })
-    // Ranked tabs sort by what earned the rank: top by ROAS→CTR desc, needs-attention by wasted spend desc.
-    .sort((a, b) => {
-      if (perf === 'top') return (b.metrics.roas ?? b.metrics.ctr ?? 0) - (a.metrics.roas ?? a.metrics.ctr ?? 0)
-      if (perf === 'needs_attention') return b.metrics.spend - a.metrics.spend
-      return 0
-    })
+  const toggleSelected = (id: string) =>
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+
+  const filtersTouched = Object.keys(axes).length > 0 || search.trim() !== '' || health !== ''
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
-        <p className="text-sm text-text-secondary">{c.subtitle}</p>
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-text-primary">{t.title}</h1>
+          <p className="mt-1 text-sm text-text-secondary">{t.subtitle}</p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-md border border-border p-0.5" role="group" aria-label={t.grid}>
+            <button
+              type="button"
+              aria-pressed={view === 'grid'}
+              onClick={() => setView('grid')}
+              className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${view === 'grid' ? 'bg-surface-hover text-text-primary' : 'text-text-secondary'}`}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" aria-hidden /> {t.grid}
+            </button>
+            <button
+              type="button"
+              aria-pressed={view === 'list'}
+              onClick={() => setView('list')}
+              className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${view === 'list' ? 'bg-surface-hover text-text-primary' : 'text-text-secondary'}`}
+            >
+              <Rows3 className="h-3.5 w-3.5" aria-hidden /> {t.list}
+            </button>
+          </div>
+
+          <Button
+            variant="secondary"
+            disabled={selected.length < 2}
+            onClick={() => setComparing(true)}
+            title={selected.length < 2 ? t.compareHint : undefined}
+          >
+            <GitCompare className="h-4 w-4" aria-hidden />
+            {t.compare}
+            {selected.length > 0 && <span dir="ltr"> ({selected.length})</span>}
+          </Button>
+        </div>
       </header>
 
-      {/* Summary */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryCard label={c.sum_total} value={String(summary.total)} tone="brand" />
-        <SummaryCard label={c.sum_active} value={String(summary.active)} tone="success" />
-        <SummaryCard label={c.sum_paused} value={String(summary.paused)} tone="warning" />
-        <SummaryCard label={c.sum_spend} value={money(summary.spend)} tone="muted" />
-      </div>
-
-      {/* Performance tabs — the workspace's own 30d baseline decides top / needs-attention. */}
-      <div className="flex flex-wrap gap-1 border-b border-border">
-        {([['all', `${c.perf_all} (${all.length})`], ['top', `${c.perf_top} (${topCount})`], ['needs_attention', `${c.perf_attention} (${attentionCount})`]] as const).map(([k, label]) => (
-          <button key={k} onClick={() => setPerf(k)}
-            className={`rounded-t-lg px-3 py-2 text-sm font-semibold transition-colors ${
-              perf === k ? 'border-b-2 border-brand-600 text-brand-600' : 'text-text-secondary hover:text-text-primary'
-            }`}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Toolbar */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <label className="relative flex w-full items-center sm:max-w-xs">
-            <Search size={15} className="pointer-events-none absolute start-3 text-text-muted" aria-hidden />
-            <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder={c.search_ph}
-              className="w-full rounded-xl border border-border bg-surface-secondary py-2 pe-3 ps-9 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none" />
+      <section className="space-y-3 rounded-lg border border-border bg-surface p-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex min-w-52 flex-1 flex-col gap-1 text-xs">
+            <span className="font-medium text-text-secondary">{t.search}</span>
+            <span className="relative">
+              <Search className="absolute top-2.5 h-4 w-4 text-text-secondary ltr:left-2 rtl:right-2" aria-hidden />
+              <input
+                type="search"
+                value={search}
+                aria-label={t.search}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setPage(1)
+                }}
+                className="w-full rounded-md border border-border bg-surface py-1.5 text-sm text-text-primary ltr:pl-8 ltr:pr-2 rtl:pr-8 rtl:pl-2"
+              />
+            </span>
           </label>
-          <div className="flex overflow-hidden rounded-lg border border-border self-start">
-            <button onClick={() => setView('grid')} aria-label={c.view_grid} title={c.view_grid}
-              className={`flex items-center px-2.5 py-1.5 ${view === 'grid' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}><LayoutGrid size={14} /></button>
-            <button onClick={() => setView('table')} aria-label={c.view_table} title={c.view_table}
-              className={`flex items-center px-2.5 py-1.5 ${view === 'table' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}><Rows3 size={14} /></button>
-          </div>
-        </div>
-        {/*
-          Three chip rows — platform, format, status — folded (SIMPLIFY-002). A creative library is
-          browsed by looking; it opened with more ways to narrow it than thumbnails on the first row.
-          Search and the grid/table switcher stay out: those are how it is looked AT.
-        */}
-        <ViewCustomiser
-          id="content"
-          ar={ar}
-          active={provider !== 'all' || format !== 'all' || status !== 'all'}
-          summary={
-            [
-              provider === 'all' ? null : providerLabel(provider),
-              format === 'all' ? null : formatLabel(format, ar),
-              status === 'all' ? null : statusMeta(status)[ar ? 'ar' : 'en'],
-            ].filter(Boolean).join(' · ')
-            || (ar ? 'كل المحتوى' : 'All content')
-          }
-          onClear={() => { setProvider('all'); setFormat('all'); setStatus('all') }}
-        >
-          <FilterGroup label={c.provider}>
-            <Chip active={provider === 'all'} onClick={() => setProvider('all')}>{c.all}</Chip>
-            {providers.map((p) => <Chip key={p} active={provider === p} onClick={() => setProvider(p)}>{providerLabel(p)}</Chip>)}
-          </FilterGroup>
-          <FilterGroup label={ar ? 'الشكل' : 'Format'}>
-            <Chip tone="dark" active={format === 'all'} onClick={() => setFormat('all')}>{c.all}</Chip>
-            {formats.map((f) => <Chip key={f} tone="dark" active={format === f} onClick={() => setFormat(format === f ? 'all' : f)}>{formatLabel(f, ar)}</Chip>)}
-          </FilterGroup>
-          <FilterGroup label={ar ? 'الحالة' : 'Status'}>
-            <Chip tone="dark" active={status === 'all'} onClick={() => setStatus('all')}>{c.all}</Chip>
-            {statuses.map((s) => <Chip key={s} tone="dark" active={status === s} onClick={() => setStatus(status === s ? 'all' : s)}>{statusMeta(s)[ar ? 'ar' : 'en']}</Chip>)}
-          </FilterGroup>
-        </ViewCustomiser>
-      </div>
 
-      {/* Body */}
-      {q.isLoading ? (
-        <StateBox>{c.loading}</StateBox>
-      ) : q.isError ? (
-        <StateBox tone="danger">{c.error}</StateBox>
-      ) : items.length === 0 ? (
-        <StateBox>{all.length === 0 ? c.none : c.no_match}</StateBox>
-      ) : view === 'grid' ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {items.map((x) => <CreativeCard key={x.id} creative={x} ar={ar} onClick={() => setSelected(x)} />)}
+          {/* `DateField`, never a native date input: the browser's own control renders in the OS
+              locale, so a Saudi machine shows a Hijri calendar for an ISO value the API expects. */}
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="font-medium text-text-secondary">{t.from}</span>
+            <DateField aria-label={t.from} value={from} onChange={(v) => { setFrom(v); setPage(1) }} />
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="font-medium text-text-secondary">{t.to}</span>
+            <DateField aria-label={t.to} value={to} onChange={(v) => { setTo(v); setPage(1) }} />
+          </label>
+
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="font-medium text-text-secondary">{t.sort}</span>
+            <select
+              value={sort}
+              aria-label={t.sort}
+              onChange={(e) => { setSort(e.target.value); setPage(1) }}
+              className="rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-text-primary"
+            >
+              <option value="recent">{t.sortRecent}</option>
+              <option value="spend">{t.sortSpend}</option>
+              <option value="impressions">{t.sortImpressions}</option>
+              <option value="conversions">{t.sortConversions}</option>
+              <option value="name">{t.sortName}</option>
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="font-medium text-text-secondary">{t.health}</span>
+            <select
+              value={health}
+              aria-label={t.health}
+              onChange={(e) => { setHealth(e.target.value); setPage(1) }}
+              className="rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-text-primary"
+            >
+              <option value="">{t.all}</option>
+              {(options?.health ?? []).map((status) => (
+                <option key={status} value={status}>
+                  {FATIGUE_LABEL[status] ? FATIGUE_LABEL[status][ar ? 'ar' : 'en'] : status}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-      ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border">
-          <table className="w-full min-w-[720px] text-sm">
-            <thead className="bg-surface-hover text-xs text-text-secondary">
+
+        {options && (
+          <div className="flex flex-wrap gap-3">
+            <AxisSelect
+              label={t.client}
+              value={axes.client_ids ?? []}
+              options={options.clients.map((c) => ({ value: c.id, label: c.name }))}
+              onChange={(v) => setAxis('client_ids', v)}
+            />
+            <AxisSelect
+              label={t.project}
+              value={axes.project_ids ?? []}
+              options={options.projects.map((p) => ({ value: p.id, label: p.name }))}
+              onChange={(v) => setAxis('project_ids', v)}
+            />
+            <AxisSelect
+              label={t.platform}
+              value={axes.providers ?? []}
+              options={options.providers.map((p) => ({ value: p, label: providerLabel(p, locale) }))}
+              onChange={(v) => setAxis('providers', v)}
+            />
+            <AxisSelect
+              label={t.campaign}
+              value={axes.campaign_ids ?? []}
+              options={options.campaigns.map((c) => ({ value: c.id, label: c.name }))}
+              onChange={(v) => setAxis('campaign_ids', v)}
+            />
+            <AxisSelect
+              label={t.adSet}
+              value={axes.ad_set_ids ?? []}
+              options={options.ad_sets.map((id) => ({ value: id, label: id }))}
+              onChange={(v) => setAxis('ad_set_ids', v)}
+            />
+            <AxisSelect
+              label={t.ad}
+              value={axes.ad_ids ?? []}
+              options={options.ads.map((id) => ({ value: id, label: id }))}
+              onChange={(v) => setAxis('ad_ids', v)}
+            />
+            <AxisSelect
+              label={t.objective}
+              value={axes.objectives ?? []}
+              options={options.objectives.map((o) => ({ value: o, label: objectiveLabel(o, locale) }))}
+              onChange={(v) => setAxis('objectives', v)}
+            />
+            <AxisSelect
+              label={t.path}
+              value={axes.paths ?? []}
+              options={options.paths.map((p) => ({ value: p, label: marketingPathLabel(p, locale) }))}
+              onChange={(v) => setAxis('paths', v)}
+            />
+            <AxisSelect
+              label={t.kind}
+              value={axes.kinds ?? []}
+              options={options.kinds.map((k) => ({
+                value: k,
+                label: KIND_LABEL[k] ? KIND_LABEL[k][ar ? 'ar' : 'en'] : k,
+              }))}
+              onChange={(v) => setAxis('kinds', v)}
+            />
+            <AxisSelect
+              label={t.status}
+              value={axes.statuses ?? []}
+              options={options.statuses.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))}
+              onChange={(v) => setAxis('statuses', v)}
+            />
+          </div>
+        )}
+
+        {selected.length > 0 && (
+          <div className="flex items-center gap-2 text-xs text-text-secondary">
+            <span dir="ltr">{selected.length}</span>
+            <span>{t.selected}</span>
+            <button type="button" onClick={() => setSelected([])} className="underline">
+              {t.clearSelection}
+            </button>
+          </div>
+        )}
+      </section>
+
+      {libraryQuery.isError && (
+        <ErrorState title={t.error} error={libraryQuery.error} ar={ar} onRetry={() => void libraryQuery.refetch()} />
+      )}
+
+      {libraryQuery.isPending && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-64" />
+          ))}
+        </div>
+      )}
+
+      {!libraryQuery.isPending && !libraryQuery.isError && creatives.length === 0 && (
+        <div className="rounded-lg border border-border bg-surface p-8 text-center text-sm text-text-secondary">
+          {filtersTouched ? t.empty : t.emptyAll}
+        </div>
+      )}
+
+      {creatives.length > 0 && view === 'grid' && (
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {creatives.map((creative, index) => (
+            <li key={creative.id}>
+              <CreativeGridCard
+                creative={creative}
+                t={t}
+                ar={ar}
+                locale={locale}
+                selected={selected.includes(creative.id)}
+                onSelect={() => toggleSelected(creative.id)}
+                onOpen={() => setViewerIndex(index)}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {creatives.length > 0 && view === 'list' && (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full min-w-[52rem] text-sm">
+            <thead className="bg-surface-hover text-start text-xs text-text-secondary">
               <tr>
-                <th className="p-3 text-start font-semibold">{c.title}</th>
-                <th className="p-3 text-start font-semibold">{c.provider}</th>
-                <th className="p-3 text-start font-semibold">{c.format}</th>
-                <th className="p-3 text-start font-semibold">{c.status}</th>
-                <th className="p-3 text-start font-semibold">{c.campaign}</th>
-                <th className="p-3 text-end font-semibold">{c.spend}</th>
-                <th className="p-3 text-end font-semibold">{c.impressions}</th>
+                <th className="p-2" />
+                <th className="p-2 text-start">{t.title}</th>
+                <th className="p-2 text-start">{t.platform}</th>
+                <th className="p-2 text-start">{t.campaign}</th>
+                <th className="p-2 text-start">{t.objective}</th>
+                <th className="p-2 text-start">{metricLabel('spend', locale)}</th>
+                <th className="p-2 text-start">{metricLabel('impressions', locale)}</th>
+                <th className="p-2 text-start">{t.health}</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((x) => {
-                const st = statusMeta(x.status)
-                return (
-                  <tr key={x.id} className="cursor-pointer border-t border-border hover:bg-surface-hover" onClick={() => setSelected(x)}>
-                    <td className="p-3 font-semibold text-text-primary">{x.name ?? '—'}</td>
-                    <td className="p-3"><ProviderDot provider={x.provider} /></td>
-                    <td className="p-3 text-text-secondary">{formatLabel(x.format, ar)}</td>
-                    <td className="p-3"><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${st.tone}`}>{ar ? st.ar : st.en}</span></td>
-                    <td className="p-3 text-text-secondary">{x.campaign_name ?? '—'}</td>
-                    <td className="p-3 tnum text-end text-text-primary" dir="ltr">{money(x.metrics.spend)}</td>
-                    <td className="p-3 tnum text-end text-text-secondary" dir="ltr">{compact(x.metrics.impressions)}</td>
-                  </tr>
-                )
-              })}
+              {creatives.map((creative, index) => (
+                <tr key={creative.id} className="border-t border-border">
+                  <td className="p-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`${t.compare}: ${creative.name}`}
+                      checked={selected.includes(creative.id)}
+                      onChange={() => toggleSelected(creative.id)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <button type="button" onClick={() => setViewerIndex(index)} className="text-start font-medium text-text-primary underline-offset-2 hover:underline">
+                      {creative.name}
+                    </button>
+                  </td>
+                  <td className="p-2 text-text-secondary">{providerLabel(creative.provider, locale)}</td>
+                  <td className="p-2 text-text-secondary">{creative.campaign_name ?? '—'}</td>
+                  <td className="p-2 text-text-secondary">
+                    {creative.objective ? objectiveLabel(creative.objective, locale) : '—'}
+                  </td>
+                  <td className="p-2 tabular-nums" dir="ltr">
+                    {formatMetric(metricState(creative.metrics, 'spend'), 'spend', locale)}
+                  </td>
+                  <td className="p-2 tabular-nums" dir="ltr">
+                    {formatMetric(metricState(creative.metrics, 'impressions'), 'impressions', locale)}
+                  </td>
+                  <td className="p-2">
+                    <span className={`rounded px-1.5 py-0.5 text-xs ${FATIGUE_TONE[creative.fatigue.status]}`}>
+                      {FATIGUE_LABEL[creative.fatigue.status]?.[ar ? 'ar' : 'en'] ?? creative.fatigue.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       )}
 
-      {selected ? <CreativeDrawer creative={selected} c={c} ar={ar} onClose={() => setSelected(null)} /> : null}
+      {total > perPage && (
+        <nav className="flex items-center justify-between gap-3 text-sm" aria-label={t.showing}>
+          <span className="text-text-secondary" dir="ltr">
+            {(page - 1) * perPage + 1}–{Math.min(page * perPage, total)} {t.of} {total}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+              {t.prev}
+            </Button>
+            <Button variant="secondary" disabled={page >= lastPage} onClick={() => setPage((p) => p + 1)}>
+              {t.next}
+            </Button>
+          </div>
+        </nav>
+      )}
+
+      {viewerIndex !== null && creatives[viewerIndex] && (
+        <CreativeViewer
+          creatives={creatives}
+          index={viewerIndex}
+          onIndexChange={setViewerIndex}
+          onClose={() => setViewerIndex(null)}
+        />
+      )}
+
+      {comparing && (
+        <CreativeCompare
+          creativeIds={selected}
+          creatives={creatives.filter((c) => selected.includes(c.id))}
+          window={{ from, to }}
+          onClose={() => setComparing(false)}
+        />
+      )}
     </div>
   )
 }
 
-function StateBox({ children, tone }: { children: React.ReactNode; tone?: 'danger' }) {
-  return <p className={`rounded-xl border border-dashed p-10 text-center text-sm ${tone === 'danger' ? 'border-danger/30 bg-danger/5 text-danger' : 'border-border text-text-secondary'}`}>{children}</p>
-}
+function CreativeGridCard({
+  creative,
+  t,
+  ar,
+  locale,
+  selected,
+  onSelect,
+  onOpen,
+}: {
+  creative: CreativeCard
+  t: (typeof COPY)['ar']
+  ar: boolean
+  locale: 'ar' | 'en'
+  selected: boolean
+  onSelect: () => void
+  onOpen: () => void
+}) {
+  const preview = creative.preview
+  const poster = preview.thumbnail_url ?? preview.image_url
+  const note = ar ? preview.note_ar : preview.note_en
 
-function Chip({ active, onClick, children, tone }: { active: boolean; onClick: () => void; children: React.ReactNode; tone?: 'dark' }) {
-  const on = tone === 'dark' ? 'bg-text-primary text-surface' : 'bg-brand-500 text-white'
-  return <button onClick={onClick} className={`rounded-full px-3 py-1 text-xs font-semibold ${active ? on : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>{children}</button>
-}
-
-function SummaryCard({ label, value, tone }: { label: string; value: string; tone: 'brand' | 'success' | 'warning' | 'muted' }) {
-  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', success: 'bg-success', warning: 'bg-warning', muted: 'bg-text-muted' }
   return (
-    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
-        <span className="text-xs font-semibold text-text-secondary">{label}</span>
+    <article className={`flex h-full flex-col overflow-hidden rounded-lg border bg-surface ${selected ? 'border-primary' : 'border-border'}`}>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={`${t.open}: ${creative.name}`}
+          className="block aspect-video w-full bg-surface-hover"
+        >
+          {poster ? (
+            <img
+              src={poster}
+              alt={creative.name}
+              // Off-screen cards cost nothing until they scroll into view — the difference between
+              // a page and a download on a phone with twenty creatives on it. An INLINE asset is
+              // exempt: see `imageLoading`, where lazy-loading a `data:` URI stopped it loading at all.
+              loading={imageLoading(poster)}
+              decoding="async"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <span className="flex h-full flex-col items-center justify-center gap-1 p-3 text-center text-xs text-text-secondary">
+              <span>{t.noPreview}</span>
+              {note && <span className="text-[11px] opacity-80">{note}</span>}
+            </span>
+          )}
+        </button>
+
+        <label className="absolute top-2 flex items-center gap-1 rounded bg-surface/90 px-1.5 py-1 text-xs ltr:left-2 rtl:right-2">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onSelect}
+            aria-label={`${t.compare}: ${creative.name}`}
+          />
+        </label>
+
+        {creative.preview.kind === 'video' && (
+          <span className="absolute bottom-2 rounded bg-black/70 px-1.5 py-0.5 text-[11px] text-white ltr:right-2 rtl:left-2" dir="ltr">
+            {creative.duration_seconds === null ? 'video' : `${creative.duration_seconds}s`}
+          </span>
+        )}
       </div>
-      <span className="text-2xl font-extrabold tnum text-text-primary" dir="ltr">{value}</span>
-    </div>
-  )
-}
 
-function ProviderDot({ provider }: { provider: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-secondary">
-      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: providerColor(provider) }} aria-hidden />
-      {providerLabel(provider)}
-    </span>
-  )
-}
-
-/** Explainable performance badge (⭐ top / ⚠ needs attention) with the reason on hover. */
-function PerfBadge({ creative, ar }: { creative: Creative; ar: boolean }) {
-  const p = creative.performance
-  if (!p || p.class === 'normal') return null
-  const reason = ar ? p.reason_ar : p.reason_en
-  return p.class === 'top' ? (
-    <span title={reason} className="inline-flex w-fit items-center gap-1 rounded-md bg-success/15 px-1.5 py-0.5 text-[10px] font-bold text-success">★ {reason}</span>
-  ) : (
-    <span title={reason} className="inline-flex w-fit items-center gap-1 rounded-md bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold text-danger">⚠ {reason}</span>
-  )
-}
-
-/** A thumbnail (only when the platform provided one) or an honest format placeholder — never fabricated. */
-function Thumb({ creative, className }: { creative: Creative; className?: string }) {
-  const src = creative.thumbnail_url ?? creative.preview_url
-  if (src) return <img src={src} alt={creative.name ?? ''} loading="lazy" className={`object-cover ${className ?? ''}`} />
-  const Icon = creative.format === 'video' ? Play : creative.format === 'carousel' ? Images : ImageIcon
-  return (
-    <div className={`flex items-center justify-center bg-surface-hover text-text-muted ${className ?? ''}`}>
-      <Icon size={22} />
-    </div>
-  )
-}
-
-function CreativeCard({ creative, ar, onClick }: { creative: Creative; ar: boolean; onClick: () => void }) {
-  const st = statusMeta(creative.status)
-  return (
-    <button onClick={onClick} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-surface text-start transition-colors hover:border-brand-400">
-      <div className="relative aspect-video w-full">
-        <Thumb creative={creative} className="h-full w-full" />
-        <span className="absolute start-2 top-2 rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: providerColor(creative.provider) }}>{providerLabel(creative.provider)}</span>
-        <span className={`absolute end-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold ${st.tone}`}>{ar ? st.ar : st.en}</span>
-      </div>
-      <div className="flex flex-col gap-1 p-3">
-        <span className="line-clamp-1 text-sm font-semibold text-text-primary">{creative.name ?? '—'}</span>
-        <PerfBadge creative={creative} ar={ar} />
-        <span className="line-clamp-1 text-[11px] text-text-tertiary">{creative.campaign_name ?? '—'} · {formatLabel(creative.format, ar)}</span>
-        <div className="mt-1 flex items-center justify-between text-[11px] text-text-secondary">
-          <span className="tnum" dir="ltr">{money(creative.metrics.spend)}</span>
-          {/* The creative's OWN group KPI — awareness shows CPM, sales shows ROAS, etc. */}
-          <span className="tnum font-semibold" dir="ltr">{kpiDisplay(creative)}</span>
-        </div>
-      </div>
-    </button>
-  )
-}
-
-function CreativeDrawer({ creative, c, ar, onClose }: { creative: Creative; c: Copy; ar: boolean; onClose: () => void }) {
-  const st = statusMeta(creative.status)
-  return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
-      <div className="flex h-full w-full max-w-md flex-col gap-4 overflow-y-auto bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="text-lg font-extrabold text-text-primary">{c.details}</h2>
-          <button onClick={onClose} aria-label={c.close} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-hover"><X size={18} /></button>
+      <div className="flex flex-1 flex-col gap-2 p-3">
+        <div className="flex items-start justify-between gap-2">
+          <button type="button" onClick={onOpen} className="text-start text-sm font-medium text-text-primary underline-offset-2 hover:underline">
+            {creative.name}
+          </button>
+          {creative.is_demo && (
+            <span className="shrink-0 rounded bg-warning/15 px-1.5 py-0.5 text-[11px] text-warning">{t.demo}</span>
+          )}
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-border">
-          <Thumb creative={creative} className="aspect-video w-full" />
-        </div>
-        {!creative.has_preview ? <p className="text-center text-[11px] text-text-tertiary">{c.no_preview}</p> : null}
+        <p className="text-xs text-text-secondary">
+          {providerLabel(creative.provider, locale)}
+          {creative.campaign_name ? ` · ${creative.campaign_name}` : ''}
+          {creative.objective ? ` · ${objectiveLabel(creative.objective, locale)}` : ''}
+        </p>
 
-        <div className="flex flex-col gap-1">
-          <span className="text-base font-bold text-text-primary">{creative.name ?? '—'}</span>
-          {creative.client_display_name ? <span className="text-xs text-text-secondary">{creative.client_display_name}</span> : null}
-        </div>
-
-        <dl className="flex flex-col gap-2 rounded-2xl border border-border p-4 text-sm">
-          <Row label={c.provider}><ProviderDot provider={creative.provider} /></Row>
-          <Row label={c.format}>{formatLabel(creative.format, ar)}</Row>
-          <Row label={c.status}><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${st.tone}`}>{ar ? st.ar : st.en}</span></Row>
-          <Row label={c.campaign}>{creative.campaign_name ?? '—'}</Row>
-          <div className="my-1 border-t border-border" />
-          <Row label={c.spend}><span className="tnum" dir="ltr">{money(creative.metrics.spend)}</span></Row>
-          <Row label={c.impressions}><span className="tnum" dir="ltr">{creative.metrics.impressions.toLocaleString('en-US')}</span></Row>
-          <Row label={c.clicks}><span className="tnum" dir="ltr">{creative.metrics.clicks.toLocaleString('en-US')}</span></Row>
-          <Row label={c.conversions}><span className="tnum" dir="ltr">{creative.metrics.conversions.toLocaleString('en-US')}</span></Row>
-          <Row label={c.ctr}><span className="tnum" dir="ltr">{creative.metrics.ctr !== null ? `${(creative.metrics.ctr * 100).toFixed(2)}%` : '—'}</span></Row>
-          <Row label={c.roas}><span className="tnum" dir="ltr">{creative.metrics.roas !== null ? `${creative.metrics.roas.toFixed(2)}x` : '—'}</span></Row>
-          <Row label={c.last_sync}><span className="tnum" dir="ltr">{fmtDate(creative.last_synced_at)}</span></Row>
+        {/* The creative's OWN headline metrics — chosen by its objective, so an awareness video is
+            never asked for a cost per order it was not bought to produce. */}
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+          {creative.headline_metrics.slice(0, 4).map((key) => (
+            <div key={key} className="flex flex-col">
+              <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
+              <dd className="tabular-nums text-text-primary" dir="ltr">
+                {formatMetric(metricState(creative.metrics, key), key, locale)}
+              </dd>
+            </div>
+          ))}
         </dl>
 
-        {creative.performance && creative.performance.class !== 'normal' ? (
-          <div className="flex items-center justify-between rounded-xl bg-surface-hover px-3 py-2 text-sm">
-            <span className="font-semibold text-text-secondary">{c.perf_reason}</span>
-            <PerfBadge creative={creative} ar={ar} />
-          </div>
-        ) : null}
+        <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
+          <span className={`rounded px-1.5 py-0.5 text-[11px] ${FATIGUE_TONE[creative.fatigue.status]}`}>
+            {FATIGUE_LABEL[creative.fatigue.status]?.[ar ? 'ar' : 'en'] ?? creative.fatigue.status}
+          </span>
+          {creative.grouped && (
+            <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[11px] text-text-secondary">{t.grouped}</span>
+          )}
+        </div>
 
-        {creative.destination_url ? (
-          <a href={creative.destination_url} target="_blank" rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:border-brand-500 hover:text-brand-600">
-            <ExternalLink size={15} /> {c.open_dest}
-          </a>
-        ) : null}
+        {/* §15.15 — where the number came from and how old it is, beside the number itself. */}
+        <p className="text-[11px] text-text-secondary">
+          {t.source} · {t.lastSync}:{' '}
+          <span dir="ltr">{creative.freshness.last_synced_at?.slice(0, 10) ?? t.never}</span>
+        </p>
       </div>
-    </div>
-  )
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <dt className="text-text-secondary">{label}</dt>
-      <dd className="font-semibold text-text-primary">{children}</dd>
-    </div>
+    </article>
   )
 }

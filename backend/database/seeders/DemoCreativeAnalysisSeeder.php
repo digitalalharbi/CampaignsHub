@@ -55,6 +55,14 @@ final class DemoCreativeAnalysisSeeder extends Seeder
     /** Reserved prefix — `demo:remove` matches on it, and no synced creative can carry it. */
     public const EXTERNAL_ID_PREFIX = 'demo-creative-';
 
+    /**
+     * The one playable file every video fixture points at, under this app's own `public/`.
+     *
+     * Served by the application rather than fetched from anywhere, so the player works on a laptop
+     * with no network and no credentials — the same reason the images are inline data URIs.
+     */
+    public const SAMPLE_VIDEO = '/demo/creative-sample.mp4';
+
     public function run(): void
     {
         if (! App::environment(['local', 'testing', 'demo'])) {
@@ -132,6 +140,22 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                      */
                     'thumbnail_url' => $this->placeholder($case['name'], $case['tint']),
                     'asset_url' => $this->placeholder($case['name'], $case['tint']),
+                    /*
+                     * A real, playable file for the video cases — nothing else proves §15.4.
+                     *
+                     * Every video fixture used to carry `video_url = null`, so the library showed a
+                     * poster with a play button and the player had nothing to open. «تشغيل الفيديو
+                     * فعليًا» is an acceptance test, and it cannot be met by a control that looks
+                     * right; a reviewer pressing play on all four video cases got a dead button.
+                     *
+                     * 27 KB of solid colour and a tone, generated once and served from this app's own
+                     * `public/`, so it plays offline with no credentials and cannot 404 on a fresh
+                     * install. Deliberately dull: it is scaffolding for the player, not content, and
+                     * nobody should mistake it for a real ad.
+                     */
+                    'video_url' => str_contains((string) $case['format'], 'video')
+                        ? rtrim((string) config('app.url'), '/').self::SAMPLE_VIDEO
+                        : null,
                     'first_seen_at' => $today->copy()->subDays($case['age']),
                     'last_active_at' => $today->copy()->subDays($case['idle'] ?? 0),
                     'source_updated_at' => $today->copy()->subDay(),
@@ -259,7 +283,18 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                 default => [1.0 + 0.1 * $t, 0.019, 0.022, 1.9 + 0.3 * $t],
             };
 
-            $impressions = round(24000 * $impressionScale * (1 + 0.12 * sin($d / 4.0)));
+            /*
+             * A scale of its own per creative, so no two are identical.
+             *
+             * Every `default`-shape case ran off the same 24,000 base, so the awareness image and the
+             * sales video reported the SAME spend to the riyal and the same impressions to the unit.
+             * A comparison of two creatives whose every delivery figure matches exactly reads as a
+             * broken join, and «sort by spend» had nothing to sort. Derived from the case key so it
+             * stays deterministic across re-seeds — this is a fixture, not a random walk.
+             */
+            $spread = 0.55 + (crc32($case['key']) % 90) / 100;
+
+            $impressions = round(24000 * $spread * $impressionScale * (1 + 0.12 * sin($d / 4.0)));
             $clicks = round($impressions * $ctr);
             $conversions = $case['sales'] ? round($clicks * $cvr) : null;
             $spend = round($clicks * 1.35, 2);
@@ -275,8 +310,20 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                 'spend' => $spend,
                 'impressions' => $impressions,
                 'clicks' => $clicks,
-                'conversions' => $conversions ?? 0,
-                'revenue' => $revenue ?? 0,
+                /*
+                 * NULL for a creative that was never bought to sell — not zero.
+                 *
+                 * These were written as `?? 0`, so an awareness image reported `conversions = 0` and
+                 * `revenue = 0` as MEASURED values. The consequence showed up the moment two
+                 * creatives were compared: the awareness image sat beside the sales video reading
+                 * «ROAS 0.00×», which says its return was nothing, when the truth is that no return
+                 * was ever reported for it. That is exactly the awareness/sales mixing the contract
+                 * forbids, produced by the very fixtures meant to demonstrate the rule.
+                 *
+                 * NULL makes the sum NULL, `reported` false, and the surfaces say «غير مُرسَل».
+                 */
+                'conversions' => $conversions,
+                'revenue' => $revenue,
                 'reach' => round($impressions / max($frequency, 1)),
                 'frequency' => round($frequency, 2),
                 'landing_page_views' => round($clicks * 0.86),

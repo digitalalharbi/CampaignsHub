@@ -57,6 +57,12 @@ final class CreativePresenter
             'preview' => $preview,
             'aspect_ratio' => $creative->aspect_ratio,
             'duration_seconds' => $creative->duration_seconds,
+            // On the CARD, not only the detail view: §15.3 asks for the dimensions and weight beside
+            // a full-size preview, and the viewer opens from a card without fetching the detail.
+            // Nullable throughout — a platform that does not report a file size has not sent zero.
+            'width' => $creative->width,
+            'height' => $creative->height,
+            'file_size' => $creative->file_size === null ? null : (int) $creative->file_size,
             'grouped' => $creative->creative_group_id !== null,
             'is_demo' => (bool) $creative->is_demo,
             'freshness' => [
