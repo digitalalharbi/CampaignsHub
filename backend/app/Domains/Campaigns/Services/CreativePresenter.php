@@ -210,6 +210,19 @@ final class CreativePresenter
             return null;
         }
 
+        /*
+         * An inline image is not a network request, and carries nothing to leak.
+         *
+         * `data:image/…` is how a self-contained asset travels — the demo library uses it so the
+         * preview renders on a laptop with no credentials and no network. Restricted to `image/`
+         * deliberately: an `<img>` will not execute a `data:text/html` payload, but nothing in this
+         * product needs one, and the narrower rule is the one that stays true if the value is ever
+         * rendered somewhere other than an `<img>`.
+         */
+        if (str_starts_with(strtolower($url), 'data:image/')) {
+            return $url;
+        }
+
         $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
         if (! in_array($scheme, ['http', 'https'], true)) {
             return null;

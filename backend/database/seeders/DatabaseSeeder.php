@@ -100,6 +100,9 @@ class DatabaseSeeder extends Seeder
             // logins seeder, because it fills the one client space that account is scoped to; before
             // it, the demo client portal was eight empty sections.
             $this->call(DemoClientPortalSeeder::class);
+            // §15.16 — the ten creative cases the analysis surfaces have to be reviewable against.
+            // AFTER the portal seeder, because it hangs its creatives off that project's campaigns.
+            $this->call(DemoCreativeAnalysisSeeder::class);
             // ADMIN-100 — spread the demo tenants' creation dates back across ten months, so the
             // platform growth chart shows a shape instead of one spike in the current month. LAST
             // among the demo seeders, because it rewrites what they have just created.
