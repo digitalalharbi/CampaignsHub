@@ -48,6 +48,15 @@ const AGENCY_BEFORE = [
    * in «the portals stay distinct» below for why an agency now has this entry.
    */
   '/agency/integrations',
+  /*
+   * ADDED for the same reason, and just as deliberately.
+   *
+   * Every metrics route on the server is `portal:app,agency` and always has been — the API has never
+   * refused an agency operator. Only the link and the URL were missing, so `/agency/analytics`
+   * answered 404 for the reader who runs media across five clients and is therefore the one who most
+   * needs it. Mounted, not copied: the same `AnalyticsPage` component, per ADR 0002.
+   */
+  '/agency/analytics',
 ]
 
 /** The sections REG-001 moved out of the advertiser rail, and the portal each landed in. */

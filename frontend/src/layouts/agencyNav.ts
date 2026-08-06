@@ -1,6 +1,6 @@
 import {
   BarChart3, BellRing, Building2, CreditCard, FolderKanban, FolderOpen, Images, Inbox,
-  LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Settings, Users,
+  LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Settings, TrendingUp, Users,
 } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
@@ -79,6 +79,12 @@ export const agencyNavGroups: readonly NavGroup[] = [
     // an agency hands over, and it now has a heading that says so.
     ar: 'التقارير والملفات', en: 'Reports & files', icon: BarChart3,
     leaves: [
+      /*
+       * Analytics leads, because it is what a report is made OF. The agency portal has never had it:
+       * the API accepted agency operators on every metrics route, and only the link and the URL were
+       * missing, so the reader running media for five clients had no page to open.
+       */
+      { to: '/agency/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp },
       { to: '/agency/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3 },
       { to: '/agency/files', ar: 'الملفات', en: 'Files', icon: FolderOpen },
     ],

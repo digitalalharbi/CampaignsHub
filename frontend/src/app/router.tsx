@@ -441,6 +441,19 @@ export const router = createBrowserRouter([
              */
             { path: 'integrations', element: <ConnectionCenterPage /> },
             { path: 'integrations/drive', element: <DrivePage /> },
+            /*
+             * The analytics page, missing from this portal for exactly the reason `/agency/integrations`
+             * was.
+             *
+             * Every metrics route is `portal:app,agency` on the server and always has been — the API
+             * has never refused an agency operator. Only the URL was absent, so the reader who runs
+             * media for five clients, and is therefore the one who most needs «أساس الأرقام» and the
+             * attribution block, had no page to open. `/agency/analytics` answered 404.
+             *
+             * MOUNTED, not copied — same component as `/app/analytics`, per ADR 0002. A second copy is
+             * how two portals start disagreeing about what a figure means.
+             */
+            { path: 'analytics', element: <AnalyticsPage /> },
             { path: 'campaigns', element: <CampaignsPage /> },
             { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
             { path: 'content', element: <CreativesPage /> },
