@@ -136,11 +136,11 @@ return new class extends Migration
 
     public function down(): void
     {
-        DB::statement("UPDATE creative_daily_metrics SET video_views = 0 WHERE video_views IS NULL");
-        DB::statement("UPDATE creative_daily_metrics SET video_completions = 0 WHERE video_completions IS NULL");
-        DB::statement("ALTER TABLE creative_daily_metrics ALTER COLUMN video_views SET DEFAULT 0");
+        DB::statement('UPDATE creative_daily_metrics SET video_views = 0 WHERE video_views IS NULL');
+        DB::statement('UPDATE creative_daily_metrics SET video_completions = 0 WHERE video_completions IS NULL');
+        DB::statement('ALTER TABLE creative_daily_metrics ALTER COLUMN video_views SET DEFAULT 0');
         DB::statement('ALTER TABLE creative_daily_metrics ALTER COLUMN video_views SET NOT NULL');
-        DB::statement("ALTER TABLE creative_daily_metrics ALTER COLUMN video_completions SET DEFAULT 0");
+        DB::statement('ALTER TABLE creative_daily_metrics ALTER COLUMN video_completions SET DEFAULT 0');
         DB::statement('ALTER TABLE creative_daily_metrics ALTER COLUMN video_completions SET NOT NULL');
 
         Schema::table('creative_daily_metrics', function (Blueprint $table): void {
