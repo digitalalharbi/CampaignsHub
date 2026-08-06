@@ -10,6 +10,92 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## Session — 2026-08-06 · §15.12, the content inside a client's report
+
+**HEAD `a456043`. Tree clean. Backend 1487+ passed · Pint clean · vitest 731 / 103 files · `tsc -b`
+· oxlint 0 errors · production build clean.**
+
+### `93897cc` — an order is a whole thing
+
+`DemoCreativesSeeder` stored clicks and conversions to two decimals; `DemoAnalyticsSeeder` rounded at
+the point of writing while spend and revenue were still derived from the unrounded figures, so a CPC
+could not be reproduced by dividing the two numbers printed beside each other. Counts are now whole
+where they are COMPUTED, money keeps its halalas, and revenue follows the whole order count at a
+fixed basket value so AOV divides exactly. The guard runs the real seeders and reads the real
+tables; on the previous code it finds 2,040 fractional click rows.
+
+### `bbcddce` — one selection, and what the figures say about it
+
+`CreativeRows` takes the query, the ordering, the two-query metric fetch and the presentation out of
+the controller so the client's report reads the SAME selection with a different ceiling. Nothing in
+it consults `auth()` or the request — a service that did would be unusable on the one surface that
+has no user.
+
+`CreativeInsights` (§15.10) reads those rows: fifteen rules, each firing only when a named creative
+crossed a named threshold against either itself in the previous window or the median of its OWN
+marketing path. Every item carries the creative, objective, path, platform, campaign, window, both
+figures, the movement, a confidence and an action, with the numbers interpolated into both
+sentences. The tests are mostly NEGATIVE, because the failure mode is a page of sentences true of
+every account on every day. Below the evidence floor exactly one rule fires — spend on something
+almost nobody saw — carrying `confidence: insufficient_data`.
+
+### `c68396f` — creative permissions on a client link, fail-closed
+
+`CreativeVisibility`: fifteen switches, every one false by default, so a link that says nothing about
+creatives shows none — including every link made before today. It closes the combinations that leak
+by arithmetic: `roas` requires spend AND revenue, `cpa` requires spend, resolved once instead of at
+fifteen call sites.
+
+`SharedCreativeView` owns the ceiling and computes nothing. An excluded creative is refused by id, by
+group, by comparison and by filter, because the lookup runs through the bounded query rather than
+fetching by key and checking after. **404, never 403** — a 403 confirms the id exists and is merely
+withheld. Named creatives and named groups UNION; two `whereIn`s would have meant «in the list AND in
+the group», which is nothing.
+
+**Form and mode are now two facts.** `form` came from the report row, so two links to one report
+could not differ; `mode` came from whether a scope existed, so choosing which creatives a link may
+show would have turned a frozen report live.
+
+Withheld figures are gone from the CSV and the XLSX too, since the export runs on the same redacted
+rows.
+
+### `a456043` — the sections a client can actually open
+
+The operator's modal separates the CEILING (which creatives exist for this link) from the SWITCHES
+(what may be shown about them), because they fail differently — and says so on screen, so an operator
+who needs a creative genuinely unavailable is told to exclude it rather than to untick «download». A
+dependency the server will refuse is shown as refused while the operator is still looking at it.
+
+The client's summary gets the answers; the detailed report gets those plus the library.
+`CreativeViewer` gained `canZoom`, which gates the shortcuts as well as the buttons.
+
+**Live evidence, end to end through the operator's own modal:** a link created with
+`form=executive_summary` stayed `mode=snapshot` despite carrying a creative ceiling, its permissions
+arrived exactly as ticked, ROAS resolved true because both sides were on, and the excluded creative
+went 60 → 59 and answered 404 by its own id while the same id answered 200 on the unrestricted link.
+On the client's page: 10 images decoding at 600×600, zero `<video>` elements in the section, the
+viewer opening at 600×600 with arrow keys moving between creatives, a video mounting
+`preload=metadata` with no `src` armed and `autoplay=false`, the platform filter narrowing 60 → 12
+server-side, the money-hiding link showing eight «not shown» labels and no ROAS figure anywhere,
+Arabic/RTL at 375px with no horizontal scroll, and zero console errors throughout.
+
+**Two defects the Arabic page found:** a bare colon in front of an unlabelled value, and raw column
+keys («ctr») sitting mid-sentence in Arabic prose.
+
+### Exact next task
+
+**§15.6 — the interactive Creative Details PAGE.** The API is live and the viewer is built; the
+drill-down currently ends at the viewer. Then §15.13 the Creative Groups UI (endpoints exist, no UI)
+· §14.6 objective layouts · §14.7–14.8 comparisons, pacing, funnel drop-off, anomaly detection ·
+REPORT-OBJECTIVE-005 attribution and deduplication · `PRODUCTION_HANDOVER.md` · clean install +
+upgrade path · **the full three-browser Playwright gate, still not run since `2ea6943`** — its
+verdict must come from Playwright's own exit code, with no file or database change during the gate.
+
+Product and Tag filters stay out of the interface: there is no `commerce_products`↔creative link and
+no creative tags table, so both would be controls that return nothing.
+
+---
+
 ## Session — 2026-08-06 · §15.11, creative analysis on the dashboard
 
 **HEAD `a9cc080`. Tree clean. Backend 1452+ passed · Pint clean · vitest 719 / 103 files · `tsc -b`
@@ -47,7 +133,9 @@ horizontal scroll at 375px (the wide tables scroll inside their own containers),
 errors through a full filter interaction, and the drill-down landing on a library filtered to one
 card with the viewer open on the named creative and its player still holding no source.
 
-### Exact next task — §15.12
+### Exact next task — **done, at `a456043`.** See the §15.12 section above.
+
+<!-- was: -->
 
 **The creative sections of the executive and the detailed report**, then share-level creative
 permissions (fail-closed: a creative excluded from a client link must not open, by URL or by API).
