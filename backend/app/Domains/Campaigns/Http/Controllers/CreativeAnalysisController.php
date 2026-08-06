@@ -5,16 +5,15 @@ declare(strict_types=1);
 namespace App\Domains\Campaigns\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
-use App\Domains\Campaigns\Enums\CampaignObjective;
-use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Models\CreativeGroup;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CreativeFatigue;
+use App\Domains\Campaigns\Services\CreativeInsights;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativePulse;
-use App\Domains\Tenancy\Services\ClientScopeResolver;
+use App\Domains\Campaigns\Services\CreativeRows;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -49,6 +48,7 @@ final class CreativeAnalysisController extends Controller
         private readonly CreativeMetrics $metrics,
         private readonly CreativeFatigue $fatigue,
         private readonly CreativePresenter $presenter,
+        private readonly CreativeRows $rows,
     ) {}
 
     /**
@@ -116,7 +116,7 @@ final class CreativeAnalysisController extends Controller
      * and the previous one are two grouped queries, and the campaigns are a third. A project with a
      * thousand creatives costs the same four queries as one with ten (§15.14).
      */
-    public function pulse(Request $request, CreativePulse $pulse, ?string $project = null): JsonResponse
+    public function pulse(Request $request, CreativePulse $pulse, CreativeInsights $insights, ?string $project = null): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
 
@@ -144,6 +144,14 @@ final class CreativeAnalysisController extends Controller
                  * rows in reach, exactly as the library's are.
                  */
                 'filters' => $this->filterOptions($request, $project),
+                /*
+                 * §15.10 — the same rows, read as findings rather than as rankings.
+                 *
+                 * Built from the array the section is already holding, so an insight can never cite
+                 * a figure the cards beside it disagree with. Empty is a legitimate answer: an
+                 * account where nothing moved materially has nothing to be told.
+                 */
+                'insights' => $insights->build($rows, $from, $to),
             ],
             'Creative pulse.',
         );
@@ -338,233 +346,62 @@ final class CreativeAnalysisController extends Controller
 
     // ---- internals ----------------------------------------------------------------------------
 
+    /*
+     * The six methods below are one-line delegations to {@see CreativeRows}, which is where the
+     * query, the ordering, the two-query metric fetch and the presentation actually live.
+     *
+     * They moved out of this controller when the client's report needed the SAME selection with a
+     * different ceiling — the share's, not the signed-in user's. Copying them would have created a
+     * second definition of «this project's creatives in this window», and the first time the two
+     * drifted, the operator's dashboard and the client's report would both have looked correct while
+     * disagreeing about the same creative. The wrappers stay so the call sites above read as they
+     * did; they hold no logic.
+     */
+
     /** @return array{0: Carbon, 1: Carbon} */
     private function window(Request $request): array
     {
-        $to = $request->filled('to') ? Carbon::parse($request->string('to')->toString()) : Carbon::today();
-        $from = $request->filled('from')
-            ? Carbon::parse($request->string('from')->toString())
-            : $to->copy()->subDays(29);
-
-        return $from->greaterThan($to) ? [$to, $from] : [$from, $to];
+        return $this->rows->window(
+            $request->filled('from') ? $request->string('from')->toString() : null,
+            $request->filled('to') ? $request->string('to')->toString() : null,
+        );
     }
 
-    /**
-     * The ceiling every library read sits under, before a single filter is considered.
-     *
-     * The tenant scope is on the model; this adds the CLIENT ceiling, which the model cannot know
-     * about. A manager confined to two clients must not reach a third client's creatives by asking
-     * for them, and `reachableClientIds()` returns `[]` — not null — for anyone without an explicit
-     * grant, so the fail-closed direction is the default rather than a special case.
-     *
-     * Applied to the query, never to the response: filtering rows out after fetching them is the
-     * shape of leak that shows up in a total, a chart axis or a page count even when the list looks
-     * right.
-     */
     private function applyReach(mixed $query, Request $request): void
     {
-        $reach = app(ClientScopeResolver::class)->reachableClientIds($request->user());
-
-        if ($reach === null) {
-            return; // an explicit `clients.view_all` holder — never inferred from an empty scope.
-        }
-
-        $query->whereIn('project_id', function ($sub) use ($reach): void {
-            $sub->select('id')->from('projects')->whereIn('client_workspace_id', $reach);
-        });
+        $this->rows->applyReach($query, $request->user());
     }
 
     private function applyFilters(mixed $query, Request $request): void
     {
-        // Singular and plural both accepted: the older callers send `provider[]`, the library sends
-        // `providers[]`. One name would have been better; breaking the older one to get it would
-        // have been worse.
-        $columns = [
-            'provider' => 'provider', 'providers' => 'provider',
-            'format' => 'format', 'formats' => 'format',
-            'status' => 'status', 'statuses' => 'status',
-        ];
-
-        foreach ($columns as $param => $column) {
-            $values = array_filter((array) $request->input($param, []));
-            if ($values !== []) {
-                $query->whereIn($column, $values);
-            }
-        }
-
-        foreach ([
-            'campaign_ids' => 'campaign_id',
-            'ad_set_ids' => 'external_ad_set_id',
-            'ad_ids' => 'external_ad_id',
-            'project_ids' => 'project_id',
-        ] as $param => $column) {
-            if ($ids = array_filter((array) $request->input($param, []))) {
-                $query->whereIn($column, $ids);
-            }
-        }
-
-        // A client is reached through its projects; `external_creatives` has no client column, and
-        // adding one would be a second place for the same fact to be wrong.
-        if ($clients = array_filter((array) $request->input('client_ids', []))) {
-            $query->whereIn('project_id', function ($sub) use ($clients): void {
-                $sub->select('id')->from('projects')->whereIn('client_workspace_id', $clients);
-            });
-        }
-
-        if ($search = trim($request->string('search')->toString())) {
-            $query->where(function ($q) use ($search): void {
-                $q->where('name', 'ilike', "%{$search}%")
-                    ->orWhere('headline', 'ilike', "%{$search}%")
-                    ->orWhere('body', 'ilike', "%{$search}%");
-            });
-        }
-
         /*
-         * Creative TYPE, not the provider's format string.
+         * Only the axes an OPERATOR may narrow by.
          *
-         * «image», «video» and «carousel» are what an operator filters by; the column holds whatever
-         * each platform calls it (`VIDEO`, `single_video`, `carousel_ad`, …). Matched with the same
-         * `str_contains` rule `CreativePresenter::kind()` uses, so the filter and the badge on the
-         * card can never disagree about what a creative is.
+         * `CreativeRows` also understands `creative_ids`, `creative_group_ids` and
+         * `excluded_creative_ids`, because a shared link is built out of exactly those. They are not
+         * forwarded from the query string here: on this surface they would be a filter nothing in
+         * the UI sets, and enumerating what a request may contain is cheaper to keep right than
+         * remembering what it may not.
          */
-        if ($kinds = array_filter((array) $request->input('kinds', []))) {
-            $query->where(function ($q) use ($kinds): void {
-                foreach ($kinds as $kind) {
-                    $q->orWhere('format', 'ilike', '%'.$kind.'%');
-                }
-            });
-        }
-
-        $objectives = array_filter((array) $request->input('objectives', []));
-        $paths = array_filter((array) $request->input('paths', []));
-
-        if ($paths !== []) {
-            // A path is a set of objectives, so it narrows to the objectives it contains — and when
-            // an objective filter is also present, to the INTERSECTION of the two. Applying them as
-            // separate `whereIn`s would have widened the result the moment both were used.
-            $fromPaths = [];
-            foreach (CampaignObjective::cases() as $case) {
-                if (in_array($this->metrics->pathFor($case->value)->value, $paths, true)) {
-                    $fromPaths[] = $case->value;
-                }
-            }
-
-            $objectives = $objectives === [] ? $fromPaths : array_values(array_intersect($objectives, $fromPaths));
-
-            // Both named and nothing satisfies both: match nothing, rather than falling through to
-            // «no objective filter» and answering with everything.
-            if ($objectives === []) {
-                $objectives = ['__none__'];
-            }
-        }
-
-        if ($objectives !== []) {
-            $query->whereIn('campaign_id', function ($sub) use ($objectives): void {
-                $sub->select('id')->from('unified_campaigns')->whereIn('objective', $objectives);
-            });
-        }
+        $this->rows->applyFilters($query, $request->only([
+            'provider', 'providers', 'format', 'formats', 'status', 'statuses',
+            'campaign_ids', 'ad_set_ids', 'ad_ids', 'project_ids', 'client_ids',
+            'search', 'kinds', 'objectives', 'paths',
+        ]));
     }
 
-    /**
-     * Ordering, including by a figure the row does not carry.
-     *
-     * Sorting by spend cannot be done on `external_creatives` — the figures live in
-     * `creative_daily_metrics` and belong to the requested window. Done in PHP it would sort only the
-     * page, which looks identical on page one and is wrong everywhere after it. A joined aggregate
-     * over the SAME window keeps the sort and the pagination talking about the same numbers.
-     */
     private function applySort(mixed $query, Request $request, Carbon $from, Carbon $to): mixed
     {
-        $sort = $request->string('sort')->toString();
-        $metric = ['spend', 'impressions', 'clicks', 'conversions', 'revenue'];
-
-        if (in_array($sort, $metric, true)) {
-            $totals = DB::table('creative_daily_metrics')
-                ->select('creative_id')
-                ->selectRaw('SUM('.$sort.') AS sort_total')
-                ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-                ->groupBy('creative_id');
-
-            return $query
-                ->leftJoinSub($totals, 'sorted', 'sorted.creative_id', '=', 'external_creatives.id')
-                ->select('external_creatives.*')
-                // NULLS LAST: a creative the platform reported nothing for has not «earned last
-                // place» on spend — it has no figure at all, and floating it to the top of an
-                // ascending sort would read as the cheapest creative in the project.
-                ->orderByRaw('sorted.sort_total DESC NULLS LAST')
-                ->orderBy('external_creatives.id');
-        }
-
-        return match ($sort) {
-            'name' => $query->orderBy('name')->orderBy('id'),
-            'oldest' => $query->orderBy('first_seen_at')->orderBy('id'),
-            default => $query
-                ->orderByDesc('last_active_at')
-                ->orderByDesc('last_synced_at')
-                // `id` last, always: the first two tie freely across a batch synced in one run, and
-                // an ordering with ties repeats and skips rows across pages.
-                ->orderBy('id'),
-        };
+        return $this->rows->applySort($query, $request->string('sort')->toString(), $from, $to);
     }
 
     /**
-     * Shape a page of creatives with their figures — TWO queries for the whole page, never per row.
-     *
      * @param  Collection<int, ExternalCreative>  $creatives
      * @return list<array<string, mixed>>
      */
     private function present(mixed $creatives, Carbon $from, Carbon $to, bool $withFatigue, bool $withPrevious = false): array
     {
-        $ids = array_map('strval', $creatives->modelKeys());
-        if ($ids === []) {
-            return [];
-        }
-
-        $figures = $this->metrics->forCreatives($ids, $from, $to);
-
-        $previous = [];
-        if ($withFatigue || $withPrevious) {
-            $days = $from->diffInDays($to) + 1;
-            $prevTo = $from->copy()->subDay();
-            $previous = $this->metrics->forCreatives($ids, $prevTo->copy()->subDays($days - 1), $prevTo);
-        }
-
-        $campaigns = UnifiedCampaign::query()
-            ->whereIn('id', $creatives->pluck('campaign_id')->filter()->unique()->values()->all())
-            ->get(['id', 'name', 'objective'])
-            ->keyBy('id');
-
-        $out = [];
-        foreach ($creatives as $creative) {
-            $id = (string) $creative->getKey();
-            $campaign = $creative->campaign_id === null ? null : $campaigns->get($creative->campaign_id);
-            $objective = $campaign?->objective;
-
-            $row = $this->presenter->card($creative, $campaign);
-            $row['objective'] = $objective;
-            $row['path'] = $this->metrics->pathFor($objective)->value;
-            $row['headline_metrics'] = $this->metrics->headline($objective);
-            $row['metrics'] = $figures[$id] ?? null;
-
-            if ($withFatigue) {
-                $row['fatigue'] = $this->fatigue->assess($figures[$id] ?? ['active_days' => 0], $previous[$id] ?? null);
-            }
-
-            /*
-             * The previous period's figures, on the row, for the dashboard only.
-             *
-             * «Fastest growing» is a comparison, and the comparison has to be made where the two
-             * periods are both in hand. The library does not carry this — a page of 24 cards would
-             * double its payload for a figure no card shows.
-             */
-            if ($withPrevious) {
-                $row['previous'] = $previous[$id] ?? null;
-            }
-
-            $out[] = $row;
-        }
-
-        return $out;
+        return $this->rows->present($creatives, $from, $to, $withFatigue, $withPrevious);
     }
 
     /** Daily figures for the trend chart — one query, ordered, no gaps invented. */
@@ -749,20 +586,10 @@ final class CreativeAnalysisController extends Controller
         ];
     }
 
-    /** The values the filters can actually take for THIS project. */
-    /**
-     * What the filter controls may offer — derived from the rows in reach, never from a fixed list.
-     *
-     * A select populated from an enum offers platforms this project has never run and campaigns it
-     * does not have: every one of those is a control that returns an empty list, which reads as «no
-     * data» rather than «nothing was ever going to match». The two exceptions are deliberate —
-     * marketing paths and fatigue states are a closed vocabulary this system defines, not a
-     * reflection of what happens to be synced, and an operator needs to see «Fatigued» in the list to
-     * know the concept exists even in a week when nothing is.
-     */
+    /** The values the filters can actually take for THIS project, under THIS caller's reach. */
     private function filterOptions(Request $request, ?string $project): array
     {
-        $base = function () use ($request, $project) {
+        return $this->rows->filterOptions(function () use ($request, $project) {
             $q = ExternalCreative::query();
             if ($project !== null) {
                 $q->where('project_id', $project);
@@ -770,49 +597,6 @@ final class CreativeAnalysisController extends Controller
             $this->applyReach($q, $request);
 
             return $q;
-        };
-
-        $distinct = static fn (string $column): array => $base()
-            ->whereNotNull($column)
-            ->distinct()->orderBy($column)->pluck($column)->map(static fn ($v): string => (string) $v)->all();
-
-        $campaignIds = $base()->whereNotNull('campaign_id')->distinct()->pluck('campaign_id')->all();
-
-        $campaigns = $campaignIds === [] ? collect() : UnifiedCampaign::query()
-            ->whereIn('id', $campaignIds)->orderBy('name')->get(['id', 'name', 'objective']);
-
-        $projectIds = $base()->distinct()->pluck('project_id')->all();
-
-        $projects = $projectIds === [] ? collect() : DB::table('projects')
-            ->whereIn('id', $projectIds)->orderBy('name')
-            ->get(['id', 'name', 'client_workspace_id']);
-
-        $clients = $projects->pluck('client_workspace_id')->filter()->unique()->values()->all();
-
-        return [
-            'providers' => $distinct('provider'),
-            'formats' => $distinct('format'),
-            'statuses' => $distinct('status'),
-            // The three the UI groups by, in the same vocabulary `CreativePresenter::kind()` uses.
-            'kinds' => ['image', 'video', 'carousel'],
-            'campaigns' => $campaigns->map(static fn ($c): array => [
-                'id' => (string) $c->id, 'name' => $c->name, 'objective' => $c->objective,
-            ])->all(),
-            'ad_sets' => $distinct('external_ad_set_id'),
-            'ads' => $distinct('external_ad_id'),
-            'objectives' => $campaigns->pluck('objective')->filter()->unique()->sort()->values()->all(),
-            'paths' => array_map(static fn (MarketingPath $p): string => $p->value, MarketingPath::cases()),
-            'projects' => $projects->map(static fn ($p): array => [
-                'id' => (string) $p->id, 'name' => $p->name,
-                'client_id' => $p->client_workspace_id === null ? null : (string) $p->client_workspace_id,
-            ])->values()->all(),
-            'clients' => $clients === [] ? [] : DB::table('client_workspaces')
-                ->whereIn('id', $clients)->orderBy('name')->get(['id', 'name'])
-                ->map(static fn ($c): array => ['id' => (string) $c->id, 'name' => $c->name])->all(),
-            'health' => [
-                CreativeFatigue::IMPROVING, CreativeFatigue::STABLE, CreativeFatigue::WATCH,
-                CreativeFatigue::FATIGUED, CreativeFatigue::INSUFFICIENT,
-            ],
-        ];
+        });
     }
 }

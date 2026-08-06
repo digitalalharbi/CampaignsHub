@@ -1,0 +1,378 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domains\Campaigns\Services;
+
+use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Tenancy\Services\ClientScopeResolver;
+use App\Models\User;
+use Closure;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * §15.17, made structural — the ONE way a creative is selected and shaped, for every surface.
+ *
+ * ## Why this is a service and not four copies of a controller method
+ *
+ * The library, the dashboard's creative section, the client's executive summary and the client's
+ * detailed report all answer questions about the same creatives. Each of them could have built its
+ * own query — and each would then have had its own idea of what «this project's creatives in this
+ * window» means. The first divergence would not announce itself: an operator would read one spend on
+ * the dashboard, a client would read another in the report, and both pages would look correct.
+ *
+ * So the filtering, the ordering, the two-query metric fetch and the presentation live here, and the
+ * controllers decide only WHICH ceiling to put in front of them:
+ *
+ *   - the operator's surfaces pass the signed-in user, and {@see applyReach()} applies the client
+ *     ceiling their membership grants;
+ *   - the client's report passes no user at all and applies the SHARE's ceiling instead, which is
+ *     narrower by construction and cannot be widened by editing a URL.
+ *
+ * Nothing here consults `auth()` or the request. A service that reached for the current user would be
+ * unusable on the one surface that has none, which is exactly the surface where a mistake is public.
+ *
+ * ## Two queries per page, whatever the page size
+ *
+ * {@see present()} fetches every figure for the whole page in one grouped query and the campaigns in
+ * another. A thousand creatives cost the same as ten (§15.14). The previous window, when asked for,
+ * is a third — not one per row.
+ */
+final class CreativeRows
+{
+    public function __construct(
+        private readonly CreativeMetrics $metrics,
+        private readonly CreativeFatigue $fatigue,
+        private readonly CreativePresenter $presenter,
+    ) {}
+
+    /**
+     * The window a creative surface reads, defaulting to the last 30 days and never inverted.
+     *
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    public function window(?string $from, ?string $to): array
+    {
+        $end = ($to !== null && trim($to) !== '') ? Carbon::parse($to) : Carbon::today();
+        $start = ($from !== null && trim($from) !== '')
+            ? Carbon::parse($from)
+            : $end->copy()->subDays(29);
+
+        return $start->greaterThan($end) ? [$end, $start] : [$start, $end];
+    }
+
+    /**
+     * The ceiling an OPERATOR's read sits under, before a single filter is considered.
+     *
+     * The tenant scope is on the model; this adds the CLIENT ceiling, which the model cannot know
+     * about. A manager confined to two clients must not reach a third client's creatives by asking
+     * for them, and `reachableClientIds()` returns `[]` — not null — for anyone without an explicit
+     * grant, so the fail-closed direction is the default rather than a special case.
+     *
+     * Applied to the query, never to the response: filtering rows out after fetching them is the
+     * shape of leak that shows up in a total, a chart axis or a page count even when the list looks
+     * right.
+     */
+    public function applyReach(mixed $query, ?User $user): void
+    {
+        $reach = app(ClientScopeResolver::class)->reachableClientIds($user);
+
+        if ($reach === null) {
+            return; // an explicit `clients.view_all` holder — never inferred from an empty scope.
+        }
+
+        $query->whereIn('project_id', function ($sub) use ($reach): void {
+            $sub->select('id')->from('projects')->whereIn('client_workspace_id', $reach);
+        });
+    }
+
+    /**
+     * The filters, from a plain array rather than a request.
+     *
+     * An array because the client's report supplies filters that have already been intersected with
+     * the share's ceiling — they arrive as data, not as query-string input, and a method that read
+     * the request directly would have quietly re-admitted the untrusted original.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public function applyFilters(mixed $query, array $filters): void
+    {
+        $list = static function (string $key) use ($filters): array {
+            return array_values(array_filter((array) ($filters[$key] ?? []), static fn ($v): bool => $v !== null && $v !== ''));
+        };
+
+        // Singular and plural both accepted: the older callers send `provider[]`, the library sends
+        // `providers[]`. One name would have been better; breaking the older one to get it would
+        // have been worse.
+        $columns = [
+            'provider' => 'provider', 'providers' => 'provider',
+            'format' => 'format', 'formats' => 'format',
+            'status' => 'status', 'statuses' => 'status',
+        ];
+
+        foreach ($columns as $param => $column) {
+            if (($values = $list($param)) !== []) {
+                $query->whereIn($column, $values);
+            }
+        }
+
+        foreach ([
+            'campaign_ids' => 'campaign_id',
+            'ad_set_ids' => 'external_ad_set_id',
+            'ad_ids' => 'external_ad_id',
+            'project_ids' => 'project_id',
+            'creative_ids' => 'id',
+            'creative_group_ids' => 'creative_group_id',
+        ] as $param => $column) {
+            if (($ids = $list($param)) !== []) {
+                $query->whereIn($column, $ids);
+            }
+        }
+
+        /*
+         * Exclusions, which are the one axis that is a UNION rather than an intersection.
+         *
+         * Everything above narrows by naming what is allowed; this narrows by naming what is not.
+         * They compose in the same direction — an excluded id stays excluded however the other axes
+         * move — which is why it is applied last and never merged into the allow-lists above.
+         */
+        if (($excluded = $list('excluded_creative_ids')) !== []) {
+            $query->whereNotIn('id', $excluded);
+        }
+
+        // A client is reached through its projects; `external_creatives` has no client column, and
+        // adding one would be a second place for the same fact to be wrong.
+        if (($clients = $list('client_ids')) !== []) {
+            $query->whereIn('project_id', function ($sub) use ($clients): void {
+                $sub->select('id')->from('projects')->whereIn('client_workspace_id', $clients);
+            });
+        }
+
+        $search = trim((string) ($filters['search'] ?? ''));
+        if ($search !== '') {
+            $query->where(function ($q) use ($search): void {
+                $q->where('name', 'ilike', "%{$search}%")
+                    ->orWhere('headline', 'ilike', "%{$search}%")
+                    ->orWhere('body', 'ilike', "%{$search}%");
+            });
+        }
+
+        /*
+         * Creative TYPE, not the provider's format string.
+         *
+         * «image», «video» and «carousel» are what an operator filters by; the column holds whatever
+         * each platform calls it (`VIDEO`, `single_video`, `carousel_ad`, …). Matched with the same
+         * `str_contains` rule `CreativePresenter::kind()` uses, so the filter and the badge on the
+         * card can never disagree about what a creative is.
+         */
+        if (($kinds = $list('kinds')) !== []) {
+            $query->where(function ($q) use ($kinds): void {
+                foreach ($kinds as $kind) {
+                    $q->orWhere('format', 'ilike', '%'.$kind.'%');
+                }
+            });
+        }
+
+        $objectives = $list('objectives');
+        $paths = $list('paths');
+
+        if ($paths !== []) {
+            // A path is a set of objectives, so it narrows to the objectives it contains — and when
+            // an objective filter is also present, to the INTERSECTION of the two. Applying them as
+            // separate `whereIn`s would have widened the result the moment both were used.
+            $fromPaths = [];
+            foreach (CampaignObjective::cases() as $case) {
+                if (in_array($this->metrics->pathFor($case->value)->value, $paths, true)) {
+                    $fromPaths[] = $case->value;
+                }
+            }
+
+            $objectives = $objectives === [] ? $fromPaths : array_values(array_intersect($objectives, $fromPaths));
+
+            // Both named and nothing satisfies both: match nothing, rather than falling through to
+            // «no objective filter» and answering with everything.
+            if ($objectives === []) {
+                $objectives = ['__none__'];
+            }
+        }
+
+        if ($objectives !== []) {
+            $query->whereIn('campaign_id', function ($sub) use ($objectives): void {
+                $sub->select('id')->from('unified_campaigns')->whereIn('objective', $objectives);
+            });
+        }
+    }
+
+    /**
+     * Ordering, including by a figure the row does not carry.
+     *
+     * Sorting by spend cannot be done on `external_creatives` — the figures live in
+     * `creative_daily_metrics` and belong to the requested window. Done in PHP it would sort only the
+     * page, which looks identical on page one and is wrong everywhere after it. A joined aggregate
+     * over the SAME window keeps the sort and the pagination talking about the same numbers.
+     */
+    public function applySort(mixed $query, ?string $sort, Carbon $from, Carbon $to): mixed
+    {
+        $sort = (string) $sort;
+        $metric = ['spend', 'impressions', 'clicks', 'conversions', 'revenue'];
+
+        if (in_array($sort, $metric, true)) {
+            $totals = DB::table('creative_daily_metrics')
+                ->select('creative_id')
+                ->selectRaw('SUM('.$sort.') AS sort_total')
+                ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+                ->groupBy('creative_id');
+
+            return $query
+                ->leftJoinSub($totals, 'sorted', 'sorted.creative_id', '=', 'external_creatives.id')
+                ->select('external_creatives.*')
+                // NULLS LAST: a creative the platform reported nothing for has not «earned last
+                // place» on spend — it has no figure at all, and floating it to the top of an
+                // ascending sort would read as the cheapest creative in the project.
+                ->orderByRaw('sorted.sort_total DESC NULLS LAST')
+                ->orderBy('external_creatives.id');
+        }
+
+        return match ($sort) {
+            'name' => $query->orderBy('name')->orderBy('id'),
+            'oldest' => $query->orderBy('first_seen_at')->orderBy('id'),
+            default => $query
+                ->orderByDesc('last_active_at')
+                ->orderByDesc('last_synced_at')
+                // `id` last, always: the first two tie freely across a batch synced in one run, and
+                // an ordering with ties repeats and skips rows across pages.
+                ->orderBy('id'),
+        };
+    }
+
+    /**
+     * Shape a page of creatives with their figures — TWO queries for the whole page, never per row.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function present(mixed $creatives, Carbon $from, Carbon $to, bool $withFatigue, bool $withPrevious = false): array
+    {
+        $ids = array_map('strval', $creatives->modelKeys());
+        if ($ids === []) {
+            return [];
+        }
+
+        $figures = $this->metrics->forCreatives($ids, $from, $to);
+
+        $previous = [];
+        if ($withFatigue || $withPrevious) {
+            $days = $from->diffInDays($to) + 1;
+            $prevTo = $from->copy()->subDay();
+            $previous = $this->metrics->forCreatives($ids, $prevTo->copy()->subDays($days - 1), $prevTo);
+        }
+
+        $campaigns = UnifiedCampaign::query()
+            ->whereIn('id', $creatives->pluck('campaign_id')->filter()->unique()->values()->all())
+            ->get(['id', 'name', 'objective'])
+            ->keyBy('id');
+
+        $out = [];
+        foreach ($creatives as $creative) {
+            $id = (string) $creative->getKey();
+            $campaign = $creative->campaign_id === null ? null : $campaigns->get($creative->campaign_id);
+            $objective = $campaign?->objective;
+
+            $row = $this->presenter->card($creative, $campaign);
+            $row['objective'] = $objective;
+            $row['path'] = $this->metrics->pathFor($objective)->value;
+            $row['headline_metrics'] = $this->metrics->headline($objective);
+            $row['metrics'] = $figures[$id] ?? null;
+
+            if ($withFatigue) {
+                $row['fatigue'] = $this->fatigue->assess($figures[$id] ?? ['active_days' => 0], $previous[$id] ?? null);
+            }
+
+            /*
+             * The previous period's figures, on the row, for the dashboard and the report only.
+             *
+             * «Fastest growing» is a comparison, and the comparison has to be made where the two
+             * periods are both in hand. The library does not carry this — a page of 24 cards would
+             * double its payload for a figure no card shows.
+             */
+            if ($withPrevious) {
+                $row['previous'] = $previous[$id] ?? null;
+            }
+
+            $out[] = $row;
+        }
+
+        return $out;
+    }
+
+    /**
+     * What the filter controls may offer — derived from the rows in reach, never from a fixed list.
+     *
+     * A select populated from an enum offers platforms this project has never run and campaigns it
+     * does not have: every one of those is a control that returns an empty list, which reads as «no
+     * data» rather than «nothing was ever going to match». The two exceptions are deliberate —
+     * marketing paths and fatigue states are a closed vocabulary this system defines, not a
+     * reflection of what happens to be synced, and an operator needs to see «Fatigued» in the list to
+     * know the concept exists even in a week when nothing is.
+     *
+     * @param  Closure(): Builder  $base  a FRESH bounded query each call — the options are read with
+     *                                    several independent aggregates, and reusing one builder
+     *                                    would accumulate their clauses onto each other.
+     * @return array<string, mixed>
+     */
+    public function filterOptions(Closure $base): array
+    {
+        $distinct = static fn (string $column): array => $base()
+            ->whereNotNull($column)
+            ->distinct()->orderBy($column)->pluck($column)->map(static fn ($v): string => (string) $v)->all();
+
+        $campaignIds = $base()->whereNotNull('campaign_id')->distinct()->pluck('campaign_id')->all();
+
+        $campaigns = $campaignIds === [] ? collect() : UnifiedCampaign::query()
+            ->whereIn('id', $campaignIds)->orderBy('name')->get(['id', 'name', 'objective']);
+
+        $projectIds = $base()->distinct()->pluck('project_id')->all();
+
+        $projects = $projectIds === [] ? collect() : DB::table('projects')
+            ->whereIn('id', $projectIds)->orderBy('name')
+            ->get(['id', 'name', 'client_workspace_id']);
+
+        $clients = $projects->pluck('client_workspace_id')->filter()->unique()->values()->all();
+
+        return [
+            'providers' => $distinct('provider'),
+            'formats' => $distinct('format'),
+            'statuses' => $distinct('status'),
+            // The three the UI groups by, in the same vocabulary `CreativePresenter::kind()` uses.
+            'kinds' => ['image', 'video', 'carousel'],
+            'campaigns' => $campaigns->map(static fn ($c): array => [
+                'id' => (string) $c->id, 'name' => $c->name, 'objective' => $c->objective,
+            ])->all(),
+            'ad_sets' => $distinct('external_ad_set_id'),
+            'ads' => $distinct('external_ad_id'),
+            'objectives' => $campaigns->pluck('objective')->filter()->unique()->sort()->values()->all(),
+            'paths' => array_map(static fn (MarketingPath $p): string => $p->value, MarketingPath::cases()),
+            'projects' => $projects->map(static fn ($p): array => [
+                'id' => (string) $p->id, 'name' => $p->name,
+                'client_id' => $p->client_workspace_id === null ? null : (string) $p->client_workspace_id,
+            ])->values()->all(),
+            'clients' => $clients === [] ? [] : DB::table('client_workspaces')
+                ->whereIn('id', $clients)->orderBy('name')->get(['id', 'name'])
+                ->map(static fn ($c): array => ['id' => (string) $c->id, 'name' => $c->name])->all(),
+            'health' => [
+                CreativeFatigue::IMPROVING, CreativeFatigue::STABLE, CreativeFatigue::WATCH,
+                CreativeFatigue::FATIGUED, CreativeFatigue::INSUFFICIENT,
+            ],
+        ];
+    }
+
+    /** A bare creative query — the model's own tenant scope and nothing else yet. */
+    public function query(): Builder
+    {
+        return ExternalCreative::query();
+    }
+}
