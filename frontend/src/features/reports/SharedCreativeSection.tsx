@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Image as ImageIcon, LayoutGrid, Lightbulb, Rows3, TrendingDown, TrendingUp, Video } from 'lucide-react'
 import {
   compareSharedCreatives,
+  getSharedCreative,
   getSharedCreativeSummary,
   getSharedCreatives,
   type CreativeInsightItem,
@@ -13,9 +15,10 @@ import {
   type SharedObjectiveWinner,
 } from './sharedCreatives'
 import { CreativeViewer } from '@/features/content/CreativeViewer'
+import { CreativeVideoPlayer } from '@/features/content/CreativeVideoPlayer'
 import { imageLoading } from '@/features/content/format'
 import { formatMetric, metricLabel, metricState } from '@/features/content/metrics'
-import { providerLabel } from '@/features/campaigns/labels'
+import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
@@ -97,6 +100,28 @@ const COPY = {
     severity: { warning: 'يحتاج انتباهًا', opportunity: 'فرصة', positive: 'تحسّن' },
     evidence: 'الأدلة',
     showing: 'المعروض',
+    details: 'تفاصيل المحتوى',
+    backToLibrary: 'العودة إلى مكتبة المحتوى',
+    funnel: 'الفانل',
+    funnelNone: 'لم ترسل المنصة أي مرحلة يمكن بناء فانل منها.',
+    funnelMissing: 'مراحل لا ترسلها هذه المنصة',
+    stage: 'المرحلة',
+    count: 'العدد',
+    rate: 'التحول من السابقة',
+    costPer: 'التكلفة لكل',
+    notShown: 'غير معروضة في هذا الرابط',
+    byPlatform: 'الأداء حسب المنصة',
+    onePlatform: 'هذا المحتوى يعمل على منصة واحدة، فلا توجد مقارنة بين المنصات.',
+    lastSync: 'آخر مزامنة',
+    sourceUpdated: 'آخر تحديث من المصدر',
+    previousPeriod: 'الفترة السابقة',
+    copy: 'نص الإعلان',
+    headlineText: 'العنوان',
+    body: 'النص',
+    cta: 'زر الإجراء',
+    destination: 'الرابط الوجهة',
+    detailError: 'هذا المحتوى غير متاح في هذا الرابط.',
+    notProvided: 'غير مُرسَل',
   },
   en: {
     heading: 'Creative analysis',
@@ -144,6 +169,28 @@ const COPY = {
     severity: { warning: 'Needs attention', opportunity: 'Opportunity', positive: 'Improved' },
     evidence: 'Evidence',
     showing: 'Showing',
+    details: 'Creative details',
+    backToLibrary: 'Back to the creative library',
+    funnel: 'Funnel',
+    funnelNone: 'The platform reported no stage a funnel could be built from.',
+    funnelMissing: 'Stages this platform does not report',
+    stage: 'Stage',
+    count: 'Count',
+    rate: 'From previous stage',
+    costPer: 'Cost per',
+    notShown: 'Not shown on this link',
+    byPlatform: 'By platform',
+    onePlatform: 'This creative runs on one platform, so there is no cross-platform comparison.',
+    lastSync: 'Last sync',
+    sourceUpdated: 'Source updated at',
+    previousPeriod: 'Previous period',
+    copy: 'Ad copy',
+    headlineText: 'Headline',
+    body: 'Body',
+    cta: 'Call to action',
+    destination: 'Destination URL',
+    detailError: 'This creative is not available on this link.',
+    notProvided: 'Not provided',
   },
 }
 
@@ -174,6 +221,25 @@ export function SharedCreativeSection({
    */
   const [filters, setFilters] = useState<SharedCreativeQuery>({})
   const [view, setView] = useState<'grid' | 'list'>('grid')
+
+  /*
+   * §15.6 — the open creative lives in the ADDRESS, so the client's detail view survives a refresh.
+   *
+   * A query parameter rather than a nested route on purpose: a password-gated link holds the
+   * accepted password in this tree's state, and a route change that remounted the gate would ask the
+   * reader for it again every time they opened a creative. `?creative=<id>` is refresh-safe,
+   * deep-linkable, and Back returns to the library with the filters still in place — which is what
+   * the requirement is actually asking for.
+   */
+  const [params, setParams] = useSearchParams()
+  const openId = params.get('creative')
+
+  const openDetail = (id: string | null) => {
+    const next = new URLSearchParams(params)
+    if (id === null) next.delete('creative')
+    else next.set('creative', id)
+    setParams(next, { replace: false })
+  }
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [selected, setSelected] = useState<string[]>([])
   const [comparing, setComparing] = useState(false)
@@ -332,7 +398,19 @@ export function SharedCreativeSection({
             </div>
           )}
 
-          {library.isLoading ? (
+          {openId !== null ? (
+            <SharedCreativeDetail
+              token={token}
+              password={password}
+              creativeId={openId}
+              filters={filters}
+              currency={currency}
+              permissions={permissions}
+              locale={locale}
+              t={t}
+              onBack={() => openDetail(null)}
+            />
+          ) : library.isLoading ? (
             <Skeleton className="h-48 w-full" />
           ) : rows.length === 0 ? (
             <p className="rounded-xl border border-border bg-surface p-6 text-center text-sm text-text-secondary">{t.empty}</p>
@@ -351,6 +429,7 @@ export function SharedCreativeSection({
                       setSelected((s) => (s.includes(creative.id) ? s.filter((v) => v !== creative.id) : [...s, creative.id]))
                     }
                     onOpen={() => setViewerIndex(index)}
+                    onDetails={() => openDetail(creative.id)}
                   />
                 </li>
               ))}
@@ -361,9 +440,11 @@ export function SharedCreativeSection({
             </div>
           )}
 
-          <p className="tnum text-xs text-text-muted" dir="ltr">
-            {t.showing} {rows.length} {t.of} {library.data?.total ?? rows.length}
-          </p>
+          {openId === null && (
+            <p className="tnum text-xs text-text-muted" dir="ltr">
+              {t.showing} {rows.length} {t.of} {library.data?.total ?? rows.length}
+            </p>
+          )}
         </div>
       )}
 
@@ -689,6 +770,217 @@ function Freshness({ data, t }: { data: { freshness: CreativePulse['freshness'] 
   )
 }
 
+/**
+ * §15.6 on the client's side — one creative, in depth, inside the link's ceiling.
+ *
+ * The endpoint is the same bounded lookup the list runs, so a creative the link excludes is not
+ * found here either: this panel cannot be used as a side door to an id the library refused. What it
+ * shows is whatever the server sent — a withheld metric is ABSENT from the payload rather than
+ * blanked here, so there is nothing for the browser to reveal.
+ */
+function SharedCreativeDetail({
+  token,
+  password,
+  creativeId,
+  filters,
+  currency,
+  permissions,
+  locale,
+  t,
+  onBack,
+}: {
+  token: string
+  password?: string
+  creativeId: string
+  filters: SharedCreativeQuery
+  currency: string
+  permissions: CreativePermissions
+  locale: 'ar' | 'en'
+  t: Copy
+  onBack: () => void
+}) {
+  const ar = locale === 'ar'
+  const [zoom, setZoom] = useState(1)
+
+  const detail = useQuery({
+    queryKey: ['shared-creative-detail', token, creativeId, filters],
+    queryFn: () => getSharedCreative(token, creativeId, filters, password),
+  })
+
+  const back = (
+    <button type="button" onClick={onBack} className="text-xs font-semibold text-brand-700 underline-offset-2 hover:underline">
+      ← {t.backToLibrary}
+    </button>
+  )
+
+  if (detail.isLoading) {
+    return (
+      <div className="grid gap-3">
+        {back}
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
+
+  if (detail.isError || !detail.data) {
+    return (
+      <div className="grid gap-3">
+        {back}
+        <ErrorState title={t.detailError} error={detail.error} />
+      </div>
+    )
+  }
+
+  const data = detail.data
+  const creative = data.creative
+  const preview = creative.preview
+  const showing: 'video' | 'image' | 'none' =
+    preview.state !== 'available' ? 'none' : preview.video_url ? 'video' : preview.image_url ? 'image' : 'none'
+  const funnel = data.funnel
+
+  return (
+    <div className="grid gap-4" data-testid="shared-creative-detail">
+      {back}
+
+      <div className="grid gap-3 rounded-xl border border-border bg-surface p-3">
+        <div className="flex min-h-48 items-center justify-center overflow-auto rounded-lg bg-surface-secondary p-2">
+          {showing === 'video' && preview.video_url ? (
+            <CreativeVideoPlayer
+              // Keyed by the creative, so opening another one builds a new player rather than
+              // inheriting the last one's armed state and playback position.
+              key={creative.id}
+              src={preview.video_url}
+              poster={preview.thumbnail_url}
+              durationHint={creative.duration_seconds}
+              className="w-full max-w-2xl"
+            />
+          ) : showing === 'image' && preview.image_url ? (
+            <img
+              src={preview.image_url}
+              alt={creative.name}
+              loading={imageLoading(preview.image_url)}
+              style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
+              className="max-h-[55vh] max-w-full object-contain transition-transform"
+            />
+          ) : (
+            <p className="p-6 text-center text-xs text-text-muted">
+              {(ar ? preview.note_ar : preview.note_en) ?? '—'}
+            </p>
+          )}
+        </div>
+
+        {/* Zoom is drawn only when the link allows it — a hidden control whose shortcut still works
+            is a control that is merely invisible. */}
+        {showing === 'image' && permissions.image_zoom && (
+          <div className="flex items-center gap-1 text-xs">
+            <button type="button" onClick={() => setZoom((z) => Math.max(z - 0.25, 0.5))} className="rounded border border-border px-2 py-1">−</button>
+            <span className="tnum w-12 text-center" dir="ltr">{Math.round(zoom * 100)}%</span>
+            <button type="button" onClick={() => setZoom((z) => Math.min(z + 0.25, 4))} className="rounded border border-border px-2 py-1">+</button>
+            <button type="button" onClick={() => setZoom(1)} className="rounded border border-border px-2 py-1">100%</button>
+          </div>
+        )}
+
+        <h3 className="font-heading text-base font-extrabold">{creative.name}</h3>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
+          <Pair k={t.platform} v={providerLabel(creative.provider, locale)} />
+          <Pair k={t.campaign} v={creative.campaign_name ?? t.notProvided} />
+          <Pair k={t.objective} v={creative.objective ? objectiveLabel(creative.objective, locale) : t.notProvided} />
+          <Pair k={t.path} v={marketingPathLabel(creative.path, locale)} />
+          <Pair k={t.period} v={`${data.period.from} → ${data.period.to}`} />
+          <Pair k={t.previousPeriod} v={`${data.previous_period.from} → ${data.previous_period.to}`} />
+          <Pair k={t.lastSync} v={creative.freshness.last_synced_at?.slice(0, 10) ?? t.notProvided} />
+          <Pair k={t.sourceUpdated} v={creative.freshness.source_updated_at?.slice(0, 10) ?? t.notProvided} />
+        </dl>
+      </div>
+
+      {/* The words on the creative — each field already removed by the server when withheld. */}
+      {(creative.copy?.headline || creative.copy?.body || creative.copy?.cta || creative.destination_url) && (
+        <div className="grid gap-1.5 rounded-xl border border-border bg-surface p-3 text-xs">
+          <h4 className="text-sm font-bold">{t.copy}</h4>
+          {creative.copy?.headline && <Pair k={t.headlineText} v={creative.copy.headline} />}
+          {creative.copy?.body && <Pair k={t.body} v={creative.copy.body} />}
+          {creative.copy?.cta && <Pair k={t.cta} v={creative.copy.cta} />}
+          {/* Text, never a link: it is an address chosen by whoever wrote the ad, and a report that
+              made it clickable would be offering to follow it on the reader's behalf. */}
+          {creative.destination_url && <Pair k={t.destination} v={creative.destination_url} />}
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-xl border border-border">
+        <MetricTable creatives={[creative as unknown as CreativeCard]} currency={currency} locale={locale} />
+      </div>
+
+      <div className="grid gap-2 rounded-xl border border-border bg-surface p-3">
+        <h4 className="text-sm font-bold">{t.funnel}</h4>
+        {!funnel || funnel.stages.length === 0 ? (
+          <p className="text-xs text-text-secondary">{t.funnelNone}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[28rem] text-xs">
+              <thead className="bg-surface-secondary text-text-muted">
+                <tr>
+                  <th className="p-2 text-start">{t.stage}</th>
+                  <th className="p-2 text-start">{t.count}</th>
+                  <th className="p-2 text-start">{t.rate}</th>
+                  <th className="p-2 text-start">{t.costPer}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {funnel.stages.map((stage) => (
+                  <tr key={stage.key} className="border-t border-border">
+                    <td className="p-2">{ar ? stage.label_ar : stage.label_en}</td>
+                    <td className="tnum p-2" dir="ltr">{stage.count === null ? t.notProvided : stage.count.toLocaleString('en-US')}</td>
+                    <td className="tnum p-2" dir="ltr">{pct(stage.rate_from_previous)}</td>
+                    <td className="tnum p-2" dir="ltr">
+                      {/* Three sentences kept apart: withheld by this link, never reported, and a
+                          real figure. Collapsing the first two into a dash tells the wrong story. */}
+                      {stage.cost_hidden
+                        ? t.notShown
+                        : stage.cost_per === null
+                          ? t.notProvided
+                          : formatMetric({ kind: 'value', value: stage.cost_per }, 'cpa', locale, currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {funnel && funnel.missing.length > 0 && (
+          <p className="text-[11px] text-text-muted">
+            {t.funnelMissing}: {funnel.missing.map((m) => (ar ? m.label_ar : m.label_en)).join('، ')}
+          </p>
+        )}
+      </div>
+
+      <div className="grid gap-2 rounded-xl border border-border bg-surface p-3">
+        <h4 className="text-sm font-bold">{t.byPlatform}</h4>
+        {data.by_platform.length <= 1 ? (
+          <p className="text-xs text-text-secondary">{t.onePlatform}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <MetricTable
+              creatives={data.by_platform.map((row, i) => ({
+                ...(creative as unknown as CreativeCard),
+                id: `${row.creative_id}-${i}`,
+                name: providerLabel(row.provider, locale),
+                provider: row.provider,
+                metrics: row.metrics,
+              }))}
+              currency={currency}
+              locale={locale}
+            />
+          </div>
+        )}
+      </div>
+
+      <p className="text-xs text-text-muted">
+        {ar ? data.attribution.note_ar : data.attribution.note_en}
+      </p>
+    </div>
+  )
+}
+
 function CreativeTile({
   creative,
   currency,
@@ -698,6 +990,7 @@ function CreativeTile({
   selected,
   onSelect,
   onOpen,
+  onDetails,
 }: {
   creative: CreativeCard
   currency: string
@@ -707,6 +1000,7 @@ function CreativeTile({
   selected: boolean
   onSelect: () => void
   onOpen: () => void
+  onDetails: () => void
 }) {
   const preview = creative.preview
   const image = preview.state === 'available' ? (preview.thumbnail_url ?? preview.image_url) : null
@@ -743,6 +1037,10 @@ function CreativeTile({
           </div>
         ))}
       </dl>
+      {/* The picture opens the viewer; this opens the analysis. Two questions, two affordances. */}
+      <button type="button" onClick={onDetails} className="text-start text-[11px] font-semibold text-brand-700 underline-offset-2 hover:underline">
+        {t.details}
+      </button>
       {selectable && (
         <label className="flex items-center gap-1.5 text-[11px] text-text-secondary">
           <input type="checkbox" checked={selected} onChange={onSelect} className="h-3.5 w-3.5 accent-brand-600" />

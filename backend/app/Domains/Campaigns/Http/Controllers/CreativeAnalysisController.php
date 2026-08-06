@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Domains\Campaigns\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Models\CreativeGroup;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CreativeFatigue;
+use App\Domains\Campaigns\Services\CreativeFunnel;
 use App\Domains\Campaigns\Services\CreativeInsights;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativePresenter;
@@ -43,6 +45,16 @@ use Illuminate\Support\Facades\DB;
 final class CreativeAnalysisController extends Controller
 {
     private const PER_PAGE_MAX = 60;
+
+    /**
+     * How many same-path creatives one detail page's findings are compared against.
+     *
+     * Bounded because the page must open in the same time for a project with 40 creatives and one
+     * with 4,000, and a median stops moving long before the hundredth row. The response reports both
+     * the number used and whether the cap bit, so «compared against 120 of them» never renders as
+     * «compared against all of them».
+     */
+    private const INSIGHT_PEERS = 120;
 
     public function __construct(
         private readonly CreativeMetrics $metrics,
@@ -158,14 +170,68 @@ final class CreativeAnalysisController extends Controller
     }
 
     /**
-     * One creative, in depth: its asset, its figures, its trend, and how it did per platform and
-     * per campaign (§15.6).
+     * One creative, in depth, pinned to a project — `/projects/{project}/creatives/{creative}`.
      */
-    public function show(Request $request, string $project, string $creative): JsonResponse
-    {
+    public function show(
+        Request $request,
+        CreativeInsights $insights,
+        CreativeFunnel $funnel,
+        string $project,
+        string $creative,
+    ): JsonResponse {
+        return $this->creativeDetail($request, $insights, $funnel, $creative, $project);
+    }
+
+    /**
+     * The same creative, addressed across the caller's whole reach — `/creatives/{creative}`.
+     *
+     * This is what the Creative Details PAGE opens (§15.6). The library spans projects and a card
+     * does not carry a project id, so a page that needed one could only be reached by first asking
+     * which project a creative belongs to — and an address the reader cannot construct is not a deep
+     * link. The ceiling here is the MEMBERSHIP's, which is the only version of this that cannot be
+     * widened by editing the URL.
+     */
+    public function detail(
+        Request $request,
+        CreativeInsights $insights,
+        CreativeFunnel $funnel,
+        string $creative,
+    ): JsonResponse {
+        return $this->creativeDetail($request, $insights, $funnel, $creative, null);
+    }
+
+    /**
+     * One creative, in depth: its asset, its figures, its funnel, its trend, its findings, and how it
+     * did per platform and per campaign (§15.6).
+     *
+     * ## Reach is applied to the LOOKUP, not checked after it
+     *
+     * The creative is fetched through the same bounded query the library uses, so a creative outside
+     * the caller's clients is not found rather than found-and-refused. That is why the answer is 404:
+     * a 403 would confirm the id exists and is merely someone else's, which is the fact the ceiling
+     * is there to withhold. It also means there is no second check to forget — cross-tenant,
+     * cross-client and cross-project all fail at the same line, for the same reason.
+     */
+    private function creativeDetail(
+        Request $request,
+        CreativeInsights $insights,
+        CreativeFunnel $funnel,
+        string $creative,
+        ?string $project,
+    ): JsonResponse {
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
 
-        $model = ExternalCreative::query()->where('project_id', $project)->findOrFail($creative);
+        $query = ExternalCreative::query()->whereKey($creative);
+
+        if ($project !== null) {
+            $query->where('project_id', $project);
+        }
+
+        $this->applyReach($query, $request);
+
+        $model = $query->first();
+        abort_if($model === null, 404, 'Creative not found.');
+
         [$from, $to] = $this->window($request);
 
         $days = $from->diffInDays($to) + 1;
@@ -186,22 +252,45 @@ final class CreativeAnalysisController extends Controller
          * is a useful sentence only when the average is of content doing the same job. Averaging an
          * awareness video's CPM into a sales benchmark produces a comparison nobody should act on.
          */
-        $peers = $this->peerAverages($project, $objective, $from, $to, exclude: $id);
+        $peers = $this->peerAverages((string) $model->project_id, $objective, $from, $to, exclude: $id);
+
+        $trend = $this->trend($id, $from, $to);
+        $findings = $this->findingsFor($request, $insights, $model, $objective, $from, $to);
 
         return ApiResponse::success([
             'creative' => $this->presenter->detail($model, $campaign),
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $days],
+            'previous_period' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()],
             'metrics' => $current,
             'previous' => $previous,
             'headline_metrics' => $this->metrics->headline($objective),
             'path' => $this->metrics->pathFor($objective)->value,
             'fatigue' => $this->fatigue->assess($current ?? ['active_days' => 0], $previous),
-            'trend' => $this->trend($id, $from, $to),
+            // The funnel is a reshaping of `metrics` above — same figures, no second query, and only
+            // the steps this platform actually reported (§15.6).
+            'funnel' => $funnel->build($current),
+            'trend' => $trend,
+            // Rolled up from the daily rows already in hand, so the two charts cannot disagree.
+            'weekly' => $this->weekly($trend),
             'by_platform' => $this->byPlatform($model, $from, $to),
             'by_campaign' => $this->byCampaign($model, $from, $to),
             'peers' => $peers,
             'group' => $this->groupShape($model),
-        ], 'Creative analysis.');
+            'insights' => $findings,
+            /*
+             * REPORT-OBJECTIVE-005 and §15.15 — what these figures ARE, beside them.
+             *
+             * A creative's numbers are what the ad platform reported about its own delivery, inside
+             * the platform's own attribution window. Fixed rather than computed: a field that
+             * sometimes said «store confirmed» because a join happened to succeed would be worse than
+             * no field at all.
+             */
+            'attribution' => [
+                'source' => 'platform_reported',
+                'note_ar' => 'الأرقام كما أبلغت عنها المنصة الإعلانية نفسها، ضمن نافذة العزو المعتمدة لديها.',
+                'note_en' => 'Figures as the ad platform reported them, inside its own attribution window.',
+            ],
+        ] + $this->projectContext($model), 'Creative analysis.');
     }
 
     /**
@@ -481,6 +570,157 @@ final class CreativeAnalysisController extends Controller
     }
 
     /**
+     * §15.10's findings, for ONE creative — the same engine the dashboard section runs.
+     *
+     * ## Why it is handed peers rather than one row
+     *
+     * Ten of the fifteen rules compare a creative to ITSELF in the previous window and would fire on
+     * a single row. The other five — «scaling opportunity», «strong hook, weak completion», and the
+     * rest — compare it to the median of content doing the same job, and on a one-row set that median
+     * IS the creative, so every one of them would silently never fire. The detail page would then be
+     * quietly missing a third of the analysis while looking complete.
+     *
+     * So the peer set is fetched and the whole set is assessed, exactly as `pulse()` does, and the
+     * items for this creative are kept. Nothing is recomputed: same service, same thresholds, same
+     * medians — an insight here says what the same insight says on the dashboard.
+     *
+     * The peer set is capped, and the response SAYS it was capped and against how many. A comparison
+     * silently taken against the top 120 spenders reads as a comparison against everything.
+     *
+     * @return array<string, mixed>
+     */
+    private function findingsFor(
+        Request $request,
+        CreativeInsights $insights,
+        ExternalCreative $model,
+        ?string $objective,
+        Carbon $from,
+        Carbon $to,
+    ): array {
+        $path = $this->metrics->pathFor($objective)->value;
+
+        $peers = ExternalCreative::query()->where('project_id', $model->project_id);
+        $this->applyReach($peers, $request);
+        $this->rows->applyFilters($peers, ['paths' => [$path]]);
+
+        // Highest spend first, so the cap keeps the creatives a median should actually be taken
+        // against — and so the same request twice returns the same set.
+        $set = $this->rows->applySort($peers, 'spend', $from, $to)->limit(self::INSIGHT_PEERS)->get();
+
+        /*
+         * The subject itself, if the cap or the path filter left it out.
+         *
+         * A creative whose campaign carries no objective is not matched by a path filter at all, and
+         * one below the top of the spend list falls off the end — either way the page would show no
+         * findings for the creative it is about, which reads as «nothing to report» rather than as
+         * «it was not looked at».
+         */
+        if (! $set->contains(static fn (ExternalCreative $c): bool => $c->is($model))) {
+            $set->push($model);
+        }
+
+        $rows = $this->present($set, $from, $to, withFatigue: true, withPrevious: true);
+        $built = $insights->build($rows, $from, $to);
+
+        $id = (string) $model->getKey();
+        $mine = array_values(array_filter(
+            $built['items'] ?? [],
+            static fn (array $item): bool => ($item['creative_id'] ?? null) === $id,
+        ));
+
+        return [
+            'items' => $mine,
+            'total' => count($mine),
+            'evidence' => $built['evidence'] ?? null,
+            'period' => $built['period'] ?? null,
+            'previous_period' => $built['previous_period'] ?? null,
+            'compared_against' => [
+                'path' => $path,
+                'creatives' => count($rows),
+                // «هذه المقارنة ضد أعلى 120 إنفاقًا» is a different claim from «ضد كل المحتويات»,
+                // and a reader cannot tell which they are looking at unless it is stated.
+                'capped' => $set->count() >= self::INSIGHT_PEERS,
+                'cap' => self::INSIGHT_PEERS,
+            ],
+        ];
+    }
+
+    /**
+     * The daily rows already in hand, rolled up by week — no second query and no second aggregation.
+     *
+     * Weeks run from the FIRST day of the window rather than from a calendar Monday, so the first
+     * bucket is never a two-day stub that reads as a collapse in delivery. A key nobody reported on
+     * any day of a week stays null: summing nulls into 0 here would undo the care `CreativeMetrics`
+     * took to keep «not provided» apart from «none».
+     *
+     * @param  list<array<string, mixed>>  $trend
+     * @return list<array<string, mixed>>
+     */
+    private function weekly(array $trend): array
+    {
+        if ($trend === []) {
+            return [];
+        }
+
+        $keys = ['spend', 'impressions', 'clicks', 'conversions', 'revenue', 'video_views', 'video_p100'];
+        $start = Carbon::parse((string) $trend[0]['date']);
+        $buckets = [];
+
+        foreach ($trend as $day) {
+            $date = Carbon::parse((string) $day['date']);
+            $index = intdiv((int) $start->diffInDays($date), 7);
+
+            if (! isset($buckets[$index])) {
+                $buckets[$index] = [
+                    'week' => $index + 1,
+                    'from' => $date->toDateString(),
+                    'to' => $date->toDateString(),
+                    'days' => 0,
+                ] + array_fill_keys($keys, null);
+            }
+
+            $buckets[$index]['to'] = $date->toDateString();
+            $buckets[$index]['days']++;
+
+            foreach ($keys as $key) {
+                if (! is_numeric($day[$key] ?? null)) {
+                    continue;
+                }
+
+                $buckets[$index][$key] = ($buckets[$index][$key] ?? 0.0) + (float) $day[$key];
+            }
+        }
+
+        ksort($buckets);
+
+        return array_values($buckets);
+    }
+
+    /**
+     * The currency and timezone these figures were normalised INTO, and whether they are demo.
+     *
+     * Read from `daily_metrics`, which is where the pipeline records what it converted to — not from
+     * a config default, which would confidently print «SAR» for a project reporting in AED. Null when
+     * the project has no daily rows yet, and the page says «not provided» rather than guessing.
+     *
+     * @return array<string, mixed>
+     */
+    private function projectContext(ExternalCreative $model): array
+    {
+        $row = DB::table('daily_metrics')
+            ->where('project_id', $model->project_id)
+            ->whereNotNull('project_currency')
+            ->orderByDesc('metric_date')
+            ->first(['project_currency', 'project_timezone']);
+
+        return [
+            'currency' => $row?->project_currency === null ? null : (string) $row->project_currency,
+            'timezone' => $row?->project_timezone === null ? null : (string) $row->project_timezone,
+            'project_id' => (string) $model->project_id,
+        ];
+    }
+
+    /**
      * The average of creatives doing the SAME job, so «below average» means something.
      *
      * @return array<string, float|null>|null
@@ -489,11 +729,25 @@ final class CreativeAnalysisController extends Controller
     {
         $path = $this->metrics->pathFor($objective);
 
+        /*
+         * On this creative's path, and only on it.
+         *
+         * This used to select every creative in the project whose campaign existed — the objective
+         * was never consulted, despite the paragraph above saying it was. So an awareness video's CPM
+         * was benchmarked against an average that included sales images, and the page said «above
+         * average» about a comparison nobody should act on. The subquery now carries the objectives
+         * the path contains, which is the same rule `CreativeRows` applies to the `paths` filter.
+         */
+        $objectives = array_values(array_filter(
+            array_map(static fn (CampaignObjective $case): string => $case->value, CampaignObjective::cases()),
+            fn (string $value): bool => $this->metrics->pathFor($value)->value === $path->value,
+        ));
+
         $peerIds = ExternalCreative::query()
             ->where('project_id', $project)
             ->whereKeyNot($exclude)
-            ->whereIn('campaign_id', function ($sub): void {
-                $sub->select('id')->from('unified_campaigns');
+            ->whereIn('campaign_id', function ($sub) use ($objectives): void {
+                $sub->select('id')->from('unified_campaigns')->whereIn('objective', $objectives);
             })
             ->pluck('id')->map(fn ($id): string => (string) $id)->all();
 

@@ -182,6 +182,62 @@ export const listCreatives = (query: LibraryQuery, projectId?: string | null) =>
     `${projectId ? `/projects/${projectId}/creatives` : '/creatives'}${libraryQueryString(query)}`,
   )
 
+/**
+ * §15.6 — one stage of a creative's funnel, as the platform reported it.
+ *
+ * A stage the provider never sent is NOT in `stages`; it is named in `missing` instead. So this list
+ * is never padded with zeroes, and a four-step funnel means four steps were reported rather than
+ * three of them having failed.
+ */
+export interface FunnelStage {
+  key: string
+  label_ar: string
+  label_en: string
+  count: number | null
+  /** The step above this one IN THIS FUNNEL — not the step above it in theory. */
+  from_stage: string | null
+  rate_from_previous: number | null
+  cost_per: number | null
+  /** True on a client link that withholds spend: the cost is absent, not zero. */
+  cost_hidden?: boolean
+  source: string
+}
+
+export interface CreativeFunnelShape {
+  stages: FunnelStage[]
+  missing: Array<{ key: string; label_ar: string; label_en: string }>
+  source: string
+}
+
+/** §15.10's findings, for one creative. Every field is evidence for the sentence it carries. */
+export interface CreativeInsight {
+  key: string
+  severity: 'warning' | 'opportunity' | 'positive'
+  comparison: 'previous_period' | 'peers'
+  title_ar: string
+  title_en: string
+  detail_ar: string
+  detail_en: string
+  action_ar?: string
+  action_en?: string
+  supporting_metrics: Record<string, number>
+  previous_metrics: Record<string, number> | null
+  movement: { metric: string; current: number | null; previous: number | null; change: number | null } | null
+  confidence: 'high' | 'medium' | 'insufficient_data'
+  creative_id: string | null
+  creative_name: string | null
+  objective: string | null
+  path: string | null
+  provider: string | null
+  campaign_name: string | null
+  period: { from: string; to: string; days: number }
+  previous_period: { from: string; to: string }
+  /** `rules` today. A model-written insight cannot arrive undeclared. */
+  generated_by: string
+  needs_human_review: boolean
+  fatigue_signals?: string[]
+}
+
 export interface CreativeDetail {
   creative: CreativeCard & {
     copy: { body: string | null; headline: string | null; description: string | null; cta: string | null }
@@ -190,22 +246,46 @@ export interface CreativeDetail {
     external_ids: { creative: string; ad: string | null; ad_set: string | null; campaign: string | null }
   }
   period: { from: string; to: string; days: number }
+  previous_period: { from: string; to: string }
   metrics: CreativeMetrics | null
   previous: CreativeMetrics | null
   headline_metrics: string[]
   path: string
   fatigue: CreativeFatigue
+  funnel: CreativeFunnelShape
   trend: Array<Record<string, number | string | null>>
+  weekly: Array<Record<string, number | string | null>>
   by_platform: Array<{ creative_id: string; provider: string; metrics: CreativeMetrics | null; source: string }>
   by_campaign: Array<Record<string, unknown>>
   peers: Record<string, number | null> | null
   group: Record<string, unknown> | null
+  insights: {
+    items: CreativeInsight[]
+    total: number
+    /** What the peer half of the analysis was actually taken against — stated, never assumed. */
+    compared_against: { path: string; creatives: number; capped: boolean; cap: number }
+  }
+  attribution: { source: string; note_ar: string; note_en: string }
+  /** What the pipeline normalised INTO. Null when the project has no daily rows yet. */
+  currency: string | null
+  timezone: string | null
+  project_id: string
 }
 
 export const getCreative = (projectId: string, creativeId: string, window: { from?: string; to?: string }) =>
   getData<CreativeDetail>(
     `/projects/${projectId}/creatives/${creativeId}${libraryQueryString(window)}`,
   )
+
+/**
+ * The detail page's own address — no project id (§15.6).
+ *
+ * A library card does not carry a project id, so a page that needed one could not be linked to from
+ * the page that lists them. The ceiling is the caller's membership either way, and a creative
+ * outside it answers 404 rather than 403 — a 403 would confirm the id exists and is someone else's.
+ */
+export const getCreativeInReach = (creativeId: string, window: { from?: string; to?: string }) =>
+  getData<CreativeDetail>(`/creatives/${creativeId}${libraryQueryString(window)}`)
 
 export interface CreativeComparison {
   creatives: CreativeCard[]

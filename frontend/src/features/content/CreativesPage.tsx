@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { GitCompare, LayoutGrid, Rows3, Search } from 'lucide-react'
 import { CreativeViewer } from './CreativeViewer'
@@ -83,7 +83,8 @@ const COPY = {
     of: 'من',
     prev: 'السابق',
     next: 'التالي',
-    open: 'فتح المحتوى',
+    open: 'فتح المعاينة',
+    details: 'تفاصيل المحتوى',
     source: 'المصدر: منصة الإعلان',
   },
   en: {
@@ -128,7 +129,8 @@ const COPY = {
     of: 'of',
     prev: 'Previous',
     next: 'Next',
-    open: 'Open creative',
+    open: 'Open preview',
+    details: 'Creative details',
     source: 'Source: ad platform',
   },
 }
@@ -212,6 +214,15 @@ export function CreativesPage() {
   const ar = locale === 'ar'
   const t = COPY[ar ? 'ar' : 'en']
   const { currentProjectId } = useProject()
+  /*
+   * The address of THIS library, carried into every detail link.
+   *
+   * Relative — `content/<id>` resolves under whichever portal mounted this page, so one component
+   * serves `/app` and `/agency` without being told which it is. The search string travels so the
+   * detail page's Back link rebuilds the shelf rather than dropping the reader in an unfiltered
+   * library, which is the exact way a drill-down stops being trusted.
+   */
+  const { search: libraryAddress } = useLocation()
 
   /*
    * The address is the opening state (§15.11's drill-down).
@@ -552,6 +563,7 @@ export function CreativesPage() {
                 selected={selected.includes(creative.id)}
                 onSelect={() => toggleSelected(creative.id)}
                 onOpen={() => setViewerIndex(index)}
+                detailsTo={`${creative.id}${libraryAddress}`}
               />
             </li>
           ))}
@@ -585,9 +597,22 @@ export function CreativesPage() {
                     />
                   </td>
                   <td className="p-2">
-                    <button type="button" onClick={() => setViewerIndex(index)} className="text-start font-medium text-text-primary underline-offset-2 hover:underline">
-                      {creative.name}
-                    </button>
+                    {/* The NAME opens the page; the preview button opens the viewer. «What does it
+                        look like» and «should we keep running it» are two questions, and one click
+                        cannot be both answers. */}
+                    <div className="flex items-center gap-2">
+                      <Link to={`${creative.id}${libraryAddress}`} className="text-start font-medium text-text-primary underline-offset-2 hover:underline">
+                        {creative.name}
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setViewerIndex(index)}
+                        aria-label={`${t.open}: ${creative.name}`}
+                        className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[11px] text-text-secondary hover:bg-surface-hover"
+                      >
+                        {t.open}
+                      </button>
+                    </div>
                   </td>
                   <td className="p-2 text-text-secondary">{providerLabel(creative.provider, locale)}</td>
                   <td className="p-2 text-text-secondary">{creative.campaign_name ?? '—'}</td>
@@ -657,6 +682,7 @@ function CreativeGridCard({
   selected,
   onSelect,
   onOpen,
+  detailsTo,
 }: {
   creative: CreativeCard
   t: (typeof COPY)['ar']
@@ -665,6 +691,7 @@ function CreativeGridCard({
   selected: boolean
   onSelect: () => void
   onOpen: () => void
+  detailsTo: string
 }) {
   const preview = creative.preview
   const poster = preview.thumbnail_url ?? preview.image_url
@@ -716,9 +743,11 @@ function CreativeGridCard({
 
       <div className="flex flex-1 flex-col gap-2 p-3">
         <div className="flex items-start justify-between gap-2">
-          <button type="button" onClick={onOpen} className="text-start text-sm font-medium text-text-primary underline-offset-2 hover:underline">
+          {/* The NAME is a real link — it can be middle-clicked, copied and sent. The poster above
+              stays a button, because a quick look is not a navigation. */}
+          <Link to={detailsTo} className="text-start text-sm font-medium text-text-primary underline-offset-2 hover:underline">
             {creative.name}
-          </button>
+          </Link>
           {creative.is_demo && (
             <span className="shrink-0 rounded bg-warning/15 px-1.5 py-0.5 text-[11px] text-warning">{t.demo}</span>
           )}
@@ -750,6 +779,9 @@ function CreativeGridCard({
           {creative.grouped && (
             <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[11px] text-text-secondary">{t.grouped}</span>
           )}
+          <Link to={detailsTo} className="ms-auto text-[11px] text-brand-700 underline-offset-2 hover:underline">
+            {t.details}
+          </Link>
         </div>
 
         {/* §15.15 — where the number came from and how old it is, beside the number itself. */}

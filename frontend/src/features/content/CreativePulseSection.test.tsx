@@ -271,12 +271,15 @@ describe('CreativePulseSection', () => {
   })
 
   /**
-   * A card links into the library carrying the selection it was computed under, plus the creative.
+   * A card naming ONE creative opens that creative's page, carrying the selection it was computed
+   * under (§15.6).
    *
-   * A drill-down that dropped the dashboard's period would land on a different set of creatives
-   * than the card the reader clicked.
+   * The filters travel because the detail page's Back link rebuilds the shelf the reader took the
+   * creative off — a drill-down that dropped the dashboard's period would return them to a
+   * different set of creatives than the card they clicked, which is how a drill-down stops being
+   * trusted.
    */
-  it('links into the library carrying the filters and the creative', async () => {
+  it('links to the creative page carrying the filters it was computed under', async () => {
     render()
 
     // The same creative is both the objective winner and the best image, so it legitimately appears
@@ -284,11 +287,10 @@ describe('CreativePulseSection', () => {
     const links = await screen.findAllByRole('link', { name: 'Hero image' })
     const href = links[0].getAttribute('href') ?? ''
 
-    expect(href).toContain('/app/content?')
+    expect(href).toContain('/app/content/cr-1?')
     expect(href).toContain('from=2026-07-08')
     expect(href).toContain('to=2026-08-06')
     expect(href).toContain('providers%5B%5D=meta')
-    expect(href).toContain('creative=cr-1')
   })
 
   /** The drill-down chain is Platform › Campaign › Ad set › Ad › Creative, each one narrower. */

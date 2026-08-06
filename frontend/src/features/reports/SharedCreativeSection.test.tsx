@@ -4,6 +4,7 @@ import { SharedCreativeSection } from './SharedCreativeSection'
 import type { CreativeCard, CreativeMetrics } from '@/features/content/api'
 import type {
   CreativePermissions,
+  SharedCreativeDetail,
   SharedCreativeLibraryPage,
   SharedCreativeSummaryPayload,
 } from './sharedCreatives'
@@ -15,11 +16,12 @@ vi.mock('./sharedCreatives', async (importOriginal) => {
     ...actual,
     getSharedCreativeSummary: vi.fn(),
     getSharedCreatives: vi.fn(),
+    getSharedCreative: vi.fn(),
     compareSharedCreatives: vi.fn(),
   }
 })
 
-import { getSharedCreativeSummary, getSharedCreatives } from './sharedCreatives'
+import { getSharedCreative, getSharedCreativeSummary, getSharedCreatives } from './sharedCreatives'
 
 /**
  * §15.12's acceptance claims for the client's creative section.
@@ -245,11 +247,47 @@ const page = (over: Partial<SharedCreativeLibraryPage> = {}): SharedCreativeLibr
   ...over,
 })
 
+/** §15.6 — one creative as the client's link answers for it, funnel included. */
+const sharedDetail = (over: Partial<SharedCreativeDetail> = {}): SharedCreativeDetail =>
+  ({
+    creative: {
+      ...card(),
+      copy: { body: 'Some ad copy', headline: 'A headline', description: null, cta: 'SHOP_NOW' },
+      destination_url: 'https://example.test/product',
+      previous: card().metrics,
+      fatigue: card().fatigue,
+    },
+    period: { from: '2026-07-08', to: '2026-08-06', days: 30 },
+    previous_period: { from: '2026-06-08', to: '2026-07-07' },
+    funnel: {
+      stages: [
+        { key: 'impressions', label_ar: 'الظهور', label_en: 'Impressions', count: 60000, from_stage: null, rate_from_previous: null, cost_per: 0.02, source: 'platform_reported' },
+        { key: 'clicks', label_ar: 'النقرات', label_en: 'Clicks', count: 1800, from_stage: 'impressions', rate_from_previous: 0.03, cost_per: 0.67, source: 'platform_reported' },
+      ],
+      missing: [{ key: 'landing_page_views', label_ar: 'زيارات صفحة الهبوط', label_en: 'Landing page views' }],
+      source: 'platform_reported',
+    },
+    trend: [],
+    by_platform: [{ creative_id: 'cr-1', provider: 'meta', metrics: card().metrics, source: 'platform_reported' }],
+    by_campaign: [],
+    attribution: {
+      source: 'platform_reported',
+      note_ar: 'الأرقام كما أبلغت عنها المنصة.',
+      note_en: 'Figures as the ad platform reported them.',
+    },
+    permissions: permissions(),
+    ...over,
+  }) as SharedCreativeDetail
+
 const mockSummary = vi.mocked(getSharedCreativeSummary)
 const mockLibrary = vi.mocked(getSharedCreatives)
+const mockDetail = vi.mocked(getSharedCreative)
 
-const render = (form: 'executive_summary' | 'detailed' = 'detailed', locale: 'ar' | 'en' = 'en') =>
-  renderWithProviders(<SharedCreativeSection token="tok" currency="SAR" form={form} />, { locale })
+const render = (
+  form: 'executive_summary' | 'detailed' = 'detailed',
+  locale: 'ar' | 'en' = 'en',
+  route = '/reports/share/tok',
+) => renderWithProviders(<SharedCreativeSection token="tok" currency="SAR" form={form} />, { locale, route })
 
 describe('SharedCreativeSection', () => {
   beforeEach(() => {
@@ -400,5 +438,113 @@ describe('SharedCreativeSection', () => {
 
     expect(await screen.findByText('تحليل المحتوى')).toBeTruthy()
     expect(screen.getByText('أفضل محتوى لكل هدف')).toBeTruthy()
+  })
+
+  // ---- §15.6, the client's own creative page ---------------------------------------------------
+
+  /**
+   * Opening a creative fetches its detail and puts it in the ADDRESS, so a refresh reopens it.
+   *
+   * A query parameter rather than a nested route: this tree holds the accepted password, and a route
+   * change that remounted the gate would ask the client for it again on every creative they opened.
+   */
+  it('opens a creative into its own view and keeps it in the address', async () => {
+    mockDetail.mockResolvedValue(sharedDetail())
+
+    render('detailed')
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Creative details' }))[0])
+
+    expect(await screen.findByTestId('shared-creative-detail')).toBeTruthy()
+    expect(mockDetail).toHaveBeenCalledWith('tok', 'cr-1', {}, undefined)
+  })
+
+  /**
+   * The address alone opens the creative — which is what makes a refresh and a forwarded link work.
+   *
+   * Asserted by MOUNTING at that address rather than by reading `window.location`: the point is not
+   * that a string was written somewhere, it is that arriving at it produces the creative.
+   */
+  it('opens the creative named by the address on arrival', async () => {
+    mockDetail.mockResolvedValue(sharedDetail())
+
+    render('detailed', 'en', '/reports/share/tok?creative=cr-1')
+
+    expect(await screen.findByTestId('shared-creative-detail')).toBeTruthy()
+    expect(mockDetail).toHaveBeenCalledWith('tok', 'cr-1', {}, undefined)
+  })
+
+  /** The client's funnel shows the reported steps and NAMES the ones the platform withheld. */
+  it('shows the reported funnel stages and names the missing ones', async () => {
+    mockDetail.mockResolvedValue(sharedDetail())
+
+    render('detailed')
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Creative details' }))[0])
+    await screen.findByTestId('shared-creative-detail')
+
+    expect(screen.getAllByText('Clicks').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Stages this platform does not report/)).toHaveTextContent('Landing page views')
+  })
+
+  /**
+   * A per-stage cost is spend divided by a count printed beside it.
+   *
+   * When the link withholds spend the server sends `cost_hidden`, and the page must say «not shown
+   * on this link» rather than a dash — «withheld» and «never reported» are different sentences.
+   */
+  it('says a withheld per-stage cost is withheld rather than missing', async () => {
+    mockDetail.mockResolvedValue(
+      sharedDetail({
+        funnel: {
+          stages: [
+            { key: 'clicks', label_ar: 'النقرات', label_en: 'Clicks', count: 1000, from_stage: null, rate_from_previous: null, cost_per: null, cost_hidden: true, source: 'platform_reported' },
+          ],
+          missing: [],
+          source: 'platform_reported',
+        },
+      }),
+    )
+
+    render('detailed')
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Creative details' }))[0])
+    await screen.findByTestId('shared-creative-detail')
+
+    expect(screen.getAllByText('Not shown on this link').length).toBeGreaterThan(0)
+  })
+
+  /** A creative the link excludes is refused here too — the detail view is not a side door. */
+  it('refuses a creative the link does not carry', async () => {
+    mockDetail.mockRejectedValue(new Error('not found'))
+
+    render('detailed')
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Creative details' }))[0])
+
+    expect(await screen.findByText('This creative is not available on this link.')).toBeTruthy()
+  })
+
+  /** Zoom is an affordance the link may withhold, and then it is not drawn at all. */
+  it('draws no zoom controls when the link forbids zooming', async () => {
+    mockDetail.mockResolvedValue(sharedDetail())
+    mockSummary.mockResolvedValue(summary({ permissions: permissions({ image_zoom: false }) }))
+    mockLibrary.mockResolvedValue(page({ permissions: permissions({ image_zoom: false }) }))
+
+    render('detailed')
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Creative details' }))[0])
+    await screen.findByTestId('shared-creative-detail')
+
+    expect(screen.queryByRole('button', { name: '100%' })).toBeNull()
+  })
+
+  /** Back returns to the library with the section's filters untouched. */
+  it('returns to the library without losing the section', async () => {
+    mockDetail.mockResolvedValue(sharedDetail())
+
+    render('detailed')
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Creative details' }))[0])
+    await screen.findByTestId('shared-creative-detail')
+
+    fireEvent.click(screen.getByRole('button', { name: /Back to the creative library/ }))
+
+    await waitFor(() => expect(screen.queryByTestId('shared-creative-detail')).toBeNull())
+    expect(screen.getByText('Creative library')).toBeTruthy()
   })
 })

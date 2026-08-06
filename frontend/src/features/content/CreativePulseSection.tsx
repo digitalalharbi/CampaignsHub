@@ -258,7 +258,16 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
     () => (extra: LibraryQuery & { creative?: string }) => {
       const { creative, ...rest } = extra
       const qs = libraryQueryString({ ...query, ...rest })
-      return `${libraryPath}${qs}${creative ? `${qs ? '&' : '?'}creative=${creative}` : ''}`
+
+      /*
+       * §15.6 — a card naming ONE creative opens that creative's page, not a filtered library.
+       *
+       * It used to land on the library with `?creative=<id>`, which opened the quick viewer: the
+       * reader asked «why is my best video my best video» and got a picture. The page answers that
+       * question. The filters still travel, because the page's Back link rebuilds the shelf the
+       * reader took it off.
+       */
+      return creative ? `${libraryPath}/${creative}${qs}` : `${libraryPath}${qs}`
     },
     [query, libraryPath],
   )

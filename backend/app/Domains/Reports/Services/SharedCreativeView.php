@@ -7,6 +7,7 @@ namespace App\Domains\Reports\Services;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CreativeFatigue;
+use App\Domains\Campaigns\Services\CreativeFunnel;
 use App\Domains\Campaigns\Services\CreativeInsights;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativePresenter;
@@ -65,6 +66,7 @@ final class SharedCreativeView
         private readonly CreativePresenter $presenter,
         private readonly CreativeMetrics $metrics,
         private readonly CreativeFatigue $fatigue,
+        private readonly CreativeFunnel $funnel,
         private readonly TenantContext $tenants,
         private readonly ProjectContext $projects,
     ) {}
@@ -194,6 +196,9 @@ final class SharedCreativeView
             'creative' => $this->redactRow($detail, $visibility),
             'period' => ['from' => $applied['from'], 'to' => $applied['to'], 'days' => $days],
             'previous_period' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()],
+            // The same reshaping of the same figures the operator's page shows — with the per-stage
+            // cost removed when the link withholds spend, since a cost per step IS spend divided.
+            'funnel' => $this->redactFunnel($this->funnel->build($current), $visibility),
             'trend' => $this->trend($id, $from, $to, $visibility),
             'by_platform' => $this->byPlatform($share, $model, $from, $to, $visibility),
             'by_campaign' => $this->byCampaign($model, $from, $to, $visibility),
@@ -698,6 +703,35 @@ final class SharedCreativeView
     }
 
     // ---- detail sections ----------------------------------------------------------------------
+
+    /**
+     * The funnel, with the per-stage cost removed when the link withholds spend.
+     *
+     * A cost per checkout IS the spend, divided by a number printed next to it — leaving it in while
+     * hiding the spend row would publish the budget to anyone willing to multiply. The stages, their
+     * counts and their conversion rates all stay: they are the client's own funnel, and none of them
+     * reconstructs a figure the link chose not to show.
+     *
+     * @param  array<string, mixed>  $funnel
+     * @return array<string, mixed>
+     */
+    private function redactFunnel(array $funnel, CreativeVisibility $visibility): array
+    {
+        if ($visibility->spend) {
+            return $funnel;
+        }
+
+        $funnel['stages'] = array_map(static function (array $stage): array {
+            $stage['cost_per'] = null;
+            // Flagged, not merely nulled: «not shown on this link» and «this platform sent no spend»
+            // are different sentences, and the reader is owed the right one.
+            $stage['cost_hidden'] = true;
+
+            return $stage;
+        }, $funnel['stages']);
+
+        return $funnel;
+    }
 
     /**
      * Daily figures for the trend chart, with hidden columns absent rather than zeroed.

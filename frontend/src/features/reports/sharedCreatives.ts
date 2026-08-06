@@ -1,4 +1,4 @@
-import type { CreativeCard, LibraryFilterOptions } from '@/features/content/api'
+import type { CreativeCard, CreativeFunnelShape, LibraryFilterOptions } from '@/features/content/api'
 import type { CreativeMove, CreativePulse, KindWinner, ObjectiveWinner, PulseList } from '@/features/content/pulse'
 
 /**
@@ -130,6 +130,13 @@ export interface SharedCreativeDetail {
   }
   period: { from: string; to: string; days: number }
   previous_period: { from: string; to: string }
+  /**
+   * §15.6 — the same reshaping of the same figures the operator's page shows.
+   *
+   * `cost_hidden` is set when the link withholds spend: a cost per stage IS the spend divided by a
+   * count printed beside it, so it goes while the stages and their conversion rates stay.
+   */
+  funnel: CreativeFunnelShape
   trend: Array<Record<string, number | string | null>>
   by_platform: Array<{ creative_id: string; provider: string; metrics: CreativeCard['metrics']; source: string }>
   by_campaign: Array<Record<string, number | string | null>>

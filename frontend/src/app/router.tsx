@@ -66,6 +66,7 @@ import { ConnectionCenterPage } from '@/features/connections/ConnectionCenterPag
 import { DrivePage } from '@/features/drive/DrivePage'
 import { TasksPage } from '@/features/tasks/TasksPage'
 import { CreativesPage } from '@/features/content/CreativesPage'
+import { CreativeDetailPage } from '@/features/content/CreativeDetailPage'
 import { FilesLibraryPage } from '@/features/files/FilesLibraryPage'
 import { BrandingCenterPage } from '@/features/branding/BrandingCenterPage'
 import { AppShell } from '@/layouts/AppShell'
@@ -293,6 +294,14 @@ export const router = createBrowserRouter([
           { path: 'drive', element: <Navigate to="/app/integrations/drive" replace /> },
           { path: 'branding', element: <Navigate to="/app/settings/branding" replace /> },
           { path: 'content', element: <CreativesPage /> },
+          /*
+           * §15.6 — one creative's own address, so it can be linked, refreshed and returned to.
+           *
+           * No project id: the library spans projects and a card does not carry one, so a route that
+           * required it could not be linked to from the page that lists them. The ceiling is the
+           * membership's, applied on the server to the lookup itself.
+           */
+          { path: 'content/:creativeId', element: <CreativeDetailPage portal="app" /> },
           { path: 'reports', element: <ReportsPage /> },
           { path: 'tasks', element: <TasksPage /> },
           /*
@@ -430,6 +439,8 @@ export const router = createBrowserRouter([
             { path: 'campaigns', element: <CampaignsPage /> },
             { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
             { path: 'content', element: <CreativesPage /> },
+            // MOUNTED, not copied — the same page, told which portal to return to (ADR 0002).
+            { path: 'content/:creativeId', element: <CreativeDetailPage portal="agency" /> },
             { path: 'reports', element: <ReportsPage /> },
             { path: 'alerts', element: <AlertsPage /> },
             { path: 'tasks', element: <TasksPage /> },

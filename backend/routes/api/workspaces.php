@@ -78,5 +78,14 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     // §15.11 — the dashboard's creative section, over the same query as the library above.
     Route::get('creatives/pulse', [CreativeAnalysisController::class, 'pulse'])->name('creatives.pulse');
     Route::post('creatives/compare', [CreativeAnalysisController::class, 'compare'])->name('creatives.compare');
+    /*
+     * §15.6 — the Creative Details page's own address, LAST in this group.
+     *
+     * After `pulse` and `compare`, or those two would be looked up as creatives whose ids are the
+     * words "pulse" and "compare". Reachable without a project id on purpose: the library spans
+     * projects and a card does not carry one, so a detail route that required it could not be linked
+     * to from the page that lists them. The ceiling is the caller's membership either way.
+     */
+    Route::get('creatives/{creative}', [CreativeAnalysisController::class, 'detail'])->name('creatives.detail');
     Route::get('files/library', [FilesLibraryController::class, 'index'])->name('files.library');
 });

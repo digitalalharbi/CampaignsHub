@@ -597,6 +597,45 @@ final class SharedReportCreativesTest extends TestCase
         $this->open($token, '/creatives', '?password=letmein')->assertOk();
     }
 
+    /**
+     * §15.6 — the client's creative page gets the same funnel, minus what the link withholds.
+     *
+     * The stages and their conversion rates are the client's own funnel and stay. The cost per stage
+     * does not: it is the spend divided by a count printed beside it, so leaving it in while hiding
+     * the spend row would publish the budget to anyone willing to multiply.
+     */
+    public function test_the_shared_funnel_keeps_its_stages_and_drops_the_cost_when_spend_is_hidden(): void
+    {
+        $creative = $this->creative(['name' => 'Funnelled']);
+        $this->figures($creative, [
+            'spend' => 1000, 'impressions' => 50000, 'clicks' => 1000,
+            'add_to_cart' => 200, 'purchases' => 50,
+        ]);
+
+        [$open] = $this->link($this->everything());
+        [$closed] = $this->link($this->everything(['spend' => false, 'cpa' => false, 'roas' => false]));
+
+        $id = (string) $creative->getKey();
+
+        $shown = $this->open($open, "/creatives/{$id}")->assertOk()->json('data.funnel');
+        $this->assertSame(['impressions', 'clicks', 'add_to_cart', 'purchases'], array_column($shown['stages'], 'key'));
+        $this->assertEqualsWithDelta(20.0, (float) $shown['stages'][3]['cost_per'], 0.0001);
+
+        $hidden = $this->open($closed, "/creatives/{$id}")->assertOk()->json('data.funnel');
+        $this->assertSame(array_column($shown['stages'], 'key'), array_column($hidden['stages'], 'key'));
+        foreach ($hidden['stages'] as $stage) {
+            $this->assertNull($stage['cost_per'], 'a per-stage cost survived a hidden spend');
+            $this->assertTrue($stage['cost_hidden']);
+        }
+        // The conversion rates are untouched — none of them reconstructs the money.
+        $this->assertEqualsWithDelta(0.2, (float) $hidden['stages'][2]['rate_from_previous'], 0.0001);
+
+        // And no stage carries the spend under another name.
+        foreach ($hidden['stages'] as $stage) {
+            $this->assertArrayNotHasKey('spend', $stage);
+        }
+    }
+
     /** @param TestResponse ...$responses */
     private function assertNotFound(...$responses): void
     {
