@@ -64,6 +64,18 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     Route::get('/reports/shared/{token}/live', [PublicReportController::class, 'live'])->name('reports.shared.live');
     Route::get('/reports/shared/{token}/download/{format}', [PublicReportController::class, 'download'])->name('reports.shared.download');
 
+    /*
+     * §15.12 — the creative sections of a client's report.
+     *
+     * `summary` and `comparison` are registered BEFORE the `{creative}` wildcard, or the router would
+     * read them as creative ids and answer «this content is not available on this link» for two
+     * addresses that are not creatives at all.
+     */
+    Route::get('/reports/shared/{token}/creatives', [PublicReportController::class, 'creatives'])->name('reports.shared.creatives');
+    Route::get('/reports/shared/{token}/creatives/summary', [PublicReportController::class, 'creativeSummary'])->name('reports.shared.creatives.summary');
+    Route::get('/reports/shared/{token}/creatives/comparison', [PublicReportController::class, 'creativeComparison'])->name('reports.shared.creatives.comparison');
+    Route::get('/reports/shared/{token}/creatives/{creative}', [PublicReportController::class, 'creative'])->name('reports.shared.creatives.show');
+
     // Print pipeline: token-gated snapshot for the headless-Chromium print route (no session).
     Route::get('/reports/print/{token}', [ReportPrintController::class, 'data'])->name('reports.print.data');
 

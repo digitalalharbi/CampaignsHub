@@ -126,12 +126,35 @@ final class CreativeRows
             'ad_set_ids' => 'external_ad_set_id',
             'ad_ids' => 'external_ad_id',
             'project_ids' => 'project_id',
-            'creative_ids' => 'id',
-            'creative_group_ids' => 'creative_group_id',
         ] as $param => $column) {
             if (($ids = $list($param)) !== []) {
                 $query->whereIn($column, $ids);
             }
+        }
+
+        /*
+         * Named creatives and named groups are a UNION, and every other axis is an intersection.
+         *
+         * An operator building a client link picks «these four creatives, plus whatever is in this
+         * group». Applied as two `whereIn`s that would mean «creatives that are in the list AND in
+         * the group», which is almost always nothing — a link that silently shows an empty section
+         * because two controls that read as additive were implemented as restrictive. Kept in one
+         * nested clause so that the union cannot leak past the other filters.
+         */
+        $namedCreatives = $list('creative_ids');
+        $namedGroups = $list('creative_group_ids');
+
+        if ($namedCreatives !== [] || $namedGroups !== []) {
+            $query->where(function ($q) use ($namedCreatives, $namedGroups): void {
+                if ($namedCreatives !== []) {
+                    $q->whereIn('id', $namedCreatives);
+                }
+                if ($namedGroups !== []) {
+                    $namedCreatives === []
+                        ? $q->whereIn('creative_group_id', $namedGroups)
+                        : $q->orWhereIn('creative_group_id', $namedGroups);
+                }
+            });
         }
 
         /*

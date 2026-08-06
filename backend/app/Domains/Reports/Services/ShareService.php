@@ -80,12 +80,27 @@ final class ShareService
             /*
              * A link is live only when it was given a ceiling to stay inside (LIVEREP-001).
              *
-             * Mode and scope are set together, never independently: `mode = live` with no scope would be
-             * a link with no bound, and `ReportShare::isLive()` refuses to honour that combination for
-             * the same reason. Setting them from one expression makes the invalid pair unwritable rather
-             * than merely unread.
+             * `mode` used to be derived from the presence of a scope alone, which was fine while a
+             * scope existed for one reason. It no longer is: a scope now also carries which creatives
+             * a link may show, so choosing four creatives for a SNAPSHOT link would have silently
+             * turned it live and started recomputing figures the operator had deliberately frozen.
+             * The mode is therefore stated (§15.12), and the scope is only what bounds it.
+             *
+             * The invalid pair stays unwritable in the other direction too: `live` without a scope is
+             * a link with no bound, so it is stored as a snapshot rather than as a promise
+             * {@see ReportShare::isLive()} would then refuse to keep.
              */
-            'mode' => ! empty($opts['scope']) ? 'live' : 'snapshot',
+            'mode' => $this->modeFor($opts),
+            /*
+             * The FORM — how much of the report this link is — independent of the mode above.
+             *
+             * Null means «whatever the report itself is», which is what every link created before
+             * this existed means and what an operator who skipped the choice means.
+             */
+            'form' => in_array($opts['form'] ?? null, ['executive_summary', 'detailed'], true)
+                ? $opts['form']
+                : null,
+            'settings' => $opts['settings'] ?? null,
             'scope' => $opts['scope'] ?? null,
             'expires_at' => $opts['expires_at'] ?? null,
             'created_by' => $userId,
@@ -93,6 +108,38 @@ final class ShareService
         ]);
 
         return [$share, $raw];
+    }
+
+    /**
+     * Live or snapshot — asked for, not inferred, with the old inference as the fallback.
+     *
+     * The mode used to be «a scope exists», which was fine while a scope existed for exactly one
+     * reason. It no longer is: a scope now also carries which creatives a link may show, so choosing
+     * four creatives for a frozen report would have silently started recomputing its figures.
+     *
+     * A caller that says nothing keeps the old behaviour, because every existing caller means what
+     * it always meant. The controller says it explicitly, so the new choice cannot be made by
+     * accident there.
+     *
+     * The invalid pair stays unwritable in the other direction too: `live` with no ceiling is a link
+     * to everything, so it is stored as a snapshot rather than as a promise
+     * {@see ReportShare::isLive()} would then refuse to keep.
+     *
+     * @param  array<string, mixed>  $opts
+     */
+    private function modeFor(array $opts): string
+    {
+        if (empty($opts['scope'])) {
+            return 'snapshot';
+        }
+
+        $asked = match (true) {
+            isset($opts['mode']) => $opts['mode'] === 'live',
+            array_key_exists('live', $opts) => (bool) $opts['live'],
+            default => true,     // said nothing, and has a scope — the pre-§15.12 reading.
+        };
+
+        return $asked ? 'live' : 'snapshot';
     }
 
     public function resolveActive(string $rawToken): ?ReportShare

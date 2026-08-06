@@ -8,6 +8,7 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\CreativeVisibility;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -56,11 +57,60 @@ final class ReportShareController extends Controller
             'providers.*' => ['string', 'max:40'],
             'earliest' => ['nullable', 'date'],
             'latest' => ['nullable', 'date'],
+
+            /*
+             * §15.12 — the two facts that were entangled, now stated separately.
+             *
+             * `form` is how much of the report this link is; `mode` is where its numbers come from.
+             * All four combinations are valid, and neither is derived from the other.
+             */
+            'form' => ['nullable', 'in:executive_summary,detailed'],
+            'mode' => ['nullable', 'in:live,snapshot'],
+
+            // The creative ceiling — an allow-list, a group allow-list, and a deny-list.
+            'creative_ids' => ['array'],
+            'creative_ids.*' => ['uuid'],
+            'creative_group_ids' => ['array'],
+            'creative_group_ids.*' => ['uuid'],
+            'excluded_creative_ids' => ['array'],
+            'excluded_creative_ids.*' => ['uuid'],
+            'objectives' => ['array'],
+            'objectives.*' => ['string', 'max:40'],
+            'paths' => ['array'],
+            'paths.*' => ['string', 'max:40'],
+
+            // The visibility switches. Absent means OFF — see CreativeVisibility.
+            'creatives' => ['array'],
+            'creatives.*' => ['boolean'],
         ]);
 
-        if (! empty($opts['live'])) {
+        /*
+         * A live link needs a ceiling; a snapshot link may have one too.
+         *
+         * The scope used to be built only for live links, because it existed only to bound live
+         * recomputation. It now also carries which creatives a link may show, which is a bound a
+         * FROZEN report needs just as much — a snapshot whose creative section showed content the
+         * operator excluded would be the same disclosure, arriving from a stored payload.
+         */
+        $wantsLive = ($opts['mode'] ?? null) === 'live' || ! empty($opts['live']);
+        $bounded = $wantsLive
+            || array_filter([
+                $opts['creative_ids'] ?? [], $opts['creative_group_ids'] ?? [],
+                $opts['excluded_creative_ids'] ?? [], $opts['objectives'] ?? [], $opts['paths'] ?? [],
+            ]) !== [];
+
+        if ($bounded) {
             $opts['scope'] = $this->scopeFor($model, $opts);
         }
+
+        // Stated, never inferred. `ShareService` still falls back to the old «a scope means live»
+        // reading for its other callers; from an operator's form the choice is always explicit, so a
+        // link cannot become live because the operator picked which creatives it may show.
+        $opts['mode'] = $wantsLive ? 'live' : 'snapshot';
+
+        // Stored resolved, not as ticked: `roas` beside a hidden spend is a published spend, and the
+        // value object closes that combination once rather than at every surface that renders it.
+        $opts['settings'] = ['creatives' => CreativeVisibility::fromArray($opts['creatives'] ?? [])->toArray()];
 
         [$share, $raw] = $this->shares->create($model, $opts, $request->user()->id);
         $audit->log(action: 'report.shared_link_created', entityType: ReportShare::class, entityId: (string) $share->id);
@@ -150,10 +200,25 @@ final class ReportShareController extends Controller
             $providers = $this->providersOf($model);
         }
 
+        $list = static fn (string $key): array => array_values(array_filter((array) ($opts[$key] ?? [])));
+
         return [
             'project_id' => (string) $model->project_id,
             'campaign_ids' => $campaigns,
             'providers' => $providers,
+            /*
+             * The creative axes (§15.12).
+             *
+             * Empty means «no bound on this axis» for the two allow-lists, and «nothing excluded» for
+             * the deny-list — which are the same sentence read in opposite directions and both
+             * correct: an operator who named no creatives shared the report's creatives, and an
+             * operator who excluded none excluded none.
+             */
+            'creative_ids' => $list('creative_ids'),
+            'creative_group_ids' => $list('creative_group_ids'),
+            'excluded_creative_ids' => $list('excluded_creative_ids'),
+            'objectives' => $list('objectives'),
+            'paths' => $list('paths'),
             'earliest' => (string) ($opts['earliest'] ?? $model->period_start?->toDateString() ?? Carbon::now()->subDays(90)->toDateString()),
             'latest' => (string) ($opts['latest'] ?? Carbon::now()->addYear()->toDateString()),
         ];
@@ -199,6 +264,10 @@ final class ReportShareController extends Controller
             'id' => $s->id,
             'active' => $s->isActive(),
             'mode' => $s->isLive() ? 'live' : 'snapshot',
+            // Two independent facts — see the store() validation. `form` is null when the link takes
+            // the report's own, which is what every link made before §15.12 does.
+            'form' => $s->form,
+            'creatives' => $s->creativeVisibility()->toArray(),
             'scope' => $s->scope,
             'allow_download' => $s->allow_download,
             'hide_spend' => $s->hide_spend,

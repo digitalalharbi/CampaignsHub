@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Models;
 
+use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
@@ -17,7 +18,7 @@ final class ReportShare extends Model
     use HasUuidKey;
 
     protected $fillable = [
-        'tenant_id', 'report_id', 'mode', 'token_hash', 'password_hash', 'allow_download',
+        'tenant_id', 'report_id', 'mode', 'form', 'token_hash', 'password_hash', 'allow_download',
         'hide_spend', 'hide_revenue', 'hide_campaign_names', 'watermark', 'settings', 'scope',
         'view_count', 'last_viewed_at', 'expires_at', 'revoked_at', 'created_by', 'is_demo',
     ];
@@ -50,6 +51,39 @@ final class ReportShare extends Model
     public function isLive(): bool
     {
         return $this->mode === 'live' && is_array($this->scope) && $this->scope !== [];
+    }
+
+    /**
+     * Which form of the report this link presents — the operator's choice, or the report's own.
+     *
+     * A per-link choice because one report is legitimately two documents: the board gets the summary
+     * and the performance manager gets the detail, from the same generation and the same figures.
+     * Before this, `form` was read from the report row, so the only way to send both was to generate
+     * the report twice — two rows, two snapshots, and a fortnight later two different answers to the
+     * same question.
+     *
+     * Independent of {@see isLive()} in both directions: a summary can be live and a detailed report
+     * can be a snapshot.
+     */
+    public function formOr(?string $reportForm): string
+    {
+        $chosen = is_string($this->form) ? trim($this->form) : '';
+
+        return in_array($chosen, ['executive_summary', 'detailed'], true)
+            ? $chosen
+            : ($reportForm === 'executive_summary' ? 'executive_summary' : 'detailed');
+    }
+
+    /**
+     * What this link may show about the creatives — fail-closed, and closed for every older link.
+     *
+     * Read through {@see CreativeVisibility} rather than as raw booleans so that the combinations
+     * that leak by arithmetic (ROAS beside a hidden spend) are closed in one place instead of at
+     * every surface that renders a figure.
+     */
+    public function creativeVisibility(): CreativeVisibility
+    {
+        return CreativeVisibility::fromArray((array) (($this->settings ?? [])['creatives'] ?? []));
     }
 
     public function isActive(): bool

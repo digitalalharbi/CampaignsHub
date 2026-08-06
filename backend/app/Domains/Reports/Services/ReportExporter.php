@@ -25,6 +25,17 @@ final class ReportExporter
     /** Bumped whenever the creative template changes so old exports are detected as stale on download. */
     public const TEMPLATE_VERSION = '2';
 
+    /**
+     * The metric columns a creative row exports, in one place so CSV and XLSX cannot drift apart.
+     *
+     * Delivery first, then money. A column whose figure the link withholds is emitted EMPTY rather
+     * than omitted, so the two formats have the same shape whatever the share permits — a sheet
+     * whose columns move depending on the recipient is a sheet nobody can build a template against.
+     */
+    private const CREATIVE_COLUMNS = [
+        'impressions', 'clicks', 'ctr', 'conversions', 'spend', 'revenue', 'cpc', 'cpm', 'cpa', 'roas',
+    ];
+
     public function __construct(
         private readonly ExportReadinessGate $gate,
         private readonly ChromiumPdfRenderer $chromium,
@@ -151,6 +162,35 @@ final class ReportExporter
         foreach (($data['campaigns'] ?? []) as $c) {
             $put([$c['campaign_name'] ?? '—', $c['provider'] ?? '', $c['spend'] ?? '', $c['revenue'] ?? '', $c['conversions'] ?? '', $c['roas'] ?? '', $c['cpa'] ?? '']);
         }
+        /*
+         * §15.12 — the creative rows, and ONLY when the link put them in `$data`.
+         *
+         * There is no fallback that reads them from the database here. An export runs on the payload
+         * the share sanitised, so a creative the link excluded is not «filtered out of the sheet» —
+         * it never reached this method, which is the only version of this that survives someone
+         * adding a column later.
+         */
+        if (! empty($data['creatives'])) {
+            $put([]);
+            $put(['Creatives', 'platform', 'campaign', 'objective', 'path', 'type', ...self::CREATIVE_COLUMNS]);
+            foreach ($data['creatives'] as $c) {
+                $put([
+                    $c['name'] ?? '—',
+                    $c['provider'] ?? '',
+                    $c['campaign_name'] ?? '',
+                    $c['objective'] ?? '',
+                    $c['path'] ?? '',
+                    $c['preview']['kind'] ?? '',
+                    ...array_map(
+                        // A withheld metric is an EMPTY cell, never a zero: a spreadsheet zero is a
+                        // measurement, and this one would be a measurement the operator hid.
+                        static fn (string $key) => $c['metrics'][$key] ?? '',
+                        self::CREATIVE_COLUMNS,
+                    ),
+                ]);
+            }
+        }
+
         // Methodology & metadata manifest appended once (never repeated per data row).
         $put([]);
         $put(['Methodology & Notes / المنهجية والملاحظات']);
@@ -238,6 +278,30 @@ final class ReportExporter
                 fn ($b) => [$b['campaign_name'] ?? '', $b['budget'] ?? null, $b['spent'] ?? null, $b['remaining'] ?? null, $b['consumed_pct'] ?? null, $b['pace'] ?? null],
                 $data['budget'],
             ));
+        }
+
+        /*
+         * §15.12 — a Creatives sheet, only when the link put creatives in `$data`.
+         *
+         * Created rather than created-and-hidden, for the same reason every other sheet here is: a
+         * hidden sheet in a workbook is one right-click away from being visible, and the figures are
+         * still in the file. What the client cannot see must not be in the bytes they were sent.
+         */
+        if (! empty($data['creatives'])) {
+            $add(
+                'Creatives',
+                ['Creative', 'Platform', 'Campaign', 'Objective', 'Path', 'Type', ...self::CREATIVE_COLUMNS],
+                array_map(static fn ($c) => [
+                    $c['name'] ?? '—',
+                    $c['provider'] ?? '',
+                    $c['campaign_name'] ?? '',
+                    $c['objective'] ?? '',
+                    $c['path'] ?? '',
+                    $c['preview']['kind'] ?? '',
+                    // null, not 0 — a withheld or unreported figure leaves the cell empty.
+                    ...array_map(static fn (string $key) => $c['metrics'][$key] ?? null, self::CREATIVE_COLUMNS),
+                ], $data['creatives']),
+            );
         }
 
         $notes = $book->createSheet();
