@@ -10,6 +10,77 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## Session — 2026-08-06 · §15 slice 4, and two root causes
+
+**HEAD `b4254a5`. Tree clean. Backend 1431 passed · Pint clean · vitest 704 · `tsc -b` · oxlint 0
+errors · build clean.**
+
+### `17e7bae` — the intermittent test was an ordering with ties
+
+`DemoPortalLoginsSeeder` chose the demo client account's space with
+`orderBy('created_at')->first()`. The demo agency's six client spaces are created inside one second
+by one seeding run and `created_at` is `timestamp(0)`, so they tie exactly; SQL leaves the order
+among tied rows unspecified and Postgres answers from physical order. The account was scoped to an
+ARBITRARY one of six — usually the one the demo fills, sometimes a sibling holding nothing.
+
+That is also why it never reproduced in isolation: a fresh table makes insertion order the physical
+order, so the tie always broke the same way. Only a full suite — hundreds of rolled-back
+transactions leaving dead tuples for new rows to land among — reordered it.
+
+Demonstrated before it was fixed: the same `ORDER BY created_at LIMIT 1` over three tied rows
+returns a different row after an unrelated row is rewritten; and pinning the seeder to each of two
+wrong spaces made a different subset of the class fail (5 cases, then 4). Two siblings had the same
+latent bug, one of them production code (`OnboardingController`).
+
+### `f31f6dc` — the frontend suite was failing correct tests
+
+7 failures, then 2, then 0 in isolation and 0 with the session's changes stashed. The slowest was
+logged at **5180ms against vitest's 5000ms default**. `testTimeout: 15_000`. A timeout is
+indistinguishable from a real failure in a gate, which is what teaches re-running until green.
+
+### `383fc63` — the Creative Library
+
+`/app/content` and `/agency/content`, rebuilt on `CreativeAnalysisController`.
+`CreativeLibraryController` is **deleted**: it had its own SQL and coalesced nulls to 0, so the page
+could disagree with Creative Analysis about the same creative (§15.17). The library now spans the
+caller's reach under the MEMBERSHIP ceiling, so Client and Project are real filters and the URL
+grants nothing.
+
+**Four defects only the browser could find** — a lazy `data:` URI never loads at all (ten cards, ten
+blank frames, no error); the player keyed by `video_url` was reused between creatives sharing a
+file; zoom controls rendered over videos; `play()` returns `undefined` in some engines.
+
+**Two at the storage layer** — `conversions`/`revenue` were `NOT NULL DEFAULT 0`, so an awareness
+image reported «ROAS 0.00×» beside a sales video's 5.55×; and `orders`/`cost_per_lpv` are headline
+metrics the paths name that `CreativeMetrics` never produced.
+
+Live in Arabic/RTL: 10 cards, 10 images decoding at 600×600, «الوصول: غير مُرسَل» beside a real
+spend, the player mounting with no `src`, playing on demand and unarming on navigate, and the
+comparison refusing an overall winner across objectives with its reason in Arabic.
+
+### Note on tooling
+
+The Browser pane's `computer{action:"screenshot"}` returned blank frames throughout this session
+(it reported the pane hidden). Live verification was done through `javascript_tool` against the real
+DOM — element counts, `naturalWidth`, `src`/`preload`/`paused`, rendered text — which is stronger
+evidence than a screenshot in any case, but the screenshots in this session's evidence are missing
+and that is why.
+
+### Exact next task
+
+**§15.11 — creative analysis in the main Dashboard.** Best by objective, best image, best video,
+declining creatives, fatigue alerts, spend by creative type, image vs video, and a clear entry into
+the library — all from `CreativeMetrics`, never a second aggregation. Then the drill-down
+Dashboard → Platform → Campaign → Ad Set → Ad → Creative that keeps filters and period.
+
+Then, in order: §15.12 executive + detailed report creative sections · share-level creative
+permissions, fail-closed · §15.10 recommendations · §15.6 the interactive detail PAGE (the API is
+live; only the viewer is built) · §14.6 objective layouts · §14.7–14.8 comparisons ·
+REPORT-OBJECTIVE-005 attribution · `PRODUCTION_HANDOVER.md` · clean install + upgrade path · the
+full three-browser Playwright gate (still not run since `2ea6943`).
+
+---
+
 ## Current commit
 `2ea6943` — **PHONE-002 + PAGES-001 + TAX-ADMIN-001.** Gate-verified: `PLAYWRIGHT_EXIT=0`,
 773 passed / 0 failed / 0 flaky / retries 0, Chromium + Firefox + WebKit. Working tree CLEAN.
@@ -2652,12 +2723,11 @@ share-level creative permissions, fail-closed (§15.12) · recommendations (§15
 layouts · §14.7–14.8 comparisons · REPORT-OBJECTIVE-005 attribution · `PRODUCTION_HANDOVER.md` ·
 clean install + upgrade path · the full three-browser gate (not run since `2ea6943`).
 
-### Open, and not to be closed by a re-run
+### Closed at the cause (was: «not to be closed by a re-run»)
 
-One full-suite run showed `DemoClientPortalTest` failing two cases (the counters case and the
-branding case). The same suite passed immediately after, and those three classes passed twice more
-together. It is recorded in the matrix as open. Root-cause it before the final gate — «إعادة تشغيل
-الاختبار ليست إصلاحًا».
+The intermittent `DemoClientPortalTest` failures are fixed at `17e7bae`. See the session record at
+the top of this file — the cause was an ordering with ties, not flakiness, and it was demonstrated
+before it was fixed.
 
 ### The warning that has now cost two cycles
 
