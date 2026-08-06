@@ -197,7 +197,12 @@ final class OnboardingController extends Controller
         if ($data['client_id'] ?? null) {
             $client = ClientWorkspace::where('id', $data['client_id'])->first();
         }
-        $client ??= ClientWorkspace::where('tenant_id', $tenant->id)->orderBy('created_at')->first()
+        // Ordered TOTALLY, by `id` after `created_at`. Workspaces provisioned in one request share a
+        // `created_at` to the second, and an ordering with ties resolves from physical row order — so
+        // two identical calls could file the projects under two different client spaces, with nothing
+        // in the request to explain the difference.
+        $client ??= ClientWorkspace::where('tenant_id', $tenant->id)
+            ->orderBy('created_at')->orderBy('id')->first()
             ?? $this->makeClient($tenant, $tenant->name);
 
         Project::create([

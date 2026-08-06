@@ -135,9 +135,32 @@ final class DemoPortalLoginsSeeder extends Seeder
          * Confined to ONE client space, through the constructor that exists to make that hard to get
          * wrong. A client-portal membership with no scope would show this customer the agency's whole
          * book of business, which is the failure `forAgencyClient` is named after.
+         *
+         * NAMED, not sorted for. This was `orderBy('created_at')->first()`, and the demo agency's
+         * client spaces are all created inside one second by one seeding run — `created_at` is
+         * `timestamp(0)`, so they tie exactly. SQL leaves the order among tied rows unspecified, and
+         * Postgres answers from physical order, which changes as pages are reused. The account was
+         * therefore scoped to an ARBITRARY one of six spaces: usually «demo-managed» — the one
+         * `DemoClientPortalSeeder` fills — and sometimes a sibling that is empty.
+         *
+         * That is the whole of the intermittent `DemoClientPortalTest` failure. In isolation the
+         * table is fresh, insertion order is physical order, and the first-created space wins every
+         * time; in a full suite run, hundreds of rolled-back transactions leave dead tuples, the new
+         * rows land in reused pages in a different order, and the tie breaks somewhere else. The
+         * portal then opened onto a space with none of the seeded data, and a different subset of
+         * this class failed depending on which space it landed in.
+         *
+         * The scope and the data now come from ONE constant, so they cannot drift apart. The
+         * fallback keeps a stable, total ordering (`id` breaks any remaining tie) so that even an
+         * install without that space picks the same space twice running.
          */
         $client = ClientWorkspace::query()->withoutGlobalScopes()
-            ->where('tenant_id', $tenant->getKey())->orderBy('created_at')->first();
+            ->where('tenant_id', $tenant->getKey())
+            ->where('slug', DemoClientPortalSeeder::WORKSPACE_SLUG)
+            ->first()
+            ?? ClientWorkspace::query()->withoutGlobalScopes()
+                ->where('tenant_id', $tenant->getKey())
+                ->orderBy('created_at')->orderBy('id')->first();
 
         if ($client === null) {
             $this->command?->warn('The demo agency has no client space — the portal demo account has no membership.');

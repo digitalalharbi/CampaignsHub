@@ -9,6 +9,7 @@ use App\Domains\Billing\Models\Quote;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Models\Membership;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoClientPortalSeeder;
@@ -170,6 +171,35 @@ final class DemoClientPortalTest extends TestCase
             (float) (int) $sales['metrics']['conversions'],
             (float) $sales['metrics']['conversions'],
             'a client-facing order count is not a whole number',
+        );
+    }
+
+    /**
+     * The account is scoped to the space the demo FILLS — by name, and not by luck.
+     *
+     * `DemoPortalLoginsSeeder` used to take «the agency's first client space» as
+     * `orderBy('created_at')->first()`. All six are created inside one second by one seeding run and
+     * `created_at` is `timestamp(0)`, so they tie exactly; SQL leaves the order among tied rows
+     * unspecified and Postgres answers from physical order. The account was scoped to an arbitrary
+     * one of the six — usually this one, occasionally a sibling holding none of the seeded data.
+     *
+     * That is the whole of this class's intermittent failure, and it is why re-running was never a
+     * fix: in isolation the table is fresh and insertion order IS physical order, so the tie always
+     * broke the same way. Only a full suite — hundreds of rolled-back transactions leaving dead
+     * tuples for the new rows to land among — reordered it. Which cases then failed depended on
+     * which space it landed in, which is why the failure never looked like the same failure twice.
+     *
+     * Asserted here rather than left to the branding case because the two must be ONE decision: the
+     * scope and the data now come from a single constant, and this states that they agree.
+     */
+    public function test_the_demo_account_is_scoped_to_the_client_space_the_demo_fills(): void
+    {
+        $membership = Membership::query()->where('user_id', $this->client->getKey())->firstOrFail();
+
+        $this->assertSame(
+            [(string) $this->space()->getKey()],
+            $membership->clientScopeIds(),
+            'the demo portal account is scoped to a client space other than the one the demo fills',
         );
     }
 

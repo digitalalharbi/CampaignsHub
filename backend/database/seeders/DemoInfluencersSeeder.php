@@ -43,8 +43,13 @@ final class DemoInfluencersSeeder extends Seeder
 
         app(TenantContext::class)->setTenantId((string) $tenant->id);
 
+        // `id` breaks the tie: the demo agency's spaces share a `created_at` to the second, and an
+        // ordering that is not total picks an arbitrary row from physical order (see the note in
+        // `DemoPortalLoginsSeeder::clientPortalCustomer()`). Re-seeding would move this work between
+        // client spaces for no reason a reader could see.
         $client = ClientWorkspace::query()
-            ->where('tenant_id', $tenant->id)->whereNull('archived_at')->orderBy('created_at')->first();
+            ->where('tenant_id', $tenant->id)->whereNull('archived_at')
+            ->orderBy('created_at')->orderBy('id')->first();
 
         $roster = [
             ['name' => 'Layla Al-Harbi', 'handle' => 'layla.creates', 'primary_platform' => 'instagram',
