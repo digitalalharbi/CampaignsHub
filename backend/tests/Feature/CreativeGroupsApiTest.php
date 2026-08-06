@@ -514,4 +514,54 @@ final class CreativeGroupsApiTest extends TestCase
 
         $this->assertNull($tiktok->fresh()->creative_group_id);
     }
+
+    /**
+     * The group LISTING answers on the pinned project too.
+     *
+     * It did not. `GET projects/{p}/creatives/groups` had no route, fell through to
+     * `creatives/{creative}`, and was looked up as a creative whose id is the word «groups» — a 500
+     * carrying a Postgres uuid-cast error, on a URL the groups page builds whenever a project is
+     * pinned. Found by writing the E2E walk, which is the first thing that ever requested it.
+     */
+    public function test_the_project_pinned_group_listing_answers(): void
+    {
+        [$meta, $tiktok] = $this->twoPlatforms();
+
+        $id = $this->actingAs($this->operator, 'sanctum')->postJson(
+            "/api/v1/projects/{$this->project->getKey()}/creatives/group",
+            ['creative_ids' => [(string) $meta->getKey(), (string) $tiktok->getKey()]],
+        )->assertCreated()->json('data.id');
+
+        $body = $this->actingAs($this->operator, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->getKey()}/creatives/groups")
+            ->assertOk()
+            ->json();
+
+        // The group just made is in the listing, and carries both platforms. Asserting on the count
+        // of the whole list would bind this test to how many groups the fixture happens to build.
+        $group = collect($body['data']['groups'])->firstWhere('id', $id);
+        $this->assertNotNull($group, 'the group just created is missing from the pinned listing');
+        $this->assertSame(['meta', 'tiktok'], collect($group['providers'])->sort()->values()->all());
+    }
+
+    /**
+     * A malformed id is NOT FOUND, not a server error.
+     *
+     * Any unmatched word under `creatives/` used to reach Eloquent and come back 500 «invalid input
+     * syntax for type uuid», which tells a caller the server is broken when the truth is that there is
+     * no such creative. `whereUuid` moves the refusal to the router, so a route added later cannot
+     * forget the check.
+     */
+    public function test_a_creative_id_that_is_not_a_uuid_is_not_found_rather_than_a_server_error(): void
+    {
+        foreach (['not-a-uuid', '12345', 'groups '] as $bad) {
+            $this->actingAs($this->operator, 'sanctum')
+                ->getJson("/api/v1/projects/{$this->project->getKey()}/creatives/".rawurlencode($bad))
+                ->assertNotFound();
+
+            $this->actingAs($this->operator, 'sanctum')
+                ->getJson('/api/v1/creatives/'.rawurlencode($bad))
+                ->assertNotFound();
+        }
+    }
 }

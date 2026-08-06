@@ -87,9 +87,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
      * the selection instead — refusing a selection that spans two.
      */
     Route::get('creatives/groups', [CreativeAnalysisController::class, 'groups'])->name('creatives.groups');
-    Route::get('creatives/groups/{group}', [CreativeAnalysisController::class, 'groupShow'])->name('creatives.groups.show');
+    Route::get('creatives/groups/{group}', [CreativeAnalysisController::class, 'groupShow'])->name('creatives.groups.show')->whereUuid('group');
     Route::post('creatives/group', [CreativeAnalysisController::class, 'merge'])->name('creatives.merge');
-    Route::delete('creatives/{creative}/group', [CreativeAnalysisController::class, 'split'])->name('creatives.split');
+    Route::delete('creatives/{creative}/group', [CreativeAnalysisController::class, 'split'])->name('creatives.split')->whereUuid('creative');
     /*
      * §15.6 — the Creative Details page's own address, LAST in this group.
      *
@@ -98,6 +98,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
      * projects and a card does not carry one, so a detail route that required it could not be linked
      * to from the page that lists them. The ceiling is the caller's membership either way.
      */
-    Route::get('creatives/{creative}', [CreativeAnalysisController::class, 'detail'])->name('creatives.detail');
+    /*
+     * `whereUuid` so a malformed id is refused by the ROUTER with a 404 rather than reaching Eloquent
+     * and returning a 500 «invalid input syntax for type uuid». A route added below this one later
+     * cannot forget the check, which a controller guard would allow.
+     */
+    Route::get('creatives/{creative}', [CreativeAnalysisController::class, 'detail'])->name('creatives.detail')->whereUuid('creative');
     Route::get('files/library', [FilesLibraryController::class, 'index'])->name('files.library');
 });

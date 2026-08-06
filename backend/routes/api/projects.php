@@ -89,9 +89,26 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // section is looked up as a creative whose id is the word "pulse".
     Route::get('creatives/pulse', [CreativeAnalysisController::class, 'pulse'])->name('creatives.pulse');
     Route::post('creatives/compare', [CreativeAnalysisController::class, 'compare'])->name('creatives.compare');
+    /*
+     * The group listing, which this surface was missing while the workspace surface had it.
+     *
+     * `GET projects/{p}/creatives/groups` fell through to `creatives/{creative}` and was looked up as
+     * a creative whose id is the word «groups» — a 500 with a Postgres uuid-cast error, on a URL the
+     * groups page constructs whenever it is opened with a project pinned.
+     */
+    Route::get('creatives/groups', [CreativeAnalysisController::class, 'groups'])->name('creatives.groups');
+    Route::get('creatives/groups/{group}', [CreativeAnalysisController::class, 'groupShow'])->name('creatives.groups.show')->whereUuid('group');
     Route::post('creatives/group', [CreativeAnalysisController::class, 'group'])->name('creatives.group');
-    Route::get('creatives/{creative}', [CreativeAnalysisController::class, 'show'])->name('creatives.show');
-    Route::delete('creatives/{creative}/group', [CreativeAnalysisController::class, 'ungroup'])->name('creatives.ungroup');
+    /*
+     * `whereUuid` on every `{creative}` — the router refuses a malformed id instead of the database.
+     *
+     * Without it, ANY unmatched word under `creatives/` reaches Eloquent and comes back 500 «invalid
+     * input syntax for type uuid», which tells the caller the server is broken when the truth is that
+     * there is no such creative. 404 is the honest answer, and a constraint gives it without a line
+     * of controller code — so a route added below this one later cannot forget the check.
+     */
+    Route::get('creatives/{creative}', [CreativeAnalysisController::class, 'show'])->name('creatives.show')->whereUuid('creative');
+    Route::delete('creatives/{creative}/group', [CreativeAnalysisController::class, 'ungroup'])->name('creatives.ungroup')->whereUuid('creative');
 
     Route::get('sync-runs', [SyncRunController::class, 'index'])->name('sync-runs.index');
     Route::post('sync-runs', [SyncRunController::class, 'store'])->name('sync-runs.store');
