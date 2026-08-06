@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Maximize2, Minus, Plus, RotateCcw } from 'lucide
 import { CreativeViewer } from './CreativeViewer'
 import { CreativeVideoPlayer } from './CreativeVideoPlayer'
 import { CreativeInsightCard } from './CreativeInsightCard'
+import { CreativeCarousel } from './CreativeCarousel'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { formatBytes, imageLoading } from './format'
 import { getCreativeInReach, type CreativeMetrics, type FunnelStage } from './api'
@@ -427,6 +428,9 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           </div>
         </div>
       </section>
+
+      {/* ---- a carousel is more than one picture (§15) ---------------------------------------- */}
+      <CreativeCarousel preview={creative.preview} locale={locale} />
 
       {/* ---- what it is, and where the figures came from ------------------------------------- */}
       <section className="rounded-lg border border-border bg-surface p-4">

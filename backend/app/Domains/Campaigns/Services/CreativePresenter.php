@@ -130,7 +130,10 @@ final class CreativePresenter
      *     thumbnail_url: string|null,
      *     expires_at: string|null,
      *     note_ar: string|null,
-     *     note_en: string|null
+     *     note_en: string|null,
+     *     cards: list<array<string, mixed>>|null,
+     *     cards_reported: bool,
+     *     cards_withheld: int
      * }
      */
     public function preview(ExternalCreative $creative): array
@@ -143,7 +146,7 @@ final class CreativePresenter
 
         $blocked = $this->wasWithheld($creative);
 
-        return match (true) {
+        $shape = match (true) {
             $blocked => [
                 'state' => 'withheld',
                 'kind' => $kind,
@@ -161,7 +164,7 @@ final class CreativePresenter
                 'note_ar' => 'انتهت صلاحية رابط المنصة — يحتاج مزامنة جديدة.',
                 'note_en' => 'The platform link has expired — it needs a fresh sync.',
             ],
-            $image === null && $video === null && $thumb === null => [
+            $image === null && $video === null && $thumb === null && $creative->cards === null => [
                 'state' => 'unavailable',
                 'kind' => $kind,
                 'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
@@ -180,6 +183,92 @@ final class CreativePresenter
                 'note_en' => null,
             ],
         };
+
+        return $shape + $this->cards($creative, $shape['state']);
+    }
+
+    /**
+     * The cards of a carousel — and an honest answer when there are none to give.
+     *
+     * ## Why this is not «nice to have»
+     *
+     * The columns a creative is synced into are singular: one `asset_url`, one `headline`, one
+     * `destination_url`. A five-card carousel poured into them KEEPS THE FIRST and drops the rest, and
+     * every surface then renders a fifth of what ran with nothing on screen saying so. That is a wrong
+     * answer, not a missing feature — a reader comparing «the carousel» against a video is comparing
+     * one of its cards.
+     *
+     * ## Three states, not two
+     *
+     *   - `cards_reported: false` — the provider sent no breakdown. The single asset above is all
+     *     there is to show, and the UI says that rather than implying the carousel has one card.
+     *   - `cards_reported: true` with a list — the real cards, in the order they ran.
+     *   - `cards_reported: true` with `[]` — it sent a breakdown and it was empty. Rare, and still not
+     *     the same sentence as the first.
+     *
+     * Every URL goes through the SAME `safe()` guard as the creative's own asset. A card link is a
+     * platform link and carries the same signed credentials; withholding the parent's and passing the
+     * children's straight through would have made this method the leak.
+     *
+     * @return array{cards: list<array<string, mixed>>|null, cards_reported: bool, cards_withheld: int}
+     */
+    private function cards(ExternalCreative $creative, string $state): array
+    {
+        $raw = $creative->cards;
+
+        if (! is_array($raw)) {
+            return ['cards' => null, 'cards_reported' => false, 'cards_withheld' => 0];
+        }
+
+        // A withheld or expired parent means every child link is withheld or expired too — they came
+        // from the same response and carry the same credential.
+        if ($state === 'withheld' || $state === 'expired') {
+            return ['cards' => [], 'cards_reported' => true, 'cards_withheld' => count($raw)];
+        }
+
+        $cards = [];
+        $withheld = 0;
+
+        foreach (array_values($raw) as $index => $card) {
+            if (! is_array($card)) {
+                continue;
+            }
+
+            $given = static fn (string $key): ?string => is_string($card[$key] ?? null) ? $card[$key] : null;
+
+            $image = $this->safe($given('image_url')) ?? $this->safe($given('asset_url'));
+            $video = $this->safe($given('video_url'));
+            $thumb = $this->safe($given('thumbnail_url'));
+
+            $hadLink = $given('image_url') ?? $given('asset_url') ?? $given('video_url') ?? $given('thumbnail_url');
+
+            if ($image === null && $video === null && $thumb === null && $hadLink !== null) {
+                // It HAD a link and the guard refused it. Counted rather than dropped silently, so
+                // «three of five cards are shown» is a sentence the page can actually say.
+                $withheld++;
+
+                continue;
+            }
+
+            $cards[] = [
+                'index' => $index,
+                'kind' => $video !== null ? 'video' : 'image',
+                'image_url' => $image,
+                'video_url' => $video,
+                'thumbnail_url' => $thumb,
+                'headline' => $this->text($card['headline'] ?? null),
+                'body' => $this->text($card['body'] ?? null),
+                'cta' => $this->text($card['cta'] ?? null),
+                'destination_url' => $this->text($card['destination_url'] ?? null),
+            ];
+        }
+
+        return ['cards' => $cards, 'cards_reported' => true, 'cards_withheld' => $withheld];
+    }
+
+    private function text(mixed $value): ?string
+    {
+        return is_string($value) && trim($value) !== '' ? trim($value) : null;
     }
 
     private function kind(ExternalCreative $creative): string

@@ -10,6 +10,56 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## Session — 2026-08-06 (later still) · §15.13 groups, dashboard findings, and carousels
+
+**HEAD `PENDING`. Tree clean.**
+
+### Carousels — a wrong answer, fixed down to the column
+
+The columns a creative syncs into are SINGULAR: one `asset_url`, one `headline`, one
+`destination_url`. A five-card carousel poured into them kept its FIRST card and dropped the rest,
+and every surface rendered a fifth of what ran with nothing on screen admitting it. A reader
+comparing «the carousel» against a video was comparing one of its cards.
+
+`external_creatives.cards` is jsonb and NULLABLE, and the nullability is the point: `null` means the
+provider sent no breakdown, `[]` means it sent one and it was empty. `NOT NULL DEFAULT '[]'` would
+have made those the same row — the same defect the video columns carried before `1687b27`.
+
+`CreativePresenter::cards()` runs every card URL through the SAME credential guard as the parent —
+withholding the parent's link and passing the children's straight through would have made the card
+list the leak — and a refused card is COUNTED, so «3 of 5 cards are shown» is sayable.
+
+`CreativeCarousel` is one component on the detail page and the client's shared panel. Cards page by
+button, thumbnail and arrow key; a video card mounts a player keyed by index, so moving cards
+unmounts it rather than leaving a video playing behind a picture.
+
+**On a client link the card copy is GONE from the payload**, not undrawn: verified live, each card on
+a copy-hiding link carries only `index`, `kind` and its three URLs. The pictures stay, because they
+are what a carousel IS — withholding those is a ceiling decision, not a copy switch.
+
+### Also in this unit
+
+§15.13 creative groups and the dashboard findings block — see the section below, both committed at
+`b2fd426`.
+
+### Cleared
+
+The 2,040 stale demo rows with fractional counts are gone: re-running `DemoCreativeAnalysisSeeder`
+to seed the carousel cards rewrote them.
+
+### Exact next task
+
+**§14.6 objective layouts · §14.7–14.8 comparisons, pacing, funnel drop-off, anomaly detection ·
+REPORT-OBJECTIVE-005 attribution and deduplication · `PRODUCTION_HANDOVER.md` · clean install +
+upgrade path · the E2E half of the §15 acceptance tests · the full three-browser Playwright gate,
+still not run since `2ea6943`** — its verdict must come from Playwright's own exit code, with no
+file or database change during it.
+
+Then the platform integrations, in the mandated order and ONE AT A TIME: **Snapchat, TikTok, Meta,
+Google Ads, X, LinkedIn.** Each gets its own read-only adapter wired into every section before the
+next one starts, and each stays `BLOCKED_EXTERNAL_CREDENTIALS` until a real OAuth round trip,
+account discovery and an actual sync have happened.
+
 ## Session — 2026-08-06 (later still) · §15.13, creative groups + the dashboard findings
 
 **HEAD `b2fd426`. Tree clean. Backend 1519 passed (8617 assertions) · Pint clean · vitest 767 / 105 files · `tsc -b` · oxlint 0

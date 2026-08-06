@@ -643,4 +643,61 @@ final class SharedReportCreativesTest extends TestCase
             $response->assertNotFound();
         }
     }
+
+    /**
+     * A carousel's cards obey the same switches as the creative's own copy.
+     *
+     * The failure this rules out is not subtle: a link that hides the ad copy and then ships four
+     * cards each holding a headline has not hidden the ad copy, it has MOVED it — and the operator
+     * who flipped the switch has no way to know. Asserted on the payload, not the rendering, because
+     * «hidden by the UI» is the thing §15.12 forbids.
+     */
+    public function test_a_carousels_cards_are_redacted_by_the_same_switches_as_the_creative(): void
+    {
+        $creative = $this->creative([
+            'name' => 'Bundle carousel',
+            'format' => 'carousel',
+            'cards' => [
+                ['image_url' => 'https://cdn.example.com/a.jpg', 'headline' => 'CARD-HEADLINE', 'body' => 'CARD-BODY', 'cta' => 'CARD-CTA', 'destination_url' => 'https://shop.example.com/CARD-DEST'],
+            ],
+        ]);
+        $this->figures($creative, ['spend' => 300, 'impressions' => 9000]);
+
+        [$open] = $this->link($this->everything());
+        [$closed] = $this->link($this->everything([
+            'ad_copy' => false, 'headline' => false, 'cta' => false, 'destination_url' => false,
+        ]));
+
+        $shown = $this->open($open, '/creatives')->assertOk()->json('data.creatives.0.preview.cards.0');
+        $this->assertSame('CARD-HEADLINE', $shown['headline']);
+        $this->assertSame('https://shop.example.com/CARD-DEST', $shown['destination_url']);
+
+        $response = $this->open($closed, '/creatives')->assertOk();
+        $hidden = $response->json('data.creatives.0.preview.cards.0');
+
+        // The picture is what a carousel IS and it stays; the copy is GONE from the payload.
+        $this->assertNotNull($hidden['image_url']);
+        $this->assertArrayNotHasKey('headline', $hidden);
+        $this->assertArrayNotHasKey('body', $hidden);
+        $this->assertArrayNotHasKey('cta', $hidden);
+        $this->assertArrayNotHasKey('destination_url', $hidden);
+        $response->assertDontSee('CARD-HEADLINE')->assertDontSee('CARD-DEST');
+    }
+
+    /** A video card is a video: the link's video switch reaches one level down. */
+    public function test_a_video_card_is_silenced_by_the_links_video_switch(): void
+    {
+        $creative = $this->creative([
+            'format' => 'carousel',
+            'cards' => [['video_url' => 'https://cdn.example.com/card.mp4', 'thumbnail_url' => 'https://cdn.example.com/card.jpg']],
+        ]);
+        $this->figures($creative, ['spend' => 120, 'impressions' => 4000]);
+
+        [$token] = $this->link($this->everything(['video' => false]));
+
+        $card = $this->open($token, '/creatives')->assertOk()->json('data.creatives.0.preview.cards.0');
+
+        $this->assertNull($card['video_url'], 'the player was still fed on a link that hides video');
+        $this->assertNotNull($card['thumbnail_url']);
+    }
 }

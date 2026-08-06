@@ -16,6 +16,7 @@ import {
 } from './sharedCreatives'
 import { CreativeViewer } from '@/features/content/CreativeViewer'
 import { CreativeVideoPlayer } from '@/features/content/CreativeVideoPlayer'
+import { CreativeCarousel } from '@/features/content/CreativeCarousel'
 import { imageLoading } from '@/features/content/format'
 import { formatMetric, metricLabel, metricState } from '@/features/content/metrics'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
@@ -892,6 +893,13 @@ function SharedCreativeDetail({
           <Pair k={t.sourceUpdated} v={creative.freshness.source_updated_at?.slice(0, 10) ?? t.notProvided} />
         </dl>
       </div>
+
+      {/*
+        A carousel's cards, on the client's link too.
+        The server has already removed whatever this link withholds from each card — the copy is gone
+        from the payload, not merely undrawn, which is what §15.12 asks for.
+      */}
+      <CreativeCarousel preview={creative.preview} locale={locale} />
 
       {/* The words on the creative — each field already removed by the server when withheld. */}
       {(creative.copy?.headline || creative.copy?.body || creative.copy?.cta || creative.destination_url) && (

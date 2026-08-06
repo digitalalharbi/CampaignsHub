@@ -90,6 +90,7 @@ const COPY = {
     error: 'تعذّر تحميل المكتبة.',
     demo: 'وضع تجريبي',
     grouped: 'مجمَّع عبر المنصات',
+    cards: (n: number) => `${n} بطاقات`,
     noPreview: 'لا تتوفر معاينة',
     lastSync: 'آخر مزامنة',
     never: 'لم تتم بعد',
@@ -142,6 +143,7 @@ const COPY = {
     error: 'Could not load the library.',
     demo: 'Demo',
     grouped: 'Grouped across platforms',
+    cards: (n: number) => `${n} cards`,
     noPreview: 'No preview available',
     lastSync: 'Last sync',
     never: 'Not yet',
@@ -854,6 +856,13 @@ function CreativeGridCard({
           </span>
           {creative.grouped && (
             <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[11px] text-text-secondary">{t.grouped}</span>
+          )}
+          {/* A card shows ONE picture; saying how many there are is what stops that reading as all
+              of them. Only when the platform actually sent the breakdown. */}
+          {creative.preview.cards_reported && (creative.preview.cards?.length ?? 0) > 0 && (
+            <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[11px] text-text-secondary" dir="ltr">
+              {t.cards(creative.preview.cards?.length ?? 0)}
+            </span>
           )}
           <Link to={detailsTo} className="ms-auto text-[11px] text-brand-700 underline-offset-2 hover:underline">
             {t.details}

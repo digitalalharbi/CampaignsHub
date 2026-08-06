@@ -443,4 +443,75 @@ final class CreativeDetailPageTest extends TestCase
             ->getJson("/api/v1/creatives/{$creative->getKey()}".$this->window())
             ->assertForbidden();
     }
+    // ---- carousels ------------------------------------------------------------------------------
+
+    /**
+     * §15 — a carousel shows its cards, or says the platform sent none.
+     *
+     * The columns a creative syncs into are singular, so a five-card carousel poured into them keeps
+     * the FIRST card and drops the rest. Every surface then rendered a fifth of what ran with nothing
+     * on screen saying so — a wrong answer, not a missing feature.
+     */
+    public function test_a_carousel_carries_its_cards_each_with_its_own_copy_and_destination(): void
+    {
+        $creative = $this->creative([
+            'name' => 'Bundle carousel',
+            'format' => 'carousel',
+            'cards' => [
+                ['image_url' => 'https://cdn.example.com/a.jpg', 'headline' => 'Card one', 'body' => 'First', 'cta' => 'SHOP_NOW', 'destination_url' => 'https://shop.example.com/a'],
+                ['image_url' => 'https://cdn.example.com/b.jpg', 'headline' => 'Card two', 'body' => 'Second', 'cta' => 'SHOP_NOW', 'destination_url' => 'https://shop.example.com/b'],
+                ['video_url' => 'https://cdn.example.com/c.mp4', 'headline' => 'Card three'],
+            ],
+        ]);
+        $this->day($creative, now()->subDay()->toDateString(), ['spend' => 100, 'impressions' => 5000]);
+
+        $preview = $this->open($creative)->assertOk()->json('data.creative.preview');
+
+        $this->assertTrue($preview['cards_reported']);
+        $this->assertCount(3, $preview['cards']);
+        $this->assertSame('Card one', $preview['cards'][0]['headline']);
+        $this->assertSame('https://shop.example.com/b', $preview['cards'][1]['destination_url']);
+        // A video card is a video card — the kind is per-card, not per-creative.
+        $this->assertSame('image', $preview['cards'][0]['kind']);
+        $this->assertSame('video', $preview['cards'][2]['kind']);
+        $this->assertSame(0, $preview['cards_withheld']);
+    }
+
+    /** «This platform sent no card breakdown» is not «this carousel has no cards». */
+    public function test_a_creative_with_no_card_breakdown_says_so_rather_than_showing_an_empty_carousel(): void
+    {
+        $creative = $this->creative(['format' => 'carousel']);
+        $this->day($creative, now()->subDay()->toDateString(), ['spend' => 50, 'impressions' => 900]);
+
+        $preview = $this->open($creative)->assertOk()->json('data.creative.preview');
+
+        $this->assertFalse($preview['cards_reported']);
+        $this->assertNull($preview['cards'], 'an unreported breakdown became an empty list');
+    }
+
+    /**
+     * A card link is a platform link, and the guard applies to it too.
+     *
+     * Withholding the parent's URL for carrying a credential and then passing the children's straight
+     * through would have made the card list the leak — the same signed links, one level down.
+     */
+    public function test_a_card_link_carrying_a_credential_is_withheld_and_counted(): void
+    {
+        $creative = $this->creative([
+            'format' => 'carousel',
+            'cards' => [
+                ['image_url' => 'https://cdn.example.com/clean.jpg', 'headline' => 'Shown'],
+                ['image_url' => 'https://cdn.example.com/x.jpg?access_token=SECRET-VALUE', 'headline' => 'Withheld'],
+            ],
+        ]);
+        $this->day($creative, now()->subDay()->toDateString(), ['spend' => 10, 'impressions' => 400]);
+
+        $body = $this->open($creative)->assertOk();
+        $preview = $body->json('data.creative.preview');
+
+        $this->assertCount(1, $preview['cards']);
+        $this->assertSame(1, $preview['cards_withheld'], 'a refused card was dropped without being counted');
+        // And the credential never reaches the browser in any form.
+        $body->assertDontSee('SECRET-VALUE');
+    }
 }

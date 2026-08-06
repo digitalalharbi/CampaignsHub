@@ -17,6 +17,25 @@ import { deleteData, getData, postData } from '@/lib/api/client'
  * exactly the distinction the backend went to the trouble of preserving.
  */
 
+/**
+ * One card of a carousel — its own picture, its own copy, its own destination.
+ *
+ * The optional fields are optional because a client link REMOVES them rather than blanking them: an
+ * empty `headline` would tell the reader a headline exists and is being kept from them, which is a
+ * different disclosure. Read them with `in` or `?.`, never with `?? ''`.
+ */
+export interface CreativeCardSlide {
+  index: number
+  kind: 'image' | 'video'
+  image_url: string | null
+  video_url: string | null
+  thumbnail_url: string | null
+  headline?: string | null
+  body?: string | null
+  cta?: string | null
+  destination_url?: string | null
+}
+
 /** What the browser may load for a creative, and why when it may not. */
 export interface CreativePreview {
   /** `available` renders; the other three explain themselves and never fabricate an image. */
@@ -28,6 +47,20 @@ export interface CreativePreview {
   expires_at: string | null
   note_ar: string | null
   note_en: string | null
+  /**
+   * A carousel's cards. `null` means the provider sent no breakdown — NOT that there are none.
+   *
+   * The distinction is the whole point: a five-card carousel synced into the singular columns keeps
+   * its first card, and a UI that could not tell the two apart would render a fifth of what ran with
+   * nothing on screen saying so.
+   */
+  cards?: CreativeCardSlide[] | null
+  cards_reported?: boolean
+  /** Cards whose link was refused for carrying a credential — counted, so «3 of 5» is sayable. */
+  cards_withheld?: number
+  /** Set only on a client link: whether the reader may zoom, and whether the asset may be downloaded. */
+  can_zoom?: boolean
+  can_download?: boolean
 }
 
 export interface CreativeMetrics {

@@ -160,6 +160,15 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                     'last_active_at' => $today->copy()->subDays($case['idle'] ?? 0),
                     'source_updated_at' => $today->copy()->subDay(),
                     'last_synced_at' => Carbon::now(),
+                    /*
+                     * The cards, or NULL — and null is a statement.
+                     *
+                     * Only the carousel case defines them, so every other fixture leaves this null,
+                     * which is exactly what «this provider sent no card breakdown» looks like. A
+                     * seeder that wrote `[]` everywhere would erase the distinction the column was
+                     * added to keep.
+                     */
+                    'cards' => isset($case['cards']) ? $this->cards($case) : null,
                     'source_type' => 'demo',
                     'is_demo' => true,
                 ],
@@ -217,6 +226,20 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                 'width' => 1080, 'height' => 1080, 'aspect_ratio' => '1:1',
                 'headline' => 'اختر منتجك', 'cta' => 'SHOP_NOW',
                 'shape' => 'steady', 'video' => false, 'sales' => true,
+                /*
+                 * Four cards, because a carousel with one card is an image.
+                 *
+                 * Each carries its OWN headline and destination — which is the whole point of the
+                 * format and the thing the singular columns cannot hold. Without this fixture the
+                 * card view can be built and never exercised, and «the carousel shows its cards» is
+                 * a claim nobody can check on a fresh install.
+                 */
+                'cards' => [
+                    ['headline' => 'عباية سوداء كلاسيكية', 'body' => 'قصّة واسعة، قماش صيفي.', 'cta' => 'SHOP_NOW', 'path' => '/abaya-classic'],
+                    ['headline' => 'عباية بتطريز ذهبي', 'body' => 'تطريز يدوي على الأكمام.', 'cta' => 'SHOP_NOW', 'path' => '/abaya-gold'],
+                    ['headline' => 'طرحة حرير', 'body' => 'ثمانية ألوان.', 'cta' => 'SHOP_NOW', 'path' => '/scarf-silk'],
+                    ['headline' => 'حقيبة يد جلدية', 'body' => 'جلد طبيعي مبطّن.', 'cta' => 'SHOP_NOW', 'path' => '/bag-leather'],
+                ],
             ],
             [
                 // The other half of the cross-platform pair — same hash as `awareness-video`.
@@ -408,6 +431,33 @@ final class DemoCreativeAnalysisSeeder extends Seeder
      * with no credentials and no network, or «the images actually appear» is untestable. It is also
      * visibly a placeholder — nobody should mistake demo content for a real asset.
      */
+    /**
+     * A carousel's cards, each with its own picture, copy and destination.
+     *
+     * The images are generated the same way as the creative's own — self-contained, offline, carrying
+     * no credential and unable to expire — so a reviewer can page through four real cards on a laptop
+     * with no network.
+     *
+     * @param  array<string, mixed>  $case
+     * @return list<array<string, string>>
+     */
+    private function cards(array $case): array
+    {
+        $out = [];
+        foreach ($case['cards'] as $index => $card) {
+            $out[] = [
+                'image_url' => $this->placeholder($card['headline'], $case['tint']),
+                'thumbnail_url' => $this->placeholder($card['headline'], $case['tint']),
+                'headline' => $card['headline'],
+                'body' => $card['body'],
+                'cta' => $card['cta'],
+                'destination_url' => 'https://example.com/demo-store'.$card['path'],
+            ];
+        }
+
+        return $out;
+    }
+
     private function placeholder(string $label, string $tint): string
     {
         $text = htmlspecialchars(mb_substr($label, 0, 28), ENT_XML1);

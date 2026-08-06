@@ -23,7 +23,7 @@ final class ExternalCreative extends Model
         'thumbnail_url', 'preview_url', 'asset_url', 'video_url', 'destination_url', 'status', 'source_type',
         'width', 'height', 'aspect_ratio', 'duration_seconds', 'file_size', 'file_hash',
         'body', 'headline', 'description', 'cta',
-        'first_seen_at', 'last_active_at', 'source_updated_at', 'asset_expires_at', 'raw',
+        'first_seen_at', 'last_active_at', 'source_updated_at', 'asset_expires_at', 'raw', 'cards',
         'creative_group_id', 'last_synced_at', 'is_demo',
     ];
 
@@ -34,6 +34,14 @@ final class ExternalCreative extends Model
         'source_updated_at' => 'datetime',
         'asset_expires_at' => 'datetime',
         'raw' => 'array',
+        /*
+         * A carousel's cards, or null.
+         *
+         * `null` is «the provider sent no card breakdown»; `[]` is «it sent one and it was empty».
+         * Two different sentences, and collapsing them is how a five-card creative renders as one
+         * picture with nothing on screen admitting it.
+         */
+        'cards' => 'array',
         'is_demo' => 'boolean',
     ];
 

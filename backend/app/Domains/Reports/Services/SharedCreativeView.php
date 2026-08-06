@@ -532,9 +532,55 @@ final class SharedCreativeView
              */
             $row['preview']['can_zoom'] = $visibility->imageZoom;
             $row['preview']['can_download'] = $visibility->download;
+
+            $row['preview'] = $this->redactCards($row['preview'], $visibility);
         }
 
         return $row;
+    }
+
+    /**
+     * A carousel's cards obey the same switches as the creative's own copy (§15.12).
+     *
+     * Each card carries its own headline, body, call to action and destination — the same four things
+     * the link can withhold one level up. A link that hides the ad copy and then ships four cards each
+     * holding a headline has not hidden the ad copy; it has moved it. The video switch applies here
+     * too, because a video card is a video.
+     *
+     * Keys are REMOVED, never blanked, for the reason `redactRow` gives above — and the cards
+     * themselves are never emptied out, because the pictures are what a carousel IS and hiding those
+     * is a decision made by excluding the creative from the link, not by a copy switch.
+     *
+     * @param  array<string, mixed>  $preview
+     * @return array<string, mixed>
+     */
+    private function redactCards(array $preview, CreativeVisibility $visibility): array
+    {
+        if (! is_array($preview['cards'] ?? null)) {
+            return $preview;
+        }
+
+        $preview['cards'] = array_map(static function (array $card) use ($visibility): array {
+            if (! $visibility->adCopy) {
+                unset($card['body']);
+            }
+            if (! $visibility->headline) {
+                unset($card['headline']);
+            }
+            if (! $visibility->cta) {
+                unset($card['cta']);
+            }
+            if (! $visibility->destinationUrl) {
+                unset($card['destination_url']);
+            }
+            if (! $visibility->video) {
+                $card['video_url'] = null;
+            }
+
+            return $card;
+        }, $preview['cards']);
+
+        return $preview;
     }
 
     /**
