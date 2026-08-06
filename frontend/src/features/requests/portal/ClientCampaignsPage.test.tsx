@@ -36,6 +36,26 @@ describe('ClientCampaignsPage', () => {
     expect(screen.getByText('Conversions')).toBeInTheDocument()
   })
 
+  /**
+   * The client reads their own language, not our storage values.
+   *
+   * `objective` and `status` arrive as enum keys — `awareness`, `paused` — and the card printed them
+   * raw, so an Arabic portal said «الهدف: awareness» beside a status badge reading «paused». Caught
+   * live the moment the demo client had campaigns on more than one objective to look at.
+   */
+  it('translates the objective and status rather than printing the enum key', async () => {
+    vi.mocked(listClientCampaigns).mockResolvedValue([
+      { ...campaign, id: 'c2', name: 'Brand Awareness', objective: 'awareness', status: 'paused' },
+    ])
+    renderWithProviders(<ClientCampaignsPage />, { locale: 'ar' })
+
+    expect(await screen.findByText('Brand Awareness')).toBeInTheDocument()
+    expect(screen.getByText('الوعي')).toBeInTheDocument()
+    expect(screen.getByText('موقوفة')).toBeInTheDocument()
+    expect(screen.queryByText('awareness')).not.toBeInTheDocument()
+    expect(screen.queryByText('paused')).not.toBeInTheDocument()
+  })
+
   it('shows an honest empty state when there are no campaigns', async () => {
     vi.mocked(listClientCampaigns).mockResolvedValue([])
     renderWithProviders(<ClientCampaignsPage />, { locale: 'en' })

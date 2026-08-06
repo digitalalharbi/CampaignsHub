@@ -4,7 +4,8 @@ import { formatDate, formatNumber, listClientCampaigns, type PortalCampaign } fr
 import { PortalShell } from './PortalShell'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { usePortalGuard } from './usePortalGuard'
-import { useUi } from '@/stores/ui'
+import { campaignStatusLabel, objectiveLabel } from '@/features/campaigns/labels'
+import { useUi, type Locale } from '@/stores/ui'
 
 const COPY = {
   ar: {
@@ -37,7 +38,8 @@ function statusTone(status: string): string {
 }
 
 export function ClientCampaignsPage() {
-  const ar = useUi((s) => s.locale) === 'ar'
+  const locale = useUi((s) => s.locale)
+  const ar = locale === 'ar'
   const t = ar ? COPY.ar : COPY.en
   const q = useQuery({ queryKey: ['client', 'campaigns'], queryFn: listClientCampaigns, retry: false })
   usePortalGuard(q.isError, q.error)
@@ -59,14 +61,14 @@ export function ClientCampaignsPage() {
         <div className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface p-12 text-center text-text-muted"><Megaphone size={26} /><span className="text-sm">{t.none}</span></div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {rows.map((campaign) => <CampaignCard key={campaign.id} campaign={campaign} t={t} />)}
+          {rows.map((campaign) => <CampaignCard key={campaign.id} campaign={campaign} t={t} locale={locale} />)}
         </div>
       )}
     </PortalShell>
   )
 }
 
-function CampaignCard({ campaign, t }: { campaign: PortalCampaign; t: typeof COPY.ar }) {
+function CampaignCard({ campaign, t, locale }: { campaign: PortalCampaign; t: typeof COPY.ar; locale: Locale }) {
   const m = campaign.metrics
   const ctr = m.ctr === null ? '—' : `${(m.ctr * 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`
   const hasPeriod = campaign.starts_on || campaign.ends_on
@@ -75,11 +77,14 @@ function CampaignCard({ campaign, t }: { campaign: PortalCampaign; t: typeof COP
     <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5">
       <div className="flex items-start justify-between gap-2">
         <span className="font-semibold text-text-primary">{campaign.name}</span>
-        <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone(campaign.status)}`}>{campaign.status}</span>
+        {/* The client reads their own language, not our enum keys: `active` / `awareness` are storage
+            values, and printing them raw left an Arabic page saying «الهدف: awareness». Same maps the
+            internal surfaces use, so the two never drift apart. */}
+        <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone(campaign.status)}`}>{campaignStatusLabel(campaign.status, locale)}</span>
       </div>
 
       <div className="flex flex-col gap-1 text-xs text-text-secondary">
-        {campaign.objective && <span>{t.objective}: <span className="font-medium text-text-primary">{campaign.objective}</span></span>}
+        {campaign.objective && <span>{t.objective}: <span className="font-medium text-text-primary">{objectiveLabel(campaign.objective, locale)}</span></span>}
         {hasPeriod && (
           <span className="tnum">{t.period}: {formatDate(campaign.starts_on)} {t.to} {formatDate(campaign.ends_on)}</span>
         )}

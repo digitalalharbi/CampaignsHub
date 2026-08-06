@@ -1107,7 +1107,27 @@ final class ClientPortalController
         $token = $this->requireSession($request);
         $this->bindTenant($token);
 
+        /*
+         * With one space and none selected, the one space IS the answer.
+         *
+         * A contact who reaches a single client is deliberately never asked to choose (see
+         * `spaces()`), so they live on the spaceless `/client/*` routes — and branding, alone among
+         * the readers, treated "no slug in the URL" as "no client", answering with the tenant's brand.
+         * The visible result was a portal that greeted the client by name on its home page and called
+         * itself «CampaignsHub» on every other one.
+         *
+         * This narrows nothing and widens nothing: it resolves the same single id the rest of the
+         * portal is already scoped to. With two or more reachable spaces the merged view still gets
+         * the tenant brand, which remains correct — no one brand may stand for the others.
+         */
         $spaceId = $this->selectedSpaceId($token);
+        if ($spaceId === null) {
+            // The membership-aware list, not the one derived from request rows: an invited client
+            // with no requests yet still has exactly one space, and still has a name.
+            $reachable = $this->contactOwnedWorkspaceIds($token);
+            $spaceId = count($reachable) === 1 ? $reachable[0] : null;
+        }
+
         $scope = $spaceId === null ? 'tenant' : 'client';
 
         $assets = app(BrandingService::class)->resolve($scope, $spaceId, BrandingSpec::THEME_ANY);

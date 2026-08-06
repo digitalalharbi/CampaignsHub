@@ -221,22 +221,55 @@ final class AgencyWhiteLabelTest extends TestCase
             ->assertOk()->assertJsonPath('data.colors.primary', '#0000BB');
     }
 
-    /** Outside a space the tenant's own brand answers — the correct fallback for the merged view. */
+    /**
+     * The merged view falls back to the agency's own brand — because no one client's may stand in.
+     *
+     * The fixture is TWO spaces, which is what «merged» means. It used to be one, and the case passed
+     * for a reason unrelated to its name: branding read "no slug in the URL" as "no client at all".
+     */
     public function test_the_merged_view_falls_back_to_the_agencys_own_brand(): void
     {
         $alpha = $this->client('Alpha');
-        $this->contactIn($alpha, 'solo@alpha.test');
+        $beta = $this->client('Beta');
+        $this->contactIn($alpha, 'lead@merged.test');
+        $this->contactIn($beta, 'lead@merged.test');
 
         app(BrandingService::class)
             ->saveSettings('tenant', null, ['colors' => ['primary' => '#333333']]);
 
-        $token = $this->portalLogin('solo@alpha.test');
+        $token = $this->portalLogin('lead@merged.test');
 
         $data = $this->withHeaders($this->auth($token))->getJson('/api/v1/client/branding')
             ->assertOk()->json('data');
 
         $this->assertSame('#333333', $data['colors']['primary']);
         $this->assertNull($data['space']);
+    }
+
+    /**
+     * A contact who reaches ONE space gets that space's brand, slug or no slug.
+     *
+     * They are deliberately never asked to choose (see `spaces()`), so they live on the spaceless
+     * `/client/*` routes for their whole visit. Answering with the tenant's brand there meant a
+     * portal that greeted the client by name on its home page and called itself «CampaignsHub» on
+     * every other one — and a white-labelled agency's colours silently replacing the client's.
+     */
+    public function test_a_contact_with_one_space_gets_that_spaces_brand_without_selecting_it(): void
+    {
+        $alpha = $this->client('Alpha');
+        $this->contactIn($alpha, 'solo@alpha.test');
+
+        $branding = app(BrandingService::class);
+        $branding->saveSettings('tenant', null, ['colors' => ['primary' => '#333333']]);
+        $branding->saveSettings('client', (string) $alpha->id, ['colors' => ['primary' => '#AA0000']]);
+
+        $token = $this->portalLogin('solo@alpha.test');
+
+        $data = $this->withHeaders($this->auth($token))->getJson('/api/v1/client/branding')
+            ->assertOk()->json('data');
+
+        $this->assertSame('#AA0000', $data['colors']['primary']);
+        $this->assertSame($alpha->slug, $data['space']['slug']);
     }
 
     /** A client cannot ask for another space's brand by naming its slug. */
