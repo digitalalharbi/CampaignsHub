@@ -10,6 +10,55 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## Session — 2026-08-06 · §15.11, creative analysis on the dashboard
+
+**HEAD `a9cc080`. Tree clean. Backend 1452+ passed · Pint clean · vitest 719 / 103 files · `tsc -b`
+· oxlint 0 errors.**
+
+### `a9cc080` — the dashboard's creative section
+
+`/app/dashboard` and `/agency/dashboard` gained the §15.11 section: best by objective, best image,
+best video, fastest growing, declining, fatigue states and alerts, spend by creative type, images
+against videos, best platform per shared asset, and the freshness behind all of it.
+
+**It is the library's query.** `GET /creatives/pulse` builds the SAME query as `index()` and hands
+the presented rows to `CreativePulse`, which does **no SQL at all** — the strongest form of §15.17
+available, because there is no query in the section that could drift from the one behind the cards
+it links into. `CreativeMetrics::aggregate()` is the only pipeline addition, and it exists so the
+images-versus-videos table is not a second implementation of the same arithmetic: it sums raw
+figures and derives through the same `derive()` a single creative does.
+
+**Nothing is ranked across paths.** Every ranking carries the metric and the marketing path it was
+computed inside, including «best image» and «best video», which render one entry per path.
+
+**The drill-down** is Platform › Campaign › Ad set › Ad › Creative, each step ADDING to the
+section's filters. The library now opens on the address it is given, and `?creative=<id>` opens
+that creative — so it is refresh-safe and shareable, and the last rung lands on the creative.
+
+**Four defects only the browser found:** a tie awarded to whichever platform sorted first (CPMs of
+25.6532 and 25.6538, both printing «25.65 SAR»); an empty section with its cause invisible behind a
+folded filter dialog; `google_ads` vs `google` between the dashboard's vocabulary and the
+creatives table; and a thin ranking with no marker on the compact rows.
+
+**Live evidence:** 74 creatives on the agency dashboard in Arabic/RTL and English/LTR, images
+decoding at 600×600, zero `<video>` elements, the platform filter narrowing 74 → 14 with the
+rankings recomputing over the narrowed set, «لا فارق» with neither platform highlighted, no
+horizontal scroll at 375px (the wide tables scroll inside their own containers), zero console
+errors through a full filter interaction, and the drill-down landing on a library filtered to one
+card with the viewer open on the named creative and its player still holding no source.
+
+### Exact next task — §15.12
+
+**The creative sections of the executive and the detailed report**, then share-level creative
+permissions (fail-closed: a creative excluded from a client link must not open, by URL or by API).
+Then §15.10 recommendations · §15.6 the interactive detail PAGE (the API is live and the viewer is
+built; the drill-down currently ends at the viewer) · §15.13 the Creative Groups UI (endpoints
+exist, no UI) · §14.6 objective layouts · §14.7–14.8 comparisons · REPORT-OBJECTIVE-005 attribution
+· `PRODUCTION_HANDOVER.md` · clean install + upgrade path · the full three-browser Playwright gate
+(still not run since `2ea6943`).
+
+---
+
 ## Session — 2026-08-06 · §15 slice 4, and two root causes
 
 **HEAD `b4254a5`. Tree clean. Backend 1431 passed · Pint clean · vitest 704 · `tsc -b` · oxlint 0
@@ -66,18 +115,7 @@ DOM — element counts, `naturalWidth`, `src`/`preload`/`paused`, rendered text 
 evidence than a screenshot in any case, but the screenshots in this session's evidence are missing
 and that is why.
 
-### Exact next task
-
-**§15.11 — creative analysis in the main Dashboard.** Best by objective, best image, best video,
-declining creatives, fatigue alerts, spend by creative type, image vs video, and a clear entry into
-the library — all from `CreativeMetrics`, never a second aggregation. Then the drill-down
-Dashboard → Platform → Campaign → Ad Set → Ad → Creative that keeps filters and period.
-
-Then, in order: §15.12 executive + detailed report creative sections · share-level creative
-permissions, fail-closed · §15.10 recommendations · §15.6 the interactive detail PAGE (the API is
-live; only the viewer is built) · §14.6 objective layouts · §14.7–14.8 comparisons ·
-REPORT-OBJECTIVE-005 attribution · `PRODUCTION_HANDOVER.md` · clean install + upgrade path · the
-full three-browser Playwright gate (still not run since `2ea6943`).
+### Exact next task — **done, at `a9cc080`.** See the §15.11 section above.
 
 ---
 
