@@ -2571,3 +2571,48 @@ three-browser gate — still not run since `2ea6943`.
 budget) above a list that can read «لا توجد حملات بعد» for the same project, because the cards read
 imported platform metrics while the list reads the internal `campaigns` table. Both are correct
 separately and the screen contradicts itself.
+
+---
+
+## Session — §14.5 report scope customisation (`73ec6dc` → `3afdd44`)
+
+**`73ec6dc` — the engine.** `ReportScope`: twelve axes, one `intersect()` that can only narrow,
+applied ONCE in `ReportGenerator` to the engine every section reads. `ObjectivePerformance` gained
+platform and account bounds so the split slide cannot contradict the cards above it. Ad sets and ads
+resolve up to their campaigns and `explain()` says so — no metric is stored at that grain.
+`reports.scope` (jsonb) + `report_scope_templates`. 29 tests.
+
+**`3afdd44` — the picker and the live ceiling.** `ReportScopePicker` over every axis the project has
+data for, with the grain note beside the deeper ones; an emptied axis is omitted rather than sent as
+`[]`. Scope editable on an existing report (same id, same link, regenerated) and saveable as a
+reusable template. `LiveReportService` applies the new axes from the share alone.
+
+**Live evidence:** one report narrowed in place from the whole demo store project to the sales
+campaigns on Meta and Google — spend 88,866.92 → 60,006.88 SAR, campaigns 15 → 6, platforms 4 → 2,
+Direct and Blended CPA converging on 84.85, non-sales spend 16,839.34 → 0.
+
+**Gates at `3afdd44`:** backend **1401 passed** (8026 assertions) · vitest **680 passed** (98 files)
+· `tsc -b` clean · build clean · oxlint **0 errors** · Pint clean.
+
+### Warning that cost a cycle, twice now
+
+`queue:work` holds code in memory exactly as `artisan serve` does. The first live regeneration
+returned the OLD figures because a worker from an earlier session was still running. **Restart BOTH
+`artisan serve` AND `queue:work`** before any live verification of a change to a service.
+
+### Exact next task
+
+**§14.6 — objective-aware report layouts.** Awareness, Traffic, Leads, Sales, Retention and
+multi-path reports each leading with the metrics that mean something for that path
+(`MarketingPath::headlineMetrics()` already defines them) instead of printing every card for every
+path. The scope's `paths` axis is what a layout should follow.
+
+Then, in order:
+
+1. **§14.7–14.8** — period comparison, budget pacing, platform/campaign/creative comparison, funnel
+   drop-off, creative fatigue, anomaly detection, and recommendations built from the report's own data.
+2. **REPORT-OBJECTIVE-005** (`NOT_STARTED`) — attribution model, window, click- vs view-through,
+   platform-reported vs store-confirmed, dedup status beside every figure.
+3. **`PRODUCTION_HANDOVER.md`** — does not exist.
+4. **Clean install + upgrade path**, then the **full three-browser gate**, whose verdict comes from
+   Playwright's own exit code. It has NOT been run since `2ea6943`.
