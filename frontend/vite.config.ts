@@ -36,5 +36,20 @@ export default defineConfig({
     css: false,
     // Playwright e2e specs live in ./e2e and run via `npx playwright test`, not vitest.
     exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
+    /*
+     * 15s, against vitest's 5s default — because the default was failing correct tests.
+     *
+     * A full run showed 7 failures, then 2 on the next run, then 0 with those files in isolation, and
+     * 0 again with the session's changes stashed. The number gives it away: the slowest failure was
+     * logged at 5180ms against a 5000ms budget. Nothing was wrong with the assertions — a hundred
+     * jsdom environments in parallel simply pushed a few `findBy*` waits past the line.
+     *
+     * That is worse than a slow suite: a timeout and a real failure look identical in a gate, so the
+     * suite reports a defect that is not there and teaches everyone to re-run until it is green —
+     * which is exactly the habit that hides a genuine intermittent failure when one appears. The
+     * budget is what was wrong, so the budget is what changed. A test that hangs still fails, three
+     * times slower.
+     */
+    testTimeout: 15_000,
   },
 })
