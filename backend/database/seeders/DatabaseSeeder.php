@@ -103,6 +103,11 @@ class DatabaseSeeder extends Seeder
             // §15.16 — the ten creative cases the analysis surfaces have to be reviewable against.
             // AFTER the portal seeder, because it hangs its creatives off that project's campaigns.
             $this->call(DemoCreativeAnalysisSeeder::class);
+            // DEMO-COMMERCE — the merchant's ledger. AFTER `DemoIntegrationsSeeder`, because an order
+            // can only carry a `utm_campaign` that names a real campaign once those exist; without
+            // them every order would seed as unattributed and the store half of the funnel, and
+            // REPORT-OBJECTIVE-005's Store-Confirmed block, would still have nothing to show.
+            $this->call(DemoCommerceSeeder::class);
             // ADMIN-100 — spread the demo tenants' creation dates back across ten months, so the
             // platform growth chart shows a shape instead of one spike in the current month. LAST
             // among the demo seeders, because it rewrites what they have just created.
