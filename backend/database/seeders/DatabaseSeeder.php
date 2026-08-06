@@ -96,6 +96,10 @@ class DatabaseSeeder extends Seeder
             // SIGNUP-006 — one demo login per portal, so the five can actually be told apart.
             // Development only; the seeder refuses in production.
             $this->call(DemoPortalLoginsSeeder::class);
+            // DEMO-PORTAL-001 — and something for that client login to actually open. AFTER the
+            // logins seeder, because it fills the one client space that account is scoped to; before
+            // it, the demo client portal was eight empty sections.
+            $this->call(DemoClientPortalSeeder::class);
             // ADMIN-100 — spread the demo tenants' creation dates back across ten months, so the
             // platform growth chart shows a shape instead of one spike in the current month. LAST
             // among the demo seeders, because it rewrites what they have just created.
