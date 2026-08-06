@@ -10,6 +10,7 @@ use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
 
@@ -78,6 +79,30 @@ final class LiveReportService
         $engine = $this->metrics
             ->forCampaigns($scope['campaign_ids'])
             ->forProviders($applied['providers']);
+
+        /*
+         * The ceiling's OTHER axes (§14.5) — accounts, objectives, marketing paths, ad sets and ads.
+         *
+         * Applied from the share alone and never from the query string: these are axes the operator
+         * chose when building the link, and there is no client-facing control for them. A filter a
+         * reader cannot set is a filter a tampered URL cannot loosen either, which is why they are
+         * read here rather than routed through `intersect()`.
+         *
+         * The ceiling's own campaign list is passed in so ad sets and ads resolve INSIDE it: without
+         * it, a share naming an ad set would have its campaign bound replaced by that ad set's
+         * campaign — possibly one the ceiling never granted.
+         *
+         * Every axis is empty on a link built before this existed, and `applyTo()` skips empty axes,
+         * so those links behave exactly as they did.
+         */
+        $engine = ReportScope::fromArray([
+            'campaign_ids' => $scope['campaign_ids'],
+            'account_ids' => $share->scope['account_ids'] ?? [],
+            'objectives' => $share->scope['objectives'] ?? [],
+            'paths' => $share->scope['paths'] ?? [],
+            'ad_set_ids' => $share->scope['ad_set_ids'] ?? [],
+            'ad_ids' => $share->scope['ad_ids'] ?? [],
+        ])->applyTo($engine);
 
         // A narrowed campaign set is applied on top of the ceiling, never instead of it.
         if ($applied['campaigns'] !== []) {

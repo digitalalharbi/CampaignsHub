@@ -1,4 +1,4 @@
-import { getData, postData } from '@/lib/api/client'
+import { getData, postData, putData } from '@/lib/api/client'
 import { api } from '@/lib/api/client'
 
 export type ReportStatus = 'draft' | 'processing' | 'completed' | 'failed'
@@ -278,3 +278,78 @@ export const runScheduleNow = (projectId: string, id: string) =>
 export async function deleteSchedule(projectId: string, id: string): Promise<void> {
   await api.delete(`${schedulesBase(projectId)}/${id}`)
 }
+
+// ---- §14.5: what a report covers, and a scope worth using again ---------------------------------
+
+/**
+ * The twelve axes, as the API spells them. Empty (or absent) means «no bound on this axis» — which is
+ * why the picker sends omitted keys rather than empty arrays for anything it did not narrow.
+ */
+export interface ReportScopeShape {
+  client_ids?: string[]
+  project_ids?: string[]
+  providers?: string[]
+  account_ids?: string[]
+  campaign_ids?: string[]
+  ad_set_ids?: string[]
+  ad_ids?: string[]
+  creative_ids?: string[]
+  objectives?: string[]
+  paths?: string[]
+  metrics?: string[]
+  from?: string
+  to?: string
+}
+
+/** What a bound axis actually reaches — `figures` narrows every number, `campaign` resolves upward. */
+export interface ScopeExplain {
+  axis: string
+  count: number
+  grain: 'figures' | 'campaign' | 'creatives' | 'projects'
+  note_ar: string
+  note_en: string
+}
+
+export interface ScopeOptions {
+  campaigns: Array<{ id: string; name: string; status: string | null; objective: string | null }>
+  providers: string[]
+  accounts: Array<{ id: string; name: string; provider: string }>
+  ad_sets: Array<{ id: string; name: string; provider: string; campaign_id: string }>
+  ads: Array<{ id: string; name: string; provider: string; campaign_id: string }>
+  creatives: Array<{ id: string; name: string; provider: string; format: string | null; campaign_id: string }>
+  objectives: Array<{ key: string; labels: { ar: string; en: string }; path: string }>
+  paths: Array<{ key: string; labels: { ar: string; en: string }; headline_metrics: string[] }>
+  metrics: Array<{ key: string; ar: string; en: string }>
+  grain: { figures: string[]; resolved_to_campaign: string[]; creatives_only: string[] }
+}
+
+export interface ScopeTemplate {
+  id: string
+  name: string
+  description: string | null
+  shared: boolean
+  scope: ReportScopeShape
+  bound_axes: string[]
+  explain: ScopeExplain[]
+  created_at: string | null
+}
+
+export const scopeOptions = (p: string) => getData<ScopeOptions>(`${base(p)}/scope/options`)
+
+export const getReportScope = (p: string, id: string) =>
+  getData<{ scope: ReportScopeShape; explain: ScopeExplain[]; bound_axes: string[] }>(`${base(p)}/${id}/scope`)
+
+/** Edits the scope ON the report and regenerates it — the same id, so a link already sent keeps working. */
+export const updateReportScope = (p: string, id: string, scope: ReportScopeShape) =>
+  putData<{ id: string; scope: ReportScopeShape | null; explain: ScopeExplain[]; status: string }>(
+    `${base(p)}/${id}/scope`,
+    { scope },
+  )
+
+export const listScopeTemplates = (p: string) =>
+  getData<{ templates: ScopeTemplate[] }>(`${base(p)}/scope-templates`)
+
+export const createScopeTemplate = (p: string, body: { name: string; description?: string; shared?: boolean; scope: ReportScopeShape }) =>
+  postData<ScopeTemplate>(`${base(p)}/scope-templates`, body)
+
+export const deleteScopeTemplate = (p: string, id: string) => api.delete(`${base(p)}/scope-templates/${id}`)

@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, Download, FileText, LayoutGrid, Link2, Loader2, Plus, RefreshCw, Rows3, Send, Share2, Trash2 } from 'lucide-react'
+import { Check, Copy, Download, FileText, LayoutGrid, Link2, Loader2, Plus, RefreshCw, Rows3, Send, Share2, Trash2, SlidersHorizontal } from 'lucide-react'
 import {
   createReport,
+  updateReportScope,
+  getReportScope,
+  type ReportScopeShape,
   createShare,
   deleteReport,
   downloadUrl,
@@ -28,6 +31,7 @@ import { toApiError } from '@/lib/api/client'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { SchedulesPanel } from './SchedulesPanel'
 import { LiveLinkBuilder } from './LiveLinkBuilder'
+import { ReportScopePicker } from './ReportScopePicker'
 import { DemoBadge } from '@/features/analytics/components'
 import { InteractiveReport } from './InteractiveReport'
 import { AnnotationsPanel } from './AnnotationsPanel'
@@ -83,6 +87,14 @@ export function ReportsPage() {
   const [search, setSearch] = useState('')
   const [builderOpen, setBuilderOpen] = useState(false)
   const [previewId, setPreviewId] = useState<string | null>(null)
+  /*
+   * Editing the scope of a report that already exists (§14.5).
+   *
+   * Deliberately an edit rather than «create a narrowed copy»: a link already with the client keeps
+   * working and starts telling the truth. A second report would leave the first one live, unchanged
+   * and wrong, with the client holding it and no sign that anything had moved.
+   */
+  const [scopeId, setScopeId] = useState<string | null>(null)
   const [shareId, setShareId] = useState<string | null>(null)
   const [liveOpen, setLiveOpen] = useState(false)
   const [view, setView] = useState<'table' | 'cards'>('table')
@@ -328,6 +340,7 @@ export function ReportsPage() {
                     typeLabel={typeLabel(r.type)}
                     onPreview={() => setPreviewId(r.id)}
                     onShare={() => setShareId(r.id)}
+                    onScope={() => setScopeId(r.id)}
                     onRegenerate={() => regen.mutate(r.id)}
                     onExport={(f) => exp.mutate({ id: r.id, format: f })}
                     onSend={() => {
@@ -359,6 +372,17 @@ export function ReportsPage() {
       {previewId && <ReportPreview projectId={currentProjectId!} id={previewId} onClose={() => setPreviewId(null)} />}
       {liveOpen && currentProjectId && <LiveLinkBuilder projectId={currentProjectId} onClose={() => setLiveOpen(false)} />}
       {shareId && <ShareManager projectId={currentProjectId!} reportId={shareId} onClose={() => setShareId(null)} />}
+      {scopeId && (
+        <ScopeEditor
+          projectId={currentProjectId!}
+          reportId={scopeId}
+          onClose={() => setScopeId(null)}
+          onSaved={() => {
+            setScopeId(null)
+            invalidate()
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -368,6 +392,7 @@ function ReportRowView({
   typeLabel,
   onPreview,
   onShare,
+  onScope,
   onRegenerate,
   onExport,
   onSend,
@@ -377,6 +402,7 @@ function ReportRowView({
   typeLabel: string
   onPreview: () => void
   onShare: () => void
+  onScope: () => void
   onRegenerate: () => void
   onExport: (f: ReportFormat) => void
   onSend: () => void
@@ -434,6 +460,7 @@ function ReportRowView({
               <IconBtn title={ar ? 'إرسال' : 'Send'} onClick={onSend}><Send size={15} /></IconBtn>
             </>
           )}
+          <IconBtn title={ar ? 'نطاق التقرير' : 'Report scope'} onClick={onScope}><SlidersHorizontal size={15} /></IconBtn>
           <IconBtn title={ar ? 'إعادة الإنشاء' : 'Regenerate'} onClick={onRegenerate}><RefreshCw size={15} /></IconBtn>
           <IconBtn title={ar ? 'حذف' : 'Delete'} onClick={onDelete} danger><Trash2 size={15} /></IconBtn>
         </div>
@@ -454,6 +481,59 @@ function IconBtn({ children, title, onClick, danger }: { children: React.ReactNo
   )
 }
 
+/**
+ * Narrow a report that already exists, and rebuild it in place.
+ *
+ * The report's stored scope is loaded first rather than starting from empty: opening this on a
+ * report already scoped to two platforms and seeing nothing selected would invite an operator to
+ * «re-apply» what was already there, and saving that would silently widen the report back to the
+ * whole project.
+ */
+function ScopeEditor({
+  projectId,
+  reportId,
+  onClose,
+  onSaved,
+}: {
+  projectId: string
+  reportId: string
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const ar = useAr()
+  const current = useQuery({ queryKey: ['report-scope', projectId, reportId], queryFn: () => getReportScope(projectId, reportId) })
+  const [scope, setScope] = useState<ReportScopeShape | null>(null)
+  const value = scope ?? current.data?.scope ?? {}
+
+  const save = useMutation({
+    mutationFn: () => updateReportScope(projectId, reportId, value),
+    onSuccess: onSaved,
+  })
+
+  return (
+    <Modal open onClose={onClose} title={ar ? 'نطاق التقرير' : 'Report scope'} size="lg">
+      {current.isLoading ? (
+        <Skeleton className="h-48 w-full" />
+      ) : (
+        <div className="space-y-4">
+          <ReportScopePicker projectId={projectId} value={value} onChange={setScope} />
+          <p className="text-[11px] text-text-muted">
+            {ar
+              ? 'الحفظ يعيد توليد هذا التقرير نفسه — الرابط المُرسَل للعميل يبقى كما هو ويعرض النطاق الجديد.'
+              : 'Saving regenerates this same report — a link already sent to the client keeps working and shows the new scope.'}
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button>
+            <Button loading={save.isPending} onClick={() => save.mutate()} data-testid="scope-save">
+              {ar ? 'حفظ وإعادة التوليد' : 'Save and regenerate'}
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
 function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; onClose: () => void; onCreated: () => void }) {
   const ar = useAr()
   const [name, setName] = useState('')
@@ -468,6 +548,13 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
    */
   const [form, setForm] = useState<'executive_summary' | 'detailed'>('executive_summary')
   const [audience, setAudience] = useState<string | null>('client')
+  /*
+   * What the report COVERS (§14.5) — chosen here, before it is generated.
+   *
+   * Empty means «the whole project», which is what every report was before this existed, so an
+   * operator who skips this step gets exactly what they used to.
+   */
+  const [scope, setScope] = useState<ReportScopeShape>({})
   const [from, setFrom] = useState(daysAgo(29))
   const [to, setTo] = useState(today())
   // Type & audience are fed by the taxonomy engine (report.type / report.audience) — system definitions, so
@@ -484,6 +571,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
         period_start: from,
         period_end: to,
         currency: 'SAR',
+        scope,
       }),
     onSuccess: onCreated,
   })
@@ -545,6 +633,9 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
         <div className="grid grid-cols-2 gap-3">
           <Field label={ar ? 'من' : 'From'} htmlFor="rb-from"><DateField id="rb-from" value={from} onChange={setFrom} /></Field>
           <Field label={ar ? 'إلى' : 'To'} htmlFor="rb-to"><DateField id="rb-to" value={to} onChange={setTo} /></Field>
+        </div>
+        <div className="border-t border-border pt-4">
+          <ReportScopePicker projectId={projectId} value={scope} onChange={setScope} />
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button>
