@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
@@ -76,6 +77,16 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/normalization', [MetricsController::class, 'normalization'])->name('metrics.normalization');
 
     // SYNC-001: the sync pipeline's operator surface — what ran, what it produced, what broke.
+    /*
+     * §15 — the creative as a unit of analysis. Declared before the campaign routes so
+     * `creatives/compare` is not read as a creative whose id is the word "compare".
+     */
+    Route::get('creatives', [CreativeAnalysisController::class, 'index'])->name('creatives.index');
+    Route::post('creatives/compare', [CreativeAnalysisController::class, 'compare'])->name('creatives.compare');
+    Route::post('creatives/group', [CreativeAnalysisController::class, 'group'])->name('creatives.group');
+    Route::get('creatives/{creative}', [CreativeAnalysisController::class, 'show'])->name('creatives.show');
+    Route::delete('creatives/{creative}/group', [CreativeAnalysisController::class, 'ungroup'])->name('creatives.ungroup');
+
     Route::get('sync-runs', [SyncRunController::class, 'index'])->name('sync-runs.index');
     Route::post('sync-runs', [SyncRunController::class, 'store'])->name('sync-runs.store');
 
