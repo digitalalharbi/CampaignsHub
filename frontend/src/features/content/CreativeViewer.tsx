@@ -74,11 +74,22 @@ export function CreativeViewer({
   index,
   onIndexChange,
   onClose,
+  canZoom = true,
 }: {
   creatives: CreativeCard[]
   index: number
   onIndexChange: (next: number) => void
   onClose: () => void
+  /**
+   * §15.12 — a client link may forbid zooming, and then the controls are not drawn at all.
+   *
+   * Defaults to true, so every operator surface is untouched. It gates the KEYBOARD as well as the
+   * buttons: a hidden control whose shortcut still works is a control that is merely invisible.
+   *
+   * It withholds an affordance, not a picture — a reader can save any image their browser has drawn.
+   * The bound that genuinely withholds a creative is excluding it from the link.
+   */
+  canZoom?: boolean
 }) {
   const { locale } = useUi()
   const ar = locale === 'ar'
@@ -106,14 +117,17 @@ export function CreativeViewer({
       if (event.key === (ar ? 'ArrowRight' : 'ArrowLeft')) {
         if (index > 0) onIndexChange(index - 1)
       }
-      if (event.key === '+' || event.key === '=') setZoom((z) => Math.min(z + ZOOM_STEP, ZOOM_MAX))
-      if (event.key === '-') setZoom((z) => Math.max(z - ZOOM_STEP, ZOOM_MIN))
-      if (event.key === '0') setZoom(1)
+      // Gated with the buttons: a hidden control whose shortcut still works is merely invisible.
+      if (canZoom) {
+        if (event.key === '+' || event.key === '=') setZoom((z) => Math.min(z + ZOOM_STEP, ZOOM_MAX))
+        if (event.key === '-') setZoom((z) => Math.max(z - ZOOM_STEP, ZOOM_MIN))
+        if (event.key === '0') setZoom(1)
+      }
     }
 
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [ar, index, creatives.length, onClose, onIndexChange])
+  }, [ar, canZoom, index, creatives.length, onClose, onIndexChange])
 
   if (!creative) return null
 
@@ -247,7 +261,7 @@ export function CreativeViewer({
           )}
         </dl>
 
-        {showing === 'image' && (
+        {showing === 'image' && canZoom && (
           <div className="flex items-center gap-1">
             <button type="button" aria-label={t.zoomOut} onClick={() => setZoom((z) => Math.max(z - ZOOM_STEP, ZOOM_MIN))} className="rounded p-1.5 hover:bg-white/10">
               <Minus className="h-4 w-4" aria-hidden />

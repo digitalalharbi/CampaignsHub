@@ -220,7 +220,19 @@ final class ReportShareController extends Controller
             'objectives' => $list('objectives'),
             'paths' => $list('paths'),
             'earliest' => (string) ($opts['earliest'] ?? $model->period_start?->toDateString() ?? Carbon::now()->subDays(90)->toDateString()),
-            'latest' => (string) ($opts['latest'] ?? Carbon::now()->addYear()->toDateString()),
+            /*
+             * A LIVE link's window runs on; a SNAPSHOT link's stops where the document does.
+             *
+             * The creative section reads the pipeline in both cases — that is what makes it the same
+             * figures the operator sees — so a snapshot link whose ceiling ran to «today + a year»
+             * would show creative rows from weeks the rest of the document never covered, sitting
+             * under a heading that says the report is fixed.
+             */
+            'latest' => (string) ($opts['latest'] ?? (
+                ($opts['mode'] ?? null) === 'live' || ! empty($opts['live'])
+                    ? Carbon::now()->addYear()->toDateString()
+                    : ($model->period_end?->toDateString() ?? Carbon::now()->toDateString())
+            )),
         ];
     }
 

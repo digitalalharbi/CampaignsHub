@@ -389,8 +389,8 @@ final class CreativeInsights
                     ['metric' => $key, 'current' => $mine, 'previous' => $par, 'change' => round($edge, 4)],
                     'أداء أفضل من متوسط المسار بميزانية أقل',
                     'Beating the path median on a smaller budget',
-                    'يتفوّق هذا المحتوى على وسيط المسار في '.$key.' بنسبة '.$this->pct($edge).' رغم أن إنفاقه أقل من الوسيط.',
-                    'This creative beats the path median on '.$key.' by '.$this->pct($edge).' while spending below the median.',
+                    'يتفوّق هذا المحتوى على وسيط المسار في '.$this->label($key, 'ar').' بنسبة '.$this->pct($edge).' رغم أن إنفاقه أقل من الوسيط.',
+                    'This creative beats the path median on '.$this->label($key, 'en').' by '.$this->pct($edge).' while spending below the median.',
                     'انقل جزءًا من ميزانية المحتوى الأضعف على المسار نفسه إلى هذا المحتوى، وقِس الأثر بعد أسبوع.',
                     'Move part of a weaker same-path creative’s budget here, and measure after a week.',
                     peerBased: true,
@@ -428,8 +428,8 @@ final class CreativeInsights
             $out[] = $this->finding($row, $key, 'opportunity', [$strongKey, $weakKey],
                 ['metric' => $weakKey, 'current' => $weak, 'previous' => $weakPar, 'change' => round(($weak - $weakPar) / abs($weakPar), 4)],
                 $titleAr, $titleEn,
-                $strongKey.' عند '.$this->pct($strong).' فوق وسيط المسار ('.$this->pct($strongPar).')، بينما '.$weakKey.' عند '.$this->pct($weak).' مقابل وسيط '.$this->pct($weakPar).'.',
-                $strongKey.' is '.$this->pct($strong).' against a path median of '.$this->pct($strongPar).', while '.$weakKey.' is '.$this->pct($weak).' against '.$this->pct($weakPar).'.',
+                $this->label($strongKey, 'ar').' عند '.$this->pct($strong).' فوق وسيط المسار ('.$this->pct($strongPar).')، بينما '.$this->label($weakKey, 'ar').' عند '.$this->pct($weak).' مقابل وسيط '.$this->pct($weakPar).'.',
+                $this->label($strongKey, 'en').' is '.$this->pct($strong).' against a path median of '.$this->pct($strongPar).', while '.$this->label($weakKey, 'en').' is '.$this->pct($weak).' against '.$this->pct($weakPar).'.',
                 $actionAr, $actionEn,
                 peerBased: true,
             );
@@ -547,8 +547,8 @@ final class CreativeInsights
                 ['metric' => $key, 'current' => $bestValue, 'previous' => $worstValue, 'change' => round($gap, 4)],
                 'المحتوى نفسه يؤدي أفضل على منصة بعينها',
                 'The same creative performs better on one platform',
-                'المحتوى نفسه سجّل '.$this->num($bestValue).' على '.(string) ($best['provider'] ?? '—').' مقابل '.$this->num($worstValue).' على '.(string) ($worst['provider'] ?? '—').' في '.$key.'.',
-                'The same creative recorded '.$this->num($bestValue).' on '.(string) ($best['provider'] ?? '—').' against '.$this->num($worstValue).' on '.(string) ($worst['provider'] ?? '—').' for '.$key.'.',
+                'المحتوى نفسه سجّل '.$this->num($bestValue).' على '.(string) ($best['provider'] ?? '—').' مقابل '.$this->num($worstValue).' على '.(string) ($worst['provider'] ?? '—').' في '.$this->label($key, 'ar').'.',
+                'The same creative recorded '.$this->num($bestValue).' on '.(string) ($best['provider'] ?? '—').' against '.$this->num($worstValue).' on '.(string) ($worst['provider'] ?? '—').' for '.$this->label($key, 'en').'.',
                 'حوّل جزءًا من ميزانية المنصة الأضعف إلى المنصة الأفضل لهذا المحتوى تحديدًا، لا لكل المحتويات.',
                 'Move part of the weaker platform’s budget to the stronger one for THIS creative, not for the account.',
             ) + $this->subject($best);
@@ -777,6 +777,34 @@ final class CreativeInsights
      * helpers exist rather than the sentence being assembled in the browser: the same text has to
      * reach a PDF and an Excel sheet, where there is no formatter to reach for.
      */
+
+    /**
+     * A metric's NAME, in the reader's language.
+     *
+     * The sentences interpolated the raw column key, so an Arabic client read «يتفوّق … في ctr»: a
+     * database identifier sitting mid-sentence, which reads as an untranslated string rather than as
+     * a technical term somebody chose. Caught by opening the Arabic report.
+     *
+     * Only the keys these rules actually name are listed; anything else falls back to the key, which
+     * is the honest failure — a wrong Arabic word invented for a metric would be worse than the key.
+     */
+    private function label(string $key, string $locale): string
+    {
+        $names = [
+            'ctr' => ['ar' => 'معدل النقر', 'en' => 'click-through rate'],
+            'cpc' => ['ar' => 'تكلفة النقرة', 'en' => 'cost per click'],
+            'cpm' => ['ar' => 'تكلفة الألف ظهور', 'en' => 'cost per thousand impressions'],
+            'cpa' => ['ar' => 'تكلفة الطلب', 'en' => 'cost per order'],
+            'roas' => ['ar' => 'العائد على الإنفاق', 'en' => 'return on ad spend'],
+            'conversion_rate' => ['ar' => 'معدل التحويل', 'en' => 'conversion rate'],
+            'view_rate' => ['ar' => 'نسبة المشاهدة', 'en' => 'view rate'],
+            'completion_rate' => ['ar' => 'نسبة إكمال المشاهدة', 'en' => 'completion rate'],
+            'hook_rate' => ['ar' => 'نسبة الجذب في الثواني الأولى', 'en' => 'hook rate'],
+            'spend' => ['ar' => 'الإنفاق', 'en' => 'spend'],
+        ];
+
+        return $names[$key][$locale] ?? $key;
+    }
 
     private function pct(?float $value): string
     {

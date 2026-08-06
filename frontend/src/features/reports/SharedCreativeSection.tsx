@@ -1,0 +1,816 @@
+import { useMemo, useState } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { AlertTriangle, Image as ImageIcon, LayoutGrid, Lightbulb, Rows3, TrendingDown, TrendingUp, Video } from 'lucide-react'
+import {
+  compareSharedCreatives,
+  getSharedCreativeSummary,
+  getSharedCreatives,
+  type CreativeInsightItem,
+  type CreativePermissions,
+  type SharedCreativeMove,
+  type SharedCreativeQuery,
+  type SharedKindWinner,
+  type SharedObjectiveWinner,
+} from './sharedCreatives'
+import { CreativeViewer } from '@/features/content/CreativeViewer'
+import { imageLoading } from '@/features/content/format'
+import { formatMetric, metricLabel, metricState } from '@/features/content/metrics'
+import { providerLabel } from '@/features/campaigns/labels'
+import { DateField } from '@/components/ui/DateField'
+import { ErrorState, Skeleton } from '@/components/ui/States'
+import { useUi } from '@/stores/ui'
+import type { CreativeCard } from '@/features/content/api'
+import type { CreativePulse, FatigueAlert, PulseList } from '@/features/content/pulse'
+
+/** A winner card takes either shape; only `objective` distinguishes them, and only one of them has it. */
+type SharedWinner = SharedObjectiveWinner | SharedKindWinner
+
+/**
+ * §15.12 — the content sections of a client's report, for a reader with no account.
+ *
+ * ## Two sections, and which one appears is the report's FORM
+ *
+ * The executive summary gets the answers: best by objective, best image, best video, what is growing,
+ * what is declining, what is fatigued, what cannot yet be judged, and the findings behind them. The
+ * detailed report gets those AND the library — every creative, filterable, openable, comparable.
+ * That is the difference the two forms are supposed to have, expressed as different content rather
+ * than as the same page with a shorter scrollbar.
+ *
+ * ## Every permission is read from the server, never assumed
+ *
+ * The payload states what this link may show, and the component renders that. It does not decide.
+ * A control drawn from a client-side guess would eventually be drawn for something the server then
+ * refuses, and the reader would meet a button that fails — which is the shape of «dead control» the
+ * contract forbids, arriving through the back door of an optimistic UI.
+ *
+ * ## Nothing is a zero
+ *
+ * `metricState` distinguishes «the platform did not report this» from «this is zero» and the cards
+ * print «غير مُرسَل» / «Not provided» accordingly. A withheld figure is not in the payload at all, so
+ * it renders as «لا توجد بيانات» rather than as a labelled blank that names what is being kept back.
+ */
+
+const COPY = {
+  ar: {
+    heading: 'تحليل المحتوى',
+    library: 'مكتبة المحتوى',
+    grid: 'شبكة',
+    list: 'قائمة',
+    bestByObjective: 'أفضل محتوى لكل هدف',
+    bestImage: 'أفضل صورة',
+    bestVideo: 'أفضل فيديو',
+    growing: 'الأسرع تحسنًا',
+    declining: 'المتراجع',
+    fatigued: 'محتوى مُجهَد',
+    watch: 'يحتاج مراقبة',
+    insufficient: 'بيانات غير كافية',
+    alerts: 'تنبيهات إجهاد المحتوى',
+    insights: 'أبرز التحليلات',
+    recommendation: 'الإجراء المقترح',
+    freshness: 'آخر مزامنة',
+    quality: 'جودة البيانات',
+    noSync: 'لم تتم مزامنة بعد',
+    period: 'الفترة',
+    previous: 'الفترة السابقة',
+    objective: 'الهدف',
+    path: 'المسار',
+    platform: 'المنصة',
+    campaign: 'الحملة',
+    metric: 'المؤشر المستخدم',
+    value: 'القيمة',
+    change: 'التغيّر عن الفترة السابقة',
+    hidden: 'غير معروض في هذا الرابط',
+    thin: 'أدلة محدودة — الترتيب مبدئي',
+    tie: 'لا فارق',
+    empty: 'لا يوجد محتوى ضمن هذا التحديد.',
+    error: 'تعذّر تحميل قسم المحتوى.',
+    compare: 'قارن المحدد',
+    clear: 'إلغاء التحديد',
+    selected: 'محدد',
+    notComparable: 'لا يمكن إعلان فائز عام بين مسارين مختلفين.',
+    from: 'من',
+    to: 'إلى',
+    all: 'الكل',
+    of: 'من',
+    attribution: 'المصدر: ما أبلغت عنه المنصة الإعلانية',
+    confidence: { high: 'ثقة عالية', medium: 'ثقة متوسطة', insufficient_data: 'بيانات غير كافية' },
+    severity: { warning: 'يحتاج انتباهًا', opportunity: 'فرصة', positive: 'تحسّن' },
+    evidence: 'الأدلة',
+    showing: 'المعروض',
+  },
+  en: {
+    heading: 'Creative analysis',
+    library: 'Creative library',
+    grid: 'Grid',
+    list: 'List',
+    bestByObjective: 'Best creative per objective',
+    bestImage: 'Best image',
+    bestVideo: 'Best video',
+    growing: 'Fastest improving',
+    declining: 'Declining',
+    fatigued: 'Fatigued',
+    watch: 'Needs watching',
+    insufficient: 'Insufficient data',
+    alerts: 'Creative fatigue alerts',
+    insights: 'Key insights',
+    recommendation: 'Recommended action',
+    freshness: 'Last sync',
+    quality: 'Data quality',
+    noSync: 'Awaiting sync',
+    period: 'Period',
+    previous: 'Previous period',
+    objective: 'Objective',
+    path: 'Marketing path',
+    platform: 'Platform',
+    campaign: 'Campaign',
+    metric: 'Metric used',
+    value: 'Value',
+    change: 'Change vs previous period',
+    hidden: 'Not shown on this link',
+    thin: 'Thin evidence — provisional ranking',
+    tie: 'No difference',
+    empty: 'No creatives in this selection.',
+    error: 'Could not load the creative section.',
+    compare: 'Compare selected',
+    clear: 'Clear selection',
+    selected: 'selected',
+    notComparable: 'No overall winner can be declared across two different marketing paths.',
+    from: 'From',
+    to: 'To',
+    all: 'All',
+    of: 'of',
+    attribution: 'Source: as the ad platform reported it',
+    confidence: { high: 'High confidence', medium: 'Medium confidence', insufficient_data: 'Insufficient data' },
+    severity: { warning: 'Needs attention', opportunity: 'Opportunity', positive: 'Improved' },
+    evidence: 'Evidence',
+    showing: 'Showing',
+  },
+}
+
+const pct = (value: number | null | undefined) =>
+  value === null || value === undefined ? '—' : `${(value * 100).toFixed(1)}%`
+
+export function SharedCreativeSection({
+  token,
+  password,
+  currency,
+  form,
+}: {
+  token: string
+  password?: string
+  currency: string
+  form: 'executive_summary' | 'detailed'
+}) {
+  const { locale } = useUi()
+  const ar = locale === 'ar'
+  const t = COPY[ar ? 'ar' : 'en']
+
+  /*
+   * One filter state, shared by both sections.
+   *
+   * The summary and the library answer the same question at two depths, so a reader who narrows to
+   * TikTok in one and finds the other still showing everything has been shown two accounts. Held
+   * here rather than in each child for that reason alone.
+   */
+  const [filters, setFilters] = useState<SharedCreativeQuery>({})
+  const [view, setView] = useState<'grid' | 'list'>('grid')
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null)
+  const [selected, setSelected] = useState<string[]>([])
+  const [comparing, setComparing] = useState(false)
+
+  const summary = useQuery({
+    queryKey: ['shared-creative-summary', token, filters],
+    queryFn: () => getSharedCreativeSummary(token, filters, password),
+    placeholderData: keepPreviousData,
+  })
+
+  const library = useQuery({
+    queryKey: ['shared-creatives', token, filters],
+    queryFn: () => getSharedCreatives(token, { ...filters, per_page: 24 }, password),
+    placeholderData: keepPreviousData,
+    // The summary is the whole ceiling read as answers; the library is only asked for by the
+    // detailed report, where the reader is actually going to page through cards.
+    enabled: form === 'detailed',
+  })
+
+  const comparison = useQuery({
+    queryKey: ['shared-creative-comparison', token, selected, filters],
+    queryFn: () => compareSharedCreatives(token, selected, filters, password),
+    enabled: comparing && selected.length >= 2,
+  })
+
+  const permissions: CreativePermissions | undefined = summary.data?.permissions ?? library.data?.permissions
+  const rows = useMemo(() => library.data?.creatives ?? [], [library.data])
+  const available = summary.data?.available ?? library.data?.available
+
+  if (summary.isLoading) return <Skeleton className="mt-6 h-64 w-full" />
+  if (summary.isError) return <ErrorState title={t.error} error={summary.error} />
+  if (!summary.data || !permissions?.creatives) return null
+
+  const data = summary.data
+  const narrow = (patch: SharedCreativeQuery) => setFilters((f) => ({ ...f, ...patch }))
+
+  return (
+    <section className="mt-8 grid gap-4" data-testid="shared-creative-section" aria-label={t.heading}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-heading text-lg font-extrabold tracking-tight">{t.heading}</h2>
+        <p className="tnum text-xs text-text-secondary" dir="ltr">
+          {data.period.from} → {data.period.to}
+        </p>
+      </div>
+
+      {/* The reader's own filters, offering only what this link can honour. */}
+      {available && (
+        <div className="flex flex-wrap items-end gap-2 rounded-xl border border-border bg-surface-secondary p-3">
+          <label className="grid gap-1 text-xs">
+            <span className="font-semibold text-text-muted">{t.from}</span>
+            <DateField value={filters.from ?? available.earliest} onChange={(v) => narrow({ from: v })} />
+          </label>
+          <label className="grid gap-1 text-xs">
+            <span className="font-semibold text-text-muted">{t.to}</span>
+            <DateField value={filters.to ?? available.latest} onChange={(v) => narrow({ to: v })} />
+          </label>
+
+          <Picker
+            label={t.platform}
+            value={filters.providers?.[0] ?? ''}
+            onChange={(v) => narrow({ providers: v ? [v] : [] })}
+            options={available.providers.map((p) => ({ value: p, label: providerLabel(p, locale) }))}
+            all={t.all}
+          />
+          <Picker
+            label={t.campaign}
+            value={filters.campaign_ids?.[0] ?? ''}
+            onChange={(v) => narrow({ campaign_ids: v ? [v] : [] })}
+            options={available.campaigns.map((c) => ({ value: c.id, label: c.name }))}
+            all={t.all}
+          />
+          <Picker
+            label={t.objective}
+            value={filters.objectives?.[0] ?? ''}
+            onChange={(v) => narrow({ objectives: v ? [v] : [] })}
+            options={available.objectives.map((o) => ({ value: o, label: o }))}
+            all={t.all}
+          />
+          <Picker
+            label={t.path}
+            value={filters.paths?.[0] ?? ''}
+            onChange={(v) => narrow({ paths: v ? [v] : [] })}
+            options={available.paths.map((p) => ({ value: p, label: p }))}
+            all={t.all}
+          />
+        </div>
+      )}
+
+      {data.totals.creatives === 0 ? (
+        <p className="rounded-xl border border-border bg-surface p-6 text-center text-sm text-text-secondary">{t.empty}</p>
+      ) : (
+        <>
+          <div className="grid gap-3 md:grid-cols-2">
+            <WinnerGroup title={t.bestByObjective} entries={data.best_by_objective} t={t} currency={currency} permissions={permissions} />
+            <div className="grid gap-3">
+              <WinnerGroup title={t.bestImage} entries={data.best_image} t={t} currency={currency} permissions={permissions} icon={<ImageIcon size={14} />} />
+              <WinnerGroup title={t.bestVideo} entries={data.best_video} t={t} currency={currency} permissions={permissions} icon={<Video size={14} />} />
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <MoveList title={t.growing} icon={<TrendingUp size={14} className="text-success" />} list={data.fastest_growing} t={t} />
+            <MoveList title={t.declining} icon={<TrendingDown size={14} className="text-danger" />} list={data.declining} t={t} />
+          </div>
+
+          <FatigueBlock data={data} t={t} currency={currency} permissions={permissions} />
+
+          {permissions.insights && data.insights && data.insights.items.length > 0 && (
+            <InsightList insights={data.insights} t={t} ar={ar} permissions={permissions} />
+          )}
+
+          <Freshness data={data} t={t} />
+        </>
+      )}
+
+      {form === 'detailed' && (
+        <div className="grid gap-3" data-testid="shared-creative-library">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-bold">{t.library}</h3>
+            <div className="flex items-center gap-2">
+              {permissions.comparison && selected.length >= 2 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setComparing(true)}
+                    className="rounded-lg border border-brand-500 bg-[var(--brand-background)] px-2 py-1 text-xs font-semibold text-brand-700"
+                  >
+                    {t.compare} ({selected.length})
+                  </button>
+                  <button type="button" onClick={() => { setSelected([]); setComparing(false) }} className="text-xs text-text-secondary hover:underline">
+                    {t.clear}
+                  </button>
+                </>
+              )}
+              <div className="flex rounded-lg border border-border">
+                <button type="button" aria-label={t.grid} onClick={() => setView('grid')} className={`rounded-s-lg p-1.5 ${view === 'grid' ? 'bg-surface-hover' : ''}`}>
+                  <LayoutGrid size={14} />
+                </button>
+                <button type="button" aria-label={t.list} onClick={() => setView('list')} className={`rounded-e-lg p-1.5 ${view === 'list' ? 'bg-surface-hover' : ''}`}>
+                  <Rows3 size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {comparing && comparison.data && (
+            <div className="rounded-xl border border-border bg-surface p-3">
+              {!comparison.data.comparable && (
+                <p className="mb-2 text-xs font-semibold text-warning">
+                  {(ar ? comparison.data.reason_ar : comparison.data.reason) ?? t.notComparable}
+                </p>
+              )}
+              <div className="overflow-x-auto">
+                <MetricTable creatives={comparison.data.creatives} currency={currency} locale={locale} />
+              </div>
+            </div>
+          )}
+
+          {library.isLoading ? (
+            <Skeleton className="h-48 w-full" />
+          ) : rows.length === 0 ? (
+            <p className="rounded-xl border border-border bg-surface p-6 text-center text-sm text-text-secondary">{t.empty}</p>
+          ) : view === 'grid' ? (
+            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {rows.map((creative, index) => (
+                <li key={creative.id}>
+                  <CreativeTile
+                    creative={creative}
+                    currency={currency}
+                    locale={locale}
+                    t={t}
+                    selectable={permissions.comparison}
+                    selected={selected.includes(creative.id)}
+                    onSelect={() =>
+                      setSelected((s) => (s.includes(creative.id) ? s.filter((v) => v !== creative.id) : [...s, creative.id]))
+                    }
+                    onOpen={() => setViewerIndex(index)}
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <MetricTable creatives={rows} currency={currency} locale={locale} onOpen={(i) => setViewerIndex(i)} />
+            </div>
+          )}
+
+          <p className="tnum text-xs text-text-muted" dir="ltr">
+            {t.showing} {rows.length} {t.of} {library.data?.total ?? rows.length}
+          </p>
+        </div>
+      )}
+
+      {viewerIndex !== null && rows.length > 0 && (
+        <CreativeViewer
+          creatives={rows}
+          index={viewerIndex}
+          onIndexChange={setViewerIndex}
+          onClose={() => setViewerIndex(null)}
+          canZoom={permissions.image_zoom}
+        />
+      )}
+
+      <p className="text-xs text-text-muted">{t.attribution}</p>
+    </section>
+  )
+}
+
+// ---- pieces ---------------------------------------------------------------------------------
+
+function Picker({
+  label,
+  value,
+  onChange,
+  options,
+  all,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  options: Array<{ value: string; label: string }>
+  all: string
+}) {
+  if (options.length === 0) return null
+
+  return (
+    <label className="grid gap-1 text-xs">
+      <span className="font-semibold text-text-muted">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={label}
+        className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs"
+      >
+        <option value="">{all}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+type Copy = (typeof COPY)['en']
+
+function WinnerGroup({
+  title,
+  entries,
+  t,
+  currency,
+  permissions,
+  icon,
+}: {
+  title: string
+  entries: SharedWinner[]
+  t: Copy
+  currency: string
+  permissions: CreativePermissions
+  icon?: React.ReactNode
+}) {
+  const { locale } = useUi()
+
+  if (entries.length === 0) return null
+
+  return (
+    <div className="rounded-xl border border-border bg-surface p-3">
+      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold">{icon}{title}</h3>
+      <ul className="grid gap-2">
+        {entries.map((entry, i) => {
+          const creative = entry.creative
+          const metric = entry.metric
+          const hidden = entry.value_hidden === true
+          return (
+            <li key={i} className="rounded-lg border border-border p-2 text-xs">
+              <p className="truncate font-semibold">{creative?.name ?? '—'}</p>
+              <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-text-secondary">
+                {'objective' in entry && entry.objective && <Pair k={t.objective} v={entry.objective} />}
+                {entry.path && <Pair k={t.path} v={entry.path} />}
+                <Pair k={t.metric} v={metricLabel(metric, locale)} />
+                <Pair
+                  k={t.value}
+                  v={
+                    hidden
+                      ? t.hidden
+                      : formatMetric(
+                          metricState(creative?.metrics ?? null, metric),
+                          metric,
+                          locale,
+                          currency,
+                        )
+                  }
+                />
+                {creative?.provider && <Pair k={t.platform} v={providerLabel(creative.provider, locale)} />}
+                {creative?.campaign_name && <Pair k={t.campaign} v={creative.campaign_name} />}
+                {!permissions.spend && <Pair k="—" v="" />}
+              </dl>
+              {entry.low_evidence === true && (
+                <p className="mt-1 text-[11px] font-semibold text-warning">{t.thin}</p>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * A labelled value — and an UNLABELLED one when the value speaks for itself.
+ *
+ * The empty key is used for the creative's own name on an insight, where a label would be noise.
+ * Rendering `{k}:` unconditionally printed a bare colon in front of it, which reads as a missing
+ * word rather than as a deliberate absence. Found by opening the Arabic page.
+ */
+function Pair({ k, v }: { k: string; v: string }) {
+  if (!v) return null
+  return (
+    <div className="flex min-w-0 gap-1">
+      {k && <dt className="shrink-0 text-text-muted">{k}:</dt>}
+      <dd className="truncate font-semibold text-text-primary">{v}</dd>
+    </div>
+  )
+}
+
+function MoveList({
+  title,
+  icon,
+  list,
+  t,
+}: {
+  title: string
+  icon: React.ReactNode
+  list: PulseList<SharedCreativeMove>
+  t: Copy
+}) {
+  const { locale } = useUi()
+
+  return (
+    <div className="rounded-xl border border-border bg-surface p-3">
+      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold">{icon}{title}</h3>
+      {list.items.length === 0 ? (
+        <p className="text-xs text-text-muted">—</p>
+      ) : (
+        <ul className="grid gap-1.5">
+          {list.items.map((move, i) => {
+            const creative = move.creative
+            return (
+              <li key={i} className="flex items-baseline justify-between gap-2 text-xs">
+                <span className="min-w-0 flex-1 truncate">{creative?.name ?? '—'}</span>
+                <span className="tnum shrink-0 text-text-secondary" dir="ltr">
+                  {metricLabel(move.metric, locale)}{' '}
+                  {move.value_hidden === true ? t.hidden : pct(move.change)}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {list.total > list.shown && (
+        <p className="mt-1 text-[11px] text-text-muted" dir="ltr">{list.shown} {t.of} {list.total}</p>
+      )}
+    </div>
+  )
+}
+
+function FatigueBlock({
+  data,
+  t,
+  currency,
+  permissions,
+}: {
+  data: { fatigue: CreativePulse['fatigue'] }
+  t: Copy
+  currency: string
+  permissions: CreativePermissions
+}) {
+  const { locale } = useUi()
+  const fatigue = data.fatigue
+  const ar = locale === 'ar'
+
+  return (
+    <div className="grid gap-3 md:grid-cols-3">
+      <Bucket title={t.fatigued} list={fatigue.fatigued} tone="danger" />
+      <Bucket title={t.watch} list={fatigue.watch} tone="warning" />
+      <Bucket title={t.insufficient} list={fatigue.insufficient_data} tone="muted" />
+
+      {fatigue.alerts.items.length > 0 && (
+        <div className="rounded-xl border border-danger/40 bg-danger/5 p-3 md:col-span-3" data-testid="fatigue-alerts">
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-danger">
+            <AlertTriangle size={14} /> {t.alerts}
+            {permissions.spend && fatigue.spend_at_risk !== null && (
+              <span className="tnum ms-auto text-xs font-semibold" dir="ltr">
+                {formatMetric({ kind: 'value', value: fatigue.spend_at_risk }, 'spend', locale, currency)}
+              </span>
+            )}
+          </h3>
+          <ul className="grid gap-1.5">
+            {fatigue.alerts.items.map((alert: FatigueAlert, i: number) => (
+              <li key={i} className="text-xs">
+                <b className="font-semibold">{alert.creative?.name ?? '—'}</b>
+                {/* The EVIDENCE, beside the verdict — «fatigued» with nothing behind it is a label. */}
+                {(ar ? alert.note_ar : alert.note_en) && (
+                  <span className="text-text-secondary"> — {ar ? alert.note_ar : alert.note_en}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Bucket({ title, list, tone }: { title: string; list: { items: CreativeCard[]; total: number }; tone: string }) {
+  const border = tone === 'danger' ? 'border-danger/40' : tone === 'warning' ? 'border-warning/40' : 'border-border'
+
+  return (
+    <div className={`rounded-xl border ${border} bg-surface p-3`}>
+      <h3 className="mb-1.5 flex items-baseline justify-between text-sm font-bold">
+        {title}
+        <span className="tnum text-xs text-text-secondary" dir="ltr">{list.total}</span>
+      </h3>
+      <ul className="grid gap-1 text-xs text-text-secondary">
+        {list.items.slice(0, 4).map((c) => (
+          <li key={c.id} className="truncate">{c.name}</li>
+        ))}
+        {list.items.length === 0 && <li className="text-text-muted">—</li>}
+      </ul>
+    </div>
+  )
+}
+
+function InsightList({
+  insights,
+  t,
+  ar,
+  permissions,
+}: {
+  insights: { items: CreativeInsightItem[]; total: number; shown: number }
+  t: Copy
+  ar: boolean
+  permissions: CreativePermissions
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-surface p-3" data-testid="shared-creative-insights">
+      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold"><Lightbulb size={14} /> {t.insights}</h3>
+      <ul className="grid gap-2">
+        {insights.items.map((item, i) => (
+          <li key={`${item.key}-${i}`} className="rounded-lg border border-border p-2.5 text-xs">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <b className="font-semibold">{ar ? item.title_ar : item.title_en}</b>
+              <span className="flex gap-2 text-[11px]">
+                <span className={item.severity === 'warning' ? 'text-danger' : item.severity === 'opportunity' ? 'text-brand-700' : 'text-success'}>
+                  {t.severity[item.severity]}
+                </span>
+                {/* Confidence is printed, always. «Insufficient data» is a verdict, not a silence. */}
+                <span className="text-text-muted">{t.confidence[item.confidence]}</span>
+              </span>
+            </div>
+            <p className="mt-1 text-text-secondary">{ar ? item.detail_ar : item.detail_en}</p>
+            <dl className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-text-muted">
+              {item.creative_name && <Pair k="" v={item.creative_name} />}
+              {item.objective && <Pair k={t.objective} v={item.objective} />}
+              {item.path && <Pair k={t.path} v={item.path} />}
+              {item.provider && <Pair k={t.platform} v={item.provider} />}
+              {item.campaign_name && <Pair k={t.campaign} v={item.campaign_name} />}
+              <Pair k={t.period} v={`${item.period.from} → ${item.period.to}`} />
+            </dl>
+            {permissions.recommendations && (ar ? item.action_ar : item.action_en) && (
+              <p className="mt-1.5 rounded bg-surface-secondary px-2 py-1 text-text-primary">
+                <b className="font-semibold">{t.recommendation}:</b> {ar ? item.action_ar : item.action_en}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+      {insights.total > insights.shown && (
+        <p className="mt-1.5 text-[11px] text-text-muted" dir="ltr">{insights.shown} {t.of} {insights.total}</p>
+      )}
+    </div>
+  )
+}
+
+function Freshness({ data, t }: { data: { freshness: CreativePulse['freshness'] }; t: Copy }) {
+  const f = data.freshness
+
+  return (
+    <div className="flex flex-wrap gap-x-5 gap-y-1.5 rounded-xl border border-border bg-surface-secondary px-4 py-3 text-xs text-text-secondary">
+      <span>
+        <span className="text-text-muted">{t.freshness}:</span>{' '}
+        <b className="tnum font-semibold text-text-primary" dir="ltr">
+          {f.last_synced_at ? new Date(f.last_synced_at).toLocaleString('en-GB') : t.noSync}
+        </b>
+      </span>
+      {f.providers.map((p) => (
+        <span key={p.provider}>
+          <span className="text-text-muted capitalize">{p.provider}:</span>{' '}
+          <b className="tnum font-semibold text-text-primary" dir="ltr">
+            {p.last_synced_at ? new Date(p.last_synced_at).toLocaleDateString('en-GB') : t.noSync}
+          </b>
+        </span>
+      ))}
+      <span>
+        <span className="text-text-muted">{t.quality}:</span>{' '}
+        <b className="tnum font-semibold text-text-primary" dir="ltr">
+          {Object.entries(f.quality)
+            .filter(([, v]) => Number(v) > 0)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(' · ') || '—'}
+        </b>
+      </span>
+    </div>
+  )
+}
+
+function CreativeTile({
+  creative,
+  currency,
+  locale,
+  t,
+  selectable,
+  selected,
+  onSelect,
+  onOpen,
+}: {
+  creative: CreativeCard
+  currency: string
+  locale: 'ar' | 'en'
+  t: Copy
+  selectable: boolean
+  selected: boolean
+  onSelect: () => void
+  onOpen: () => void
+}) {
+  const preview = creative.preview
+  const image = preview.state === 'available' ? (preview.thumbnail_url ?? preview.image_url) : null
+
+  return (
+    <div className={`grid gap-1.5 rounded-xl border p-2 ${selected ? 'border-brand-500' : 'border-border'} bg-surface`}>
+      <button type="button" onClick={onOpen} className="block overflow-hidden rounded-lg bg-surface-secondary">
+        {image ? (
+          <img
+            src={image}
+            alt={creative.name}
+            // `loading="lazy"` on a data: URI never loads at all — see imageLoading().
+            loading={imageLoading(image)}
+            className="aspect-square w-full object-cover"
+          />
+        ) : (
+          <span className="flex aspect-square w-full items-center justify-center px-2 text-center text-[11px] text-text-muted">
+            {(locale === 'ar' ? preview.note_ar : preview.note_en) ?? '—'}
+          </span>
+        )}
+      </button>
+      <p className="truncate text-xs font-semibold">{creative.name}</p>
+      <p className="truncate text-[11px] text-text-secondary">
+        {providerLabel(creative.provider, locale)}
+        {creative.campaign_name ? ` · ${creative.campaign_name}` : ''}
+      </p>
+      <dl className="grid gap-0.5 text-[11px]">
+        {creative.headline_metrics.slice(0, 3).map((key) => (
+          <div key={key} className="flex justify-between gap-1">
+            <dt className="truncate text-text-muted">{metricLabel(key, locale)}</dt>
+            <dd className="tnum shrink-0 font-semibold" dir="ltr">
+              {formatMetric(metricState(creative.metrics, key), key, locale, currency)}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {selectable && (
+        <label className="flex items-center gap-1.5 text-[11px] text-text-secondary">
+          <input type="checkbox" checked={selected} onChange={onSelect} className="h-3.5 w-3.5 accent-brand-600" />
+          {t.selected}
+        </label>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The list view, and the comparison, are the same table.
+ *
+ * Two renderers would have been two opinions about which columns matter, and the reader would meet a
+ * metric in one that is missing from the other for no reason they can see.
+ */
+function MetricTable({
+  creatives,
+  currency,
+  locale,
+  onOpen,
+}: {
+  creatives: CreativeCard[]
+  currency: string
+  locale: 'ar' | 'en'
+  onOpen?: (index: number) => void
+}) {
+  // The union of what each row's own path calls headline, so an awareness row is not given a column
+  // for a metric its objective never produces — it simply has no value in that column.
+  const columns = useMemo(
+    () => [...new Set(creatives.flatMap((c) => c.headline_metrics))].slice(0, 7),
+    [creatives],
+  )
+
+  return (
+    <table className="w-full min-w-[640px] text-xs">
+      <thead className="bg-surface-secondary text-text-muted">
+        <tr>
+          <th className="p-2 text-start font-semibold">—</th>
+          {columns.map((key) => (
+            <th key={key} className="p-2 text-start font-semibold">{metricLabel(key, locale)}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {creatives.map((creative, index) => (
+          <tr key={creative.id} className="border-t border-border">
+            <td className="max-w-[220px] p-2">
+              {onOpen ? (
+                <button type="button" onClick={() => onOpen(index)} className="truncate text-start font-semibold hover:underline">
+                  {creative.name}
+                </button>
+              ) : (
+                <span className="truncate font-semibold">{creative.name}</span>
+              )}
+              <span className="block truncate text-[11px] text-text-secondary">
+                {providerLabel(creative.provider, locale)}
+                {creative.objective ? ` · ${creative.objective}` : ''}
+              </span>
+            </td>
+            {columns.map((key) => (
+              <td key={key} className="tnum p-2" dir="ltr">
+                {formatMetric(metricState(creative.metrics, key), key, locale, currency)}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}

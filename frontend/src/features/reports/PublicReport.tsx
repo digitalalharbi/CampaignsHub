@@ -5,6 +5,7 @@ import { fetchSharedReport, sharedDownloadUrl } from './api'
 import type { ReportFormat } from './api'
 import { InteractiveReport } from './InteractiveReport'
 import { LiveSharedReport } from './LiveSharedReport'
+import { SharedCreativeSection } from './SharedCreativeSection'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { useUi } from '@/stores/ui'
@@ -25,6 +26,14 @@ interface Shared {
   form?: 'executive_summary' | 'detailed'
   branding?: { name: string | null; logo_url: string | null; accent: string | null }
   settings: { allow_download: boolean; watermark: boolean }
+  /**
+   * §15.12 — what this link may show about the content, stated before anything is drawn.
+   *
+   * Read here rather than discovered by calling the creative endpoint and handling its refusal: a
+   * section that appears and then fails is worse than one that never appears, and a client cannot
+   * tell the difference between «not shared» and «broken».
+   */
+  creatives?: { creatives: boolean }
   data: Record<string, unknown>
 }
 
@@ -162,6 +171,22 @@ export function PublicReport() {
                   />
                   <ReportMetaStrip report={report} />
                 </>
+              )}
+
+              {/*
+                The creative sections, for BOTH modes.
+                A live link and a snapshot link differ in where the report's own figures come from;
+                the content section reads the pipeline either way, and says when it last synced. What
+                keeps a snapshot honest is its ceiling: the link's window stops where the document
+                does, so the section cannot show weeks the rest of the report never covered.
+              */}
+              {report.creatives?.creatives && (
+                <SharedCreativeSection
+                  token={token}
+                  password={accepted}
+                  currency={report.currency}
+                  form={report.form === 'executive_summary' ? 'executive_summary' : 'detailed'}
+                />
               )}
             </div>
           </div>

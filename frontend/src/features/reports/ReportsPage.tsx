@@ -32,6 +32,12 @@ import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { SchedulesPanel } from './SchedulesPanel'
 import { LiveLinkBuilder } from './LiveLinkBuilder'
 import { ReportScopePicker } from './ReportScopePicker'
+import {
+  ShareCreativeControls,
+  creativeSharingBody,
+  emptyCreativeSharing,
+  type CreativeSharing,
+} from './ShareCreativeControls'
 import { DemoBadge } from '@/features/analytics/components'
 import { InteractiveReport } from './InteractiveReport'
 import { AnnotationsPanel } from './AnnotationsPanel'
@@ -699,6 +705,17 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
 
   const [opts, setOpts] = useState({ password: '', allow_download: true, hide_spend: false, hide_revenue: false, hide_campaign_names: false, watermark: false, expires_at: '' })
   const [live, setLive] = useState(false)
+  /*
+   * The FORM is a per-LINK choice, and it is not the same question as live-or-fixed (§15.12).
+   *
+   * One generated report is legitimately two documents: the board reads the summary and the
+   * performance manager reads the detail. Before this the form came from the report row, so sending
+   * both meant generating the report twice — two snapshots, and a fortnight later two different
+   * answers to the same question. `''` means «whatever this report is», which is what a link made
+   * before this existed does.
+   */
+  const [form, setForm] = useState('')
+  const [creatives, setCreatives] = useState<CreativeSharing>(emptyCreativeSharing)
   const [scopeCampaigns, setScopeCampaigns] = useState<string[]>([])
   const [scopeProviders, setScopeProviders] = useState<string[]>([])
   const [created, setCreated] = useState<CreatedShare | null>(null)
@@ -715,6 +732,15 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
         watermark: opts.watermark,
         ...(opts.password ? { password: opts.password } : {}),
         ...(opts.expires_at ? { expires_at: opts.expires_at } : {}),
+        /*
+         * Both facts, always stated (§15.12).
+         *
+         * `mode` is sent explicitly so that choosing which creatives a link may show — which writes
+         * a scope — cannot silently turn a frozen report into a live one.
+         */
+        mode: live ? 'live' : 'snapshot',
+        ...(form ? { form } : {}),
+        ...creativeSharingBody(creatives),
         /*
          * An empty picker means "everything this report covers", which the backend fills in from the
          * report itself — see ReportShareController::scopeFor. Sending [] would be read as a ceiling of
@@ -844,6 +870,26 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
                 </p>
               </div>
             )}
+
+            {/*
+              How much of the report this link is — a separate question from live-or-fixed, and asked
+              separately. All four combinations are valid: a summary can be live, a detailed report
+              can be a snapshot.
+            */}
+            <Field label={ar ? 'شكل التقرير في هذا الرابط' : 'The form this link presents'}>
+              <select
+                data-testid="share-form"
+                value={form}
+                onChange={(e) => setForm(e.target.value)}
+                className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base"
+              >
+                <option value="">{ar ? 'كما هو التقرير' : 'As the report is'}</option>
+                <option value="executive_summary">{ar ? 'ملخص تنفيذي' : 'Executive summary'}</option>
+                <option value="detailed">{ar ? 'تقرير تفصيلي' : 'Detailed report'}</option>
+              </select>
+            </Field>
+
+            <ShareCreativeControls projectId={projectId} value={creatives} onChange={setCreatives} />
 
             <div className="grid gap-2 sm:grid-cols-2">
               <Toggle k="allow_download" label={ar ? 'السماح بالتنزيل' : 'Allow download'} />
