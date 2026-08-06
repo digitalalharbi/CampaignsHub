@@ -6,6 +6,7 @@ namespace App\Domains\Metrics\Services;
 
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Concerns\ProjectScope;
+use App\Support\AdPlatforms;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -245,6 +246,61 @@ final class MetricsAggregator
         )))->first();
 
         return $this->withDerived((array) $row);
+    }
+
+    /**
+     * REPORT-OBJECTIVE-005 — what the single «conversions» figure above actually is.
+     *
+     * `SUM(conversions)` over more than one platform is the sum of each platform's own claim, and
+     * those claims OVERLAP: a sale a shopper clicked from Snapchat on Tuesday and from Meta on
+     * Thursday is reported in full by both. There is no shared key that would let us prove two
+     * conversions are one sale — conversion payloads carry no order id — so the sum cannot be
+     * deduplicated, and it is NOT a count of unique orders.
+     *
+     * The figure is not removed. It is the only conversion number available before a store is
+     * connected, it is what every platform optimises against, and deleting it would leave the
+     * dashboard with nothing to say. What was missing was the sentence beside it — the contract is
+     * explicit that per-platform figures may be shown but «never summed into unique unified orders»,
+     * and an unlabelled total is read as exactly that.
+     *
+     * Returned in the PAYLOAD rather than added by each page, so a surface cannot print the number
+     * while forgetting the caveat. One platform contributing means no overlap is possible, and the
+     * basis says so instead of warning about a risk that does not exist.
+     *
+     * Deliberately NOT a key inside `totals()`. That map is metrics, and every key in it is asserted
+     * against the canonical catalogue — a provenance field smuggled in there would either fail that
+     * guard or force it to be loosened, and the guard is worth more than the convenience.
+     *
+     * @return array<string,mixed>
+     */
+    public function conversionsBasis(Carbon $from, Carbon $to): array
+    {
+        $providers = $this->base($from, $to)
+            ->where('metric_key', 'conversions')
+            ->where('value', '>', 0)
+            ->distinct()
+            ->pluck('provider')
+            ->map(static fn ($p): string => AdPlatforms::canonical((string) $p))
+            ->unique()
+            ->values()
+            ->all();
+
+        $overlapping = count($providers) > 1;
+
+        return [
+            'source' => 'platform_reported',
+            'label_ar' => 'ما أبلغت به المنصات',
+            'label_en' => 'Platform-Reported',
+            'providers' => AdPlatforms::sort($providers),
+            'may_double_count' => $overlapping,
+            'is_unique_order_count' => false,
+            'note_ar' => $overlapping
+                ? 'مجموع ما أبلغت به '.count($providers).' منصات، وليس عدد طلبات فريدة — البيعة الواحدة قد تُبلَّغ من أكثر من منصة.'
+                : 'ما أبلغت به المنصة عن التحويلات التي تعتقد أن إعلانها تسبب بها.',
+            'note_en' => $overlapping
+                ? 'The sum of what '.count($providers).' platforms each reported — not a count of unique orders, because one sale can be reported by more than one platform.'
+                : 'What the platform reported for the conversions it believes its ads caused.',
+        ];
     }
 
     /** @return list<array<string, mixed>> one row per provider, ordered by spend desc, with share of spend. */

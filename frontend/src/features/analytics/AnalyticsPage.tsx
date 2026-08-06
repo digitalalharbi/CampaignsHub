@@ -18,6 +18,7 @@ import {
   useFreshness,
   useFunnel,
   useLastNDaysRange,
+  useAttribution,
   useNormalization,
   usePlatforms,
   useSummary,
@@ -29,6 +30,7 @@ import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { StoreFunnelTab } from './StoreFunnelTab'
+import { AttributionPanel } from './AttributionPanel'
 
 const TABS = [
   { id: 'performance', ar: 'نظرة عامة على الأداء', en: 'Performance overview' },
@@ -113,6 +115,25 @@ function PerformanceTab({ projectId, range }: TabProps) {
         <KpiCard label="CPA" value={money(cur?.cpa)} delta={d.cpa} invertGood />
         <KpiCard label="CTR" value={percent(cur?.ctr, 2)} delta={d.ctr} />
       </div>
+      {/*
+       * REPORT-OBJECTIVE-005 — «النتائج» above is the SUM of what each platform claimed.
+       *
+       * One sale clicked from two platforms is reported in full by both, and there is no shared key
+       * that would prove they are the same sale — so the figure is not a count of unique orders, and
+       * it must not be read as one. The sentence comes from the API rather than being written here, so
+       * the dashboard, the report and the client's link cannot end up saying different things about
+       * the same number. Shown only when more than one platform contributed: a single platform cannot
+       * overlap with itself, and a warning about an impossible risk trains readers to ignore warnings.
+       */}
+      {s.data?.conversions_basis.may_double_count && (
+        <p
+          data-testid="conversions-basis"
+          className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
+        >
+          <span className="font-semibold text-text-primary">{ar ? '«النتائج»: ' : 'Results: '}</span>
+          {ar ? s.data.conversions_basis.note_ar : s.data.conversions_basis.note_en}
+        </p>
+      )}
       <Panel title={ar ? 'الإنفاق والنتائج والإيرادات' : 'Spend, results and revenue'} description={ar ? 'مقارنة بالفترة السابقة عبر الاتجاه اليومي' : 'Compared with the previous period, day by day'} loading={ts.isLoading} error={ts.isError} empty={!ts.isLoading && points.length === 0}>
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
@@ -333,7 +354,28 @@ function QualityTab({ projectId, range }: TabProps) {
       <p className="mt-3 text-xs text-text-muted">{ar ? 'لا يتم جمع Reach عبر المنصات كوصول فريد — يُعرض لكل منصة على حدة.' : 'Reach is not summed across platforms as unique reach — it is shown per platform.'}</p>
       </Panel>
       <NormalizationPanel projectId={projectId} range={range} />
+      {/*
+       * REPORT-OBJECTIVE-005 — on this tab because it is literally «جودة البيانات والإسناد», and
+       * because a reader who has just been told which currency and window produced a figure is the
+       * reader who needs to be told which SYSTEM produced it.
+       */}
+      <AttributionSection projectId={projectId} range={range} />
     </div>
+  )
+}
+
+function AttributionSection({ projectId, range }: TabProps) {
+  const locale = useUi((u) => u.locale)
+  const a = useAttribution(projectId, range)
+
+  return (
+    <AttributionPanel
+      data={a.data}
+      loading={a.isLoading}
+      error={a.isError}
+      locale={locale}
+      className="mt-4"
+    />
   )
 }
 

@@ -75,6 +75,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // NORM-001: what was done to the numbers before they were shown — currency, timezone, attribution,
     // source, objective comparability, and the canonical metric catalogue.
     Route::get('metrics/normalization', [MetricsController::class, 'normalization'])->name('metrics.normalization');
+    // REPORT-OBJECTIVE-005: Platform-Reported vs Store-Confirmed, the attribution window each figure
+    // was collected under, and what may be summed — the platforms' claims never are.
+    Route::get('metrics/attribution', [MetricsController::class, 'attribution'])->name('metrics.attribution');
 
     // SYNC-001: the sync pipeline's operator surface — what ran, what it produced, what broke.
     /*

@@ -120,6 +120,16 @@ final class LiveReportService
             ],
             'currency' => $currency,
             'totals' => $totals,
+            /*
+             * REPORT-OBJECTIVE-005 — the client's link says what its «conversions» number is.
+             *
+             * This is the surface where the caveat matters most: an agency's own operator knows a
+             * pixel over-reports, and the client reading the link does not. The figure is the sum of
+             * each platform's claim, one sale can be claimed by two of them, and no key exists that
+             * would prove it. Same method the operator's dashboard calls, so the two cannot end up
+             * saying different things about the same number.
+             */
+            'conversions_basis' => $engine->conversionsBasis($from, $to),
             'deltas' => $this->deltas($totals, $previous),
             'timeseries' => $engine->timeseries($from, $to),
             'platforms' => $engine->byProvider($from, $to),

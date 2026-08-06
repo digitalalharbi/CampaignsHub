@@ -70,7 +70,10 @@ final class StoreFunnelService
     /** Order statuses both providers use for an order that is genuinely paid for. */
     private const PAID_STATUSES = ['completed', 'delivered', 'shipped', 'paid', 'fulfilled', 'ready'];
 
-    public function __construct(private readonly ProjectStores $projectStores) {}
+    public function __construct(
+        private readonly ProjectStores $projectStores,
+        private readonly ProjectOrders $projectOrders,
+    ) {}
 
     /**
      * @return array<string,mixed>
@@ -105,10 +108,17 @@ final class StoreFunnelService
         $stores = $this->projectStores->forProject($tenantId, $projectId);
         $pendingStores = $stores->isEmpty() ? $this->projectStores->unsynced($tenantId) : collect();
 
-        $orders = CommerceOrder::withoutGlobalScopes()
-            ->where('project_id', $projectId)
-            ->whereBetween('placed_at', [$from, $to])
-            ->get();
+        /*
+         * REPORT-OBJECTIVE-005 — one sale, counted once.
+         *
+         * The orders are loaded through {@see ProjectOrders} rather than queried here, because a shop
+         * connected twice files every order twice and both copies satisfy the unique index. Doing the
+         * collapse in the loader means the funnel, the dashboard's store block and the attribution
+         * report cannot disagree about how many orders there were; doing it here would have left the
+         * other two reading the raw table.
+         */
+        $loaded = $this->projectOrders->forWindow($tenantId, $projectId, $from, $to);
+        $orders = $loaded['orders'];
 
         $store = $this->storeMeasurements($tenantId, $projectId, $orders, $stores, $from, $to);
         $ads = $this->adMeasurements($projectId, $from, $to);
@@ -141,7 +151,7 @@ final class StoreFunnelService
                 'campaigns' => $this->byCampaign($orders),
                 'products' => $this->byProduct($orders),
             ],
-            'coverage' => $this->coverage($stores, $pendingStores, $orders),
+            'coverage' => $this->coverage($stores, $pendingStores, $orders, $loaded),
         ];
     }
 
@@ -513,10 +523,11 @@ final class StoreFunnelService
      *
      * @param  Collection<int,ExternalAccount>  $stores
      * @param  Collection<int,ExternalAccount>  $pending  connected to the tenant, not yet swept anywhere
-     * @param  Collection<int,CommerceOrder>  $orders
+     * @param  Collection<int,CommerceOrder>  $orders  already deduplicated
+     * @param  array{duplicates_collapsed:int,duplicated_shops:list<array<string,mixed>>}  $loaded
      * @return array<string,mixed>
      */
-    private function coverage(Collection $stores, Collection $pending, Collection $orders): array
+    private function coverage(Collection $stores, Collection $pending, Collection $orders, array $loaded): array
     {
         return [
             'stores' => $stores->count(),
@@ -550,6 +561,15 @@ final class StoreFunnelService
             'orders_without_attribution' => $orders
                 ->filter(fn (CommerceOrder $o) => $o->attribution_method === 'none' || $o->attribution_method === null)
                 ->count(),
+            /*
+             * Duplicate copies removed before any figure above was computed (REPORT-OBJECTIVE-005).
+             *
+             * Reported rather than applied in silence. A merchant whose shop is connected twice has a
+             * setup problem, and a funnel that quietly halved its own numbers between one week and the
+             * next — with no line saying why — is a funnel nobody trusts again.
+             */
+            'duplicate_orders_collapsed' => $loaded['duplicates_collapsed'],
+            'shops_connected_more_than_once' => $loaded['duplicated_shops'],
         ];
     }
 }

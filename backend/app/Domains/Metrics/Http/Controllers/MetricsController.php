@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\MetricDefinition;
+use App\Domains\Metrics\Services\AttributionTransparency;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
@@ -55,6 +56,15 @@ final class MetricsController extends Controller
             'previous' => $previous,
             'delta' => $deltas,
             'commerce' => $this->commerce($request, $from, $to),
+            /*
+             * REPORT-OBJECTIVE-005 — what the single «conversions» figure above is.
+             *
+             * It is the SUM of each platform's own claim, and those claims overlap: one sale clicked
+             * from two platforms is reported in full by both, and no shared key exists that would let
+             * us prove they are the same sale. So it is not a count of unique orders, and the payload
+             * says so rather than leaving every page to remember.
+             */
+            'conversions_basis' => $this->scoped($request)->conversionsBasis($from, $to),
         ], 'Metrics summary.', meta: $this->meta($from, $to));
     }
 
@@ -523,6 +533,31 @@ final class MetricsController extends Controller
                 'sync_failed' => $state['sync_failed'],
             ],
         ]);
+    }
+
+    /**
+     * REPORT-OBJECTIVE-005 — who is answering «كم بعنا؟», and what may be added up.
+     *
+     * Every figure here comes from the same two places the rest of the product reads: `daily_metrics`
+     * for what the platforms reported, and {@see ProjectOrders} for what the store confirmed. This
+     * endpoint computes no sales of its own — it states the provenance of sales already counted
+     * elsewhere, which is the only way its numbers can be guaranteed to match the pages it explains.
+     */
+    public function attribution(Request $request, AttributionTransparency $transparency): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        $tenantId = (string) app(TenantContext::class)->tenantId();
+        $projectId = (string) app(ProjectContext::class)->projectId();
+
+        abort_if($tenantId === '' || $projectId === '', 400, 'No active project.');
+
+        return ApiResponse::success(
+            $transparency->build($tenantId, $projectId, $from, $to, $this->providerFilter($request)),
+            'Attribution transparency and de-duplication.',
+            meta: $this->meta($from, $to),
+        );
     }
 
     // ---- helpers ----------------------------------------------------------------------------------

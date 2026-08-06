@@ -64,11 +64,31 @@ export interface CommerceSummary {
   store_last_synced_at: string | null
 }
 
+/**
+ * REPORT-OBJECTIVE-005 — what the single «conversions» figure is.
+ *
+ * It is the SUM of each platform's own claim, and those claims overlap: one sale clicked from two
+ * platforms is reported in full by both, and no shared key exists that would prove they are the same
+ * sale. `is_unique_order_count` is typed `false` rather than `boolean` — the server never sends true,
+ * and a type that admitted it would let somebody write the branch that prints this as an order count.
+ */
+export interface ConversionsBasis {
+  source: 'platform_reported'
+  label_ar: string
+  label_en: string
+  providers: string[]
+  may_double_count: boolean
+  is_unique_order_count: false
+  note_ar: string
+  note_en: string
+}
+
 export interface Summary {
   current: MetricTotals
   previous: MetricTotals
   delta: Partial<Record<keyof MetricTotals, number | null>>
   commerce: CommerceSummary | null
+  conversions_basis: ConversionsBasis
 }
 export interface TimePoint extends MetricTotals {
   date: string
@@ -173,6 +193,108 @@ export interface Normalization {
   unread_metric_keys: string[]
 }
 
+/**
+ * REPORT-OBJECTIVE-005 — who is answering «كم بعنا؟».
+ *
+ * `total_orders` and `total_revenue` are typed `null` rather than `number | null`, on purpose. The
+ * server never sends a unified platform total, and a type that admitted one would let a component be
+ * written that renders it the day somebody changes the server — which is the whole defect. The type
+ * is the second lock on the same rule.
+ */
+export interface AttributionWindowBasis {
+  windows: Array<{ window: string; rows: number }>
+  mixed_windows: boolean
+  window_known: boolean
+  click_through_days: number | null
+  view_through_days: number | null
+  includes_view_through: boolean | null
+  unknown_ar: string | null
+  unknown_en: string | null
+}
+
+export interface PlatformClaim {
+  provider: string
+  platform_reported_orders: number
+  platform_reported_revenue: number
+  store_confirmed_orders: number | null
+  store_confirmed_revenue: number | null
+  difference: number | null
+  ratio: number | null
+  attribution: AttributionWindowBasis
+  currency: string | null
+}
+
+export interface DuplicatedShop {
+  provider: string
+  shop_external_id: string
+  connections: number
+  names: string[]
+}
+
+export interface Attribution {
+  period: Range
+  platform_reported: {
+    label_ar: string
+    label_en: string
+    basis_ar: string
+    basis_en: string
+    platforms: PlatformClaim[]
+    total_orders: null
+    total_revenue: null
+    total_withheld: boolean
+    total_withheld_reason: string
+    total_withheld_ar: string
+    total_withheld_en: string
+  }
+  store_confirmed: {
+    label_ar: string
+    label_en: string
+    available: boolean
+    unavailable_reason: string | null
+    unavailable_ar?: string
+    unavailable_en?: string
+    basis_ar?: string
+    basis_en?: string
+    orders: number | null
+    revenue: number | null
+    currency: string | null
+    cancelled_orders?: number
+    attributed_orders?: number
+    duplicates_collapsed?: number
+    shops_connected_more_than_once?: DuplicatedShop[]
+  }
+  dedup: {
+    platform_reported: { status: string; reason_ar: string; reason_en: string; may_be_summed: boolean }
+    store_confirmed: {
+      status: string
+      key: string | null
+      reason_ar: string
+      reason_en: string
+      may_be_summed: boolean
+      duplicates_collapsed?: number
+    }
+    comparison_ar: string
+    comparison_en: string
+    comparable_platforms: number
+  }
+  models: Array<{
+    model: string
+    is_set: boolean
+    campaigns: number
+    campaign_names: string[]
+    windows: string[]
+  }>
+  unattributed: {
+    available: boolean
+    orders: number | null
+    revenue: number | null
+    share: number | null
+    by_method: Array<{ method: string; orders: number }>
+    note_ar?: string
+    note_en?: string
+  }
+}
+
 export interface Range {
   from: string
   to: string
@@ -215,3 +337,4 @@ export const useFunnel = (p: string | null, r: Range, f?: MetricFilters) => useM
 export const useBudget = (p: string | null, r: Range, f?: MetricFilters) => useMetric<BudgetRow[]>('budget', p, r, 'budget', f)
 export const useFreshness = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FreshnessRow[]>('freshness', p, r, 'freshness', f)
 export const useNormalization = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Normalization>('normalization', p, r, 'normalization', f)
+export const useAttribution = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Attribution>('attribution', p, r, 'attribution', f)
