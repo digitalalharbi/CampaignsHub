@@ -366,6 +366,92 @@ that unit can start from the mapping rather than from the documentation:
 | `engagements` | — | Snapchat publishes `shares`, `saves`, `story_opens` separately and no single
 total. Summing them would manufacture a metric the platform never reported, so it stays null. |
 
+## Session — UX/UI overhaul: the filters go back on the page (`645431b` → gate)
+
+The instruction was a root-and-branch UX pass over every category in `/admin`, `/app`, `/agency` and
+`/portal`, with one rule stated three different ways: **the daily functions must be visible.** «لا
+أريد واجهات تختصر الوظائف المهمة داخل أيقونة أو زر غامض أو نافذة مخفية.»
+
+That is a deliberate reversal of SIMPLIFY-001/002/003, and it should be read as one. Those units
+folded every filter on Dashboard, Content, Tasks, Alerts, Files, Reports and Clients behind a single
+button. They were right about the symptom — ten rows of chips above a library is a settings screen —
+and wrong about which controls count as configuration. Narrowing to one platform, one campaign, the
+fatigued creatives, the open tasks: that is not configuring a view, it is using the product. Folding
+it made a rich system look like a plain list, and made a narrowed page indistinguishable from a short
+one.
+
+**The rule now is a division rather than a switch.** `FilterBar` renders the daily axes inline and
+keeps only the rare ones behind «More filters». Four of the six converted pages had nothing rare
+enough to fold and now carry no dialog at all. Every applied axis is a chip that removes its own
+value — which the old applied-summary SENTENCE could not do: it could say «2 platforms» and offer no
+way to drop one of them.
+
+### The units
+
+| commit | unit |
+|---|---|
+| `645431b` | UX-KIT-001 — `FilterBar`, `MetricStrip`, `PageIntro` |
+| `e80fbf6` | the campaign filter the dashboard needed, backend-supported |
+| `3a8966f` | the summary says which of its zeros are measurements |
+| `0487212` | the Arabic funnel was naming its stages in English |
+| `65d6da5` | UX-DASH-001 — filters visible, KPI row objective-aware |
+| `acce639` | `dir="ltr"` inside an RTL page matched BOTH variants |
+| `e340246` | UX-CONTENT-001 — library filters, decision table, creative panel |
+| `786b364` | UX-SWEEP-001 — tasks, alerts, files, reports, clients, analytics |
+
+### The four defects the work uncovered
+
+**A metric no platform reported was a zero on every KPI card.** `PIVOT` coalesces base sums to 0, so
+«Landing page views 0» beside forty thousand impressions said the campaign was broken when the truth
+was that nobody had been asked. FUNNEL-NULL-001 fixed this for the funnel by dropping the COALESCE;
+the totals cannot follow it there without changing what every summing surface receives, so
+`summary.reported` publishes the distinction beside the figures instead.
+
+**The Arabic funnel named its stages in English** — «Impressions / Add to Cart / Purchase» down the
+left edge of the most-read chart in the product, under an Arabic heading, beside Arabic percentages.
+Found by opening the page in Arabic; every assertion about that funnel passed while it was
+untranslated, because nothing covered the left-hand column.
+
+**Tailwind's `rtl:` variant compiles to a descendant selector**, so an element carrying `dir="ltr"`
+inside an RTL page matches `ltr:` AND `rtl:`. Both sides of a `ltr:right-2 rtl:left-2` pair applied,
+the box got a left and a right, and it stretched across its container. This product puts `dir="ltr"`
+on every Latin figure, so the trap is one line away everywhere. The kit uses logical utilities now.
+
+**Two pages described themselves by their plumbing.** Projects said «مصدر البيانات: CampaignsHub
+API»; Leads said «MediaBuying API» — the product's OLD name, on a page a customer can open, long
+after IDENTITY-PROD renamed everything.
+
+### What was deliberately NOT done
+
+- **The campaign filter is backend-supported, and the path filter is not — on purpose.** `?campaign=`
+  narrows every metric endpoint on one request. A path is not a server axis: it selects its
+  objectives and sends them on the objective filter the API already has, so a drift in the grouping
+  can mis-file a CHOICE and can never produce a wrong figure. `CampaignObjectivePathTest` fails by
+  name if the enum moves one.
+- **The creative panel is off by default.** `SharedCreativeSection` renders the same viewer on a
+  client's `/r/<token>` link, which has no session; the pane reads an authenticated endpoint, so a
+  default-on pane would have put a 401 on every public report the moment a client opened a picture.
+- **Analytics' store tab is not narrowed** by platform or campaign, for the reason the dashboard's
+  store strip already states: spend belongs to a platform and an order does not.
+- **Fractional order counts in the development database are stale seed rows, not a defect.**
+  `DemoCreativesSeeder` rounds (§15.12a) and its comment documents exactly this; the dev DB predates
+  the fix. Re-seed to clear it.
+
+### Exact next task
+
+1. **§14.6 objective layouts on the REPORTS**, then **§14.7–14.8** — comparisons, pacing, funnel
+   drop-off, anomaly detection. `dashboardMetrics` now does for the dashboard what §14.6 asks of a
+   report layout, and `MarketingPath::headlineMetrics()` is still the server's answer to the same
+   question — the report side has not been done.
+2. **The attribution panel is operator-only** — the client link carries `conversions_basis` but not
+   the Platform-Reported / Store-Confirmed section, which needs its own visibility switch.
+3. **`initiate_checkout` on TikTok** — confirm the exact reporting field spelling on the first real
+   sync.
+4. **LinkedIn cannot report sales** — `purchases` and `revenue` deliberately absent; an operator
+   decision to revisit against real data once credentials exist.
+
+---
+
 ## Session — 2026-08-07 · REPORT-OBJECTIVE-005, attribution and de-duplication
 
 **HEAD `d4f2486`. Tree clean. Backend 1551 passed (8739 assertions), exit 0 · Pint clean · vitest 790 /
