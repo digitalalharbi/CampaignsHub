@@ -321,7 +321,16 @@ export function LiveSharedReport({
             )}
           </ChartCard>
           <ChartCard title={ar ? 'قمع الأداء' : 'Performance funnel'}>
-            <ConversionFunnelChart stages={payload.funnel} currency={currency} />
+            <ConversionFunnelChart stages={payload.funnel} currency={currency} ar={ar} />
+            {/* FUNNEL-NULL-001 — said once in a sentence as well as drawn. The client has no second
+                view of their account to check a gap against, so the gap must explain itself. */}
+            {payload.funnel.some((s) => !s.reported) && (
+              <p className="mt-3 text-xs text-text-muted" data-testid="shared-funnel-unreported">
+                {ar
+                  ? `لم ترسل أي منصة هذه المراحل في هذه الفترة: ${payload.funnel.filter((s) => !s.reported).map((s) => s.label).join('، ')}. الفراغ ليس صفرًا.`
+                  : `No platform reported these stages in this period: ${payload.funnel.filter((s) => !s.reported).map((s) => s.label).join(', ')}. A gap is not a zero.`}
+              </p>
+            )}
           </ChartCard>
         </div>
 

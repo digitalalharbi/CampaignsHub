@@ -266,21 +266,37 @@ function FunnelTab({ projectId, range }: TabProps) {
   const ar = useAr()
   const f = useFunnel(projectId, range)
   const rows = f.data ?? []
-  const top = rows[0]?.count || 1
+  /*
+   * FUNNEL-NULL-001 — scaled against the largest REPORTED count, not `rows[0].count`.
+   *
+   * A stage nobody sent has a null count, and `null / top` is 0 in JavaScript: the old line drew the
+   * 8% minimum-width bar with «—» written inside it, so «this platform does not count basket adds»
+   * and «almost nobody added to a basket» were the same picture. An unreported stage now gets no bar
+   * and says so in words instead.
+   */
+  const reported = rows.map((s) => s.count).filter((c): c is number => c !== null)
+  const top = reported.length > 0 ? Math.max(...reported) : 1
+  const unreported = rows.filter((s) => !s.reported)
   return (
     <Panel title={ar ? 'قمع التحويل' : 'Conversion funnel'} description="Impression → Click → Landing → Add to Cart → Checkout → Purchase" loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
       <div className="space-y-3">
         {rows.map((s, i) => (
-          <div key={s.stage} className="flex items-center gap-3">
+          <div key={s.stage} className="flex items-center gap-3" data-testid={`ad-funnel-stage-${s.stage}`}>
             <span className="w-32 shrink-0 text-sm font-medium text-text-secondary">{s.label}</span>
-            <div className="h-10 flex-1 overflow-hidden rounded-xl bg-surface-secondary">
-              <div
-                className="flex h-full items-center justify-between rounded-xl px-3 text-sm font-semibold text-white"
-                style={{ width: `${Math.max(8, (s.count / top) * 100)}%`, background: `color-mix(in oklab, ${SERIES.spend} ${100 - i * 10}%, var(--brand-700))` }}
-              >
-                <span className="tnum">{num(s.count)}</span>
+            {s.count !== null ? (
+              <div className="h-10 flex-1 overflow-hidden rounded-xl bg-surface-secondary">
+                <div
+                  className="flex h-full items-center justify-between rounded-xl px-3 text-sm font-semibold text-white"
+                  style={{ width: `${Math.max(8, (s.count / top) * 100)}%`, background: `color-mix(in oklab, ${SERIES.spend} ${100 - i * 10}%, var(--brand-700))` }}
+                >
+                  <span className="tnum">{num(s.count)}</span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex h-10 flex-1 items-center rounded-xl border border-dashed border-border px-3 text-xs text-text-muted" data-testid={`ad-funnel-unreported-${s.stage}`}>
+                {ar ? 'لم ترسل المنصة هذه المرحلة' : 'This stage was never reported'}
+              </div>
+            )}
             <div className="w-40 shrink-0 text-end text-xs text-text-muted">
               {s.step_rate !== null && <span>{ar ? 'انتقال' : 'step'} {percent(s.step_rate, 0)}</span>}
               {s.cost_per !== null && <span className="ms-2">{ar ? 'تكلفة' : 'cost'} {money(s.cost_per)}</span>}
@@ -288,6 +304,15 @@ function FunnelTab({ projectId, range }: TabProps) {
           </div>
         ))}
       </div>
+      {unreported.length > 0 && (
+        // Named beneath the chart as well as drawn, because a reader who scans the bars needs to be
+        // told once, in a sentence, that the gaps are the platform's silence and not their results.
+        <p className="mt-4 text-xs text-text-muted" data-testid="ad-funnel-unreported-note">
+          {ar
+            ? `لم ترسل أي منصة هذه المراحل في هذه الفترة: ${unreported.map((s) => s.label).join('، ')}. الفراغ ليس صفرًا.`
+            : `No platform reported these stages in this period: ${unreported.map((s) => s.label).join(', ')}. A gap is not a zero.`}
+        </p>
+      )}
     </Panel>
   )
 }

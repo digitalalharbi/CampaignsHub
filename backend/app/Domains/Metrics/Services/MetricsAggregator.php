@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Services;
 
+use App\Domains\Campaigns\Services\CreativeFunnel;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Support\AdPlatforms;
@@ -506,6 +507,26 @@ final class MetricsAggregator
      * it never stated. A reader could multiply their way back to it and could not read it, and
      * nothing reconciled the funnel against the dashboard, which is exactly where a page that had
      * grown its own query would have hidden.
+     *
+     * ## A stage nobody reported is null, not zero (FUNNEL-NULL-001)
+     *
+     * Every stage used to be `COALESCE(SUM(…), 0)`, so a platform that does not count basket adds and
+     * a platform that counted zero of them produced the same figure on the most-read chart in the
+     * product. A client reading «0 add to cart» beside 176 purchases concludes the funnel is broken,
+     * or that we are — and they are reading a sentence about what the platform sends, not about their
+     * campaign. So the COALESCE is gone: a null sum means no row for that key exists in the window,
+     * which is exactly «never sent», while a real measured zero still sums to 0 and still says zero.
+     * `reported` carries that distinction explicitly so no caller has to infer it from a null.
+     *
+     * This mattered less while `AccountMetricsSyncer` could not carry those stages at all (they were
+     * dropped before storage, so every funnel was missing them for one indistinguishable reason).
+     * Now that it does carry them, the two reasons must be told apart.
+     *
+     * `from_stage` names the step this one's rate is measured AGAINST — the nearest stage above that
+     * was actually reported, not the one above it in theory. A funnel whose middle is unreported says
+     * «purchases per landing-page view» rather than dividing by a step that is not on the screen.
+     * This is the shape {@see CreativeFunnel} already established for
+     * one creative; the project funnel now answers the same way, so the two cannot read differently.
      */
     public function funnel(Carbon $from, Carbon $to): array
     {
@@ -514,24 +535,39 @@ final class MetricsAggregator
             'impressions' => 'Impressions', 'clicks' => 'Clicks', 'landing_page_views' => 'Landing Page View',
             'add_to_cart' => 'Add to Cart', 'checkout' => 'Checkout', 'conversions' => 'Purchase',
         ];
-        $selects = array_map(fn ($s) => "COALESCE(SUM(value) FILTER (WHERE metric_key = '{$s}'), 0) AS {$s}", $stages);
+        // Deliberately NOT wrapped in COALESCE — see the note above. The null IS the answer.
+        $selects = array_map(fn ($s) => "SUM(value) FILTER (WHERE metric_key = '{$s}') AS {$s}", $stages);
         $selects[] = "COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'), 0) AS spend";
         $row = (array) $this->base($from, $to)->selectRaw(implode(', ', $selects))->first();
 
         $spend = (float) ($row['spend'] ?? 0);
         $out = [];
         $prev = null;
+        $prevStage = null;
         foreach ($stages as $s) {
-            $count = (float) ($row[$s] ?? 0);
+            $reported = ($row[$s] ?? null) !== null;
+            $count = $reported ? round((float) $row[$s]) : null;
+
+            // A rate needs both sides and a non-zero denominator: «100% of nothing» is not a
+            // conversion rate, and neither is «a share of a step the platform never sent».
+            $ratio = $count !== null && $prev !== null && $prev > 0 ? $count / $prev : null;
+
             $out[] = [
                 'stage' => $s,
                 'label' => $labels[$s],
-                'count' => round($count),
-                'step_rate' => $prev !== null && $prev > 0 ? round($count / $prev, 4) : null,
-                'drop_off' => $prev !== null && $prev > 0 ? round(1 - $count / $prev, 4) : null,
-                'cost_per' => $count > 0 ? round($spend / $count, 2) : null,
+                'reported' => $reported,
+                'count' => $count,
+                'from_stage' => $count !== null ? $prevStage : null,
+                'step_rate' => $ratio !== null ? round($ratio, 4) : null,
+                'drop_off' => $ratio !== null ? round(1 - $ratio, 4) : null,
+                'cost_per' => $count !== null && $count > 0 ? round($spend / $count, 2) : null,
             ];
-            $prev = $count;
+
+            // Only a reported stage becomes the denominator for the next one.
+            if ($count !== null) {
+                $prev = $count;
+                $prevStage = $s;
+            }
         }
 
         return ['stages' => $out, 'spend' => round($spend, 2)];

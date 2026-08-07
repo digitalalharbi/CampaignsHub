@@ -102,10 +102,22 @@ export interface CampaignRow extends MetricTotals {
   campaign_name: string | null
   provider: string
 }
+/**
+ * One stage of the project (or campaign) funnel — FUNNEL-NULL-001.
+ *
+ * `count` is nullable and the null is load-bearing: it means no platform sent this key for the window,
+ * which is a different fact from a platform that counted zero. `reported` states that distinction so
+ * no caller has to infer it, and it is the field to branch on — `count === 0` is a real measurement.
+ */
 export interface FunnelStage {
   stage: string
   label: string
-  count: number
+  /** True when at least one platform sent this key. False means never sent, and `count` is null. */
+  reported: boolean
+  count: number | null
+  /** The stage this one's rate is measured against — the nearest reported step above, not the one
+   *  above it in theory. Null on the first reported stage, and on an unreported one. */
+  from_stage: string | null
   step_rate: number | null
   drop_off: number | null
   cost_per: number | null

@@ -276,6 +276,67 @@ final class MetricsTest extends TestCase
     }
 
     /**
+     * FUNNEL-NULL-001 — a stage nobody reported is null; a stage measured at zero is zero.
+     *
+     * Every stage was `COALESCE(SUM(…), 0)`, so «this platform does not count basket adds» and «nobody
+     * added anything to a basket» arrived at the client identically, on the chart they read first. The
+     * two must be told apart, and the way to prove they are is to put BOTH in one window: `add_to_cart`
+     * is seeded at a genuine 0 and must stay 0, while `landing_page_views` and `checkout` are never
+     * sent at all and must be null.
+     *
+     * The rate is measured against the nearest stage that WAS reported — the same `from_stage` rule
+     * `CreativeFunnel` follows — so a funnel with an unreported middle never divides by a step that is
+     * not on the screen.
+     */
+    public function test_a_funnel_stage_nobody_reported_is_null_and_a_measured_zero_is_still_zero(): void
+    {
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'impressions', 1000, '2026-06-01'),
+            $this->metric($this->projectA->id, 'clicks', 100, '2026-06-01'),
+            // Reported, and genuinely zero: nobody added to a basket, and the platform said so.
+            $this->metric($this->projectA->id, 'add_to_cart', 0, '2026-06-01'),
+            $this->metric($this->projectA->id, 'conversions', 10, '2026-06-01'),
+            $this->metric($this->projectA->id, 'spend', 200, '2026-06-01'),
+            // `landing_page_views` and `checkout` are deliberately absent — never sent, not measured.
+        ]);
+
+        $stages = collect($this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/funnel?from=2026-06-01&to=2026-06-02")
+            ->assertOk()
+            ->json('data'))->keyBy('stage');
+
+        // Never sent — and this is the assertion the old COALESCE fails.
+        foreach (['landing_page_views', 'checkout'] as $silent) {
+            $this->assertNull($stages[$silent]['count'], "{$silent} was never sent — null, not 0");
+            $this->assertFalse($stages[$silent]['reported'], "{$silent} was never sent and must not claim to be reported");
+            $this->assertNull($stages[$silent]['step_rate'], "{$silent} has no count, so it has no rate");
+            $this->assertNull($stages[$silent]['cost_per']);
+            $this->assertNull($stages[$silent]['from_stage']);
+        }
+
+        // Sent, and zero. The fix must not turn a real measurement into silence.
+        $this->assertTrue($stages['add_to_cart']['reported']);
+        $this->assertSame(0.0, (float) $stages['add_to_cart']['count']);
+        // Measured against clicks, skipping the landing-page step the platform never sent.
+        $this->assertSame('clicks', $stages['add_to_cart']['from_stage']);
+        $this->assertSame(0.0, (float) $stages['add_to_cart']['step_rate']);
+        $this->assertSame(1.0, (float) $stages['add_to_cart']['drop_off']);
+        // 0 add-to-carts cost nothing per add-to-cart; a division by zero is null, not a figure.
+        $this->assertNull($stages['add_to_cart']['cost_per']);
+
+        // And the stage below the zero still measures against the zero, so its rate is null rather
+        // than a fabricated ratio — «10 purchases from 0 basket adds» is not a conversion rate.
+        $this->assertSame('add_to_cart', $stages['conversions']['from_stage']);
+        $this->assertNull($stages['conversions']['step_rate']);
+        $this->assertSame(20.0, (float) $stages['conversions']['cost_per']);
+
+        // The first stage is reported and has nothing above it.
+        $this->assertTrue($stages['impressions']['reported']);
+        $this->assertNull($stages['impressions']['from_stage']);
+        $this->assertSame(0.1, (float) $stages['clicks']['step_rate']);
+    }
+
+    /**
      * CAMPAIGN-020: comparing campaigns side by side must reuse the same derived-KPI formulas, must
      * expose each campaign's own objective (so the UI never blends KPIs across objectives), and must
      * fail closed when someone slips in a campaign from another project.

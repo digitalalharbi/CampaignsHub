@@ -186,20 +186,40 @@ export function RankingBarChart({
 
 // ---- Funnel: stages with transition rate + drop-off ----------------------------------------------
 
-export function ConversionFunnelChart({ stages, currency = 'SAR' }: { stages: Array<{ label: string; count: number; step_rate: number | null; cost_per: number | null }>; currency?: string }) {
-  const top = stages[0]?.count || 1
+/**
+ * The conversion funnel, drawn from counts that may legitimately be absent (FUNNEL-NULL-001).
+ *
+ * `count` is nullable and a null is NOT a zero-length bar. A bar is a measurement, so a stage the
+ * platform never reported gets no bar at all — it gets a dashed, empty track saying so in words. The
+ * alternative was what shipped before: `null / top` is `0` in JavaScript, which drew the minimum-width
+ * bar with «—» inside it and read, to a client, as «this step happened almost never».
+ *
+ * `top` is the largest count that was actually reported rather than the first stage's, because the
+ * first stage is exactly the one that can be missing on a platform that reports conversions without
+ * impressions — and scaling every bar to `undefined` would have collapsed the whole chart.
+ */
+export function ConversionFunnelChart({ stages, currency = 'SAR', ar = false }: { stages: Array<{ label: string; count: number | null; step_rate: number | null; cost_per: number | null }>; currency?: string; ar?: boolean }) {
+  const counts = stages.map((s) => s.count).filter((c): c is number => c !== null && c !== undefined)
+  const top = counts.length > 0 ? Math.max(...counts) : 1
   return (
     <div className="space-y-2.5">
       {stages.map((s, i) => {
-        const w = Math.max(8, (s.count / top) * 100)
+        const reported = s.count !== null && s.count !== undefined
+        const w = reported ? Math.max(8, ((s.count as number) / (top || 1)) * 100) : 0
         return (
           <div key={s.label} className="flex items-center gap-3">
             <span className="w-32 shrink-0 text-sm font-medium text-text-secondary">{s.label}</span>
-            <div className="h-9 flex-1 overflow-hidden rounded-xl bg-surface-secondary">
-              <div className="flex h-full items-center justify-between rounded-xl px-3 text-sm font-semibold text-white transition-all" style={{ width: `${w}%`, background: `color-mix(in oklab, var(--brand-600) ${100 - i * 10}%, var(--brand-700))` }}>
-                <span className="tnum">{num(s.count)}</span>
+            {reported ? (
+              <div className="h-9 flex-1 overflow-hidden rounded-xl bg-surface-secondary">
+                <div className="flex h-full items-center justify-between rounded-xl px-3 text-sm font-semibold text-white transition-all" style={{ width: `${w}%`, background: `color-mix(in oklab, var(--brand-600) ${100 - i * 10}%, var(--brand-700))` }}>
+                  <span className="tnum">{num(s.count)}</span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex h-9 flex-1 items-center rounded-xl border border-dashed border-border px-3 text-xs text-text-muted">
+                {ar ? 'لم ترسل المنصة هذه المرحلة' : 'This stage was never reported'}
+              </div>
+            )}
             <div className="w-36 shrink-0 text-end text-xs text-text-muted">
               {s.step_rate !== null && <span className="tnum">{percent(s.step_rate, 0)}</span>}
               {s.cost_per !== null && <span className="tnum ms-2">{money(s.cost_per, currency)}</span>}

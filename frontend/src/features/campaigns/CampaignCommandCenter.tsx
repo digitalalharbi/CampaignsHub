@@ -285,17 +285,24 @@ export function CampaignFunnelTab({ campaign, projectId, range }: { campaign: Un
   return (
     <div className="space-y-4">
       <ChartCard title={`قمع التحويل — ${campaign.objective}`} subtitle="حسب هدف الحملة">
-        <ConversionFunnelChart stages={stages} currency={cur} />
+        <ConversionFunnelChart stages={stages} currency={cur} ar />
       </ChartCard>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {stages.map((s) => (
           <div key={s.stage} className="rounded-xl border border-border bg-surface p-3">
             <div className="text-[11px] uppercase text-text-muted">{s.label}</div>
-            <div className="tnum text-lg font-extrabold">{num(s.count)}</div>
-            <div className="flex justify-between text-[11px] text-text-muted">
-              <span>تحويل {s.step_rate != null ? percent(s.step_rate * 100, 0) : '—'}</span>
-              <span>تكلفة {s.cost_per != null ? money(s.cost_per, cur) : '—'}</span>
-            </div>
+            {/* FUNNEL-NULL-001 — «لم تُرسل» is a different sentence from «صفر», and the card must say
+                which one it means. `num(null)` already prints «—», but a dash alone reads as a
+                rendering failure; the label underneath names the reason. */}
+            <div className="tnum text-lg font-extrabold">{s.count !== null ? num(s.count) : '—'}</div>
+            {s.reported ? (
+              <div className="flex justify-between text-[11px] text-text-muted">
+                <span>تحويل {s.step_rate != null ? percent(s.step_rate * 100, 0) : '—'}</span>
+                <span>تكلفة {s.cost_per != null ? money(s.cost_per, cur) : '—'}</span>
+              </div>
+            ) : (
+              <div className="text-[11px] text-text-muted">لم ترسل المنصة هذه المرحلة</div>
+            )}
           </div>
         ))}
       </div>

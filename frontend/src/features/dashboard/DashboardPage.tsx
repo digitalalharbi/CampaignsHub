@@ -453,25 +453,38 @@ export function DashboardPage() {
         </Panel>
 
         <Panel title={ar ? 'قمع التحويل' : 'Conversion funnel'} description={ar ? 'من الظهور إلى الشراء' : 'From impression to purchase'} loading={funnel.isLoading} error={funnel.isError} empty={!funnel.isLoading && (funnel.data?.length ?? 0) === 0}>
+          {/*
+            * FUNNEL-NULL-001 — a fifth surface drawing this funnel, found by the compiler when
+            * `count` became nullable rather than by reading. It scaled every bar to `rows[0].count`
+            * and `null / top` is 0 in JavaScript, so a stage the platform never sent drew the
+            * minimum-width bar with «0» inside it — on the dashboard, above the fold.
+            */}
           <div className="space-y-2">
-            {(funnel.data ?? []).map((s, i) => {
-              const top = funnel.data?.[0]?.count || 1
-              const w = Math.max(6, (s.count / top) * 100)
-              return (
+            {(() => {
+              const rows = funnel.data ?? []
+              const measured = rows.map((s) => s.count).filter((c): c is number => c !== null)
+              const top = measured.length > 0 ? Math.max(...measured) : 1
+              return rows.map((s, i) => (
                 <div key={s.stage} className="flex items-center gap-3">
                   <span className="w-28 shrink-0 text-sm text-text-secondary">{s.label}</span>
-                  <div className="h-8 flex-1 overflow-hidden rounded-lg bg-surface-secondary">
-                    <div
-                      className="flex h-full items-center justify-end rounded-lg px-2 text-sm font-semibold text-white"
-                      style={{ width: `${w}%`, background: `color-mix(in oklab, ${SERIES.spend} ${100 - i * 12}%, var(--brand-700))` }}
-                    >
-                      <span className="tnum">{compact(s.count)}</span>
+                  {s.count !== null ? (
+                    <div className="h-8 flex-1 overflow-hidden rounded-lg bg-surface-secondary">
+                      <div
+                        className="flex h-full items-center justify-end rounded-lg px-2 text-sm font-semibold text-white"
+                        style={{ width: `${Math.max(6, (s.count / top) * 100)}%`, background: `color-mix(in oklab, ${SERIES.spend} ${100 - i * 12}%, var(--brand-700))` }}
+                      >
+                        <span className="tnum">{compact(s.count)}</span>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="flex h-8 flex-1 items-center rounded-lg border border-dashed border-border px-2 text-xs text-text-muted">
+                      {ar ? 'لم ترسل المنصة هذه المرحلة' : 'This stage was never reported'}
+                    </div>
+                  )}
                   <span className="tnum w-12 text-end text-xs text-text-muted">{s.step_rate === null ? '' : percent(s.step_rate, 0)}</span>
                 </div>
-              )
-            })}
+              ))
+            })()}
           </div>
         </Panel>
       </div>

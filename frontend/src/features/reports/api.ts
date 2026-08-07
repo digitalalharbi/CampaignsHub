@@ -164,7 +164,12 @@ export interface LivePayload {
   timeseries: Array<Record<string, unknown>>
   platforms: Array<Record<string, unknown> & { provider: string; spend: number | null }>
   campaigns: Array<Record<string, unknown> & { campaign_name: string | null; provider: string | null; spend: number | null }>
-  funnel: Array<{ stage: string; label: string; count: number; step_rate: number | null; cost_per: number | null }>
+  /**
+   * FUNNEL-NULL-001 — `count` is null for a stage no platform reported, and `reported` says so
+   * outright. On a client link this matters more than anywhere else: the reader has no other view of
+   * their account, so «0 add to cart» beside 176 purchases is a conclusion they cannot check.
+   */
+  funnel: Array<{ stage: string; label: string; reported: boolean; count: number | null; from_stage: string | null; step_rate: number | null; cost_per: number | null }>
   /**
    * FUNNEL-001 — «الفانل والمتجر» for this link's project, or null when it has no store.
    *

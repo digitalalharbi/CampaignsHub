@@ -512,7 +512,9 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
               <ConversionFunnelChart
                 stages={data.funnel.stages.map((s) => ({
                   label: ar ? s.label_ar : s.label_en,
-                  count: s.count ?? 0,
+                  // Was `s.count ?? 0` — the coercion FUNNEL-NULL-001 is about, on the one chart whose
+                  // whole premise is that an unreported step is not a step. The chart takes the null.
+                  count: s.count,
                   step_rate: s.rate_from_previous,
                   /*
                    * The bars carry no cost. Found live: the chart rounds money to whole units, so a

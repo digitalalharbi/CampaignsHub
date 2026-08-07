@@ -31,7 +31,8 @@ export interface ReportData {
   top_creatives?: Row[]
   platform_notes?: Record<string, { strengths: string[]; weaknesses: string[] }>
   best?: { platform_by_roas?: string; platform_by_cpa?: string; platform_by_results?: string; campaign?: string }
-  funnel?: Array<{ label: string; count: number; step_rate: number | null; cost_per: number | null }>
+  /** FUNNEL-NULL-001 — `count` is null for a stage no platform reported; `reported` says which. */
+  funnel?: Array<{ stage?: string; label: string; reported?: boolean; count: number | null; step_rate: number | null; cost_per: number | null }>
   budget?: Row[]
   summary?: string[]
   findings?: NoteCardData[]
@@ -696,18 +697,40 @@ function FunnelSlide({ data }: { data: ReportData }) {
   // Biggest drop-off + overall conversion, to fill the slide with real insight beside the funnel.
   const withDrop = stages.map((s, i) => ({ ...s, drop: i > 0 && s.step_rate !== null ? 1 - (s.step_rate ?? 0) : 0 }))
   const worst = withDrop.slice(1).sort((a, b) => (b.drop ?? 0) - (a.drop ?? 0))[0]
-  const overall = stages.length > 1 && (stages[0]?.count ?? 0) > 0 ? (stages[stages.length - 1]?.count ?? 0) / (stages[0]?.count ?? 1) : null
+  /*
+   * FUNNEL-NULL-001 — the end-to-end rate is measured between the stages that were REPORTED.
+   *
+   * This read `stages[0].count ?? 0` over `stages[last].count ?? 1`, so a funnel whose top or bottom
+   * the platform never sent still published a percentage — computed from a zero that stood in for
+   * silence, on the slide a client reads as the headline. Both ends must be real figures or the rate
+   * is not stated at all, and the sentence underneath names the two steps it actually spans rather
+   * than always claiming «من الظهور إلى النتيجة».
+   */
+  const measured = stages.filter((s) => s.count !== null)
+  const first = measured[0]
+  const last = measured[measured.length - 1]
+  const overall = measured.length > 1 && (first?.count ?? 0) > 0 ? (last!.count as number) / (first!.count as number) : null
+  const unreported = stages.filter((s) => s.count === null)
   return (
     <div>
       <Title sub="من الظهور إلى الشراء — معدل الانتقال وتكلفة كل مرحلة">قمع التحويل</Title>
       {stages.length > 0 ? (
         <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-          <ChartCard title="مراحل القمع" subtitle="العدد ومعدل الانتقال وتكلفة كل مرحلة"><ConversionFunnelChart stages={stages} currency={data.currency} /></ChartCard>
+          <ChartCard title="مراحل القمع" subtitle="العدد ومعدل الانتقال وتكلفة كل مرحلة"><ConversionFunnelChart stages={stages} currency={data.currency} ar /></ChartCard>
           <div className="space-y-3">
             <div className="rounded-2xl border border-border bg-surface-secondary p-4">
               <div className="text-xs text-text-muted">معدل التحويل الكلي</div>
               <div className="tnum text-3xl font-extrabold text-text-primary">{overall !== null ? percent(overall, 2) : '—'}</div>
-              <div className="mt-1 text-xs text-text-secondary">من {num(stages[0]?.count ?? 0)} ظهور إلى {num(stages[stages.length - 1]?.count ?? 0)} نتيجة</div>
+              <div className="mt-1 text-xs text-text-secondary">
+                {overall !== null
+                  ? `من ${num(first!.count)} ${first!.label} إلى ${num(last!.count)} ${last!.label}`
+                  : 'لا توجد مرحلتان مرسلتان تُقاس بينهما نسبة.'}
+              </div>
+              {unreported.length > 0 && (
+                <div className="mt-2 text-[11px] text-text-muted">
+                  لم ترسل أي منصة: {unreported.map((s) => s.label).join('، ')} — الفراغ ليس صفرًا.
+                </div>
+              )}
             </div>
             {worst && (
               <div className="rounded-2xl border border-border bg-[var(--warning-background)] p-4">
