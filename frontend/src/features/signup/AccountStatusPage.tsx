@@ -34,6 +34,7 @@ const COPY = {
     checking: 'جارٍ التحقق…',
     verifying: 'جارٍ تأكيد بريدك…',
     notFound: 'لم نعثر على طلب تسجيل. ابدأ من صفحة إنشاء الحساب.',
+    lookupFailed: 'تعذّر قراءة حالة الطلب. لم يتغيّر شيء في طلبك؛ المشكلة في قراءته الآن.',
     startOver: 'إنشاء حساب',
     awaitingProvider: 'لم يُفعَّل مزوّد الإرسال بعد (بانتظار بيانات الاعتماد)، لذلك لم تُرسل الرسالة فعليًا. استخدم زر التطوير أدناه مؤقتًا.',
     devVerify: 'تأكيد الآن (تطوير)',
@@ -65,6 +66,7 @@ const COPY = {
     checking: 'Checking…',
     verifying: 'Confirming your email…',
     notFound: 'We could not find a registration. Start from the sign-up page.',
+    lookupFailed: 'We could not read the status of your application. Nothing about it has changed — reading it just now is what failed.',
     startOver: 'Create an account',
     awaitingProvider: 'No delivery provider is configured yet (awaiting credentials), so the message was not actually sent. Use the dev button below for now.',
     devVerify: 'Verify now (dev)',
@@ -205,6 +207,42 @@ export function AccountStatusPage() {
   const envelope = (queryClient.getQueryData(['registration', id]) as RegistrationEnvelope | undefined) ?? status.data
   const reg = envelope?.registration
   const policy = envelope?.policy
+
+  /*
+   * A LOOKUP that failed is not a lookup still running.
+   *
+   * `error` above is set by the mutations only, so until this branch existed a failed QUERY left the
+   * spinner turning with nothing beside it — for as long as the tab stayed open. That is the worst
+   * available answer for this particular page, whose entire reason to exist is that «I signed up and
+   * nothing happened» must never be what somebody is left with. An applicant sent here by a payment
+   * gateway with a registration id we cannot read gets told so, and is offered the two doors that
+   * actually lead somewhere: ask again, or start over.
+   *
+   * Deliberately NOT an automatic retry. The failure this branch first exposed was an address
+   * pointing at the wrong installation entirely (see `e2e/env.ts`) — retrying would have re-asked
+   * the wrong server, more often, and reported nothing.
+   */
+  if (!reg && status.isError) {
+    return (
+      <AuthShell>
+        <div data-testid="registration-unavailable" className="flex flex-col items-center gap-4 py-10 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--negative-background)] text-danger">
+            <ShieldAlert size={26} />
+          </span>
+          <p data-testid="registration-error" className="text-sm text-danger">
+            {toApiError(status.error).message}
+          </p>
+          <p className="text-sm text-text-secondary">{c.lookupFailed}</p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Button data-testid="registration-refresh" onClick={() => void status.refetch()} variant="secondary">
+              <RefreshCw size={15} /> {c.checkAgain}
+            </Button>
+            <Link to="/register" className="text-sm font-semibold text-brand-600 hover:underline">{c.startOver}</Link>
+          </div>
+        </div>
+      </AuthShell>
+    )
+  }
 
   if (!reg) {
     return (

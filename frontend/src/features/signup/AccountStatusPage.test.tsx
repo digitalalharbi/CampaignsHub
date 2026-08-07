@@ -249,4 +249,39 @@ describe('AccountStatusPage', () => {
     // The dev link is what stands in for an email nobody can send yet.
     expect(await screen.findByTestId('registration-dev-verify')).toHaveAttribute('href', '/signup/status?request=reg-1&token=fresh')
   })
+
+  /**
+   * A lookup that FAILED must not look like a lookup still running.
+   *
+   * The page's `error` state was set by its mutations only, so a failed query left the spinner and
+   * «Checking…» on screen for as long as the tab stayed open — on the one page in the product whose
+   * whole purpose is that «I signed up and nothing happened» never happens. This is the branch that
+   * was missing, and it is asserted on the QUERY rather than on a mutation for that reason.
+   */
+  it('says a status lookup failed instead of spinning forever', async () => {
+    vi.mocked(fetchRegistration).mockRejectedValue(new Error('Not found.'))
+
+    renderWithProviders(<AccountStatusPage />, { route: '/signup/status?request=reg-1', locale: 'en' })
+
+    expect(await screen.findByTestId('registration-unavailable')).toBeInTheDocument()
+    expect(screen.getByTestId('registration-error')).toBeInTheDocument()
+    // «Checking…» is gone: an unresolved lookup and a refused one are not the same claim.
+    expect(screen.queryByText('Checking…')).not.toBeInTheDocument()
+    // And there is a way onward — asked for, never retried automatically.
+    expect(screen.getByTestId('registration-refresh')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Create an account' })).toBeInTheDocument()
+  })
+
+  /** Asking again is a button, not a loop: nothing re-fetches until somebody presses it. */
+  it('re-reads the status only when asked', async () => {
+    vi.mocked(fetchRegistration).mockRejectedValue(new Error('Not found.'))
+
+    renderWithProviders(<AccountStatusPage />, { route: '/signup/status?request=reg-1', locale: 'en' })
+    await screen.findByTestId('registration-unavailable')
+
+    const attempts = vi.mocked(fetchRegistration).mock.calls.length
+    fireEvent.click(screen.getByTestId('registration-refresh'))
+
+    await waitFor(() => expect(vi.mocked(fetchRegistration).mock.calls.length).toBe(attempts + 1))
+  })
 })
