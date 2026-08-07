@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-dom'
 import { NotFoundPage } from './NotFoundPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RegisterPage } from '@/features/auth/RegisterPage'
@@ -104,7 +104,23 @@ import { CreatorCollaborationPage } from '@/features/influencers/creator/Creator
 import { WorkspaceSwitcherPage } from '@/features/auth/WorkspaceSwitcherPage'
 import { legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
 
-export const router = createBrowserRouter([
+/**
+ * ROUTE-BOUNDARY-001 — every branch of the tree has somewhere to land when it throws.
+ *
+ * The `*` route carried an `errorElement` and nothing else did, so a render error anywhere in the
+ * authenticated app bubbled past every route to React Router's DEFAULT boundary: «Unexpected
+ * Application Error!» over a raw English stack trace, on a page a customer is looking at. That is
+ * exactly how `0490892`'s funnel crash presented — the shape defect is fixed, but the presentation
+ * was a property of the router, not of that one bug, and the next crash would have looked the same.
+ *
+ * Applied to the TOP-LEVEL routes rather than to each leaf: React Router bubbles an error up to the
+ * nearest ancestor that has a boundary, so one per branch covers every page beneath it, and a route
+ * that already declares its own keeps it.
+ */
+const withErrorBoundary = (routes: RouteObject[]): RouteObject[] =>
+  routes.map((route) => (route.errorElement ? route : { ...route, errorElement: <NotFoundPage /> }))
+
+export const router = createBrowserRouter(withErrorBoundary([
   // Public marketing homepage — the primary conversion surface. The authenticated app lives under
   // its own paths (/dashboard, /campaigns, …); `/` is public and shows "back to dashboard" when signed in.
   { path: '/', element: <PublicHomePage /> },
@@ -595,4 +611,4 @@ export const router = createBrowserRouter([
    * rather than as a wrong address. Last in the list, so it can only ever match what nothing else did.
    */
   { path: '*', element: <NotFoundPage />, errorElement: <NotFoundPage /> },
-])
+]))
