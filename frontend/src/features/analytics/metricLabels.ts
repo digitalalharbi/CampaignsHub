@@ -66,6 +66,38 @@ const METRIC_LABELS: Record<string, Pair> = {
 export const metricLabel = (key: string, ar: boolean) =>
   METRIC_LABELS[key] ? pick(METRIC_LABELS[key], ar) : key
 
+/**
+ * The funnel's stage names, in the reader's language — UX-COPY-001.
+ *
+ * `MetricsAggregator::funnel()` labels its stages in English and only in English: «Impressions»,
+ * «Add to Cart», «Purchase». Every surface that draws a funnel printed that field straight out, so
+ * the most-read chart in the product had six untranslated words down its left edge on an Arabic
+ * page — under an Arabic heading, beside Arabic percentages.
+ *
+ * Translated here rather than on the server because the payload is one response serving both
+ * languages, and a `label_ar` would double the field without removing the need for a fallback.
+ * `stage` is the stable key; the server's `label` is the fallback for a stage this map has not met
+ * yet, which is better than the key but is still English — so a new stage shows up as a translation
+ * gap rather than as `landing_page_views`.
+ *
+ * The ENGLISH strings are deliberately identical to the server's, character for character. This is
+ * an Arabic defect and an English rewording would be churn — worse, it would silently move the text
+ * that report exports, PDF snapshots and three test suites already match on.
+ */
+const FUNNEL_STAGE_LABELS: Record<string, Pair> = {
+  impressions: { ar: 'الظهور', en: 'Impressions' },
+  clicks: { ar: 'النقرات', en: 'Clicks' },
+  landing_page_views: { ar: 'زيارات صفحة الهبوط', en: 'Landing Page View' },
+  add_to_cart: { ar: 'الإضافة إلى السلة', en: 'Add to Cart' },
+  checkout: { ar: 'بدء الدفع', en: 'Checkout' },
+  purchases: { ar: 'الشراء', en: 'Purchase' },
+  // Retained because a funnel stored before FUNNEL-PURCHASE-001 ends in this key.
+  conversions: { ar: 'التحويلات', en: 'Purchase' },
+}
+
+export const funnelStageLabel = (stage: string, fallback: string, ar: boolean) =>
+  FUNNEL_STAGE_LABELS[stage] ? pick(FUNNEL_STAGE_LABELS[stage], ar) : fallback
+
 /** Page-level copy for the advertiser dashboard. */
 export const DASH_COPY = {
   operationalView: { ar: 'لوحة التحكم — نظرة تشغيلية', en: 'Dashboard — operational view' },

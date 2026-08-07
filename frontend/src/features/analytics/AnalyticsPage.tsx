@@ -26,6 +26,7 @@ import {
 } from './hooks'
 import { DemoBadge, KpiCard, Panel, RangeTabs, SERIES, platformColor, tooltipProps } from './components'
 import { compact, money, num, percent, ratio } from './format'
+import { funnelStageLabel } from './metricLabels'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
@@ -278,11 +279,11 @@ function FunnelTab({ projectId, range }: TabProps) {
   const top = reported.length > 0 ? Math.max(...reported) : 1
   const unreported = rows.filter((s) => !s.reported)
   return (
-    <Panel title={ar ? 'قمع التحويل' : 'Conversion funnel'} description="Impression → Click → Landing → Add to Cart → Checkout → Purchase" loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
+    <Panel title={ar ? 'قمع التحويل' : 'Conversion funnel'} description={ar ? 'الظهور ← النقرة ← صفحة الهبوط ← السلة ← الدفع ← الشراء' : 'Impression → Click → Landing → Add to cart → Checkout → Purchase'} loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
       <div className="space-y-3">
         {rows.map((s, i) => (
           <div key={s.stage} className="flex items-center gap-3" data-testid={`ad-funnel-stage-${s.stage}`}>
-            <span className="w-32 shrink-0 text-sm font-medium text-text-secondary">{s.label}</span>
+            <span className="w-32 shrink-0 text-sm font-medium text-text-secondary">{funnelStageLabel(s.stage, s.label, ar)}</span>
             {s.count !== null ? (
               <div className="h-10 flex-1 overflow-hidden rounded-xl bg-surface-secondary">
                 <div
@@ -309,8 +310,8 @@ function FunnelTab({ projectId, range }: TabProps) {
         // told once, in a sentence, that the gaps are the platform's silence and not their results.
         <p className="mt-4 text-xs text-text-muted" data-testid="ad-funnel-unreported-note">
           {ar
-            ? `لم ترسل أي منصة هذه المراحل في هذه الفترة: ${unreported.map((s) => s.label).join('، ')}. الفراغ ليس صفرًا.`
-            : `No platform reported these stages in this period: ${unreported.map((s) => s.label).join(', ')}. A gap is not a zero.`}
+            ? `لم ترسل أي منصة هذه المراحل في هذه الفترة: ${unreported.map((s) => funnelStageLabel(s.stage, s.label, true)).join('، ')}. الفراغ ليس صفرًا.`
+            : `No platform reported these stages in this period: ${unreported.map((s) => funnelStageLabel(s.stage, s.label, false)).join(', ')}. A gap is not a zero.`}
         </p>
       )}
     </Panel>

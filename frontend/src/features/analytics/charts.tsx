@@ -18,6 +18,7 @@ import {
 } from 'recharts'
 import { platformColor, tooltipProps } from './components'
 import { compact, money, num, percent, ratio } from './format'
+import { funnelStageLabel } from './metricLabels'
 
 /**
  * Shared chart design system for dashboard + analytics + reports. One tooltip/legend/color/typography
@@ -198,7 +199,7 @@ export function RankingBarChart({
  * first stage is exactly the one that can be missing on a platform that reports conversions without
  * impressions — and scaling every bar to `undefined` would have collapsed the whole chart.
  */
-export function ConversionFunnelChart({ stages, currency = 'SAR', ar = false }: { stages: Array<{ label: string; count: number | null; step_rate: number | null; cost_per: number | null }>; currency?: string; ar?: boolean }) {
+export function ConversionFunnelChart({ stages, currency = 'SAR', ar = false }: { stages: Array<{ stage?: string; label: string; count: number | null; step_rate: number | null; cost_per: number | null }>; currency?: string; ar?: boolean }) {
   const counts = stages.map((s) => s.count).filter((c): c is number => c !== null && c !== undefined)
   const top = counts.length > 0 ? Math.max(...counts) : 1
   return (
@@ -208,7 +209,8 @@ export function ConversionFunnelChart({ stages, currency = 'SAR', ar = false }: 
         const w = reported ? Math.max(8, ((s.count as number) / (top || 1)) * 100) : 0
         return (
           <div key={s.label} className="flex items-center gap-3">
-            <span className="w-32 shrink-0 text-sm font-medium text-text-secondary">{s.label}</span>
+            {/* UX-COPY-001 — the payload labels its stages in English only. */}
+            <span className="w-32 shrink-0 text-sm font-medium text-text-secondary">{funnelStageLabel(s.stage ?? '', s.label, ar)}</span>
             {reported ? (
               <div className="h-9 flex-1 overflow-hidden rounded-xl bg-surface-secondary">
                 <div className="flex h-full items-center justify-between rounded-xl px-3 text-sm font-semibold text-white transition-all" style={{ width: `${w}%`, background: `color-mix(in oklab, var(--brand-600) ${100 - i * 10}%, var(--brand-700))` }}>

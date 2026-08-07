@@ -144,4 +144,45 @@ describe('the conversion funnel tells silence from zero', () => {
     expect(screen.getByText('لم ترسل المنصة هذه المرحلة')).toBeInTheDocument()
     expect(screen.getByText('400')).toBeInTheDocument()
   })
+
+  /**
+   * UX-COPY-001 — the Arabic funnel names its stages in Arabic.
+   *
+   * `MetricsAggregator::funnel()` labels its stages in English and only in English, and every
+   * surface printed that field straight out. So the most-read chart in the product had «Impressions
+   * / Add to Cart / Purchase» down its left edge on an Arabic page, under an Arabic heading, beside
+   * Arabic percentages. Found by looking at the page in Arabic — no assertion anywhere covered the
+   * left-hand column, so the whole suite passed while it was untranslated.
+   */
+  it('names the funnel stages in Arabic on an Arabic page', () => {
+    renderWithProviders(
+      <ConversionFunnelChart
+        stages={[
+          { stage: 'impressions', label: 'Impressions', count: 1000, step_rate: null, cost_per: null },
+          { stage: 'add_to_cart', label: 'Add to Cart', count: 40, step_rate: null, cost_per: null },
+        ]}
+        ar
+      />,
+      { locale: 'ar' },
+    )
+
+    expect(screen.getByText('الظهور')).toBeInTheDocument()
+    expect(screen.getByText('الإضافة إلى السلة')).toBeInTheDocument()
+    expect(screen.queryByText('Impressions')).not.toBeInTheDocument()
+    expect(screen.queryByText('Add to Cart')).not.toBeInTheDocument()
+  })
+
+  /** A stage this map has not met falls back to the server's label rather than to its raw key. */
+  it('falls back to the payload label for an unknown stage', () => {
+    renderWithProviders(
+      <ConversionFunnelChart
+        stages={[{ stage: 'subscriptions', label: 'Subscriptions', count: 7, step_rate: null, cost_per: null }]}
+        ar
+      />,
+      { locale: 'ar' },
+    )
+
+    expect(screen.getByText('Subscriptions')).toBeInTheDocument()
+    expect(screen.queryByText('subscriptions')).not.toBeInTheDocument()
+  })
 })
