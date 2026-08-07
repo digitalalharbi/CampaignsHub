@@ -10,7 +10,23 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## GATE — 2026-08-07 · **GREEN.** `PLAYWRIGHT_EXIT_CODE=0` · 821 passed · 0 failed · **0 skipped** · 29.5m
+## GATE — 2026-08-07 (UX overhaul) · **GREEN.** `PLAYWRIGHT_EXIT_CODE=0` · 830 passed · 0 failed · **0 skipped** · 28.0m
+
+Run at `303e50b`, three browsers, one worker, `retries: 0`, no file or database change during it.
+**Failed=0 · Flaky=0 · Retries=0 · Skipped=0 · Working tree CLEAN.** The verdict is Playwright's own
+exit code, read directly and not through a pipe.
+
+Backend **1578 passed (8973 assertions), exit 0** · Pint clean · `tsc -b` clean · oxlint **0 errors**
+· vitest **838 passed (117 files)** · production build clean.
+
+**The first run of this gate was RED** — `PLAYWRIGHT_EXIT_CODE=1`, 16 failed across five distinct
+causes, all fixed at the cause and each verified on its own before the re-run. One of them was a
+real design mistake in the sweep (the alerts status control had been turned from a segmented tab
+strip into a dropdown); one was a real interaction defect (a multi-select popover covers the applied
+row it has just created); and one was a three-minute Firefox timeout that passed in isolation, whose
+product half is recorded below rather than folded into a UX pass. See `303e50b`.
+
+## GATE — 2026-08-07 (platform adapters) · **GREEN.** `PLAYWRIGHT_EXIT_CODE=0` · 821 passed · 0 failed · **0 skipped** · 29.5m
 
 Run at `39f79b8`, three browsers, one worker, `retries: 0`, no file or database change during it.
 **Failed=0 · Flaky=0 · Retries=0 · Skipped=0 · Working tree CLEAN.** The verdict is Playwright's own
