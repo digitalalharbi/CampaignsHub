@@ -43,6 +43,14 @@ export type MetricItem = {
   delta?: number | null
   /** True where DOWN is the good direction — cost per result, CPC, CPA. */
   invertGood?: boolean
+  /**
+   * True where neither direction is good — frequency, impressions on a sales campaign.
+   *
+   * Without it every delta is coloured, and colour is a judgement: a rising frequency painted green
+   * tells the reader their ads being shown more often to the same people is going well, which is
+   * the opposite of what an operator would say about it.
+   */
+  neutral?: boolean
   /** What this metric means, in one sentence. Shown on hover and on focus. */
   hint?: string
   spark?: number[]
@@ -109,10 +117,20 @@ export function InfoHint({ text, label }: { text: string; label: string }) {
   )
 }
 
-function Delta({ delta, invertGood, ar }: { delta: number; invertGood?: boolean; ar: boolean }) {
+function Delta({
+  delta,
+  invertGood,
+  neutral,
+  ar,
+}: {
+  delta: number
+  invertGood?: boolean
+  neutral?: boolean
+  ar: boolean
+}) {
   const flat = Math.abs(delta) < 0.0005
   const up = delta > 0
-  const good = flat ? null : invertGood ? !up : up
+  const good = flat || neutral ? null : invertGood ? !up : up
   const Icon = flat ? Minus : up ? ArrowUpRight : ArrowDownRight
   const tone = good === null
     ? 'text-text-muted bg-surface-secondary'
@@ -157,7 +175,7 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
           comparison of two absences, printed as a change.
         */}
         {!missing && item.delta !== null && item.delta !== undefined && (
-          <Delta delta={item.delta} invertGood={item.invertGood} ar={ar} />
+          <Delta delta={item.delta} invertGood={item.invertGood} neutral={item.neutral} ar={ar} />
         )}
       </div>
 

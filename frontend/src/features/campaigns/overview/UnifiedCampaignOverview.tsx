@@ -247,7 +247,15 @@ export function UnifiedCampaignOverview({
         </div>
       </div>
 
-      {/* KPI row */}
+      {/*
+        KPI row — omitted entirely when the caller has none.
+
+        `/app/dashboard` moved its headline figures to the objective-aware `MetricStrip` above this
+        component (UX-DASH-001) and passes an empty list. Without the guard this rendered an empty
+        grid: invisible, but a real gap in the vertical rhythm between the filters and the first
+        chart, which reads as something that failed to load.
+      */}
+      {kpis.length > 0 && (
       <div className={`grid grid-cols-2 gap-2 ${isMarketing ? 'sm:grid-cols-4' : compact ? 'sm:grid-cols-3' : 'md:grid-cols-3 xl:grid-cols-6'}`}>
         {kpis.map((k) => (
           <div key={k.key} className={`rounded-xl border ${lg ? 'p-4' : 'p-2.5'} ${c.card}`}>
@@ -262,6 +270,7 @@ export function UnifiedCampaignOverview({
           </div>
         ))}
       </div>
+      )}
 
       <div className={`grid gap-3 ${isMarketing ? 'sm:grid-cols-3' : compact ? '' : 'lg:grid-cols-3'}`}>
         {/* Platform comparison (spend bars + ROAS) */}

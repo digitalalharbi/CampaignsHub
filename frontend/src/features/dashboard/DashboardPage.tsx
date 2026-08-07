@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
   Area,
   AreaChart,
@@ -10,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { ArrowUpRight, SlidersHorizontal } from 'lucide-react'
+import { ArrowUpRight } from 'lucide-react'
 import {
   useBudget,
   useCampaigns,
@@ -21,16 +22,24 @@ import {
   useSummary,
   useTimeseries,
 } from '../analytics/hooks'
-import { DemoBadge, Panel, RangeTabs, SERIES, tooltipProps } from '../analytics/components'
+import { DemoBadge, Panel, SERIES, tooltipProps } from '../analytics/components'
 import { compact, money, num, percent, ratio } from '../analytics/format'
-import { UnifiedCampaignOverview, providerColor, providerName, type OverviewKpi, type OverviewVM } from '@/features/campaigns/overview/UnifiedCampaignOverview'
-import type { MetricTotals } from '../analytics/api'
+import { UnifiedCampaignOverview, providerName, type OverviewVM } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import { SavedViewsBar } from './SavedViewsBar'
 import { useSavedViews, type SavedView } from './savedViews'
-import { OBJECTIVE_KEYS, dash, metricLabel, objectiveLabel } from '@/features/analytics/metricLabels'
-import { Modal } from '@/components/ui/Modal'
+import { dashboardMetrics } from './dashboardMetrics'
+import { dash, funnelStageLabel } from '@/features/analytics/metricLabels'
+import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
+import { MetricStrip } from '@/components/ui/MetricStrip'
+import { DataFreshness, PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
 import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
+import { useProject } from '@/stores/project'
+import { listClientWorkspaces, listProjects } from '@/features/projects/api'
+import { MARKETING_PATH_KEYS, marketingPathLabel, objectiveLabel, objectivesForPath, pathOfObjective } from '@/features/campaigns/labels'
+import { CreativePulseSection } from '@/features/content/CreativePulseSection'
+import type { LibraryQuery } from '@/features/content/api'
+import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
 /**
  * The six paid platforms CampaignsHub unifies — the dashboard platform filter.
@@ -41,91 +50,193 @@ import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
  */
 export const PLATFORM_KEYS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
 
-/*
- * DASH-010-D: campaign objectives (keys match the CampaignObjective enum) for the filter and KPIs.
- *
- * The labels come from the shared bilingual vocabulary (APP-100). They used to be Arabic string
- * literals here, which is why switching the product to English flipped `dir` to `ltr` and left the
- * whole dashboard in Arabic — an interface that changes direction while its content does not reads
- * as broken rather than as unfinished.
- */
-const objectives = (ar: boolean) => OBJECTIVE_KEYS.map((key) => ({ key, label: objectiveLabel(key, ar) }))
-
 /**
- * The KPI set shown for the selected objective — the RIGHT metrics per objective (never ROAS for everything).
- * "all" (mixed objectives) shows a correct shared set. Values come from the expanded, normalized summary.
+ * The objectives this page has a layout for.
+ *
+ * Deliberately the six with a `OBJECTIVE_LAYOUTS` entry rather than all fourteen enum cases: an
+ * objective with no layout falls through to the mixed operational set, which would put four generic
+ * cards under a heading naming one specific objective — the reader would reasonably conclude those
+ * four ARE that objective's metrics.
  */
-function objectiveKpis(objective: string, cur: MetricTotals | undefined, activeCount: number, ar: boolean): OverviewKpi[] {
-  const m = (key: string) => metricLabel(key, ar)
-  const active: OverviewKpi = { key: 'active', label: m('active'), value: num(activeCount) }
-  const spend: OverviewKpi = { key: 'spend', label: m('spend'), value: money(cur?.spend) }
-  switch (objective) {
-    case 'awareness':
-      return [{ key: 'reach', label: m('reach'), value: num(cur?.reach) }, { key: 'impr', label: m('impressions'), value: num(cur?.impressions) }, { key: 'freq', label: m('frequency'), value: ratio(cur?.frequency ?? null) }, { key: 'cpm', label: 'CPM', value: money(cur?.cpm) }, { key: 'vv', label: m('video_views'), value: num(cur?.video_views) }, spend]
-    case 'traffic':
-      return [{ key: 'clicks', label: m('clicks'), value: num(cur?.clicks) }, { key: 'lpv', label: m('landing_page_views'), value: num(cur?.landing_page_views) }, { key: 'ctr', label: 'CTR', value: percent(cur?.ctr, 2) }, { key: 'cpc', label: 'CPC', value: money(cur?.cpc) }, spend, active]
-    case 'leads':
-      return [{ key: 'leads', label: m('leads'), value: num(cur?.leads) }, { key: 'ql', label: m('qualified_leads'), value: num(cur?.qualified_leads) }, { key: 'cpl', label: 'CPL', value: money(cur?.cpl) }, { key: 'cvr', label: m('conversion_rate'), value: percent(cur?.conversion_rate, 2) }, spend, active]
-    case 'sales':
-      return [{ key: 'purch', label: m('purchases'), value: num(cur?.purchases) }, { key: 'rev', label: m('revenue'), value: money(cur?.revenue) }, { key: 'cpa', label: m('cost_per_result'), value: money(cur?.cpa) }, { key: 'roas', label: 'ROAS', value: ratio(cur?.roas ?? null), tone: 'good' }, { key: 'aov', label: m('aov'), value: money(cur?.aov) }, spend]
-    case 'app_installs':
-      return [{ key: 'inst', label: m('installs'), value: num(cur?.installs) }, { key: 'cpi', label: 'CPI', value: money(cur?.cpi) }, { key: 'reg', label: m('registrations'), value: num(cur?.registrations) }, { key: 'iae', label: m('in_app_events'), value: num(cur?.in_app_events) }, spend, active]
-    case 'engagement':
-      return [{ key: 'eng', label: m('engagements'), value: num(cur?.engagements) }, { key: 'er', label: m('engagement_rate'), value: percent(cur?.engagement_rate, 2) }, { key: 'cpe', label: 'CPE', value: money(cur?.cpe) }, { key: 'vv', label: m('video_views'), value: num(cur?.video_views) }, spend, active]
-    default:
-      // "all"/mixed objectives → operational, objective-NEUTRAL metrics only. NEVER a blended ROAS/CPA/CPL
-      // across incompatible objectives (that would be misleading — different objectives, different success).
-      return [{ key: 'spend', label: m('spend_total'), value: money(cur?.spend), hint: dash('totalSpendHint', ar) }, { key: 'campaigns', label: m('campaigns'), value: num(activeCount) }, { key: 'impr', label: m('impressions'), value: num(cur?.impressions) }, { key: 'clicks', label: m('clicks'), value: num(cur?.clicks) }]
-  }
-}
-import { useProject } from '@/stores/project'
-import { CreativePulseSection } from '@/features/content/CreativePulseSection'
-import type { LibraryQuery } from '@/features/content/api'
-import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
+const OBJECTIVE_CHOICES = ['awareness', 'traffic', 'leads', 'sales', 'app_installs', 'engagement']
 
 const axis = { stroke: 'var(--text-muted)', fontSize: 12 }
 
+const COPY = {
+  ar: {
+    title: 'لوحة التحكم',
+    purpose: 'كل حملاتك الإعلانية المدفوعة عبر المنصات في مكان واحد — الإنفاق والنتائج والمحتوى، من مصدر بيانات واحد.',
+    period: 'الفترة',
+    client: 'العميل',
+    project: 'المشروع',
+    platform: 'المنصة',
+    campaign: 'الحملة',
+    path: 'المسار التسويقي',
+    objective: 'الهدف',
+    allClients: 'كل العملاء',
+    allPaths: 'كل المسارات',
+    allObjectives: 'كل الأهداف',
+    noProject: 'لم يُختر مشروع',
+    days7: '7 أيام',
+    days30: '30 يوم',
+    days90: '90 يوم',
+    previous: (n: number) => `الـ${n} يومًا السابقة`,
+    mixedNote: 'أهداف مختلطة — تُعرض المؤشرات التشغيلية المشتركة فقط، بلا تكلفة نتيجة أو عائد مُجمَّع.',
+    campaigns: 'الحملات',
+    analytics: 'التحليلات',
+    savedViews: 'العروض المحفوظة',
+    trend: 'الإنفاق مقابل الإيرادات',
+    trendSub: 'الاتجاه اليومي خلال الفترة',
+    funnel: 'قمع التحويل',
+    funnelSub: 'من الظهور إلى الشراء',
+    unreported: 'لم ترسل المنصة هذه المرحلة',
+    store: 'المتجر المرتبط',
+    storeSub: 'من سجل التاجر نفسه — لا من بكسل المنصات.',
+    storeLink: 'الفانل والمتجر',
+    storeRevenue: 'إيرادات المتجر',
+    orders: 'الطلبات',
+    aov: 'متوسط قيمة الطلب',
+    roas: 'العائد على الإنفاق',
+  },
+  en: {
+    title: 'Dashboard',
+    purpose: 'Every paid campaign you run, across every platform, in one place — spend, results and creative from a single source.',
+    period: 'Period',
+    client: 'Client',
+    project: 'Project',
+    platform: 'Platform',
+    campaign: 'Campaign',
+    path: 'Marketing path',
+    objective: 'Objective',
+    allClients: 'All clients',
+    allPaths: 'All paths',
+    allObjectives: 'All objectives',
+    noProject: 'No project selected',
+    days7: '7 days',
+    days30: '30 days',
+    days90: '90 days',
+    previous: (n: number) => `the previous ${n} days`,
+    mixedNote: 'Mixed objectives — shared operational figures only, with no blended cost per result or return.',
+    campaigns: 'Campaigns',
+    analytics: 'Analytics',
+    savedViews: 'Saved views',
+    trend: 'Spend vs revenue',
+    trendSub: 'Day by day over the period',
+    funnel: 'Conversion funnel',
+    funnelSub: 'From impression to purchase',
+    unreported: 'This stage was never reported',
+    store: 'Connected store',
+    storeSub: 'From the merchant’s own ledger — not the platforms’ pixel.',
+    storeLink: 'Funnel & store',
+    storeRevenue: 'Store revenue',
+    orders: 'Orders',
+    aov: 'Average order value',
+    roas: 'ROAS',
+  },
+}
+
+/**
+ * `/app/dashboard` — UX-DASH-001.
+ *
+ * ## The filters are on the page again, and one of them is new
+ *
+ * This page opened with a `Customise` button: the objective, the platforms and the saved views all
+ * lived in a dialog (SIMPLIFY-001). The reasoning was sound about the symptom — three bands of
+ * chips above the fold is a settings screen — and wrong about the cure. Period, client, project,
+ * platform, campaign, path and objective are not configuration; they are the questions this product
+ * is FOR, and hiding them made the system look thinner than it is. They are inline now, in one
+ * compact bar, with the applied ones as removable chips. Saved views stay behind `More filters`,
+ * which is what that control is for: the rare thing, not the daily one.
+ *
+ * The campaign filter did not exist at all. It is backend-supported (`?campaign=`) rather than
+ * applied to rows already fetched, so the KPI row, the chart, the funnel and the pacing table all
+ * narrow together — see the note in `MetricsController::campaignFilter()`.
+ *
+ * ## Client and project are one control each, and both are real
+ *
+ * The project was chosen in the sidebar and nowhere else, so a dashboard about one project never
+ * said whose it was. Client narrows the project list and project sets the same store the sidebar
+ * writes — no second source of truth, and switching client moves to that client's first project
+ * rather than leaving the page showing another client's numbers under a new heading.
+ *
+ * ## The KPI row is now objective-aware, and says when it has nothing
+ *
+ * `dashboardMetrics` picks four to six cards for the money this campaign IS (§14.6) and folds the
+ * rest one visible click away. `summary.reported` is what lets a card say «لم ترسله المنصة»
+ * instead of the coalesced zero the sums produce.
+ */
 export function DashboardPage() {
-  // The reader's language, threaded through every label on the page (APP-100). Without it the
-  // dashboard rendered Arabic under `dir="ltr"` — the direction changed and the content did not.
   const ar = useUi((s) => s.locale) === 'ar'
-  const { currentProjectId } = useProject()
+  const t = COPY[ar ? 'ar' : 'en']
+  const { currentProjectId, setCurrentProjectId } = useProject()
+
   const [days, setDays] = useState(30)
   const range = useLastNDaysRange(days)
   const [providers, setProviders] = useState<string[]>([])
-  // Default objective = Awareness (never "all" with blended KPIs); a saved default view can override it.
-  const [objective, setObjective] = useState('awareness')
-  // The filters live in a dialog now; the page leads with answers. See the note by the button.
-  const [customising, setCustomising] = useState(false)
-  const filters = useMemo(() => ({ provider: providers, objective: objective === 'all' ? [] : [objective] }), [providers, objective])
+  const [campaignIds, setCampaignIds] = useState<string[]>([])
+  const [path, setPath] = useState('all')
+  const [objective, setObjective] = useState('all')
+  const [clientId, setClientId] = useState('all')
+
+  // The workspace's own shelves — real records, so «Client» and «Project» are choices rather than
+  // decoration. Failure is silent by design here: a filter that cannot load must not take the
+  // dashboard down with it, and an axis with no options renders nothing at all.
+  const projectsQuery = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false), retry: false })
+  const clientsQuery = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces, retry: false })
+  const allProjects = projectsQuery.data ?? []
+  const clients = clientsQuery.data ?? []
+  const projects = clientId === 'all' ? allProjects : allProjects.filter((p) => p.client_workspace_id === clientId)
+
+  /*
+   * Choosing a client moves to one of that client's projects.
+   *
+   * Without this the heading says «Nakheel» while every figure below it is still the previous
+   * client's — the single most dangerous state a multi-client dashboard can be in, because nothing
+   * on the screen looks wrong.
+   */
+  useEffect(() => {
+    if (clientId === 'all' || projects.length === 0) return
+    if (!projects.some((p) => p.id === currentProjectId)) setCurrentProjectId(projects[0].id)
+  }, [clientId, projects, currentProjectId, setCurrentProjectId])
 
   /**
-   * The same selection, in the creative library's own vocabulary (§15.11).
+   * The objective filter actually sent.
    *
-   * Two translations happen here and both matter. The platform keys are canonicalised, because this
-   * page filters metrics with `google_ads` while `external_creatives.provider` stores `google` —
-   * passing the page's spelling through would have returned an empty Google section on an account
-   * that runs Google. And the project travels as a FILTER rather than in the path, so the same value
-   * survives into the drill-down links; a section pinned by URL would link into a library that was
-   * not pinned at all.
+   * A path is not a server axis — it is this path's objectives, on the objective filter the metrics
+   * API already supports (see `objectivesForPath`). So picking «التحويل والمبيعات» narrows every
+   * figure on the page exactly as picking its objectives one by one would.
    */
+  const objectiveFilter = useMemo(() => {
+    if (objective !== 'all') return [objective]
+
+    return path === 'all' ? [] : objectivesForPath(path)
+  }, [objective, path])
+
+  const filters = useMemo(
+    () => ({ provider: providers, objective: objectiveFilter, campaign: campaignIds }),
+    [providers, objectiveFilter, campaignIds],
+  )
+
+  /** The same selection in the creative library's vocabulary (§15.11) — canonical platform keys. */
   const creativeFilters: LibraryQuery = useMemo(
     () => ({
       from: range.from,
       to: range.to,
       providers: providers.length > 0 ? providers.map(canonicalPlatform) : undefined,
-      objectives: objective === 'all' ? undefined : [objective],
+      objectives: objectiveFilter.length > 0 ? objectiveFilter : undefined,
+      campaign_ids: campaignIds.length > 0 ? campaignIds : undefined,
       project_ids: currentProjectId ? [currentProjectId] : undefined,
     }),
-    [range.from, range.to, providers, objective, currentProjectId],
+    [range.from, range.to, providers, objectiveFilter, campaignIds, currentProjectId],
   )
-  const toggleProvider = (key: string) =>
-    setProviders((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]))
 
-  // Saved views (DASH-010-E-FE): apply restores objective + platforms + date range; a default applies once on load.
+  // Saved views (DASH-010-E-FE): apply restores objective + platforms + date range.
   const savedViews = useSavedViews()
   const applyView = (v: SavedView) => {
-    if (v.filters?.objective) setObjective(v.filters.objective)
+    if (v.filters?.objective) {
+      setObjective(v.filters.objective)
+      setPath(v.filters.objective === 'all' ? 'all' : pathOfObjective(v.filters.objective))
+    }
     if (v.filters?.provider) setProviders(v.filters.provider)
     if (v.date_range?.days) setDays(v.date_range.days)
   }
@@ -148,17 +259,24 @@ export function DashboardPage() {
   const budget = useBudget(currentProjectId, range, filters)
   const freshness = useFreshness(currentProjectId, range, filters)
 
-  const cur = summary.data?.current
-  // Null when the project has no store at all — the strip is absent rather than empty, because an
-  // empty store panel reads as a store that sold nothing.
+  /*
+   * The campaign OPTIONS come from an unnarrowed request.
+   *
+   * Reading them off `campaigns` would collapse the list to the one campaign already chosen, and a
+   * multi-select you cannot add a second value to is a single-select that lies about it.
+   */
+  const campaignOptions = useCampaigns(currentProjectId, range, useMemo(
+    () => ({ provider: providers, objective: objectiveFilter }),
+    [providers, objectiveFilter],
+  ))
+
   const commerce = summary.data?.commerce ?? null
   const points = series.data ?? []
+  const metrics = useMemo(() => dashboardMetrics(objective, path, summary.data, ar), [objective, path, summary.data, ar])
 
   const alerts = useMemo(() => {
     const out: { kind: 'sync' | 'budget' | 'performance'; text: string }[] = []
     freshness.data?.forEach((f) => {
-      // The store's own name, when the failing source is a shop: «فشل مزامنة salla» names a platform
-      // where the operator connected «متجر العميل», and they have to guess which shop is meant.
       const who = f.name ?? providerName(f.provider)
       if (f.last_sync_status === 'failed') out.push({ kind: 'sync', text: ar ? `فشل مزامنة ${who} — يتطلب إعادة ربط` : `${who} sync failed — needs reconnecting` })
     })
@@ -173,14 +291,18 @@ export function DashboardPage() {
 
   const lastSync = freshness.data?.map((f) => f.last_sync_at).filter(Boolean).sort().at(-1)
 
-  // Map the real analytics data to the shared command-center view-model — the SAME component the marketing
-  // homepage preview uses (there fed labeled demo data). Data is currently seeded/demo → dataStatus 'demo'.
+  /*
+   * The shared command-centre view model — comparisons, top campaigns, attention and alerts.
+   *
+   * `kpis` is empty on purpose: the objective-aware `MetricStrip` above owns the KPI row now, and
+   * two rows of headline figures on one page is two answers to the same question.
+   */
   const vm: OverviewVM = useMemo(
     () => ({
       currency: 'SAR',
       dataStatus: 'demo',
       lastSyncAt: lastSync ?? null,
-      kpis: objectiveKpis(objective, cur, campaigns.data?.length ?? 0, ar),
+      kpis: [],
       platforms: (platforms.data ?? []).map((p) => ({
         key: p.provider,
         name: p.provider,
@@ -204,229 +326,198 @@ export function DashboardPage() {
         .map((c) => ({ id: String(c.campaign_id), name: c.campaign_name ?? '—', reason: dash('spendNoConversions', ar) })),
       alerts: alerts.map((a) => ({ severity: a.kind === 'budget' ? ('medium' as const) : ('high' as const), text: a.text })),
     }),
-    // `ar` belongs here: the KPI labels inside are language-dependent, and leaving it out left
-    // them frozen in whichever language the page first rendered in.
-    [cur, campaigns.data, platforms.data, alerts, lastSync, objective, ar],
+    [campaigns.data, platforms.data, alerts, lastSync, ar],
   )
 
-  const objLabel = objectiveLabel(objective, ar)
-  const pageTitle = objective === 'all'
-    ? dash('operationalView', ar)
-    : `${dash('objectiveViewPrefix', ar)} ${objLabel}`
+  /** What is narrowing the page, each chip removing exactly its own value. */
+  const applied: AppliedFilter[] = useMemo(() => {
+    const out: AppliedFilter[] = []
+
+    if (clientId !== 'all') {
+      out.push({
+        key: `client:${clientId}`,
+        axis: t.client,
+        label: clients.find((c) => c.id === clientId)?.name ?? clientId,
+        onRemove: () => setClientId('all'),
+      })
+    }
+    providers.forEach((p) => {
+      out.push({
+        key: `provider:${p}`,
+        axis: t.platform,
+        label: providerName(p),
+        onRemove: () => setProviders((prev) => prev.filter((x) => x !== p)),
+      })
+    })
+    campaignIds.forEach((id) => {
+      out.push({
+        key: `campaign:${id}`,
+        axis: t.campaign,
+        label: campaignOptions.data?.find((c) => String(c.campaign_id) === id)?.campaign_name ?? id,
+        onRemove: () => setCampaignIds((prev) => prev.filter((x) => x !== id)),
+      })
+    })
+    if (path !== 'all') {
+      out.push({ key: `path:${path}`, axis: t.path, label: marketingPathLabel(path, ar ? 'ar' : 'en'), onRemove: () => setPath('all') })
+    }
+    if (objective !== 'all') {
+      out.push({
+        key: `objective:${objective}`,
+        axis: t.objective,
+        label: objectiveLabel(objective, ar ? 'ar' : 'en'),
+        onRemove: () => setObjective('all'),
+      })
+    }
+
+    return out
+  }, [clientId, clients, providers, campaignIds, campaignOptions.data, path, objective, t, ar])
+
+  const resetFilters = () => {
+    setClientId('all')
+    setProviders([])
+    setCampaignIds([])
+    setPath('all')
+    setObjective('all')
+  }
+
+  // The objectives that belong to the chosen path — so the two controls cannot contradict.
+  const objectiveChoices = OBJECTIVE_CHOICES.filter((key) => path === 'all' || pathOfObjective(key) === path)
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{pageTitle}</h1>
-            <DemoBadge />
-          </div>
-          <p className="mt-1 text-sm text-text-secondary">{ar ? 'مركز قيادة موحّد لكل حملاتك الإعلانية المدفوعة عبر المنصات.' : 'One command centre for every paid campaign you run, across every platform.'}</p>
-        </div>
-        {/*
-          `flex-wrap` is load-bearing. Adding the Customise button made three controls sit in one
-          non-wrapping row; at 375px in ENGLISH — where «Customise» and «Campaigns» are wider than
-          their Arabic labels — the header pushed the page sideways, and content reachable only by
-          dragging is content a phone user will not know is there. Caught by the responsive sweep.
-        */}
-        <div className="flex flex-wrap items-center gap-2">
-          <RangeTabs value={days} onChange={setDays} />
-          {/*
-            One control, not three rows of them.
-            The page used to open with a saved-views bar, an objective row and a platform row — three
-            bands of configuration between the reader and any answer. Somebody who has never used this
-            product met the settings before the numbers. They are all still here, unchanged and
-            server-backed; they are now behind one button, and the summary beside it says what is
-            currently applied so nothing is hidden, only folded.
-          */}
-          <button
-            type="button"
-            data-testid="dashboard-customise"
-            onClick={() => setCustomising(true)}
-            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border-strong bg-surface px-3 text-sm font-semibold text-text-primary hover:bg-surface-hover"
-          >
-            <SlidersHorizontal size={16} /> {ar ? 'تخصيص العرض' : 'Customise'}
-          </button>
-          <Link
-            to="/app/campaigns"
-            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border-strong bg-surface px-3 text-sm font-semibold text-text-primary hover:bg-surface-hover"
-          >
-            {ar ? 'الحملات' : 'Campaigns'} <ArrowUpRight size={16} />
-          </Link>
-        </div>
-      </div>
-
-      {/* What is currently applied, in words — so folding the controls hides no state. */}
-      <p data-testid="dashboard-applied" className="-mt-2 text-[13px] text-text-secondary">
-        {ar ? 'المعروض: ' : 'Showing: '}
-        <span className="font-semibold text-text-primary">{objectives(ar).find((o) => o.key === objective)?.label ?? objective}</span>
-        {' · '}
-        {providers.length === 0
-          ? (ar ? 'كل المنصات' : 'every platform')
-          : providers.map((k) => providerName(k)).join('، ')}
-      </p>
-
-      <Modal
-        open={customising}
-        onClose={() => setCustomising(false)}
-        title={ar ? 'تخصيص العرض' : 'Customise this view'}
-        size="lg"
-      >
-        <div className="grid gap-5">
-      {/* Saved views — server-persisted (DASH-010-E); save/apply/rename/default/delete the current filters. */}
-          <SavedViewsBar current={{ objective, providers, days }} onApply={applyView} />
-
-          {/* Objective filter — switches the KPI set AND filters all tiles by campaign objective (backend-supported). */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-text-muted">{ar ? 'الهدف:' : 'Objective:'}</span>
-            {objectives(ar).map((o) => {
-              const on = objective === o.key
-              return (
-                <button
-                  key={o.key}
-                  type="button"
-                  onClick={() => setObjective(o.key)}
-                  aria-pressed={on}
-                  className={`rounded-full border px-2.5 py-1 text-sm font-semibold transition-colors ${on ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-text-secondary hover:bg-surface-hover'}`}
-                >
-                  {o.label}
-                </button>
-              )
-            })}
-          </div>
-
-          {objective === 'all' && (
-            <div className="rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-[13px] text-text-secondary">
-              {ar ? 'تعرض هذه النظرة مؤشرات تشغيلية مشتركة فقط؛ اختر هدفًا محددًا لعرض مؤشرات الأداء المتخصصة.' : 'This view shows shared operational figures only. Pick one objective to see the metrics that belong to it.'}
-            </div>
-          )}
-
-          {/* Platform filter — backend-supported (?provider=…); affects every KPI, chart, table below. */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-text-muted">{ar ? 'المنصات:' : 'Platforms:'}</span>
-            {PLATFORM_KEYS.map((key) => {
-              const on = providers.includes(key)
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => toggleProvider(key)}
-                  aria-pressed={on}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm font-semibold transition-colors ${on ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-text-secondary hover:bg-surface-hover'}`}
-                >
-                  <span className="h-2 w-2 rounded-full" style={{ background: providerColor(key) }} />
-                  {providerName(key)}
-                </button>
-              )
-            })}
-            {providers.length > 0 && (
-              <button type="button" onClick={() => setProviders([])} className="text-sm font-semibold text-text-muted underline underline-offset-2 hover:text-text-primary">
-                {ar ? 'إعادة ضبط' : 'Reset'}
-              </button>
-            )}
-          </div>
-
-        </div>
-      </Modal>
-
-      {/* Unified command center (shared with the marketing preview) */}
-      <UnifiedCampaignOverview
-        vm={vm}
-        lang={ar ? 'ar' : 'en'}
-        headerRight={
-          <Link to="/app/analytics" className="inline-flex items-center gap-1 font-semibold text-text-secondary hover:text-text-primary">
-            {ar ? 'التحليلات' : 'Analytics'} <ArrowUpRight size={14} />
-          </Link>
+    <div className="space-y-5">
+      <PageIntro
+        testid="dashboard-intro"
+        title={t.title}
+        purpose={t.purpose}
+        badges={<DemoBadge />}
+        meta={<DataFreshness lastSyncAt={lastSync} ar={ar} />}
+        actions={
+          <>
+            <Link
+              to="/app/campaigns"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border-strong bg-surface px-3 text-sm font-semibold text-text-primary hover:bg-surface-hover"
+            >
+              {t.campaigns} <ArrowUpRight size={16} aria-hidden />
+            </Link>
+            <Link
+              to="/app/analytics"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border-strong bg-surface px-3 text-sm font-semibold text-text-primary hover:bg-surface-hover"
+            >
+              {t.analytics} <ArrowUpRight size={16} aria-hidden />
+            </Link>
+          </>
         }
       />
 
-      {/*
-        UNIFIED-001 — the connected store, on the dashboard, from the funnel's own service.
-
-        The KPI cards above carry `revenue` as the ad platforms report it: a pixel's estimate of what
-        it believes its clicks caused. The shop's ledger is a different and better number, and the
-        product holds both. Showing only the first here while the analytics tab showed the second gave
-        two answers to «كم بعنا؟» with nothing to say which was which — so this strip is labelled as
-        the store's, sits beside the platforms' figures rather than replacing them, and links through
-        to the section that explains where each number came from.
-      */}
-      {commerce && (
-        <div data-testid="dashboard-store" className="rounded-2xl border border-border bg-surface p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-lg font-bold text-text-primary">{ar ? 'المتجر المرتبط' : 'Connected store'}</h2>
-              <p className="text-[13px] text-text-secondary">
-                {ar ? 'من سجل التاجر نفسه — لا من بكسل المنصات.' : 'From the merchant’s own ledger — not the platforms’ pixel.'}
-              </p>
-            </div>
-            <Link to="/app/analytics" className="inline-flex items-center gap-1 text-sm font-semibold text-text-secondary hover:text-text-primary">
-              {ar ? 'الفانل والمتجر' : 'Funnel & store'} <ArrowUpRight size={14} />
-            </Link>
+      <FilterBar
+        id="dashboard"
+        ar={ar}
+        applied={applied}
+        onReset={resetFilters}
+        advancedActive={savedViews.data?.some((v) => v.is_default) ?? false}
+        advanced={
+          <div className="grid gap-2">
+            <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{t.savedViews}</span>
+            <SavedViewsBar current={{ objective, providers, days }} onApply={applyView} />
           </div>
+        }
+      >
+        <FilterChips
+          label={t.period}
+          value={String(days)}
+          testid="dashboard-period"
+          options={[
+            { value: '7', label: t.days7 },
+            { value: '30', label: t.days30 },
+            { value: '90', label: t.days90 },
+          ]}
+          onChange={(v) => setDays(Number(v))}
+        />
 
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { key: 'revenue', label: ar ? 'إيرادات المتجر' : 'Store revenue', value: commerce.revenue == null ? '—' : money(commerce.revenue) },
-              { key: 'orders', label: ar ? 'الطلبات' : 'Orders', value: num(commerce.orders) },
-              { key: 'aov', label: ar ? 'متوسط قيمة الطلب' : 'Average order value', value: commerce.aov == null ? '—' : money(commerce.aov) },
-              { key: 'roas', label: ar ? 'العائد على الإنفاق' : 'ROAS', value: commerce.roas == null ? '—' : ratio(commerce.roas, '×') },
-            ].map((k) => (
-              <div key={k.key} data-testid={`store-kpi-${k.key}`} className="rounded-xl border border-border bg-surface-secondary px-3 py-2">
-                <p className="text-[13px] text-text-secondary">{k.label}</p>
-                <p className="tnum mt-0.5 text-xl font-bold text-text-primary">{k.value}</p>
-              </div>
-            ))}
-          </div>
+        {clients.length > 1 && (
+          <FilterSelect
+            label={t.client}
+            value={clientId}
+            testid="dashboard-client"
+            options={[{ value: 'all', label: t.allClients }, ...clients.map((c) => ({ value: c.id, label: c.name }))]}
+            onChange={setClientId}
+          />
+        )}
 
-          {/*
-            When the rest of the page is narrowed and this block is not, the block says so.
+        {projects.length > 0 && (
+          <FilterSelect
+            label={t.project}
+            value={currentProjectId ?? ''}
+            testid="dashboard-project"
+            options={[
+              ...(currentProjectId ? [] : [{ value: '', label: t.noProject }]),
+              ...projects.map((p) => ({ value: p.id, label: p.name })),
+            ]}
+            onChange={setCurrentProjectId}
+          />
+        )}
 
-            An order does not belong to a platform the way a click does — a large share of them carry
-            no attribution at all — so these figures cover the whole shop whatever the filter above
-            says. Printing them silently under a heading the reader has just filtered to «Meta» is the
-            misreading this line exists to close.
-          */}
-          {commerce.filtered_view && (
-            <p data-testid="dashboard-store-unfiltered" className="mt-3 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-[13px] text-text-secondary">
-              {ar ? commerce.unfiltered_note_ar : commerce.unfiltered_note_en}
-            </p>
-          )}
+        <FilterMulti
+          label={t.platform}
+          ar={ar}
+          values={providers}
+          testid="dashboard-platform"
+          options={PLATFORM_KEYS.map((key) => ({ value: key, label: providerName(key) }))}
+          onChange={setProviders}
+        />
 
-          {/*
-            Untraceable orders are shown, not folded in. A high share of them is a link-tagging
-            problem worth more than any figure on this strip, and a dashboard that spread those
-            orders across the campaigns would hide exactly that.
-          */}
-          {commerce.unattributed_orders > 0 && (
-            <p data-testid="dashboard-store-unattributed" className="mt-3 text-[13px] text-text-secondary">
-              {ar
-                ? `${num(commerce.unattributed_orders)} من ${num(commerce.orders)} طلبًا وصلت بلا إسناد لأي حملة.`
-                : `${num(commerce.unattributed_orders)} of ${num(commerce.orders)} orders arrived with no campaign attribution.`}
-            </p>
-          )}
-        </div>
-      )}
+        <FilterMulti
+          label={t.campaign}
+          ar={ar}
+          values={campaignIds}
+          testid="dashboard-campaign"
+          options={(campaignOptions.data ?? []).map((c) => ({
+            value: String(c.campaign_id),
+            label: c.campaign_name ?? String(c.campaign_id),
+          }))}
+          onChange={setCampaignIds}
+        />
 
-      {/*
-        §15.11 — the creative section, on the dashboard's own filters.
+        <FilterSelect
+          label={t.path}
+          value={path}
+          testid="dashboard-path"
+          options={[
+            { value: 'all', label: t.allPaths },
+            ...MARKETING_PATH_KEYS.map((key) => ({ value: key, label: marketingPathLabel(key, ar ? 'ar' : 'en') })),
+          ]}
+          onChange={(v) => {
+            setPath(v)
+            // An objective outside the new path would make the two controls disagree, and the
+            // objective is the narrower of the two — so it yields.
+            if (v !== 'all' && objective !== 'all' && pathOfObjective(objective) !== v) setObjective('all')
+          }}
+        />
 
-        It is handed this page's window, platform selection and objective, and sends them to the
-        endpoint the creative library reads. So it narrows when the page narrows, and every card
-        links into the library carrying the same selection it was computed under. It renders the two
-        axes this page does not own — client and creative type — and nothing else, so there is one
-        control per filter rather than two that can disagree.
-      */}
-      <CreativePulseSection
-        libraryPath="/app/content"
-        axes={['clients', 'kinds']}
-        filters={creativeFilters}
+        <FilterSelect
+          label={t.objective}
+          value={objective}
+          testid="dashboard-objective"
+          options={[
+            { value: 'all', label: t.allObjectives },
+            ...objectiveChoices.map((key) => ({ value: key, label: objectiveLabel(key, ar ? 'ar' : 'en') })),
+          ]}
+          onChange={setObjective}
+        />
+      </FilterBar>
+
+      <MetricStrip
+        id="dashboard"
+        ar={ar}
+        primary={metrics.primary}
+        secondary={metrics.secondary}
+        comparisonLabel={t.previous(days)}
+        note={objective === 'all' && path === 'all' ? t.mixedNote : undefined}
       />
 
-      {/* Deeper detail: daily trend + conversion funnel */}
+      {/* The analysis: what happened day by day, and where people stopped. */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <Panel title={ar ? 'الإنفاق مقابل الإيرادات' : 'Spend vs revenue'} description={ar ? 'الاتجاه اليومي خلال الفترة' : 'Day by day over the period'} className="lg:col-span-2" loading={series.isLoading} error={series.isError} empty={!series.isLoading && points.length === 0}>
+        <Panel title={t.trend} description={t.trendSub} className="lg:col-span-2" loading={series.isLoading} error={series.isError} empty={!series.isLoading && points.length === 0}>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={points} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
@@ -452,42 +543,130 @@ export function DashboardPage() {
           </div>
         </Panel>
 
-        <Panel title={ar ? 'قمع التحويل' : 'Conversion funnel'} description={ar ? 'من الظهور إلى الشراء' : 'From impression to purchase'} loading={funnel.isLoading} error={funnel.isError} empty={!funnel.isLoading && (funnel.data?.length ?? 0) === 0}>
+        <Panel title={t.funnel} description={t.funnelSub} loading={funnel.isLoading} error={funnel.isError} empty={!funnel.isLoading && (funnel.data?.length ?? 0) === 0}>
           {/*
-            * FUNNEL-NULL-001 — a fifth surface drawing this funnel, found by the compiler when
-            * `count` became nullable rather than by reading. It scaled every bar to `rows[0].count`
-            * and `null / top` is 0 in JavaScript, so a stage the platform never sent drew the
-            * minimum-width bar with «0» inside it — on the dashboard, above the fold.
-            */}
+            FUNNEL-NULL-001 — a stage the platform never sent draws no bar at all. It used to scale
+            every bar to `rows[0].count`, and `null / top` is 0 in JavaScript, so an unreported stage
+            drew the minimum-width bar with «0» inside it, on the dashboard, above the fold.
+          */}
           <div className="space-y-2">
             {(() => {
               const rows = funnel.data ?? []
               const measured = rows.map((s) => s.count).filter((c): c is number => c !== null)
               const top = measured.length > 0 ? Math.max(...measured) : 1
-              return rows.map((s, i) => (
+              return rows.map((s, i) => {
+                const share = s.count === null ? 0 : (s.count / top) * 100
+                /*
+                 * The figure moves OUT of the bar once the bar is too small to hold it.
+                 *
+                 * A funnel narrows by design, so the later stages are always the thin ones — and
+                 * `overflow-hidden` on the track was clipping «2.9K» down to «K» on exactly the
+                 * stages a reader is most interested in. Caught by looking at the page, not by a
+                 * test: every assertion about this funnel passed while it was unreadable.
+                 */
+                const inside = share >= 18
+
+                return (
                 <div key={s.stage} className="flex items-center gap-3">
-                  <span className="w-28 shrink-0 text-sm text-text-secondary">{s.label}</span>
+                  <span className="w-28 shrink-0 text-sm text-text-secondary">{funnelStageLabel(s.stage, s.label, ar)}</span>
                   {s.count !== null ? (
-                    <div className="h-8 flex-1 overflow-hidden rounded-lg bg-surface-secondary">
-                      <div
-                        className="flex h-full items-center justify-end rounded-lg px-2 text-sm font-semibold text-white"
-                        style={{ width: `${Math.max(6, (s.count / top) * 100)}%`, background: `color-mix(in oklab, ${SERIES.spend} ${100 - i * 12}%, var(--brand-700))` }}
-                      >
-                        <span className="tnum">{compact(s.count)}</span>
+                    <div className="flex h-8 flex-1 items-center gap-2">
+                      <div className="h-full flex-1 overflow-hidden rounded-lg bg-surface-secondary">
+                        <div
+                          className="flex h-full items-center justify-end rounded-lg px-2 text-sm font-semibold text-white"
+                          style={{ width: `${Math.max(4, share)}%`, background: `color-mix(in oklab, ${SERIES.spend} ${100 - i * 12}%, var(--brand-700))` }}
+                        >
+                          {inside && <span className="tnum">{compact(s.count)}</span>}
+                        </div>
                       </div>
+                      {!inside && <span className="tnum shrink-0 text-sm font-semibold text-text-primary">{compact(s.count)}</span>}
                     </div>
                   ) : (
                     <div className="flex h-8 flex-1 items-center rounded-lg border border-dashed border-border px-2 text-xs text-text-muted">
-                      {ar ? 'لم ترسل المنصة هذه المرحلة' : 'This stage was never reported'}
+                      {t.unreported}
                     </div>
                   )}
                   <span className="tnum w-12 text-end text-xs text-text-muted">{s.step_rate === null ? '' : percent(s.step_rate, 0)}</span>
                 </div>
-              ))
+                )
+              })
             })()}
           </div>
         </Panel>
       </div>
+
+      {/* The comparisons, the details and the alerts — shared with the marketing preview. */}
+      <UnifiedCampaignOverview
+        vm={vm}
+        lang={ar ? 'ar' : 'en'}
+        headerRight={
+          <Link to="/app/analytics" className="inline-flex items-center gap-1 font-semibold text-text-secondary hover:text-text-primary">
+            {t.analytics} <ArrowUpRight size={14} aria-hidden />
+          </Link>
+        }
+      />
+
+      {/*
+        UNIFIED-001 — the connected store, from the funnel's own service.
+
+        The KPI row above carries `revenue` as the ad platforms report it: a pixel's estimate of what
+        it believes its clicks caused. The shop's ledger is a different and better number, and the
+        product holds both. This strip is labelled as the store's, sits beside the platforms' figures
+        rather than replacing them, and links to the section that explains where each came from.
+      */}
+      {commerce && (
+        <div data-testid="dashboard-store" className="rounded-2xl border border-border bg-surface p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-bold text-text-primary">{t.store}</h2>
+              <p className="text-[13px] text-text-secondary">{t.storeSub}</p>
+            </div>
+            <Link to="/app/analytics" className="inline-flex items-center gap-1 text-sm font-semibold text-text-secondary hover:text-text-primary">
+              {t.storeLink} <ArrowUpRight size={14} aria-hidden />
+            </Link>
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { key: 'revenue', label: t.storeRevenue, value: commerce.revenue == null ? '—' : money(commerce.revenue) },
+              { key: 'orders', label: t.orders, value: num(commerce.orders) },
+              { key: 'aov', label: t.aov, value: commerce.aov == null ? '—' : money(commerce.aov) },
+              { key: 'roas', label: t.roas, value: commerce.roas == null ? '—' : ratio(commerce.roas, '×') },
+            ].map((k) => (
+              <div key={k.key} data-testid={`store-kpi-${k.key}`} className="rounded-xl border border-border bg-surface-secondary px-3 py-2">
+                <p className="text-[13px] text-text-secondary">{k.label}</p>
+                <p className="tnum mt-0.5 text-xl font-bold text-text-primary">{k.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/*
+            When the rest of the page is narrowed and this block is not, the block says so. An order
+            does not belong to a platform the way a click does — a large share carry no attribution
+            at all — so these figures cover the whole shop whatever the filter above says.
+          */}
+          {commerce.filtered_view && (
+            <p data-testid="dashboard-store-unfiltered" className="mt-3 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-[13px] text-text-secondary">
+              {ar ? commerce.unfiltered_note_ar : commerce.unfiltered_note_en}
+            </p>
+          )}
+
+          {commerce.unattributed_orders > 0 && (
+            <p data-testid="dashboard-store-unattributed" className="mt-3 text-[13px] text-text-secondary">
+              {ar
+                ? `${num(commerce.unattributed_orders)} من ${num(commerce.orders)} طلبًا وصلت بلا إسناد لأي حملة.`
+                : `${num(commerce.unattributed_orders)} of ${num(commerce.orders)} orders arrived with no campaign attribution.`}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* §15.11 — the creative section, on this page's own filters, linking into the library. */}
+      <CreativePulseSection
+        libraryPath="/app/content"
+        axes={['clients', 'kinds']}
+        filters={creativeFilters}
+      />
 
       <LivePerformanceNotice variant="compact" />
     </div>

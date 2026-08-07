@@ -139,7 +139,9 @@ describe('the dashboard store strip', () => {
 
     renderWithProviders(<DashboardPage />, { locale: 'ar' })
 
-    await screen.findByTestId('dashboard-applied')
+    // Waits on the page's own header rather than on the applied-filters row: after UX-DASH-001 that
+    // row is absent whenever nothing is narrowed, which on a freshly opened dashboard is always.
+    await screen.findByTestId('dashboard-intro')
     expect(screen.queryByTestId('dashboard-store')).toBeNull()
   })
 

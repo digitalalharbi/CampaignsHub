@@ -87,6 +87,15 @@ export interface Summary {
   current: MetricTotals
   previous: MetricTotals
   delta: Partial<Record<keyof MetricTotals, number | null>>
+  /**
+   * UX-METRICS-001 — which of `current`'s zeros are measurements.
+   *
+   * The base sums coalesce to 0, so a metric no platform reports and a metric reported as zero are
+   * the same number here. `reported[key] === false` means nothing was ever sent, and the card must
+   * say so instead of printing a zero. Base metrics only: derived ratios are computed rather than
+   * sent, and their own `null` already says «there was no denominator».
+   */
+  reported: Record<string, boolean>
   commerce: CommerceSummary | null
   conversions_basis: ConversionsBasis
 }
@@ -328,14 +337,23 @@ const base = (projectId: string) => `/projects/${projectId}/metrics`
 export interface MetricFilters {
   provider?: string[]
   objective?: string[]
+  /** UX-DASH-001 — the dashboard's campaign control. Absent means every campaign, never none. */
+  campaign?: string[]
 }
 const qf = (f?: MetricFilters) =>
   (f?.provider?.length ? `&provider=${f.provider.join(',')}` : '') +
-  (f?.objective?.length ? `&objective=${f.objective.join(',')}` : '')
+  (f?.objective?.length ? `&objective=${f.objective.join(',')}` : '') +
+  (f?.campaign?.length ? `&campaign=${f.campaign.join(',')}` : '')
 
 function useMetric<T>(key: string, projectId: string | null, range: Range, path: string, filters?: MetricFilters) {
   return useQuery({
-    queryKey: ['metrics', key, projectId, range.from, range.to, filters?.provider?.join(',') ?? '', filters?.objective?.join(',') ?? ''],
+    queryKey: [
+      'metrics', key, projectId, range.from, range.to,
+      filters?.provider?.join(',') ?? '',
+      filters?.objective?.join(',') ?? '',
+      // Part of the key, or the campaign filter would return whatever the unfiltered request cached.
+      filters?.campaign?.join(',') ?? '',
+    ],
     queryFn: () => getData<T>(`${base(projectId!)}/${path}?${q(range)}${qf(filters)}`),
     enabled: Boolean(projectId),
   })
