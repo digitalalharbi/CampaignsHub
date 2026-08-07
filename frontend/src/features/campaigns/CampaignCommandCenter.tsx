@@ -16,6 +16,22 @@ import {
 } from './metrics'
 import type { MetricTotals, PlatformRow, Range, TimePoint } from '@/features/analytics/api'
 import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, PlatformDonutChart, ProgressRing, SpendRevenueAreaChart } from '@/features/analytics/charts'
+/*
+ * PERCENT-100X-001 — `percent()` multiplies by 100. This file used to as well.
+ *
+ * Every rate in the command centre was written `percent(x * 100)`, and the helper's own body is
+ * `${(n * 100).toFixed(d)}%` — so every ratio was multiplied twice and printed a hundredfold. Live,
+ * on a real campaign: CTR **210.0%**, معدل التحويل **479.6%**, استهلاك الميزانية **3028%**, and a
+ * funnel step of **210%**. The true figures are 2.1%, 4.8%, 30% and 2.1%.
+ *
+ * These are not rounding artefacts, they are impossible statements — more clicks than impressions,
+ * a budget spent thirty times over — on the page an agency reads before it talks to its client. It
+ * survived because nothing asserted a rendered percentage and because the analytics page, which is
+ * correct (`percent(cur?.ctr, 2)`), is where anyone would have looked to check.
+ *
+ * The ratio goes in raw. If a figure ever arrives already scaled to 0–100, convert it at the source
+ * rather than reintroducing a second multiplication here.
+ */
 import { compact, money, num, percent, ratio, trend } from '@/features/analytics/format'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
@@ -53,7 +69,7 @@ function KpiCard({
         {delta != null && (
           <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold ${toneClass}`}>
             {tone === 'up' ? <TrendingUp size={11} /> : tone === 'down' ? <TrendingDown size={11} /> : null}
-            {percent(Math.abs(delta) * 100, 0)}
+            {percent(Math.abs(delta), 0)}
           </span>
         )}
       </div>
@@ -86,15 +102,15 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
       <KpiCard label="الميزانية" value={budget != null ? money(budget, cur) : '—'} />
       <KpiCard label="المصروف" value={money(spend, cur)} delta={d.spend} deltaKey="spend" spark={sparks(perf.data, 'spend')} />
-      <KpiCard label="المتبقي" value={remaining != null ? money(remaining, cur) : '—'} sub={utilization != null ? `استهلاك ${percent(utilization * 100, 0)}` : undefined} />
+      <KpiCard label="المتبقي" value={remaining != null ? money(remaining, cur) : '—'} sub={utilization != null ? `استهلاك ${percent(utilization, 0)}` : undefined} />
       <KpiCard label="النتائج" value={num(k?.conversions)} delta={d.conversions} deltaKey="conversions" spark={sparks(perf.data, 'conversions')} />
       <KpiCard label={costLabel(campaign.objective)} value={money(k?.cpa ?? null, cur)} delta={d.cpa} deltaKey="cpa" spark={sparks(perf.data, 'cpa')} />
       <KpiCard label="الإيرادات" value={money(k?.revenue ?? null, cur)} delta={d.revenue} deltaKey="revenue" spark={sparks(perf.data, 'revenue')} />
       <KpiCard label="ROAS" value={ratio(k?.roas ?? null)} delta={d.roas} deltaKey="roas" spark={sparks(perf.data, 'roas')} />
-      <KpiCard label="CTR" value={percent((k?.ctr ?? 0) * 100)} delta={d.ctr} deltaKey="ctr" spark={sparks(perf.data, 'ctr')} />
+      <KpiCard label="CTR" value={percent(k?.ctr ?? 0)} delta={d.ctr} deltaKey="ctr" spark={sparks(perf.data, 'ctr')} />
       <KpiCard label="CPC" value={money(k?.cpc ?? null, cur)} delta={d.cpc} deltaKey="cpc" />
       <KpiCard label="CPM" value={money(k?.cpm ?? null, cur)} delta={d.cpm} deltaKey="cpm" />
-      <KpiCard label="معدل التحويل" value={convRate != null ? percent(convRate * 100) : '—'} />
+      <KpiCard label="معدل التحويل" value={convRate != null ? percent(convRate) : '—'} />
       <KpiCard label="مرات الظهور" value={compact(k?.impressions ?? 0)} delta={d.impressions} deltaKey="impressions" />
     </div>
   )
@@ -226,7 +242,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
       <div className="grid gap-4 lg:grid-cols-3">
         <ChartCard title="استهلاك الميزانية" subtitle={budget != null ? `${money(spend, cur)} من ${money(budget, cur)}` : 'لا ميزانية محددة'}>
           <div className="flex h-[190px] items-center justify-center">
-            <ProgressRing value={util ?? 0} sublabel={util != null ? percent(util * 100, 0) : '—'} size={150} tone={util != null && util > 0.95 ? 'danger' : util != null && util > 0.8 ? 'warning' : 'brand'} />
+            <ProgressRing value={util ?? 0} sublabel={util != null ? percent(util, 0) : '—'} size={150} tone={util != null && util > 0.95 ? 'danger' : util != null && util > 0.8 ? 'warning' : 'brand'} />
           </div>
         </ChartCard>
         <ChartCard title="المخطط مقابل الفعلي" subtitle="الاتجاه التراكمي" className="lg:col-span-2">
@@ -297,7 +313,7 @@ export function CampaignFunnelTab({ campaign, projectId, range }: { campaign: Un
             <div className="tnum text-lg font-extrabold">{s.count !== null ? num(s.count) : '—'}</div>
             {s.reported ? (
               <div className="flex justify-between text-[11px] text-text-muted">
-                <span>تحويل {s.step_rate != null ? percent(s.step_rate * 100, 0) : '—'}</span>
+                <span>تحويل {s.step_rate != null ? percent(s.step_rate, 0) : '—'}</span>
                 <span>تكلفة {s.cost_per != null ? money(s.cost_per, cur) : '—'}</span>
               </div>
             ) : (
@@ -308,7 +324,7 @@ export function CampaignFunnelTab({ campaign, projectId, range }: { campaign: Un
       </div>
       {bottleneck && (
         <div className="rounded-xl border border-warning/40 bg-warning/5 p-3 text-sm">
-          <span className="font-semibold text-warning">أكبر تسرّب:</span> {bottleneck.label} — {percent((bottleneck.drop_off ?? 0) * 100, 0)}؛ الإجراء المقترح: مراجعة هذه المرحلة (استهداف/محتوى/صفحة الهبوط).
+          <span className="font-semibold text-warning">أكبر تسرّب:</span> {bottleneck.label} — {percent(bottleneck.drop_off ?? 0, 0)}؛ الإجراء المقترح: مراجعة هذه المرحلة (استهداف/محتوى/صفحة الهبوط).
         </div>
       )}
     </div>
@@ -407,8 +423,8 @@ export function CampaignPlatformsTab({
                 <MiniStat label="النتائج" value={num(m?.conversions ?? 0)} />
                 <MiniStat label="CPA" value={money(m?.cpa ?? null, cur)} />
                 <MiniStat label="ROAS" value={ratio(m?.roas ?? null)} />
-                <MiniStat label="المساهمة" value={m?.spend_share != null ? percent(m.spend_share * 100, 0) : '—'} />
-                <MiniStat label="CTR" value={percent((m?.ctr ?? 0) * 100)} />
+                <MiniStat label="المساهمة" value={m?.spend_share != null ? percent(m.spend_share, 0) : '—'} />
+                <MiniStat label="CTR" value={percent(m?.ctr ?? 0)} />
                 <MiniStat label="حملات خارجية" value={String(externals.length)} />
                 <MiniStat label="الحساب" value={externals[0]?.external_account_id?.slice(0, 8) ?? '—'} />
               </div>
@@ -665,8 +681,8 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
                 <MiniStat label="النتائج" value={num(c.metrics.conversions)} />
                 <MiniStat label="ROAS" value={ratio(c.metrics.roas)} />
                 <MiniStat label="CPA" value={money(c.metrics.cpa, cur)} />
-                <MiniStat label="CTR" value={percent((c.metrics.ctr ?? 0) * 100)} />
-                <MiniStat label="مشاهدة" value={c.metrics.view_rate != null ? percent(c.metrics.view_rate * 100, 0) : '—'} />
+                <MiniStat label="CTR" value={percent(c.metrics.ctr ?? 0)} />
+                <MiniStat label="مشاهدة" value={c.metrics.view_rate != null ? percent(c.metrics.view_rate, 0) : '—'} />
               </div>
               <p className="text-[11px] text-text-muted">{c.ranking_reason}</p>
             </div>
@@ -685,7 +701,7 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
                   <td className="tnum p-2">{num(c.metrics.conversions)}</td>
                   <td className="tnum p-2">{money(c.metrics.cpa, cur)}</td>
                   <td className="tnum p-2">{ratio(c.metrics.roas)}</td>
-                  <td className="tnum p-2">{percent((c.metrics.ctr ?? 0) * 100)}</td>
+                  <td className="tnum p-2">{percent(c.metrics.ctr ?? 0)}</td>
                   <td className="p-2"><span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${cls(c.classification).tone}`}>{cls(c.classification).label}</span></td>
                 </tr>
               ))}
