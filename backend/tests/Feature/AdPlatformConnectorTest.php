@@ -687,6 +687,80 @@ final class AdPlatformConnectorTest extends TestCase
     }
 
     /**
+     * GADS-001 — a lead is not a sale, and Google Ads will happily let you say it is.
+     *
+     * Google has no purchase metric. `metrics.conversions` counts whichever conversion ACTIONS the
+     * account has been told to count — a phone call, a form, a signup, a store visit, a sale — and
+     * `metrics.conversions_value` is the value assigned to all of them. This connector reported both
+     * as `conversions` and `revenue`, so a lead-generation account read its enquiries as orders and
+     * whatever internal value it had put on a lead as money taken.
+     *
+     * The fixture is that account: 260 conversions worth 26,000 in assigned lead value, of which
+     * exactly 8 sales worth 3,200 are real. The second, category-segmented query is what tells them
+     * apart, and the fake answers it separately so the two really are distinguished.
+     */
+    public function test_google_counts_only_purchase_category_conversions_as_sales(): void
+    {
+        $this->configure('google');
+        Http::fake(function ($request) {
+            $isSalesQuery = str_contains((string) ($request->data()['query'] ?? ''), 'conversion_action_category');
+
+            return Http::response($isSalesQuery ? [
+                ['results' => [[
+                    'campaign' => ['id' => '111'],
+                    'segments' => ['date' => '2026-08-01', 'conversionActionCategory' => 'PURCHASE'],
+                    'metrics' => ['conversions' => 8, 'conversionsValue' => 3200.0],
+                ]]],
+            ] : [
+                ['results' => [[
+                    'campaign' => ['id' => '111'],
+                    'segments' => ['date' => '2026-08-01'],
+                    'metrics' => [
+                        'costMicros' => '900000000', 'impressions' => '54000', 'clicks' => '2100',
+                        // Every conversion action the account counts, and the value it assigns them.
+                        'conversions' => 260, 'conversionsValue' => 26000.0,
+                        'videoViews' => '12000', 'engagements' => '3100',
+                    ],
+                ]]],
+            ]);
+        });
+
+        $row = $this->bound('google')->syncInsights('123-456-7890', '2026-08-01', '2026-08-02')->records[0];
+
+        $this->assertSame(8.0, $row['purchases'], '260 conversions of every kind were reported as sales');
+        $this->assertSame(3200.0, $row['revenue'], 'the value assigned to leads was reported as money taken');
+        $this->assertSame(260.0, $row['conversions'], 'Google\'s own conversions figure is still carried — just not as the sale');
+        $this->assertEqualsWithDelta(900.0, $row['spend'], 0.001, 'cost arrives in micros and is divided once');
+        $this->assertSame(12000.0, $row['video_views']);
+        $this->assertSame(3100.0, $row['engagements']);
+    }
+
+    /** An account that measures no sales has not measured zero sales. */
+    public function test_google_leaves_purchases_absent_when_no_conversion_action_is_a_purchase(): void
+    {
+        $this->configure('google');
+        Http::fake(function ($request) {
+            $isSalesQuery = str_contains((string) ($request->data()['query'] ?? ''), 'conversion_action_category');
+
+            // A brand campaign: conversions counted, none of them in the PURCHASE category.
+            return Http::response($isSalesQuery ? [['results' => []]] : [
+                ['results' => [[
+                    'campaign' => ['id' => '111'],
+                    'segments' => ['date' => '2026-08-01'],
+                    'metrics' => ['costMicros' => '50000000', 'impressions' => '9000', 'clicks' => '210', 'conversions' => 40],
+                ]]],
+            ]);
+        });
+
+        $row = $this->bound('google')->syncInsights('123-456-7890', '2026-08-01', '2026-08-02')->records[0];
+
+        $this->assertArrayNotHasKey('purchases', $row, 'no purchase-category action means unmeasured, not zero');
+        $this->assertArrayNotHasKey('revenue', $row);
+        $this->assertArrayNotHasKey('video_views', $row);
+        $this->assertSame(40.0, $row['conversions']);
+    }
+
+    /**
      * Google's `searchStream` answers with an ARRAY of chunks.
      *
      * The wrong reading — `$body['results']` — finds nothing, returns no rows, and reports no error,

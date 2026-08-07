@@ -217,10 +217,13 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector
     {
         $rows = $this->stream($tokens, $adAccountId, <<<GAQL
             SELECT campaign.id, segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks,
-                   metrics.conversions, metrics.conversions_value
+                   metrics.conversions, metrics.video_views, metrics.engagements
             FROM campaign
             WHERE segments.date BETWEEN '{$from}' AND '{$to}'
             GAQL);
+
+        // The sales, asked for separately and by category — see the note on the method.
+        $sales = $this->purchasesByCampaignDay($tokens, $adAccountId, $from, $to);
 
         $insights = [];
 
@@ -238,18 +241,95 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector
                 continue;
             }
 
+            $date = (string) ($segments['date'] ?? $from);
+            $sale = $sales["{$campaignId}|{$date}"] ?? [];
+
             $insights[] = array_filter([
                 'campaign_id' => $campaignId,
-                'date' => (string) ($segments['date'] ?? $from),
+                'date' => $date,
                 'spend' => isset($metrics['costMicros']) ? (float) $metrics['costMicros'] / self::MICRO : null,
                 'impressions' => isset($metrics['impressions']) ? (float) $metrics['impressions'] : null,
                 'clicks' => isset($metrics['clicks']) ? (float) $metrics['clicks'] : null,
+                /*
+                 * `metrics.conversions` is EVERY conversion action the account counts — a call, a
+                 * form, a signup, a store visit, a sale. It is Google's own «conversions» figure and
+                 * is carried as such, but it is not the sale, and `purchases` below comes from the
+                 * PURCHASE category instead. Before GADS-001 the two were the same number and a
+                 * lead-generation account read its enquiries as orders.
+                 */
                 'conversions' => isset($metrics['conversions']) ? (float) $metrics['conversions'] : null,
-                'revenue' => isset($metrics['conversionsValue']) ? (float) $metrics['conversionsValue'] : null,
+                'video_views' => isset($metrics['videoViews']) ? (float) $metrics['videoViews'] : null,
+                'engagements' => isset($metrics['engagements']) ? (float) $metrics['engagements'] : null,
+                'purchases' => $sale['purchases'] ?? null,
+                'revenue' => $sale['revenue'] ?? null,
             ], static fn ($v) => $v !== null);
         }
 
         return $insights;
+    }
+
+    /**
+     * Sales per campaign per day, from the PURCHASE conversion category alone (GADS-001).
+     *
+     * Google Ads has no purchase metric. It has `metrics.conversions`, which counts whichever
+     * conversion ACTIONS the account has told it to count — a phone call, a form submission, a
+     * newsletter signup, a store visit, a sale — and `metrics.conversions_value`, which is the value
+     * assigned to all of them. This connector reported both as `conversions` and `revenue`, so a
+     * lead-generation account read its enquiries as orders and whatever value it had assigned to a
+     * lead as money taken.
+     *
+     * The only honest way to get sales out of this API is to ask for them by category, which is what
+     * this second query does. It is a second round trip and worth it: the alternative is a purchase
+     * figure that is right only for accounts that happen to count nothing else.
+     *
+     * The category is filtered in the QUERY and checked again HERE. Not distrust of Google — a guard
+     * against this method being pointed at an unfiltered query later and silently counting
+     * everything again, which is precisely the defect it exists to fix.
+     *
+     * A campaign with no purchase-category conversions appears in neither map, so `purchases` and
+     * `revenue` are ABSENT for it rather than zero: an account that does not measure sales has not
+     * measured zero sales.
+     *
+     * @return array<string, array{purchases: float, revenue: float}> keyed «campaignId|date»
+     */
+    private function purchasesByCampaignDay(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
+    {
+        $rows = $this->stream($tokens, $adAccountId, <<<GAQL
+            SELECT campaign.id, segments.date, segments.conversion_action_category,
+                   metrics.conversions, metrics.conversions_value
+            FROM campaign
+            WHERE segments.date BETWEEN '{$from}' AND '{$to}'
+              AND segments.conversion_action_category = 'PURCHASE'
+            GAQL);
+
+        $sales = [];
+
+        foreach ($rows as $row) {
+            /** @var array<string,mixed> $segments */
+            $segments = (array) ($row['segments'] ?? []);
+
+            if ((string) ($segments['conversionActionCategory'] ?? '') !== 'PURCHASE') {
+                continue;
+            }
+
+            $campaignId = (string) (((array) ($row['campaign'] ?? []))['id'] ?? '');
+
+            if ($campaignId === '') {
+                continue;
+            }
+
+            /** @var array<string,mixed> $metrics */
+            $metrics = (array) ($row['metrics'] ?? []);
+            $key = $campaignId.'|'.(string) ($segments['date'] ?? $from);
+
+            // Several conversion ACTIONS can share the PURCHASE category — two checkout flows, web
+            // and app. Those are different sales, so within the category they are added.
+            $sales[$key] ??= ['purchases' => 0.0, 'revenue' => 0.0];
+            $sales[$key]['purchases'] += (float) ($metrics['conversions'] ?? 0);
+            $sales[$key]['revenue'] += (float) ($metrics['conversionsValue'] ?? 0);
+        }
+
+        return $sales;
     }
 
     /**
