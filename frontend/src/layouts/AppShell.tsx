@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router-dom'
+import { PortalFooter } from '@/features/legal/PolicyFooter'
 import {
   Megaphone,
   Menu,
@@ -154,6 +155,7 @@ export function AppShell() {
 
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-12 pt-4 sm:px-5 lg:px-6">
           <Outlet />
+          <PortalFooter />
         </main>
       </div>
     </div>

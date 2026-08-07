@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HOME_COPY } from './homeCopy'
 import { LEGAL_DOCS, findLegalDoc } from './legalContent'
+import { POLICY_CONTEXTS } from '@/features/legal/policyLinks'
 
 /**
  * LEGAL-001 — every footer link goes somewhere real, in both languages.
@@ -47,21 +48,42 @@ describe('the public footer', () => {
       })
 
       /**
-       * The pages the brief requires by name, each reachable from the footer.
+       * The pages the brief requires — each reachable, and each from the right place.
        *
-       * Listed explicitly because "every link resolves" would still pass if a required page were
-       * simply never linked — which is the same outcome for a visitor looking for it.
+       * This assertion used to demand that all seventeen hang off the public footer. That was the
+       * placement rule at the time; POLICY-PLACEMENT-001 changed it, because «حذف الحساب والبيانات»
+       * and «الاشتراكات والاسترداد» in front of a visitor with no account is not disclosure, it is
+       * clutter — and it left the person who needs them, who is signed in looking at their account
+       * or their invoice, with nowhere to find them.
+       *
+       * What the assertion protects is unchanged and is the part that matters: **no required page
+       * becomes unreachable.** The visitor-facing ones are checked on the footer; the rest are
+       * checked against the in-product contexts that now carry them.
        */
-      it('offers every page the brief requires', () => {
+      it('offers every page the brief requires, from the place that suits it', () => {
         const linked = new Set(copy.footer.groups.flatMap((g) => g.links.map((l) => l.to.replace(/^\//, ''))))
 
+        // What a visitor without an account can act on stays on the public footer.
         for (const required of [
           'privacy', 'terms', 'data-processing', 'cookies', 'security',
           'about', 'contact', 'support', 'faq',
+        ]) {
+          expect(linked.has(required), `${required} is not linked from the ${locale} footer`).toBe(true)
+        }
+
+        // The operational ones moved INTO the product — and none of them was merely dropped.
+        const inProduct = new Set(
+          Object.entries(POLICY_CONTEXTS)
+            .filter(([name]) => name !== 'public')
+            .flatMap(([, keys]) => keys as readonly string[]),
+        )
+
+        for (const moved of [
           'account-deletion', 'data-requests', 'retention', 'subprocessors',
           'acceptable-use', 'subscriptions-refunds', 'oauth-disclosure', 'system-status',
         ]) {
-          expect(linked.has(required), `${required} is not linked from the ${locale} footer`).toBe(true)
+          expect(linked.has(moved), `${moved} is still on the ${locale} public footer`).toBe(false)
+          expect(inProduct.has(moved), `${moved} left the footer and landed nowhere`).toBe(true)
         }
       })
     })

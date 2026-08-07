@@ -18,6 +18,7 @@ import {
 import { AccountMenu } from '@/features/account/UserMenu'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { useUi } from '@/stores/ui'
+import { PortalFooter } from '@/features/legal/PolicyFooter'
 
 /**
  * The platform owner's shell (ADR 0002, ADMIN-001).
@@ -243,6 +244,7 @@ export function AdminShell() {
 
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-12 pt-4 sm:px-5 lg:px-6">
           <Outlet />
+          <PortalFooter />
         </main>
       </div>
     </div>

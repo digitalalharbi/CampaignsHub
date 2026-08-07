@@ -7,6 +7,7 @@ import { portalLogout } from '../clientPortalApi'
 import { PortalNav } from './portalNav'
 import { useClientSpacePath } from './clientSpace'
 import { brandStyle, useClientBranding } from './useClientBranding'
+import { PortalFooter } from '@/features/legal/PolicyFooter'
 
 /**
  * Minimal, mobile-first, RTL/LTR + light/dark shell for the public client portal.
@@ -84,7 +85,10 @@ export function PortalShell({
         </div>
       </header>
       {nav && <PortalNav ar={ar} />}
-      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
+        {children}
+        <PortalFooter />
+      </main>
     </div>
   )
 }

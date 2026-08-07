@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { Bell, KeyRound, Palette, ShieldCheck, User as UserIcon } from 'lucide-react'
 import { useUi } from '@/stores/ui'
+import { PolicyNote } from '@/features/legal/PolicyFooter'
 
 /**
  * USER settings shell (/account/*) — reachable ONLY from the account menu in the top bar.
@@ -43,8 +44,14 @@ export function AccountSettingsLayout() {
           ))}
         </div>
       </nav>
-      <div className="min-w-0">
+      <div className="min-w-0 space-y-4">
         <Outlet />
+        {/*
+          POLICY-PLACEMENT-001 — «what happens to my data, and how do I get it out», beside the
+          account it is about. These four used to be on the marketing footer, in front of a visitor
+          who has no account at all.
+        */}
+        <PolicyNote context="account" />
       </div>
     </div>
   )

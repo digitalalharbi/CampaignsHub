@@ -5,6 +5,7 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/Card'
 import { useT } from '@/lib/i18n'
 import { brand } from '@/lib/brand'
 import type { HealthData } from '@/lib/api/types'
+import { PolicyNote } from '@/features/legal/PolicyFooter'
 
 function useHealth(path: string) {
   return useQuery({
@@ -25,6 +26,15 @@ export function SystemStatusPage() {
         <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('dashboard')}</h1>
         <p className="mt-1 text-sm text-text-secondary">{t('system_status')}</p>
       </div>
+
+      {/*
+        POLICY-PLACEMENT-001 — operational health is where the operational policies belong.
+
+        «حالة النظام» was on the marketing footer, which is the one place a visitor cannot act on it.
+        The public status page it links to is a different document from this page: this is the live
+        snapshot of THIS installation, that is the published commitment.
+      */}
+      <PolicyNote context="support" />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>

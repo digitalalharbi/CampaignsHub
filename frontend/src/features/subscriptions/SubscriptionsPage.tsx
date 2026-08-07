@@ -8,6 +8,7 @@ import {
   cancelPlanChange, getCurrent, getPlans, quotePlanChange, requestPlanChange,
   type CurrentSubscription, type SubscriptionPlan, type UsageMetric,
 } from './api'
+import { PolicyNote } from '@/features/legal/PolicyFooter'
 
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 const COPY = {
@@ -184,6 +185,9 @@ export function SubscriptionsPage() {
         <h1 className="flex items-center gap-2 text-3xl font-extrabold tracking-tight text-text-primary"><CreditCard size={26} /> {c.title}</h1>
         <p className="text-sm text-text-secondary">{c.subtitle}</p>
       </header>
+
+      {/* POLICY-PLACEMENT-001 — «what am I paying for, and how do I stop», beside the subscription. */}
+      <PolicyNote context="billing" />
 
       {isLoading ? (
         <div className="flex flex-col gap-3">{[0, 1].map((i) => <div key={i} className="h-40 animate-pulse rounded-2xl bg-surface-secondary" />)}</div>

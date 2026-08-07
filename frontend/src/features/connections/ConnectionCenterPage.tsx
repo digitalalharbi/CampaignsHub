@@ -19,6 +19,7 @@ import {
   type Connector, type ConnectionState, type SyncResult, type SyncRun,
 } from './api'
 import { sortPlatforms } from '@/lib/platforms'
+import { PolicyNote } from '@/features/legal/PolicyFooter'
 
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 const COPY = {
@@ -214,6 +215,16 @@ export function ConnectionCenterPage() {
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
 
         {/*
+          POLICY-PLACEMENT-001 — on THIS branch too, and that is the point.
+
+          The ad-platform panel sits above the project gate because connecting Snapchat or Meta is a
+          tenant-level act. So this is the screen an operator is on when they authorise access, and
+          the screen a platform's OAuth reviewer is sent to — with no project chosen. A disclosure
+          offered only on the other branch would be missing exactly when it is being relied on.
+        */}
+        <PolicyNote context="integrations" />
+
+        {/*
           * The six ad platforms live above the project-scoped centre (INTEG-UI-001).
           *
           * Connecting Snapchat or Meta is a TENANT-level act — one authorisation serves every project —
@@ -245,6 +256,15 @@ export function ConnectionCenterPage() {
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
         <p className="text-sm text-text-secondary">{c.subtitle}</p>
       </header>
+
+      {/*
+        POLICY-PLACEMENT-001 — the OAuth disclosure beside the platforms it discloses.
+
+        This is the page an operator is on when they are about to hand this product access to an ad
+        account, and it is the page a platform's OAuth reviewer is sent to. Both were previously
+        expected to find the disclosure in the marketing footer.
+      */}
+      <PolicyNote context="integrations" />
 
       {/*
         * The six ad platforms live above the project-scoped centre (INTEG-UI-001).

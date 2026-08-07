@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router-dom'
+import { PortalFooter } from '@/features/legal/PolicyFooter'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, Moon, Sun } from 'lucide-react'
 import { AccountMenu } from '@/features/account/UserMenu'
@@ -102,6 +103,7 @@ export function CreatorShell() {
         ) : (
           <Outlet />
         )}
+        <PortalFooter />
       </main>
     </div>
   )

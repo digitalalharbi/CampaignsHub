@@ -15,6 +15,7 @@ import { AccountMenu } from '@/features/account/UserMenu'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { fetchMemberships } from '@/features/auth/memberships'
 import { useUi } from '@/stores/ui'
+import { PortalFooter } from '@/features/legal/PolicyFooter'
 
 /**
  * The influencers & UGC portal's shell (ADR 0002, INFL-001).
@@ -195,6 +196,7 @@ export function InfluencerShell() {
 
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-12 pt-4 sm:px-5 lg:px-6">
           <Outlet />
+          <PortalFooter />
         </main>
       </div>
     </div>
