@@ -123,8 +123,16 @@ export function DevStatusPage() {
             <p className="mt-3 text-sm text-success">Every requirement is VERIFIED.</p>
           ) : (
             <ul className="mt-3 space-y-1">
-              {(req.open ?? []).map((r) => (
-                <li key={r.id} className="flex flex-wrap items-baseline gap-2 border-b border-border py-1.5 last:border-0 text-sm">
+              {/*
+                Keyed by id AND position, because the id is not unique down this list.
+                A requirement appears in the matrix once where it was specified and again in each
+                unit that advanced it — `REPORT-OBJECTIVE-002` is there three times, NOT_STARTED then
+                PARTIAL then VERIFIED — so keying on the id alone made React collapse them and the
+                board silently showed fewer requirements than the count printed above it. The same
+                defect `CreativeInsights` had, on the one page whose entire job is reporting status.
+              */}
+              {(req.open ?? []).map((r, i) => (
+                <li key={`${r.id}-${i}`} className="flex flex-wrap items-baseline gap-2 border-b border-border py-1.5 last:border-0 text-sm">
                   <span className="font-mono text-xs font-bold text-text-primary">{r.id}</span>
                   <span className={`rounded px-1.5 text-[11px] font-semibold ${r.status.startsWith('BLOCKED') ? 'text-warning' : 'text-info'}`}>{r.status}</span>
                   <span className="min-w-0 flex-1 truncate text-text-secondary">{r.title}</span>
