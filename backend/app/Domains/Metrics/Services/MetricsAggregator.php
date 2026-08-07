@@ -40,8 +40,26 @@ final class MetricsAggregator
         'engagements' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'engagements'), 0)",
     ];
 
-    /** The funnel's stages. Two of them (`add_to_cart`, `checkout`) are read HERE and nowhere else. */
-    private const FUNNEL_STAGES = ['impressions', 'clicks', 'landing_page_views', 'add_to_cart', 'checkout', 'conversions'];
+    /**
+     * The funnel's stages. Two of them (`add_to_cart`, `checkout`) are read HERE and nowhere else.
+     *
+     * The last stage is `purchases`, not `conversions` (FUNNEL-PURCHASE-001). It used to be
+     * `conversions` while the label beneath it said **Purchase**, and those are not the same figure:
+     * `conversions` is the sum of every event a campaign was optimised for — a lead, an install, a
+     * registration, a form submit. On a lead-generation account the funnel therefore ended in a count
+     * of LEADS with the word «الشراء» printed under it.
+     *
+     * It went unnoticed because Snapchat maps both canonical keys from `conversion_purchases`, so
+     * the two were literally the same number and the label was accidentally true. TikTok is the
+     * first platform to map them apart (`complete_payment` vs `conversion`), which turns a dormant
+     * mislabelling into a figure a client would act on.
+     *
+     * An account that reports no `purchases` now ends the funnel in «لم تُرسل» rather than in
+     * somebody else's number — which is the honest answer, and the one FUNNEL-NULL-001 already
+     * built the display for. `conversions` remains everywhere it belongs: it is still in `PIVOT`,
+     * still summed, still the «النتائج» figure on every dashboard. It is simply not the sale.
+     */
+    private const FUNNEL_STAGES = ['impressions', 'clicks', 'landing_page_views', 'add_to_cart', 'checkout', 'purchases'];
 
     /**
      * Every `metric_key` this engine reads (NORM-001).
@@ -533,7 +551,7 @@ final class MetricsAggregator
         $stages = self::FUNNEL_STAGES;
         $labels = [
             'impressions' => 'Impressions', 'clicks' => 'Clicks', 'landing_page_views' => 'Landing Page View',
-            'add_to_cart' => 'Add to Cart', 'checkout' => 'Checkout', 'conversions' => 'Purchase',
+            'add_to_cart' => 'Add to Cart', 'checkout' => 'Checkout', 'purchases' => 'Purchase',
         ];
         // Deliberately NOT wrapped in COALESCE — see the note above. The null IS the answer.
         $selects = array_map(fn ($s) => "SUM(value) FILTER (WHERE metric_key = '{$s}') AS {$s}", $stages);

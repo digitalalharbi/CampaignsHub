@@ -148,7 +148,7 @@ final class CampaignMetricsTest extends TestCase
 
         // Every stage the funnel names, in order, and the spend beside them rather than among them.
         $this->assertSame(
-            ['impressions', 'clicks', 'landing_page_views', 'add_to_cart', 'checkout', 'conversions'],
+            ['impressions', 'clicks', 'landing_page_views', 'add_to_cart', 'checkout', 'purchases'],
             array_column($stages, 'stage'),
         );
         $this->assertArrayNotHasKey('spend', $stages[0]);

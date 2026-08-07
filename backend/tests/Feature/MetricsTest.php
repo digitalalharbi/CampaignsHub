@@ -295,7 +295,7 @@ final class MetricsTest extends TestCase
             $this->metric($this->projectA->id, 'clicks', 100, '2026-06-01'),
             // Reported, and genuinely zero: nobody added to a basket, and the platform said so.
             $this->metric($this->projectA->id, 'add_to_cart', 0, '2026-06-01'),
-            $this->metric($this->projectA->id, 'conversions', 10, '2026-06-01'),
+            $this->metric($this->projectA->id, 'purchases', 10, '2026-06-01'),
             $this->metric($this->projectA->id, 'spend', 200, '2026-06-01'),
             // `landing_page_views` and `checkout` are deliberately absent — never sent, not measured.
         ]);
@@ -326,14 +326,63 @@ final class MetricsTest extends TestCase
 
         // And the stage below the zero still measures against the zero, so its rate is null rather
         // than a fabricated ratio — «10 purchases from 0 basket adds» is not a conversion rate.
-        $this->assertSame('add_to_cart', $stages['conversions']['from_stage']);
-        $this->assertNull($stages['conversions']['step_rate']);
-        $this->assertSame(20.0, (float) $stages['conversions']['cost_per']);
+        $this->assertSame('add_to_cart', $stages['purchases']['from_stage']);
+        $this->assertNull($stages['purchases']['step_rate']);
+        $this->assertSame(20.0, (float) $stages['purchases']['cost_per']);
 
         // The first stage is reported and has nothing above it.
         $this->assertTrue($stages['impressions']['reported']);
         $this->assertNull($stages['impressions']['from_stage']);
         $this->assertSame(0.1, (float) $stages['clicks']['step_rate']);
+    }
+
+    /**
+     * FUNNEL-PURCHASE-001 — the stage labelled «Purchase» counts purchases.
+     *
+     * The funnel's terminal stage read `conversions` while the label under it said Purchase, and
+     * those are not the same figure: `conversions` is the sum of EVERY event a campaign was
+     * optimised for — a lead, an install, a registration. On a lead-generation account the funnel
+     * ended in a count of leads with «الشراء» printed beneath it.
+     *
+     * It hid because Snapchat maps both canonical keys from `conversion_purchases`, so the two were
+     * literally the same number and the label was accidentally true. TikTok is the first platform to
+     * map them apart (`complete_payment` vs `conversion`), which turns a dormant mislabelling into a
+     * figure a client would act on.
+     *
+     * So the fixture is a lead-gen week: 400 conversions, 3 purchases. If the stage still read
+     * `conversions` the funnel would tell the client they sold four hundred things.
+     */
+    public function test_the_funnel_stage_labelled_purchase_counts_purchases_not_every_conversion(): void
+    {
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'impressions', 50000, '2026-06-01'),
+            $this->metric($this->projectA->id, 'clicks', 900, '2026-06-01'),
+            // A lead-generation buy: 400 results, of which 3 were actual sales.
+            $this->metric($this->projectA->id, 'conversions', 400, '2026-06-01'),
+            $this->metric($this->projectA->id, 'purchases', 3, '2026-06-01'),
+            $this->metric($this->projectA->id, 'spend', 600, '2026-06-01'),
+        ]);
+
+        $body = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/funnel?from=2026-06-01&to=2026-06-02")
+            ->assertOk()
+            ->json('data');
+
+        $last = end($body);
+
+        $this->assertSame('purchases', $last['stage']);
+        $this->assertSame('Purchase', $last['label']);
+        $this->assertSame(3.0, (float) $last['count'], 'the Purchase stage counted every conversion, not the sales');
+        $this->assertNotEquals(400.0, (float) $last['count']);
+
+        // `conversions` is not demoted — it is simply not the sale. The totals still report it.
+        $summary = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/summary?from=2026-06-01&to=2026-06-02")
+            ->assertOk()
+            ->json('data.current');
+
+        $this->assertSame(400.0, (float) $summary['conversions'], '«النتائج» still means every result the platform reported');
+        $this->assertSame(3.0, (float) $summary['purchases']);
     }
 
     /**
