@@ -45,6 +45,34 @@ export const E2E_BACKEND_ENV: Record<string, string> = {
   // is on 5273, so the default 5173 entry from `.env` would refuse every authenticated call.
   SANCTUM_STATEFUL_DOMAINS: `localhost:${E2E_FRONTEND_PORT},127.0.0.1:${E2E_FRONTEND_PORT}`,
   SESSION_DOMAIN: 'null',
+  /*
+   * Where the backend sends a customer BACK to — the gate's frontend, not the developer's.
+   *
+   * `backend/.env` says `http://localhost:5173`, and every absolute return address the product
+   * builds reads it: the sandbox gateway's redirect after a confirmed payment, the applicant's
+   * notification links, the OAuth landing. Before E2E-ISO-001 the gate shared that port and it did
+   * not matter. Moving the gate to :5273 left those redirects pointing at whatever is listening on
+   * :5173 — which is a DIFFERENT frontend, talking to a DIFFERENT backend and a DIFFERENT database,
+   * where the application that just paid does not exist.
+   *
+   * That is not a subtle failure: the whole paid-registration journey ends on a status page that
+   * cannot find its own registration. It presents as a hang rather than an error, because the page
+   * had no branch for a failed query — fixed in `AccountStatusPage`, and the redirect fixed here.
+   * With nothing at all on :5173 it fails differently again (a connection error), which is why this
+   * belongs beside `SANCTUM_STATEFUL_DOMAINS` above: both are addresses the gate has to own.
+   */
+  FRONTEND_URL: E2E_ORIGIN,
+  /*
+   * The same mistake in a second place, and it has to be set separately because it is a second key.
+   *
+   * `ChromiumPdfRenderer` mints a print token, then drives a headless browser to
+   * `{REPORTS_PRINT_APP_URL}/reports/print/{token}` and prints what it finds. Left at its :5173
+   * default the gate's renderer opened the DEVELOPER's frontend, which asks the DEVELOPER's backend
+   * about a token that only exists in `mediabuying_e2e` — so the print route answered
+   * «report_error / print route reported a data error» and the export was correctly marked FAILED.
+   * The exporter was doing exactly the right thing; it was pointed at the wrong installation.
+   */
+  REPORTS_PRINT_APP_URL: E2E_ORIGIN,
   // The gate walks the paid-signup journey, which needs a provider it can actually settle against.
   SUBSCRIPTION_PROVIDER: 'sandbox',
 }
