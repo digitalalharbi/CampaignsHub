@@ -239,7 +239,15 @@ final class DailyDigest
             static fn (array $r): bool => isset($r['cpa']) && is_numeric($r['cpa']) && (float) $r['spend'] > 0,
         ));
 
-        if ($comparable === []) {
+        /*
+         * A ranking of one is not a ranking.
+         *
+         * With a single comparable row, «best» and «weakest» resolve to the SAME platform and the
+         * email prints it twice under two contradictory headings — which reads as a bug and, worse,
+         * implies a comparison that was never made. Seen in the live render of a single-platform
+         * account. Two rows is the minimum at which either word means anything.
+         */
+        if (count($comparable) < 2) {
             return null;
         }
 

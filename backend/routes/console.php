@@ -94,6 +94,16 @@ Schedule::command('integrations:sync-structure')->cron('55 */6 * * *')->withoutO
 Schedule::command('integrations:refresh-tokens')->hourly()->withoutOverlapping();
 
 /*
+ * The daily digest sweep — hourly, not daily (MAIL-003).
+ *
+ * A single «dailyAt(08:00)» sends at the SERVER's eight o'clock, which is somebody else's three in
+ * the morning. The command asks each recipient whether it is currently their chosen hour in their
+ * own timezone, so the schedule has to come round every hour for that question to be answerable.
+ * Sending is idempotent by database constraint, so an overlapping run cannot double-send.
+ */
+Schedule::command('notifications:send-digests')->hourly()->withoutOverlapping();
+
+/*
  * The store sweep (COMMERCE-001) — Salla and Zid.
  *
  * Hourly, at :20, out of the way of both ad sweeps: a store's four paginated reads should not be

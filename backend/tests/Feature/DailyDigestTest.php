@@ -339,4 +339,56 @@ final class DailyDigestTest extends TestCase
         $this->assertFalse($digest['sendable']);
         $this->assertSame('no_projects_in_scope', $digest['reason']);
     }
+
+    /**
+     * With one platform there is no «best» and no «weakest».
+     *
+     * Both resolved to the same row, and the email printed it twice under two contradictory
+     * headings — implying a comparison that was never made. Found in the live render of a
+     * single-platform account, not by reading the code.
+     */
+    public function test_a_single_comparable_row_is_neither_the_best_nor_the_worst(): void
+    {
+        $yesterday = Carbon::today()->subDay();
+
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric((string) $this->alpha->id, 'spend', 500, $yesterday->toDateString()),
+            $this->metric((string) $this->alpha->id, 'conversions', 10, $yesterday->toDateString()),
+        ]);
+
+        $digest = app(DailyDigest::class)->build(
+            $this->user('solo@agency.test', ['clients.view_all']),
+            (string) $this->tenant->id,
+            [(string) $this->alpha->id],
+            $yesterday,
+        );
+
+        $block = $digest['projects'][0];
+        $this->assertNull($block['best_platform'], 'one platform cannot be the best of one');
+        $this->assertNull($block['worst_platform']);
+    }
+
+    /** With two, the ranking is real — and the cheaper cost per result wins. */
+    public function test_two_platforms_are_ranked_by_their_own_cost_per_result(): void
+    {
+        $yesterday = Carbon::today()->subDay();
+
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric((string) $this->alpha->id, 'spend', 500, $yesterday->toDateString(), ['provider' => 'meta', 'camp' => 'm1']),
+            $this->metric((string) $this->alpha->id, 'conversions', 25, $yesterday->toDateString(), ['provider' => 'meta', 'camp' => 'm1']),
+            $this->metric((string) $this->alpha->id, 'spend', 400, $yesterday->toDateString(), ['provider' => 'tiktok', 'camp' => 't1']),
+            $this->metric((string) $this->alpha->id, 'conversions', 4, $yesterday->toDateString(), ['provider' => 'tiktok', 'camp' => 't1']),
+        ]);
+
+        $digest = app(DailyDigest::class)->build(
+            $this->user('two@agency.test', ['clients.view_all']),
+            (string) $this->tenant->id,
+            [(string) $this->alpha->id],
+            $yesterday,
+        );
+
+        $block = $digest['projects'][0];
+        $this->assertSame('meta', $block['best_platform']['label'], '500/25 = 20 beats 400/4 = 100');
+        $this->assertSame('tiktok', $block['worst_platform']['label']);
+    }
 }
