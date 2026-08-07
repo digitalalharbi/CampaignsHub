@@ -114,6 +114,47 @@ final class CampaignMetricsTest extends TestCase
         $this->assertEqualsWithDelta(3.0, $a2['roas'], 0.01);
     }
 
+    /**
+     * The campaign funnel answers the SAME shape as the project funnel.
+     *
+     * `data` is the stage list; the spend those stages are derived from rides in `meta`. That is the
+     * contract `MetricsController::funnel` set under UNIFIED-002, and the browser has one type for
+     * both endpoints — so a second shape here is not a cosmetic difference. It crashed the campaign's
+     * funnel tab outright (`stages.filter is not a function`) and replaced the whole page with a raw
+     * stack trace, because a component cannot defend against a payload the type system told it was
+     * a list.
+     *
+     * Asserted against the project endpoint rather than against a literal, so the two cannot drift
+     * apart again by one of them being updated alone.
+     */
+    public function test_the_campaign_funnel_answers_the_same_shape_as_the_project_funnel(): void
+    {
+        $window = 'from=2026-06-01&to=2026-06-30';
+
+        $campaign = $this->actingAs($this->owner)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/funnel?{$window}")
+            ->assertOk();
+
+        $project = $this->actingAs($this->owner)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/funnel?{$window}")
+            ->assertOk();
+
+        // A LIST, not an object wrapping one. `array_is_list` is the assertion that fails on the
+        // previous code: `{stages: [...], spend: …}` is an array in PHP and is not a list.
+        $stages = $campaign->json('data');
+        $this->assertIsArray($stages);
+        $this->assertTrue(array_is_list($stages), 'the campaign funnel must answer a stage list');
+        $this->assertSame(array_keys($project->json('data')[0] ?? []), array_keys($stages[0] ?? []));
+
+        // Every stage the funnel names, in order, and the spend beside them rather than among them.
+        $this->assertSame(
+            ['impressions', 'clicks', 'landing_page_views', 'add_to_cart', 'checkout', 'conversions'],
+            array_column($stages, 'stage'),
+        );
+        $this->assertArrayNotHasKey('spend', $stages[0]);
+        $this->assertEqualsWithDelta(1000, $campaign->json('meta.spend'), 0.01);
+    }
+
     public function test_cross_project_campaign_id_fails_closed(): void
     {
         // campA1 belongs to project A; requesting it under project B must 404 (project scope).

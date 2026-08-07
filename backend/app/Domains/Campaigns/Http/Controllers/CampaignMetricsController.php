@@ -178,13 +178,33 @@ final class CampaignMetricsController extends Controller
         return ApiResponse::success($this->agg->forCampaign($id)->budgetPacing($from, $to, Carbon::today()), 'Campaign budget.', meta: $this->meta($from, $to));
     }
 
-    /** Conversion funnel for the campaign. */
+    /**
+     * Conversion funnel for the campaign.
+     *
+     * `data` is the STAGE LIST and the spend it is derived from rides in `meta` — the shape
+     * `MetricsController::funnel` established under UNIFIED-002, and the shape every caller renders.
+     *
+     * This endpoint used to hand back `MetricsAggregator::funnel()` whole, so `data` was
+     * `{stages, spend}` here and a bare list one route away. The browser has ONE type for both, so
+     * the campaign's funnel tab called `.filter` on an object, threw, and took the entire campaign
+     * page down to React Router's default error boundary — «Unexpected Application Error!» and a raw
+     * stack trace, in English, in a customer's portal.
+     *
+     * Fixed at the endpoint that diverged rather than in the component, because a guard in the
+     * browser would have left two shapes in the API and the next caller would pick the wrong one.
+     */
     public function funnel(Request $request, string $project, string $campaign): JsonResponse
     {
         $id = $this->resolve($request, $campaign);
         [$from, $to] = $this->range($request);
 
-        return ApiResponse::success($this->agg->forCampaign($id)->funnel($from, $to), 'Campaign funnel.', meta: $this->meta($from, $to));
+        $funnel = $this->agg->forCampaign($id)->funnel($from, $to);
+
+        return ApiResponse::success(
+            $funnel['stages'],
+            'Campaign funnel.',
+            meta: $this->meta($from, $to) + ['spend' => $funnel['spend']],
+        );
     }
 
     /** Fail-closed campaign lookup: 403 without permission, 404 for cross-project/unknown ids. */
