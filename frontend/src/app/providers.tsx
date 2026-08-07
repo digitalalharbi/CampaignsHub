@@ -22,6 +22,24 @@ const queryClient = new QueryClient({
   },
 })
 
+/**
+ * Addresses that are token-gated and read no session at all (PUBLIC-REPORT-NOAUTH).
+ *
+ * `/r/` is the short client link; `/reports/share/` is the older address every link already sent
+ * still uses; `/reports/print/` is the headless-Chromium print route, which has no browser session
+ * by construction. All three are matched, because an auth dependency on any one of them is an auth
+ * dependency on a client's report.
+ *
+ * Deliberately NOT «every route outside RequireAuth». A public page such as `/` legitimately wants
+ * to know who you are, so it can offer «back to your dashboard» to somebody already signed in. This
+ * list is the surfaces where the answer is not merely unnecessary but meaningless.
+ */
+const SESSIONLESS_PREFIXES = ['/r/', '/reports/share/', '/reports/print/']
+
+export function isSessionlessSurface(pathname: string): boolean {
+  return SESSIONLESS_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+}
+
 export function Providers({ children }: { children: ReactNode }) {
   const { theme, locale } = useUi()
   const setUser = useAuth((s) => s.setUser)
@@ -42,6 +60,28 @@ export function Providers({ children }: { children: ReactNode }) {
    * /login. Whoever moved the store off `loading` knows more than this does.
    */
   useEffect(() => {
+    /*
+     * PUBLIC-REPORT-NOAUTH — the probe is not run on a surface that has no session by design.
+     *
+     * A client opening `/r/<token>` has no account, so `GET /auth/me` there is a request that can
+     * only ever be answered 401 — and it was, twice per load, on the one page an agency sends to a
+     * paying customer. Harmless while nothing renders a 401, and one release away from «انتهت
+     * جلستك» appearing on a report belonging to somebody who was never signed in.
+     *
+     * The answer is set rather than merely skipped. Leaving the store on `loading` would be a
+     * different bug — anything that waits for the question to be settled would wait forever — and
+     * `null` is not a guess here: these addresses are token-gated and read no session at all.
+     *
+     * Matched on `window.location` rather than `useLocation` because Providers mounts ABOVE the
+     * router, and this probe runs once at load: it is asking who you were when the page opened, so
+     * the address the page opened at is exactly the right thing to read.
+     */
+    if (isSessionlessSurface(window.location.pathname)) {
+      if (useAuth.getState().status === 'loading') setUser(null)
+
+      return
+    }
+
     void fetchCurrentUser().then((user) => {
       if (useAuth.getState().status === 'loading') setUser(user)
     })

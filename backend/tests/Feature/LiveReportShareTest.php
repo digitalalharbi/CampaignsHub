@@ -120,6 +120,80 @@ final class LiveReportShareTest extends TestCase
     }
 
     /**
+     * PUBLIC-REPORT-NOAUTH — a client's link must never be able to ask them to sign in.
+     *
+     * «رسالة انتهت جلستك مسموحة فقط داخل /app و/agency و/admin و/portal.» The link's reader has no
+     * account, so a 401 on this path is not a security outcome — it is the product failing, and the
+     * client cannot do the thing it asks. The guarantee is checked STRUCTURALLY, against the routes
+     * themselves rather than one happy request, because a middleware added to the group later would
+     * pass every functional test in this file while breaking every real link in the field.
+     */
+    public function test_no_public_report_route_sits_behind_an_authentication_middleware(): void
+    {
+        $guarded = [];
+
+        foreach (app('router')->getRoutes() as $route) {
+            if (! str_contains($route->uri(), 'reports/shared/') && ! str_contains($route->uri(), 'reports/print/')) {
+                continue;
+            }
+            foreach ($route->gatherMiddleware() as $middleware) {
+                if (is_string($middleware) && (str_starts_with($middleware, 'auth') || str_contains($middleware, 'Authenticate'))) {
+                    $guarded[] = $route->uri().' → '.$middleware;
+                }
+            }
+        }
+
+        $this->assertSame([], $guarded, 'a public client link cannot require a session');
+    }
+
+    /**
+     * And the same URL, asked twice with no session and no cookie jar between them, answers twice.
+     *
+     * A link that only worked on the first request — because something established a session on the
+     * way — would pass every other test here and fail the day a client sent it to a colleague.
+     */
+    public function test_the_link_answers_repeatedly_with_no_session_and_never_401s(): void
+    {
+        $token = $this->liveLink();
+
+        foreach ([1, 2, 3] as $attempt) {
+            $res = $this->getJson("/api/v1/reports/shared/{$token}/live");
+
+            $this->assertSame(200, $res->getStatusCode(), "attempt {$attempt} did not answer");
+            $this->assertNull(auth()->user(), 'the public link path must not authenticate anybody');
+            $this->assertSame(100.0, (float) $res->json('data.totals.spend'));
+        }
+    }
+
+    /**
+     * «تحديث البيانات تلقائيًا بعد كل Sync» — the same link, after new metrics land.
+     *
+     * This is what «live» has to mean to be worth the word: not a snapshot taken when the link was
+     * created, but the figures as they stand when the client opens it. Proved by writing metrics the
+     * way a sync writes them and re-reading the SAME token — no new link, no regeneration, no session.
+     */
+    public function test_the_same_link_shows_what_a_later_sync_added(): void
+    {
+        $token = $this->liveLink();
+
+        $this->assertSame(100.0, (float) $this->getJson("/api/v1/reports/shared/{$token}/live")->json('data.totals.spend'));
+
+        // A sync lands more spend on the shared campaign, inside the link's own window.
+        app(TenantContext::class)->setTenantId($this->project->tenant_id);
+        $this->metric($this->shared->id, 'spend', 250, '2026-07-11');
+        app(TenantContext::class)->forget();
+
+        $after = $this->getJson("/api/v1/reports/shared/{$token}/live");
+
+        $after->assertOk();
+        $this->assertSame(
+            350.0,
+            (float) $after->json('data.totals.spend'),
+            'the link served a frozen figure — a live link that does not move is a snapshot with a longer name',
+        );
+    }
+
+    /**
      * The one that matters most: a campaign the link was never given.
      *
      * The sibling has 999 spend. If the ceiling is not applied, the total is 1099 and a client is
