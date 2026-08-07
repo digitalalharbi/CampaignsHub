@@ -128,6 +128,33 @@ final class AccountMetricsSyncer
     }
 
     /**
+     * Every metric a connector may report and this pipeline will carry (PIPELINE-METRICS-001).
+     *
+     * Read from `MetricsAggregator::readKeys()` rather than written out here, and that is the whole
+     * point. This used to be a literal list of seven — `spend, impressions, clicks, conversions,
+     * revenue, reach, video_views` — while the aggregator read eighteen. So a connector could map
+     * `add_to_cart` perfectly, from the platform's own correct field, and the figure was DROPPED on
+     * this line before it ever reached storage. Nothing failed, nothing was logged: the funnel simply
+     * had no add-to-cart stage, on every platform, forever.
+     *
+     * Two lists describing one thing is how that happens, so there is now one. A key the engine reads
+     * is a key the syncer carries, by construction.
+     *
+     * DERIVED metrics are deliberately absent and must stay absent. `readKeys()` returns only the
+     * additive keys — the ones `metric_definitions.is_additive` marks true — because `frequency`,
+     * `roas`, `ctr`, `cpa` and the rest are computed FROM sums and are meaningless when summed
+     * themselves. A stored daily `frequency` added across thirty days is not a frequency; it is a
+     * number with no referent. They are computed at read time, and a zero denominator yields null
+     * rather than 0.
+     *
+     * @return list<string>
+     */
+    private static function carriedKeys(): array
+    {
+        return MetricsAggregator::readKeys();
+    }
+
+    /**
      * Map provider insight rows onto normalized metrics.
      *
      * @param  array<int,array<string,mixed>>  $records
@@ -158,7 +185,7 @@ final class AccountMetricsSyncer
 
             $date = Carbon::parse((string) ($row['date'] ?? Carbon::now()->toDateString()));
 
-            foreach (['spend', 'impressions', 'clicks', 'conversions', 'revenue', 'reach', 'video_views'] as $key) {
+            foreach (self::carriedKeys() as $key) {
                 if (! array_key_exists($key, $row)) {
                     continue;
                 }

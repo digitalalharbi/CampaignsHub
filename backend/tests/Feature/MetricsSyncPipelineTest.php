@@ -10,13 +10,18 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\OAuth\PlatformCredentials;
+use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Services\AccountMetricsSyncer;
+use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
@@ -88,6 +93,94 @@ final class MetricsSyncPipelineTest extends TestCase
         $spend = DailyMetric::withoutGlobalScopes()->where('metric_key', 'spend')->where('unified_campaign_id', $this->campaign->id)->first();
         $this->assertNotNull($spend, 'the mapped insight must land as a normalized metric');
         $this->assertEquals(100.0, (float) $spend->value);
+    }
+
+    /**
+     * PIPELINE-METRICS-001 — a metric a connector maps is a metric that reaches storage.
+     *
+     * `ingest()` used to carry a literal list of seven keys while `MetricsAggregator` read eighteen,
+     * so a connector could map `add_to_cart` correctly, from the platform's own correct field, and
+     * the figure was dropped on that line before it ever became a row. Nothing failed and nothing was
+     * logged — the funnel simply had no add-to-cart stage, on every platform, for as long as that
+     * list stayed shorter than the engine's.
+     *
+     * The assertion walks `MetricsAggregator::readKeys()` rather than naming keys, so a metric added
+     * to the engine later cannot quietly stop being carried here.
+     */
+    public function test_every_canonical_metric_a_connector_reports_is_stored_not_only_the_first_seven(): void
+    {
+        foreach (PlatformCredentials::for('snapchat')->requires() as $key) {
+            config()->set("ad_platforms.platforms.snapchat.{$key}", "test-{$key}");
+        }
+
+        // A real authorised connection: this path reads a token, unlike the sandbox connector.
+        $connection = app(TokenVault::class)->open(
+            tenantId: $this->tenant->id,
+            provider: 'snapchat',
+            tokens: new OAuthTokens('AT-secret', 'RT', Carbon::now()->addDay()),
+            connectionName: 'snapchat',
+        );
+        $account = ExternalAccount::create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id,
+            'provider' => 'snapchat', 'account_type' => 'ad_account', 'external_id' => 'act-1',
+            'name' => 'Snap acct', 'status' => 'active',
+        ]);
+
+        ExternalCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'unified_campaign_id' => $this->campaign->id, 'external_account_id' => $account->id,
+            'provider' => 'snapchat', 'external_id' => 'camp-1', 'name' => 'Snap', 'status' => 'active',
+        ]);
+
+        Http::fake(['adsapi.snapchat.com/*' => Http::response([
+            'timeseries_stats' => [[
+                'timeseries_stat' => [
+                    'id' => 'camp-1',
+                    'timeseries' => [[
+                        'start_time' => '2026-06-01T00:00:00.000-00:00',
+                        'stats' => [
+                            'spend' => 10_000_000, 'impressions' => 5000, 'swipes' => 200,
+                            'uniques' => 4000, 'landing_page_views' => 150, 'video_views' => 900,
+                            'view_completion' => 300, 'conversion_add_cart' => 60,
+                            'conversion_start_checkout' => 30, 'conversion_purchases' => 12,
+                            'conversion_purchases_value' => 48_000_000,
+                        ],
+                    ]],
+                ],
+            ]],
+        ])]);
+
+        $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-06-01'), Carbon::parse('2026-06-02'));
+
+        $this->assertSame('success', $run->status);
+
+        $stored = DailyMetric::withoutGlobalScopes()
+            ->where('unified_campaign_id', $this->campaign->id)
+            ->pluck('value', 'metric_key');
+
+        // The five that always worked, and the six that were being thrown away.
+        $expected = [
+            'spend' => 10.0, 'impressions' => 5000.0, 'clicks' => 200.0,
+            'conversions' => 12.0, 'revenue' => 48.0, 'reach' => 4000.0,
+            'landing_page_views' => 150.0, 'video_views' => 900.0, 'video_completions' => 300.0,
+            'add_to_cart' => 60.0, 'checkout' => 30.0, 'purchases' => 12.0,
+        ];
+
+        foreach ($expected as $key => $value) {
+            $this->assertArrayHasKey($key, $stored->all(), "{$key} was mapped by the connector and never stored");
+            $this->assertEqualsWithDelta($value, (float) $stored[$key], 0.001, $key);
+        }
+
+        // Nothing DERIVED was stored: a daily frequency summed over a month has no meaning, and the
+        // engine computes it — null on a zero denominator — from the sums above.
+        foreach (['frequency', 'roas', 'ctr', 'cpa', 'cpc', 'cpm'] as $derived) {
+            $this->assertArrayNotHasKey($derived, $stored->all(), "{$derived} is derived and must never be stored");
+        }
+
+        // And every key the pipeline carried is one the engine actually reads.
+        foreach ($stored->keys() as $key) {
+            $this->assertContains($key, MetricsAggregator::readKeys(), "{$key} is stored but nothing reads it");
+        }
     }
 
     public function test_a_provider_without_credentials_is_not_run_and_is_not_reported_as_failed(): void
