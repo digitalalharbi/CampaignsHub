@@ -268,6 +268,39 @@ final class MetricsAggregator
     }
 
     /**
+     * Which base metrics any platform actually sent in this window — UX-METRICS-001.
+     *
+     * `PIVOT` coalesces every sum to `0`, which is right for arithmetic and wrong for a KPI card: a
+     * platform that does not count landing-page views and a platform that counted none of them both
+     * produce «0», and a reader looking at «Landing page views 0» beside forty thousand impressions
+     * concludes the campaign is broken. FUNNEL-NULL-001 fixed exactly this for the funnel by
+     * dropping the COALESCE; the totals cannot follow it there without changing what every surface
+     * that sums them receives, so the distinction is published BESIDE the figures instead.
+     *
+     * `true` means at least one row for that key exists in the window, so a zero is measured.
+     * `false` means nothing was ever sent, and the card must say so rather than print a zero.
+     * Derived ratios are absent from this map on purpose: they are computed, never sent, and their
+     * own `null` already carries «there was no denominator».
+     *
+     * @return array<string, bool>
+     */
+    public function reportedKeys(Carbon $from, Carbon $to): array
+    {
+        $present = $this->base($from, $to)
+            ->distinct()
+            ->pluck('metric_key')
+            ->map(static fn ($k): string => (string) $k)
+            ->all();
+
+        $out = [];
+        foreach (array_keys(self::PIVOT) as $key) {
+            $out[$key] = in_array($key, $present, true);
+        }
+
+        return $out;
+    }
+
+    /**
      * REPORT-OBJECTIVE-005 — what the single «conversions» figure above actually is.
      *
      * `SUM(conversions)` over more than one platform is the sum of each platform's own claim, and

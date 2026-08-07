@@ -503,6 +503,39 @@ final class MetricsTest extends TestCase
         $this->assertSame($sales->id, $rows[0]['campaign_id']);
     }
 
+    /**
+     * UX-METRICS-001 — the summary says which zeros are measurements.
+     *
+     * The defect is invisible in the arithmetic and obvious on the screen: `PIVOT` coalesces to 0,
+     * so a platform that does not count landing-page views produces the same «0» as one that
+     * counted none, and the KPI card reads as a failed campaign either way. `reported` is what lets
+     * the card say «لم ترسله المنصة» for the first and «0» for the second.
+     */
+    public function test_the_summary_says_which_base_metrics_were_reported_at_all(): void
+    {
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'spend', 100, '2026-06-01'),
+            $this->metric($this->projectA->id, 'impressions', 5000, '2026-06-01'),
+            // Sent, and genuinely zero — a real measurement that must not be confused with silence.
+            $this->metric($this->projectA->id, 'clicks', 0, '2026-06-01'),
+        ]);
+
+        $reported = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/summary?from=2026-06-01&to=2026-06-02")
+            ->assertOk()
+            ->json('data.reported');
+
+        $this->assertTrue($reported['spend']);
+        $this->assertTrue($reported['impressions']);
+        $this->assertTrue($reported['clicks'], 'a measured zero was reported');
+        $this->assertFalse($reported['landing_page_views'], 'never sent — the card must not print a zero');
+        $this->assertFalse($reported['reach']);
+
+        // Derived ratios are computed, never sent: their own null already says «no denominator».
+        $this->assertArrayNotHasKey('roas', $reported);
+        $this->assertArrayNotHasKey('ctr', $reported);
+    }
+
     // ---- NORM-001: the basis of the figures ---------------------------------------------------
 
     /**

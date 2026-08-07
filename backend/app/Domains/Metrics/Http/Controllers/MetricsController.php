@@ -55,6 +55,14 @@ final class MetricsController extends Controller
             'current' => $current,
             'previous' => $previous,
             'delta' => $deltas,
+            /*
+             * UX-METRICS-001 — which of those figures are measurements and which are absences.
+             *
+             * `current` coalesces to 0, so on its own a KPI card cannot tell «this platform does not
+             * report landing-page views» from «it reported none». The map says which, per base
+             * metric, and the strip renders «لم ترسله المنصة» rather than a zero for the first.
+             */
+            'reported' => $this->scoped($request)->reportedKeys($from, $to),
             'commerce' => $this->commerce($request, $from, $to),
             /*
              * REPORT-OBJECTIVE-005 — what the single «conversions» figure above is.
