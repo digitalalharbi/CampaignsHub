@@ -318,7 +318,7 @@ export function FilterMulti({
             role="listbox"
             aria-label={label}
             data-testid={testid ? `${testid}-options` : undefined}
-            className="absolute top-full z-30 mt-1 max-h-72 w-64 overflow-auto rounded-xl border border-border-strong bg-surface p-1.5 shadow-[var(--shadow-medium)] ltr:left-0 rtl:right-0"
+            className="absolute top-full z-30 mt-1 max-h-72 w-64 overflow-auto rounded-xl border border-border-strong bg-surface p-1.5 shadow-[var(--shadow-medium)] start-0"
           >
             {options.length > searchAfter && (
               <div className="sticky top-0 bg-surface pb-1.5">
@@ -326,7 +326,7 @@ export function FilterMulti({
                   <Search
                     size={14}
                     aria-hidden
-                    className="absolute top-2.5 text-text-muted ltr:left-2 rtl:right-2"
+                    className="absolute top-2.5 text-text-muted start-2"
                   />
                   <input
                     type="search"
@@ -334,7 +334,7 @@ export function FilterMulti({
                     aria-label={`${label} — ${t('searchOptions', ar)}`}
                     placeholder={t('searchOptions', ar)}
                     onChange={(e) => setTerm(e.target.value)}
-                    className="h-8 w-full rounded-lg border border-border bg-surface text-sm text-text-primary ltr:pl-7 ltr:pr-2 rtl:pr-7 rtl:pl-2"
+                    className="h-8 w-full rounded-lg border border-border bg-surface text-sm text-text-primary ps-7 pe-2"
                   />
                 </span>
               </div>
@@ -449,7 +449,7 @@ export function FilterSearch({
     <div className="flex min-w-52 flex-1 flex-col gap-1">
       <ControlLabel htmlFor={id}>{placeholder}</ControlLabel>
       <span className="relative block">
-        <Search size={15} aria-hidden className="absolute top-2.5 text-text-muted ltr:left-2.5 rtl:right-2.5" />
+        <Search size={15} aria-hidden className="absolute top-2.5 text-text-muted start-2.5" />
         <input
           id={id}
           type="search"
@@ -457,7 +457,7 @@ export function FilterSearch({
           value={value}
           aria-label={placeholder}
           onChange={(e) => onChange(e.target.value)}
-          className="h-9 w-full rounded-xl border border-border bg-surface text-sm text-text-primary ltr:pl-8 ltr:pr-2 rtl:pr-8 rtl:pl-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+          className="h-9 w-full rounded-xl border border-border bg-surface text-sm text-text-primary ps-8 pe-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
         />
       </span>
     </div>
