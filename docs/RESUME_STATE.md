@@ -82,11 +82,61 @@ missing data. Both now assert the effect.
 boundary, which is why a customer would have seen a stack trace. The shape defect is fixed; the missing
 boundary is not, and any future crash on that route presents the same way. Its own unit.
 
-### Exact next task
+## SNAP-001 — done at `7c115d4`, and the pipeline gap it exposed at `52884d2`
 
-**The platform integrations, in the mandated order and ONE AT A TIME: Snapchat, TikTok, Meta, Google
-Ads, X, LinkedIn.** Each stays `BLOCKED_EXTERNAL_CREDENTIALS` until a real OAuth round trip, account
-discovery and an actual sync.
+**Backend 1558 passed (8823 assertions), exit 0 · Pint clean · tree CLEAN.**
+
+**`52884d2` is the larger of the two and it was not a Snapchat problem.**
+`AccountMetricsSyncer::ingest()` carried a literal list of SEVEN metric keys while
+`MetricsAggregator` reads EIGHTEEN and `metric_definitions` defines eighteen additive ones. A
+connector could map `add_to_cart` perfectly, from the platform's own correct field, and the figure
+was thrown away on that line before it became a row — no failure, no log, run reported success. The
+funnel had no add-to-cart stage on ANY platform and nothing could say why, because from downstream
+that is indistinguishable from a platform which never reported it. The syncer now reads
+`MetricsAggregator::readKeys()`; derived metrics stay out, because a stored daily `frequency` summed
+over a month is a number with no referent.
+
+**`7c115d4` — Snapchat's mapping and pagination.** Five fields became the full canonical set, and
+every list endpoint now follows `paging.next_link` to the end instead of reading one page and
+stopping (a complete-looking answer with entities missing, and their spend missing with them). The
+tests assert what is NOT read as much as what is: the fixture carries `conversion_start_checkout`,
+`conversion_view_content` and `conversion_page_views` with distinctive values so a leak into
+`purchases`, `add_to_cart` or `landing_page_views` is unmissable. Absent, never zero. **Snapchat
+remains `BLOCKED_EXTERNAL_CREDENTIALS`** — no OAuth round trip has been made.
+
+### Exact next task — FUNNEL-NULL-001, found live and NOT yet fixed
+
+`GET metrics/funnel` on the demo project answers, right now:
+
+```
+impressions=83820 · clicks=2934 · landing_page_views=0 · add_to_cart=0 · checkout=0 · conversions=176
+```
+
+Those three zeros are `COALESCE(SUM(value) FILTER (…), 0)` in `MetricsAggregator::funnel()` over
+stages **no platform has ever reported**. It is a measured zero standing in for «never sent», on the
+funnel, which is the exact thing the contract forbids: «المؤشر غير المتاح أو العملية ذات المقام
+الصفري تكون `null` لا صفرًا».
+
+It did not matter while the pipeline could not carry those stages at all. Now that `52884d2` can, a
+zero meaning «no add-to-carts happened» and a zero meaning «nobody reported add-to-cart» are
+indistinguishable on the most-read chart in the product — and a client reading «0 add to cart»
+beside 176 purchases concludes the funnel is broken, or that we are.
+
+The fix is `null` for a stage with no rows at all, distinct from `0` for a stage with rows summing to
+zero, carried through `funnel()`, `CampaignFunnelTab`, `FunnelTab`, `CreativeFunnel` and the client
+report — the pattern `CreativeMetrics.reported` already established. Needs its own tests and a fresh
+three-browser gate.
+
+### Then: the remaining five integrations, ONE AT A TIME
+
+**TikTok → Meta → Google Ads → X → LinkedIn.** Each stays `BLOCKED_EXTERNAL_CREDENTIALS` until a real
+OAuth round trip, account discovery and an actual sync. The per-platform shape is now established by
+SNAP-001: audit the connector's mapping against the canonical list, honour the four prohibitions,
+follow the platform's own pagination, fixtures + tests that fail on the previous code, and confirm
+the metrics reach storage (the syncer no longer drops them).
+
+`GoogleAdsConnector`, `MetaConnector`, `TikTokConnector`, `XConnector` and `LinkedInConnector` all
+still map only the original five-to-seven fields — the same audit SNAP-001 just did is owed to each.
 
 **Snapchat is scoped, and the survey is done — start from this, not from the documentation:**
 
