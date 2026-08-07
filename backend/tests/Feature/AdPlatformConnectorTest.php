@@ -265,6 +265,127 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertSame(40.0, $rows[0]['clicks']);
     }
 
+    /**
+     * SNAP-001 — every canonical metric Snapchat reports, read from the field that MEANS it.
+     *
+     * The fixture deliberately includes the three fields that are the classic wrong answers, each
+     * with a value that would be obvious if it leaked into the wrong column: a started checkout that
+     * is not a sale, a viewed product that is not a basket, and a pixel page-view that is not the
+     * delivery metric. The assertions are as much about what is NOT read as what is.
+     */
+    public function test_snapchat_maps_every_canonical_metric_from_the_field_that_means_it(): void
+    {
+        $this->configure('snapchat');
+        Http::fake(['adsapi.snapchat.com/*' => Http::response([
+            'timeseries_stats' => [[
+                'timeseries_stat' => [
+                    'id' => 'camp-1',
+                    'timeseries' => [[
+                        'start_time' => '2026-08-01T00:00:00.000-00:00',
+                        'stats' => [
+                            'spend' => 12_340_000, 'impressions' => 1000, 'swipes' => 40,
+                            'uniques' => 800, 'landing_page_views' => 25,
+                            'video_views' => 300, 'video_views_15s' => 120, 'view_completion' => 90,
+                            'conversion_add_cart' => 12, 'conversion_view_content' => 400,
+                            'conversion_start_checkout' => 7, 'conversion_purchases' => 3,
+                            'conversion_purchases_value' => 99_000_000,
+                            'conversion_page_views' => 999,
+                            'shares' => 5, 'saves' => 6, 'story_opens' => 7,
+                        ],
+                    ]],
+                ],
+            ]],
+        ])]);
+
+        $row = $this->bound('snapchat')->syncInsights('act-1', '2026-08-01', '2026-08-02')->records[0];
+
+        // Money arrives in millionths and is divided once, at the edge.
+        $this->assertEqualsWithDelta(12.34, $row['spend'], 0.001);
+        $this->assertEqualsWithDelta(99.0, $row['revenue'], 0.001);
+
+        $this->assertSame(1000.0, $row['impressions']);
+        $this->assertSame(40.0, $row['clicks'], 'a swipe IS the click on this platform');
+        $this->assertSame(800.0, $row['reach']);
+        $this->assertSame(90.0, $row['video_completions']);
+
+        // A purchase is a purchase. `conversion_start_checkout` is 7 and must appear nowhere near it.
+        $this->assertSame(3.0, $row['purchases']);
+        $this->assertSame(3.0, $row['conversions']);
+        $this->assertSame(7.0, $row['checkout'], 'a started checkout is its own stage, never a sale');
+
+        // Add to cart is 12; viewing a product 400 times is not putting anything in a basket.
+        $this->assertSame(12.0, $row['add_to_cart']);
+
+        // The DELIVERY metric (25), not the pixel event (999) — two different measurements.
+        $this->assertSame(25.0, $row['landing_page_views']);
+
+        // 300 viewers, not 300 + the 120 of them who watched longer.
+        $this->assertSame(300.0, $row['video_views']);
+
+        /*
+         * `frequency` and `engagements` are absent, and that is the answer.
+         *
+         * Frequency is derived — impressions over reach — and a stored daily frequency summed across
+         * a month is a number with no referent. Engagements would have to be `shares + saves +
+         * story_opens`, a total Snapchat never publishes, so producing one would manufacture a metric
+         * the platform did not report.
+         */
+        $this->assertArrayNotHasKey('frequency', $row);
+        $this->assertArrayNotHasKey('engagements', $row);
+    }
+
+    /** A metric the account does not report is ABSENT, so no surface can print it as a measured zero. */
+    public function test_snapchat_omits_a_metric_the_account_never_reported_rather_than_sending_zero(): void
+    {
+        $this->configure('snapchat');
+        Http::fake(['adsapi.snapchat.com/*' => Http::response([
+            'timeseries_stats' => [[
+                'timeseries_stat' => [
+                    'id' => 'camp-1',
+                    'timeseries' => [[
+                        'start_time' => '2026-08-01T00:00:00.000-00:00',
+                        // An awareness buy: delivery only, and no conversion pixel at all.
+                        'stats' => ['spend' => 5_000_000, 'impressions' => 2000, 'swipes' => 10],
+                    ]],
+                ],
+            ]],
+        ])]);
+
+        $row = $this->bound('snapchat')->syncInsights('act-1', '2026-08-01', '2026-08-02')->records[0];
+
+        foreach (['purchases', 'conversions', 'revenue', 'add_to_cart', 'checkout', 'reach'] as $key) {
+            $this->assertArrayNotHasKey($key, $row, "{$key} was never reported and must not be sent as 0");
+        }
+        $this->assertSame(2000.0, $row['impressions']);
+    }
+
+    /**
+     * A paged list is read to its END.
+     *
+     * One page and stop is not a partial answer that looks partial — it is a complete-looking answer
+     * with entities missing, and their spend goes missing with them. The second page is served from
+     * the URL the first one named, because rebuilding the cursor by hand is how a paging parameter
+     * gets dropped and the same page is fetched forever.
+     */
+    public function test_snapchat_follows_the_paging_cursor_instead_of_stopping_at_the_first_page(): void
+    {
+        $this->configure('snapchat');
+        Http::fake([
+            'adsapi.snapchat.com/v1/adaccounts/act-1/campaigns?cursor=2' => Http::response([
+                'campaigns' => [['campaign' => ['id' => 'c2', 'name' => 'Second page', 'status' => 'PAUSED']]],
+            ]),
+            'adsapi.snapchat.com/*' => Http::response([
+                'campaigns' => [['campaign' => ['id' => 'c1', 'name' => 'First page', 'status' => 'ACTIVE']]],
+                'paging' => ['next_link' => 'https://adsapi.snapchat.com/v1/adaccounts/act-1/campaigns?cursor=2'],
+            ]),
+        ]);
+
+        $campaigns = $this->bound('snapchat')->syncCampaigns('act-1')->records;
+
+        $this->assertCount(2, $campaigns, 'the second page was never fetched');
+        $this->assertSame(['c1', 'c2'], array_column($campaigns, 'external_id'));
+    }
+
     /** Meta reports every action type; only purchases are conversions. */
     public function test_meta_counts_purchases_as_conversions_and_leaves_page_likes_alone(): void
     {

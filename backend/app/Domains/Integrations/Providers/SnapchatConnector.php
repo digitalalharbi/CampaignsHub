@@ -22,6 +22,48 @@ final class SnapchatConnector extends ApiAdvertisingConnector
     /** Snapchat states money in millionths. */
     private const MICRO = 1_000_000;
 
+    /**
+     * A ceiling on paging, so a wrong `next_link` cannot become an unbounded loop.
+     *
+     * At Snapchat's default page size this is far more entities than an ad account holds; it exists
+     * because a sync job that never returns is worse than one that stops and says it stopped.
+     */
+    private const MAX_PAGES = 50;
+
+    /**
+     * Read a list endpoint to its END, not just its first page.
+     *
+     * Snapchat pages every collection and hands back the next page as an absolute URL in
+     * `paging.next_link`. Reading one page and stopping is not a partial answer that looks partial —
+     * it is a complete-looking answer with entities missing, and the ones missing are the ones the
+     * platform happened to order last. An account with 60 campaigns silently reported 50 of them, and
+     * the ten that vanished took their spend out of every total on every surface.
+     *
+     * The cursor is followed rather than reconstructed: `next_link` already carries whatever page
+     * token, limit and filter the first request implied, so rebuilding it by hand is how a paging
+     * parameter gets dropped and the same page is fetched forever.
+     *
+     * @return list<array<string,mixed>> every wrapper object from `$key`, across all pages
+     */
+    private function readAll(OAuthTokens $tokens, string $path, string $key, string $what): array
+    {
+        $url = $this->url($path);
+        $items = [];
+
+        for ($page = 0; $page < self::MAX_PAGES && $url !== null; $page++) {
+            $body = $this->read($this->api($tokens)->get($url), $what);
+
+            foreach ((array) ($body[$key] ?? []) as $wrapper) {
+                $items[] = (array) $wrapper;
+            }
+
+            $next = $body['paging']['next_link'] ?? null;
+            $url = is_string($next) && $next !== '' ? $next : null;
+        }
+
+        return $items;
+    }
+
     protected function platform(): string
     {
         return 'snapchat';
@@ -31,14 +73,9 @@ final class SnapchatConnector extends ApiAdvertisingConnector
     {
         $organization = (string) $this->credentials()->get('organization_id');
 
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("organizations/{$organization}/adaccounts")),
-            'ad accounts',
-        );
-
         $accounts = [];
 
-        foreach ((array) ($body['adaccounts'] ?? []) as $wrapper) {
+        foreach ($this->readAll($tokens, "organizations/{$organization}/adaccounts", 'adaccounts', 'ad accounts') as $wrapper) {
             /** @var array<string,mixed> $a */
             $a = (array) ($wrapper['adaccount'] ?? []);
 
@@ -62,14 +99,9 @@ final class SnapchatConnector extends ApiAdvertisingConnector
 
     protected function fetchCampaigns(OAuthTokens $tokens, string $adAccountId): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("adaccounts/{$adAccountId}/campaigns")),
-            'campaigns',
-        );
-
         $campaigns = [];
 
-        foreach ((array) ($body['campaigns'] ?? []) as $wrapper) {
+        foreach ($this->readAll($tokens, "adaccounts/{$adAccountId}/campaigns", 'campaigns', 'campaigns') as $wrapper) {
             /** @var array<string,mixed> $c */
             $c = (array) ($wrapper['campaign'] ?? []);
 
@@ -94,14 +126,9 @@ final class SnapchatConnector extends ApiAdvertisingConnector
 
     protected function fetchAdSets(OAuthTokens $tokens, string $adAccountId): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("adaccounts/{$adAccountId}/adsquads")),
-            'ad squads',
-        );
-
         $squads = [];
 
-        foreach ((array) ($body['adsquads'] ?? []) as $wrapper) {
+        foreach ($this->readAll($tokens, "adaccounts/{$adAccountId}/adsquads", 'adsquads', 'ad squads') as $wrapper) {
             /** @var array<string,mixed> $s */
             $s = (array) ($wrapper['adsquad'] ?? []);
 
@@ -141,14 +168,9 @@ final class SnapchatConnector extends ApiAdvertisingConnector
     {
         $creatives = $this->creativesById($tokens, $adAccountId);
 
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("adaccounts/{$adAccountId}/ads")),
-            'ads',
-        );
-
         $ads = [];
 
-        foreach ((array) ($body['ads'] ?? []) as $wrapper) {
+        foreach ($this->readAll($tokens, "adaccounts/{$adAccountId}/ads", 'ads', 'ads') as $wrapper) {
             /** @var array<string,mixed> $a */
             $a = (array) ($wrapper['ad'] ?? []);
 
@@ -180,14 +202,9 @@ final class SnapchatConnector extends ApiAdvertisingConnector
      */
     private function creativesById(OAuthTokens $tokens, string $adAccountId): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("adaccounts/{$adAccountId}/creatives")),
-            'creatives',
-        );
-
         $creatives = [];
 
-        foreach ((array) ($body['creatives'] ?? []) as $wrapper) {
+        foreach ($this->readAll($tokens, "adaccounts/{$adAccountId}/creatives", 'creatives', 'creatives') as $wrapper) {
             /** @var array<string,mixed> $c */
             $c = (array) ($wrapper['creative'] ?? []);
 
@@ -248,13 +265,60 @@ final class SnapchatConnector extends ApiAdvertisingConnector
         return $readable === [] ? null : $readable;
     }
 
+    /**
+     * The canonical metric ← the Snapchat field it is READ from, and nothing invented in between.
+     *
+     * Every line here is a semantic decision, and the wrong one is not a rounding error — it is a
+     * different question answered under the same heading:
+     *
+     * - **`clicks` ← `swipes`.** A swipe-up IS the click on this platform. Mapping it is what makes a
+     *   Snapchat CTR comparable to the other five on one chart.
+     * - **`purchases` ← `conversion_purchases`, never `conversion_start_checkout`.** A checkout that
+     *   was started is not a sale, and reporting one as the other inflates every ROAS on the page.
+     * - **`add_to_cart` ← `conversion_add_cart`, never `conversion_view_content`.** Looking at a
+     *   product is not putting it in a basket.
+     * - **`landing_page_views` ← `landing_page_views`**, the delivery metric — NOT
+     *   `conversion_page_views`, which is a pixel event with its own attribution window and would put
+     *   two different measurements in one column.
+     * - **`video_views` ← `video_views` alone.** `video_views_5s` and `_15s` are the SAME viewers
+     *   counted at longer thresholds; adding them would report a fraction of an audience as extra
+     *   people.
+     * - **`checkout` ← `conversion_start_checkout`.** Correct as its own funnel stage, which is
+     *   exactly why it must never stand in for a purchase.
+     *
+     * `frequency` is absent on purpose: it is derived (`impressions / reach`) and a stored daily
+     * frequency summed over a month is a number with no meaning. `engagements` is absent because
+     * Snapchat publishes `shares`, `saves` and `story_opens` separately and no total over them — so
+     * any total we produced would be one the platform never reported.
+     *
+     * @var array<string,string> canonical key → Snapchat field
+     */
+    private const METRICS = [
+        'spend' => 'spend',
+        'impressions' => 'impressions',
+        'clicks' => 'swipes',
+        'reach' => 'uniques',
+        'landing_page_views' => 'landing_page_views',
+        'video_views' => 'video_views',
+        'video_completions' => 'view_completion',
+        'add_to_cart' => 'conversion_add_cart',
+        'checkout' => 'conversion_start_checkout',
+        'purchases' => 'conversion_purchases',
+        'conversions' => 'conversion_purchases',
+        'revenue' => 'conversion_purchases_value',
+    ];
+
+    /** The fields stated in micro-units of the account currency, divided once at this edge. */
+    private const MONEY = ['spend', 'revenue'];
+
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
         $body = $this->read(
             $this->api($tokens)->get($this->url("adaccounts/{$adAccountId}/stats"), [
                 'granularity' => 'DAY',
                 'breakdown' => 'campaign',
-                'fields' => 'spend,impressions,swipes,conversion_purchases,conversion_purchases_value',
+                // Asked for from the map, so a metric cannot be mapped and then never requested.
+                'fields' => implode(',', array_values(array_unique(self::METRICS))),
                 'start_time' => $from.'T00:00:00.000-00:00',
                 'end_time' => $to.'T00:00:00.000-00:00',
             ]),
@@ -276,19 +340,30 @@ final class SnapchatConnector extends ApiAdvertisingConnector
                 /** @var array<string,mixed> $stats */
                 $stats = (array) ($point['stats'] ?? []);
 
-                $rows[] = array_filter([
+                $row = [
                     'campaign_id' => $campaignId,
                     'date' => substr((string) ($point['start_time'] ?? $from), 0, 10),
-                    'spend' => isset($stats['spend']) ? (float) $stats['spend'] / self::MICRO : null,
-                    'impressions' => isset($stats['impressions']) ? (float) $stats['impressions'] : null,
-                    // Snapchat's click is a swipe-up; mapping it to `clicks` is what makes a Snapchat
-                    // CTR comparable to the other five on the same chart.
-                    'clicks' => isset($stats['swipes']) ? (float) $stats['swipes'] : null,
-                    'conversions' => isset($stats['conversion_purchases']) ? (float) $stats['conversion_purchases'] : null,
-                    'revenue' => isset($stats['conversion_purchases_value'])
-                        ? (float) $stats['conversion_purchases_value'] / self::MICRO
-                        : null,
-                ], static fn ($v) => $v !== null);
+                ];
+
+                foreach (self::METRICS as $canonical => $field) {
+                    /*
+                     * ABSENT, not zero.
+                     *
+                     * A metric this account does not report must arrive as a missing key, so the
+                     * pipeline stores no row for it and every surface says «غير مُرسَل» rather than
+                     * printing a measured zero. An awareness campaign that was never asked to sell
+                     * anything has no purchases; it does not have zero of them.
+                     */
+                    if (! array_key_exists($field, $stats)) {
+                        continue;
+                    }
+
+                    $row[$canonical] = in_array($canonical, self::MONEY, true)
+                        ? (float) $stats[$field] / self::MICRO
+                        : (float) $stats[$field];
+                }
+
+                $rows[] = $row;
             }
         }
 
