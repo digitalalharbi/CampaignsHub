@@ -10,7 +10,129 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## GATE — 2026-08-07 · FAILING. `Failed=21`, and the verdict stands until it is 0
+## GATE — 2026-08-07 · **GREEN.** `PLAYWRIGHT_EXIT_CODE=0` · 809 passed · 0 failed · 32.4m
+
+Run at `b6cc223`, three browsers, one worker, `retries: 0`, with no file or database change during it.
+**Failed=0 · Flaky=0 · Retries=0 · Working tree CLEAN.** The verdict is Playwright's own exit code,
+read directly and not through a pipe.
+
+Two runs were needed and the first one earned its keep — it went 21 → 5, and the 5 were not the same
+5. Three of them were a control this session had deliberately moved; **two were defects nobody had
+reported.**
+
+### What the two runs actually cost, and what they bought
+
+| | first run | second |
+|---|---|---|
+| verdict | `EXIT=1`, 804 passed, 5 failed, 33.7m | `EXIT=0`, **809 passed, 0 failed**, 32.4m |
+
+**`9459ee1` — two addresses the gate never took with it.** E2E-ISO-001 moved the gate onto :5273 and
+:8100 and carried the database, the Redis prefix and the Sanctum origin across. It did not carry the
+two places the BACKEND builds an absolute address back to a frontend, and both still said :5173 —
+the developer's stack, a different backend, a different database. `FRONTEND_URL` broke the sandbox
+gateway's post-payment redirect (9 failures: two registration journeys and the phone sign-in, ×3);
+`REPORTS_PRINT_APP_URL` sent the Chromium print renderer to look for a print token that only exists
+in `mediabuying_e2e`, so the export was correctly marked FAILED (3 failures). **12 of the original 21,
+one cause.** Neither was a product defect and neither was masked.
+
+**`76c8ebd` — the library's filter control, restored.** `383fc63` had removed `ViewCustomiser` from
+`CreativesPage` and left an open row of ten selects, silently reverting SIMPLIFY-001 on a page that
+component's own docblock names. 9 failures. The applied state is stated in words again («تيك توك»,
+«2 منصات», «كل المحتوى»); closed sets are chips, id lists stay selects, and search, the grid/list
+switcher and the PERIOD stay outside the dialog — the period because it is not a filter over which
+rows exist, it is the window every figure was measured in.
+
+**`5738fd1` — the silent spinner.** `AccountStatusPage` set `error` from its mutations only, so a
+failed QUERY left «جارٍ التحقق…» turning indefinitely on the one page whose whole purpose is that «I
+signed up and nothing happened» never happens. Not fixed with a retry: the refresh is a button, and
+a test asserts nothing re-fetches until it is pressed.
+
+### The two the first green-ward run uncovered — both real, neither reported
+
+**`0490892` — the campaign Funnel tab crashed the page.** `stages.filter is not a function`. Two
+endpoints serve one funnel: `MetricsController::funnel` answers `data` = the stage list with spend in
+`meta` (UNIFIED-002, stated in its own comment), and `CampaignMetricsController::funnel` handed back
+`{stages, spend}` whole — while the browser has ONE type for both. Opening the tab replaced the entire
+page with «Unexpected Application Error!» and a raw English stack trace, in a customer's portal.
+
+It failed in firefox only, and **it is not a firefox defect**: it was reproduced by driving the real
+page in Chrome before anything was changed, and it fires on every single open. A single-browser
+failure was worth the hour it took to learn which kind it was. Fixed at the endpoint that diverged,
+never in the component — a browser-side guard leaves two shapes in the API for the next caller to pick
+wrong. The test asserts the campaign endpoint against the PROJECT endpoint, so they cannot drift apart
+by one being updated alone.
+
+**`08f2ecb` — the status board dropped the requirements it counted.** Keyed on requirement id, and
+ids repeat down the matrix BY DESIGN (`REPORT-OBJECTIVE-002` appears three times as it went
+NOT_STARTED → PARTIAL → VERIFIED). React collapsed them and the board showed fewer rows than the total
+printed above them — `CreativeInsights`'s defect at `b2fd426`, on the one page whose only job is
+reporting honest status. Found in the console output of a PASSING test; nothing asserted the row count.
+
+**`b6cc223` — two specs asserting something other than what they claimed.** `creative-analysis` drove
+the platform filter as a `<select>` (mine: I checked the two specs the verdict named and did not grep
+for others driving that page) and counted cards with the modal open — `getByRole('article')` returns
+zero behind an open dialog, so «0 ≤ all» would have passed forever proving nothing. `campaigns-linking`
+clicked the «unlinked only» checkbox and assumed; in webkit the click landed on a control React had not
+yet bound, so the box looked ticked, the query never changed, and a correctly-absent row read as
+missing data. Both now assert the effect.
+
+### Known gap, named rather than folded in
+
+**The campaign detail route has no `errorElement`.** The crash above reached React Router's DEFAULT
+boundary, which is why a customer would have seen a stack trace. The shape defect is fixed; the missing
+boundary is not, and any future crash on that route presents the same way. Its own unit.
+
+### Exact next task
+
+**The platform integrations, in the mandated order and ONE AT A TIME: Snapchat, TikTok, Meta, Google
+Ads, X, LinkedIn.** Each stays `BLOCKED_EXTERNAL_CREDENTIALS` until a real OAuth round trip, account
+discovery and an actual sync.
+
+**Snapchat is scoped, and the survey is done — start from this, not from the documentation:**
+
+`SnapchatConnector` already covers OAuth → ad accounts → campaigns → ad squads → ads → creatives →
+insights, and retry is already central in `PlatformHttp` (INTEG-RETRY-001). Three real gaps:
+
+1. **`AccountMetricsSyncer::ingest()` hard-codes seven metric keys** — `spend, impressions, clicks,
+   conversions, revenue, reach, video_views`. Every other canonical metric a connector maps is
+   silently DROPPED before storage: `add_to_cart`, `landing_page_views`, `video_completions`,
+   `engagements`, `purchases`. `metric_definitions` already carries all **18 additive** keys and marks
+   `frequency`/`roas`/`ctr`/… non-additive, and `MetricsAggregator::readKeys()` returns exactly that
+   18. Drive the syncer from that ONE list — a second literal is how the two drift. `frequency` must
+   stay DERIVED (`impressions/reach`, null on a zero denominator) and must never be stored or summed.
+2. **Snapchat's mapping stops at five fields.** Extend `fetchInsights` to the full canonical set,
+   honouring the prohibitions: `conversion_purchases` NOT `conversion_start_checkout`,
+   `conversion_add_cart` NOT `conversion_view_content`, `landing_page_views` NOT
+   `conversion_page_views`, and no breakdown mixed into a total.
+3. **No pagination.** The list endpoints (`adaccounts`, `campaigns`, `adsquads`, `ads`, `creatives`)
+   read one page and stop.
+
+Plus fixtures, an idempotency assertion (`UpsertDailyMetrics` already upserts on the natural key), and
+the wiring proved through to every section.
+
+| canonical | Snapchat field | note |
+|---|---|---|
+| `spend` | `spend` | micro-currency ÷ 1e6 |
+| `impressions` | `impressions` | |
+| `clicks` | `swipes` | a swipe-up IS Snapchat's click |
+| `reach` | `uniques` | |
+| `frequency` | — | derived from impressions/reach; never stored, never summed |
+| `landing_page_views` | `landing_page_views` | the delivery metric, NOT `conversion_page_views` |
+| `video_views` | `video_views` | 2s+; do NOT also add `video_views_5s`/`_15s` |
+| `video_completions` | `view_completion` | |
+| `add_to_cart` | `conversion_add_cart` | NOT `conversion_view_content` |
+| `purchases` | `conversion_purchases` | NOT `conversion_start_checkout` |
+| `revenue` | `conversion_purchases_value` | micro; kept apart from the count |
+| `engagements` | — | Snapchat publishes `shares`, `saves`, `story_opens` separately and no single total. Summing them would manufacture a metric the platform never reported, so it stays null. |
+
+Still outstanding from the contract beyond the integrations: §14.6 objective layouts; §14.7–14.8
+comparisons, pacing, funnel drop-off, anomaly detection. And the attribution PANEL is operator-only —
+the client link carries `conversions_basis` but not the Platform-Reported/Store-Confirmed section,
+which needs its own visibility switch on the link builder.
+
+---
+
+## GATE — 2026-08-07 (superseded by the green run above) · FAILING. `Failed=21`
 
 **`PLAYWRIGHT_EXIT_CODE=1` · 788 passed · 21 failed · 41.6m · `retries: 0`, so `Flaky=0` and
 `Retries=0` are properties of the run, not a claim about it.** Run at `235803d`, three browsers, one

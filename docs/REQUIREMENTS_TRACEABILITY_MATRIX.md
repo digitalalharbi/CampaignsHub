@@ -1153,22 +1153,28 @@ still `NOT_STARTED`.** The section stays `PARTIAL` until that lands.
 | REPORT-OBJECTIVE-005-A | REPORTS | The store's orders are the one figure that MAY be totalled, and duplicates are removed before it | `ProjectOrders::forWindow()` — one loader, dedup key `(provider, shop external id, order external id)` | The collapse is stated with the shop named, never applied in silence | `…::a_shop_connected_twice_does_not_double_the_merchants_revenue`, `…::two_different_shops_using_the_same_order_number_are_two_orders`, `…::the_funnel_reads_the_same_deduplicated_orders` | **VERIFIED** | — | `commerce_orders` is unique on `(external_account_id, external_id)`, which stops a re-sync and does **not** stop the case that happens: one shop connected twice — a reconnect, or two people running the OAuth flow — files every sale under two account ids. Both rows satisfy the index, revenue doubles, order count doubles and **AOV stays exactly right**, which is why nobody notices. The shop must be in the key: two merchants both numbering an order `1001` are two orders, and a key without it would trade a double-count for an undercount. Live: 657 → 1,314 rows, and the answer stayed 457 orders / 303,720 SAR with 469 copies collapsed |
 | REPORT-OBJECTIVE-005-B | REPORTS | The summed «conversions» figure says what it is | `MetricsAggregator::conversionsBasis()`, carried by `metrics/summary` and by the client link's `LiveReportService` | A line beneath the KPI row, shown only when more than one platform contributed | `…::a_summed_conversions_figure_declares_that_it_may_double_count`, `…::a_single_platform_figure_is_not_flagged`, `conversionsBasis.test.tsx` | **VERIFIED** | — | Found while reviewing this unit live: the dashboard printed «النتائج 1,169» — `SUM(conversions)` across four platforms — with nothing beside it, which is precisely the «unique unified orders» the contract forbids. The figure is NOT removed: it is the only conversion number available before a store is connected. What was missing was the sentence. It ships in the payload rather than being written by each page, so the dashboard, the report and the client's link cannot end up saying different things about the same number |
 | REPORT-OBJECTIVE-005-C | REPORTS | Click-through and view-through are read, never assumed | `attributionOf()` parses `7d_click_1d_view`; `default` yields nulls and `window_known: false` | «لم تُرسل المنصة نافذة إسناد مع هذه الأرقام» | `…::an_unstated_window_yields_null_days_and_says_so`, `…::a_click_only_window_reports_no_view_through`, `…::mixed_windows_inside_one_platform_are_declared` | **VERIFIED** | — | A defaulted «7 days» would be a claim about a client's data invented by this file. Two windows inside ONE platform's figures means those figures are not comparable to each other, and that is said rather than resolved by taking the commonest |
-> ### ⚠ GATE STATUS — 2026-08-07: **FAILING.** `PLAYWRIGHT_EXIT_CODE=1`, 788 passed, 21 failed.
+> ### ✅ GATE STATUS — 2026-08-07: **GREEN.** `PLAYWRIGHT_EXIT_CODE=0`, 809 passed, 0 failed, 32.4m.
 >
-> 21 = 7 distinct specs × 3 browsers; **every failure reproduces in chromium, firefox and webkit**,
-> so none of them is noise. Three root causes, recorded in full in `RESUME_STATE.md`:
+> Run at `b6cc223` on chromium, firefox and webkit, one worker, `retries: 0`, with no file or database
+> change during it. **Failed=0 · Flaky=0 · Retries=0 · Working tree CLEAN.** Every §15 row below is now
+> gate-backed as well as unit-tested and live-reviewed. This is the first passing gate since `2ea6943`.
 >
-> 1. **`/agency/content` lost `ViewCustomiser`** (9 failures). `383fc63`, the §15 library rebuild,
->    removed the one folded filter control and the applied-summary, reverting SIMPLIFY-001 on a page
->    that component's own docblock names as one of its five. **This is ours, and it is a regression.**
-> 2. **The registration journey hangs** on «جارٍ التحقق…» (9 failures) — and `AccountStatusPage` has
->    no error branch for a failed QUERY, only for a failed mutation, so it spins silently.
-> 3. **The Arabic PDF export** (3 failures), not yet diagnosed.
+> It took two runs and the first was worth its 34 minutes — 21 failures became 5, and the 5 were not a
+> subset of the 21. The full account is in `RESUME_STATE.md`; the short version is that **12 of the
+> original 21 were one cause and it was not in the product** (the gate's own backend still redirected
+> to :5173 after E2E-ISO-001 moved it to :5273), 9 were a genuine regression this branch had carried
+> undetected since `383fc63`, and the second run then surfaced **two real defects nobody had reported**:
 >
-> **Read every §15 row below accordingly.** They were verified against unit tests and live browser
-> review, which is what their evidence columns say — and NOT against a passing three-browser gate,
-> because there has not been one since `2ea6943`. No row here is withdrawn; none of them should be
-> read as gate-backed until the gate is green.
+> - **`0490892`** — the campaign Funnel tab replaced the whole page with a raw stack trace, in a
+>   customer's portal, on every open. Two endpoints answered one funnel in two shapes.
+> - **`08f2ecb`** — the requirement board silently showed fewer requirements than the count printed
+>   above them, because ids repeat down this very matrix by design.
+>
+> Both failed in ONE browser each. Neither was noise, and treating a single-browser failure as a flake
+> would have shipped both.
+>
+> **One gap is named and left open rather than folded in:** the campaign detail route has no
+> `errorElement`, which is why that crash reached React Router's default boundary. Its own unit.
 
 | DEMO-COMMERCE | COMMERCE | The merchant's ledger the demo never had | `DemoCommerceSeeder` — one Salla store, 657 orders across 90 days, products, customers, abandoned carts | Makes «الفانل والمتجر» and the Store-Confirmed block reviewable for the first time | Exercised by the live review above | **VERIFIED** | — | `COMMERCE-001` shipped the connectors, the tables, the resolver and the store half of the funnel, and **no seeder ever wrote one order** — so every install said «لا يوجد متجر مربوط» on all four store stages and nobody had seen that code run. The orders span every case the resolver distinguishes (`utm_campaign_id` · `click_id_platform_only` · `conflict` · `none`) and the platforms deliberately over-report against them, because a demo where the two agreed would make the attribution page look pointless. Everything is `is_demo`; the credential payload is a labelled placeholder; Salla and Zid stay **Awaiting Credentials** |
 | AGENCY-ANALYTICS | UX | `/agency/analytics` exists | — | Mounted, not copied — the same `AnalyticsPage` component, per ADR 0002 | `navGrouping.test.ts` pin extended deliberately | **VERIFIED** | — | Every metrics route is `portal:app,agency` on the server and always has been; only the link and the URL were missing, so `/agency/analytics` answered 404 for the reader who runs media across five clients and most needs it. The same gap `/agency/integrations` closed under CONNECT-001. Found because this unit's own panel could not be reviewed live — the demo store project lives in the agency tenant, and no `/app` user can reach it |
