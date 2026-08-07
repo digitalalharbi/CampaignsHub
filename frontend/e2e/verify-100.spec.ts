@@ -291,60 +291,79 @@ test.describe('DEVSTATUS-001 — the requirement board', () => {
 })
 
 /**
- * SIMPLIFY-001 — the dashboard answers before it configures.
+ * UX-DASH-001 — the dashboard answers, WITH its filters on it.
  *
- * `/app/dashboard` opened with three bands of controls between the reader and any number: a saved-views
- * bar, an objective row and a platform row. Somebody who had never used the product met the settings
- * before the answers.
+ * SIMPLIFY-001 folded the saved-views bar, the objective row and the platform row behind one
+ * «تخصيص العرض» button. It was right that three bands of configuration above the fold is a settings
+ * screen, and wrong about which of them were configuration: period, client, project, platform,
+ * campaign, path and objective are the questions this product exists to answer.
  *
- * Nothing was removed. All three are behind one «تخصيص العرض» button, and a line beside it states what
- * is currently applied in words — so folding the controls hides no state. These tests assert exactly
- * that: the controls are reachable, they still work, and the page says what it is showing.
+ * So these tests are the inverse of the ones they replace. The controls are on the page, saved views
+ * — genuinely rare — are the only thing still folded, and a narrowed page names what narrowed it
+ * with chips that each undo their own value.
  */
-test.describe('SIMPLIFY-001 — the advertiser dashboard', () => {
+test.describe('UX-DASH-001 — the advertiser dashboard', () => {
   test.use({ storageState: AUTH.advertiser })
 
-  test('opens on the figures, with one control and a plain statement of what is applied', async ({ page }) => {
+  test('opens on the figures, with its filters on the page', async ({ page }) => {
     await page.goto('/app/dashboard')
 
-    await expect(page.getByTestId('dashboard-applied'), 'the page does not say what it is showing')
-      .toBeVisible({ timeout: 20000 })
-    await expect(page.getByTestId('dashboard-customise')).toBeVisible()
+    const bar = page.getByTestId('dashboard-filters')
+    await expect(bar, 'the dashboard has no visible filter bar').toBeVisible({ timeout: 20000 })
 
-    // The filter rows are folded away, not sitting between the reader and the numbers.
-    await expect(page.getByTestId('saved-views-bar')).toHaveCount(0)
+    for (const id of ['dashboard-period', 'dashboard-platform', 'dashboard-path', 'dashboard-objective']) {
+      await expect(page.getByTestId(id), `${id} is not on the page`).toBeVisible()
+    }
+
+    // Nothing narrowed on arrival, and nothing had to be opened to reach the controls.
+    await expect(page.getByTestId('dashboard-applied')).toHaveCount(0)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
   })
 
-  test('the folded controls still work, and the page says so', async ({ page }) => {
+  test('narrowing names itself, and can be undone one value at a time', async ({ page }) => {
     await page.goto('/app/dashboard')
-    await expect(page.getByTestId('dashboard-applied')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('dashboard-filters')).toBeVisible({ timeout: 20000 })
 
-    const before = await page.getByTestId('dashboard-applied').innerText()
+    await page.getByTestId('dashboard-objective').selectOption('sales')
 
-    await page.getByTestId('dashboard-customise').click()
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible()
+    const chip = page.getByTestId('dashboard-applied-objective:sales')
+    await expect(chip, 'the page does not say what is narrowing it').toBeVisible({ timeout: 20000 })
 
-    // Everything that used to be on the page is still here, unchanged.
-    await expect(dialog).toContainText(/العروض المحفوظة|Saved views/i)
-    await expect(dialog).toContainText(/الهدف|Objective/i)
-    await expect(dialog).toContainText(/المنصات|Platforms/i)
+    // The KPI row follows the objective: a sales dashboard leads with what it sold.
+    await expect(page.getByTestId('metric-purchases')).toBeVisible({ timeout: 20000 })
 
-    await dialog.getByRole('button', { name: /^المبيعات$|^Sales$/ }).click()
+    await page.getByTestId('dashboard-reset').click()
+    await expect(page.getByTestId('dashboard-applied')).toHaveCount(0)
+  })
 
-    await expect.poll(async () => await page.getByTestId('dashboard-applied').innerText(), { timeout: 20000 })
-      .not.toBe(before)
+  /** Saved views are the one thing rare enough to fold — and they still open and still work. */
+  test('saved views are behind More filters, and still reachable', async ({ page }) => {
+    await page.goto('/app/dashboard')
+    await expect(page.getByTestId('dashboard-more-filters')).toBeVisible({ timeout: 20000 })
+
+    await page.getByTestId('dashboard-more-filters').click()
+    await expect(page.getByRole('dialog')).toContainText(/العروض المحفوظة|Saved views/i)
   })
 
   test('it holds together on a phone', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
     await page.goto('/app/dashboard')
-    await expect(page.getByTestId('dashboard-customise')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('dashboard-filters')).toBeVisible({ timeout: 20000 })
+    await page.waitForLoadState('networkidle')
 
-    await page.getByTestId('dashboard-customise').click()
+    // The inline row of controls is now the thing most likely to burst a phone, so it is measured
+    // before anything is opened — and again with the folded dialog open.
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
+      'the filter bar pushes the page sideways on a phone',
+    ).toBe(false)
+
+    await page.getByTestId('dashboard-more-filters').click()
     await expect(page.getByRole('dialog')).toBeVisible()
 
-    const overflows = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
-    expect(overflows, 'the customise dialog pushes the page sideways on a phone').toBe(false)
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
+      'the More filters dialog pushes the page sideways on a phone',
+    ).toBe(false)
   })
 })

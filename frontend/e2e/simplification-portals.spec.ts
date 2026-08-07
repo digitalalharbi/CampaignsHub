@@ -2,58 +2,66 @@ import { expect, test } from '@playwright/test'
 import { AUTH } from './helpers'
 
 /**
- * `/app`, `/admin` and `/portal` after the simplification pass (SIMPLIFY-003/004/005).
+ * `/app`, `/admin` and `/portal` — UX-FILTERS-001, which narrowed the scope of SIMPLIFY-003/004/005.
  *
- * The agency portal has its own file. This one covers the other three and the rule they share:
- * **a page opens on its data, and whatever narrows that data folds behind one control that says what
- * is applied.**
+ * These tests used to assert the opposite of what they assert now, and that is deliberate rather
+ * than a repair. SIMPLIFY folded EVERY filter on these pages behind one button; the rule since is a
+ * division: **the axes somebody reaches for daily are on the page, and only the rare ones fold.**
  *
- * The regression these exist to prevent is a page drifting back to settings-first. That is not a
- * hypothetical: it is how every one of these pages got that way — a status row, then a type row, then
- * a toggle, each reasonable on its own.
+ * What survives from the original intent, unchanged, is the thing those tests were really protecting
+ * — a page must not drift back to settings-first, and a narrowed page must say what narrowed it. It
+ * says so with removable chips now instead of a sentence, which is strictly more: a sentence could
+ * report «2 platforms» and offer no way to drop one of them.
+ *
+ * The regression this still prevents is a daily control disappearing behind a dialog.
  */
 
-test.describe('the advertiser portal opens on its data', () => {
+test.describe('the advertiser portal opens on its data, with its filters on it', () => {
   test.use({ storageState: AUTH.advertiser })
 
   /**
-   * Reports and Files fold their filters; search and the view switchers stay out.
-   *
    * Campaigns is deliberately NOT in this list. Its chips carry live counts («الكل ٢٥», «نشطة ١٢»),
-   * which makes them information rather than configuration — folding them would hide data, not
-   * settings. Projects is out for the same kind of reason: one status row beside search is already
-   * simple, and folding it would add a click for nothing.
+   * which makes them information rather than configuration, and it never folded them.
    */
   const PAGES = [
-    { id: 'reports', path: '/app/reports', empty: /كل التقارير|All reports/ },
-    { id: 'files', path: '/app/files', empty: /كل الملفات|All files/ },
+    { id: 'reports', path: '/app/reports' },
+    { id: 'files', path: '/app/files' },
+    { id: 'tasks', path: '/app/tasks' },
   ] as const
 
   for (const p of PAGES) {
-    test(`${p.id}: one filter control, and a sentence saying what is shown`, async ({ page }) => {
+    test(`${p.id}: the filters are on the page, not behind a button`, async ({ page }) => {
       await page.goto(p.path)
 
-      await expect(page.getByTestId(`${p.id}-customise`), 'no single filter control')
-        .toBeVisible({ timeout: 20000 })
-      await expect(page.getByTestId(`${p.id}-applied`), 'the page never says what it is showing')
-        .toContainText(p.empty)
+      const bar = page.getByTestId(`${p.id}-filters`)
+      await expect(bar, 'no visible filter bar').toBeVisible({ timeout: 20000 })
+
+      // At least one real narrowing control, reachable without opening anything.
+      await expect(bar.locator('select').first()).toBeVisible()
+
+      // Nothing is applied on arrival, so there is no chip row and nothing to reset.
+      await expect(page.getByTestId(`${p.id}-applied`)).toHaveCount(0)
+      await expect(page.getByRole('dialog')).toHaveCount(0)
     })
 
-    test(`${p.id}: the folded controls still work`, async ({ page }) => {
+    test(`${p.id}: narrowing names itself as a chip that can be undone`, async ({ page }) => {
       await page.goto(p.path)
-      await expect(page.getByTestId(`${p.id}-customise`)).toBeVisible({ timeout: 20000 })
+      const bar = page.getByTestId(`${p.id}-filters`)
+      await expect(bar).toBeVisible({ timeout: 20000 })
 
-      const before = await page.getByTestId(`${p.id}-applied`).innerText()
-      await page.getByTestId(`${p.id}-customise`).click()
+      // Pick the first non-default value of the first select on the bar.
+      const select = bar.locator('select').first()
+      const values = await select.locator('option').evaluateAll((os) =>
+        os.map((o) => (o as HTMLOptionElement).value),
+      )
+      const chosen = values.find((v) => v !== '' && v !== 'all')
+      expect(chosen, 'the filter offers nothing to choose').toBeTruthy()
+      await select.selectOption(chosen!)
 
-      // Scoped to the body: the modal's close «X» is a text-less button and would otherwise be first.
-      const controls = page.getByTestId(`${p.id}-customise-body`)
-      await expect(controls).toBeVisible()
-      await controls.getByRole('button').filter({ hasNotText: /^\s*(الكل|All)\s*$/ }).first().click()
-
-      await expect
-        .poll(async () => page.getByTestId(`${p.id}-applied`).innerText(), { timeout: 20000 })
-        .not.toBe(before)
+      // The page now says what is narrowing it, and offers the way back.
+      await expect(page.getByTestId(`${p.id}-applied`)).toBeVisible({ timeout: 20000 })
+      await page.getByTestId(`${p.id}-reset`).click()
+      await expect(page.getByTestId(`${p.id}-applied`)).toHaveCount(0)
     })
   }
 
@@ -63,12 +71,10 @@ test.describe('the advertiser portal opens on its data', () => {
    * Searching is how somebody finds a row they already have in mind. Burying it would make the page
    * harder to use, which is the opposite of the point — so it is asserted to stay on the page.
    */
-  test('search stays on the page, outside the dialog', async ({ page }) => {
+  test('search stays on the page, beside the filters', async ({ page }) => {
     await page.goto('/app/files')
-    await expect(page.getByTestId('files-customise')).toBeVisible({ timeout: 20000 })
-
-    const search = page.locator('main input[type="text"], main input:not([type])').first()
-    await expect(search, 'the search box was folded away with the filters').toBeVisible()
+    await expect(page.getByTestId('files-filters')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('files-search'), 'the search box was folded away').toBeVisible()
   })
 })
 

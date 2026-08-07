@@ -95,28 +95,26 @@ test.describe('the creative library', () => {
     const all = await cards(page).count()
 
     /*
-     * The platform axis lives inside the folded filter dialog (SIMPLIFY-001).
+     * The platform axis is ON the page (UX-CONTENT-001).
      *
-     * It was a `<select>` when this spec was written and is a chip now — the library's ten axes were
-     * restored to the one control the rest of the product uses, and the closed sets became chips
-     * because a chip row is how you offer six platforms. What is asserted below is unchanged and is
-     * the part that matters: the filter narrows on the SERVER and the choice lands in the address.
+     * It has been a `<select>` inside a dialog and a chip inside a dialog; it is a visible
+     * multi-select now, because narrowing a library to one platform is how a library is used rather
+     * than how it is configured. What is asserted below is unchanged across all three and is the
+     * part that matters: the filter narrows on the SERVER and the choice lands in the address.
      */
-    await page.getByTestId('content-customise').click()
-    const filters = page.getByTestId('content-customise-body')
-    await expect(filters).toBeVisible()
-    await filters.getByRole('button').filter({ hasNotText: /^\s*(الكل|All)\s*$/ }).first().click()
-    await expect(page.getByTestId('content-applied')).not.toHaveText(/^كل المحتوى$|^All content$/)
+    await page.getByTestId('content-providers').click()
+    await page.getByRole('option').first().click()
+    await expect(page.getByTestId('content-applied')).toBeVisible({ timeout: 20000 })
 
     /*
-     * Shut the dialog before counting, and not for tidiness.
+     * Shut the popover before counting.
      *
-     * `cards()` is `getByRole('article')`, and an open modal takes the page behind it out of the
-     * accessibility tree — so counting with the dialog up returns zero, and «0 ≤ all» would pass
-     * this test while proving nothing at all.
+     * `cards()` is `getByRole('article')`; anything that takes the page behind it out of the
+     * accessibility tree would return zero, and «0 ≤ all» would pass this test while proving
+     * nothing at all.
      */
     await page.keyboard.press('Escape')
-    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByRole('listbox')).toHaveCount(0)
 
     await expect.poll(() => cards(page).count(), { timeout: 20000 }).toBeLessThanOrEqual(all)
     await expect(page).toHaveURL(/providers/)

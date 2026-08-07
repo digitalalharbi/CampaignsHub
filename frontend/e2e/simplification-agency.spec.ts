@@ -67,97 +67,75 @@ test.describe('the agency rail', () => {
   })
 })
 
-test.describe('agency filters fold, and say what is applied', () => {
+test.describe('agency filters are on the page, and name what they narrow', () => {
   test.use({ storageState: AUTH.owner })
 
   /**
-   * Each page states what it is showing, before anybody opens anything.
+   * UX-FILTERS-001 narrowed the scope of SIMPLIFY-002.
    *
-   * The wording differs per page on purpose — «كل العملاء» and «كل المهام» read as sentences where a
-   * shared «No filters» would read as a system message.
+   * These assertions are the inverse of the ones they replace, on purpose. The daily axes are inline
+   * now — status, priority, severity, platform, type — and only the rare ones fold. What is
+   * unchanged is the claim underneath: a narrowed page must SAY what narrowed it. It says so with
+   * chips that each undo their own value, which a joined sentence could not do.
    */
   const PAGES = [
-    /*
-     * `narrow` names the exact control to use, per page.
-     *
-     * A generic «click the first button that isn't All» does not work here and produced four
-     * identical failures: Clients filters with dropdowns and tick-boxes, not chips, so the first
-     * such button was a select that opens rather than a choice that applies. Naming the control is
-     * the same lesson this suite has now learned five times — a selector that guesses guesses wrong.
-     */
-    {
-      id: 'clients', path: '/agency/clients', empty: /كل العملاء|All clients/,
-      narrow: (d: import('@playwright/test').Locator) =>
-        d.getByRole('checkbox').first().check(),
-    },
-    {
-      id: 'tasks', path: '/agency/tasks', empty: /كل المهام|All tasks/,
-      narrow: (d: import('@playwright/test').Locator) =>
-        d.getByRole('button').filter({ hasNotText: /^\s*(الكل|All)\s*$/ }).first().click(),
-    },
-    {
-      id: 'alerts', path: '/agency/alerts', empty: /كل الأهميات|Every severity/,
-      narrow: (d: import('@playwright/test').Locator) =>
-        d.getByRole('button').filter({ hasNotText: /^\s*(الكل|All)\s*$/ }).first().click(),
-    },
-    {
-      id: 'content', path: '/agency/content', empty: /كل المحتوى|All content/,
-      narrow: (d: import('@playwright/test').Locator) =>
-        d.getByRole('button').filter({ hasNotText: /^\s*(الكل|All)\s*$/ }).first().click(),
-    },
+    { id: 'clients', path: '/agency/clients' },
+    { id: 'tasks', path: '/agency/tasks' },
+    { id: 'alerts', path: '/agency/alerts' },
+    { id: 'content', path: '/agency/content' },
   ] as const
 
   for (const p of PAGES) {
-    test(`${p.id}: opens on its data, with one control and a plain summary`, async ({ page }) => {
+    test(`${p.id}: opens on its data, with its filters on the page`, async ({ page }) => {
       await page.goto(p.path)
 
-      await expect(page.getByTestId(`${p.id}-customise`), 'no single filter control')
-        .toBeVisible({ timeout: 20000 })
-      await expect(page.getByTestId(`${p.id}-applied`), 'the page never says what it is showing')
-        .toContainText(p.empty)
+      const bar = page.getByTestId(`${p.id}-filters`)
+      await expect(bar, 'no visible filter bar').toBeVisible({ timeout: 20000 })
+
+      // Nothing narrowed on arrival: no chip row, and nothing had to be opened to see the controls.
+      await expect(page.getByTestId(`${p.id}-applied`)).toHaveCount(0)
+      await expect(page.getByRole('dialog')).toHaveCount(0)
     })
 
-    test(`${p.id}: the folded controls still work and the summary follows`, async ({ page }) => {
+    test(`${p.id}: narrowing names itself, and can be undone`, async ({ page }) => {
       await page.goto(p.path)
-      await expect(page.getByTestId(`${p.id}-customise`)).toBeVisible({ timeout: 20000 })
-
-      const before = await page.getByTestId(`${p.id}-applied`).innerText()
-
-      await page.getByTestId(`${p.id}-customise`).click()
-      await expect(page.getByRole('dialog')).toBeVisible()
+      const bar = page.getByTestId(`${p.id}-filters`)
+      await expect(bar).toBeVisible({ timeout: 20000 })
+      await page.waitForLoadState('networkidle')
 
       /*
-       * Scoped to the dialog's BODY, not the dialog.
+       * Use whichever kind of control this page's first axis is.
        *
-       * The modal's close «X» is a button with no text, so it survived a «not the All option» filter
-       * and got clicked first — the dialog shut and nothing was filtered, three times over. The body
-       * testid contains only the page's own controls.
+       * A generic «click the first thing that isn't All» has guessed wrong on this suite five times.
+       * Both shapes are handled explicitly instead: a `<select>` gets its first real option, and a
+       * multi-select trigger gets opened and its first option chosen.
        */
-      const controls = page.getByTestId(`${p.id}-customise-body`)
-      await expect(controls).toBeVisible()
+      const select = bar.locator('select').first()
+      if (await select.count() > 0) {
+        const values = await select.locator('option').evaluateAll((os) =>
+          os.map((o) => (o as HTMLOptionElement).value),
+        )
+        const chosen = values.find((v) => v !== '' && v !== 'all')
+        expect(chosen, `${p.id} offers no filter value`).toBeTruthy()
+        await select.selectOption(chosen!)
+      } else {
+        await bar.getByRole('button', { expanded: false }).first().click()
+        await page.getByRole('option').first().click()
+      }
 
-      // Use the control this page actually filters with — see `narrow` above.
-      await p.narrow(controls)
-
-      await expect
-        .poll(async () => page.getByTestId(`${p.id}-applied`).innerText(), { timeout: 20000 })
-        .not.toBe(before)
-
-      // Having narrowed it, the page offers a way back to everything.
-      await expect(page.getByTestId(`${p.id}-clear`)).toBeVisible()
+      await expect(page.getByTestId(`${p.id}-applied`)).toBeVisible({ timeout: 20000 })
+      await page.getByTestId(`${p.id}-reset`).click()
+      await expect(page.getByTestId(`${p.id}-applied`)).toHaveCount(0)
     })
   }
-})
-
-test.describe('the agency portal holds together at every width', () => {
-  test.use({ storageState: AUTH.owner })
 
   /**
    * 343px is the narrowest case in the brief, and the dialog is the thing most likely to burst it.
    *
    * The `/app/dashboard` regression that got through was exactly this shape — fine in Arabic, too
-   * wide in English, because «Customise» and «Campaigns» are longer than their Arabic labels. So both
-   * languages are measured, at the width where it would show.
+   * wide in English, because the English labels are longer than their Arabic counterparts. So both
+   * languages are measured, at the width where it would show. The bar is measured before the dialog
+   * as well, because an inline row of controls is now the more likely thing to burst a phone.
    */
   for (const locale of ['ar', 'en'] as const) {
     test(`no sideways scroll at 343px in ${locale}, dialog open`, async ({ page }) => {
@@ -165,7 +143,7 @@ test.describe('the agency portal holds together at every width', () => {
       await page.setViewportSize({ width: 343, height: 760 })
       await page.goto('/agency/clients')
 
-      await expect(page.getByTestId('clients-customise')).toBeVisible({ timeout: 20000 })
+      await expect(page.getByTestId('clients-filters')).toBeVisible({ timeout: 20000 })
 
       /*
        * Wait for the clients themselves, not just the toolbar above them.
@@ -183,7 +161,7 @@ test.describe('the agency portal holds together at every width', () => {
         'the loaded page scrolls sideways before the dialog is even opened',
       ).toBe(false)
 
-      await page.getByTestId('clients-customise').click()
+      await page.getByTestId('clients-more-filters').click()
       await expect(page.getByRole('dialog')).toBeVisible()
 
       expect(

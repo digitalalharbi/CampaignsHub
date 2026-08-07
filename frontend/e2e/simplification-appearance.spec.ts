@@ -14,10 +14,11 @@ import { AUTH } from './helpers'
  * - **the page has loaded** before anything is measured — `networkidle`, not "the toolbar appeared";
  * - **no sideways scroll**, which on a phone is content the reader cannot reach and will not know is
  *   there;
- * - **the filters dialog** opened at the narrowest width, because folding controls into a dialog is
- *   the thing this pass introduced and therefore the thing most likely to burst a small screen;
- * - **the applied-state sentence stays legible** in both themes — a summary rendered in a colour that
- *   vanishes against the dark surface hides exactly the state folding was supposed to keep visible.
+ * - **the visible filter bar** measured at the narrowest width, because a row of inline controls is
+ *   what UX-FILTERS-001 put back on these pages and therefore the thing most likely to burst a small
+ *   screen;
+ * - **a filter's own label stays legible** in both themes — a control rendered in a colour that
+ *   vanishes against the dark surface is a control nobody can find, which is worse than folding it.
  *
  * Both directions are reached by toggling, which is how a person reaches them too.
  */
@@ -66,7 +67,7 @@ for (const p of PAGES) {
         await page.setViewportSize({ width: vp.width, height: vp.height })
         await page.goto(p.path)
 
-        await expect(page.getByTestId(`${p.id}-customise`)).toBeVisible({ timeout: 20000 })
+        await expect(page.getByTestId(`${p.id}-filters`)).toBeVisible({ timeout: 20000 })
         // Measure the page that the reader gets, not the skeleton that precedes it.
         await page.waitForLoadState('networkidle')
 
@@ -86,16 +87,16 @@ for (const p of PAGES) {
           ).toBe(false)
 
           /*
-           * The applied-state line must be readable, not merely present.
+           * A filter's own label must be READABLE, not merely present.
            *
-           * It is the sentence that keeps folding honest — «كل العملاء», «مفتوحة · أولوية عالية». A
-           * theme that leaves it the same colour as the surface behind it hides the one thing this
-           * pass promised would stay visible, and the DOM assertion alone would never notice.
+           * These labels are what make an inline control findable — «المنصة», «الحالة», «الأولوية».
+           * A theme that leaves one the same colour as the surface behind it hides the control the
+           * whole unit exists to expose, and a DOM assertion alone would never notice.
            */
-          const applied = page.getByTestId(`${p.id}-applied`)
-          await expect(applied, `${where} has no applied-state line`).toBeVisible()
+          const label = page.getByTestId(`${p.id}-filters`).locator('label, span').first()
+          await expect(label, `${where} has no filter label`).toBeVisible()
 
-          const contrast = await applied.evaluate((el) => {
+          const contrast = await label.evaluate((el) => {
             const rgb = (s: string) => (s.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number)
             const lum = ([r, g, b]: number[]) => {
               const c = [r, g, b].map((v) => {
@@ -119,18 +120,18 @@ for (const p of PAGES) {
 
           // 3:1 is the WCAG floor for large text and a generous one for this size — anything below it
           // is not a matter of taste, it is text nobody can read.
-          expect(contrast, `${where}: the applied-state line is unreadable against its background`)
+          expect(contrast, `${where}: a filter label is unreadable against its background`)
             .toBeGreaterThan(3)
         })
 
         /*
-         * And once more with the dialog open, at the narrow width only.
-         *
-         * A modal that fits at 1440 tells you nothing; the phone is where a dialog full of filters
-         * pushes a page sideways.
+         * And once more with «More filters» open, at the narrow width only — where a page still has
+         * one. Four of these six now fold nothing at all, which is the point of the unit; a modal
+         * that fits at 1440 tells you nothing, and the phone is where a dialog bursts a page.
          */
-        if (vp.name === 'phone') {
-          await page.getByTestId(`${p.id}-customise`).click()
+        const more = page.getByTestId(`${p.id}-more-filters`)
+        if (vp.name === 'phone' && (await more.count()) > 0) {
+          await more.click()
           await expect(page.getByRole('dialog')).toBeVisible()
           expect(
             await page.evaluate(
