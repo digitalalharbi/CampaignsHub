@@ -135,77 +135,80 @@ describe('CreativesPage', () => {
     vi.mocked(listCreatives).mockResolvedValue(page())
   })
 
-  /** Opens the folded filter dialog and hands back its body — the controls, without the modal chrome. */
-  const openFilters = async () => {
-    fireEvent.click(await screen.findByTestId('content-customise'))
-    return within(await screen.findByTestId('content-customise-body'))
-  }
-
-  it('offers every axis §15.2 asks for, populated from real rows', async () => {
+  /**
+   * UX-CONTENT-001 — the axes a reviewer uses daily are ON the page.
+   *
+   * The predecessor of this test opened a dialog first. That is the change: somebody who came to
+   * LOOK at creatives should not have to discover that the library can be narrowed at all.
+   */
+  it('puts every daily axis §15.2 asks for on the page, populated from real rows', async () => {
     renderWithProviders(<CreativesPage />, { locale: 'en' })
     await screen.findByRole('article')
 
-    const filters = await openFilters()
+    const bar = within(screen.getByTestId('content-filters'))
 
-    // The closed sets are chips, named by their group heading and offering the real values.
-    for (const group of ['Platform', 'Creative type', 'Status', 'Fatigue', 'Objective', 'Marketing path']) {
-      expect(filters.getByText(group)).toBeInTheDocument()
+    for (const axis of ['Client', 'Project', 'Platform', 'Campaign', 'Objective', 'Marketing path', 'Creative type', 'Fatigue']) {
+      expect(bar.getByText(axis)).toBeInTheDocument()
     }
-    expect(filters.getByRole('button', { name: 'TikTok' })).toBeInTheDocument()
-    expect(filters.getByRole('button', { name: 'Fatigued' })).toBeInTheDocument()
+    // Reachable without opening anything.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
-    // The open-ended id lists stay selects — a chip row of four hundred campaigns is not a control.
-    for (const axis of ['Client', 'Project', 'Campaign', 'Ad set', 'Ad']) {
-      expect(filters.getByLabelText(axis)).toBeInTheDocument()
+    // The values come from the rows the server returned, not from a hardcoded list.
+    fireEvent.click(screen.getByTestId('content-providers'))
+    expect(screen.getByRole('option', { name: 'TikTok' })).toBeInTheDocument()
+  })
+
+  /** The rare axes still fold — that is what «More filters» is for. */
+  it('folds status, ad set and ad, and nothing else', async () => {
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+    await screen.findByRole('article')
+
+    fireEvent.click(screen.getByTestId('content-more-filters'))
+    const dialog = within(await screen.findByTestId('content-more-filters-body'))
+
+    for (const axis of ['Status', 'Ad set', 'Ad']) {
+      expect(dialog.getByText(axis)).toBeInTheDocument()
     }
+    expect(dialog.queryByText('Platform')).not.toBeInTheDocument()
   })
 
   /**
-   * SIMPLIFY-001: folding the controls must hide no state.
+   * A narrowed library names what narrowed it, and each chip undoes exactly its own value.
    *
-   * The dialog is shut for all but a few seconds of the page's life, so the applied line beside the
-   * button is the ONLY thing standing between a narrowed library and a library that merely looks
-   * short. It states what is applied in words — never `providers[]=meta`.
+   * This is what the old applied-summary SENTENCE could not do: it could say «2 platforms» and
+   * offer no way to drop one of them, so the only way back was clearing everything.
    */
-  it('says what is applied in words, before and after narrowing', async () => {
+  it('names each applied filter as a chip and removes only that one', async () => {
     renderWithProviders(<CreativesPage />, { locale: 'en' })
     await screen.findByRole('article')
 
-    expect(screen.getByTestId('content-applied')).toHaveTextContent('All content')
-    expect(screen.queryByTestId('content-clear')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('content-applied')).not.toBeInTheDocument()
 
-    const filters = await openFilters()
-    fireEvent.click(filters.getByRole('button', { name: 'TikTok' }))
+    fireEvent.click(screen.getByTestId('content-providers'))
+    fireEvent.click(screen.getByRole('option', { name: 'TikTok' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Meta' }))
 
-    await waitFor(() => expect(screen.getByTestId('content-applied')).toHaveTextContent('TikTok'))
-    // Having narrowed it, the page offers a way back to everything.
-    expect(screen.getByTestId('content-clear')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('content-applied-providers:tiktok')).toBeInTheDocument())
+    expect(screen.getByTestId('content-applied-providers:meta')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Platform: TikTok' }))
+
+    await waitFor(() => expect(screen.queryByTestId('content-applied-providers:tiktok')).not.toBeInTheDocument())
+    expect(screen.getByTestId('content-applied-providers:meta')).toBeInTheDocument()
   })
 
-  /** More than one value of an axis collapses to a count, so the line stays a sentence. */
-  it('counts a multi-value axis rather than listing it', async () => {
+  /** One Reset, because clearing eight controls by hand is how people end up reloading the page. */
+  it('clears every filter at once, folded ones included', async () => {
     renderWithProviders(<CreativesPage />, { locale: 'en' })
     await screen.findByRole('article')
 
-    const filters = await openFilters()
-    fireEvent.click(filters.getByRole('button', { name: 'TikTok' }))
-    fireEvent.click(filters.getByRole('button', { name: 'Meta' }))
+    fireEvent.click(screen.getByTestId('content-providers'))
+    fireEvent.click(screen.getByRole('option', { name: 'TikTok' }))
+    await waitFor(() => expect(screen.getByTestId('content-applied-providers:tiktok')).toBeInTheDocument())
 
-    await waitFor(() => expect(screen.getByTestId('content-applied')).toHaveTextContent('2 platforms'))
-  })
+    fireEvent.click(screen.getByTestId('content-reset'))
 
-  /** Clearing puts every folded filter back, and the line says so without being read for it. */
-  it('clears every folded filter at once', async () => {
-    renderWithProviders(<CreativesPage />, { locale: 'en' })
-    await screen.findByRole('article')
-
-    const filters = await openFilters()
-    fireEvent.click(filters.getByRole('button', { name: 'TikTok' }))
-    await waitFor(() => expect(screen.getByTestId('content-applied')).toHaveTextContent('TikTok'))
-
-    fireEvent.click(screen.getByTestId('content-clear'))
-
-    await waitFor(() => expect(screen.getByTestId('content-applied')).toHaveTextContent('All content'))
+    await waitFor(() => expect(screen.queryByTestId('content-applied')).not.toBeInTheDocument())
   })
 
   /**
@@ -219,8 +222,8 @@ describe('CreativesPage', () => {
     renderWithProviders(<CreativesPage />, { locale: 'en' })
     await screen.findByRole('article')
 
-    const filters = await openFilters()
-    fireEvent.click(filters.getByRole('button', { name: 'TikTok' }))
+    fireEvent.click(screen.getByTestId('content-providers'))
+    fireEvent.click(screen.getByRole('option', { name: 'TikTok' }))
 
     await waitFor(() => {
       const calls = vi.mocked(listCreatives).mock.calls

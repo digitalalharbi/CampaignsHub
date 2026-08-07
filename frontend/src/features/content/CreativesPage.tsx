@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { GitCompare, Layers, LayoutGrid, Rows3, Search } from 'lucide-react'
+import { GitCompare, Layers, LayoutGrid, Rows3 } from 'lucide-react'
 import { CreativeViewer } from './CreativeViewer'
 import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
@@ -17,7 +17,8 @@ import {
 import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
-import { FilterGroup, ViewCustomiser } from '@/components/ui/ViewCustomiser'
+import { FilterBar, FilterMulti, FilterSearch, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
@@ -42,22 +43,23 @@ import { campaignStatusLabel, marketingPathLabel, objectiveLabel, providerLabel 
  * server intersects them against the caller's membership ceiling. Asking for another client's id
  * returns nothing rather than that client's creatives — the URL is not a permission.
  *
- * ## One control, not a wall of them — SIMPLIFY-001
+ * ## The filters somebody uses daily are on the page — UX-CONTENT-001
  *
- * Ten filter axes across the top of a library is the settings screen this page was never meant to
- * be: somebody who came to LOOK at creatives met the configuration first. They fold into
- * `ViewCustomiser`, which states what is applied in words beside the button — the part that makes
- * folding honest, since a narrowed library that looks unnarrowed is worse than a noisy toolbar.
+ * All ten axes used to fold into `ViewCustomiser` (SIMPLIFY-001). That was right about the symptom
+ * — ten rows of chips above a library is a settings screen — and wrong about which controls are
+ * configuration. Narrowing to one platform, one campaign, videos only, or the fatigued ones IS how
+ * a library is used, and folding those made a rich product look like a plain grid.
  *
- * Three things deliberately stay OUTSIDE it. **Search**, because searching is how a person finds a
- * row rather than how they configure a view. **The grid/list switcher**, because that is how the
- * page is READ. And **the period**, because it is not a filter over which rows exist — it is the
- * window every figure on every card was measured in, and a library quoting thirty days' spend
- * without saying so on screen is the same defect in a different place.
+ * So the division is by frequency rather than by count. Period, client, project, platform,
+ * campaign, objective, path, creative type and fatigue are inline. **Status, ad set and ad** fold
+ * into `More filters` — they are the rare ones. Search and the grid/table switcher were always
+ * outside: one is how a person finds a row, the other is how the page is READ.
  *
- * Inside, the closed sets (platform, type, status, fatigue, objective, path) are chips and the
- * open-ended id lists (client, project, campaign, ad set, ad) are multi-selects. A chip row of four
- * hundred campaign names is not a control.
+ * The applied axes render as chips that each remove their own value, which is what makes a narrowed
+ * library legible at a glance instead of looking like a short one.
+ *
+ * Closed sets and open-ended id lists both use the same multi-select, because a chip row of four
+ * hundred campaign names is not a control and two different shapes of the same idea is not a design.
  *
  * ## Nothing autoplays and nothing preloads
  *
@@ -117,6 +119,10 @@ const COPY = {
     prev: 'السابق',
     next: 'التالي',
     open: 'فتح المعاينة',
+    preview: 'المعاينة',
+    name: 'الاسم',
+    result: 'النتيجة',
+    efficiency: 'الكفاءة',
     details: 'تفاصيل المحتوى',
     source: 'المصدر: منصة الإعلان',
     allContent: 'كل المحتوى',
@@ -188,6 +194,10 @@ const COPY = {
     prev: 'Previous',
     next: 'Next',
     open: 'Open preview',
+    preview: 'Preview',
+    name: 'Name',
+    result: 'Result',
+    efficiency: 'Efficiency',
     details: 'Creative details',
     source: 'Source: ad platform',
     allContent: 'All content',
@@ -228,6 +238,31 @@ const KIND_LABEL: Record<string, { ar: string; en: string }> = {
 }
 
 /**
+ * Which of a creative's headline metrics is its RESULT, and which is its efficiency.
+ *
+ * `headline_metrics` is the server's answer to «what is this creative judged on», ordered by that
+ * objective's own priority — but it mixes the two kinds of answer a reviewer needs side by side.
+ * The result is what the money BOUGHT (purchases, leads, clicks, views); the efficiency is what
+ * each one COST or returned (CPA, CPL, CPC, CTR, ROAS). One column each, so a lead ad and a brand
+ * video can sit in the same table and neither is asked the other's question.
+ *
+ * `spend` is deliberately neither: it has its own column, because it is the one figure that means
+ * the same thing whatever the campaign was for.
+ */
+const EFFICIENCY_KEYS = new Set([
+  'ctr', 'cpc', 'cpm', 'cpa', 'roas', 'conversion_rate', 'aov',
+  'cost_per_view', 'cost_per_lpv', 'view_rate', 'completion_rate', 'hook_rate',
+])
+
+function primaryResultKey(headline: string[]): string | null {
+  return headline.find((key) => key !== 'spend' && !EFFICIENCY_KEYS.has(key)) ?? null
+}
+
+function primaryEfficiencyKey(headline: string[]): string | null {
+  return headline.find((key) => EFFICIENCY_KEYS.has(key)) ?? null
+}
+
+/**
  * The filter axes the address may carry, and the library may be opened on.
  *
  * Named in one place because both ends read it: the drill-down writes these keys and this page
@@ -242,70 +277,6 @@ const isoDaysAgo = (days: number) => {
   const d = new Date()
   d.setDate(d.getDate() - days)
   return d.toISOString().slice(0, 10)
-}
-
-/**
- * One value of a closed set, toggled.
- *
- * A chip rather than a checkbox because the whole set is visible at once and the choice is
- * multi-valued: «meta AND tiktok» is a normal thing to ask a library for.
- */
-function Chip({
-  active,
-  onClick,
-  tone,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  tone?: 'dark'
-  children: ReactNode
-}) {
-  const on = tone === 'dark' ? 'bg-text-primary text-surface' : 'bg-brand-500 text-white'
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`rounded-full px-3 py-1 text-xs font-semibold ${active ? on : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}
-    >
-      {children}
-    </button>
-  )
-}
-
-/** A multi-select rendered as a plain `<select multiple>` — keyboard-navigable and screen-readable. */
-function AxisSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string
-  value: string[]
-  options: Array<{ value: string; label: string }>
-  onChange: (next: string[]) => void
-}) {
-  if (options.length === 0) return null
-
-  return (
-    <label className="flex min-w-40 flex-col gap-1 text-xs">
-      <span className="font-medium text-text-secondary">{label}</span>
-      <select
-        multiple
-        aria-label={label}
-        value={value}
-        onChange={(e) => onChange(Array.from(e.target.selectedOptions, (o) => o.value))}
-        className="h-20 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text-primary"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
 }
 
 export function CreativesPage() {
@@ -465,331 +436,249 @@ export function CreativesPage() {
   const toggleSelected = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
 
-  const toggleAxis = (key: string, value: string) => {
-    const current = axes[key] ?? []
-    setAxis(key, current.includes(value) ? current.filter((v) => v !== value) : [...current, value])
-  }
-
   const filtersTouched = Object.keys(axes).length > 0 || search.trim() !== '' || health !== ''
 
-  /*
-   * Whether anything is NARROWED — which is not the same as «anything was touched».
-   *
-   * Sort lives in the dialog too and is deliberately absent here: reordering a library changes which
-   * creative is first, never which creatives exist, so marking it as an active filter would put a
-   * dot beside a control that hides nothing. Search and the period are outside the dialog and
-   * visible on their own, so they do not need the summary to speak for them.
-   */
-  const narrowed = Object.keys(axes).length > 0 || health !== ''
-
   /**
-   * What is applied, in words.
+   * What is narrowing the library, one chip per value.
    *
-   * This is the line that makes folding honest: with the controls behind a button, a library
-   * narrowed to one platform is indistinguishable from a library with one platform in it. Names,
-   * never the internal keys — `providers[]=meta` is what we send, «ميتا» is what a reader is owed.
+   * The applied row replaces the sentence the folded dialog needed. A sentence had to compress
+   * «three campaigns» into a phrase because it could not offer a way to undo any single one; chips
+   * can, and undoing one filter without touching the other eight is most of what a reviewer does.
    */
-  const appliedSummary = useMemo(() => {
-    const named = (values: string[] | undefined, label: (v: string) => string, plural: string) => {
-      if (!values || values.length === 0) return null
-      return values.length === 1 ? label(values[0]) : `${values.length} ${plural}`
-    }
+  const applied: AppliedFilter[] = useMemo(() => {
     const nameOf = (rows: Array<{ id: string; name: string }> | undefined, id: string) =>
       rows?.find((r) => r.id === id)?.name ?? id
 
-    const parts = [
-      named(axes.providers, (p) => providerLabel(p, locale), t.manyPlatforms),
-      named(axes.kinds, (k) => KIND_LABEL[k]?.[ar ? 'ar' : 'en'] ?? k, t.manyKinds),
-      named(axes.statuses, (s) => campaignStatusLabel(s, locale), t.manyStatuses),
-      health ? (FATIGUE_LABEL[health as FatigueStatus]?.[ar ? 'ar' : 'en'] ?? health) : null,
-      named(axes.objectives, (o) => objectiveLabel(o, locale), t.manyObjectives),
-      named(axes.paths, (p) => marketingPathLabel(p, locale), t.manyPaths),
-      named(axes.client_ids, (id) => nameOf(options?.clients, id), t.manyClients),
-      named(axes.project_ids, (id) => nameOf(options?.projects, id), t.manyProjects),
-      named(axes.campaign_ids, (id) => nameOf(options?.campaigns, id), t.manyCampaigns),
-      named(axes.ad_set_ids, (id) => id, t.manyAdSets),
-      named(axes.ad_ids, (id) => id, t.manyAds),
-    ].filter(Boolean)
+    const forAxis = (key: string, axis: string, label: (value: string) => string): AppliedFilter[] =>
+      (axes[key] ?? []).map((value) => ({
+        key: `${key}:${value}`,
+        axis,
+        label: label(value),
+        onRemove: () => setAxis(key, (axes[key] ?? []).filter((v) => v !== value)),
+      }))
 
-    // Never an empty string: the line is rendered always, so its wording has to cover «nothing is
-    // narrowed» rather than disappearing and leaving the reader to guess what they are looking at.
-    return parts.length > 0 ? parts.join(' · ') : t.allContent
-  }, [axes, health, options, locale, ar, t])
+    const out: AppliedFilter[] = [
+      ...forAxis('providers', t.platform, (p) => providerLabel(p, locale)),
+      ...forAxis('kinds', t.kind, (k) => KIND_LABEL[k]?.[ar ? 'ar' : 'en'] ?? k),
+      ...forAxis('objectives', t.objective, (o) => objectiveLabel(o, locale)),
+      ...forAxis('paths', t.path, (p) => marketingPathLabel(p, locale)),
+      ...forAxis('client_ids', t.client, (id) => nameOf(options?.clients, id)),
+      ...forAxis('project_ids', t.project, (id) => nameOf(options?.projects, id)),
+      ...forAxis('campaign_ids', t.campaign, (id) => nameOf(options?.campaigns, id)),
+      ...forAxis('statuses', t.status, (s) => campaignStatusLabel(s, locale)),
+      ...forAxis('ad_set_ids', t.adSet, (id) => id),
+      ...forAxis('ad_ids', t.ad, (id) => id),
+    ]
+
+    if (health !== '') {
+      out.push({
+        key: `health:${health}`,
+        axis: t.health,
+        label: FATIGUE_LABEL[health as FatigueStatus]?.[ar ? 'ar' : 'en'] ?? health,
+        onRemove: () => { setHealth(''); setPage(1) },
+      })
+    }
+
+    if (search.trim() !== '') {
+      out.push({ key: 'search', axis: t.search, label: search.trim(), onRemove: () => { setSearch(''); setPage(1) } })
+    }
+
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [axes, health, search, options, locale, ar, t])
+
+  /** Only the folded axes drive the marker on «More filters» — the visible ones speak for themselves. */
+  const advancedActive = ['statuses', 'ad_set_ids', 'ad_ids'].some((key) => (axes[key] ?? []).length > 0)
+
+  const resetFilters = () => {
+    setAxes({})
+    setHealth('')
+    setSearch('')
+    setPage(1)
+  }
+
+  const multi = (key: string, label: string, values: Array<{ value: string; label: string }>) => (
+    <FilterMulti
+      label={label}
+      ar={ar}
+      testid={`content-${key}`}
+      values={axes[key] ?? []}
+      options={values}
+      onChange={(next) => setAxis(key, next)}
+    />
+  )
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-text-primary">{t.title}</h1>
-          <p className="mt-1 text-sm text-text-secondary">{t.subtitle}</p>
-        </div>
-
-        {/* `flex-wrap`: four controls in English measure 351px, which is wider than the 343px phone
-            in the brief — so on the narrowest screen the page scrolled sideways to reach «Groups». */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-md border border-border p-0.5" role="group" aria-label={t.grid}>
-            <button
-              type="button"
-              aria-pressed={view === 'grid'}
-              onClick={() => setView('grid')}
-              className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${view === 'grid' ? 'bg-surface-hover text-text-primary' : 'text-text-secondary'}`}
+    <div className="space-y-5">
+      <PageIntro
+        testid="content-intro"
+        title={t.title}
+        purpose={t.subtitle}
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              disabled={selected.length < 2}
+              onClick={() => setComparing(true)}
+              title={selected.length < 2 ? t.compareHint : undefined}
             >
-              <LayoutGrid className="h-3.5 w-3.5" aria-hidden /> {t.grid}
-            </button>
-            <button
-              type="button"
-              aria-pressed={view === 'list'}
-              onClick={() => setView('list')}
-              className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${view === 'list' ? 'bg-surface-hover text-text-primary' : 'text-text-secondary'}`}
+              <GitCompare className="h-4 w-4" aria-hidden />
+              {t.compare}
+              {selected.length > 0 && <span dir="ltr"> ({selected.length})</span>}
+            </Button>
+
+            {/* Relative, so one component serves both portals without being told which mounted it. */}
+            <Link
+              to="groups"
+              className="flex items-center gap-1 rounded-xl border border-border-strong px-3 py-2 text-sm font-semibold text-text-primary hover:bg-surface-hover"
             >
-              <Rows3 className="h-3.5 w-3.5" aria-hidden /> {t.list}
-            </button>
-          </div>
+              <Layers className="h-4 w-4" aria-hidden />
+              {t.groups}
+            </Link>
+          </>
+        }
+      />
 
-          <Button
-            variant="secondary"
-            disabled={selected.length < 2}
-            onClick={() => setComparing(true)}
-            title={selected.length < 2 ? t.compareHint : undefined}
-          >
-            <GitCompare className="h-4 w-4" aria-hidden />
-            {t.compare}
-            {selected.length > 0 && <span dir="ltr"> ({selected.length})</span>}
-          </Button>
-
-          {/* Relative, so one component serves both portals without being told which mounted it. */}
-          <Link
-            to="groups"
-            className="flex items-center gap-1 rounded-md border border-border px-3 py-2 text-sm text-text-secondary hover:bg-surface-hover"
-          >
-            <Layers className="h-4 w-4" aria-hidden />
-            {t.groups}
-          </Link>
-        </div>
-      </header>
-
-      <section className="space-y-3 rounded-lg border border-border bg-surface p-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex min-w-52 flex-1 flex-col gap-1 text-xs">
-            <span className="font-medium text-text-secondary">{t.search}</span>
-            <span className="relative">
-              <Search className="absolute top-2.5 h-4 w-4 text-text-secondary ltr:left-2 rtl:right-2" aria-hidden />
-              <input
-                type="search"
-                value={search}
-                aria-label={t.search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
-                  setPage(1)
-                }}
-                className="w-full rounded-md border border-border bg-surface py-1.5 text-sm text-text-primary ltr:pl-8 ltr:pr-2 rtl:pr-8 rtl:pl-2"
-              />
-            </span>
-          </label>
-
-          {/* `DateField`, never a native date input: the browser's own control renders in the OS
-              locale, so a Saudi machine shows a Hijri calendar for an ISO value the API expects. */}
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="font-medium text-text-secondary">{t.from}</span>
-            <DateField aria-label={t.from} value={from} onChange={(v) => { setFrom(v); setPage(1) }} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="font-medium text-text-secondary">{t.to}</span>
-            <DateField aria-label={t.to} value={to} onChange={(v) => { setTo(v); setPage(1) }} />
-          </label>
-        </div>
-
-        {/*
-          The ten axes, folded — SIMPLIFY-001.
-
-          Order inside the dialog is not cosmetic: the closed sets come first because they are what
-          somebody browsing a library actually reaches for, and the id lists — which are long, and
-          often a single obvious choice — sit below them. Sort comes last, since it is the one
-          control here that reorders rather than narrows.
-        */}
-        <ViewCustomiser
-          id="content"
-          ar={ar}
-          active={narrowed}
-          summary={appliedSummary}
-          onClear={() => { setAxes({}); setHealth(''); setPage(1) }}
-        >
-          {options && (
-            <>
-              <FilterGroup label={t.platform}>
-                <Chip active={!axes.providers} onClick={() => setAxis('providers', [])}>{t.all}</Chip>
-                {options.providers.map((p) => (
-                  <Chip
-                    key={p}
-                    active={(axes.providers ?? []).includes(p)}
-                    onClick={() => toggleAxis('providers', p)}
-                  >
-                    {providerLabel(p, locale)}
-                  </Chip>
-                ))}
-              </FilterGroup>
-
-              <FilterGroup label={t.kind}>
-                <Chip tone="dark" active={!axes.kinds} onClick={() => setAxis('kinds', [])}>{t.all}</Chip>
-                {options.kinds.map((k) => (
-                  <Chip
-                    key={k}
-                    tone="dark"
-                    active={(axes.kinds ?? []).includes(k)}
-                    onClick={() => toggleAxis('kinds', k)}
-                  >
-                    {KIND_LABEL[k] ? KIND_LABEL[k][ar ? 'ar' : 'en'] : k}
-                  </Chip>
-                ))}
-              </FilterGroup>
-
-              <FilterGroup label={t.status}>
-                <Chip tone="dark" active={!axes.statuses} onClick={() => setAxis('statuses', [])}>{t.all}</Chip>
-                {options.statuses.map((s) => (
-                  <Chip
-                    key={s}
-                    tone="dark"
-                    active={(axes.statuses ?? []).includes(s)}
-                    onClick={() => toggleAxis('statuses', s)}
-                  >
-                    {campaignStatusLabel(s, locale)}
-                  </Chip>
-                ))}
-              </FilterGroup>
-
-              {/* Single-valued: a creative is in exactly one fatigue state, so «watch AND fatigued»
-                  is not a question the server can be asked. */}
-              <FilterGroup label={t.health}>
-                <Chip active={health === ''} onClick={() => { setHealth(''); setPage(1) }}>{t.all}</Chip>
-                {options.health.map((status) => (
-                  <Chip
-                    key={status}
-                    active={health === status}
-                    onClick={() => { setHealth(health === status ? '' : status); setPage(1) }}
-                  >
-                    {FATIGUE_LABEL[status] ? FATIGUE_LABEL[status][ar ? 'ar' : 'en'] : status}
-                  </Chip>
-                ))}
-              </FilterGroup>
-
-              <FilterGroup label={t.objective}>
-                <Chip tone="dark" active={!axes.objectives} onClick={() => setAxis('objectives', [])}>{t.all}</Chip>
-                {options.objectives.map((o) => (
-                  <Chip
-                    key={o}
-                    tone="dark"
-                    active={(axes.objectives ?? []).includes(o)}
-                    onClick={() => toggleAxis('objectives', o)}
-                  >
-                    {objectiveLabel(o, locale)}
-                  </Chip>
-                ))}
-              </FilterGroup>
-
-              <FilterGroup label={t.path}>
-                <Chip tone="dark" active={!axes.paths} onClick={() => setAxis('paths', [])}>{t.all}</Chip>
-                {options.paths.map((p) => (
-                  <Chip
-                    key={p}
-                    tone="dark"
-                    active={(axes.paths ?? []).includes(p)}
-                    onClick={() => toggleAxis('paths', p)}
-                  >
-                    {marketingPathLabel(p, locale)}
-                  </Chip>
-                ))}
-              </FilterGroup>
-
-              <div className="flex flex-wrap gap-3">
-                <AxisSelect
-                  label={t.client}
-                  value={axes.client_ids ?? []}
-                  options={options.clients.map((c) => ({ value: c.id, label: c.name }))}
-                  onChange={(v) => setAxis('client_ids', v)}
-                />
-                <AxisSelect
-                  label={t.project}
-                  value={axes.project_ids ?? []}
-                  options={options.projects.map((p) => ({ value: p.id, label: p.name }))}
-                  onChange={(v) => setAxis('project_ids', v)}
-                />
-                <AxisSelect
-                  label={t.campaign}
-                  value={axes.campaign_ids ?? []}
-                  options={options.campaigns.map((c) => ({ value: c.id, label: c.name }))}
-                  onChange={(v) => setAxis('campaign_ids', v)}
-                />
-                <AxisSelect
-                  label={t.adSet}
-                  value={axes.ad_set_ids ?? []}
-                  options={options.ad_sets.map((id) => ({ value: id, label: id }))}
-                  onChange={(v) => setAxis('ad_set_ids', v)}
-                />
-                <AxisSelect
-                  label={t.ad}
-                  value={axes.ad_ids ?? []}
-                  options={options.ads.map((id) => ({ value: id, label: id }))}
-                  onChange={(v) => setAxis('ad_ids', v)}
-                />
-              </div>
-            </>
-          )}
-
-          <label className="flex min-w-40 flex-col gap-1 text-xs">
-            <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{t.sort}</span>
-            <select
-              value={sort}
-              aria-label={t.sort}
-              onChange={(e) => { setSort(e.target.value); setPage(1) }}
-              className="rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-text-primary"
-            >
-              <option value="recent">{t.sortRecent}</option>
-              <option value="spend">{t.sortSpend}</option>
-              <option value="impressions">{t.sortImpressions}</option>
-              <option value="conversions">{t.sortConversions}</option>
-              <option value="name">{t.sortName}</option>
-            </select>
-          </label>
-        </ViewCustomiser>
-
-        {selected.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
-            <span dir="ltr">{selected.length}</span>
-            <span>{t.selected}</span>
-            <button type="button" onClick={() => setSelected([])} className="underline">
-              {t.clearSelection}
-            </button>
-            {canLink && (
+      <FilterBar
+        id="content"
+        ar={ar}
+        applied={applied}
+        onReset={resetFilters}
+        advancedActive={advancedActive}
+        advanced={
+          options && (
+            <div className="flex flex-wrap items-end gap-3">
+              {multi('statuses', t.status, options.statuses.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) })))}
+              {multi('ad_set_ids', t.adSet, options.ad_sets.map((id) => ({ value: id, label: id })))}
+              {multi('ad_ids', t.ad, options.ads.map((id) => ({ value: id, label: id })))}
+            </div>
+          )
+        }
+        trailing={
+          <>
+            {/* How the page is READ, not how it is configured — so it sits with the controls and
+                never inside a dialog. */}
+            <div className="flex rounded-xl border border-border p-0.5" role="group" aria-label={t.grid}>
               <button
                 type="button"
-                disabled={selected.length < 2 || merge.isPending}
-                onClick={() => merge.mutate(selected)}
-                className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-text-primary hover:bg-surface-hover disabled:opacity-50"
+                aria-pressed={view === 'grid'}
+                onClick={() => setView('grid')}
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${view === 'grid' ? 'bg-surface-hover text-text-primary' : 'text-text-secondary'}`}
               >
-                <Layers className="h-3.5 w-3.5" aria-hidden />
-                {merge.isPending ? t.merging : t.merge}
+                <LayoutGrid className="h-3.5 w-3.5" aria-hidden /> {t.grid}
               </button>
-            )}
-          </div>
-        )}
+              <button
+                type="button"
+                aria-pressed={view === 'list'}
+                onClick={() => setView('list')}
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${view === 'list' ? 'bg-surface-hover text-text-primary' : 'text-text-secondary'}`}
+              >
+                <Rows3 className="h-3.5 w-3.5" aria-hidden /> {t.list}
+              </button>
+            </div>
 
-        {mergeNotice && (
-          <p className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface-hover p-2 text-xs" role="status">
-            <span className="text-text-primary">{mergeNotice.message}</span>
-            {mergeNotice.groupId && (
-              <Link to={`groups?group=${mergeNotice.groupId}`} className="text-primary underline">
-                {t.openGroup}
-              </Link>
-            )}
-          </p>
-        )}
+            {/* Reordering changes which creative is first, never which exist — so it is beside the
+                filters rather than among them, and never counts as a narrowing. */}
+            <FilterSelect
+              label={t.sort}
+              value={sort}
+              testid="content-sort"
+              options={[
+                { value: 'recent', label: t.sortRecent },
+                { value: 'spend', label: t.sortSpend },
+                { value: 'impressions', label: t.sortImpressions },
+                { value: 'conversions', label: t.sortConversions },
+                { value: 'name', label: t.sortName },
+              ]}
+              onChange={(v) => { setSort(v); setPage(1) }}
+            />
+          </>
+        }
+      >
+        <FilterSearch
+          value={search}
+          placeholder={t.search}
+          testid="content-search"
+          onChange={(v) => { setSearch(v); setPage(1) }}
+        />
 
-        {merge.isError && (
-          <p className="rounded-md border border-danger/40 bg-danger/10 p-2 text-xs text-text-primary" role="alert">
-            {t.mergeFailed}
-          </p>
+        {/* `DateField`, never a native date input: the browser's own control renders in the OS
+            locale, so a Saudi machine shows a Hijri calendar for an ISO value the API expects. */}
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-semibold text-text-secondary">{t.from}</span>
+          <DateField aria-label={t.from} value={from} onChange={(v) => { setFrom(v); setPage(1) }} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-semibold text-text-secondary">{t.to}</span>
+          <DateField aria-label={t.to} value={to} onChange={(v) => { setTo(v); setPage(1) }} />
+        </div>
+
+        {options && (
+          <>
+            {multi('client_ids', t.client, options.clients.map((c) => ({ value: c.id, label: c.name })))}
+            {multi('project_ids', t.project, options.projects.map((p) => ({ value: p.id, label: p.name })))}
+            {multi('providers', t.platform, options.providers.map((p) => ({ value: p, label: providerLabel(p, locale) })))}
+            {multi('campaign_ids', t.campaign, options.campaigns.map((c) => ({ value: c.id, label: c.name })))}
+            {multi('objectives', t.objective, options.objectives.map((o) => ({ value: o, label: objectiveLabel(o, locale) })))}
+            {multi('paths', t.path, options.paths.map((p) => ({ value: p, label: marketingPathLabel(p, locale) })))}
+            {multi('kinds', t.kind, options.kinds.map((k) => ({ value: k, label: KIND_LABEL[k]?.[ar ? 'ar' : 'en'] ?? k })))}
+
+            {/* Single-valued: a creative is in exactly one fatigue state, so «watch AND fatigued» is
+                not a question the server can be asked. */}
+            <FilterSelect
+              label={t.health}
+              value={health}
+              testid="content-health"
+              options={[
+                { value: '', label: t.all },
+                ...options.health.map((status) => ({
+                  value: status,
+                  label: FATIGUE_LABEL[status]?.[ar ? 'ar' : 'en'] ?? status,
+                })),
+              ]}
+              onChange={(v) => { setHealth(v); setPage(1) }}
+            />
+          </>
         )}
-      </section>
+      </FilterBar>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-xs text-text-secondary">
+          <span dir="ltr">{selected.length}</span>
+          <span>{t.selected}</span>
+          <button type="button" onClick={() => setSelected([])} className="underline">
+            {t.clearSelection}
+          </button>
+          {canLink && (
+            <button
+              type="button"
+              disabled={selected.length < 2 || merge.isPending}
+              onClick={() => merge.mutate(selected)}
+              className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-text-primary hover:bg-surface-hover disabled:opacity-50"
+            >
+              <Layers className="h-3.5 w-3.5" aria-hidden />
+              {merge.isPending ? t.merging : t.merge}
+            </button>
+          )}
+        </div>
+      )}
+
+      {mergeNotice && (
+        <p className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface-hover p-2 text-xs" role="status">
+          <span className="text-text-primary">{mergeNotice.message}</span>
+          {mergeNotice.groupId && (
+            <Link to={`groups?group=${mergeNotice.groupId}`} className="text-primary underline">
+              {t.openGroup}
+            </Link>
+          )}
+        </p>
+      )}
+
+      {merge.isError && (
+        <p className="rounded-md border border-danger/40 bg-danger/10 p-2 text-xs text-text-primary" role="alert">
+          {t.mergeFailed}
+        </p>
+      )}
 
       {libraryQuery.isError && (
         <ErrorState title={t.error} error={libraryQuery.error} ar={ar} onRetry={() => void libraryQuery.refetch()} />
@@ -829,67 +718,122 @@ export function CreativesPage() {
       )}
 
       {creatives.length > 0 && view === 'list' && (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[52rem] text-sm">
+        /*
+         * The table is for DECIDING, not for auditing — UX-CONTENT-001.
+         *
+         * Its predecessor carried whatever was easy to reach: spend and impressions, the same two
+         * for every row whatever the campaign was for. Impressions do not help anybody decide
+         * whether to keep running a lead ad. So each row now shows its own objective's headline
+         * result and its own efficiency figure, chosen by `resultKey`/`efficiencyKey` from the
+         * creative's `headline_metrics` — which is the server's answer to «what is this judged on».
+         *
+         * Ten columns, and no more. Everything else is one click away in the panel, which is
+         * reachable from any cell in the row.
+         */
+        <div className="overflow-x-auto rounded-2xl border border-border">
+          <table className="w-full min-w-[60rem] text-sm">
             <thead className="bg-surface-hover text-start text-xs text-text-secondary">
               <tr>
                 <th className="p-2" />
-                <th className="p-2 text-start">{t.title}</th>
+                <th className="p-2 text-start">{t.preview}</th>
+                <th className="p-2 text-start">{t.name}</th>
                 <th className="p-2 text-start">{t.platform}</th>
                 <th className="p-2 text-start">{t.campaign}</th>
                 <th className="p-2 text-start">{t.objective}</th>
                 <th className="p-2 text-start">{metricLabel('spend', locale)}</th>
-                <th className="p-2 text-start">{metricLabel('impressions', locale)}</th>
+                <th className="p-2 text-start">{t.result}</th>
+                <th className="p-2 text-start">{t.efficiency}</th>
                 <th className="p-2 text-start">{t.health}</th>
+                <th className="p-2 text-start">{t.lastSync}</th>
               </tr>
             </thead>
             <tbody>
-              {creatives.map((creative, index) => (
-                <tr key={creative.id} className="border-t border-border">
-                  <td className="p-2">
-                    <input
-                      type="checkbox"
-                      aria-label={`${t.compare}: ${creative.name}`}
-                      checked={selected.includes(creative.id)}
-                      onChange={() => toggleSelected(creative.id)}
-                    />
-                  </td>
-                  <td className="p-2">
-                    {/* The NAME opens the page; the preview button opens the viewer. «What does it
-                        look like» and «should we keep running it» are two questions, and one click
-                        cannot be both answers. */}
-                    <div className="flex items-center gap-2">
+              {creatives.map((creative, index) => {
+                const resultKey = primaryResultKey(creative.headline_metrics)
+                const efficiencyKey = primaryEfficiencyKey(creative.headline_metrics)
+                const poster = creative.preview.thumbnail_url ?? creative.preview.image_url
+
+                return (
+                  <tr
+                    key={creative.id}
+                    data-testid={`content-row-${creative.id}`}
+                    /*
+                     * The whole row opens the panel. A single small «Open» button in one column is
+                     * a target somebody has to aim at forty times; the row is the thing they are
+                     * already looking at. The name stays a real link inside it — middle-clickable,
+                     * copyable — and the checkbox stops the click from reaching the row so
+                     * selecting for comparison does not also open a dialog.
+                     */
+                    onClick={() => setViewerIndex(index)}
+                    className="cursor-pointer border-t border-border hover:bg-surface-hover"
+                  >
+                    <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        aria-label={`${t.compare}: ${creative.name}`}
+                        checked={selected.includes(creative.id)}
+                        onChange={() => toggleSelected(creative.id)}
+                      />
+                    </td>
+                    <td className="p-2">
+                      {poster ? (
+                        <img
+                          src={poster}
+                          alt=""
+                          loading={imageLoading(poster)}
+                          decoding="async"
+                          className="h-10 w-16 rounded object-cover"
+                        />
+                      ) : (
+                        <span className="flex h-10 w-16 items-center justify-center rounded bg-surface-hover text-[10px] text-text-muted">
+                          {t.noPreview}
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2" onClick={(e) => e.stopPropagation()}>
                       <Link to={`${creative.id}${libraryAddress}`} className="text-start font-medium text-text-primary underline-offset-2 hover:underline">
                         {creative.name}
                       </Link>
-                      <button
-                        type="button"
-                        onClick={() => setViewerIndex(index)}
-                        aria-label={`${t.open}: ${creative.name}`}
-                        className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[11px] text-text-secondary hover:bg-surface-hover"
-                      >
-                        {t.open}
-                      </button>
-                    </div>
-                  </td>
-                  <td className="p-2 text-text-secondary">{providerLabel(creative.provider, locale)}</td>
-                  <td className="p-2 text-text-secondary">{creative.campaign_name ?? '—'}</td>
-                  <td className="p-2 text-text-secondary">
-                    {creative.objective ? objectiveLabel(creative.objective, locale) : '—'}
-                  </td>
-                  <td className="p-2 tabular-nums" dir="ltr">
-                    {formatMetric(metricState(creative.metrics, 'spend'), 'spend', locale)}
-                  </td>
-                  <td className="p-2 tabular-nums" dir="ltr">
-                    {formatMetric(metricState(creative.metrics, 'impressions'), 'impressions', locale)}
-                  </td>
-                  <td className="p-2">
-                    <span className={`rounded px-1.5 py-0.5 text-xs ${FATIGUE_TONE[creative.fatigue.status]}`}>
-                      {FATIGUE_LABEL[creative.fatigue.status]?.[ar ? 'ar' : 'en'] ?? creative.fatigue.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="p-2 text-text-secondary">{providerLabel(creative.provider, locale)}</td>
+                    <td className="max-w-48 truncate p-2 text-text-secondary">{creative.campaign_name ?? '—'}</td>
+                    <td className="p-2 text-text-secondary">
+                      {creative.objective ? objectiveLabel(creative.objective, locale) : marketingPathLabel(creative.path, locale)}
+                    </td>
+                    <td className="p-2 tabular-nums" dir="ltr">
+                      {formatMetric(metricState(creative.metrics, 'spend'), 'spend', locale)}
+                    </td>
+                    <td className="p-2" dir="ltr">
+                      {resultKey === null ? (
+                        <span className="text-text-muted">—</span>
+                      ) : (
+                        <span className="tabular-nums">
+                          {formatMetric(metricState(creative.metrics, resultKey), resultKey, locale)}
+                          <span className="ms-1 text-[11px] text-text-muted">{metricLabel(resultKey, locale)}</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2" dir="ltr">
+                      {efficiencyKey === null ? (
+                        <span className="text-text-muted">—</span>
+                      ) : (
+                        <span className="tabular-nums">
+                          {formatMetric(metricState(creative.metrics, efficiencyKey), efficiencyKey, locale)}
+                          <span className="ms-1 text-[11px] text-text-muted">{metricLabel(efficiencyKey, locale)}</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2">
+                      <span className={`rounded px-1.5 py-0.5 text-xs ${FATIGUE_TONE[creative.fatigue.status]}`}>
+                        {FATIGUE_LABEL[creative.fatigue.status]?.[ar ? 'ar' : 'en'] ?? creative.fatigue.status}
+                      </span>
+                    </td>
+                    <td className="p-2 text-xs text-text-secondary" dir="ltr">
+                      {creative.freshness.last_synced_at?.slice(0, 10) ?? t.never}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -917,6 +861,13 @@ export function CreativesPage() {
           index={viewerIndex}
           onIndexChange={setViewerIndex}
           onClose={() => setViewerIndex(null)}
+          /*
+           * The panel, with the figures beside the asset — so «should we keep running this» is
+           * answerable here rather than four navigations away. It carries THIS library's window, so
+           * the pane can never quote a different period from the row that opened it, and the
+           * details link carries the library's address so Back rebuilds the shelf.
+           */
+          analysis={{ window: { from, to }, detailsTo: (c) => `${c.id}${libraryAddress}` }}
         />
       )}
 
@@ -983,7 +934,7 @@ function CreativeGridCard({
           )}
         </button>
 
-        <label className="absolute top-2 flex items-center gap-1 rounded bg-surface/90 px-1.5 py-1 text-xs ltr:left-2 rtl:right-2">
+        <label className="absolute top-2 flex items-center gap-1 rounded bg-surface/90 px-1.5 py-1 text-xs start-2">
           <input
             type="checkbox"
             checked={selected}
@@ -992,9 +943,22 @@ function CreativeGridCard({
           />
         </label>
 
+        {/*
+          The badge says «فيديو» in Arabic, not the literal `video`.
+
+          It fell back to the raw English word whenever the platform sent no duration, which on an
+          Arabic page is an untranslated term sitting on top of the picture. `dir="ltr"` is applied
+          only to the DURATION, because «30s» is a Latin figure and «فيديو» is not — and because an
+          element carrying `dir="ltr"` inside an RTL page matches BOTH the `ltr:` and `rtl:`
+          variants, which is what was stretching this badge across the whole card.
+        */}
         {creative.preview.kind === 'video' && (
-          <span className="absolute bottom-2 rounded bg-black/70 px-1.5 py-0.5 text-[11px] text-white ltr:right-2 rtl:left-2" dir="ltr">
-            {creative.duration_seconds === null ? 'video' : `${creative.duration_seconds}s`}
+          <span className="absolute bottom-2 end-2 rounded bg-black/70 px-1.5 py-0.5 text-[11px] text-white">
+            {creative.duration_seconds === null ? (
+              KIND_LABEL.video[ar ? 'ar' : 'en']
+            ) : (
+              <span dir="ltr">{creative.duration_seconds}s</span>
+            )}
           </span>
         )}
       </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Minus, Plus, RotateCcw, X } from 'lucide-react'
 import { CreativeVideoPlayer } from './CreativeVideoPlayer'
+import { CreativeQuickFacts } from './CreativeQuickFacts'
 import { formatBytes } from './format'
 import { providerLabel } from '@/features/campaigns/labels'
 import { useUi } from '@/stores/ui'
@@ -75,6 +76,7 @@ export function CreativeViewer({
   onIndexChange,
   onClose,
   canZoom = true,
+  analysis,
 }: {
   creatives: CreativeCard[]
   index: number
@@ -90,6 +92,16 @@ export function CreativeViewer({
    * The bound that genuinely withholds a creative is excluding it from the link.
    */
   canZoom?: boolean
+  /**
+   * UX-CONTENT-001 — the analysis pane beside the asset. Off by default, and that matters.
+   *
+   * `SharedCreativeSection` renders this same viewer on a client's `/r/<token>` link, which has no
+   * session and must never acquire one. The pane fetches `/creatives/{id}`, an authenticated
+   * endpoint, so switching it on by default would have put a 401 on every public report the moment
+   * a client opened a picture — the exact regression PUBLIC-REPORT-NOAUTH exists to prevent.
+   * Only the operator library passes it.
+   */
+  analysis?: { window: { from: string; to: string }; detailsTo: (creative: CreativeCard) => string }
 }) {
   const { locale } = useUi()
   const ar = locale === 'ar'
@@ -165,7 +177,8 @@ export function CreativeViewer({
         </button>
       </header>
 
-      <div className="flex flex-1 items-center justify-center overflow-auto p-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-auto lg:flex-row">
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
         <button
           type="button"
           aria-label={t.prev}
@@ -221,6 +234,31 @@ export function CreativeViewer({
         >
           {ar ? <ChevronLeft className="h-6 w-6" aria-hidden /> : <ChevronRight className="h-6 w-6" aria-hidden />}
         </button>
+      </div>
+
+        {/*
+          The facts, beside the asset — so «should we keep running this» is answerable here.
+
+          A fixed column on a wide screen and a band underneath on a narrow one: on a phone the
+          picture has to come first, because scrolling past a metrics table to see the creative is
+          the opposite of what somebody opened.
+        */}
+        {analysis && (
+          <aside
+            data-testid="creative-quick-facts"
+            className="w-full shrink-0 overflow-auto border-white/10 bg-slate-950/60 ltr:lg:border-l rtl:lg:border-r lg:w-96 lg:border-t-0 border-t"
+          >
+            <CreativeQuickFacts
+              /* Keyed by the creative so arrowing forward mounts a fresh pane rather than showing
+                 the previous creative's figures until the next request settles. */
+              key={creative.id}
+              creativeId={creative.id}
+              objective={creative.objective}
+              window={analysis.window}
+              detailsTo={analysis.detailsTo(creative)}
+            />
+          </aside>
+        )}
       </div>
 
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-4 py-3 text-xs text-white/80">
