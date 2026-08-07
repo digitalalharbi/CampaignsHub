@@ -540,6 +540,153 @@ final class AdPlatformConnectorTest extends TestCase
     }
 
     /**
+     * META-001 — the same sale, reported three ways, is ONE sale.
+     *
+     * Meta returns a purchase under several action types at once: `offsite_conversion.fb_pixel_purchase`
+     * is what the pixel saw, `purchase` is the consolidated standard event, `omni_purchase` is the
+     * cross-surface rollup. This connector used to ADD every matching type together, so a typical
+     * account had its purchases, its revenue and therefore its ROAS multiplied by three — on the
+     * number a client judges the whole engagement by.
+     *
+     * The fixture reports all three with the SAME value, as a real account does. Twelve, not thirty-six.
+     */
+    public function test_meta_counts_one_sale_once_even_when_it_is_reported_three_ways(): void
+    {
+        $this->configure('meta');
+        Http::fake(['graph.facebook.com/*' => Http::response([
+            'data' => [[
+                'campaign_id' => 'c1', 'date_start' => '2026-08-01', 'spend' => '480.00',
+                'impressions' => '120000', 'clicks' => '2400', 'reach' => '86000',
+                'actions' => [
+                    ['action_type' => 'purchase', 'value' => '12'],
+                    ['action_type' => 'omni_purchase', 'value' => '12'],
+                    ['action_type' => 'offsite_conversion.fb_pixel_purchase', 'value' => '12'],
+                ],
+                'action_values' => [
+                    ['action_type' => 'purchase', 'value' => '3600.00'],
+                    ['action_type' => 'omni_purchase', 'value' => '3600.00'],
+                    ['action_type' => 'offsite_conversion.fb_pixel_purchase', 'value' => '3600.00'],
+                ],
+            ]],
+        ])]);
+
+        $row = $this->bound('meta')->syncInsights('act_1', '2026-08-01', '2026-08-02')->records[0];
+
+        // Asserted on `conversions` first because that is the figure the previous code DID produce,
+        // so the failure it leaves behind is the defect itself — «36 is not identical to 12» — and
+        // not merely a key that did not exist yet.
+        $this->assertSame(12.0, $row['conversions'], 'three views of one sale were added together');
+        $this->assertSame(3600.0, $row['revenue'], 'revenue tripled, and ROAS with it');
+        $this->assertSame(12.0, $row['purchases']);
+    }
+
+    /**
+     * Every canonical metric Meta reports, mapped to the action type that MEANS it.
+     *
+     * The fixture is built to catch a leak: `view_content` is 5,000 while `add_to_cart` is 300, so
+     * confusing the two is unmissable, and `link_click` is 2,400 against a `landing_page_view` of
+     * 1,900 — the click and the arrival are different moments and the larger number is the flattering
+     * one. `initiate_checkout` sits between add-to-cart and purchase as its own stage.
+     */
+    public function test_meta_maps_every_canonical_metric_to_the_action_that_means_it(): void
+    {
+        $this->configure('meta');
+        Http::fake(['graph.facebook.com/*' => Http::response([
+            'data' => [[
+                'campaign_id' => 'c1', 'date_start' => '2026-08-01', 'spend' => '480.00',
+                'impressions' => '120000', 'clicks' => '2400', 'reach' => '86000',
+                'actions' => [
+                    ['action_type' => 'link_click', 'value' => '2400'],
+                    ['action_type' => 'landing_page_view', 'value' => '1900'],
+                    ['action_type' => 'offsite_conversion.fb_pixel_view_content', 'value' => '5000'],
+                    ['action_type' => 'add_to_cart', 'value' => '300'],
+                    ['action_type' => 'initiate_checkout', 'value' => '160'],
+                    ['action_type' => 'purchase', 'value' => '12'],
+                    ['action_type' => 'post_engagement', 'value' => '7400'],
+                    ['action_type' => 'like', 'value' => '640'],
+                ],
+                'action_values' => [['action_type' => 'purchase', 'value' => '3600.00']],
+                'video_play_actions' => [['action_type' => 'video_view', 'value' => '64000']],
+                'video_p100_watched_actions' => [['action_type' => 'video_view', 'value' => '9100']],
+            ]],
+        ])]);
+
+        $row = $this->bound('meta')->syncInsights('act_1', '2026-08-01', '2026-08-02')->records[0];
+
+        $this->assertSame(300.0, $row['add_to_cart'], 'a content view is not a basket add');
+        $this->assertSame(160.0, $row['checkout'], 'a started checkout is its own stage, never a sale');
+        $this->assertSame(12.0, $row['purchases']);
+        $this->assertSame(1900.0, $row['landing_page_views'], 'the arrival, not the click');
+        $this->assertSame(7400.0, $row['engagements'], 'Meta publishes one engagement total; a like alone is not it');
+
+        /*
+         * `video_play_actions`, not `video_30_sec_watched_actions`.
+         *
+         * The thirty-second metric exists only for videos at least that long, so on the fifteen-second
+         * creatives most of this market runs it is never returned at all — and the product showed
+         * «video views» as unreported for ads watched sixty-four thousand times.
+         */
+        $this->assertSame(64000.0, $row['video_views']);
+        $this->assertSame(9100.0, $row['video_completions']);
+
+        // `frequency` is derived from impressions and reach; a stored daily one cannot be summed.
+        $this->assertArrayNotHasKey('frequency', $row);
+    }
+
+    /**
+     * An action type Meta never sent is ABSENT, not zero.
+     *
+     * Meta omits an action type entirely when its count is zero, so «no purchase action» cannot be
+     * told apart from «no pixel on this campaign». Storing 0 would state the first when it might be
+     * the second, on the stage a client reads as their sales.
+     */
+    public function test_meta_omits_an_action_it_never_reported_rather_than_sending_zero(): void
+    {
+        $this->configure('meta');
+        Http::fake(['graph.facebook.com/*' => Http::response([
+            'data' => [[
+                'campaign_id' => 'c1', 'date_start' => '2026-08-01', 'spend' => '90.00',
+                'impressions' => '40000', 'clicks' => '110',
+                // A reach buy with no pixel: engagement only.
+                'actions' => [['action_type' => 'post_engagement', 'value' => '1200']],
+            ]],
+        ])]);
+
+        $row = $this->bound('meta')->syncInsights('act_1', '2026-08-01', '2026-08-02')->records[0];
+
+        foreach (['purchases', 'conversions', 'revenue', 'add_to_cart', 'checkout', 'landing_page_views', 'video_views'] as $key) {
+            $this->assertArrayNotHasKey($key, $row, "{$key} was never reported and must not be sent as 0");
+        }
+        $this->assertSame(1200.0, $row['engagements']);
+    }
+
+    /**
+     * A Graph edge is read to its END.
+     *
+     * `limit=500` is a page size, not a guarantee of completeness: an account with 600 ads answered
+     * with 500 and said nothing about the rest, and the hundred that vanished took their spend out of
+     * every total on every surface.
+     */
+    public function test_meta_follows_the_graph_cursor_instead_of_stopping_at_the_first_page(): void
+    {
+        $this->configure('meta');
+        Http::fake([
+            'graph.facebook.com/*after=CURSOR2*' => Http::response([
+                'data' => [['id' => 'c2', 'name' => 'Second page', 'status' => 'PAUSED']],
+            ]),
+            'graph.facebook.com/*' => Http::response([
+                'data' => [['id' => 'c1', 'name' => 'First page', 'status' => 'ACTIVE']],
+                'paging' => ['next' => 'https://graph.facebook.com/v21.0/act_1/campaigns?after=CURSOR2'],
+            ]),
+        ]);
+
+        $campaigns = $this->bound('meta')->syncCampaigns('act_1')->records;
+
+        $this->assertCount(2, $campaigns, 'the second page was never fetched');
+        $this->assertSame(['c1', 'c2'], array_column($campaigns, 'external_id'));
+    }
+
+    /**
      * Google's `searchStream` answers with an ARRAY of chunks.
      *
      * The wrong reading — `$body['results']` — finds nothing, returns no rows, and reports no error,

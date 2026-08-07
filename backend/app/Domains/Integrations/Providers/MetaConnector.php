@@ -12,42 +12,110 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
  * The awkward part is conversions. Meta does not return a `conversions` number; it returns an
  * `actions` array of every action type the campaign produced — page engagement, video views, link
  * clicks, purchases — and a matching `action_values` array for the money. Summing all of them would
- * count a page like as a purchase, so `PURCHASE_ACTIONS` names the ones this product means by
- * "conversion", and everything else is left where it is rather than quietly inflating a ROAS.
+ * count a page like as a purchase, so {@see self::ACTIONS} names which action type carries which
+ * canonical metric, and everything else is left where it is rather than quietly inflating a ROAS.
+ *
+ * The subtler trap, and the one that was live here until META-001, is that Meta reports the SAME
+ * sale under several action types at once. Adding those together is not a bigger truth, it is the
+ * same purchase counted three times — see the note on `ACTIONS`.
  *
  * Awaiting credentials on this install.
  */
 final class MetaConnector extends ApiAdvertisingConnector
 {
     /**
-     * The action types counted as a conversion.
-     *
-     * Both spellings are real: `purchase` comes from the pixel, `omni_purchase` from the aggregated
-     * cross-surface attribution. A campaign can report either, and reading only one silently halves
-     * the conversions on the accounts that report the other.
-     *
-     * @var list<string>
+     * A ceiling on paging, so a wrong `paging.next` cannot become an unbounded loop.
      */
-    private const PURCHASE_ACTIONS = ['purchase', 'omni_purchase', 'offsite_conversion.fb_pixel_purchase'];
+    private const MAX_PAGES = 50;
+
+    /**
+     * Canonical metric ← the Meta action types that could carry it, in priority order.
+     *
+     * ## First present wins. They are NOT summed (META-001)
+     *
+     * This used to add together every matching type, and the three purchase spellings are not three
+     * different sales — they are three VIEWS OF THE SAME SALES. `offsite_conversion.fb_pixel_purchase`
+     * is what the pixel saw, `purchase` is Meta's consolidated standard-event total, `omni_purchase`
+     * is the cross-surface rollup. A typical account reports all three, so summing them counted every
+     * sale up to three times: purchases tripled, revenue tripled, and ROAS tripled with them, on the
+     * number a client judges the whole engagement by.
+     *
+     * The previous comment shows how it happened — it was written to fix the opposite worry, that
+     * reading only one spelling «silently halves the conversions on accounts that report the other».
+     * The fix for that is a fallback ORDER, which is what this is; addition was never it.
+     *
+     * ## And each canonical is its own event
+     *
+     * `view_content` appears nowhere: looking at a product is not putting it in a basket, and
+     * `offsite_conversion.fb_pixel_view_content` is the single easiest way to make add-to-cart look
+     * healthy. `initiate_checkout` is its own stage and never a purchase. `landing_page_view` is the
+     * real landing metric — `link_click` counts the click, which is a different moment and a larger
+     * number, and using it would make the funnel's landing step look better than it was.
+     *
+     * @var array<string, list<string>>
+     */
+    private const ACTIONS = [
+        'purchases' => ['purchase', 'omni_purchase', 'offsite_conversion.fb_pixel_purchase'],
+        'add_to_cart' => ['add_to_cart', 'omni_add_to_cart', 'offsite_conversion.fb_pixel_add_to_cart'],
+        'checkout' => ['initiate_checkout', 'omni_initiated_checkout', 'offsite_conversion.fb_pixel_initiate_checkout'],
+        'landing_page_views' => ['landing_page_view'],
+        // Meta, unlike Snapchat and TikTok, DOES publish a single engagement total for the ad, so
+        // this one is read rather than left null. `page_engagement` is deliberately not added to it:
+        // it overlaps with post engagement and adding the two would invent interactions.
+        'engagements' => ['post_engagement'],
+    ];
 
     protected function platform(): string
     {
         return 'meta';
     }
 
+    /**
+     * Read a Graph collection to its END, not just its first page.
+     *
+     * Meta pages every edge and hands back the next page as an absolute URL in `paging.next`. A
+     * `limit` of 500 is not a guarantee of completeness — it is a page size, and an account with 600
+     * ads answered with 500 of them and no indication that anything was missing. The hundred that
+     * vanished took their spend out of every total on every surface.
+     *
+     * The cursor is followed rather than rebuilt: `paging.next` already carries the `after` token,
+     * the field list and the time range, and reconstructing it by hand is how one of them gets
+     * dropped and the same page is fetched until the ceiling.
+     *
+     * @param  array<string,mixed>  $query
+     * @return list<array<string,mixed>>
+     */
+    private function readAll(OAuthTokens $tokens, string $path, string $what, array $query): array
+    {
+        $url = $this->url($path);
+        $items = [];
+
+        for ($page = 0; $page < self::MAX_PAGES && $url !== null; $page++) {
+            // Only the FIRST request carries the query; every later one is the cursor URL entire.
+            $body = $this->read(
+                $page === 0 ? $this->api($tokens)->get($url, $query) : $this->api($tokens)->get($url),
+                $what,
+            );
+
+            foreach ((array) ($body['data'] ?? []) as $item) {
+                $items[] = (array) $item;
+            }
+
+            $next = $body['paging']['next'] ?? null;
+            $url = is_string($next) && $next !== '' ? $next : null;
+        }
+
+        return $items;
+    }
+
     protected function fetchAdAccounts(OAuthTokens $tokens): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url('me/adaccounts'), [
-                'fields' => 'id,account_id,name,currency,timezone_name,account_status',
-                'limit' => 200,
-            ]),
-            'ad accounts',
-        );
-
         $accounts = [];
 
-        foreach ((array) ($body['data'] ?? []) as $a) {
+        foreach ($this->readAll($tokens, 'me/adaccounts', 'ad accounts', [
+            'fields' => 'id,account_id,name,currency,timezone_name,account_status',
+            'limit' => 200,
+        ]) as $a) {
             if (($a['id'] ?? null) === null) {
                 continue;
             }
@@ -69,17 +137,12 @@ final class MetaConnector extends ApiAdvertisingConnector
 
     protected function fetchCampaigns(OAuthTokens $tokens, string $adAccountId): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("{$adAccountId}/campaigns"), [
-                'fields' => 'id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time',
-                'limit' => 500,
-            ]),
-            'campaigns',
-        );
-
         $campaigns = [];
 
-        foreach ((array) ($body['data'] ?? []) as $c) {
+        foreach ($this->readAll($tokens, "{$adAccountId}/campaigns", 'campaigns', [
+            'fields' => 'id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time',
+            'limit' => 500,
+        ]) as $c) {
             if (($c['id'] ?? null) === null) {
                 continue;
             }
@@ -102,17 +165,12 @@ final class MetaConnector extends ApiAdvertisingConnector
 
     protected function fetchAdSets(OAuthTokens $tokens, string $adAccountId): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("{$adAccountId}/adsets"), [
-                'fields' => 'id,name,status,campaign_id,optimization_goal,bid_strategy,daily_budget,lifetime_budget,targeting,start_time,end_time',
-                'limit' => 500,
-            ]),
-            'ad sets',
-        );
-
         $sets = [];
 
-        foreach ((array) ($body['data'] ?? []) as $s) {
+        foreach ($this->readAll($tokens, "{$adAccountId}/adsets", 'ad sets', [
+            'fields' => 'id,name,status,campaign_id,optimization_goal,bid_strategy,daily_budget,lifetime_budget,targeting,start_time,end_time',
+            'limit' => 500,
+        ]) as $s) {
             if (($s['id'] ?? null) === null || ($s['campaign_id'] ?? null) === null) {
                 continue;
             }
@@ -140,17 +198,12 @@ final class MetaConnector extends ApiAdvertisingConnector
 
     protected function fetchAds(OAuthTokens $tokens, string $adAccountId): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("{$adAccountId}/ads"), [
-                'fields' => 'id,name,status,effective_status,adset_id,campaign_id,preview_shareable_link,creative{id,name,thumbnail_url,object_type}',
-                'limit' => 500,
-            ]),
-            'ads',
-        );
-
         $ads = [];
 
-        foreach ((array) ($body['data'] ?? []) as $a) {
+        foreach ($this->readAll($tokens, "{$adAccountId}/ads", 'ads', [
+            'fields' => 'id,name,status,effective_status,adset_id,campaign_id,preview_shareable_link,creative{id,name,thumbnail_url,object_type}',
+            'limit' => 500,
+        ]) as $a) {
             if (($a['id'] ?? null) === null) {
                 continue;
             }
@@ -239,66 +292,133 @@ final class MetaConnector extends ApiAdvertisingConnector
 
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("{$adAccountId}/insights"), [
-                'level' => 'campaign',
-                'time_increment' => 1, // one row per campaign per day
-                'fields' => 'campaign_id,date_start,spend,impressions,clicks,reach,actions,action_values,video_30_sec_watched_actions',
-                'time_range' => json_encode(['since' => $from, 'until' => $to], JSON_THROW_ON_ERROR),
-                'limit' => 500,
-            ]),
-            'daily insights',
-        );
+        $reported = $this->readAll($tokens, "{$adAccountId}/insights", 'daily insights', [
+            'level' => 'campaign',
+            'time_increment' => 1, // one row per campaign per day
+            /*
+             * `video_play_actions`, not `video_30_sec_watched_actions`, for `video_views`.
+             *
+             * The thirty-second metric only exists for videos at least that long, so on the fifteen-
+             * second creatives most of this market runs it is simply never returned — and the product
+             * showed «video views» as unreported for ads that were watched hundreds of thousands of
+             * times. `video_play_actions` is the play, which is what every other platform here means
+             * by a view (Snapchat `video_views`, TikTok `video_play_actions`).
+             */
+            'fields' => 'campaign_id,date_start,spend,impressions,clicks,reach,actions,action_values,'
+                .'video_play_actions,video_p100_watched_actions',
+            'time_range' => json_encode(['since' => $from, 'until' => $to], JSON_THROW_ON_ERROR),
+            'limit' => 500,
+        ]);
 
         $rows = [];
 
-        foreach ((array) ($body['data'] ?? []) as $row) {
+        foreach ($reported as $row) {
             $campaignId = (string) ($row['campaign_id'] ?? '');
 
             if ($campaignId === '') {
                 continue;
             }
 
-            $rows[] = array_filter([
+            $actions = $row['actions'] ?? null;
+            $purchases = $this->pick($actions, self::ACTIONS['purchases']);
+
+            $mapped = [
                 'campaign_id' => $campaignId,
                 'date' => (string) ($row['date_start'] ?? $from),
                 'spend' => isset($row['spend']) ? (float) $row['spend'] : null,
                 'impressions' => isset($row['impressions']) ? (float) $row['impressions'] : null,
                 'clicks' => isset($row['clicks']) ? (float) $row['clicks'] : null,
                 'reach' => isset($row['reach']) ? (float) $row['reach'] : null,
-                'conversions' => $this->sumActions($row['actions'] ?? null),
-                'revenue' => $this->sumActions($row['action_values'] ?? null),
-                'video_views' => $this->sumActions($row['video_30_sec_watched_actions'] ?? null, all: true),
-            ], static fn ($v) => $v !== null);
+                'revenue' => $this->pick($row['action_values'] ?? null, self::ACTIONS['purchases']),
+                'video_views' => $this->total($row['video_play_actions'] ?? null),
+                'video_completions' => $this->total($row['video_p100_watched_actions'] ?? null),
+                /*
+                 * Meta publishes no generic «conversions» figure — it publishes actions, and which of
+                 * them is the result depends on the objective. This connector's definition of a
+                 * conversion has always been a purchase, so the two are the same number HERE and are
+                 * stated as such rather than one being quietly derived from the other. On a platform
+                 * where they differ (TikTok's `conversion` against `complete_payment`) they are
+                 * mapped apart, which is why the funnel now reads `purchases` for its Purchase stage.
+                 */
+                'purchases' => $purchases,
+                'conversions' => $purchases,
+            ];
+
+            foreach (['add_to_cart', 'checkout', 'landing_page_views', 'engagements'] as $canonical) {
+                $mapped[$canonical] = $this->pick($actions, self::ACTIONS[$canonical]);
+            }
+
+            // ABSENT, not zero — every null drops out here and no surface can print it as a measured 0.
+            $rows[] = array_filter($mapped, static fn ($v) => $v !== null);
         }
 
         return $rows;
     }
 
     /**
-     * Sum a Meta action array, counting only purchases unless told otherwise.
+     * The value of the FIRST action type present, out of a priority list. Never their sum.
      *
-     * Returns null rather than 0.0 when the array is absent, because "Meta sent no actions" and "Meta
-     * sent zero purchases" are different facts and only the second is a figure worth storing.
+     * Meta reports the same sale under several action types at once — the pixel's own view, the
+     * consolidated standard event, the cross-surface rollup — so adding them counts one purchase up
+     * to three times. Only within a single type are values added, because Meta can repeat a type
+     * across breakdown rows and those ARE different occurrences.
+     *
+     * Null when none of the types is present, and that is the honest answer rather than 0.0: Meta
+     * omits an action type entirely when its count is zero, so «no purchase action» is
+     * indistinguishable from «no pixel on this campaign». Storing a zero would state the first when
+     * it might be the second, on the stage a client reads as their sales.
+     *
+     * @param  list<string>  $types
      */
-    private function sumActions(mixed $actions, bool $all = false): ?float
+    private function pick(mixed $actions, array $types): ?float
     {
         if (! is_array($actions)) {
             return null;
         }
 
-        $total = 0.0;
+        $byType = [];
 
         foreach ($actions as $action) {
             if (! is_array($action)) {
                 continue;
             }
 
-            if (! $all && ! in_array((string) ($action['action_type'] ?? ''), self::PURCHASE_ACTIONS, true)) {
+            $type = (string) ($action['action_type'] ?? '');
+
+            if ($type === '') {
                 continue;
             }
 
-            $total += (float) ($action['value'] ?? 0);
+            $byType[$type] = ($byType[$type] ?? 0.0) + (float) ($action['value'] ?? 0);
+        }
+
+        foreach ($types as $type) {
+            if (array_key_exists($type, $byType)) {
+                return $byType[$type];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The whole of a single-purpose action array (`video_play_actions` and friends).
+     *
+     * These edges carry one action type broken down into rows, so summing them is right — unlike
+     * {@see self::pick()}, where the types are competing views of the same event.
+     */
+    private function total(mixed $actions): ?float
+    {
+        if (! is_array($actions) || $actions === []) {
+            return null;
+        }
+
+        $total = 0.0;
+
+        foreach ($actions as $action) {
+            if (is_array($action)) {
+                $total += (float) ($action['value'] ?? 0);
+            }
         }
 
         return $total;
