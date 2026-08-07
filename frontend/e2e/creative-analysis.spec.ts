@@ -325,23 +325,48 @@ test.describe('what a client link shows', () => {
    * every creative switch is off, so a link created without settings must carry no creative section
    * at all — not one that is present and empty, which reads as a section that failed to load.
    */
+  /*
+   * The three preconditions below were `test.skip()` and are now assertions.
+   *
+   * A skip is a test that proved nothing while reporting green, and every one of these conditions
+   * is a product failure rather than an optional precondition: a seeded project with no report, a
+   * refused share creation, a share response with no token. In the full three-browser gate this test
+   * SKIPPED in all three browsers while passing when run alone — so one of them was firing, and the
+   * run said «818 passed» either way. That is the shape of hidden failure this project's rules
+   * forbid, and the fix is to make the run say which one rather than to make it quieter.
+   *
+   * Each message carries what it saw, so a failure names the cause instead of restating the guard.
+   */
   test('a link created with no creative switches has no creative section', async ({ page, request }) => {
     const projectId = await seededProject(request, STORE_PROJECT)
     const headers = await csrfHeaders(request)
 
     const reports = await request.get(`/api/v1/projects/${projectId}/reports`, { headers: API_HEADERS })
-    const list = ((await reports.json()).data?.reports ?? []) as Array<{ id: string }>
-    test.skip(!list.length, 'the seed has no report to share')
+    const list = ((await reports.json()).data?.reports ?? []) as Array<{ id: string; status?: string }>
 
-    const created = await request.post(`/api/v1/projects/${projectId}/reports/${list[0].id}/shares`, {
+    /*
+     * A report that can be SHARED, not merely the first one in the list.
+     *
+     * `list[0]` was a draft — an earlier spec in the full run creates one, and it sorts to the head.
+     * The API then correctly refused with 409 «Generate the report before sharing», and the old
+     * `test.skip()` swallowed that into a green run. The product was right and the test was picking
+     * the wrong row, which is only visible once the guard is an assertion.
+     */
+    const shareable = list.find((r) => r.status === 'completed')
+    expect(
+      shareable,
+      `project ${projectId} has no COMPLETED report to share — statuses were [${list.map((r) => r.status ?? '?').join(', ')}]`,
+    ).toBeTruthy()
+
+    const created = await request.post(`/api/v1/projects/${projectId}/reports/${shareable!.id}/shares`, {
       headers: { ...headers, 'Content-Type': 'application/json' },
       data: { mode: 'snapshot' },
     })
-    test.skip(!created.ok(), `share creation returned ${created.status()}`)
+    expect(created.ok(), `share creation returned ${created.status()}: ${(await created.text()).slice(0, 300)}`).toBe(true)
 
     const body = (await created.json()).data as Record<string, string>
     const raw = body.raw_token ?? body.token ?? body.url?.split('/r/')[1]
-    test.skip(!raw, 'the share response carried no token')
+    expect(raw, `the share response carried no token: ${JSON.stringify(body).slice(0, 300)}`).toBeTruthy()
 
     // No session at all — this is the reader the link is for.
     await page.context().clearCookies()
