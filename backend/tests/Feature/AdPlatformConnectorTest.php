@@ -823,6 +823,149 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertEqualsWithDelta(3.0, $rows[1]['spend'], 0.001);
     }
 
+    /**
+     * X-001 — the whole canonical set, out of the metric groups the mapping actually reads.
+     *
+     * The request asked for `BILLING,ENGAGEMENT` while `unroll()` read `conversion_purchases` (a
+     * WEB_CONVERSION metric) and `video_total_views` (a VIDEO metric). X never returned either, so
+     * both were mapped from a key that could not arrive — and downstream that is indistinguishable
+     * from a platform which does not report them: no error, no log, the metrics simply never existed.
+     *
+     * The conversion group also answers a DIFFERENT SHAPE: an object per metric with the count under
+     * `metric` and the money under `sale_amount_local_micro`, rather than the plain day-indexed array
+     * every other group sends. Reading only the plain shape returns null for every conversion, which
+     * looks exactly the same as never having asked.
+     */
+    public function test_x_asks_for_the_metric_groups_it_reads_and_understands_both_shapes(): void
+    {
+        $this->configure('x');
+        Http::fake([
+            'ads-api.x.com/*/accounts/*/campaigns*' => Http::response(['data' => [['id' => 'cx', 'name' => 'C', 'entity_status' => 'ACTIVE']]]),
+            'ads-api.x.com/*/stats/*' => Http::response(['data' => [[
+                'id' => 'cx',
+                'id_data' => [['metrics' => [
+                    'billed_charge_local_micro' => [4_000_000],
+                    'impressions' => [52000],
+                    'clicks' => [900],
+                    'engagements' => [3400],
+                    'video_total_views' => [21000],
+                    'video_views_100' => [4100],
+                    // The conversion shape: nested, and money beside the count.
+                    'conversion_purchases' => [
+                        'metric' => [14],
+                        'sale_amount_local_micro' => [5_600_000],
+                    ],
+                    'conversion_add_to_cart' => ['metric' => [220]],
+                    'conversion_checkouts_initiated' => ['metric' => [95]],
+                ]]],
+            ]]]),
+        ]);
+
+        $row = $this->bound('x')->syncInsights('acct', '2026-08-01', '2026-08-02')->records[0];
+
+        // Every group the mapping reads is requested — the defect this unit exists to fix.
+        Http::assertSent(fn (Request $r) => ! str_contains($r->url(), '/stats/')
+            || (str_contains($r->url(), 'WEB_CONVERSION') && str_contains($r->url(), 'VIDEO')));
+
+        $this->assertEqualsWithDelta(4.0, $row['spend'], 0.001);
+        $this->assertSame(3400.0, $row['engagements'], 'X publishes one engagement total, so it is read');
+        $this->assertSame(21000.0, $row['video_views']);
+        $this->assertSame(4100.0, $row['video_completions']);
+
+        // The nested conversion shape, count and money.
+        $this->assertSame(14.0, $row['purchases']);
+        $this->assertSame(14.0, $row['conversions']);
+        $this->assertSame(220.0, $row['add_to_cart']);
+        $this->assertSame(95.0, $row['checkout'], 'a started checkout is its own stage, never a sale');
+        $this->assertEqualsWithDelta(5.6, $row['revenue'], 0.001, 'conversion value arrives in millionths');
+
+        // No X equivalent, so absent rather than approximated from clicks.
+        $this->assertArrayNotHasKey('landing_page_views', $row);
+        $this->assertArrayNotHasKey('frequency', $row);
+    }
+
+    /**
+     * A window with conversions but no billed spend is still a window.
+     *
+     * The day count was measured across spend, impressions and clicks only, so a paused campaign
+     * still converting from earlier impressions measured as zero days long and every conversion in
+     * it was dropped before anything could store it.
+     */
+    public function test_x_measures_the_window_across_every_series_it_was_sent(): void
+    {
+        $this->configure('x');
+        Http::fake([
+            'ads-api.x.com/*/accounts/*/campaigns*' => Http::response(['data' => [['id' => 'cx', 'name' => 'C', 'entity_status' => 'ACTIVE']]]),
+            'ads-api.x.com/*/stats/*' => Http::response(['data' => [[
+                'id' => 'cx',
+                'id_data' => [['metrics' => [
+                    'conversion_purchases' => ['metric' => [2, 5]],
+                ]]],
+            ]]]),
+        ]);
+
+        $rows = $this->bound('x')->syncInsights('acct', '2026-08-01', '2026-08-03')->records;
+
+        $this->assertCount(2, $rows, 'a window measured only by spend threw the conversions away');
+        $this->assertSame(2.0, $rows[0]['purchases']);
+        $this->assertSame(5.0, $rows[1]['purchases']);
+        $this->assertArrayNotHasKey('spend', $rows[0], 'nothing was billed, and that is not a spend of zero');
+    }
+
+    /**
+     * LINKEDIN-001 — what LinkedIn measures, and the two things it refuses to guess at.
+     *
+     * LinkedIn's adAnalytics has no purchase metric. `externalWebsiteConversions` counts every
+     * conversion the account defined — a demo request, a whitepaper download, a contact form, and on
+     * the rare B2C account a sale — with no way to ask for one category the way Google Ads can. So it
+     * is carried as `conversions`, and `purchases` stays ABSENT rather than being approximated from
+     * it. A sales funnel on a LinkedIn-only account ends in «لم تُرسل», which is the truth.
+     *
+     * `conversionValueInLocalCurrency` used to be mapped to `revenue`. It is the value the advertiser
+     * ASSIGNED to those conversions — commonly an internal worth put on a lead — so reporting it as
+     * revenue put a ROAS on a client's report built from money nobody had taken. Removing it costs a
+     * figure and buys back the only thing that makes the rest of them worth reading.
+     */
+    public function test_linkedin_reports_what_it_measures_and_refuses_to_call_lead_value_revenue(): void
+    {
+        $this->configure('linkedin');
+        Http::fake(['api.linkedin.com/*' => Http::response([
+            'elements' => [[
+                'pivotValues' => ['urn:li:sponsoredCampaign:9911'],
+                'dateRange' => ['start' => ['year' => 2026, 'month' => 8, 'day' => 1]],
+                'costInLocalCurrency' => '1840.00',
+                'impressions' => 74000,
+                'clicks' => 610,
+                'approximateUniqueImpressions' => 51000,
+                'externalWebsiteConversions' => 38,
+                // The trap: 76,000 of «value» the advertiser assigned to 38 leads.
+                'conversionValueInLocalCurrency' => '76000.00',
+                'videoViews' => 22000,
+                'videoCompletions' => 3900,
+                'totalEngagements' => 1450,
+                'landingPageClicks' => 540,
+            ]],
+        ])]);
+
+        $row = $this->bound('linkedin')->syncInsights('507', '2026-08-01', '2026-08-02')->records[0];
+
+        $this->assertSame('9911', $row['campaign_id']);
+        $this->assertSame('2026-08-01', $row['date']);
+        $this->assertEqualsWithDelta(1840.0, $row['spend'], 0.001);
+        $this->assertSame(51000.0, $row['reach']);
+        $this->assertSame(38.0, $row['conversions']);
+        $this->assertSame(22000.0, $row['video_views']);
+        $this->assertSame(3900.0, $row['video_completions']);
+        $this->assertSame(1450.0, $row['engagements'], 'LinkedIn publishes one engagement total; assembling it from likes would double count');
+
+        // The two refusals, and they are the point of this test.
+        $this->assertArrayNotHasKey('revenue', $row, 'the value assigned to a lead is not money anybody has taken');
+        $this->assertArrayNotHasKey('purchases', $row, 'LinkedIn publishes no purchase count, so there is none to report');
+        // And the click before the arrival is not the arrival.
+        $this->assertArrayNotHasKey('landing_page_views', $row);
+        $this->assertArrayNotHasKey('frequency', $row);
+    }
+
     // ── Isolation ─────────────────────────────────────────────────────────────────────────────
 
     /**

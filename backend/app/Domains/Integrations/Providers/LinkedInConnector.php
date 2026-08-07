@@ -163,7 +163,9 @@ final class LinkedInConnector extends ApiAdvertisingConnector
                 'timeGranularity' => 'DAILY',
                 'dateRange' => $this->dateRange($from, $to),
                 'accounts' => "List(urn:li:sponsoredAccount:{$adAccountId})",
-                'fields' => 'pivotValues,dateRange,costInLocalCurrency,impressions,clicks,externalWebsiteConversions,conversionValueInLocalCurrency,videoViews',
+                'fields' => 'pivotValues,dateRange,costInLocalCurrency,impressions,clicks,'
+                    .'externalWebsiteConversions,approximateUniqueImpressions,'
+                    .'videoViews,videoCompletions,totalEngagements,landingPageClicks',
             ]),
             'daily analytics',
         );
@@ -178,19 +180,45 @@ final class LinkedInConnector extends ApiAdvertisingConnector
                 continue;
             }
 
+            /*
+             * LINKEDIN-001 — what LinkedIn measures, and the two things it does not.
+             *
+             * **`purchases` is absent, deliberately.** LinkedIn's adAnalytics has no purchase metric.
+             * `externalWebsiteConversions` counts every conversion the account defined — a demo
+             * request, a whitepaper download, a contact form, and on the rare B2C account a sale —
+             * with no way to ask for one category, the way Google Ads can. So it is carried as
+             * `conversions`, which is what it is, and `purchases` stays null rather than being
+             * approximated from it. A sales funnel on a LinkedIn-only account therefore ends in «لم
+             * تُرسل», which is the truth: LinkedIn did not tell us about sales.
+             *
+             * **`revenue` is absent for the same reason.** `conversionValueInLocalCurrency` is the
+             * value the advertiser ASSIGNED to those conversions — commonly an internal worth put on
+             * a lead. Reporting it as revenue would put a ROAS on the client's report built from
+             * money nobody has taken. It was mapped here before this unit; removing it costs a
+             * figure and buys back the only thing that makes the rest of them worth reading.
+             *
+             * `landing_page_views` also stays absent: `landingPageClicks` counts the CLICK, which is
+             * the moment before the arrival that this canonical key means on every other platform.
+             * It is requested so a future decision can be made on real data, and mapped to nothing.
+             */
             $rows[] = array_filter([
                 'campaign_id' => $campaignId,
                 'date' => $date,
                 'spend' => isset($row['costInLocalCurrency']) ? (float) $row['costInLocalCurrency'] : null,
                 'impressions' => isset($row['impressions']) ? (float) $row['impressions'] : null,
                 'clicks' => isset($row['clicks']) ? (float) $row['clicks'] : null,
+                // The closest thing LinkedIn publishes to reach: unique members shown the ad.
+                'reach' => isset($row['approximateUniqueImpressions'])
+                    ? (float) $row['approximateUniqueImpressions']
+                    : null,
                 'conversions' => isset($row['externalWebsiteConversions'])
                     ? (float) $row['externalWebsiteConversions']
                     : null,
-                'revenue' => isset($row['conversionValueInLocalCurrency'])
-                    ? (float) $row['conversionValueInLocalCurrency']
-                    : null,
                 'video_views' => isset($row['videoViews']) ? (float) $row['videoViews'] : null,
+                'video_completions' => isset($row['videoCompletions']) ? (float) $row['videoCompletions'] : null,
+                // LinkedIn publishes a single engagement total, so it is read rather than assembled
+                // from likes, comments and shares — which would count one interaction more than once.
+                'engagements' => isset($row['totalEngagements']) ? (float) $row['totalEngagements'] : null,
             ], static fn ($v) => $v !== null);
         }
 
