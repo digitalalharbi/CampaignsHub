@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { GitCompare, Layers, LayoutGrid, Rows3, Search } from 'lucide-react'
@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
+import { FilterGroup, ViewCustomiser } from '@/components/ui/ViewCustomiser'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
@@ -40,6 +41,23 @@ import { campaignStatusLabel, marketingPathLabel, objectiveLabel, providerLabel 
  * Every axis is sent only when it has a value (`libraryQueryString` omits the empty ones), and the
  * server intersects them against the caller's membership ceiling. Asking for another client's id
  * returns nothing rather than that client's creatives — the URL is not a permission.
+ *
+ * ## One control, not a wall of them — SIMPLIFY-001
+ *
+ * Ten filter axes across the top of a library is the settings screen this page was never meant to
+ * be: somebody who came to LOOK at creatives met the configuration first. They fold into
+ * `ViewCustomiser`, which states what is applied in words beside the button — the part that makes
+ * folding honest, since a narrowed library that looks unnarrowed is worse than a noisy toolbar.
+ *
+ * Three things deliberately stay OUTSIDE it. **Search**, because searching is how a person finds a
+ * row rather than how they configure a view. **The grid/list switcher**, because that is how the
+ * page is READ. And **the period**, because it is not a filter over which rows exist — it is the
+ * window every figure on every card was measured in, and a library quoting thirty days' spend
+ * without saying so on screen is the same defect in a different place.
+ *
+ * Inside, the closed sets (platform, type, status, fatigue, objective, path) are chips and the
+ * open-ended id lists (client, project, campaign, ad set, ad) are multi-selects. A chip row of four
+ * hundred campaign names is not a control.
  *
  * ## Nothing autoplays and nothing preloads
  *
@@ -101,6 +119,24 @@ const COPY = {
     open: 'فتح المعاينة',
     details: 'تفاصيل المحتوى',
     source: 'المصدر: منصة الإعلان',
+    allContent: 'كل المحتوى',
+    /*
+     * Plurals for the applied-state line, one word per axis.
+     *
+     * Used only above one — a single choice is named («ميتا»), and only a selection of several
+     * collapses to a count, because «3 منصات» is readable where three platform names in a row is a
+     * list nobody finishes. Latin digits, per the product's standing rule for Arabic copy.
+     */
+    manyClients: 'عملاء',
+    manyProjects: 'مشاريع',
+    manyPlatforms: 'منصات',
+    manyCampaigns: 'حملات',
+    manyAdSets: 'مجموعات إعلانية',
+    manyAds: 'إعلانات',
+    manyObjectives: 'أهداف',
+    manyPaths: 'مسارات',
+    manyKinds: 'أنواع',
+    manyStatuses: 'حالات',
   },
   en: {
     title: 'Creative library',
@@ -154,6 +190,17 @@ const COPY = {
     open: 'Open preview',
     details: 'Creative details',
     source: 'Source: ad platform',
+    allContent: 'All content',
+    manyClients: 'clients',
+    manyProjects: 'projects',
+    manyPlatforms: 'platforms',
+    manyCampaigns: 'campaigns',
+    manyAdSets: 'ad sets',
+    manyAds: 'ads',
+    manyObjectives: 'objectives',
+    manyPaths: 'paths',
+    manyKinds: 'types',
+    manyStatuses: 'statuses',
   },
 }
 
@@ -195,6 +242,36 @@ const isoDaysAgo = (days: number) => {
   const d = new Date()
   d.setDate(d.getDate() - days)
   return d.toISOString().slice(0, 10)
+}
+
+/**
+ * One value of a closed set, toggled.
+ *
+ * A chip rather than a checkbox because the whole set is visible at once and the choice is
+ * multi-valued: «meta AND tiktok» is a normal thing to ask a library for.
+ */
+function Chip({
+  active,
+  onClick,
+  tone,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  tone?: 'dark'
+  children: ReactNode
+}) {
+  const on = tone === 'dark' ? 'bg-text-primary text-surface' : 'bg-brand-500 text-white'
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`rounded-full px-3 py-1 text-xs font-semibold ${active ? on : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}
+    >
+      {children}
+    </button>
+  )
 }
 
 /** A multi-select rendered as a plain `<select multiple>` — keyboard-navigable and screen-readable. */
@@ -388,7 +465,56 @@ export function CreativesPage() {
   const toggleSelected = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
 
+  const toggleAxis = (key: string, value: string) => {
+    const current = axes[key] ?? []
+    setAxis(key, current.includes(value) ? current.filter((v) => v !== value) : [...current, value])
+  }
+
   const filtersTouched = Object.keys(axes).length > 0 || search.trim() !== '' || health !== ''
+
+  /*
+   * Whether anything is NARROWED — which is not the same as «anything was touched».
+   *
+   * Sort lives in the dialog too and is deliberately absent here: reordering a library changes which
+   * creative is first, never which creatives exist, so marking it as an active filter would put a
+   * dot beside a control that hides nothing. Search and the period are outside the dialog and
+   * visible on their own, so they do not need the summary to speak for them.
+   */
+  const narrowed = Object.keys(axes).length > 0 || health !== ''
+
+  /**
+   * What is applied, in words.
+   *
+   * This is the line that makes folding honest: with the controls behind a button, a library
+   * narrowed to one platform is indistinguishable from a library with one platform in it. Names,
+   * never the internal keys — `providers[]=meta` is what we send, «ميتا» is what a reader is owed.
+   */
+  const appliedSummary = useMemo(() => {
+    const named = (values: string[] | undefined, label: (v: string) => string, plural: string) => {
+      if (!values || values.length === 0) return null
+      return values.length === 1 ? label(values[0]) : `${values.length} ${plural}`
+    }
+    const nameOf = (rows: Array<{ id: string; name: string }> | undefined, id: string) =>
+      rows?.find((r) => r.id === id)?.name ?? id
+
+    const parts = [
+      named(axes.providers, (p) => providerLabel(p, locale), t.manyPlatforms),
+      named(axes.kinds, (k) => KIND_LABEL[k]?.[ar ? 'ar' : 'en'] ?? k, t.manyKinds),
+      named(axes.statuses, (s) => campaignStatusLabel(s, locale), t.manyStatuses),
+      health ? (FATIGUE_LABEL[health as FatigueStatus]?.[ar ? 'ar' : 'en'] ?? health) : null,
+      named(axes.objectives, (o) => objectiveLabel(o, locale), t.manyObjectives),
+      named(axes.paths, (p) => marketingPathLabel(p, locale), t.manyPaths),
+      named(axes.client_ids, (id) => nameOf(options?.clients, id), t.manyClients),
+      named(axes.project_ids, (id) => nameOf(options?.projects, id), t.manyProjects),
+      named(axes.campaign_ids, (id) => nameOf(options?.campaigns, id), t.manyCampaigns),
+      named(axes.ad_set_ids, (id) => id, t.manyAdSets),
+      named(axes.ad_ids, (id) => id, t.manyAds),
+    ].filter(Boolean)
+
+    // Never an empty string: the line is rendered always, so its wording has to cover «nothing is
+    // narrowed» rather than disappearing and leaving the reader to guess what they are looking at.
+    return parts.length > 0 ? parts.join(' · ') : t.allContent
+  }, [axes, health, options, locale, ar, t])
 
   return (
     <div className="space-y-6">
@@ -398,7 +524,9 @@ export function CreativesPage() {
           <p className="mt-1 text-sm text-text-secondary">{t.subtitle}</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* `flex-wrap`: four controls in English measure 351px, which is wider than the 343px phone
+            in the brief — so on the narrowest screen the page scrolled sideways to reach «Groups». */}
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-md border border-border p-0.5" role="group" aria-label={t.grid}>
             <button
               type="button"
@@ -469,9 +597,146 @@ export function CreativesPage() {
             <span className="font-medium text-text-secondary">{t.to}</span>
             <DateField aria-label={t.to} value={to} onChange={(v) => { setTo(v); setPage(1) }} />
           </label>
+        </div>
 
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="font-medium text-text-secondary">{t.sort}</span>
+        {/*
+          The ten axes, folded — SIMPLIFY-001.
+
+          Order inside the dialog is not cosmetic: the closed sets come first because they are what
+          somebody browsing a library actually reaches for, and the id lists — which are long, and
+          often a single obvious choice — sit below them. Sort comes last, since it is the one
+          control here that reorders rather than narrows.
+        */}
+        <ViewCustomiser
+          id="content"
+          ar={ar}
+          active={narrowed}
+          summary={appliedSummary}
+          onClear={() => { setAxes({}); setHealth(''); setPage(1) }}
+        >
+          {options && (
+            <>
+              <FilterGroup label={t.platform}>
+                <Chip active={!axes.providers} onClick={() => setAxis('providers', [])}>{t.all}</Chip>
+                {options.providers.map((p) => (
+                  <Chip
+                    key={p}
+                    active={(axes.providers ?? []).includes(p)}
+                    onClick={() => toggleAxis('providers', p)}
+                  >
+                    {providerLabel(p, locale)}
+                  </Chip>
+                ))}
+              </FilterGroup>
+
+              <FilterGroup label={t.kind}>
+                <Chip tone="dark" active={!axes.kinds} onClick={() => setAxis('kinds', [])}>{t.all}</Chip>
+                {options.kinds.map((k) => (
+                  <Chip
+                    key={k}
+                    tone="dark"
+                    active={(axes.kinds ?? []).includes(k)}
+                    onClick={() => toggleAxis('kinds', k)}
+                  >
+                    {KIND_LABEL[k] ? KIND_LABEL[k][ar ? 'ar' : 'en'] : k}
+                  </Chip>
+                ))}
+              </FilterGroup>
+
+              <FilterGroup label={t.status}>
+                <Chip tone="dark" active={!axes.statuses} onClick={() => setAxis('statuses', [])}>{t.all}</Chip>
+                {options.statuses.map((s) => (
+                  <Chip
+                    key={s}
+                    tone="dark"
+                    active={(axes.statuses ?? []).includes(s)}
+                    onClick={() => toggleAxis('statuses', s)}
+                  >
+                    {campaignStatusLabel(s, locale)}
+                  </Chip>
+                ))}
+              </FilterGroup>
+
+              {/* Single-valued: a creative is in exactly one fatigue state, so «watch AND fatigued»
+                  is not a question the server can be asked. */}
+              <FilterGroup label={t.health}>
+                <Chip active={health === ''} onClick={() => { setHealth(''); setPage(1) }}>{t.all}</Chip>
+                {options.health.map((status) => (
+                  <Chip
+                    key={status}
+                    active={health === status}
+                    onClick={() => { setHealth(health === status ? '' : status); setPage(1) }}
+                  >
+                    {FATIGUE_LABEL[status] ? FATIGUE_LABEL[status][ar ? 'ar' : 'en'] : status}
+                  </Chip>
+                ))}
+              </FilterGroup>
+
+              <FilterGroup label={t.objective}>
+                <Chip tone="dark" active={!axes.objectives} onClick={() => setAxis('objectives', [])}>{t.all}</Chip>
+                {options.objectives.map((o) => (
+                  <Chip
+                    key={o}
+                    tone="dark"
+                    active={(axes.objectives ?? []).includes(o)}
+                    onClick={() => toggleAxis('objectives', o)}
+                  >
+                    {objectiveLabel(o, locale)}
+                  </Chip>
+                ))}
+              </FilterGroup>
+
+              <FilterGroup label={t.path}>
+                <Chip tone="dark" active={!axes.paths} onClick={() => setAxis('paths', [])}>{t.all}</Chip>
+                {options.paths.map((p) => (
+                  <Chip
+                    key={p}
+                    tone="dark"
+                    active={(axes.paths ?? []).includes(p)}
+                    onClick={() => toggleAxis('paths', p)}
+                  >
+                    {marketingPathLabel(p, locale)}
+                  </Chip>
+                ))}
+              </FilterGroup>
+
+              <div className="flex flex-wrap gap-3">
+                <AxisSelect
+                  label={t.client}
+                  value={axes.client_ids ?? []}
+                  options={options.clients.map((c) => ({ value: c.id, label: c.name }))}
+                  onChange={(v) => setAxis('client_ids', v)}
+                />
+                <AxisSelect
+                  label={t.project}
+                  value={axes.project_ids ?? []}
+                  options={options.projects.map((p) => ({ value: p.id, label: p.name }))}
+                  onChange={(v) => setAxis('project_ids', v)}
+                />
+                <AxisSelect
+                  label={t.campaign}
+                  value={axes.campaign_ids ?? []}
+                  options={options.campaigns.map((c) => ({ value: c.id, label: c.name }))}
+                  onChange={(v) => setAxis('campaign_ids', v)}
+                />
+                <AxisSelect
+                  label={t.adSet}
+                  value={axes.ad_set_ids ?? []}
+                  options={options.ad_sets.map((id) => ({ value: id, label: id }))}
+                  onChange={(v) => setAxis('ad_set_ids', v)}
+                />
+                <AxisSelect
+                  label={t.ad}
+                  value={axes.ad_ids ?? []}
+                  options={options.ads.map((id) => ({ value: id, label: id }))}
+                  onChange={(v) => setAxis('ad_ids', v)}
+                />
+              </div>
+            </>
+          )}
+
+          <label className="flex min-w-40 flex-col gap-1 text-xs">
+            <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{t.sort}</span>
             <select
               value={sort}
               aria-label={t.sort}
@@ -485,92 +750,7 @@ export function CreativesPage() {
               <option value="name">{t.sortName}</option>
             </select>
           </label>
-
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="font-medium text-text-secondary">{t.health}</span>
-            <select
-              value={health}
-              aria-label={t.health}
-              onChange={(e) => { setHealth(e.target.value); setPage(1) }}
-              className="rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-text-primary"
-            >
-              <option value="">{t.all}</option>
-              {(options?.health ?? []).map((status) => (
-                <option key={status} value={status}>
-                  {FATIGUE_LABEL[status] ? FATIGUE_LABEL[status][ar ? 'ar' : 'en'] : status}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {options && (
-          <div className="flex flex-wrap gap-3">
-            <AxisSelect
-              label={t.client}
-              value={axes.client_ids ?? []}
-              options={options.clients.map((c) => ({ value: c.id, label: c.name }))}
-              onChange={(v) => setAxis('client_ids', v)}
-            />
-            <AxisSelect
-              label={t.project}
-              value={axes.project_ids ?? []}
-              options={options.projects.map((p) => ({ value: p.id, label: p.name }))}
-              onChange={(v) => setAxis('project_ids', v)}
-            />
-            <AxisSelect
-              label={t.platform}
-              value={axes.providers ?? []}
-              options={options.providers.map((p) => ({ value: p, label: providerLabel(p, locale) }))}
-              onChange={(v) => setAxis('providers', v)}
-            />
-            <AxisSelect
-              label={t.campaign}
-              value={axes.campaign_ids ?? []}
-              options={options.campaigns.map((c) => ({ value: c.id, label: c.name }))}
-              onChange={(v) => setAxis('campaign_ids', v)}
-            />
-            <AxisSelect
-              label={t.adSet}
-              value={axes.ad_set_ids ?? []}
-              options={options.ad_sets.map((id) => ({ value: id, label: id }))}
-              onChange={(v) => setAxis('ad_set_ids', v)}
-            />
-            <AxisSelect
-              label={t.ad}
-              value={axes.ad_ids ?? []}
-              options={options.ads.map((id) => ({ value: id, label: id }))}
-              onChange={(v) => setAxis('ad_ids', v)}
-            />
-            <AxisSelect
-              label={t.objective}
-              value={axes.objectives ?? []}
-              options={options.objectives.map((o) => ({ value: o, label: objectiveLabel(o, locale) }))}
-              onChange={(v) => setAxis('objectives', v)}
-            />
-            <AxisSelect
-              label={t.path}
-              value={axes.paths ?? []}
-              options={options.paths.map((p) => ({ value: p, label: marketingPathLabel(p, locale) }))}
-              onChange={(v) => setAxis('paths', v)}
-            />
-            <AxisSelect
-              label={t.kind}
-              value={axes.kinds ?? []}
-              options={options.kinds.map((k) => ({
-                value: k,
-                label: KIND_LABEL[k] ? KIND_LABEL[k][ar ? 'ar' : 'en'] : k,
-              }))}
-              onChange={(v) => setAxis('kinds', v)}
-            />
-            <AxisSelect
-              label={t.status}
-              value={axes.statuses ?? []}
-              options={options.statuses.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))}
-              onChange={(v) => setAxis('statuses', v)}
-            />
-          </div>
-        )}
+        </ViewCustomiser>
 
         {selected.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">

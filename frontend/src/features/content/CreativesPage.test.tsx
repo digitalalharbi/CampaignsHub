@@ -135,14 +135,77 @@ describe('CreativesPage', () => {
     vi.mocked(listCreatives).mockResolvedValue(page())
   })
 
+  /** Opens the folded filter dialog and hands back its body — the controls, without the modal chrome. */
+  const openFilters = async () => {
+    fireEvent.click(await screen.findByTestId('content-customise'))
+    return within(await screen.findByTestId('content-customise-body'))
+  }
+
   it('offers every axis §15.2 asks for, populated from real rows', async () => {
     renderWithProviders(<CreativesPage />, { locale: 'en' })
+    await screen.findByRole('article')
 
-    expect(await screen.findByLabelText('Client')).toBeInTheDocument()
-    for (const axis of ['Project', 'Platform', 'Campaign', 'Ad set', 'Ad', 'Objective', 'Marketing path', 'Creative type', 'Status']) {
-      expect(screen.getByLabelText(axis)).toBeInTheDocument()
+    const filters = await openFilters()
+
+    // The closed sets are chips, named by their group heading and offering the real values.
+    for (const group of ['Platform', 'Creative type', 'Status', 'Fatigue', 'Objective', 'Marketing path']) {
+      expect(filters.getByText(group)).toBeInTheDocument()
     }
-    expect(screen.getByLabelText('Fatigue')).toBeInTheDocument()
+    expect(filters.getByRole('button', { name: 'TikTok' })).toBeInTheDocument()
+    expect(filters.getByRole('button', { name: 'Fatigued' })).toBeInTheDocument()
+
+    // The open-ended id lists stay selects — a chip row of four hundred campaigns is not a control.
+    for (const axis of ['Client', 'Project', 'Campaign', 'Ad set', 'Ad']) {
+      expect(filters.getByLabelText(axis)).toBeInTheDocument()
+    }
+  })
+
+  /**
+   * SIMPLIFY-001: folding the controls must hide no state.
+   *
+   * The dialog is shut for all but a few seconds of the page's life, so the applied line beside the
+   * button is the ONLY thing standing between a narrowed library and a library that merely looks
+   * short. It states what is applied in words — never `providers[]=meta`.
+   */
+  it('says what is applied in words, before and after narrowing', async () => {
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+    await screen.findByRole('article')
+
+    expect(screen.getByTestId('content-applied')).toHaveTextContent('All content')
+    expect(screen.queryByTestId('content-clear')).not.toBeInTheDocument()
+
+    const filters = await openFilters()
+    fireEvent.click(filters.getByRole('button', { name: 'TikTok' }))
+
+    await waitFor(() => expect(screen.getByTestId('content-applied')).toHaveTextContent('TikTok'))
+    // Having narrowed it, the page offers a way back to everything.
+    expect(screen.getByTestId('content-clear')).toBeInTheDocument()
+  })
+
+  /** More than one value of an axis collapses to a count, so the line stays a sentence. */
+  it('counts a multi-value axis rather than listing it', async () => {
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+    await screen.findByRole('article')
+
+    const filters = await openFilters()
+    fireEvent.click(filters.getByRole('button', { name: 'TikTok' }))
+    fireEvent.click(filters.getByRole('button', { name: 'Meta' }))
+
+    await waitFor(() => expect(screen.getByTestId('content-applied')).toHaveTextContent('2 platforms'))
+  })
+
+  /** Clearing puts every folded filter back, and the line says so without being read for it. */
+  it('clears every folded filter at once', async () => {
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+    await screen.findByRole('article')
+
+    const filters = await openFilters()
+    fireEvent.click(filters.getByRole('button', { name: 'TikTok' }))
+    await waitFor(() => expect(screen.getByTestId('content-applied')).toHaveTextContent('TikTok'))
+
+    fireEvent.click(screen.getByTestId('content-clear'))
+
+    await waitFor(() => expect(screen.getByTestId('content-applied')).toHaveTextContent('All content'))
   })
 
   /**
@@ -154,9 +217,10 @@ describe('CreativesPage', () => {
    */
   it('sends a changed filter to the server rather than slicing the loaded page', async () => {
     renderWithProviders(<CreativesPage />, { locale: 'en' })
-    await screen.findByLabelText('Platform')
+    await screen.findByRole('article')
 
-    fireEvent.change(screen.getByLabelText('Platform'), { target: { value: 'tiktok' } })
+    const filters = await openFilters()
+    fireEvent.click(filters.getByRole('button', { name: 'TikTok' }))
 
     await waitFor(() => {
       const calls = vi.mocked(listCreatives).mock.calls
@@ -168,7 +232,7 @@ describe('CreativesPage', () => {
   /** An axis nobody touched is omitted, never sent as `[]` — absent and empty differ on the server. */
   it('omits an untouched axis instead of sending an empty list', async () => {
     renderWithProviders(<CreativesPage />, { locale: 'en' })
-    await screen.findByLabelText('Platform')
+    await screen.findByRole('article')
 
     const first = vi.mocked(listCreatives).mock.calls[0][0]
 
