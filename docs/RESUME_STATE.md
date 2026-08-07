@@ -437,6 +437,20 @@ after IDENTITY-PROD renamed everything.
   `DemoCreativesSeeder` rounds (§15.12a) and its comment documents exactly this; the dev DB predates
   the fix. Re-seed to clear it.
 
+### Found by the gate, and NOT fixed here — one for the next session
+
+**A silently dead «إنشاء وتوليد» when the agency scope disagrees with itself.**
+`AgencyScopeSwitcher` clears `currentProjectId` whenever a client is selected and the chosen project
+belongs to a different one. That is correct on its own. What is not correct is what the reports page
+then does: it keeps offering the report builder, and the create button posts nothing, with no
+sentence saying the project went away. The gate hit it as a three-minute Firefox timeout, because by
+then earlier specs had created workspaces and the client persisted at sign-in no longer owned the
+project the spec had pinned.
+
+The spec now states the scope it needs instead of inheriting one, which is the right fix for the
+TEST. The product fix — the page saying «اختر عميلًا ومشروعًا أولًا» instead of presenting a builder
+that cannot build — is a separate unit and is deliberately not folded into a UX pass.
+
 ### Exact next task
 
 1. **§14.6 objective layouts on the REPORTS**, then **§14.7–14.8** — comparisons, pacing, funnel

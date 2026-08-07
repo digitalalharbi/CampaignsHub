@@ -78,11 +78,73 @@ test.describe('agency filters are on the page, and name what they narrow', () =>
    * unchanged is the claim underneath: a narrowed page must SAY what narrowed it. It says so with
    * chips that each undo their own value, which a joined sentence could not do.
    */
+  /*
+   * `narrow` names the exact control to use, per page — the lesson this suite has now learned six
+   * times, once more in the gate that followed the rewrite.
+   *
+   * A generic «drive the first select, or else the first collapsed button» failed on two pages at
+   * once and for two different reasons. Clients filters with `SearchableSelect`, which is neither a
+   * native select nor a button carrying `aria-expanded`, so the helper found nothing to click. And
+   * on Alerts the first select IS a control — but it is the queue's status, which deliberately
+   * never becomes an applied chip, so the assertion that followed could not pass however long it
+   * waited. A selector that guesses guesses wrong.
+   */
+  type Bar = import('@playwright/test').Locator
+
+  /*
+   * Open a multi-select, take its first value, and SHUT it again.
+   *
+   * The shutting is not tidiness. The popover is `absolute` under its trigger, so it covers the
+   * applied-filters row that the selection just created — and the gate caught a click on «إعادة
+   * ضبط» landing on «سناب شات» instead. That is how a dropdown behaves everywhere; a person presses
+   * Escape or clicks away before reaching for what is underneath, so the test does too.
+   */
+  const pickOption = async (bar: Bar, testid: string) => {
+    await bar.getByTestId(testid).click()
+    await bar.getByTestId(`${testid}-options`).getByRole('option').first().click()
+    await bar.page().keyboard.press('Escape')
+    await expect(bar.getByTestId(`${testid}-options`)).toHaveCount(0)
+  }
+
   const PAGES = [
-    { id: 'clients', path: '/agency/clients' },
-    { id: 'tasks', path: '/agency/tasks' },
-    { id: 'alerts', path: '/agency/alerts' },
-    { id: 'content', path: '/agency/content' },
+    {
+      /*
+       * Clients is driven through its FOLDED axis, on purpose.
+       *
+       * Its visible three are taxonomy comboboxes whose options come from the workspace's own
+       * taxonomy — a set the gate's seed does not guarantee, so a test that picks «the first
+       * option» is a test that can find none. `needs_attention` is a checkbox that always exists,
+       * always narrows, and always names itself; and driving it also proves the folded half of
+       * this page still works, which nothing else here covers.
+       */
+      id: 'clients',
+      path: '/agency/clients',
+      narrow: async (bar: Bar) => {
+        const page = bar.page()
+        await page.getByTestId('clients-more-filters').click()
+        const dialog = page.getByTestId('clients-more-filters-body')
+        await expect(dialog).toBeVisible()
+        await dialog.getByRole('checkbox').first().check()
+        await page.keyboard.press('Escape')
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+      },
+    },
+    {
+      id: 'tasks',
+      path: '/agency/tasks',
+      narrow: (bar: Bar) => bar.getByTestId('tasks-status').selectOption({ index: 1 }),
+    },
+    {
+      // Severity, NOT status: status is the queue's mode and never becomes a chip.
+      id: 'alerts',
+      path: '/agency/alerts',
+      narrow: (bar: Bar) => bar.getByTestId('alerts-severity').selectOption({ index: 1 }),
+    },
+    {
+      id: 'content',
+      path: '/agency/content',
+      narrow: (bar: Bar) => pickOption(bar, 'content-providers'),
+    },
   ] as const
 
   for (const p of PAGES) {
@@ -103,25 +165,7 @@ test.describe('agency filters are on the page, and name what they narrow', () =>
       await expect(bar).toBeVisible({ timeout: 20000 })
       await page.waitForLoadState('networkidle')
 
-      /*
-       * Use whichever kind of control this page's first axis is.
-       *
-       * A generic «click the first thing that isn't All» has guessed wrong on this suite five times.
-       * Both shapes are handled explicitly instead: a `<select>` gets its first real option, and a
-       * multi-select trigger gets opened and its first option chosen.
-       */
-      const select = bar.locator('select').first()
-      if (await select.count() > 0) {
-        const values = await select.locator('option').evaluateAll((os) =>
-          os.map((o) => (o as HTMLOptionElement).value),
-        )
-        const chosen = values.find((v) => v !== '' && v !== 'all')
-        expect(chosen, `${p.id} offers no filter value`).toBeTruthy()
-        await select.selectOption(chosen!)
-      } else {
-        await bar.getByRole('button', { expanded: false }).first().click()
-        await page.getByRole('option').first().click()
-      }
+      await p.narrow(bar)
 
       await expect(page.getByTestId(`${p.id}-applied`)).toBeVisible({ timeout: 20000 })
       await page.getByTestId(`${p.id}-reset`).click()

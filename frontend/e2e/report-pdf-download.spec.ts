@@ -24,17 +24,37 @@ test('export button → queue → download → the downloaded Arabic PDF is a va
 
   // A project that has metrics (the demo seed project with existing reports has them).
   const projects = (await (await page.request.get('/api/v1/projects', { headers: API_HEADERS })).json())
-    .data as Array<{ id: string }>
+    .data as Array<{ id: string; client_workspace_id: string }>
   let projectId = ''
+  let clientId = ''
   for (const p of projects) {
     const res = await page.request.get(`/api/v1/projects/${p.id}/reports`, { headers: API_HEADERS })
-    if (res.ok() && ((await res.json()).data.reports as unknown[]).length > 0) { projectId = p.id; break }
+    if (res.ok() && ((await res.json()).data.reports as unknown[]).length > 0) {
+      projectId = p.id
+      clientId = p.client_workspace_id
+      break
+    }
   }
   expect(projectId, 'a demo project with reports must exist').not.toBe('')
 
-  await page.addInitScript((id) => {
+  /*
+   * The CLIENT is set as well as the project, and the two are made to agree.
+   *
+   * This spec runs as the agency owner, so it lands in the agency shell — where `AgencyScopeSwitcher`
+   * clears `currentProjectId` whenever a client is selected and the chosen project belongs to a
+   * different one. The stored client comes from `auth.setup`, which signs in before any other spec
+   * has created a workspace; by the time this spec runs in a full gate, several exist, and whichever
+   * client the setup persisted no longer owned this project. The switcher then did exactly what it
+   * is written to do, the project went null, and «إنشاء وتوليد» posted nothing — for three minutes,
+   * on Firefox only, because that is where the ordering happened to bite.
+   *
+   * Passing both removes the dependency on auto-selection: the test states the scope it needs
+   * instead of inheriting whatever the previous specs left behind.
+   */
+  await page.addInitScript(([id, client]) => {
     localStorage.setItem('campaign-hub-project-storage', JSON.stringify({ state: { currentProjectId: id }, version: 0 }))
-  }, projectId)
+    localStorage.setItem('campaign-hub-agency-client', JSON.stringify({ state: { currentClientId: client }, version: 0 }))
+  }, [projectId, clientId])
   await page.goto('/reports')
 
   // 1. Create a fresh CLIENT report via the builder (a new report has no exports → export button shows).

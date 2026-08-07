@@ -103,7 +103,15 @@ test.describe('the creative library', () => {
      * part that matters: the filter narrows on the SERVER and the choice lands in the address.
      */
     await page.getByTestId('content-providers').click()
-    await page.getByRole('option').first().click()
+    /*
+     * Scoped to THIS popover, and not for tidiness.
+     *
+     * A native `<option>` also carries `role="option"`, and the agency shell's client picker is a
+     * `<select>` in the sidebar — so an unscoped `getByRole('option')` resolved to «اختر عميلًا»,
+     * which is inside a closed dropdown and can never be clicked. The test spent thirty seconds
+     * retrying an invisible element in all three browsers.
+     */
+    await page.getByTestId('content-providers-options').getByRole('option').first().click()
     await expect(page.getByTestId('content-applied')).toBeVisible({ timeout: 20000 })
 
     /*

@@ -45,6 +45,17 @@ test.describe('the advertiser portal', () => {
   test('the objective KPIs re-label when the language changes', async ({ page }) => {
     await page.goto('/app/dashboard')
     await expect(page.locator('main')).toBeVisible()
+
+    /*
+     * The objective is CHOSEN here rather than assumed (UX-DASH-001).
+     *
+     * The dashboard used to open pinned to Awareness, so «الوصول» was on screen by default and this
+     * test could rely on it. It opens on the mixed operational set now — spend, impressions, clicks,
+     * CTR — because pinning a sales account to an awareness layout answers a question nobody asked.
+     * Naming the objective keeps the test about what it was always about: the labels re-render in
+     * the reader's language rather than freezing in whichever one loaded first.
+     */
+    await page.getByTestId('dashboard-objective').selectOption('awareness')
     await expect(page.getByText('الوصول').first()).toBeVisible({ timeout: 20000 })
 
     await toggleLanguage(page)

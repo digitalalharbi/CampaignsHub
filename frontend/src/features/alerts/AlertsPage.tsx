@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, BellRing, CheckCircle2, Clock, ListChecks, Plus, Settings2, Truck } from 'lucide-react'
-import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
+import { FilterBar, FilterChips, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
 import {
   createAlertRule, createTaskFromAlert, listAlertEvents, listAlertRules,
@@ -206,7 +206,16 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
       >
         <FilterSearch value={term} placeholder={c.search_ph} testid="alerts-search" onChange={setTerm} />
 
-        <FilterSelect
+        {/*
+          Status is the queue's MODE, not a filter over it.
+
+          Open / snoozed / resolved is how an alert list is WORKED — the same shape as a tab strip —
+          which is why it was already outside the folded dialog before this unit, why it stays a
+          segmented control rather than becoming a dropdown, and why it is deliberately absent from
+          the applied-filters row: a chip offering to «remove» the queue you are looking at would be
+          a control with nowhere to go.
+        */}
+        <FilterChips
           label={locale === 'ar' ? 'الحالة' : 'Status'}
           value={filter}
           testid="alerts-status"
