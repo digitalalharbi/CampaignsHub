@@ -85,8 +85,18 @@ export function LeadsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('leads')}</h1>
-          <p className="mt-1 text-sm text-text-secondary">
-            {t('data_source')}: MediaBuying API
+          {/*
+            UX-IDENTITY-001, and a naming regression with it.
+
+            This line read «مصدر البيانات: MediaBuying API» — the product's OLD name, on a page a
+            customer can open, months after IDENTITY-PROD renamed everything to CampaignsHub. A
+            purpose sentence replaces it, so the fix removes the wrong name rather than correcting it
+            into a sentence nobody needed.
+          */}
+          <p className="mt-1 max-w-2xl text-sm text-text-secondary">
+            {locale === 'ar'
+              ? 'العملاء المحتملون الواردون من حملاتك ونماذجك — مع مصدر كل واحد وحالته.'
+              : 'The leads your campaigns and forms brought in — each with its source and where it stands.'}
           </p>
         </div>
         {canCreate && (

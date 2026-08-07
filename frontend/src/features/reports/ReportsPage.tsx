@@ -42,7 +42,7 @@ import { DemoBadge } from '@/features/analytics/components'
 import { InteractiveReport } from './InteractiveReport'
 import { AnnotationsPanel } from './AnnotationsPanel'
 import { useProject } from '@/stores/project'
-import { FilterGroup, ViewCustomiser } from '@/components/ui/ViewCustomiser'
+import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
 
 const STATUS_STYLE: Record<string, string> = {
@@ -225,76 +225,73 @@ export function ReportsPage() {
         <SchedulesPanel projectId={currentProjectId!} />
       ) : (
       <>
-      {/* Toolbar — search + status segmented filter (matches the platform's other command pages). */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={ar ? 'ابحث في التقارير…' : 'Search reports…'}
-          className="h-10 w-full rounded-xl border border-border bg-surface-secondary px-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 sm:max-w-xs"
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          {/*
-            Status and type fold; search and the view switcher stay (SIMPLIFY-003).
-            A reports page is opened to FETCH a report — most often the newest one — and it opened
-            with a status row, a type row and a view switcher above the first filename.
-          */}
-          <ViewCustomiser
-            id="reports"
-            ar={ar}
-            active={status !== '' || typeFilter !== ''}
-            summary={
-              [
-                status === '' ? null : statusLabel(status, ar),
-                typeFilter === '' ? null : typeLabel(typeFilter),
-              ].filter(Boolean).join(' · ')
-              || (ar ? 'كل التقارير' : 'All reports')
-            }
-            onClear={() => { setStatus(''); setTypeFilter('') }}
-          >
-            <FilterGroup label={ar ? 'الحالة' : 'Status'}>
-              {[
-                ['', ar ? 'الكل' : 'All'],
-                ['completed', statusLabel('completed', ar)],
-                ['processing', statusLabel('processing', ar)],
-                ['failed', statusLabel('failed', ar)],
-              ].map(([value, label]) => (
-                <button
-                  key={value || 'all'}
-                  onClick={() => setStatus(value)}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                    status === value ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </FilterGroup>
-            {presentTypes.length > 1 && (
-              <FilterGroup label={ar ? 'النوع' : 'Type'}>
-                <button onClick={() => setTypeFilter('')}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${typeFilter === '' ? 'bg-text-primary text-surface' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
-                  {ar ? 'الكل' : 'All'}
-                </button>
-                {presentTypes.map((tp) => (
-                  <button key={tp} onClick={() => setTypeFilter(typeFilter === tp ? '' : tp)}
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${typeFilter === tp ? 'bg-text-primary text-surface' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
-                    {typeLabel(tp)}
-                  </button>
-                ))}
-              </FilterGroup>
-            )}
-          </ViewCustomiser>
-          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-          {/* View switch — table for scanning, cards for browsing. */}
+      {/*
+        Status and type, on the page — UX-SWEEP-001.
+
+        SIMPLIFY-003 folded them behind one button because a reports page is opened to FETCH a
+        report. True, and «the completed ones» is how somebody fetches it — a status filter is part
+        of finding the report, not part of configuring the page. Two controls, both visible.
+      */}
+      <FilterBar
+        id="reports"
+        ar={ar}
+        applied={[
+          ...(status === '' ? [] : [{
+            key: `status:${status}`,
+            axis: ar ? 'الحالة' : 'Status',
+            label: statusLabel(status, ar),
+            onRemove: () => setStatus(''),
+          }]),
+          ...(typeFilter === '' ? [] : [{
+            key: `type:${typeFilter}`,
+            axis: ar ? 'النوع' : 'Type',
+            label: typeLabel(typeFilter),
+            onRemove: () => setTypeFilter(''),
+          }]),
+        ]}
+        onReset={() => { setStatus(''); setTypeFilter('') }}
+        trailing={
           <div className="flex overflow-hidden rounded-lg border border-border">
             <button onClick={() => setView('table')} aria-label={ar ? 'جدول' : 'Table'} title={ar ? 'جدول' : 'Table'}
               className={`flex items-center px-2.5 py-1.5 ${view === 'table' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}><Rows3 size={14} /></button>
             <button onClick={() => setView('cards')} aria-label={ar ? 'بطاقات' : 'Cards'} title={ar ? 'بطاقات' : 'Cards'}
               className={`flex items-center px-2.5 py-1.5 ${view === 'cards' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}><LayoutGrid size={14} /></button>
           </div>
-        </div>
-      </div>
+        }
+      >
+        <FilterSearch
+          value={search}
+          placeholder={ar ? 'ابحث في التقارير…' : 'Search reports…'}
+          testid="reports-search"
+          onChange={setSearch}
+        />
+
+        <FilterSelect
+          label={ar ? 'الحالة' : 'Status'}
+          value={status}
+          testid="reports-status"
+          options={[
+            { value: '', label: ar ? 'الكل' : 'All' },
+            { value: 'completed', label: statusLabel('completed', ar) },
+            { value: 'processing', label: statusLabel('processing', ar) },
+            { value: 'failed', label: statusLabel('failed', ar) },
+          ]}
+          onChange={setStatus}
+        />
+
+        {presentTypes.length > 1 && (
+          <FilterSelect
+            label={ar ? 'النوع' : 'Type'}
+            value={typeFilter}
+            testid="reports-type"
+            options={[
+              { value: '', label: ar ? 'الكل' : 'All' },
+              ...presentTypes.map((tp) => ({ value: tp, label: typeLabel(tp) })),
+            ]}
+            onChange={setTypeFilter}
+          />
+        )}
+      </FilterBar>
 
       {/* List */}
       <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">

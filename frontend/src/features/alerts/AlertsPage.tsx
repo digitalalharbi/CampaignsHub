@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, BellRing, CheckCircle2, Clock, ListChecks, Plus, Search, Settings2, Truck } from 'lucide-react'
-import { FilterGroup, ViewCustomiser } from '@/components/ui/ViewCustomiser'
+import { AlertTriangle, BellRing, CheckCircle2, Clock, ListChecks, Plus, Settings2, Truck } from 'lucide-react'
+import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
 import {
   createAlertRule, createTaskFromAlert, listAlertEvents, listAlertRules,
@@ -177,78 +177,64 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
         <SummaryCard label={c.sum_resolved} value={summary.resolved} tone="success" />
       </div>
 
-      {/* Search + status/severity filters. */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
-        <label className="relative flex w-full items-center sm:max-w-xs">
-          <Search size={15} className="pointer-events-none absolute start-3 text-text-muted" aria-hidden />
-          <input
-            value={term}
-            onChange={(ev) => setTerm(ev.target.value)}
-            placeholder={c.search_ph}
-            className="w-full rounded-xl border border-border bg-surface-secondary py-2 pe-3 ps-9 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none"
-          />
-        </label>
-        {/*
-          Status stays out in the open — open / snoozed / resolved is how the queue is WORKED, the
-          same way tabs are. Severity and source are filters on top of that, and they were two more
-          chip rows before the first alert; they fold, with the applied set spelled out (SIMPLIFY-002).
-        */}
-        <div className="flex flex-wrap items-center gap-2">
-          {filters.map((f) => (
-            <button
-              key={f.id}
-              onClick={() => setFilter(f.id)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                filter === f.id ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/*
+        The queue's own three questions, on the page — UX-SWEEP-001.
 
-      <ViewCustomiser
+        Status stays first because open / snoozed / resolved is how an alert queue is WORKED rather
+        than filtered. Severity and source were folded behind a button (SIMPLIFY-002); they are the
+        next two things anybody asks of an alert list, so they sit beside it now. Source appears only
+        when more than one kind of alert exists — an axis with one value is not a filter.
+      */}
+      <FilterBar
         id="alerts"
         ar={locale === 'ar'}
-        active={sev !== sevFilters[0]?.id || type !== 'all'}
-        summary={
-          [
-            sev === sevFilters[0]?.id ? null : sevFilters.find((f) => f.id === sev)?.label,
-            type === 'all' ? null : (TYPE_LABEL[type as AlertType]?.[locale] ?? type),
-          ].filter(Boolean).join(' · ')
-          || (locale === 'ar' ? 'كل الأهميات وكل المصادر' : 'Every severity, every source')
-        }
-        onClear={() => { setSev(sevFilters[0]!.id); setType('all') }}
+        applied={[
+          ...(sev === sevFilters[0]?.id ? [] : [{
+            key: `sev:${sev}`,
+            axis: c.severity,
+            label: sevFilters.find((f) => f.id === sev)?.label ?? sev,
+            onRemove: () => setSev(sevFilters[0]!.id),
+          }]),
+          ...(type === 'all' ? [] : [{
+            key: `type:${type}`,
+            axis: c.source,
+            label: TYPE_LABEL[type as AlertType]?.[locale] ?? type,
+            onRemove: () => setType('all'),
+          }]),
+        ]}
+        onReset={() => { setSev(sevFilters[0]!.id); setType('all') }}
       >
-        <FilterGroup label={c.severity}>
-          {sevFilters.map((f) => (
-            <button
-              key={f.id}
-              onClick={() => setSev(f.id)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                sev === f.id ? 'bg-text-primary text-surface' : 'bg-surface-hover text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </FilterGroup>
+        <FilterSearch value={term} placeholder={c.search_ph} testid="alerts-search" onChange={setTerm} />
+
+        <FilterSelect
+          label={locale === 'ar' ? 'الحالة' : 'Status'}
+          value={filter}
+          testid="alerts-status"
+          options={filters.map((f) => ({ value: f.id, label: f.label }))}
+          onChange={(v) => setFilter(v as EventFilter)}
+        />
+
+        <FilterSelect
+          label={c.severity}
+          value={sev}
+          testid="alerts-severity"
+          options={sevFilters.map((f) => ({ value: f.id, label: f.label }))}
+          onChange={(v) => setSev(v as 'all' | AlertEvent['severity'])}
+        />
+
         {presentTypes.length > 1 && (
-          <FilterGroup label={c.source}>
-            <button onClick={() => setType('all')}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${type === 'all' ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
-              {c.all}
-            </button>
-            {presentTypes.map((tp) => (
-              <button key={tp} onClick={() => setType(type === tp ? 'all' : tp)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${type === tp ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
-                {TYPE_LABEL[tp as AlertType]?.[locale] ?? tp}
-              </button>
-            ))}
-          </FilterGroup>
+          <FilterSelect
+            label={c.source}
+            value={type}
+            testid="alerts-source"
+            options={[
+              { value: 'all', label: c.all },
+              ...presentTypes.map((tp) => ({ value: tp, label: TYPE_LABEL[tp as AlertType]?.[locale] ?? tp })),
+            ]}
+            onChange={setType}
+          />
         )}
-      </ViewCustomiser>
+      </FilterBar>
 
       {events.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">

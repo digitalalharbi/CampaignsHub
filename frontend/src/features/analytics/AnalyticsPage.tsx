@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -23,13 +23,33 @@ import {
   usePlatforms,
   useSummary,
   useTimeseries,
+  type MetricFilters,
 } from './hooks'
-import { DemoBadge, KpiCard, Panel, RangeTabs, SERIES, platformColor, tooltipProps } from './components'
+import { DemoBadge, KpiCard, Panel, SERIES, platformColor, tooltipProps } from './components'
 import { compact, money, num, percent, ratio } from './format'
 import { funnelStageLabel } from './metricLabels'
+import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
+import { PageIntro } from '@/components/ui/PageIntro'
+import { listProjects } from '@/features/projects/api'
+import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
+import {
+  MARKETING_PATH_KEYS,
+  marketingPathLabel,
+  objectiveLabel,
+  objectivesForPath,
+  pathOfObjective,
+  providerLabel,
+} from '@/features/campaigns/labels'
+
+/** The six platforms this product unifies, in the product's own order (PLATFORM-ORDER-001). */
+const ANALYTICS_PLATFORMS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
+
+/** The objectives with a layout elsewhere in the product — the same six the dashboard offers. */
+const ANALYTICS_OBJECTIVES = ['awareness', 'traffic', 'leads', 'sales', 'app_installs', 'engagement']
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
+import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
 import { AttributionPanel } from './AttributionPanel'
 
@@ -49,25 +69,157 @@ const axis = { stroke: 'var(--text-muted)', fontSize: 12 }
 /** The reader's language. Each tab below is its own component, so each one asks. */
 const useAr = () => useUi((u) => u.locale) === 'ar'
 
+/**
+ * `/app/analytics` and `/agency/analytics` — UX-SWEEP-001.
+ *
+ * The page could be narrowed by ONE axis: the period. Everything else it can answer — which
+ * platform, which campaign, which objective, which marketing path — was reachable only by going to
+ * the dashboard, setting it there, and coming back. So the product's deepest analysis surface was
+ * also its least filterable, which is the wrong way round.
+ *
+ * The filters live here rather than in each tab because they must narrow every tab at once: a
+ * platform chosen on «Platform analysis» that reset itself on «Conversions & funnel» would be a
+ * control that appears to work and does not.
+ */
 export function AnalyticsPage() {
   const ar = useAr()
-  const { currentProjectId } = useProject()
+  const { currentProjectId, setCurrentProjectId } = useProject()
   const [days, setDays] = useState(30)
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('performance')
+  const [providers, setProviders] = useState<string[]>([])
+  const [campaignIds, setCampaignIds] = useState<string[]>([])
+  const [path, setPath] = useState('all')
+  const [objective, setObjective] = useState('all')
   const range = useLastNDaysRange(days)
 
+  const projectsQuery = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false), retry: false })
+  const projects = projectsQuery.data ?? []
+
+  /** A path is not a server axis — it is its objectives, on the objective filter (see the dashboard). */
+  const objectiveFilter = useMemo(() => {
+    if (objective !== 'all') return [objective]
+
+    return path === 'all' ? [] : objectivesForPath(path)
+  }, [objective, path])
+
+  const filters: MetricFilters = useMemo(
+    () => ({ provider: providers, objective: objectiveFilter, campaign: campaignIds }),
+    [providers, objectiveFilter, campaignIds],
+  )
+
+  /* Unnarrowed by campaign, so choosing one does not collapse the list it was chosen from. */
+  const campaignOptions = useCampaigns(currentProjectId, range, useMemo(
+    () => ({ provider: providers, objective: objectiveFilter }),
+    [providers, objectiveFilter],
+  ))
+
+  const objectiveChoices = ANALYTICS_OBJECTIVES.filter((key) => path === 'all' || pathOfObjective(key) === path)
+
+  const applied: AppliedFilter[] = useMemo(() => {
+    const out: AppliedFilter[] = []
+    providers.forEach((v) => out.push({
+      key: `provider:${v}`,
+      axis: ar ? 'المنصة' : 'Platform',
+      label: providerLabel(canonicalPlatform(v), ar ? 'ar' : 'en'),
+      onRemove: () => setProviders((prev) => prev.filter((x) => x !== v)),
+    }))
+    campaignIds.forEach((v) => out.push({
+      key: `campaign:${v}`,
+      axis: ar ? 'الحملة' : 'Campaign',
+      label: campaignOptions.data?.find((c) => String(c.campaign_id) === v)?.campaign_name ?? v,
+      onRemove: () => setCampaignIds((prev) => prev.filter((x) => x !== v)),
+    }))
+    if (path !== 'all') {
+      out.push({ key: `path:${path}`, axis: ar ? 'المسار' : 'Path', label: marketingPathLabel(path, ar ? 'ar' : 'en'), onRemove: () => setPath('all') })
+    }
+    if (objective !== 'all') {
+      out.push({ key: `objective:${objective}`, axis: ar ? 'الهدف' : 'Objective', label: objectiveLabel(objective, ar ? 'ar' : 'en'), onRemove: () => setObjective('all') })
+    }
+    return out
+  }, [providers, campaignIds, campaignOptions.data, path, objective, ar])
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{ar ? 'التحليلات' : 'Analytics'}</h1>
-            <DemoBadge />
-          </div>
-          <p className="mt-1 text-sm text-text-secondary">{ar ? 'استكشاف تفصيلي وتفاعلي للأداء عبر المنصات والحملات' : 'A detailed, interactive look at performance across platforms and campaigns'}</p>
-        </div>
-        <RangeTabs value={days} onChange={setDays} />
-      </div>
+    <div className="space-y-5">
+      <PageIntro
+        testid="analytics-intro"
+        title={ar ? 'التحليلات' : 'Analytics'}
+        purpose={ar
+          ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
+          : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
+        badges={<DemoBadge />}
+      />
+
+      <FilterBar
+        id="analytics"
+        ar={ar}
+        applied={applied}
+        onReset={() => { setProviders([]); setCampaignIds([]); setPath('all'); setObjective('all') }}
+      >
+        <FilterChips
+          label={ar ? 'الفترة' : 'Period'}
+          value={String(days)}
+          testid="analytics-period"
+          options={[
+            { value: '7', label: ar ? '7 أيام' : '7 days' },
+            { value: '30', label: ar ? '30 يوم' : '30 days' },
+            { value: '90', label: ar ? '90 يوم' : '90 days' },
+          ]}
+          onChange={(v) => setDays(Number(v))}
+        />
+
+        {projects.length > 0 && (
+          <FilterSelect
+            label={ar ? 'المشروع' : 'Project'}
+            value={currentProjectId ?? ''}
+            testid="analytics-project"
+            options={projects.map((pr) => ({ value: pr.id, label: pr.name }))}
+            onChange={setCurrentProjectId}
+          />
+        )}
+
+        <FilterMulti
+          label={ar ? 'المنصة' : 'Platform'}
+          ar={ar}
+          values={providers}
+          testid="analytics-platform"
+          options={ANALYTICS_PLATFORMS.map((key) => ({ value: key, label: providerLabel(canonicalPlatform(key), ar ? 'ar' : 'en') }))}
+          onChange={setProviders}
+        />
+
+        <FilterMulti
+          label={ar ? 'الحملة' : 'Campaign'}
+          ar={ar}
+          values={campaignIds}
+          testid="analytics-campaign"
+          options={(campaignOptions.data ?? []).map((c) => ({ value: String(c.campaign_id), label: c.campaign_name ?? String(c.campaign_id) }))}
+          onChange={setCampaignIds}
+        />
+
+        <FilterSelect
+          label={ar ? 'المسار التسويقي' : 'Marketing path'}
+          value={path}
+          testid="analytics-path"
+          options={[
+            { value: 'all', label: ar ? 'كل المسارات' : 'All paths' },
+            ...MARKETING_PATH_KEYS.map((key) => ({ value: key, label: marketingPathLabel(key, ar ? 'ar' : 'en') })),
+          ]}
+          onChange={(v) => {
+            setPath(v)
+            if (v !== 'all' && objective !== 'all' && pathOfObjective(objective) !== v) setObjective('all')
+          }}
+        />
+
+        <FilterSelect
+          label={ar ? 'الهدف' : 'Objective'}
+          value={objective}
+          testid="analytics-objective"
+          options={[
+            { value: 'all', label: ar ? 'كل الأهداف' : 'All objectives' },
+            ...objectiveChoices.map((key) => ({ value: key, label: objectiveLabel(key, ar ? 'ar' : 'en') })),
+          ]}
+          onChange={setObjective}
+        />
+      </FilterBar>
 
       <div className="flex flex-wrap gap-1.5 border-b border-border">
         {TABS.map((t) => (
@@ -84,25 +236,31 @@ export function AnalyticsPage() {
         ))}
       </div>
 
-      {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} />}
-      {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} />}
-      {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} />}
-      {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} />}
+      {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} />}
+      {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
+      {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
+      {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'store' && <StoreFunnelTab projectId={currentProjectId} range={range} />}
-      {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} />}
-      {tab === 'quality' && <QualityTab projectId={currentProjectId} range={range} />}
+      {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} filters={filters} />}
+      {tab === 'quality' && <QualityTab projectId={currentProjectId} range={range} filters={filters} />}
 
       <LivePerformanceNotice variant="compact" />
     </div>
   )
 }
 
-type TabProps = { projectId: string | null; range: { from: string; to: string } }
+type TabProps = { projectId: string | null; range: { from: string; to: string }; filters: MetricFilters }
 
-function PerformanceTab({ projectId, range }: TabProps) {
+/*
+ * The store tab takes no filters, and that is the same rule the dashboard's store strip follows:
+ * spend narrows to a platform and an order does not — a large share of orders carry no attribution
+ * at all, so «Meta's share of the shop's revenue» is not a quantity that exists.
+ */
+
+function PerformanceTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
-  const s = useSummary(projectId, range)
-  const ts = useTimeseries(projectId, range)
+  const s = useSummary(projectId, range, filters)
+  const ts = useTimeseries(projectId, range, filters)
   const cur = s.data?.current
   const d = s.data?.delta ?? {}
   const points = ts.data ?? []
@@ -170,9 +328,9 @@ function PerformanceTab({ projectId, range }: TabProps) {
   )
 }
 
-function PlatformsTab({ projectId, range }: TabProps) {
+function PlatformsTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
-  const p = usePlatforms(projectId, range)
+  const p = usePlatforms(projectId, range, filters)
   const rows = p.data ?? []
   return (
     <div className="space-y-4">
@@ -215,9 +373,9 @@ function PlatformsTab({ projectId, range }: TabProps) {
   )
 }
 
-function CampaignsTab({ projectId, range }: TabProps) {
+function CampaignsTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
-  const c = useCampaigns(projectId, range)
+  const c = useCampaigns(projectId, range, filters)
   const rows = c.data ?? []
   const best = rows[0]
   const worst = [...rows].filter((r) => r.spend > 0).sort((a, b) => (a.roas ?? 0) - (b.roas ?? 0))[0]
@@ -263,9 +421,9 @@ function CampaignsTab({ projectId, range }: TabProps) {
   )
 }
 
-function FunnelTab({ projectId, range }: TabProps) {
+function FunnelTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
-  const f = useFunnel(projectId, range)
+  const f = useFunnel(projectId, range, filters)
   const rows = f.data ?? []
   /*
    * FUNNEL-NULL-001 — scaled against the largest REPORTED count, not `rows[0].count`.
@@ -318,9 +476,9 @@ function FunnelTab({ projectId, range }: TabProps) {
   )
 }
 
-function BudgetTab({ projectId, range }: TabProps) {
+function BudgetTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
-  const b = useBudget(projectId, range)
+  const b = useBudget(projectId, range, filters)
   const rows = b.data ?? []
   return (
     <Panel title={ar ? 'تحليل الميزانية' : 'Budget analysis'} description={ar ? 'المخطط مقابل المصروف وسرعة الصرف (Pacing)' : 'Planned against spent, and how fast it is going (pacing)'} loading={b.isLoading} error={b.isError} empty={!b.isLoading && rows.length === 0}>
@@ -347,9 +505,9 @@ function BudgetTab({ projectId, range }: TabProps) {
   )
 }
 
-function QualityTab({ projectId, range }: TabProps) {
+function QualityTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
-  const f = useFreshness(projectId, range)
+  const f = useFreshness(projectId, range, filters)
   const rows = f.data ?? []
   return (
     <div>
@@ -379,20 +537,20 @@ function QualityTab({ projectId, range }: TabProps) {
       />
       <p className="mt-3 text-xs text-text-muted">{ar ? 'لا يتم جمع Reach عبر المنصات كوصول فريد — يُعرض لكل منصة على حدة.' : 'Reach is not summed across platforms as unique reach — it is shown per platform.'}</p>
       </Panel>
-      <NormalizationPanel projectId={projectId} range={range} />
+      <NormalizationPanel projectId={projectId} range={range} filters={filters} />
       {/*
        * REPORT-OBJECTIVE-005 — on this tab because it is literally «جودة البيانات والإسناد», and
        * because a reader who has just been told which currency and window produced a figure is the
        * reader who needs to be told which SYSTEM produced it.
        */}
-      <AttributionSection projectId={projectId} range={range} />
+      <AttributionSection projectId={projectId} range={range} filters={filters} />
     </div>
   )
 }
 
-function AttributionSection({ projectId, range }: TabProps) {
+function AttributionSection({ projectId, range, filters }: TabProps) {
   const locale = useUi((u) => u.locale)
-  const a = useAttribution(projectId, range)
+  const a = useAttribution(projectId, range, filters)
 
   return (
     <AttributionPanel
@@ -421,9 +579,9 @@ function AttributionSection({ projectId, range }: TabProps) {
  * (a second currency, a second attribution window, demo rows among real ones) are called out rather
  * than resolved quietly.
  */
-function NormalizationPanel({ projectId, range }: TabProps) {
+function NormalizationPanel({ projectId, range, filters }: TabProps) {
   const ar = useAr()
-  const n = useNormalization(projectId, range)
+  const n = useNormalization(projectId, range, filters)
   const d = n.data
 
   const converted = (d?.currencies ?? []).filter((c) => c.converted)

@@ -3,6 +3,7 @@ import { getData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardDescription, CardTitle } from '@/components/ui/Card'
 import { useT } from '@/lib/i18n'
+import { brand } from '@/lib/brand'
 import type { HealthData } from '@/lib/api/types'
 
 function useHealth(path: string) {
@@ -41,7 +42,7 @@ export function SystemStatusPage() {
             )}
           </div>
           <p className="mt-3 text-xs text-text-muted">
-            {t('data_source')}: MediaBuying API · {t('last_updated')}:{' '}
+            {t('data_source')}: {brand.name} API · {t('last_updated')}:{' '}
             <span className="tnum">{new Date(health.dataUpdatedAt).toLocaleTimeString()}</span>
           </p>
         </Card>

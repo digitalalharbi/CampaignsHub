@@ -118,7 +118,17 @@ export function ProjectsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('projects')}</h1>
-          <p className="mt-1 text-sm text-text-secondary">{t('data_source')}: CampaignsHub API</p>
+          {/*
+            What this category is FOR — UX-IDENTITY-001.
+
+            It said «مصدر البيانات: CampaignsHub API», which is plumbing: it tells the reader where
+            the rows came from and nothing about what a project is or what they can do here.
+          */}
+          <p className="mt-1 max-w-2xl text-sm text-text-secondary">
+            {locale === 'ar'
+              ? 'كل مشروع مساحة معزولة لعميل واحد — حساباته الإعلانية وحملاته وفريقه وتقاريره.'
+              : 'Each project is one client’s isolated workspace — its ad accounts, campaigns, team and reports.'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant={showArchived ? 'secondary' : 'ghost'} onClick={() => setShowArchived((v) => !v)}>

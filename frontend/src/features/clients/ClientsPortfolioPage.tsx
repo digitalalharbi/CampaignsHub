@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Building2, LayoutGrid, Search, Table2, Users } from 'lucide-react'
+import { AlertTriangle, Building2, LayoutGrid, Table2, Users } from 'lucide-react'
 import { getTaxonomy, listClients, type ClientCard, type ClientFilters } from './api'
 import { CLIENT_STATUS_LABELS, INDUSTRY_LABELS, labelOf } from './labels'
 import { SearchableSelect } from '@/components/forms'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { useT } from '@/lib/i18n'
-import { ViewCustomiser } from '@/components/ui/ViewCustomiser'
+import { FilterBar, FilterSearch, type AppliedFilter } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
 import { usePortalPath } from '@/app/portalPath'
 
@@ -59,16 +59,26 @@ export function ClientsPortfolioPage() {
   const labelOf = (opts: readonly { value: string; label?: string }[] | undefined, v: string | null | undefined) =>
     v == null ? null : (opts?.find((o) => o.value === v)?.label ?? v)
 
-  const appliedFilters = [
-    labelOf(statusTax.options, filters.status),
-    labelOf(serviceLevelTax.options, filters.service_level),
-    labelOf(industryTax.options, filters.industry),
-    filters.owner_id != null ? labelOf(ownerOptions, String(filters.owner_id)) : null,
-    filters.needs_attention ? t('cc_needs_attention') : null,
-    filters.has_open_requests ? t('cc_has_open_requests') : null,
-    filters.has_active_campaigns ? t('cc_has_active_campaigns') : null,
-    filters.include_archived ? t('cc_include_archived') : null,
-  ].filter(Boolean) as string[]
+  const patchOne = (p: Partial<ClientFilters>) => () => setFilters((f) => ({ ...f, ...p, page: 1 }))
+
+  /*
+   * One chip per applied filter, each undoing exactly its own value.
+   *
+   * The summary this replaced was a joined sentence: it could say «عميل مميز · يحتاج متابعة» and
+   * offer no way to drop one of the two, so the only route back was clearing everything.
+   */
+  const appliedChips: AppliedFilter[] = ([
+    ['status', t('cc_filter_status'), labelOf(statusTax.options, filters.status), patchOne({ status: undefined })],
+    ['service_level', t('cc_filter_service'), labelOf(serviceLevelTax.options, filters.service_level), patchOne({ service_level: undefined })],
+    ['industry', t('cc_filter_industry'), labelOf(industryTax.options, filters.industry), patchOne({ industry: undefined })],
+    ['owner', t('cc_filter_owner'), filters.owner_id != null ? labelOf(ownerOptions, String(filters.owner_id)) : null, patchOne({ owner_id: undefined })],
+    ['needs_attention', t('cc_needs_attention'), filters.needs_attention ? t('cc_needs_attention') : null, patchOne({ needs_attention: undefined })],
+    ['has_open_requests', t('cc_has_open_requests'), filters.has_open_requests ? t('cc_has_open_requests') : null, patchOne({ has_open_requests: undefined })],
+    ['has_active_campaigns', t('cc_has_active_campaigns'), filters.has_active_campaigns ? t('cc_has_active_campaigns') : null, patchOne({ has_active_campaigns: undefined })],
+    ['include_archived', t('cc_include_archived'), filters.include_archived ? t('cc_include_archived') : null, patchOne({ include_archived: undefined })],
+  ] as Array<[string, string, string | null, () => void]>)
+    .filter(([, , label]) => label !== null)
+    .map(([key, axis, label, onRemove]) => ({ key, axis, label: label as string, onRemove }))
 
 
   const patch = (p: Partial<ClientFilters>) => setFilters((f) => ({ ...f, ...p, page: 1 }))
@@ -104,30 +114,57 @@ export function ClientsPortfolioPage() {
         <ClientSummaryCard label={ar ? 'طلبات مفتوحة' : 'Open requests'} value={summary.openRequests} tone="info" />
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2.5">
-        <form className="relative" onSubmit={(e) => { e.preventDefault(); patch({ q: search || undefined }) }}>
-          <Search size={16} className="pointer-events-none absolute inset-y-0 my-auto ms-3 text-text-muted" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('search')} className="h-10 w-56 rounded-lg border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500" />
-        </form>
-        {/*
-          Four dropdowns and four checkboxes folded behind one control (SIMPLIFY-002).
-          This band was the widest in the product: search, status, service level, industry, owner, and
-          four tick-boxes, all above the first client. Search stays — it is how somebody finds a client
-          they already have in mind — and everything that narrows the ROSTER moved into the dialog,
-          with the applied set spelled out beside the button.
-        */}
-        <ViewCustomiser
+      {/*
+        The roster's own questions, on the page — UX-SWEEP-001.
+
+        SIMPLIFY-002 folded four dropdowns and four tick-boxes behind one button, and it was right
+        that eight controls above the first client is too many. The cure was too wide though: which
+        clients are ACTIVE, at what service level, and whose they are, is what a portfolio page is
+        for. Those three sit beside search now. Industry and the four flags are the rarer questions
+        and still fold — which is what «More filters» is for.
+      */}
+      <div className="mb-4">
+        <FilterBar
           id="clients"
           ar={ar}
-          active={appliedFilters.length > 0}
-          summary={appliedFilters.join(' · ') || (ar ? 'كل العملاء' : 'All clients')}
-          onClear={() => patch({
+          applied={appliedChips}
+          onReset={() => patch({
             status: undefined, service_level: undefined, industry: undefined, owner_id: undefined,
             needs_attention: undefined, has_open_requests: undefined, has_active_campaigns: undefined,
             include_archived: undefined,
           })}
+          advancedActive={Boolean(filters.industry || filters.needs_attention || filters.has_open_requests || filters.has_active_campaigns || filters.include_archived)}
+          advanced={
+            <div className="grid gap-4">
+              <div className="w-full max-w-sm">
+                <SearchableSelect
+                  value={filters.industry ?? null}
+                  onChange={(v) => patch({ industry: v ?? undefined })}
+                  options={industryTax.options}
+                  loading={industryTax.isPending}
+                  optionsError={industryTax.isError ? t('error_generic') : null}
+                  onRetry={() => industryTax.refetch()}
+                  placeholder={`${t('cc_filter_industry')}: ${t('cc_filter_all')}`}
+                />
+              </div>
+              <div className="grid gap-2">
+                <label className="flex items-center gap-1.5 text-sm text-text-secondary"><input type="checkbox" checked={Boolean(filters.needs_attention)} onChange={(e) => patch({ needs_attention: e.target.checked || undefined })} /> {t('cc_needs_attention')}</label>
+                <label className="flex items-center gap-1.5 text-sm text-text-secondary"><input type="checkbox" checked={Boolean(filters.has_open_requests)} onChange={(e) => patch({ has_open_requests: e.target.checked || undefined })} /> {t('cc_has_open_requests')}</label>
+                <label className="flex items-center gap-1.5 text-sm text-text-secondary"><input type="checkbox" checked={Boolean(filters.has_active_campaigns)} onChange={(e) => patch({ has_active_campaigns: e.target.checked || undefined })} /> {t('cc_has_active_campaigns')}</label>
+                <label className="flex items-center gap-1.5 text-sm text-text-secondary"><input type="checkbox" checked={Boolean(filters.include_archived)} onChange={(e) => patch({ include_archived: e.target.checked || undefined })} /> {t('cc_include_archived')}</label>
+              </div>
+            </div>
+          }
         >
-        <div className="w-52">
+          <FilterSearch
+            value={search}
+            placeholder={t('search')}
+            testid="clients-search"
+            onChange={(v) => { setSearch(v); patch({ q: v || undefined }) }}
+          />
+
+          <div className="flex w-52 flex-col gap-1">
+            <span className="text-xs font-semibold text-text-secondary">{t('cc_filter_status')}</span>
             <SearchableSelect
               value={filters.status ?? null}
               onChange={(v) => patch({ status: v ?? undefined })}
@@ -135,10 +172,12 @@ export function ClientsPortfolioPage() {
               loading={statusTax.isPending}
               optionsError={statusTax.isError ? t('error_generic') : null}
               onRetry={() => statusTax.refetch()}
-              placeholder={`${t('cc_filter_status')}: ${t('cc_filter_all')}`}
+              placeholder={t('cc_filter_all')}
             />
           </div>
-          <div className="w-52">
+
+          <div className="flex w-52 flex-col gap-1">
+            <span className="text-xs font-semibold text-text-secondary">{t('cc_filter_service')}</span>
             <SearchableSelect
               value={filters.service_level ?? null}
               onChange={(v) => patch({ service_level: v ?? undefined })}
@@ -146,34 +185,21 @@ export function ClientsPortfolioPage() {
               loading={serviceLevelTax.isPending}
               optionsError={serviceLevelTax.isError ? t('error_generic') : null}
               onRetry={() => serviceLevelTax.refetch()}
-              placeholder={`${t('cc_filter_service')}: ${t('cc_filter_all')}`}
+              placeholder={t('cc_filter_all')}
             />
           </div>
-          <div className="w-52">
-            <SearchableSelect
-              value={filters.industry ?? null}
-              onChange={(v) => patch({ industry: v ?? undefined })}
-              options={industryTax.options}
-              loading={industryTax.isPending}
-              optionsError={industryTax.isError ? t('error_generic') : null}
-              onRetry={() => industryTax.refetch()}
-              placeholder={`${t('cc_filter_industry')}: ${t('cc_filter_all')}`}
-            />
-          </div>
-          <div className="w-52">
+
+          <div className="flex w-52 flex-col gap-1">
+            <span className="text-xs font-semibold text-text-secondary">{t('cc_filter_owner')}</span>
             <SearchableSelect
               value={filters.owner_id != null ? String(filters.owner_id) : null}
               onChange={(v) => patch({ owner_id: v ? Number(v) : undefined })}
               options={ownerOptions}
               loading={taxonomy.isPending}
-              placeholder={`${t('cc_filter_owner')}: ${t('cc_filter_all')}`}
+              placeholder={t('cc_filter_all')}
             />
           </div>
-          <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ needs_attention: e.target.checked || undefined })} /> {t('cc_needs_attention')}</label>
-          <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ has_open_requests: e.target.checked || undefined })} /> {t('cc_has_open_requests')}</label>
-          <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ has_active_campaigns: e.target.checked || undefined })} /> {t('cc_has_active_campaigns')}</label>
-          <label className="flex items-center gap-1.5 text-xs text-text-secondary"><input type="checkbox" onChange={(e) => patch({ include_archived: e.target.checked || undefined })} /> {t('cc_include_archived')}</label>
-        </ViewCustomiser>
+        </FilterBar>
       </div>
 
       {query.isLoading ? (

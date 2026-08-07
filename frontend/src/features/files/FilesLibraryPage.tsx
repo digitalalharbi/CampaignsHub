@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Download, FileSpreadsheet, FileText, FileType, FolderGit2, LayoutGrid, Link2, Rows3, Search } from 'lucide-react'
-import { FilterGroup, ViewCustomiser } from '@/components/ui/ViewCustomiser'
+import { Download, FileSpreadsheet, FileText, FileType, FolderGit2, LayoutGrid, Link2, Rows3 } from 'lucide-react'
+import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
 import { fmtDateTime } from '@/lib/datetime'
 import { getFilesLibrary } from './api'
@@ -90,51 +90,66 @@ export function FilesLibraryPage() {
         <FileSummaryCard label={c.sum_drive} value={driveLinks} tone="muted" />
       </div>
 
-      {/* Search + filters */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
-        <label className="relative flex w-full items-center sm:max-w-xs">
-          <Search size={15} className="pointer-events-none absolute start-3 text-text-muted" aria-hidden />
-          <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder={c.search_ph}
-            className="w-full rounded-xl border border-border bg-surface-secondary py-2 pe-3 ps-9 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none" />
-        </label>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {/* Source and visibility fold; search and the view switcher stay (SIMPLIFY-003). */}
-          <ViewCustomiser
-            id="files"
-            ar={locale === 'ar'}
-            active={source !== 'all' || visibility !== 'all'}
-            summary={
-              [
-                source === 'all' ? null : srcLabel(source),
-                visibility === 'all' ? null : (visibility === 'internal' ? c.vis_internal : c.vis_client),
-              ].filter(Boolean).join(' · ')
-              || (locale === 'ar' ? 'كل الملفات' : 'All files')
-            }
-            onClear={() => { setSource('all'); setVisibility('all') }}
-          >
-            <FilterGroup label={c.col_source}>
-              {(['all', 'request', 'report'] as const).map((s) => (
-                <Chip key={s} active={source === s} onClick={() => setSource(s)}>{s === 'all' ? c.all : srcLabel(s)}</Chip>
-              ))}
-            </FilterGroup>
-            <FilterGroup label={c.col_visibility}>
-              {(['all', 'client_visible', 'internal'] as const).map((v) => (
-                <Chip key={v} tone="dark" active={visibility === v} onClick={() => setVisibility(v)}>
-                  {v === 'all' ? c.all : v === 'internal' ? c.vis_internal : c.vis_client}
-                </Chip>
-              ))}
-            </FilterGroup>
-          </ViewCustomiser>
-          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-          {/* View switch — grid for browsing, table for scanning (same language as Content). */}
+      {/*
+        Source and visibility, on the page — UX-SWEEP-001.
+
+        SIMPLIFY-003 folded them, and this page has exactly two axes: what a file came from, and
+        who may see it. Two controls are not a wall, and «who may see it» is the question a file
+        library exists to answer — hiding it behind a button made the page look like a plain list.
+      */}
+      <FilterBar
+        id="files"
+        ar={locale === 'ar'}
+        applied={[
+          ...(source === 'all' ? [] : [{
+            key: `source:${source}`,
+            axis: c.col_source,
+            label: srcLabel(source),
+            onRemove: () => setSource('all'),
+          }]),
+          ...(visibility === 'all' ? [] : [{
+            key: `visibility:${visibility}`,
+            axis: c.col_visibility,
+            label: visibility === 'internal' ? c.vis_internal : c.vis_client,
+            onRemove: () => setVisibility('all'),
+          }]),
+        ]}
+        onReset={() => { setSource('all'); setVisibility('all') }}
+        trailing={
           <div className="flex overflow-hidden rounded-lg border border-border">
             <button onClick={() => setView('grid')} aria-label={c.view_grid} title={c.view_grid}
               className={`flex items-center px-2.5 py-1.5 ${view === 'grid' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}><LayoutGrid size={14} /></button>
             <button onClick={() => setView('table')} aria-label={c.view_table} title={c.view_table}
               className={`flex items-center px-2.5 py-1.5 ${view === 'table' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}><Rows3 size={14} /></button>
           </div>
-        </div>
-      </div>
+        }
+      >
+        <FilterSearch value={term} placeholder={c.search_ph} testid="files-search" onChange={setTerm} />
+
+        <FilterSelect
+          label={c.col_source}
+          value={source}
+          testid="files-source"
+          options={[
+            { value: 'all', label: c.all },
+            { value: 'request', label: c.src_request },
+            { value: 'report', label: c.src_report },
+          ]}
+          onChange={(v) => setSource(v as typeof source)}
+        />
+
+        <FilterSelect
+          label={c.col_visibility}
+          value={visibility}
+          testid="files-visibility"
+          options={[
+            { value: 'all', label: c.all },
+            { value: 'client_visible', label: c.vis_client },
+            { value: 'internal', label: c.vis_internal },
+          ]}
+          onChange={(v) => setVisibility(v as typeof visibility)}
+        />
+      </FilterBar>
 
       {/* Body */}
       {q.isLoading ? (
@@ -219,10 +234,6 @@ export function FilesLibraryPage() {
   )
 }
 
-function Chip({ active, onClick, children, tone }: { active: boolean; onClick: () => void; children: React.ReactNode; tone?: 'dark' }) {
-  const on = tone === 'dark' ? 'bg-text-primary text-surface' : 'bg-brand-500 text-white'
-  return <button onClick={onClick} className={`rounded-full px-3 py-1 text-xs font-semibold ${active ? on : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>{children}</button>
-}
 
 function FileSummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'info' | 'success' | 'muted' }) {
   const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', info: 'bg-info', success: 'bg-success', muted: 'bg-text-muted' }

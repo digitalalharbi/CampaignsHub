@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, LayoutGrid, ListChecks, Plus, Rows3, Search, X } from 'lucide-react'
-import { FilterGroup, ViewCustomiser } from '@/components/ui/ViewCustomiser'
+import { AlertTriangle, CheckCircle2, LayoutGrid, ListChecks, Plus, Rows3, X } from 'lucide-react'
+import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
@@ -124,66 +124,78 @@ export function TasksPage() {
         <SummaryCard label={c.sum_done} value={summary.done} tone="success" unknown={q.isError} />
       </div>
 
-      {/* Search + filters + view toggle */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <label className="relative flex w-full items-center sm:max-w-xs">
-            <Search size={15} className="pointer-events-none absolute start-3 text-text-muted" aria-hidden />
-            <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder={c.search_ph}
-              className="w-full rounded-xl border border-border bg-surface-secondary py-2 pe-3 ps-9 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none" />
-          </label>
-          <div className="flex items-center gap-2">
-            <div className="flex overflow-hidden rounded-lg border border-border">
-              <button onClick={() => setView('list')} aria-label={c.view_list} title={c.view_list}
-                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold ${view === 'list' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
-                <Rows3 size={14} />
-              </button>
-              <button onClick={() => setView('board')} aria-label={c.view_board} title={c.view_board}
-                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold ${view === 'board' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
-                <LayoutGrid size={14} />
-              </button>
-            </div>
+      {/*
+        The filters, on the page — UX-SWEEP-001.
+
+        SIMPLIFY-002 folded status, assignee and priority behind one button. Those are the three
+        questions somebody opens a task list to ask; folding them left a page whose only visible
+        controls were a search box and a view switcher, which reads as a list that cannot be
+        narrowed at all. They are inline now, with the applied ones as chips that each undo their
+        own value. Nothing about this page has a rare axis, so there is no «More filters» at all.
+      */}
+      <FilterBar
+        id="tasks"
+        ar={ar}
+        applied={[
+          ...(status === 'all' ? [] : [{
+            key: `status:${status}`,
+            axis: ar ? 'الحالة' : 'Status',
+            label: statusLabel(status, ar),
+            onRemove: () => setStatus('all'),
+          }]),
+          ...(priority === 'all' ? [] : [{
+            key: `priority:${priority}`,
+            axis: c.priority,
+            label: priorityLabel(priority, ar),
+            onRemove: () => setPriority('all'),
+          }]),
+          ...(mine ? [{
+            key: 'mine',
+            axis: ar ? 'المُسنَدة' : 'Assigned to',
+            label: c.mine,
+            onRemove: () => setMine(false),
+          }] : []),
+        ]}
+        onReset={() => { setStatus('all'); setPriority('all'); setMine(false) }}
+        trailing={
+          <div className="flex overflow-hidden rounded-lg border border-border">
+            <button onClick={() => setView('list')} aria-label={c.view_list} title={c.view_list}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold ${view === 'list' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
+              <Rows3 size={14} />
+            </button>
+            <button onClick={() => setView('board')} aria-label={c.view_board} title={c.view_board}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold ${view === 'board' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
+              <LayoutGrid size={14} />
+            </button>
           </div>
-        </div>
-        {/*
-          Two chip rows folded behind one control (SIMPLIFY-002).
-          Search and the list/board switcher stay above — they are how the page is READ. Status and
-          priority change which rows exist, so they go in the dialog with a summary saying what is
-          applied; a filtered list that looks like a short list is the risk, and the summary is what
-          removes it.
-        */}
-        <ViewCustomiser
-          id="tasks"
-          ar={ar}
-          active={status !== 'all' || priority !== 'all' || mine}
-          summary={
-            [
-              status === 'all' ? null : `${ar ? 'الحالة' : 'Status'}: ${statusLabel(status, ar)}`,
-              priority === 'all' ? null : `${c.priority}: ${priorityLabel(priority, ar)}`,
-              mine ? c.mine : null,
-            ].filter(Boolean).join(' · ')
-            || (ar ? 'كل المهام' : 'All tasks')
-          }
-          onClear={() => { setStatus('all'); setPriority('all'); setMine(false) }}
-        >
-          <FilterGroup label={ar ? 'الحالة' : 'Status'}>
-            <FilterChip active={status === 'all'} onClick={() => setStatus('all')}>{c.all}</FilterChip>
-            {FILTER_STATUSES.map((s) => (
-              <FilterChip key={s} active={status === s} onClick={() => setStatus(s)}>{statusLabel(s, ar)}</FilterChip>
-            ))}
-          </FilterGroup>
-          <FilterGroup label={ar ? 'المُسنَدة' : 'Assigned to'}>
-            <FilterChip active={!mine} onClick={() => setMine(false)}>{c.all}</FilterChip>
-            <FilterChip active={mine} onClick={() => setMine(true)}>{c.mine}</FilterChip>
-          </FilterGroup>
-          <FilterGroup label={c.priority}>
-            <FilterChip tone="dark" active={priority === 'all'} onClick={() => setPriority('all')}>{c.all}</FilterChip>
-            {FILTER_PRIORITIES.map((p) => (
-              <FilterChip key={p} tone="dark" active={priority === p} onClick={() => setPriority(p)}>{priorityLabel(p, ar)}</FilterChip>
-            ))}
-          </FilterGroup>
-        </ViewCustomiser>
-      </div>
+        }
+      >
+        <FilterSearch value={term} placeholder={c.search_ph} testid="tasks-search" onChange={setTerm} />
+
+        <FilterSelect
+          label={ar ? 'الحالة' : 'Status'}
+          value={status}
+          testid="tasks-status"
+          options={[{ value: 'all', label: c.all }, ...FILTER_STATUSES.map((v) => ({ value: v, label: statusLabel(v, ar) }))]}
+          onChange={setStatus}
+        />
+
+        <FilterSelect
+          label={c.priority}
+          value={priority}
+          testid="tasks-priority"
+          options={[{ value: 'all', label: c.all }, ...FILTER_PRIORITIES.map((v) => ({ value: v, label: priorityLabel(v, ar) }))]}
+          onChange={setPriority}
+        />
+
+        <FilterSelect
+          label={ar ? 'المُسنَدة' : 'Assigned to'}
+          value={mine ? 'mine' : 'all'}
+          testid="tasks-assignee"
+          options={[{ value: 'all', label: c.all }, { value: 'mine', label: c.mine }]}
+          onChange={(v) => setMine(v === 'mine')}
+        />
+      </FilterBar>
 
       {/* Body */}
       {q.isLoading ? (
@@ -231,15 +243,6 @@ function StateBox({ children, tone }: { children: React.ReactNode; tone?: 'dange
   )
 }
 
-function FilterChip({ active, onClick, children, tone }: { active: boolean; onClick: () => void; children: React.ReactNode; tone?: 'dark' }) {
-  const on = tone === 'dark' ? 'bg-text-primary text-surface' : 'bg-brand-500 text-white'
-  return (
-    <button onClick={onClick}
-      className={`rounded-full px-3 py-1 text-xs font-semibold ${active ? on : 'bg-surface-hover text-text-secondary hover:text-text-primary'}`}>
-      {children}
-    </button>
-  )
-}
 
 /**
  * A count, or «—» when the list could not be read (AGENCY-PERMS).
