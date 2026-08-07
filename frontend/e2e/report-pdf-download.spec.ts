@@ -22,40 +22,70 @@ test.use({ storageState: AUTH.owner })
 test('export button → queue → download → the downloaded Arabic PDF is a valid Chromium file', async ({ page }) => {
   test.setTimeout(180_000)
 
-  // A project that has metrics (the demo seed project with existing reports has them).
-  const projects = (await (await page.request.get('/api/v1/projects', { headers: API_HEADERS })).json())
-    .data as Array<{ id: string; client_workspace_id: string }>
+  /*
+   * The scope is chosen through the SHELL's own controls — SCOPE-BUILDER-001's other lesson.
+   *
+   * Two previous gates failed here, on two different browsers, and both times the cause was the
+   * same: the spec picked a project from `/api/v1/projects` and pinned it in localStorage, and
+   * `AgencyScopeSwitcher` then dropped it as orphaned because that project was not in the list the
+   * SWITCHER had loaded. Two endpoints, two lists, and the one the test trusted was not the one the
+   * page obeys. It looked like a three-minute hang, because a builder with no project posts nothing.
+   *
+   * Selecting from the switcher's own options cannot disagree with the switcher. It is also what a
+   * person does, which is the better reason.
+   */
+  await page.goto('/reports')
+
+  const clientSelect = page.getByLabel(/^العميل$|^Client$/)
+  await expect(clientSelect).toBeVisible({ timeout: 20_000 })
+  const projectSelect = page.getByLabel(/^المشروع$|^Project$/)
+
+  /*
+   * Walk the clients until one has a project.
+   *
+   * Not every client does: earlier specs in the same gate create client workspaces with no project
+   * under them, and they sort to the top. Taking «the first client» therefore picked an empty one
+   * and left the project select disabled — which is the switcher behaving correctly and the test
+   * assuming otherwise.
+   */
+  const clientValues = (await clientSelect.locator('option').evaluateAll((os) =>
+    os.map((o) => (o as HTMLOptionElement).value),
+  )).filter(Boolean)
+  expect(clientValues.length, 'the agency owner can reach no clients').toBeGreaterThan(0)
+
   let projectId = ''
-  let clientId = ''
-  for (const p of projects) {
-    const res = await page.request.get(`/api/v1/projects/${p.id}/reports`, { headers: API_HEADERS })
-    if (res.ok() && ((await res.json()).data.reports as unknown[]).length > 0) {
-      projectId = p.id
-      clientId = p.client_workspace_id
+  for (const clientValue of clientValues) {
+    await clientSelect.selectOption(clientValue)
+
+    // The project list is refetched per client; give it a beat before reading the options.
+    const found = await projectSelect
+      .locator('option')
+      .evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value).filter(Boolean))
+      .catch(() => [] as string[])
+
+    if (found.length > 0) {
+      projectId = found[0]
+      break
+    }
+
+    await page.waitForTimeout(400)
+    const retry = await projectSelect
+      .locator('option')
+      .evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value).filter(Boolean))
+
+    if (retry.length > 0) {
+      projectId = retry[0]
       break
     }
   }
-  expect(projectId, 'a demo project with reports must exist').not.toBe('')
 
-  /*
-   * The CLIENT is set as well as the project, and the two are made to agree.
-   *
-   * This spec runs as the agency owner, so it lands in the agency shell — where `AgencyScopeSwitcher`
-   * clears `currentProjectId` whenever a client is selected and the chosen project belongs to a
-   * different one. The stored client comes from `auth.setup`, which signs in before any other spec
-   * has created a workspace; by the time this spec runs in a full gate, several exist, and whichever
-   * client the setup persisted no longer owned this project. The switcher then did exactly what it
-   * is written to do, the project went null, and «إنشاء وتوليد» posted nothing — for three minutes,
-   * on Firefox only, because that is where the ordering happened to bite.
-   *
-   * Passing both removes the dependency on auto-selection: the test states the scope it needs
-   * instead of inheriting whatever the previous specs left behind.
-   */
-  await page.addInitScript(([id, client]) => {
-    localStorage.setItem('campaign-hub-project-storage', JSON.stringify({ state: { currentProjectId: id }, version: 0 }))
-    localStorage.setItem('campaign-hub-agency-client', JSON.stringify({ state: { currentClientId: client }, version: 0 }))
-  }, [projectId, clientId])
-  await page.goto('/reports')
+  expect(projectId, 'no reachable client has a project to report on').not.toBe('')
+  await projectSelect.selectOption(projectId)
+
+  // The page reloads its reports for the chosen project; the builder is only offered once it has one.
+  await expect(page.getByRole('button', { name: /تقرير محفوظ|Saved report/ })).toBeEnabled({ timeout: 20_000 })
+
+
 
   // 1. Create a fresh CLIENT report via the builder (a new report has no exports → export button shows).
   //    Report type & audience are now taxonomy-fed SelectField comboboxes; the builder already defaults the
