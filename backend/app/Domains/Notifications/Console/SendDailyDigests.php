@@ -40,7 +40,7 @@ final class SendDailyDigests extends Command
         {--force : Ignore the recipient’s chosen hour (still idempotent per period)}
         {--date= : The day to summarise, YYYY-MM-DD. Defaults to the recipient’s yesterday}';
 
-    protected $description = 'Send each recipient their daily performance digest at their own local hour.';
+    protected $description = 'Send each recipient their daily and weekly digests at their own local hour.';
 
     public function handle(DigestDispatcher $dispatcher): int
     {
@@ -60,7 +60,9 @@ final class SendDailyDigests extends Command
             ->get();
 
         foreach ($rows as $row) {
-            if (! $this->wantsDailyDigest($row)) {
+            $digests = $this->digests($row);
+
+            if ($digests === []) {
                 continue;
             }
 
@@ -81,15 +83,27 @@ final class SendDailyDigests extends Command
                 ? Carbon::parse((string) $this->option('date'), $timezone)
                 : $local->copy()->subDay();
 
-            $state = $dispatcher->sendDaily(
-                $user,
-                (string) $row->tenant_id,
-                $day->startOfDay(),
-                (string) ($row->locale ?? 'ar'),
-            );
+            $locale = (string) ($row->locale ?? 'ar');
+            $tenantId = (string) $row->tenant_id;
 
-            $state === 'sent' ? $sent++ : $skipped++;
-            $this->line("{$user->email}: {$state}");
+            if (in_array('daily', $digests, true)) {
+                $state = $dispatcher->sendDaily($user, $tenantId, $day->copy()->startOfDay(), $locale);
+                $state === 'sent' ? $sent++ : $skipped++;
+                $this->line("{$user->email} daily: {$state}");
+            }
+
+            /*
+             * The weekly goes out on ONE weekday, not every day at the chosen hour.
+             *
+             * Monday, so it summarises a finished week rather than a week in progress — and because
+             * the idempotency key is the ISO week, a `--force` run on any other day still converges
+             * on the same single send.
+             */
+            if (in_array('weekly', $digests, true) && ($this->option('force') || $local->isMonday())) {
+                $state = $dispatcher->sendWeekly($user, $tenantId, $day->copy()->endOfDay(), $locale);
+                $state === 'sent' ? $sent++ : $skipped++;
+                $this->line("{$user->email} weekly: {$state}");
+            }
         }
 
         $this->info("digests sent={$sent} other={$skipped}");
@@ -98,16 +112,21 @@ final class SendDailyDigests extends Command
     }
 
     /**
-     * Whether this row asked for the daily digest.
+     * Which digests this row asked for.
      *
-     * Absent means NO. An opt-in that defaults to on is not an opt-in, and the first scheduled run
+     * Absent means NONE. An opt-in that defaults to on is not an opt-in, and the first scheduled run
      * after a deploy is the worst possible moment to discover that.
+     *
+     * @return list<string>
      */
-    private function wantsDailyDigest(object $row): bool
+    private function digests(object $row): array
     {
-        $digests = $row->digests === null ? [] : (array) json_decode((string) $row->digests, true);
+        $chosen = $row->digests === null ? [] : (array) json_decode((string) $row->digests, true);
 
-        return ($digests['daily'] ?? false) === true;
+        return array_values(array_filter(
+            ['daily', 'weekly'],
+            static fn (string $kind): bool => ($chosen[$kind] ?? false) === true,
+        ));
     }
 
     /**

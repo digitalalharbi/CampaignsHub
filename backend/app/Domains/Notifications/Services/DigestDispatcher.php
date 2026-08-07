@@ -57,10 +57,37 @@ final class DigestDispatcher
      */
     public function sendDaily(User $user, string $tenantId, Carbon $day, string $locale = 'ar'): string
     {
-        $periodKey = $day->toDateString();
+        return $this->send($user, $tenantId, 'daily', $day->toDateString(), $day->copy()->startOfDay(), $day->copy()->endOfDay(), $locale);
+    }
+
+    /**
+     * The week ending on `$weekEnd`, sent once — MAIL-005.
+     *
+     * The period key is the ISO week (`2026-W32`) rather than a date, so a run on any day of that
+     * week converges on the same row and the same unique-index guarantee. Everything else is the
+     * daily path: same builder, same scope, same honest states.
+     */
+    public function sendWeekly(User $user, string $tenantId, Carbon $weekEnd, string $locale = 'ar'): string
+    {
+        $end = $weekEnd->copy()->endOfDay();
+        $start = $end->copy()->subDays(6)->startOfDay();
+
+        return $this->send($user, $tenantId, 'weekly', $end->format('o-\WW'), $start, $end, $locale);
+    }
+
+    /** One send, for either rhythm. */
+    private function send(
+        User $user,
+        string $tenantId,
+        string $kind,
+        string $periodKey,
+        Carbon $from,
+        Carbon $to,
+        string $locale,
+    ): string {
 
         // Claim the period first. A losing race means somebody else is already sending it.
-        if (! $this->claim($tenantId, $user, 'daily', $periodKey)) {
+        if (! $this->claim($tenantId, $user, $kind, $periodKey)) {
             return 'already_sent';
         }
 
@@ -75,21 +102,21 @@ final class DigestDispatcher
             $this->tenants->setTenantId($tenantId);
 
             $projectIds = $this->scope->projectIdsFor($user, $tenantId);
-            $digest = $this->daily->build($user, $tenantId, $projectIds, $day);
+            $digest = $this->daily->buildRange($user, $tenantId, $projectIds, $from, $to);
 
             if (($digest['sendable'] ?? false) !== true) {
-                return $this->finish($user, 'daily', $periodKey, 'skipped', (string) ($digest['reason'] ?? 'not_sendable'));
+                return $this->finish($user, $kind, $periodKey, 'skipped', (string) ($digest['reason'] ?? 'not_sendable'));
             }
 
             // Honest classification, from the product's own answer about the channel — never from
             // an assumption that mail works because a mailer is configured in .env.
             if (! $this->providers->isConfigured('email')) {
-                return $this->finish($user, 'daily', $periodKey, 'awaiting_credentials', 'no_email_provider');
+                return $this->finish($user, $kind, $periodKey, 'awaiting_credentials', 'no_email_provider');
             }
 
-            Mail::to($user->email)->send(new DailyDigestMail($digest, $locale, (string) $user->name));
+            Mail::to($user->email)->send(new DailyDigestMail($digest, $locale, (string) $user->name, $kind));
 
-            return $this->finish($user, 'daily', $periodKey, 'sent', null, sentAt: Carbon::now());
+            return $this->finish($user, $kind, $periodKey, 'sent', null, sentAt: Carbon::now());
         } catch (Throwable $e) {
             /*
              * The failure is recorded with its message and left visible.
@@ -99,7 +126,7 @@ final class DigestDispatcher
              * repo is that an intermittent failure must never be hidden by a retry — the next
              * scheduled run picks it up while `attempts` is under the ceiling, and stops after.
              */
-            return $this->finish($user, 'daily', $periodKey, 'failed', 'exception', error: $e->getMessage());
+            return $this->finish($user, $kind, $periodKey, 'failed', 'exception', error: $e->getMessage());
         } finally {
             $this->tenants->forget();
         }

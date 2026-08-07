@@ -65,16 +65,32 @@ final class DailyDigest
      */
     public function build(User $user, string $tenantId, array $projectIds, Carbon $day): array
     {
+        return $this->buildRange($user, $tenantId, $projectIds, $day->copy()->startOfDay(), $day->copy()->endOfDay());
+    }
+
+    /**
+     * The same digest over any window — one day, or a week (MAIL-005).
+     *
+     * The weekly executive digest is this method over seven days, not a second engine. Every rule
+     * the daily digest follows — the path split, the absent blended cost, «not reported» rather than
+     * zero — is a rule the weekly inherits by construction rather than by being reimplemented and
+     * kept in step. The comparison window is always the SAME LENGTH immediately before, so a week is
+     * compared with a week and a day with a day.
+     *
+     * @param  list<string>  $projectIds
+     * @return array<string,mixed>
+     */
+    public function buildRange(User $user, string $tenantId, array $projectIds, Carbon $from, Carbon $to): array
+    {
         // Nothing reachable → nothing to say. The caller must not send an email at all; an empty
         // digest that says «no data» is indistinguishable from a real day with no spend.
         if ($projectIds === []) {
             return ['sendable' => false, 'reason' => 'no_projects_in_scope', 'projects' => []];
         }
 
-        $from = $day->copy()->startOfDay();
-        $to = $day->copy()->endOfDay();
-        $prevFrom = $from->copy()->subDay();
-        $prevTo = $prevFrom->copy()->endOfDay();
+        $days = max(1, $from->diffInDays($to) + 1);
+        $prevTo = $from->copy()->subSecond();
+        $prevFrom = $prevTo->copy()->subDays($days)->startOfDay();
 
         $projects = Project::query()
             ->where('tenant_id', $tenantId)
@@ -101,7 +117,9 @@ final class DailyDigest
         return [
             'sendable' => $anySpend,
             'reason' => $anySpend ? null : 'no_activity',
-            'date' => $day->toDateString(),
+            'date' => $from->toDateString(),
+            'to_date' => $to->toDateString(),
+            'days' => $days,
             'previous_date' => $prevFrom->toDateString(),
             'projects' => $blocks,
             'totals' => $this->rollUp($blocks),

@@ -46,6 +46,14 @@ final class DailyDigestMail extends Mailable
          */
         private readonly string $lang,
         private readonly string $recipientName,
+        /*
+         * `daily` or `weekly` — the rhythm, not a second email.
+         *
+         * One Mailable and one template serve both because every rule the daily digest follows is a
+         * rule the weekly must follow too. A second class would be two places to keep «awareness
+         * money never gets a cost per order» true, and the one nobody edits is the one that breaks.
+         */
+        private readonly string $kind = 'daily',
     ) {}
 
     public function envelope(): Envelope
@@ -57,10 +65,14 @@ final class DailyDigestMail extends Mailable
         $spend = $p->money($totals['spend'] ?? null);
         $results = number_format((float) ($totals['conversions'] ?? 0));
 
+        $when = $this->kind === 'weekly'
+            ? ($ar ? 'هذا الأسبوع' : 'this week')
+            : ($ar ? 'أمس' : 'yesterday');
+
         return new Envelope(
             subject: $ar
-                ? config('brand.name')." — {$spend} أمس، {$results} نتيجة"
-                : config('brand.name')." — {$spend} yesterday, {$results} results",
+                ? config('brand.name')." — {$spend} {$when}، {$results} نتيجة"
+                : config('brand.name')." — {$spend} {$when}, {$results} results",
         );
     }
 
@@ -85,9 +97,7 @@ final class DailyDigestMail extends Mailable
                 'preheader' => $ar
                     ? 'ملخص أمس عبر مشاريعك ومنصاتك.'
                     : 'Yesterday across your projects and platforms.',
-                'headerNote' => $ar
-                    ? 'الملخص اليومي · '.($this->digest['date'] ?? '')
-                    : 'Daily digest · '.($this->digest['date'] ?? ''),
+                'headerNote' => $this->headerNote($ar),
                 'urls' => [
                     'preferences' => $app.'/account/notifications',
                     'privacy' => $site.'/privacy',
@@ -113,6 +123,20 @@ final class DailyDigestMail extends Mailable
                 ])->render(),
             ],
         );
+    }
+
+    /** «الملخص اليومي · 2026-08-06» or «Weekly digest · 2026-08-01 → 2026-08-07». */
+    private function headerNote(bool $ar): string
+    {
+        $from = (string) ($this->digest['date'] ?? '');
+
+        if ($this->kind !== 'weekly') {
+            return ($ar ? 'الملخص اليومي · ' : 'Daily digest · ').$from;
+        }
+
+        $to = (string) ($this->digest['to_date'] ?? $from);
+
+        return ($ar ? 'الملخص الأسبوعي · ' : 'Weekly digest · ')."{$from} → {$to}";
     }
 
     /**
@@ -240,7 +264,9 @@ final class DailyDigestMail extends Mailable
     {
         return $ar ? [
             'greeting' => "صباح الخير، {$this->recipientName}",
-            'intro' => 'هذا ما حدث أمس عبر مشاريعك — والقرارات التي تستحق وقتك اليوم.',
+            'intro' => $this->kind === 'weekly'
+                ? 'هذا ما حدث هذا الأسبوع عبر مشاريعك — والقرارات التي تستحق وقتك.'
+                : 'هذا ما حدث أمس عبر مشاريعك — والقرارات التي تستحق وقتك اليوم.',
             'account_total' => 'إجمالي الحساب',
             'spend' => 'الإنفاق',
             'results' => 'النتائج',
@@ -257,7 +283,9 @@ final class DailyDigestMail extends Mailable
             'security' => 'الأمان',
         ] : [
             'greeting' => "Good morning, {$this->recipientName}",
-            'intro' => 'Here is what happened yesterday across your projects — and what is worth your time today.',
+            'intro' => $this->kind === 'weekly'
+                ? 'Here is the week across your projects — and what is worth your time.'
+                : 'Here is what happened yesterday across your projects — and what is worth your time today.',
             'account_total' => 'Account total',
             'spend' => 'Spend',
             'results' => 'Results',

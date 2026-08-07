@@ -197,6 +197,48 @@ final class DigestDeliveryTest extends TestCase
         $this->assertSame('no_activity', $row->reason);
     }
 
+    /**
+     * The weekly is the same engine over seven days, keyed on the ISO week.
+     *
+     * A run on any day of that week converges on one row, so a `--force` and the Monday schedule
+     * cannot both land. And it inherits every rule the daily follows, because it IS the daily
+     * builder over a different window rather than a second implementation to keep in step.
+     */
+    public function test_the_weekly_digest_is_sent_once_per_iso_week(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+
+        $dispatcher = app(DigestDispatcher::class);
+        $end = Carbon::today();
+
+        $first = $dispatcher->sendWeekly($this->user, (string) $this->tenant->id, $end);
+        // A different day of the SAME week must not produce a second email.
+        $second = $dispatcher->sendWeekly($this->user, (string) $this->tenant->id, $end->copy()->subDays(2));
+
+        $this->assertSame('sent', $first);
+        $this->assertSame('already_sent', $second);
+
+        Mail::assertSent(DailyDigestMail::class, 1);
+        $this->assertSame(1, DB::table('digest_sends')->where('kind', 'weekly')->count());
+        $this->assertSame($end->format('o-\WW'), DB::table('digest_sends')->where('kind', 'weekly')->value('period_key'));
+    }
+
+    /** Daily and weekly are separate rows: asking for both means two emails, not one deduped away. */
+    public function test_the_daily_and_weekly_do_not_deduplicate_against_each_other(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+
+        $dispatcher = app(DigestDispatcher::class);
+        $day = Carbon::today()->subDay();
+
+        $this->assertSame('sent', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, $day));
+        $this->assertSame('sent', $dispatcher->sendWeekly($this->user, (string) $this->tenant->id, $day));
+
+        Mail::assertSent(DailyDigestMail::class, 2);
+    }
+
     // ---- the sweep -------------------------------------------------------------------------------
 
     /**
