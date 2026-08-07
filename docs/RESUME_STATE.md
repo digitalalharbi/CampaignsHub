@@ -10,7 +10,104 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## GATE — 2026-08-07 · **GREEN.** `PLAYWRIGHT_EXIT_CODE=0` · 809 passed · 0 failed · 32.4m
+## GATE — 2026-08-07 · **GREEN.** `PLAYWRIGHT_EXIT_CODE=0` · 821 passed · 0 failed · **0 skipped** · 29.5m
+
+Run at `39f79b8`, three browsers, one worker, `retries: 0`, no file or database change during it.
+**Failed=0 · Flaky=0 · Retries=0 · Skipped=0 · Working tree CLEAN.** The verdict is Playwright's own
+exit code, read directly and not through a pipe.
+
+Backend **1575 passed (8951 assertions), exit 0** · Pint clean · `tsc -b` clean · vitest **812 passed
+(113 files)**.
+
+### The skip that said «passed»
+
+The run before this one reported «818 passed, **3 skipped**» where its predecessor reported 821 and
+none. The three were one test in three browsers — the client link's fail-closed creative section —
+and it passed when run alone, so nothing looked wrong.
+
+It carried three `test.skip()` guards. A skip is a test that proved nothing while reporting green,
+and none of these was an optional precondition. Turning them into assertions made the run say what it
+had been swallowing: **`share creation returned 409: "Generate the report before sharing."`** The
+product was right; the TEST shared `list[0]`, and in the full run an earlier spec leaves a draft
+report that sorts to the head. It now picks a report whose status is `completed`. `39f79b8`.
+
+**The lesson for whoever reads this next: a change in the SKIPPED count is a change in what the gate
+proved.** «818 passed» and «821 passed» are not the same run with different arithmetic.
+
+## What this session did, in order
+
+| commit | unit | what it was |
+|---|---|---|
+| `3874ea8` | FUNNEL-NULL-001 | an unreported funnel stage was a measured `0` |
+| `2eb2a13` | PERCENT-100X-001 | the campaign centre printed CTR as **210%**, utilisation as **3028%** |
+| `aee8109` | COMPACT-ZERO-001 | a cost of 0.028 SAR printed «**0 SAR**» — «this step is free» |
+| `04868f3` | ROUTE-BOUNDARY-001 | **141** route branches had no error boundary, not one |
+| `135d18c` | PUBLIC-REPORT-NOAUTH | `/r/<token>` probed `/auth/me` and took **401, twice** |
+| `7922a63` | TIKTOK-001 | `purchases` from `complete_payment`, never `conversion` |
+| `7ef8be5` | FUNNEL-PURCHASE-001 | the stage labelled «Purchase» counted every conversion |
+| `8d53e25` | META-001 | one sale reported three ways was counted **three times** |
+| `b59a8cb` | GADS-001 | sales by conversion CATEGORY, not every conversion |
+| `01e3fa3` | X-001 | two metric groups were read and never requested |
+| `a157e36` | LINKEDIN-001 | the value assigned to a lead is not revenue |
+| `39f79b8` | (e2e) | the skip that said «passed» |
+
+**All six platforms are audited and every one stays `BLOCKED_EXTERNAL_CREDENTIALS`.** No OAuth round
+trip has been made on any of them. The adapters are complete; the connections are not.
+
+### The three that were found by driving the product, not by reading it
+
+**`2eb2a13`** — `percent()` multiplies by 100 and all twelve calls in `CampaignCommandCenter` passed
+`x * 100` as well, so every rate was squared. Live: CTR **210.0%**, معدل التحويل **479.6%**, استهلاك
+**3028%**, funnel step **210%**. Impossible statements — more clicks than impressions, a budget spent
+thirty times over — sitting beside correct spend and ROAS figures that lend them credibility. It
+survived because nothing asserted a RENDERED percentage anywhere, and because the analytics page,
+where anyone would have checked, is correct.
+
+**`8d53e25`** — Meta reports the same purchase under `offsite_conversion.fb_pixel_purchase`,
+`purchase` AND `omni_purchase`. `sumActions()` added them, so purchases, revenue and **ROAS were
+multiplied by three**. The old comment shows how: it was written to fix the opposite worry, that
+reading one spelling «halves the conversions». The fix for that is a fallback ORDER, never addition.
+
+**`135d18c`** — the client report already rendered without a session. What it also did, visible only
+at the network layer, was ask `GET /auth/me` on every load and get 401 twice. Harmless while nothing
+renders a 401; one release from «انتهت جلستك» on a report belonging to somebody who never had an
+account.
+
+### The public client link — the critical condition, proved at three levels
+
+- **Browser**: both `/r/<token>` and the legacy `/reports/share/<token>` open from an EMPTY storage
+  state with cookies cleared AGAIN after arrival (storageState only governs what the context STARTS
+  with). The URL never leaves `/r/`, no `/login` link is offered, the session copy appears in neither
+  language, the filters keep working with the jar emptied, and **no request is answered 401 or 419**.
+- **Routes**: no `reports/shared` or `reports/print` route carries an auth middleware, asserted
+  structurally so one added to the group later cannot pass unnoticed.
+- **Freshness**: the same token, re-read after a later sync writes 250 more spend, answers **350**
+  rather than the 100 it was created with. A live link that does not move is a snapshot with a
+  longer name.
+
+### Exact next task
+
+Nothing is half-made and the tree is clean. In priority order:
+
+1. **§14.6 objective layouts**, then **§14.7–14.8** — comparisons, pacing, funnel drop-off, anomaly
+   detection. The longest-outstanding contract items.
+2. **The attribution panel is operator-only.** The client link carries `conversions_basis` but not
+   the Platform-Reported / Store-Confirmed section, which needs its own visibility switch on the
+   link builder.
+3. **`initiate_checkout` on TikTok** — the one field spelling in this whole sweep not confirmed
+   verbatim against a vendor's own documentation (the portal renders none to a fetcher). It fails
+   SAFE: a wrong spelling returns no key, stores nothing, and shows «لم تُرسل». Confirm on the first
+   real sync.
+4. **LinkedIn cannot report sales.** `purchases` and `revenue` are deliberately absent because its
+   adAnalytics has no purchase metric and no way to ask for one conversion category. If a LinkedIn
+   account genuinely measures sales, this connector currently cannot surface them — an operator
+   decision to revisit against real data once credentials exist.
+
+**Everything below this line is the previous session's record.**
+
+---
+
+## GATE — 2026-08-07 (superseded by the run above) · GREEN · 809 passed · 32.4m
 
 Run at `b6cc223`, three browsers, one worker, `retries: 0`, with no file or database change during it.
 **Failed=0 · Flaky=0 · Retries=0 · Working tree CLEAN.** The verdict is Playwright's own exit code,
