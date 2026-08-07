@@ -386,6 +386,137 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertSame(['c1', 'c2'], array_column($campaigns, 'external_id'));
     }
 
+    /**
+     * TIKTOK-001 — every canonical metric TikTok reports, mapped to the field that MEANS it.
+     *
+     * The fixture is built to catch a leak rather than to confirm a happy path. `conversion` is 500
+     * while `complete_payment` is 12: if the two are ever conflated the difference is unmissable, and
+     * that conflation is the one this platform invites — TikTok's `conversion` counts every event the
+     * campaign was optimised for, so on a lead-gen buy it is a count of LEADS. Reporting it as
+     * purchases would tell a client they sold five hundred things.
+     *
+     * `video_watched_2s` and `video_watched_6s` carry distinctive values for the same reason: they are
+     * the same viewers measured at longer thresholds, so a mapping that adds them to `video_views`
+     * counts one person three times.
+     */
+    public function test_tiktok_maps_every_canonical_metric_to_the_field_that_means_it(): void
+    {
+        $this->configure('tiktok');
+        Http::fake(['business-api.tiktok.com/*' => Http::response([
+            'code' => 0,
+            'data' => [
+                'list' => [[
+                    'dimensions' => ['campaign_id' => 'c1', 'stat_time_day' => '2026-08-01 00:00:00'],
+                    'metrics' => [
+                        'spend' => '412.75', 'impressions' => '90000', 'clicks' => '1800',
+                        'reach' => '65000', 'frequency' => '1.38',
+                        'video_play_actions' => '54000', 'video_watched_2s' => '31000',
+                        'video_watched_6s' => '17000', 'video_views_p100' => '9000',
+                        'add_to_cart' => '260', 'initiate_checkout' => '140',
+                        'complete_payment' => '12', 'total_purchase_value' => '4380.00',
+                        // The trap: five hundred optimisation events, twelve of them sales.
+                        'conversion' => '500',
+                        'likes' => '900', 'comments' => '40', 'shares' => '75', 'follows' => '30',
+                    ],
+                ]],
+                'page_info' => ['page' => 1, 'total_page' => 1],
+            ],
+        ])]);
+
+        $row = $this->bound('tiktok')->syncInsights('adv-1', '2026-08-01', '2026-08-02')->records[0];
+
+        $this->assertSame('2026-08-01', $row['date'], 'the timestamp is stored as the date it names');
+        $this->assertEqualsWithDelta(412.75, $row['spend'], 0.001, 'TikTok bills in the account currency, not millionths');
+        $this->assertEqualsWithDelta(4380.0, $row['revenue'], 0.001);
+        $this->assertSame(90000.0, $row['impressions']);
+        $this->assertSame(1800.0, $row['clicks']);
+        $this->assertSame(65000.0, $row['reach']);
+
+        // The line this platform makes dangerous. Twelve sales, not five hundred.
+        $this->assertSame(12.0, $row['purchases'], 'a purchase is a completed payment, never «a conversion»');
+        $this->assertSame(500.0, $row['conversions'], 'TikTok\'s own results figure is still carried — just never as the sale');
+        $this->assertSame(140.0, $row['checkout'], 'a started checkout is its own stage, never a sale');
+        $this->assertSame(260.0, $row['add_to_cart']);
+
+        // 54,000 viewers — not 54,000 plus the 31,000 and 17,000 of them who watched longer.
+        $this->assertSame(54000.0, $row['video_views']);
+        $this->assertSame(9000.0, $row['video_completions']);
+
+        /*
+         * Three canonical metrics are absent, and that IS the answer.
+         *
+         * `frequency` is derived and is computed at read time (null on a zero denominator); TikTok
+         * publishes one, and storing a daily frequency to be summed across a month would produce a
+         * number with no referent. `landing_page_views` has no TikTok equivalent — its «content
+         * views» metric is a different event at a different moment. `engagements` would have to be
+         * likes + comments + shares + follows, a total TikTok never publishes, and the fixture
+         * supplies all four precisely so a mapping that invented it would be caught here.
+         */
+        foreach (['frequency', 'landing_page_views', 'engagements'] as $absent) {
+            $this->assertArrayNotHasKey($absent, $row, "{$absent} is not something TikTok reports and must not be manufactured");
+        }
+    }
+
+    /** A metric the advertiser does not report is ABSENT, so no surface can print it as a measured zero. */
+    public function test_tiktok_omits_a_metric_the_advertiser_never_reported_rather_than_sending_zero(): void
+    {
+        $this->configure('tiktok');
+        Http::fake(['business-api.tiktok.com/*' => Http::response([
+            'code' => 0,
+            'data' => [
+                'list' => [[
+                    'dimensions' => ['campaign_id' => 'c1', 'stat_time_day' => '2026-08-01 00:00:00'],
+                    // A reach buy with no pixel: delivery only. And TikTok sends an explicit null for
+                    // a metric it has no value for, which `isset` cannot tell from an absent key.
+                    'metrics' => [
+                        'spend' => '80.00', 'impressions' => '40000', 'clicks' => '120',
+                        'complete_payment' => null, 'total_purchase_value' => null,
+                    ],
+                ]],
+            ],
+        ])]);
+
+        $row = $this->bound('tiktok')->syncInsights('adv-1', '2026-08-01', '2026-08-02')->records[0];
+
+        foreach (['purchases', 'revenue', 'conversions', 'add_to_cart', 'checkout', 'reach', 'video_views'] as $key) {
+            $this->assertArrayNotHasKey($key, $row, "{$key} was never reported and must not be sent as 0");
+        }
+        $this->assertSame(40000.0, $row['impressions']);
+    }
+
+    /**
+     * A paged list is read to its END.
+     *
+     * TikTok states the extent in `data.page_info.total_page` and expects the reader to ask for the
+     * next `page`. Reading one and stopping is a complete-LOOKING answer with entities missing, and
+     * whichever the platform ordered last take their spend out of every total on every surface.
+     */
+    public function test_tiktok_reads_every_page_instead_of_stopping_at_the_first(): void
+    {
+        $this->configure('tiktok');
+        Http::fake([
+            'business-api.tiktok.com/*page=2*' => Http::response([
+                'code' => 0,
+                'data' => [
+                    'list' => [['campaign_id' => 'c2', 'campaign_name' => 'Second page', 'operation_status' => 'DISABLE']],
+                    'page_info' => ['page' => 2, 'total_page' => 2],
+                ],
+            ]),
+            'business-api.tiktok.com/*' => Http::response([
+                'code' => 0,
+                'data' => [
+                    'list' => [['campaign_id' => 'c1', 'campaign_name' => 'First page', 'operation_status' => 'ENABLE']],
+                    'page_info' => ['page' => 1, 'total_page' => 2],
+                ],
+            ]),
+        ]);
+
+        $campaigns = $this->bound('tiktok')->syncCampaigns('adv-1')->records;
+
+        $this->assertCount(2, $campaigns, 'the second page was never fetched');
+        $this->assertSame(['c1', 'c2'], array_column($campaigns, 'external_id'));
+    }
+
     /** Meta reports every action type; only purchases are conversions. */
     public function test_meta_counts_purchases_as_conversions_and_leaves_page_likes_alone(): void
     {

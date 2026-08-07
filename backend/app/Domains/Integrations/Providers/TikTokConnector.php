@@ -18,14 +18,122 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
  */
 final class TikTokConnector extends ApiAdvertisingConnector
 {
+    /**
+     * A ceiling on paging, so a wrong `total_page` cannot become an unbounded loop.
+     *
+     * At TikTok's page size of 100 this is far more entities than an advertiser holds; it exists
+     * because a sync job that never returns is worse than one that stops and says it stopped.
+     */
+    private const MAX_PAGES = 50;
+
+    /**
+     * Canonical metric ← the TikTok field that actually means it (TIKTOK-001).
+     *
+     * Every line is a semantic decision, and the four this project forbids are all live here:
+     *
+     *  - `purchases` ← **`complete_payment`**, never `conversion`. TikTok's `conversion` counts every
+     *    event the campaign was optimised for — a lead, an install, a registration, a form submit. On
+     *    a lead-gen campaign it is a count of leads, and reporting it as purchases would tell a client
+     *    they sold something. `conversion` is still carried, as `conversions`, because it IS the
+     *    platform's own «results» figure; what it must never be is the sale.
+     *  - `checkout` ← `initiate_checkout`, its own stage. A started checkout is not a completed one.
+     *  - `add_to_cart` ← `add_to_cart`, never a content view. Looking at a product is not putting it
+     *    in a basket.
+     *  - `video_views` ← `video_play_actions` ALONE. `video_watched_2s` and `_6s` are the same
+     *    viewers measured at longer thresholds, so adding them counts one person up to three times.
+     *
+     * Three canonical metrics are deliberately ABSENT rather than approximated:
+     *
+     *  - `frequency` is derived (impressions ÷ reach) and is computed at read time with a null on a
+     *    zero denominator. A stored daily frequency summed across a month is a number with no referent.
+     *  - `landing_page_views` has no TikTok equivalent. Its «Content views (page)» metric is the
+     *    view-content event, which is a different thing measured at a different moment; using it would
+     *    put a number under a label it does not belong to.
+     *  - `engagements` would have to be `likes + comments + shares + follows`, a total TikTok never
+     *    publishes. Summing them here would manufacture a metric the platform did not report.
+     *
+     * Unlike Snapchat, spend and value arrive in the advertiser's own currency rather than in
+     * millionths, so there is no division at this edge.
+     *
+     * `initiate_checkout` is the one spelling not confirmed verbatim against the developer portal
+     * (which renders no documentation to a fetcher). It is mapped anyway because a wrong spelling
+     * FAILS SAFE by construction: TikTok returns no such key, `array_key_exists` skips it, nothing is
+     * stored, and every surface says «لم تُرسل» rather than printing a measured zero. It is recorded
+     * as the one line to confirm on the first real sync — which is what awaiting-credentials means.
+     */
+    private const METRICS = [
+        'spend' => 'spend',
+        'impressions' => 'impressions',
+        'clicks' => 'clicks',
+        'reach' => 'reach',
+        'video_views' => 'video_play_actions',
+        'video_completions' => 'video_views_p100',
+        'add_to_cart' => 'add_to_cart',
+        'checkout' => 'initiate_checkout',
+        'purchases' => 'complete_payment',
+        'revenue' => 'total_purchase_value',
+        'conversions' => 'conversion',
+    ];
+
     protected function platform(): string
     {
         return 'tiktok';
     }
 
+    /**
+     * Read a list endpoint to its END, not just its first page.
+     *
+     * TikTok pages every collection with `page`/`page_size` and states the extent in
+     * `data.page_info.total_page`. Reading one page and stopping is not a partial answer that looks
+     * partial — it is a complete-looking answer with entities missing, and the ones missing are
+     * whichever the platform happened to order last. An advertiser with 140 ads silently reported
+     * 100 of them, and the forty that vanished took their spend out of every total on every surface.
+     *
+     * The page NUMBER is followed rather than a cursor because that is what this API offers; the
+     * caller's own query is carried forward on every request so a filter cannot be dropped after the
+     * first page.
+     *
+     * @param  array<string,mixed>  $query
+     * @return list<array<string,mixed>> every object from `data.list`, across all pages
+     */
+    private function readAll(OAuthTokens $tokens, string $path, string $what, array $query): array
+    {
+        $items = [];
+
+        for ($page = 1; $page <= self::MAX_PAGES; $page++) {
+            $body = $this->read(
+                $this->api($tokens)->get($this->url($path), array_merge($query, [
+                    'page' => $page,
+                    'page_size' => 100,
+                ])),
+                $what,
+            );
+
+            foreach ((array) ($body['data']['list'] ?? []) as $item) {
+                $items[] = (array) $item;
+            }
+
+            // Absent `page_info` means a single-page answer, not an unknown one — one read and stop.
+            $total = (int) ($body['data']['page_info']['total_page'] ?? 1);
+
+            if ($page >= max(1, $total)) {
+                break;
+            }
+        }
+
+        return $items;
+    }
+
     protected function fetchAdAccounts(OAuthTokens $tokens): array
     {
-        // The advertiser list is the one call that still wants the app credentials in the query.
+        /*
+         * The advertiser list is the one call that still wants the app credentials in the query.
+         *
+         * Deliberately NOT routed through `readAll()`: it is keyed on the app rather than on an
+         * advertiser, publishes no `page_info`, and returns every advertiser the token can reach in
+         * one answer. Sending paging parameters to a call that may reject unknown ones would buy
+         * nothing and could cost the whole discovery step.
+         */
         $body = $this->read(
             $this->api($tokens)->get($this->url('oauth2/advertiser/get/'), [
                 'app_id' => $this->credentials()->get('client_id'),
@@ -57,17 +165,9 @@ final class TikTokConnector extends ApiAdvertisingConnector
 
     protected function fetchCampaigns(OAuthTokens $tokens, string $adAccountId): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url('campaign/get/'), [
-                'advertiser_id' => $adAccountId,
-                'page_size' => 100,
-            ]),
-            'campaigns',
-        );
-
         $campaigns = [];
 
-        foreach ((array) (($body['data']['list'] ?? [])) as $c) {
+        foreach ($this->readAll($tokens, 'campaign/get/', 'campaigns', ['advertiser_id' => $adAccountId]) as $c) {
             if (($c['campaign_id'] ?? null) === null) {
                 continue;
             }
@@ -93,17 +193,9 @@ final class TikTokConnector extends ApiAdvertisingConnector
 
     protected function fetchAdSets(OAuthTokens $tokens, string $adAccountId): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url('adgroup/get/'), [
-                'advertiser_id' => $adAccountId,
-                'page_size' => 100,
-            ]),
-            'ad groups',
-        );
-
         $sets = [];
 
-        foreach ((array) (($body['data']['list'] ?? [])) as $g) {
+        foreach ($this->readAll($tokens, 'adgroup/get/', 'ad groups', ['advertiser_id' => $adAccountId]) as $g) {
             if (($g['adgroup_id'] ?? null) === null || ($g['campaign_id'] ?? null) === null) {
                 continue;
             }
@@ -133,17 +225,9 @@ final class TikTokConnector extends ApiAdvertisingConnector
 
     protected function fetchAds(OAuthTokens $tokens, string $adAccountId): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url('ad/get/'), [
-                'advertiser_id' => $adAccountId,
-                'page_size' => 100,
-            ]),
-            'ads',
-        );
-
         $ads = [];
 
-        foreach ((array) (($body['data']['list'] ?? [])) as $a) {
+        foreach ($this->readAll($tokens, 'ad/get/', 'ads', ['advertiser_id' => $adAccountId]) as $a) {
             if (($a['ad_id'] ?? null) === null) {
                 continue;
             }
@@ -232,27 +316,22 @@ final class TikTokConnector extends ApiAdvertisingConnector
 
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url('report/integrated/get/'), [
-                'advertiser_id' => $adAccountId,
-                'report_type' => 'BASIC',
-                'data_level' => 'AUCTION_CAMPAIGN',
-                // TikTok wants these as JSON strings inside the query, not repeated parameters.
-                'dimensions' => json_encode(['campaign_id', 'stat_time_day'], JSON_THROW_ON_ERROR),
-                'metrics' => json_encode(
-                    ['spend', 'impressions', 'clicks', 'conversion', 'total_purchase_value', 'reach', 'video_play_actions'],
-                    JSON_THROW_ON_ERROR,
-                ),
-                'start_date' => $from,
-                'end_date' => $to,
-                'page_size' => 1000,
-            ]),
-            'daily report',
-        );
+        $reported = $this->readAll($tokens, 'report/integrated/get/', 'daily report', [
+            'advertiser_id' => $adAccountId,
+            'report_type' => 'BASIC',
+            'data_level' => 'AUCTION_CAMPAIGN',
+            // TikTok wants these as JSON strings inside the query, not repeated parameters.
+            'dimensions' => json_encode(['campaign_id', 'stat_time_day'], JSON_THROW_ON_ERROR),
+            // Asked for FROM the map, so a metric cannot be mapped here and then never requested —
+            // which reads downstream exactly like a platform that does not report it.
+            'metrics' => json_encode(array_values(array_unique(self::METRICS)), JSON_THROW_ON_ERROR),
+            'start_date' => $from,
+            'end_date' => $to,
+        ]);
 
         $rows = [];
 
-        foreach ((array) (($body['data']['list'] ?? [])) as $row) {
+        foreach ($reported as $row) {
             /** @var array<string,mixed> $dims */
             $dims = (array) ($row['dimensions'] ?? []);
             /** @var array<string,mixed> $metrics */
@@ -264,18 +343,35 @@ final class TikTokConnector extends ApiAdvertisingConnector
                 continue;
             }
 
-            $rows[] = array_filter([
+            $mapped = [
                 'campaign_id' => $campaignId,
                 // `stat_time_day` is «2026-08-05 00:00:00»; the pipeline stores a date.
                 'date' => substr((string) ($dims['stat_time_day'] ?? $from), 0, 10),
-                'spend' => isset($metrics['spend']) ? (float) $metrics['spend'] : null,
-                'impressions' => isset($metrics['impressions']) ? (float) $metrics['impressions'] : null,
-                'clicks' => isset($metrics['clicks']) ? (float) $metrics['clicks'] : null,
-                'conversions' => isset($metrics['conversion']) ? (float) $metrics['conversion'] : null,
-                'revenue' => isset($metrics['total_purchase_value']) ? (float) $metrics['total_purchase_value'] : null,
-                'reach' => isset($metrics['reach']) ? (float) $metrics['reach'] : null,
-                'video_views' => isset($metrics['video_play_actions']) ? (float) $metrics['video_play_actions'] : null,
-            ], static fn ($v) => $v !== null);
+            ];
+
+            foreach (self::METRICS as $canonical => $field) {
+                /*
+                 * ABSENT, not zero.
+                 *
+                 * A metric this advertiser does not report must arrive as a MISSING KEY, so the
+                 * pipeline stores no row for it and every surface says «لم تُرسل» rather than
+                 * printing a measured zero. An awareness campaign that was never asked to sell
+                 * anything has no purchases; it does not have zero of them.
+                 *
+                 * `array_key_exists` rather than `isset`, because TikTok sends a JSON null for some
+                 * fields and `isset` cannot tell that from a key that was never there — both are
+                 * «not reported» here, and both must be skipped rather than cast to 0.0.
+                 */
+                if (! array_key_exists($field, $metrics) || $metrics[$field] === null) {
+                    continue;
+                }
+
+                // Numbers arrive as strings on this API; spend and value are in the advertiser's own
+                // currency, not in millionths, so nothing is divided at this edge.
+                $mapped[$canonical] = (float) $metrics[$field];
+            }
+
+            $rows[] = $mapped;
         }
 
         return $rows;
