@@ -111,7 +111,26 @@ test('link → 409 move-confirmation → confirm move → unlink (full path)', a
   await page.goto('/app/campaigns')
   await openCampaignLinkedTab(page, campB)
   await page.getByRole('button', { name: /Link external campaign|ربط حملة خارجية/ }).click()
-  await page.getByRole('checkbox').click() // show linked-elsewhere too ("Unlinked only" off)
+
+  /*
+   * Turn «Unlinked only» off, and PROVE it went off.
+   *
+   * The target is linked to campaign A by this point, so with the filter on it is correctly absent
+   * from the list — which means a click that did not register presents as «the row is missing»
+   * rather than as «the filter is still on», and reads like a data problem. It was webkit that lost
+   * it: the raw click landed on a control the modal had painted but React had not yet bound, so the
+   * box appeared ticked while the query key never changed.
+   *
+   * Two changes, and both matter. The list is awaited FIRST, so the panel is interactive before its
+   * filter is touched. And the checkbox's state is asserted afterwards instead of assumed — if the
+   * control is ever genuinely dead this fails on the control, which is the thing that would be
+   * broken, instead of thirty seconds later on a row that was never going to appear.
+   */
+  await expect(page.locator('[data-testid="link-external-row"]').first()).toBeVisible({ timeout: 15000 })
+  const unlinkedOnly = page.getByRole('dialog').getByRole('checkbox')
+  await unlinkedOnly.click()
+  await expect(unlinkedOnly, 'the «unlinked only» filter did not come off').not.toBeChecked()
+
   await expect(modalRow(targetName)).toBeVisible({ timeout: 15000 })
   await modalRow(targetName).getByRole('button', linkBtn).click()
 
