@@ -121,7 +121,9 @@ final class MetricsController extends Controller
              * True when the rest of the page is narrowed and this block is not. The card renders a
              * sentence off this, so nobody reads a whole-shop figure as one platform's share.
              */
-            'filtered_view' => $this->providerFilter($request) !== [] || $this->objectiveFilter($request) !== [],
+            'filtered_view' => $this->providerFilter($request) !== []
+                || $this->objectiveFilter($request) !== []
+                || $this->campaignFilter($request) !== [],
             'unfiltered_note_ar' => 'أرقام المتجر لكامل المتجر ولا تتأثر بفلتر المنصة أو الهدف، لأن جزءًا من الطلبات يصل بلا إسناد.',
             'unfiltered_note_en' => 'Store figures cover the whole shop and are not narrowed by the platform or objective filter — some orders arrive with no attribution.',
             'orders' => $funnel['totals']['orders'],
@@ -584,18 +586,51 @@ final class MetricsController extends Controller
     /** The objective filter from the request (?objective=sales,leads). Empty when absent. @return list<string> */
     private function objectiveFilter(Request $request): array
     {
-        $raw = $request->query('objective', []);
+        return $this->listFilter($request, 'objective');
+    }
+
+    /**
+     * The campaign filter from the request (?campaign=<uuid>,<uuid>). Empty when absent.
+     *
+     * UX-DASH-001 put a campaign control on the dashboard's visible filter row, and a control on the
+     * page has to narrow the figures on the page — the contract's own words are that a filter which
+     * does not work is worse than no filter. So it is read here and applied through the aggregator's
+     * existing campaign bound rather than by a component filtering rows it already fetched: every
+     * KPI, the chart, the funnel and the pacing table narrow together, which a client-side filter
+     * over one endpoint's response could not do.
+     *
+     * @return list<string>
+     */
+    private function campaignFilter(Request $request): array
+    {
+        return $this->listFilter($request, 'campaign');
+    }
+
+    /** A comma-list or repeated query parameter, trimmed, with the empties dropped. @return list<string> */
+    private function listFilter(Request $request, string $key): array
+    {
+        $raw = $request->query($key, []);
         $list = is_array($raw) ? $raw : ($raw === '' ? [] : explode(',', (string) $raw));
 
         return array_values(array_filter(array_map('trim', $list)));
     }
 
-    /** The aggregator scoped by the dashboard platform + objective filters (backend-supported). */
+    /** The aggregator scoped by the dashboard's platform, objective and campaign filters. */
     private function scoped(Request $request): MetricsAggregator
     {
-        return $this->agg
+        $campaigns = $this->campaignFilter($request);
+
+        $agg = $this->agg
             ->forProviders($this->providerFilter($request))
             ->forObjectives($this->objectiveFilter($request));
+
+        /*
+         * Applied only when the operator asked for one — `forCampaigns([])` means «no campaigns» to
+         * this aggregator, not «all of them» (it is the fail-closed bound a shared link's ceiling
+         * uses). Passing the empty filter straight through would have emptied the dashboard for
+         * everybody who had not picked a campaign.
+         */
+        return $campaigns === [] ? $agg : $agg->forCampaigns($campaigns);
     }
 
     /** @return array{0: Carbon, 1: Carbon} */

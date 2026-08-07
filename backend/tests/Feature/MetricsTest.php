@@ -449,6 +449,60 @@ final class MetricsTest extends TestCase
             ->assertStatus(422);
     }
 
+    /**
+     * UX-DASH-001 — the campaign control on the dashboard narrows the dashboard.
+     *
+     * The two claims that matter are opposites and both are here. **With** `?campaign=` every figure
+     * is that campaign's, on the same request the funnel and the pacing table make, so the page
+     * cannot narrow its KPI row and leave its chart wide. **Without** it the page is not narrowed at
+     * all — the aggregator's campaign bound is fail-closed by design (an empty set means «no
+     * campaigns» for a shared link's ceiling), so passing the unset filter straight through would
+     * have emptied the dashboard for everybody who had not picked one.
+     */
+    public function test_the_campaign_filter_narrows_every_figure_and_an_absent_one_narrows_nothing(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $sales = UnifiedCampaign::create(['project_id' => $this->projectA->id, 'name' => 'Sales', 'objective' => 'sales', 'status' => 'active']);
+        $reach = UnifiedCampaign::create(['project_id' => $this->projectA->id, 'name' => 'Reach', 'objective' => 'awareness', 'status' => 'active']);
+        app(TenantContext::class)->forget();
+
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'spend', 100, '2026-06-01', ['unified' => $sales->id, 'camp' => 's1']),
+            $this->metric($this->projectA->id, 'impressions', 5000, '2026-06-01', ['unified' => $sales->id, 'camp' => 's1']),
+            $this->metric($this->projectA->id, 'spend', 40, '2026-06-01', ['unified' => $reach->id, 'camp' => 'r1']),
+            $this->metric($this->projectA->id, 'impressions', 9000, '2026-06-01', ['unified' => $reach->id, 'camp' => 'r1']),
+        ]);
+
+        $base = "/api/v1/projects/{$this->projectA->id}/metrics";
+        $window = 'from=2026-06-01&to=2026-06-02';
+
+        // Unfiltered: both campaigns.
+        $all = $this->actingAs($this->owner, 'sanctum')->getJson("{$base}/summary?{$window}")->assertOk();
+        $this->assertEquals(140.0, $all->json('data.current.spend'));
+
+        // Filtered: one campaign, and the same bound on the funnel — not just on the KPI row.
+        $one = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("{$base}/summary?{$window}&campaign={$sales->id}")
+            ->assertOk();
+        $this->assertEquals(100.0, $one->json('data.current.spend'));
+        $this->assertTrue($one->json('data.commerce') === null || $one->json('data.commerce.filtered_view'));
+
+        $impressions = collect($this->actingAs($this->owner, 'sanctum')
+            ->getJson("{$base}/funnel?{$window}&campaign={$sales->id}")
+            ->assertOk()
+            ->json('data'))
+            ->firstWhere('stage', 'impressions');
+        $this->assertEquals(5000, $impressions['count'], 'the funnel must narrow with the KPI row, not beside it');
+
+        // And the campaign breakdown returns only the chosen campaign.
+        $rows = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("{$base}/campaigns?{$window}&campaign={$sales->id}")
+            ->assertOk()
+            ->json('data');
+        $this->assertCount(1, $rows);
+        $this->assertSame($sales->id, $rows[0]['campaign_id']);
+    }
+
     // ---- NORM-001: the basis of the figures ---------------------------------------------------
 
     /**
