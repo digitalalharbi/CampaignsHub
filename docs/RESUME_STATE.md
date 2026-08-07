@@ -382,6 +382,79 @@ that unit can start from the mapping rather than from the documentation:
 | `engagements` | — | Snapchat publishes `shares`, `saves`, `story_opens` separately and no single
 total. Summing them would manufacture a metric the platform never reported, so it stays null. |
 
+## Session — the recorded open items, then the digests (`e7cd83b` → `f35f10c`)
+
+Three instructions, taken in order and each finished before the next was started.
+
+### 1. The dead «إنشاء وتوليد» — `e7cd83b`
+
+The item this file recorded last session. `AgencyScopeSwitcher` clears `currentProjectId` when a
+client is selected and the chosen project belongs to a different one — correct on its own, and it
+runs asynchronously, after the clients and projects queries settle. All five project-scoped dialogs
+on `/…/reports` were mounted with `currentProjectId!`, and the `!` was a lie.
+
+Reproduced before fixing, with a probe: the dialog stays open, the button stays live, and pressing
+it calls `createReport(null, …)` — a POST to `/projects/null/reports` that can only 404. Now no
+project-scoped dialog renders without a project, and `ScopeLostDialog` names the missing scope
+rather than greying out a control. **The project is never guessed**: falling back to «the first
+project the operator can reach» writes one client's report into another client's project.
+
+One test initially passed against the unfixed page — a negative assertion inside `waitFor` succeeds
+on its first attempt, before the mutation it is meant to catch is scheduled.
+
+### 2. Policy placement — `fbfca1e`
+
+Thirteen policies hung off the marketing footer. Nine moved into the contexts that raise them:
+account (deletion, data requests, retention), billing (refunds), integrations (OAuth disclosure,
+subprocessors, data processing), support (system status, acceptable use). The five portal shells
+gained a three-link footer. **Nothing was deleted** — every route, page and obligation is untouched,
+and `policyLinks.test.ts` fails by name if any policy is left with nowhere to be reached.
+
+The integrations note renders on BOTH branches of that page. The no-project branch is where an
+operator authorises a platform and where a platform's OAuth reviewer is sent; a disclosure offered
+only on the other branch would be missing exactly when it is relied on.
+
+### 3. Email notifications and daily intelligence — `f6114a2` → `f35f10c`
+
+| commit | unit |
+|---|---|
+| `f6114a2` | MAIL-001 — fail-closed recipient scope, objective-aware daily builder |
+| `98162de` | MAIL-002 — the email: branded, bilingual, RTL, dark-client safe |
+| `7afa915` | MAIL-003 — idempotent sending at the recipient's own local hour |
+| `9fbf7ac` | MAIL-004 — preferences: digests, hour, timezone, language |
+| `f35f10c` | MAIL-005 — the weekly, as the same engine over seven days |
+
+Four decisions worth keeping:
+
+- **An email cannot be un-authorised.** Once a client's spend is in an inbox no permission change
+  takes it back, so `DigestScope` resolves the same ceiling the request path does and every failure
+  mode sends less. `project_ids` from a user's own settings can only NARROW — it is an input.
+- **Idempotency is a unique index, not a check**, and the row is claimed before the send. The window
+  in a check-then-send is exactly where a retried job sends yesterday's numbers twice.
+- **Hourly, not `dailyAt(08:00)`.** A single daily run sends at the server's morning, which is
+  somebody else's three a.m. «Yesterday» means yesterday where the reader is.
+- **Nothing claims to have been sent that was not.** With no provider the state is
+  `awaiting_credentials`, `sent_at` stays null, and it is never retried as a failure.
+
+**Real delivery is `BLOCKED_EXTERNAL_CREDENTIALS`.** No SMTP or API credentials were supplied; the
+system is complete and tested through `Mail::fake()` and the log mailer, and was verified live
+against the development database — the Arabic email renders right to left with real figures, and the
+run recorded `awaiting_credentials` exactly as it should.
+
+### Still open, and why
+
+- **§14.6 objective layouts on the REPORTS**, then **§14.7–14.8** — comparisons, pacing, funnel
+  drop-off, anomaly detection. `dashboardMetrics` and now `DailyDigest` both do for their surface
+  what §14.6 asks of a report layout; the report side has not been done.
+- **The attribution panel is operator-only** — the client link carries `conversions_basis` but not
+  the Platform-Reported / Store-Confirmed section, which needs its own visibility switch.
+- **`initiate_checkout` on TikTok** and **LinkedIn's absent sales metrics** — both wait on a real
+  sync. Not actionable without credentials.
+- **A weekly digest E2E** — the weekly is covered by unit and feature tests, not by a browser run;
+  there is no browser surface for it beyond the preference toggle, which is covered.
+
+---
+
 ## Session — UX/UI overhaul: the filters go back on the page (`645431b` → gate)
 
 The instruction was a root-and-branch UX pass over every category in `/admin`, `/app`, `/agency` and
