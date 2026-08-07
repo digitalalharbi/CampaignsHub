@@ -12,6 +12,17 @@ interface NotifPrefs {
   quiet_hours: { enabled: boolean; start: string; end: string }
   categories: Record<string, { in_app: boolean; email: boolean }>
   available_categories?: string[]
+  /**
+   * MAIL-004 — the digests, the clock they arrive on, and the language they arrive in.
+   *
+   * Both digests default to FALSE on the server. A summary that arrives because nobody turned it
+   * off is a mailing list, not a preference.
+   */
+  digests: { daily: boolean; weekly: boolean }
+  timezone: string
+  locale: 'ar' | 'en'
+  digest_hour: number
+  available_timezones?: string[]
 }
 
 const COPY = {
@@ -21,6 +32,17 @@ const COPY = {
     quiet: 'ساعات الهدوء', quiet_enabled: 'تفعيل ساعات الهدوء', from: 'من', to: 'إلى',
     categories: 'حسب النوع', loading: 'جارٍ التحميل…', error: 'تعذّر تحميل التفضيلات.', saved: 'تم الحفظ',
     honest: 'التسليم صادق: لا تُسجَّل رسالة كـ«مُرسلة» قبل ربط مزوّد حقيقي.',
+    digests: 'الملخصات الدورية',
+    digests_hint: 'ملخص يصلك بالبريد دون الحاجة لفتح النظام — أهم ما حدث وما يستحق قرارًا.',
+    daily: 'الملخص اليومي',
+    daily_hint: 'إنفاق أمس ونتائجه، وأفضل وأضعف منصة، والميزانيات التي تحتاج انتباهًا.',
+    weekly: 'الملخص التنفيذي الأسبوعي',
+    weekly_hint: 'أداء الأسبوع عبر كل المشاريع والمنصات والاتجاهات.',
+    when: 'وقت الوصول',
+    hour: 'الساعة (بتوقيتك)',
+    timezone: 'المنطقة الزمنية',
+    language: 'لغة الرسائل',
+    scope_note: 'تصلك أرقام المشاريع التي تملك صلاحية الوصول إليها فقط — ولا يضيف اختيارك مشروعًا خارج صلاحيتك.',
   },
   en: {
     title: 'Personal notifications', subtitle: 'Choose how and when YOU get notified — this does not affect your teammates.',
@@ -28,6 +50,17 @@ const COPY = {
     quiet: 'Quiet hours', quiet_enabled: 'Enable quiet hours', from: 'From', to: 'To',
     categories: 'By category', loading: 'Loading…', error: 'Could not load preferences.', saved: 'Saved',
     honest: 'Honest delivery: nothing is logged as "sent" before a real provider is wired.',
+    digests: 'Digests',
+    digests_hint: 'A summary by email so you do not have to open the product — what happened, and what is worth a decision.',
+    daily: 'Daily digest',
+    daily_hint: 'Yesterday’s spend and results, the best and weakest platform, and any budget that needs attention.',
+    weekly: 'Weekly executive digest',
+    weekly_hint: 'The week across every project, platform and trend.',
+    when: 'When it arrives',
+    hour: 'Hour (your local time)',
+    timezone: 'Timezone',
+    language: 'Email language',
+    scope_note: 'You only ever receive figures for projects you may already reach — choosing one you cannot reach adds nothing.',
   },
 }
 
@@ -60,6 +93,103 @@ export function PersonalNotificationsPage() {
         <p className="rounded-xl border border-danger/30 bg-danger/5 p-8 text-center text-sm text-danger">{c.error}</p>
       ) : (
         <>
+          {/*
+            MAIL-004 — the digests, and the clock they arrive on.
+
+            Placed FIRST because it is the setting that changes whether somebody has to open the
+            product at all, which is the promise the rest of this feature exists to keep.
+          */}
+          <section className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5" data-testid="digest-preferences">
+            <div>
+              <h2 className="text-sm font-bold text-text-primary">{c.digests}</h2>
+              <p className="mt-0.5 text-xs text-text-secondary">{c.digests_hint}</p>
+            </div>
+
+            <label className="flex items-start gap-2 text-sm text-text-secondary">
+              <input
+                type="checkbox"
+                data-testid="digest-daily"
+                className="mt-1"
+                checked={p.digests?.daily ?? false}
+                onChange={(e) => set({ digests: { ...p.digests, daily: e.target.checked } })}
+              />
+              <span>
+                <span className="font-semibold text-text-primary">{c.daily}</span>
+                <span className="block text-xs">{c.daily_hint}</span>
+              </span>
+            </label>
+
+            <label className="flex items-start gap-2 text-sm text-text-secondary">
+              <input
+                type="checkbox"
+                data-testid="digest-weekly"
+                className="mt-1"
+                checked={p.digests?.weekly ?? false}
+                onChange={(e) => set({ digests: { ...p.digests, weekly: e.target.checked } })}
+              />
+              <span>
+                <span className="font-semibold text-text-primary">{c.weekly}</span>
+                <span className="block text-xs">{c.weekly_hint}</span>
+              </span>
+            </label>
+
+            <div className="grid gap-3 border-t border-border pt-3 sm:grid-cols-3">
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="font-semibold text-text-secondary">{c.hour}</span>
+                <select
+                  data-testid="digest-hour"
+                  value={p.digest_hour ?? 8}
+                  onChange={(e) => set({ digest_hour: Number(e.target.value) })}
+                  className="h-9 rounded-xl border border-border bg-surface px-2 text-sm text-text-primary"
+                  dir="ltr"
+                >
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="font-semibold text-text-secondary">{c.timezone}</span>
+                <select
+                  data-testid="digest-timezone"
+                  value={p.timezone ?? 'Asia/Riyadh'}
+                  onChange={(e) => set({ timezone: e.target.value })}
+                  className="h-9 rounded-xl border border-border bg-surface px-2 text-sm text-text-primary"
+                  dir="ltr"
+                >
+                  {(p.available_timezones ?? [p.timezone ?? 'Asia/Riyadh']).map((tz) => (
+                    <option key={tz} value={tz}>{tz}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="font-semibold text-text-secondary">{c.language}</span>
+                <select
+                  data-testid="digest-locale"
+                  value={p.locale ?? 'ar'}
+                  onChange={(e) => set({ locale: e.target.value as 'ar' | 'en' })}
+                  className="h-9 rounded-xl border border-border bg-surface px-2 text-sm text-text-primary"
+                >
+                  <option value="ar">العربية</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+            </div>
+
+            {/*
+              Stated on the page, not only enforced in the code.
+
+              The project picker below can only NARROW what a person receives — the ceiling is their
+              membership. Saying so is what stops somebody assuming they can subscribe their way into
+              a client they cannot otherwise see.
+            */}
+            <p className="rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary">
+              {c.scope_note}
+            </p>
+          </section>
+
           <section className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5">
             <h2 className="text-sm font-bold text-text-primary">{c.channels}</h2>
             <label className="flex items-center gap-2 text-sm text-text-secondary">
