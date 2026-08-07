@@ -362,29 +362,71 @@ export function ReportsPage() {
       </>
       )}
 
+      {/*
+        SCOPE-BUILDER-001 — every project-scoped dialog says what happened when the project goes.
+
+        The project can be cleared WHILE one of these is open. `AgencyScopeSwitcher` drops
+        `currentProjectId` whenever a client is selected and the chosen project belongs to a
+        different one — right on its own, and it runs asynchronously, after the clients and projects
+        queries settle. So an operator opens the builder on a valid project and the project is gone
+        underneath the dialog a moment later.
+
+        Every one of these was mounted with `currentProjectId!`, and the `!` was a lie: the builder
+        held a null and «إنشاء وتوليد» posted `createReport(null, …)` — a request to
+        `/projects/null/reports` that can only ever 404. Nothing on screen said so. The gate met it
+        as a three-minute Firefox timeout waiting for a response that was never coming.
+
+        Two rules here, and the second matters more than the first:
+
+        - **Never render a project-scoped dialog without a project.** The `!` is gone from all five.
+        - **Never guess the project.** The tempting repair is to fall back to the first project the
+          operator can reach, which silently writes one client's report into another client's
+          project. `ScopeLostDialog` refuses and says how to fix it — a refusal a person can act on,
+          rather than a control that quietly does nothing.
+      */}
       {builderOpen && (
-        <ReportBuilder
-          projectId={currentProjectId!}
-          onClose={() => setBuilderOpen(false)}
-          onCreated={() => {
-            setBuilderOpen(false)
-            invalidate()
-          }}
-        />
+        currentProjectId ? (
+          <ReportBuilder
+            projectId={currentProjectId}
+            onClose={() => setBuilderOpen(false)}
+            onCreated={() => {
+              setBuilderOpen(false)
+              invalidate()
+            }}
+          />
+        ) : (
+          <ScopeLostDialog ar={ar} onClose={() => setBuilderOpen(false)} />
+        )
       )}
-      {previewId && <ReportPreview projectId={currentProjectId!} id={previewId} onClose={() => setPreviewId(null)} />}
-      {liveOpen && currentProjectId && <LiveLinkBuilder projectId={currentProjectId} onClose={() => setLiveOpen(false)} />}
-      {shareId && <ShareManager projectId={currentProjectId!} reportId={shareId} onClose={() => setShareId(null)} />}
+      {previewId && (
+        currentProjectId
+          ? <ReportPreview projectId={currentProjectId} id={previewId} onClose={() => setPreviewId(null)} />
+          : <ScopeLostDialog ar={ar} onClose={() => setPreviewId(null)} />
+      )}
+      {liveOpen && (
+        currentProjectId
+          ? <LiveLinkBuilder projectId={currentProjectId} onClose={() => setLiveOpen(false)} />
+          : <ScopeLostDialog ar={ar} onClose={() => setLiveOpen(false)} />
+      )}
+      {shareId && (
+        currentProjectId
+          ? <ShareManager projectId={currentProjectId} reportId={shareId} onClose={() => setShareId(null)} />
+          : <ScopeLostDialog ar={ar} onClose={() => setShareId(null)} />
+      )}
       {scopeId && (
-        <ScopeEditor
-          projectId={currentProjectId!}
-          reportId={scopeId}
-          onClose={() => setScopeId(null)}
-          onSaved={() => {
-            setScopeId(null)
-            invalidate()
-          }}
-        />
+        currentProjectId ? (
+          <ScopeEditor
+            projectId={currentProjectId}
+            reportId={scopeId}
+            onClose={() => setScopeId(null)}
+            onSaved={() => {
+              setScopeId(null)
+              invalidate()
+            }}
+          />
+        ) : (
+          <ScopeLostDialog ar={ar} onClose={() => setScopeId(null)} />
+        )
       )}
     </div>
   )
@@ -533,6 +575,37 @@ function ScopeEditor({
           </div>
         </div>
       )}
+    </Modal>
+  )
+}
+
+/**
+ * The project went away while this dialog was open — SCOPE-BUILDER-001.
+ *
+ * It is a REFUSAL with an instruction, not a disabled button. A greyed-out «إنشاء وتوليد» would be
+ * the same dead control with a lighter colour: it still would not say which of the two scopes is
+ * missing, or what to do about it. And it deliberately offers no «pick a project for me» — the
+ * project decides which client's data a report is built from, and choosing one on the operator's
+ * behalf is how one client's report ends up in another client's account.
+ */
+function ScopeLostDialog({ ar, onClose }: { ar: boolean; onClose: () => void }) {
+  return (
+    <Modal open onClose={onClose} title={ar ? 'المشروع لم يعد محددًا' : 'No project is selected'}>
+      <div data-testid="builder-no-project" className="space-y-3">
+        <p className="text-sm text-text-secondary">
+          {ar
+            ? 'تغيّر نطاق العميل أثناء فتح هذه النافذة، فلم يعد المشروع محددًا. اختر العميل ثم المشروع من أعلى الشريط الجانبي، ثم افتح النافذة من جديد.'
+            : 'The client scope changed while this was open, so no project is selected any more. Choose the client and then the project at the top of the sidebar, then open this again.'}
+        </p>
+        <p className="text-sm text-text-secondary">
+          {ar
+            ? 'لم يُرسَل أي شيء — التقرير يُبنى من بيانات مشروع بعينه، ولن نختار مشروعًا نيابة عنك.'
+            : 'Nothing was submitted. A report is built from one project’s data, and we will not pick a project on your behalf.'}
+        </p>
+        <div className="flex justify-end">
+          <Button variant="secondary" onClick={onClose}>{ar ? 'إغلاق' : 'Close'}</Button>
+        </div>
+      </div>
     </Modal>
   )
 }
