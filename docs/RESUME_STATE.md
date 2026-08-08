@@ -406,7 +406,7 @@ afterwards, leaving the account exactly as it was found (no preference row).
 
 ---
 
-## Session — MAIL-012, the team notification board (`PENDING`)
+## Session — MAIL-012, the team notification board (`0cc9069`)
 
 **What it is.** `GET /settings/notifications/team` behind `settings.manage`, and a board under
 Settings → Notifications. Per person: name, address, roles, portal, the projects they cover, the
@@ -432,7 +432,7 @@ email switched off» is exactly what it exists to surface — so the row now nam
 attempt at that vocabulary guessed `client` and `advertiser`; the `Portal` enum has `portal` and
 `app`, which is precisely the pair a guess gets backwards.
 
-**Gates:** backend suite green (see below) · frontend **922 passed** (125 files) · `tsc -b`, oxlint
+**Gates:** backend **1740 passed** (10178 assertions) · frontend **922 passed** (125 files) · `tsc -b`, oxlint
 (0 errors) and the production build clean · Pint clean. Live-reviewed at
 `/agency/settings` → الإشعارات: five people, each with their portal, their client-qualified projects
 and «لم يُرسل شيء بعد» — correct, because no provider is wired and nothing has been sent in dev.
