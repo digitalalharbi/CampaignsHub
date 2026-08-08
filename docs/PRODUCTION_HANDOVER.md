@@ -232,7 +232,10 @@ cd backend && ./vendor/bin/pint && php artisan test
 cd frontend && npm run typecheck && npx vitest run && npx oxlint src/ && npm run build
 
 # end to end — three browsers
-npx playwright test --project=chromium --project=firefox --project=webkit
+# The gate: one isolated run per browser (E2E-ISO-002). A single `playwright test`
+# invocation seeds the database once and then runs all three browsers against it, so
+# firefox and webkit inherit whatever chromium created.
+npm run gate
 # (a `setup` project runs first as a dependency and authenticates; do not skip it)
 ```
 

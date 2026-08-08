@@ -27,6 +27,19 @@ import { E2E_BACKEND_ENV } from './env'
  *      which means the gate needs no `.env.e2e` on disk, and a clean checkout works unchanged.
  */
 export default async function globalSetup() {
+  /*
+   * The one way to NOT reseed, and it exists for exactly one purpose.
+   *
+   * Reproducing an order-dependent failure needs a run that starts from the state a previous run
+   * left — which is the opposite of what this file is for. It is opt-in through the environment and
+   * never set by `npm run gate`, so no ordinary invocation can reach it by accident.
+   */
+  if (process.env.E2E_SKIP_RESET === '1') {
+    process.stdout.write('\n[e2e] E2E_SKIP_RESET=1 — reusing the existing database ON PURPOSE\n')
+
+    return
+  }
+
   const started = Date.now()
   process.stdout.write(`\n[e2e] preparing isolated database ${E2E_BACKEND_ENV.DB_DATABASE}…\n`)
 

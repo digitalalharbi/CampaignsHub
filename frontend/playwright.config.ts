@@ -27,6 +27,17 @@ export default defineConfig({
    * behind; the residue reached 485 tenants and 2105 tasks and made live review of any list
    * meaningless. See `e2e/global-setup.ts` for the full account.
    */
+  /*
+   * Seeds the isolated database before either server starts (E2E-ISO-001).
+   *
+   * It runs ONCE per invocation, which is why `npm run gate` invokes Playwright once per browser
+   * rather than once for all three (E2E-ISO-002). A single invocation gives chromium the seed,
+   * firefox the seed plus everything chromium created, and webkit both — three browsers running
+   * three different suites and reporting one number.
+   *
+   * `npx playwright test` still works and is the right tool for one spec or one project. It is not
+   * the gate.
+   */
   globalSetup: './e2e/global-setup.ts',
   use: {
     baseURL: E2E_ORIGIN,

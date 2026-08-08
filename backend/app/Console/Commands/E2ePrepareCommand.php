@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Redis;
 use Throwable;
 
 /**
@@ -61,9 +62,70 @@ final class E2ePrepareCommand extends Command
 
         $this->line("Resetting {$database} (migrate:fresh --seed)…");
 
-        return $this->call('migrate:fresh', ['--seed' => true, '--force' => true]) === 0
-            ? self::SUCCESS
-            : self::FAILURE;
+        if ($this->call('migrate:fresh', ['--seed' => true, '--force' => true]) !== 0) {
+            return self::FAILURE;
+        }
+
+        $this->forgetRedis();
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Reset the gate's REDIS too, not only its database — E2E-ISO-002.
+     *
+     * Sessions, the cache and the queues all live in Redis (see `e2e/env.ts`), and `migrate:fresh`
+     * touches Postgres alone. That did not matter while a gate was one long invocation, because the
+     * database and Redis were reset together at the start of it and stayed consistent throughout.
+     *
+     * Running Playwright once per browser broke that assumption in a way that produced two failures
+     * with no obvious connection to each other: an advertiser was «not offered a password step», and
+     * the analytics page rendered without its metric catalogue. Both were the second invocation
+     * meeting a fresh database while Redis still held sessions and cached answers describing the
+     * rows the first invocation had just dropped. A stale cache entry is indistinguishable from a
+     * product defect from the outside, which is exactly why this belongs here rather than in a
+     * retry.
+     *
+     * Only the gate's own keyspace is touched. Every Redis key Laravel writes carries `REDIS_PREFIX`
+     * — `campaignshub-e2e-` for this environment — so `keys('*')` on the prefixed connection cannot
+     * reach a developer's own stack sharing the same Redis server. `flushdb()` would, which is why
+     * it is not used.
+     */
+    private function forgetRedis(): void
+    {
+        try {
+            $connection = Redis::connection();
+            $keys = $connection->keys('*');
+
+            if ($keys === []) {
+                $this->line('Redis: nothing to clear for this prefix.');
+
+                return;
+            }
+
+            /*
+             * `keys()` returns keys WITH the prefix already applied, and `del()` would apply it
+             * again — deleting `campaignshub-e2e-campaignshub-e2e-…`, which exists nowhere. The
+             * prefix is stripped back off so the two halves agree.
+             */
+            $prefix = (string) config('database.redis.options.prefix', '');
+            $bare = array_map(
+                static fn (string $key): string => $prefix !== '' && str_starts_with($key, $prefix)
+                    ? substr($key, strlen($prefix))
+                    : $key,
+                $keys,
+            );
+
+            $connection->del($bare);
+            $this->line('Redis: cleared '.count($bare).' key(s) under this prefix.');
+        } catch (Throwable $e) {
+            /*
+             * A gate that cannot reach Redis is a gate whose sessions will not work at all, so this
+             * is said out loud rather than swallowed — but it does not abort the reset, because the
+             * database half has already succeeded and the failure will be obvious within seconds.
+             */
+            $this->warn('Redis: could not clear the gate keyspace — '.$e->getMessage());
+        }
     }
 
     private function databaseExists(string $connection, string $database): bool
