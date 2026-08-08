@@ -256,7 +256,7 @@ Five units landed after the green isolated gate, each committed on its own and e
 | `BRAND-GUARD-001` | `873ab08` | a scanner that fails the suite when a superseded identity ships anywhere outside a test |
 | `MAIL-DS-001` | `d196367` | email design tokens; an Arabic font stack that can render Arabic; tabular figures; the escaping bug that would have broken it in Outlook |
 | `METRIC-NAMES-001` | `d0b357d` | plain Arabic metric names, objective-aware layouts everywhere, `add_to_cart` promoted to a real metric |
-| `MAIL-009` | see below | the account messages, and a delivery state that is an outcome rather than a literal |
+| `MAIL-009` | `8553aaa` | the account messages, and a delivery state that is an outcome rather than a literal |
 
 ### MAIL-009 — and the three holes it closed
 
