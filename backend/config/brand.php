@@ -13,7 +13,33 @@ return [
     'docs_url' => env('DOCS_URL', 'https://docs.campaignshub.io'),
     'status_url' => env('STATUS_URL', 'https://status.campaignshub.io'),
     'support_email' => env('SUPPORT_EMAIL', 'info@campaignshub.io'),
-    'tagline' => 'Run every client, project, and campaign from one place.',
+    /*
+     * The OFFICIAL tagline, in both languages — BRAND-001.
+     *
+     * «كل حملاتك الإعلانية المدفوعة في مكان واحد» is the sentence the product is sold on, and until
+     * now it lived almost entirely in code comments: eight files quoted it to explain a decision,
+     * one marketing page used it as a heading, and the value actually configured here was a
+     * different English sentence that no Arabic surface could use.
+     *
+     * Both languages sit together because every surface that needs one needs the other — the title
+     * tag, the Open Graph card, the structured data, the sign-in panel, the email header and the
+     * footer are each rendered in whichever language the reader chose.
+     */
+    'tagline' => [
+        'ar' => 'كل حملاتك الإعلانية المدفوعة في مكان واحد',
+        'en' => 'All your paid campaigns in one place',
+    ],
+
+    /*
+     * What the product IS, for a description field rather than a headline.
+     *
+     * Deliberately plain and checkable: it names what the platform does and claims nothing about
+     * results. A description that promises performance is a description that has to be defended.
+     */
+    'description' => [
+        'ar' => 'منصة موحدة لإدارة ومتابعة وتحليل الحملات الإعلانية المدفوعة عبر جميع المنصات من مكان واحد.',
+        'en' => 'One platform to run, monitor and analyse paid advertising across every ad platform.',
+    ],
 
     // Feature flags (platform defaults; a tenant may override in its settings later).
     'features' => [

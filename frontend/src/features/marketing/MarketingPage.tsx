@@ -65,7 +65,15 @@ export function MarketingPage() {
       {/* Hero */}
       <section className="mx-auto max-w-[1240px] px-6 py-20 text-center">
         <span className="inline-block rounded-[var(--radius-pill)] bg-[var(--brand-background)] px-3 py-1 text-xs font-bold text-brand-600">
-          {ar ? 'منصة إدارة الميديا باينج' : 'Media-buying operations platform'}
+          {/*
+            BRAND-001 — the product's own words, not the industry's.
+
+            This read «منصة إدارة الميديا باينج», a transliteration of the old positioning, sitting
+            directly above the official tagline. «الحملات الإعلانية المدفوعة» is what the rest of the
+            product calls this, and a visitor should not have to know the English term to read the
+            first line of the homepage.
+          */}
+          {ar ? 'منصة إدارة الحملات الإعلانية المدفوعة' : 'Paid advertising management platform'}
         </span>
         <h1 className="mx-auto mt-5 max-w-3xl font-[var(--font-heading)] text-4xl font-extrabold leading-tight md:text-5xl">
           {ar ? brand.taglineAr : brand.tagline}

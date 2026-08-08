@@ -18,7 +18,15 @@ final class HealthController extends Controller
     public function health(): JsonResponse
     {
         return ApiResponse::success(
-            ['status' => 'ok', 'service' => 'mediabuying-api'],
+            /*
+             * The product's own name — BRAND-001.
+             *
+             * It read `mediabuying-api`, which is what this platform was called before it was
+             * CampaignsHub. A health endpoint is a public surface: it is what a monitor, a status
+             * page and an uptime checker quote back, so the one place the old name survived was
+             * also one of the few that a customer could see.
+             */
+            ['status' => 'ok', 'service' => config('brand.name').' API'],
             'Service is alive.',
         );
     }
