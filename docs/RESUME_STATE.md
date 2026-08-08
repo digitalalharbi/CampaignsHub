@@ -10,7 +10,18 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## GATE — 2026-08-08 (§14.6–14.8, attribution, mail) · **RED at the time of writing** · 829/1
+## GATE — 2026-08-08 (§14.6–14.8, attribution, mail) · **GREEN** · `PLAYWRIGHT_EXIT_CODE=0` · 830 passed · 28 skipped=0 · 29.8m
+
+Run at `08e31f1`, three browsers, one worker, `retries: 0`, no file or database change during it.
+**Failed=0 · Flaky=0 · Retries=0 · Skipped=0 · Working tree CLEAN.** The verdict is Playwright's own
+exit code, read directly and not through a pipe.
+
+**It went green on the run after the section below, and that is not the same as the section below
+being resolved.** The tab-parameter defect is real, is user-facing, and is order-sensitive — a green
+run means this invocation did not hit it, not that it is gone. Do not close the open item on the
+strength of this figure.
+
+### The run before it — RED, 829/1, and what it proved
 
 `PLAYWRIGHT_EXIT_CODE=1` at `316e4d6` — 829 passed, **1 failed**, 0 skipped, 0 flaky, 28.8m.
 Backend **1671 passed (9534 assertions), exit 0** · Pint clean · `tsc -b` clean · oxlint 0 errors ·
