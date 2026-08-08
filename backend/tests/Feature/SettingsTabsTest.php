@@ -12,6 +12,8 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -52,18 +54,78 @@ final class SettingsTabsTest extends TestCase
         $this->deleteJson("/api/v1/settings/team/{$this->owner->uuid}")->assertStatus(422);
     }
 
-    public function test_invite_creates_scoped_member(): void
+    /**
+     * Inviting somebody creates an INVITATION, not an account — TEAM-INVITE-001.
+     *
+     * This used to provision the user immediately with a random 24-character password, which is why
+     * the assertion below changed: a mistyped address became a real account holding that email
+     * forever, that nobody could sign into and that appeared in the team list as a colleague. The
+     * membership is now granted at acceptance, by `InvitationService`, which the workspace
+     * invitation tests cover end to end.
+     */
+    public function test_invite_creates_an_invitation_and_not_an_account(): void
     {
         Sanctum::actingAs($this->owner);
         Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Analyst', 'slug' => 'analyst']);
 
-        $this->postJson('/api/v1/settings/team', ['name' => 'New', 'email' => 'new@a.test', 'role' => 'analyst'])
-            ->assertStatus(201);
-        // An invited member must land IN the workspace — a role without a membership put them
-        // nowhere, which is what this assertion caught when `users.tenant_id` stopped covering it.
-        $invited = User::where('email', 'new@a.test')->firstOrFail();
-        $this->assertTrue($invited->memberships()->where('tenant_id', $this->tenant->id)->exists());
+        $this->postJson('/api/v1/settings/team', ['email' => 'new@a.test', 'role' => 'analyst'])
+            ->assertStatus(201)
+            ->assertJsonPath('data.delivery_status', 'awaiting_provider_credentials');
+
+        $this->assertNull(User::where('email', 'new@a.test')->first(), 'an account was created before acceptance');
+        $this->assertDatabaseHas('workspace_invitations', [
+            'tenant_id' => $this->tenant->id, 'email' => 'new@a.test', 'role_slug' => 'analyst', 'accepted_at' => null,
+        ]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'settings.team.invited']);
+    }
+
+    /** The team screen shows who has been invited, or «I invited Sara last week» has no answer. */
+    public function test_the_team_listing_shows_invitations_nobody_has_accepted(): void
+    {
+        Sanctum::actingAs($this->owner);
+        Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Analyst', 'slug' => 'analyst']);
+        $this->postJson('/api/v1/settings/team', ['email' => 'pending@a.test', 'role' => 'analyst'])->assertStatus(201);
+
+        $this->getJson('/api/v1/settings/team')->assertOk()
+            ->assertJsonPath('data.invitations.0.email', 'pending@a.test')
+            ->assertJsonPath('data.invitations.0.expired', false);
+    }
+
+    /**
+     * Withdrawing an invitation removes the capability, not just the row from a screen.
+     *
+     * The token in somebody's inbox works until the row is gone, so a «revoked» flag that left the
+     * row in place would be a button that says it did something it did not.
+     */
+    public function test_withdrawing_an_invitation_makes_the_link_stop_working(): void
+    {
+        Sanctum::actingAs($this->owner);
+        Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Analyst', 'slug' => 'analyst']);
+        $id = $this->postJson('/api/v1/settings/team', ['email' => 'gone@a.test', 'role' => 'analyst'])
+            ->assertStatus(201)->json('data.id');
+
+        $this->deleteJson("/api/v1/settings/team/invitations/{$id}")->assertOk();
+
+        $this->assertDatabaseMissing('workspace_invitations', ['id' => $id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'settings.team.invitation_revoked']);
+    }
+
+    /** Another workspace's invitation is not this workspace's to withdraw. */
+    public function test_an_invitation_from_another_workspace_cannot_be_withdrawn(): void
+    {
+        $other = Tenant::create(['name' => 'Other', 'slug' => 'other-invite', 'status' => 'active']);
+        // The column is char(26): these ids are ULIDs, not UUIDs.
+        $id = (string) Str::ulid();
+        DB::table('workspace_invitations')->insert([
+            'id' => $id, 'tenant_id' => $other->id, 'email' => 'x@other.test', 'role_slug' => 'analyst',
+            'token_hash' => hash('sha256', 'x'), 'delivery_status' => 'awaiting_provider_credentials',
+            'invited_by' => $this->owner->id, 'expires_at' => now()->addDay(),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        Sanctum::actingAs($this->owner);
+        $this->deleteJson("/api/v1/settings/team/invitations/{$id}")->assertStatus(404);
+        $this->assertDatabaseHas('workspace_invitations', ['id' => $id]);
     }
 
     public function test_team_requires_permission(): void

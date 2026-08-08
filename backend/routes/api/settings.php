@@ -34,6 +34,13 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     // Team & permissions.
     Route::get('team', [TeamController::class, 'index'])->name('team.index');
     Route::post('team', [TeamController::class, 'invite'])->name('team.invite');
+    /*
+     * TEAM-INVITE-001 — withdraw an invitation that has not been accepted.
+     *
+     * Declared BEFORE `team/{user}`: a literal segment must be registered ahead of the wildcard, or
+     * `DELETE team/invitations/…` is matched as a member id and refused as «no such member».
+     */
+    Route::delete('team/invitations/{invitation}', [TeamController::class, 'revokeInvitation'])->name('team.invitations.revoke');
     Route::put('team/{user}/role', [TeamController::class, 'updateRole'])->name('team.role');
     Route::post('team/{user}/toggle', [TeamController::class, 'toggleStatus'])->name('team.toggle');
     Route::delete('team/{user}', [TeamController::class, 'destroy'])->name('team.destroy');

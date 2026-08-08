@@ -15,8 +15,8 @@ import { QueryFailure } from '@/components/ui/QueryFailure'
 export function TeamTab() {
   const ar = useUi((u) => u.locale) === 'ar'
   const { data, error, isLoading, isError } = useTeam()
-  const { invite, setRole, toggle, remove } = useTeamActions()
-  const [form, setForm] = useState({ name: '', email: '', role: '' })
+  const { invite, setRole, toggle, remove, revokeInvitation } = useTeamActions()
+  const [form, setForm] = useState({ email: '', role: '' })
   const [err, setErr] = useState('')
 
   if (isLoading) return <div className="space-y-3"><Skeleton className="h-24" /><Skeleton className="h-48" /></div>
@@ -34,7 +34,7 @@ export function TeamTab() {
     setErr('')
     try {
       await invite.mutateAsync({ ...form, role: form.role || data.roles[0]?.slug })
-      setForm({ name: '', email: '', role: '' })
+      setForm({ email: '', role: '' })
     } catch (e2) { setErr(toApiError(e2).message) }
   }
   const guard = (p: Promise<unknown>) => p.catch((e) => setErr(toApiError(e).message))
@@ -44,14 +44,56 @@ export function TeamTab() {
       <form onSubmit={doInvite} className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)]">
         <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-text-primary"><UserPlus size={18} /> {ar ? 'دعوة عضو' : 'Invite a member'}</h2>
         {err && <div className="mb-3"><Alert severity="danger" title={ar ? 'تعذّر تنفيذ الإجراء' : 'That action could not be completed'}>{err}</Alert></div>}
-        <div className="grid gap-3 sm:grid-cols-4">
-          <Field label={ar ? 'الاسم' : 'Name'} htmlFor="inv-name"><Input id="inv-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></Field>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {/*
+            No name field — TEAM-INVITE-001.
+
+            The invited person names themselves when they accept, which is the only moment anybody
+            has actually asked them. A name typed by a colleague was never verified and was often
+            wrong, and it stopped being needed the moment the account stopped being created here.
+          */}
           <Field label={ar ? 'البريد' : 'Email'} htmlFor="inv-email"><Input id="inv-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required /></Field>
           <Field label={ar ? 'الدور' : 'Role'} htmlFor="inv-role"><Select id="inv-role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} options={roleOptions} placeholder={ar ? 'اختر الدور' : 'Choose a role'} /></Field>
           <div className="flex items-end"><Button type="submit" disabled={invite.isPending} className="w-full">{invite.isPending ? '…' : (ar ? 'دعوة' : 'Invite')}</Button></div>
         </div>
-        <p className="mt-2 text-xs text-text-muted">{ar ? 'تُنشأ العضوية فورًا؛ يصل العضو عبر إعادة تعيين كلمة المرور حتى تُفعّل رسائل الدعوة في مرحلة البريد.' : 'The membership is created straight away; until invitation emails are live, the member gets in through a password reset.'}</p>
+        <p className="mt-2 max-w-2xl text-xs leading-6 text-text-muted">
+          {ar
+            ? 'تُرسل دعوة برابط ينتهي خلال ٧٢ ساعة. لا يُنشأ الحساب ولا تُمنح أي صلاحية قبل أن يفتح الشخص الرابط ويختار كلمة مروره — لذلك لا يترك البريد الخاطئ حسابًا معلّقًا.'
+            : 'An invitation link is sent and expires in 72 hours. No account exists and nothing is granted until the person opens it and chooses a password — so a mistyped address leaves nothing behind.'}
+        </p>
       </form>
+
+      {/*
+        Invitations nobody has accepted — TEAM-INVITE-001.
+
+        Above the member list rather than below it: this is the part somebody is looking for when
+        they come back to check, and an expired invitation is the one thing here that needs doing
+        something about.
+      */}
+      {(data.invitations ?? []).length > 0 && (
+        <div className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)]">
+          <h2 className="mb-3 text-lg font-bold text-text-primary">{ar ? 'دعوات لم تُقبل بعد' : 'Invitations not yet accepted'}</h2>
+          <ul className="divide-y divide-border">
+            {data.invitations.map((i) => (
+              <li key={i.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div>
+                  <div className="font-medium text-text-primary" dir="ltr">{i.email}</div>
+                  <div className="text-[13px] text-text-muted">
+                    {i.role_slug}
+                    {i.expired
+                      ? ` · ${ar ? 'انتهت صلاحية الرابط' : 'the link has expired'}`
+                      : ` · ${ar ? 'ينتهي' : 'expires'} ${i.expires_at.slice(0, 10)}`}
+                    {i.delivery_status !== 'sent' && ` · ${ar ? 'لم يُرسل البريد بعد' : 'not emailed yet'}`}
+                  </div>
+                </div>
+                <Button variant="secondary" onClick={() => guard(revokeInvitation.mutateAsync(i.id))}>
+                  {ar ? 'سحب الدعوة' : 'Withdraw'}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
         {data.members.length === 0 ? <div className="p-6"><EmptyState title={ar ? 'لا أعضاء' : 'No members'} /></div> : (

@@ -6,11 +6,8 @@ namespace App\Domains\Settings\Http\Controllers;
 
 use App\Domains\Access\Models\Role;
 use App\Domains\Audit\AuditLogger;
-use App\Domains\Identity\Services\PasswordResetService;
-use App\Domains\Tenancy\Actions\GrantMembership;
+use App\Domains\Identity\Services\InvitationService;
 use App\Domains\Tenancy\Context\TenantContext;
-use App\Domains\Tenancy\DTOs\MembershipGrant;
-use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -18,8 +15,8 @@ use App\Support\ApiResponse;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 /**
  * Organization team & role management. Roles/permissions are enforced server-side (not just hidden
@@ -48,60 +45,79 @@ final class TeamController extends Controller
                 'two_factor_enabled' => (bool) $u->two_factor_enabled,
             ])->values(),
             'roles' => $roles->map(fn ($r) => ['slug' => (string) $r->slug, 'name' => (string) $r->name])->values(),
+            /*
+             * People who have been invited and are not here yet — TEAM-INVITE-001.
+             *
+             * This list is the cost of converging on the token path, and it is worth paying. Before,
+             * inviting somebody created their account immediately, so the member list was the whole
+             * truth and a typo'd address became a permanent ghost account nobody could sign into.
+             * Now nothing exists until they accept — which means an invitation that is sitting
+             * unaccepted has to be visible, or «I invited Sara last week» has no answer anywhere.
+             */
+            'invitations' => DB::table('workspace_invitations')
+                ->where('tenant_id', $tenantId)
+                ->whereNull('accepted_at')
+                ->orderByDesc('created_at')
+                ->get(['id', 'email', 'role_slug', 'delivery_status', 'expires_at', 'created_at'])
+                ->map(static fn (object $i): array => [
+                    'id' => (string) $i->id,
+                    'email' => (string) $i->email,
+                    'role_slug' => (string) $i->role_slug,
+                    'delivery_status' => (string) $i->delivery_status,
+                    'expires_at' => (string) $i->expires_at,
+                    // An expired invitation is not a pending one, and a list that shows both the
+                    // same way is a list somebody waits on forever.
+                    'expired' => Carbon::parse($i->expires_at)->isPast(),
+                ])->values(),
         ], 'Team retrieved.');
     }
 
-    public function invite(Request $request, AuditLogger $audit, GrantMembership $grants): JsonResponse
+    /**
+     * Invite somebody — TEAM-INVITE-001.
+     *
+     * ## Why this stopped creating the account
+     *
+     * There were two invitation paths. This one provisioned a `User` immediately with a random
+     * 24-character password; `/app/team/invitations` issued an expiring token and created nobody
+     * until it was accepted. Two paths meant two answers to «is Sara a member?», and this one gave
+     * the worse answer: a mistyped address became a real account, holding that email address
+     * forever, that nobody could ever sign into and that showed in the team list as a colleague.
+     *
+     * Both now go through `InvitationService`, so an invitation grants nothing until the person
+     * proves they own the address by opening the link.
+     *
+     * ## What the caller loses, and why that is right
+     *
+     * The `name` field. The invited person names themselves when they accept, which is the only
+     * moment anybody has actually asked them. A name typed by a colleague was never verified and
+     * was frequently wrong.
+     */
+    public function invite(Request $request, AuditLogger $audit, InvitationService $invitations): JsonResponse
     {
         abort_unless($request->user()->hasPermission('settings.manage'), 403);
         $tenantId = $this->tenantId();
 
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:120'],
+            // Accepted and ignored for older clients: the person names themselves at acceptance.
+            'name' => ['sometimes', 'nullable', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:180'],
             'role' => ['required', 'string', 'exists:roles,slug'],
         ]);
-        abort_if(
-            self::inTenant($tenantId)->where('email', $data['email'])->exists(),
-            422, 'A user with this email already exists.',
+
+        $result = $invitations->invite(
+            tenant: Tenant::query()->findOrFail($tenantId),
+            email: $data['email'],
+            roleSlug: $data['role'],
+            projectIds: null,
+            invitedBy: $request->user(),
         );
 
-        $role = Role::where('tenant_id', $tenantId)->where('slug', $data['role'])->firstOrFail();
-
-        /*
-         * Provision the member with a random password they will never be told — MAIL-009.
-         *
-         * That part is unchanged and correct: nobody, including this workspace's owner, should be
-         * able to sign in as a colleague. What was missing is the other half. The comment here used
-         * to say the account was «usable via password reset meanwhile», and password reset was a
-         * TODO — so every member added through this screen held an account with an unknown
-         * 24-character password and no route to a known one. The setup link below IS that route.
-         */
-        $user = User::create([
-            'name' => $data['name'], 'email' => $data['email'],
-            'password' => Str::password(24),
-        ]);
-        $user->assignRole($role);
-
-        /*
-         * A role is not a workspace. Creating the user and assigning a role left them with no
-         * membership, so `inTenant()` could not see them and they landed nowhere on first sign-in —
-         * the same defect already fixed once in InvitationService::accept, in a second place.
-         * Dropping `users.tenant_id` is what made it visible: the column had been quietly standing
-         * in for the grant.
-         */
-        $grants->execute(new MembershipGrant(
-            user: $user,
-            tenant: Tenant::query()->findOrFail($tenantId),
-            portal: Portal::forAccountType(Tenant::query()->findOrFail($tenantId)->account_type),
-            role: $data['role'],
-            grantedBy: $request->user(),
-        ));
-
-        $tenant = Tenant::query()->findOrFail($tenantId);
-        $delivery = app(PasswordResetService::class)->inviteExistingMember($user, (string) $tenant->name);
-
-        $audit->log(action: 'settings.team.invited', entityType: 'user', entityId: $user->uuid, after: ['email' => $user->email, 'role' => $role->slug]);
+        $audit->log(
+            action: 'settings.team.invited',
+            entityType: 'workspace_invitation',
+            entityId: $result['id'],
+            after: ['email' => $data['email'], 'role' => $data['role']],
+        );
 
         /*
          * The delivery state travels back with the id.
@@ -110,11 +126,37 @@ final class TeamController extends Controller
          * it?», and on an install with no mail provider the honest answer is `awaiting_credentials` —
          * which the interface can then say out loud instead of implying an email that never left.
          */
-        return ApiResponse::success(
-            ['id' => $user->uuid, 'delivery_status' => $delivery],
-            'Member invited.',
-            status: 201,
+        return ApiResponse::success($result, 'Invitation sent.', status: 201);
+    }
+
+    /**
+     * Withdraw an invitation that has not been accepted.
+     *
+     * Deleted rather than marked, because an unaccepted invitation is a live capability: the token
+     * in somebody's inbox still works until this row is gone. There is no «revoked» state worth
+     * keeping — the audit entry is the record that it happened.
+     */
+    public function revokeInvitation(Request $request, string $invitation, AuditLogger $audit): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('settings.manage'), 403);
+
+        $row = DB::table('workspace_invitations')
+            ->where('tenant_id', $this->tenantId())
+            ->where('id', $invitation)
+            ->first();
+
+        abort_if($row === null, 404, 'No such invitation.');
+
+        DB::table('workspace_invitations')->where('id', $invitation)->delete();
+
+        $audit->log(
+            action: 'settings.team.invitation_revoked',
+            entityType: 'workspace_invitation',
+            entityId: $invitation,
+            before: ['email' => $row->email],
         );
+
+        return ApiResponse::success(null, 'Invitation withdrawn.');
     }
 
     public function updateRole(Request $request, string $user, AuditLogger $audit): JsonResponse

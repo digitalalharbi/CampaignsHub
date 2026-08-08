@@ -88,7 +88,20 @@ export interface TeamMember {
   last_login_at: string | null
   two_factor_enabled: boolean
 }
-export interface TeamData { members: TeamMember[]; roles: { slug: string; name: string }[] }
+/** Somebody invited who has not accepted yet — they hold no account and no membership. */
+export interface TeamInvitation {
+  id: string
+  email: string
+  role_slug: string
+  delivery_status: string
+  expires_at: string
+  expired: boolean
+}
+export interface TeamData {
+  members: TeamMember[]
+  roles: { slug: string; name: string }[]
+  invitations: TeamInvitation[]
+}
 
 export function useTeam() {
   return useQuery({ queryKey: ['settings', 'team'], queryFn: () => getData<TeamData>('/settings/team') })
@@ -97,7 +110,9 @@ export function useTeamActions() {
   const qc = useQueryClient()
   const inv = () => qc.invalidateQueries({ queryKey: ['settings', 'team'] })
   return {
-    invite: useMutation({ mutationFn: (b: { name: string; email: string; role: string }) => postData('/settings/team', b), onSuccess: inv }),
+    // No name — TEAM-INVITE-001. The invited person names themselves at acceptance.
+    invite: useMutation({ mutationFn: (b: { email: string; role: string }) => postData('/settings/team', b), onSuccess: inv }),
+    revokeInvitation: useMutation({ mutationFn: (id: string) => deleteData(`/settings/team/invitations/${id}`), onSuccess: inv }),
     setRole: useMutation({ mutationFn: (b: { id: string; role: string }) => putData(`/settings/team/${b.id}/role`, { role: b.role }), onSuccess: inv }),
     toggle: useMutation({ mutationFn: (id: string) => postData(`/settings/team/${id}/toggle`), onSuccess: inv }),
     remove: useMutation({ mutationFn: (id: string) => deleteData(`/settings/team/${id}`), onSuccess: inv }),

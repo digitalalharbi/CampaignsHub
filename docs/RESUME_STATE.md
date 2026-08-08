@@ -346,7 +346,6 @@ rather than grants, resolved against each recipient's live ceiling at send time.
 
 | unit | what it is |
 |---|---|
-| `TEAM-INVITE-001` | two invitation paths — see below |
 
 **Where to start reading:** `MessageCatalogue` (every message this product can send, and which
 category, rhythm and default each has), `NotificationChoices` (the ONE resolution order — the bell,
@@ -505,6 +504,38 @@ so one of the two options matched nothing. And «آخر 7 يومًا» had the A
 (0 errors) and the production build clean · Pint clean. Live-reviewed at `/admin/email` as
 `admin@demo-campaignshub.local` with three temporary ledger rows — one sent, one failed with its
 SMTP reason, one digest awaiting credentials — all three rendered with their counts, then deleted.
+
+---
+
+## Session — TEAM-INVITE-001, one invitation path (`PENDING`)
+
+**Two paths, two answers to «is Sara a member?».** `/settings/team` provisioned a `User` immediately
+with a random 24-character password; `/app/team/invitations` issued an expiring token and created
+nobody until it was accepted. The settings path gave the worse answer: a mistyped address became a
+real account, holding that email address forever, that nobody could ever sign into and that showed in
+the team list as a colleague.
+
+Both now go through `InvitationService`. Nothing exists and nothing is granted until the person opens
+the link and chooses a password.
+
+**What the screen gained and lost.** It lost the name field — the invited person names themselves at
+acceptance, which is the only moment anybody has actually asked them. It gained a «not yet accepted»
+list, because with no account created there is otherwise no answer to «I invited Sara last week»;
+each row carries the expiry, whether it has passed, and whether the email actually left.
+
+**Withdrawing deletes the row.** The token in somebody's inbox works until it is gone, so a «revoked»
+flag would be a button claiming something it had not done.
+
+**Known and NOT fixed here:** inviting somebody who already has an account in another workspace is
+still refused (`InvitationService` rejects any existing email, and `accept()` creates the user rather
+than granting a membership to an existing one). The old path did not support it either — it would
+have hit the unique-email index and 500ed — so this is a narrowing of nothing, but it is a real
+product gap for a multi-workspace install and belongs to whoever takes cross-workspace membership.
+
+**Gates:** backend **1761 passed** (10211 assertions) · frontend **928 passed** (126 files) · `tsc -b` and the
+production build clean · Pint clean. Live-reviewed at `/agency/settings/permissions`: invited
+`temp-invite@example.com`, saw it listed as pending with «لم يُرسل البريد بعد», withdrew it, and
+confirmed the workspace was left with no invitations and no new account.
 
 **B. Plans, subscriptions and payments** — not started. No free tier; a paid subscription required;
 USD; a PAID introductory first month, once per entity; annual with a real discount; every price,
