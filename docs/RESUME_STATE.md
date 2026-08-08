@@ -10,6 +10,30 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## GATE — 2026-08-08 (open items + digests) · **GREEN.** `PLAYWRIGHT_EXIT_CODE=0` · 830 passed · 0 failed · **0 skipped** · 30.7m
+
+Run at `9839287`, three browsers, one worker, `retries: 0`, no file or database change during it.
+**Failed=0 · Flaky=0 · Retries=0 · Skipped=0 · Working tree CLEAN.** The verdict is Playwright's own
+exit code, read directly and not through a pipe.
+
+Backend **1613 passed (9072 assertions), exit 0** · Pint clean · `tsc -b` clean · oxlint **0 errors**
+· vitest **854 passed (118 files)** · production build clean.
+
+**It took three red runs to get here, and each one was a different real thing.**
+
+1. **16 failed** — five causes, including a design mistake this work introduced (the alert queue's
+   open/snoozed/resolved tab strip turned into a dropdown) and a real interaction defect (a
+   multi-select popover covering the applied row it had just created).
+2. **3 failed** — the homepage baselines were 327px too tall, which is exactly the footer column
+   that was removed; the visual test refused to assume an intentional change was intentional, which
+   is its job. Regenerated after checking the delta matched.
+3. **2 failed** — two waits that guessed a DURATION rather than waiting for the dependency. One had
+   already been raised 15s → 20s and failed again; raising it a third time would have been an
+   intermittent failure hidden by a bigger budget. Both now await the response they actually depend
+   on. The Arabic PDF export failed on three different browsers across three gates for one cause,
+   and the second fix corrected the timing without asserting its postcondition — which is why it
+   came back.
+
 ## GATE — 2026-08-07 (UX overhaul) · **GREEN.** `PLAYWRIGHT_EXIT_CODE=0` · 830 passed · 0 failed · **0 skipped** · 28.0m
 
 Run at `303e50b`, three browsers, one worker, `retries: 0`, no file or database change during it.
