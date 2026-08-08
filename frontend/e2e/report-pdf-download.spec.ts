@@ -53,34 +53,55 @@ test('export button → queue → download → the downloaded Arabic PDF is a va
   )).filter(Boolean)
   expect(clientValues.length, 'the agency owner can reach no clients').toBeGreaterThan(0)
 
+  /*
+   * After choosing, the choice is VERIFIED — the switcher is allowed to disagree.
+   *
+   * The previous attempt read the project options straight after selecting a client, and the list
+   * is refetched per client: the first read could still hold the PREVIOUS client's options, so the
+   * project selected belonged to another client and `AgencyScopeSwitcher` dropped it as
+   * `belongsElsewhere`. That produced the same three-minute hang one browser further along, which
+   * is how a fix that guesses at timing looks when it is really a fix that never asserted its
+   * postcondition.
+   *
+   * `toHaveValue` after each selection is that postcondition. If the switcher resets the project,
+   * this client is skipped rather than proceeding into a builder that cannot build.
+   */
   let projectId = ''
   for (const clientValue of clientValues) {
     await clientSelect.selectOption(clientValue)
+    await expect(clientSelect).toHaveValue(clientValue)
 
-    // The project list is refetched per client; give it a beat before reading the options.
-    const found = await projectSelect
-      .locator('option')
-      .evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value).filter(Boolean))
-      .catch(() => [] as string[])
+    // The options arrive with the per-client refetch, so read until they do.
+    const readOptions = () =>
+      projectSelect.locator('option').evaluateAll((os) =>
+        os.map((o) => (o as HTMLOptionElement).value).filter(Boolean),
+      )
 
-    if (found.length > 0) {
-      projectId = found[0]
-      break
+    let values: string[] = []
+    for (let attempt = 0; attempt < 20 && values.length === 0; attempt++) {
+      values = await readOptions()
+      if (values.length === 0) await page.waitForTimeout(200)
     }
 
-    await page.waitForTimeout(400)
-    const retry = await projectSelect
-      .locator('option')
-      .evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value).filter(Boolean))
+    if (values.length === 0) continue
 
-    if (retry.length > 0) {
-      projectId = retry[0]
+    await projectSelect.selectOption(values[0])
+
+    /*
+     * The switcher runs after its queries settle and clears a project it does not recognise, so the
+     * selection is re-read a moment later. If it survives, the scope is genuinely consistent and the
+     * builder will work; if not, this client is skipped rather than walking into a dead dialog.
+     */
+    await page.waitForTimeout(600)
+    const held = (await projectSelect.evaluate((el) => (el as HTMLSelectElement).value)) === values[0]
+
+    if (held) {
+      projectId = values[0]
       break
     }
   }
 
-  expect(projectId, 'no reachable client has a project to report on').not.toBe('')
-  await projectSelect.selectOption(projectId)
+  expect(projectId, 'no reachable client has a project the switcher will hold').not.toBe('')
 
   // The page reloads its reports for the chosen project; the builder is only offered once it has one.
   await expect(page.getByRole('button', { name: /تقرير محفوظ|Saved report/ })).toBeEnabled({ timeout: 20_000 })

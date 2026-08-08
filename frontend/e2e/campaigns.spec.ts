@@ -82,13 +82,24 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
   /*
    * Performance tab renders the real charts (Spend vs Revenue) from the campaign metrics API.
    *
-   * 20s, not 15s, and the difference is measured rather than guessed: this assertion waits on a
-   * metrics round-trip AND a recharts mount, and 15s cleared it comfortably in isolation (three runs,
-   * ~14s each INCLUDING auth setup) while failing once during a full three-browser gate. That is a
-   * budget sized for an idle machine, on the one wait in this file that depends on two slow things at
-   * once. 20s is what every other data-then-chart wait in this suite already allows.
+   * This wait was 15s, then 20s, and failed again at 20s in a full three-browser gate. Raising it a
+   * third time would be the pattern this repo forbids: an intermittent failure hidden by a bigger
+   * budget. The wait is guessing a DURATION for two slow things — a metrics round-trip and a
+   * recharts mount — when only one of them is unpredictable.
+   *
+   * So it waits for the actual dependency instead. The response is awaited alongside the click, so
+   * a request already in flight cannot be missed, and the chart title then has a normal budget
+   * because the only thing left is React rendering data it already holds. Under a full gate the
+   * backend is answering against everything the earlier specs created, which is precisely why a
+   * fixed number was never going to hold.
    */
-  await page.getByRole('tab', { name: /Performance|الأداء/ }).click()
+  await Promise.all([
+    page.waitForResponse(
+      (r) => /\/campaigns\/[^/]+\/performance/.test(r.url()) && r.request().method() === 'GET',
+      { timeout: 60000 },
+    ),
+    page.getByRole('tab', { name: /Performance|الأداء/ }).click(),
+  ])
   await expect(page.getByText(/الإنفاق مقابل الإيرادات/)).toBeVisible({ timeout: 20000 })
 
   // Platforms tab lists linked external campaigns (or an empty state).
