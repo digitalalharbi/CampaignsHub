@@ -515,8 +515,7 @@ Five units landed, each with its own commit, tests, live review and docs:
 
 **The three-browser gate RAN and FAILED on firefox.** `chromium` 278 passed, `webkit` 278 passed,
 `firefox` exit 1. The runner uses `stdio: 'inherit'`, so capturing it with `tail` threw away the
-failure detail — **capture the whole run to a file, never a tail.** A firefox-only re-run identified TWO
-failures, and neither is in the five units this session shipped (none of them touches these specs):
+failure detail — **capture the whole run to a file, never a tail.** A firefox-only re-run (275 passed, **3 failed**, 13.4m) identified them, and neither is in the five units this session shipped (none of them touches these specs):
 
 1. **`campaigns.spec.ts:73` — «open a campaign detail and switch tabs».** This is `TAB-PARAM-001`
    (task #69), already open, already recorded as firefox-only, and still unreproduced by hand. The
@@ -524,6 +523,13 @@ failures, and neither is in the five units this session shipped (none of them to
 2. **`analytics-normalization.spec.ts:87` — «the source is given in words, not as the column
    value»**, failing at 21.4s, which is the shape of a locator timing out rather than an assertion
    about wrong text. NEW information: this was not previously recorded anywhere.
+3. **`verify-100.spec.ts:340` — «UX-DASH-001 … saved views are behind More filters, and still
+   reachable»** (7.5s). Also NEW. A screenshot was written to
+   `frontend/test-results/verify-100-UX-DASH-001-…-firefox/test-failed-1.png` — LOOK AT IT before
+   theorising; every other defect this session was found by looking rather than by reading code.
+
+The three-failure count comes from the isolated firefox run. The gate's own firefox leg reported
+only `exit 1`, so treat 3 as the number to drive to zero.
 
 Both need the same treatment `run-gate.mjs` argues for: order-dependent failures here are always
 firefox or webkit and never chromium, so run `npx playwright test --project firefox <spec>` ALONE
