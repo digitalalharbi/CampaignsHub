@@ -71,6 +71,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
      * read them as creative ids and answer «this content is not available on this link» for two
      * addresses that are not creatives at all.
      */
+    // ATTRIB-VIS-001 — refuses with 404 unless the link's own settings carry the section.
+    Route::get('/reports/shared/{token}/attribution', [PublicReportController::class, 'attribution'])->name('reports.shared.attribution');
     Route::get('/reports/shared/{token}/creatives', [PublicReportController::class, 'creatives'])->name('reports.shared.creatives');
     Route::get('/reports/shared/{token}/creatives/summary', [PublicReportController::class, 'creativeSummary'])->name('reports.shared.creatives.summary');
     Route::get('/reports/shared/{token}/creatives/comparison', [PublicReportController::class, 'creativeComparison'])->name('reports.shared.creatives.comparison');

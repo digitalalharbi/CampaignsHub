@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Http\Controllers;
 
+use App\Domains\Metrics\Services\AttributionTransparency;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ClientReportView;
@@ -15,6 +16,7 @@ use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -103,6 +105,13 @@ final class PublicReportController extends Controller
              * is withheld should not be drawn as an empty column with a name on it.
              */
             'creatives' => $share->creativeVisibility()->toArray(),
+            /*
+             * Which optional sections this link may open — ATTRIB-VIS-001.
+             *
+             * The page needs it before it renders: a section it may not open must never appear as a
+             * control that then refuses, and a client should not be shown a tab that answers 403.
+             */
+            'sections' => $share->sectionVisibility()->toArray(),
             'data' => $data,
         ], 'Shared report.');
     }
@@ -169,6 +178,47 @@ final class PublicReportController extends Controller
      * creative the link does not carry.** A 403 would confirm that the id exists and is simply not
      * shared, which is the fact a reader guessing ids is trying to establish.
      */
+    /**
+     * ATTRIB-VIS-001 — the Platform-Reported vs Store-Confirmed panel, for links that carry it.
+     *
+     * A separate address rather than a block inside `show()`, and that is the point rather than a
+     * convenience: with the section off there is no endpoint to answer and nothing in the document
+     * payload to strip. A client link that may not show attribution cannot leak it through the
+     * export either, because the export renders the document — which never held it.
+     *
+     * §14.9's figures are computed for the report's own window and its own project, never for
+     * «now»: a link opened in October must show what the September report said.
+     */
+    public function attribution(Request $request, string $token, AttributionTransparency $transparency): JsonResponse
+    {
+        $share = $this->shares->resolveActive($token);
+        if (! $share) {
+            return ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404);
+        }
+
+        // Fail-closed: an older link, a link that never asked, and a malformed settings blob all
+        // land here.
+        if (! $share->sectionVisibility()->attribution) {
+            return ApiResponse::error('هذا القسم غير متاح في هذا الرابط.', status: 404);
+        }
+
+        $report = Report::withoutGlobalScopes()->find($share->report_id);
+        if (! $report || $report->status !== 'completed') {
+            return ApiResponse::error('التقرير غير متاح.', status: 404);
+        }
+
+        $period = (array) (($report->data ?? [])['period'] ?? []);
+        $to = isset($period['to']) ? Carbon::parse((string) $period['to']) : Carbon::today();
+        $from = isset($period['from']) ? Carbon::parse((string) $period['from']) : $to->copy()->subDays(29);
+
+        $this->shares->log($share, 'view', $request, 'attribution');
+
+        return ApiResponse::success(
+            $transparency->build((string) $report->tenant_id, (string) $report->project_id, $from, $to),
+            'Shared attribution.',
+        );
+    }
+
     public function creatives(Request $request, string $token, SharedCreativeView $creatives): JsonResponse
     {
         [$share, $error] = $this->open($request, $token);

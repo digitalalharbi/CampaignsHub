@@ -9,6 +9,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\CreativeVisibility;
+use App\Domains\Reports\Support\ShareSections;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -82,6 +83,8 @@ final class ReportShareController extends Controller
             // The visibility switches. Absent means OFF — see CreativeVisibility.
             'creatives' => ['array'],
             'creatives.*' => ['boolean'],
+            'sections' => ['array'],
+            'sections.*' => ['boolean'],
         ]);
 
         /*
@@ -110,7 +113,16 @@ final class ReportShareController extends Controller
 
         // Stored resolved, not as ticked: `roas` beside a hidden spend is a published spend, and the
         // value object closes that combination once rather than at every surface that renders it.
-        $opts['settings'] = ['creatives' => CreativeVisibility::fromArray($opts['creatives'] ?? [])->toArray()];
+        $opts['settings'] = [
+            'creatives' => CreativeVisibility::fromArray($opts['creatives'] ?? [])->toArray(),
+            /*
+             * Which optional sections this link may open — ATTRIB-VIS-001.
+             *
+             * Resolved the same way and for the same reason: an absent or malformed key becomes
+             * «closed», so a link cannot acquire a section by omission.
+             */
+            'sections' => ShareSections::fromArray($opts['sections'] ?? [])->toArray(),
+        ];
 
         [$share, $raw] = $this->shares->create($model, $opts, $request->user()->id);
         $audit->log(action: 'report.shared_link_created', entityType: ReportShare::class, entityId: (string) $share->id);
@@ -280,6 +292,7 @@ final class ReportShareController extends Controller
             // the report's own, which is what every link made before §15.12 does.
             'form' => $s->form,
             'creatives' => $s->creativeVisibility()->toArray(),
+            'sections' => $s->sectionVisibility()->toArray(),
             'scope' => $s->scope,
             'allow_download' => $s->allow_download,
             'hide_spend' => $s->hide_spend,

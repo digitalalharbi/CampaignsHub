@@ -786,6 +786,14 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
    */
   const [form, setForm] = useState('')
   const [creatives, setCreatives] = useState<CreativeSharing>(emptyCreativeSharing)
+  /*
+   * ATTRIB-VIS-001 — off unless the operator turns it on, for this link.
+   *
+   * The attribution panel compares what the platforms claim with what the shop recorded. That is a
+   * sentence about the agency's own reporting as much as about the campaigns, so it is published
+   * deliberately or not at all.
+   */
+  const [showAttribution, setShowAttribution] = useState(false)
   const [scopeCampaigns, setScopeCampaigns] = useState<string[]>([])
   const [scopeProviders, setScopeProviders] = useState<string[]>([])
   const [created, setCreated] = useState<CreatedShare | null>(null)
@@ -811,6 +819,7 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
         mode: live ? 'live' : 'snapshot',
         ...(form ? { form } : {}),
         ...creativeSharingBody(creatives),
+        sections: { attribution: showAttribution },
         /*
          * An empty picker means "everything this report covers", which the backend fills in from the
          * report itself — see ReportShareController::scopeFor. Sending [] would be read as a ceiling of
@@ -960,6 +969,32 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
             </Field>
 
             <ShareCreativeControls projectId={projectId} value={creatives} onChange={setCreatives} />
+
+            {/*
+              ATTRIB-VIS-001 — its own control, because it publishes its own kind of thing.
+
+              Off leaves the section out of the payload and the endpoint answering 404, so there is
+              nothing to hide in the interface and nothing to strip from the export.
+            */}
+            <label
+              data-testid="share-attribution"
+              className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border p-3"
+            >
+              <input
+                type="checkbox"
+                checked={showAttribution}
+                onChange={(e) => setShowAttribution(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-[var(--brand-600)]"
+              />
+              <span className="text-sm">
+                <b className="block font-semibold">{ar ? 'إظهار شفافية الإسناد' : 'Show attribution transparency'}</b>
+                <span className="text-text-secondary">
+                  {ar
+                    ? 'يعرض ما أبلغت به المنصات مقابل ما أكده المتجر، مع نموذج الإسناد وحالة معالجة التكرار.'
+                    : 'Shows what the platforms reported against what the store confirmed, with the attribution model and deduplication status.'}
+                </span>
+              </span>
+            </label>
 
             <div className="grid gap-2 sm:grid-cols-2">
               <Toggle k="allow_download" label={ar ? 'السماح بالتنزيل' : 'Allow download'} />

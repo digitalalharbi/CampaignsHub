@@ -5,6 +5,7 @@ import { fetchSharedReport, sharedDownloadUrl } from './api'
 import type { ReportFormat } from './api'
 import { InteractiveReport } from './InteractiveReport'
 import { LiveSharedReport } from './LiveSharedReport'
+import { SharedAttributionSection } from './SharedAttributionSection'
 import { SharedCreativeSection } from './SharedCreativeSection'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
@@ -34,6 +35,13 @@ interface Shared {
    * tell the difference between «not shared» and «broken».
    */
   creatives?: { creatives: boolean }
+  /**
+   * ATTRIB-VIS-001 — which optional sections this link may open.
+   *
+   * Read for the same reason as `creatives` above: the section is mounted only when the link
+   * carries it, so there is no path that renders a control which then answers 404.
+   */
+  sections?: { attribution: boolean }
   data: Record<string, unknown>
 }
 
@@ -180,6 +188,11 @@ export function PublicReport() {
                 keeps a snapshot honest is its ceiling: the link's window stops where the document
                 does, so the section cannot show weeks the rest of the report never covered.
               */}
+              {/*
+                ATTRIB-VIS-001 — the answer to «why does your report say 1,169 orders when my shop
+                recorded 640?», for the links whose operator chose to give it.
+              */}
+              {report.sections?.attribution && <SharedAttributionSection token={token} password={accepted} />}
               {report.creatives?.creatives && (
                 <SharedCreativeSection
                   token={token}

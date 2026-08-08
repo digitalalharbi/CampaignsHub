@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Models;
 
 use App\Domains\Reports\Support\CreativeVisibility;
+use App\Domains\Reports\Support\ShareSections;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
@@ -84,6 +85,17 @@ final class ReportShare extends Model
     public function creativeVisibility(): CreativeVisibility
     {
         return CreativeVisibility::fromArray((array) (($this->settings ?? [])['creatives'] ?? []));
+    }
+
+    /**
+     * Which optional sections this link may open — fail-closed, and closed for every older link.
+     *
+     * ATTRIB-VIS-001. Sibling of `creativeVisibility()` rather than a second pattern, because the
+     * question is the same one: what did an operator deliberately choose to publish?
+     */
+    public function sectionVisibility(): ShareSections
+    {
+        return ShareSections::fromArray((array) (($this->settings ?? [])['sections'] ?? []));
     }
 
     public function isActive(): bool
