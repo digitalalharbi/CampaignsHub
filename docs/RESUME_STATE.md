@@ -537,7 +537,37 @@ production build clean · Pint clean. Live-reviewed at `/agency/settings/permiss
 `temp-invite@example.com`, saw it listed as pending with «لم يُرسل البريد بعد», withdrew it, and
 confirmed the workspace was left with no invitations and no new account.
 
-**B. Plans, subscriptions and payments** — not started. No free tier; a paid subscription required;
+**B. Plans, subscriptions and payments** — **NOT «not started»; read this before writing a line.**
+A survey on 2026-08-09 found the domain substantially built under the older `PAY-00x` unit numbers:
+`app/Domains/Subscriptions` has `SubscriptionPlan`, `Subscription`, `SubscriptionInvoice(+Line)`,
+`SubscriptionPayment`, `TrialClaim`, `UsageCounter`; services `PlanCatalogue`, `SubscriptionCheckout`,
+`SubscriptionInvoicing`, `SubscriptionLifecycle`, `SubscriptionProration`, `TrialEligibility`,
+`ApplySubscriptionPaymentEvent`; a `RunSubscriptionLifecycle` command; `app/Domains/Billing/Providers`
+has `PaymentProvider` with Moyasar, Stripe and Sandbox adapters; unauthenticated webhook sinks exist
+at `POST payments/webhook/{provider}` and `billing/webhook/{provider}`; `/admin` has
+`PlatformPaymentSettingsController`. Eight test files cover it (`SubscriptionTest`,
+`SubscriptionLifecycleTest`, `SubscriptionInvoiceTest`, `PlanChangeProrationTest`,
+`PlanCatalogueTest`, `SubscriptionNotificationTest`, `PaymentActivationSecurityTest`,
+`PlatformPaymentSettingsTest`).
+
+**So the next unit is an AUDIT against the commission's clauses, not a rebuild.** Take them one at a
+time, prove each with a test that fails first, and close only the genuine gaps:
+
+1. No free tier; a paid subscription REQUIRED to use the product.
+2. USD.
+3. A PAID introductory first month, once per entity (`TrialClaim` + `TrialEligibility` exist — check
+   what «once per entity» is keyed on, and that it is paid rather than free).
+4. Annual with a real discount.
+5. Every price, limit and duration editable from `/admin` and never hard-coded — grep for literals.
+6. **Entitlements gating real features with an in-context upgrade path rather than a bare 403.** The
+   survey found NO entitlements layer: nothing named `Entitlement` exists. This is the largest gap.
+7. The state machine end to end: introductory → active → annual → upgrade → scheduled downgrade →
+   renewal → failed payment → grace → suspended → cancel → reactivate → refund.
+8. Webhooks as the only source of truth, signature verification, idempotency, duplicate-event
+   protection (`payment_webhook_events` exists — verify all four properties hold).
+9. Provisioning strictly behind verified payment.
+10. Two webhook sinks exist (`billing/webhook` and `payments/webhook`). Two paths for one concept is
+    the same shape as `TEAM-INVITE-001` — establish which is live before building on either. No free tier; a paid subscription required;
 USD; a PAID introductory first month, once per entity; annual with a real discount; every price,
 limit and duration editable from `/admin`. Entitlements gating real features with an in-context
 upgrade path rather than a bare 403. A state machine covering introductory → active → annual →
