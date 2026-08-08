@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compact, money, num, percent, ratio } from './format'
+import { compact, money, moneyExact, num, percent, ratio } from './format'
 
 /**
  * COMPACT-ZERO-001 — the formatters may abbreviate a figure; they may not deny it.
@@ -43,5 +43,35 @@ describe('compact never rounds a real figure away to nothing', () => {
   it('percent takes a ratio, not a percentage', () => {
     expect(percent(0.021, 1)).toBe('2.1%')
     expect(percent(1)).toBe('100.0%')
+  })
+})
+
+/**
+ * COMPACT-ZERO-001's other half — one order of magnitude up.
+ *
+ * The strip these figures live in exists to carry the PRECISE value into the PDF, and it rounded
+ * every one of them. On a five-figure total that is invisible; on a cost-per it is the figure.
+ */
+describe('moneyExact', () => {
+  it('keeps the decimals on a cost-per, where they are the number', () => {
+    expect(moneyExact(29.71)).toBe('29.71 SAR')
+    expect(moneyExact(73.72)).toBe('73.72 SAR')
+    expect(moneyExact(1.83)).toBe('1.83 SAR')
+  })
+
+  it('leaves every large total reading exactly as it did', () => {
+    expect(moneyExact(96121)).toBe('96,121 SAR')
+    expect(moneyExact(96121.37)).toBe('96,121 SAR')
+    expect(moneyExact(8900)).toBe('8,900 SAR')
+  })
+
+  it('does not dress a whole number in decimals it does not have', () => {
+    expect(moneyExact(30)).toBe('30 SAR')
+    expect(moneyExact(0)).toBe('0 SAR')
+  })
+
+  it('still says nothing rather than zero for an absent figure', () => {
+    expect(moneyExact(null)).toBe('—')
+    expect(moneyExact(undefined)).toBe('—')
   })
 })

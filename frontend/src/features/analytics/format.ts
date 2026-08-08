@@ -24,10 +24,30 @@ export function money(n: number | null | undefined, currency = 'SAR'): string {
   return `${compact(n)} ${currency}`
 }
 
-/** Exact money with thousands separators (e.g. "96,122 SAR") — used so the precise figure is always
- * present (and PDF-extractable) alongside the compact display value. */
+/**
+ * Exact money with thousands separators (e.g. "96,122 SAR") — used so the precise figure is always
+ * present (and PDF-extractable) alongside the compact display value.
+ *
+ * ## Why «exact» has to keep the decimals on a small figure
+ *
+ * It rounded everything through `num()`, so a CPM of 29.71 printed «30 SAR» and a cost per order of
+ * 73.72 printed «74 SAR» — in the one strip on the page whose stated job is to carry the precise
+ * value into the PDF. On a total that runs to five figures the fraction is noise; on a cost-per it
+ * IS the figure, and a 1% misstatement of the number a report is judged on is not a rounding, it is
+ * a different answer.
+ *
+ * Same family as COMPACT-ZERO-001, which taught `compact()` not to print a non-zero cost as «0»;
+ * this is the other half of that lesson, one order of magnitude up.
+ *
+ * The threshold keeps every large total reading exactly as it did — spend, revenue and the rest are
+ * unchanged — and gives decimals only where they carry meaning.
+ */
 export function moneyExact(n: number | null | undefined, currency = 'SAR'): string {
   if (n === null || n === undefined) return '—'
+  if (Math.abs(n) < 1000 && !Number.isInteger(n)) {
+    return `${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)} ${currency}`
+  }
+
   return `${num(n)} ${currency}`
 }
 
