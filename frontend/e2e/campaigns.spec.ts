@@ -80,27 +80,25 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
 
   /*
-   * Performance tab renders the real charts (Spend vs Revenue) from the campaign metrics API.
+   * Performance tab renders the real charts from the campaign metrics API.
    *
-   * This wait was 15s, then 20s, and failed again at 20s in a full three-browser gate. Raising it a
-   * third time would be the pattern this repo forbids: an intermittent failure hidden by a bigger
-   * budget. The wait is guessing a DURATION for two slow things — a metrics round-trip and a
-   * recharts mount — when only one of them is unpredictable.
+   * Two things were wrong here, and the first one hid the second for four gates.
    *
-   * So it waits for the actual dependency instead. The response is awaited alongside the click, so
-   * a request already in flight cannot be missed, and the chart title then has a normal budget
-   * because the only thing left is React rendering data it already holds. Under a full gate the
-   * backend is answering against everything the earlier specs created, which is precisely why a
-   * fixed number was never going to hold.
+   * The assertion read the ARABIC title after `switchToEnglish` above. It passed because
+   * `CampaignPerformanceTab` never translated — every heading on that tab was hard-coded Arabic,
+   * which is the product defect this spec should have caught on its first run and instead depended
+   * on. Now that the tab is bilingual the assertion has to accept whichever language is on screen.
+   *
+   * And the wait matched the FIRST `/performance` response, while the component's skeleton is
+   * driven by whichever request is currently in flight: a second round-trip (a settling range, a
+   * project context landing late) puts it back into `isLoading` after the wait has already
+   * resolved. So the wait is now on the settled COMPONENT — Playwright polls until the chart is
+   * there — rather than on one packet arriving.
    */
-  await Promise.all([
-    page.waitForResponse(
-      (r) => /\/campaigns\/[^/]+\/performance/.test(r.url()) && r.request().method() === 'GET',
-      { timeout: 60000 },
-    ),
-    page.getByRole('tab', { name: /Performance|الأداء/ }).click(),
-  ])
-  await expect(page.getByText(/الإنفاق مقابل الإيرادات/)).toBeVisible({ timeout: 20000 })
+  await page.getByRole('tab', { name: /Performance|الأداء/ }).click()
+  await expect(
+    page.getByText(/الإنفاق مقابل الإيرادات|Spend vs revenue/),
+  ).toBeVisible({ timeout: 60000 })
 
   // Platforms tab lists linked external campaigns (or an empty state).
   await page.getByRole('tab', { name: /Platforms|المنصات/ }).click()

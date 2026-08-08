@@ -172,23 +172,37 @@ export function CampaignPerformanceTab({ campaign, projectId, range, locale }: {
 
   if (perf.isLoading) return <div className="space-y-4"><Skeleton className="h-[240px]" /><div className="grid gap-4 lg:grid-cols-2"><Skeleton className="h-[200px]" /><Skeleton className="h-[200px]" /></div></div>
 
+  /*
+   * Every heading on this tab was hard-coded Arabic.
+   *
+   * `CampaignsPage` renders the SAME chart two files away and localises it properly, which is how
+   * this survived: the project-level view reads correctly in English, so nobody following a link
+   * from it would notice that the campaign-level one does not. An English-speaking media buyer
+   * opening a campaign's Performance tab met «الإنفاق مقابل الإيرادات» over a chart of their money.
+   *
+   * Found while reading this file for an unrelated reason — the E2E spec asserts the Arabic string
+   * AFTER switching the interface to English, and it passed for four gates precisely because the
+   * component never translated.
+   */
+  const ar = locale === 'ar'
+
   return (
     <div className="space-y-4">
-      <ChartCard title="الإنفاق مقابل الإيرادات" subtitle="الاتجاه اليومي لهذه الحملة">
+      <ChartCard title={ar ? 'الإنفاق مقابل الإيرادات' : 'Spend vs revenue'} subtitle={ar ? 'الاتجاه اليومي لهذه الحملة' : 'This campaign, day by day'}>
         <SpendRevenueAreaChart data={series as unknown as Array<Record<string, unknown>>} height={240} currency={cur} />
       </ChartCard>
       <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="النتائج" subtitle="الاتجاه اليومي">
-          <MetricLineChart data={series as unknown as Array<Record<string, unknown>>} series={[{ key: 'conversions', name: 'النتائج' }]} height={190} />
+        <ChartCard title={ar ? 'النتائج' : 'Results'} subtitle={ar ? 'الاتجاه اليومي' : 'Day by day'}>
+          <MetricLineChart data={series as unknown as Array<Record<string, unknown>>} series={[{ key: 'conversions', name: ar ? 'النتائج' : 'Results' }]} height={190} />
         </ChartCard>
-        <ChartCard title="ROAS" subtitle="العائد على الإنفاق">
+        <ChartCard title="ROAS" subtitle={ar ? 'العائد على الإنفاق' : 'Return on ad spend'}>
           <MetricLineChart data={series as unknown as Array<Record<string, unknown>>} series={[{ key: 'roas', name: 'ROAS' }]} height={190} />
         </ChartCard>
-        <ChartCard title="CPA / CPC" subtitle="التكلفة">
+        <ChartCard title="CPA / CPC" subtitle={ar ? 'التكلفة' : 'Cost'}>
           <MetricLineChart data={series as unknown as Array<Record<string, unknown>>} series={[{ key: 'cpa', name: 'CPA' }, { key: 'cpc', name: 'CPC' }]} height={190} />
         </ChartCard>
-        <ChartCard title="مساهمة المنصات" subtitle="حسب الإنفاق">
-          {platformDonut.length ? <PlatformDonutChart data={platformDonut} centerLabel="الإنفاق" centerValue={compact(platformDonut.reduce((a, b) => a + b.value, 0))} height={190} /> : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">لا بيانات منصات</div>}
+        <ChartCard title={ar ? 'مساهمة المنصات' : 'Platform contribution'} subtitle={ar ? 'حسب الإنفاق' : 'By spend'}>
+          {platformDonut.length ? <PlatformDonutChart data={platformDonut} centerLabel={ar ? 'الإنفاق' : 'Spend'} centerValue={compact(platformDonut.reduce((a, b) => a + b.value, 0))} height={190} /> : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">{ar ? 'لا بيانات منصات' : 'No platform data'}</div>}
         </ChartCard>
       </div>
       {bestWorst && (
