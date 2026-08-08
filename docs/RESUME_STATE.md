@@ -515,9 +515,23 @@ Five units landed, each with its own commit, tests, live review and docs:
 
 **The three-browser gate RAN and FAILED on firefox.** `chromium` 278 passed, `webkit` 278 passed,
 `firefox` exit 1. The runner uses `stdio: 'inherit'`, so capturing it with `tail` threw away the
-failure detail — **capture the whole run to a file, never a tail.** A firefox-only re-run was started
-to identify it (`cd frontend && npx playwright test --project firefox`), writing to
-`…/scratchpad/firefox-gate.txt`; if that file is missing, run it again. Do NOT treat this as
+failure detail — **capture the whole run to a file, never a tail.** A firefox-only re-run identified TWO
+failures, and neither is in the five units this session shipped (none of them touches these specs):
+
+1. **`campaigns.spec.ts:73` — «open a campaign detail and switch tabs».** This is `TAB-PARAM-001`
+   (task #69), already open, already recorded as firefox-only, and still unreproduced by hand. The
+   gate has now reproduced it twice.
+2. **`analytics-normalization.spec.ts:87` — «the source is given in words, not as the column
+   value»**, failing at 21.4s, which is the shape of a locator timing out rather than an assertion
+   about wrong text. NEW information: this was not previously recorded anywhere.
+
+Both need the same treatment `run-gate.mjs` argues for: order-dependent failures here are always
+firefox or webkit and never chromium, so run `npx playwright test --project firefox <spec>` ALONE
+first. If it passes alone and fails in the suite, the cause is state left by an earlier spec, not the
+browser. Do NOT re-run hoping for green.
+
+Capture the whole run to a file — `run-gate.mjs` uses `stdio: 'inherit'`, and piping it through
+`tail` is what threw the detail away the first time. Do NOT treat this as
 flakiness and do NOT re-run it hoping for green: `run-gate.mjs` documents that order-dependent
 failures in this repo are always firefox or webkit and never chromium, so a browser-specific failure
 here has a cause worth finding.
