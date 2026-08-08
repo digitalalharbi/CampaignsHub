@@ -10,6 +10,7 @@ use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
+use App\Domains\Notifications\Console\RenderMailPreviews;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
 use App\Domains\Platform\Console\BackupCommand;
@@ -66,6 +67,9 @@ return Application::configure(basePath: dirname(__DIR__))
         SendDailyDigests::class,
         // MAIL-006 — the alert sweep, for the findings that should not wait until tomorrow morning.
         SendAlerts::class,
+        // MAIL-008 — every email type rendered to a file, which is the only way to review them
+        // until SMTP credentials exist.
+        RenderMailPreviews::class,
         // INTEG-SYNC-001 — the sweep that drives synced data, the token refresh that runs ahead of
         // need, and the retention that keeps raw payloads from becoming the largest table here.
         SyncAdPlatformsCommand::class,

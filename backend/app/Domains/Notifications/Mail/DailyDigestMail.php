@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Services\DigestPresenter;
+use App\Domains\Notifications\Support\MailLinks;
 use App\Support\AdPlatforms;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -102,12 +103,9 @@ final class DailyDigestMail extends Mailable
                     ? 'ملخص أمس عبر مشاريعك ومنصاتك.'
                     : 'Yesterday across your projects and platforms.',
                 'headerNote' => $this->headerNote($ar),
-                'urls' => [
-                    'preferences' => $app.'/account/notifications',
-                    'privacy' => $site.'/privacy',
-                    'terms' => $site.'/terms',
-                    'security' => $site.'/security',
-                ],
+                // One place, because the two mailables already disagreed about the unsubscribe —
+                // and the one that was wrong resolved anyway, through a redirect (MAIL-008).
+                'urls' => MailLinks::footer(),
                 't' => $this->copy($ar),
                 'totals' => [
                     'spend' => $p->money($this->digest['totals']['spend'] ?? null),

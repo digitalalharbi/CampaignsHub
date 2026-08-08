@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Mail;
 
+use App\Domains\Notifications\Support\MailLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -93,12 +94,9 @@ final class OperationalMail extends Mailable
                 : ($this->recipientName !== '' ? "Hello, {$this->recipientName}" : 'Hello'),
             'actionLabel' => $this->action ?? ($ar ? 'فتح في CampaignsHub' : 'Open in CampaignsHub'),
             'actionUrl' => $app.$this->path,
-            'urls' => [
-                'preferences' => $app.'/app/settings/notifications',
-                'privacy' => $app.'/privacy',
-                'terms' => $app.'/terms',
-                'security' => $app.'/security',
-            ],
+            // One place — see `MailLinks`. This class had the unsubscribe pointing at a path that
+            // only worked because the router happened to redirect it.
+            'urls' => MailLinks::footer(),
             't' => $ar
                 ? ['manage_preferences' => 'إدارة إشعاراتك', 'privacy' => 'الخصوصية', 'terms' => 'الشروط', 'security' => 'الأمان',
                     'why' => 'وصلتك هذه الرسالة لأنك تتابع هذا المشروع في CampaignsHub.']
