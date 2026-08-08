@@ -339,13 +339,22 @@ total it.
 `METRIC-NAMES-001` and `MAIL-009` are done. The message catalogue is complete: the digest, the four
 alerts, report-ready, billing, approval and conversation messages (`MAIL-006`), and now the account
 messages — password reset, email verification, sign-in code, member setup, invitation and security
-alert (`MAIL-009`). Remaining:
-recipient management honouring Tenant → Agency → Client → Project **fail-closed**, so a manager
-cannot widen a colleague's access through notification settings; a preferences centre listing every
-message type by category with per-type channel, frequency, projects, recipients, language, timezone
-and hour; a team notifications view showing who receives what and when it last sent; quiet hours and
-digest aggregation on top of the dedup and cooldown `AlertDispatcher` already has; admin delivery
-monitoring; and an in-product preview gallery extending `notifications:preview`.
+alert (`MAIL-009`). Recipient management is done too (`MAIL-010`): arrangements that are requests
+rather than grants, resolved against each recipient's live ceiling at send time.
+
+**Remaining, in the order the next session should take them:**
+
+| unit | what it is |
+|---|---|
+| `MAIL-011` | the preferences centre — every message type by category (الأداء / الميزانية / المحتوى / التكاملات / التقارير / التشغيل / المالية) with per-type email on/off, immediate / daily / weekly, projects, recipients, language, timezone and receiving hour. The current screen has six categories and two channels; the commission asks for per-TYPE control |
+| `MAIL-012` | a team notifications view — person, email, role, projects, message types, frequency, last message sent, email status. Most of the data already exists: `mail_deliveries` (MAIL-009), `notification_recipients` (MAIL-010), `digest_sends` |
+| `MAIL-013` | quiet hours and digest aggregation on top of the dedup and cooldown `AlertDispatcher` already has. `quiet_hours` is STORED and honoured by nothing — check before building anything new |
+| `MAIL-014` | admin email operations over `mail_deliveries` (counts, delivered/failed/awaiting credentials, type, recipient, tenant/project, time, attempts, reason, transport, template) plus an in-product preview gallery extending `notifications:preview` |
+| `TEAM-INVITE-001` | two invitation paths — see below |
+
+**Where to start reading:** `NotificationPreferenceController` (the six categories and the digest
+opt-ins), `NotificationAudience` (the fail-closed resolver every new surface should go through), and
+`TransactionalMailer` + `mail_deliveries` (the ledger `MAIL-014` renders).
 
 **B. Plans, subscriptions and payments** — not started. No free tier; a paid subscription required;
 USD; a PAID introductory first month, once per entity; annual with a real discount; every price,
