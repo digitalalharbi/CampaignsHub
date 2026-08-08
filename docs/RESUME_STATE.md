@@ -507,6 +507,24 @@ SMTP reason, one digest awaiting credentials — all three rendered with their c
 
 ---
 
+## Session — where this one stopped
+
+Five units landed, each with its own commit, tests, live review and docs:
+`MAIL-011` `d2bdc25` · `MAIL-012` `0cc9069` · `MAIL-013` `1d0ce97` · `MAIL-014` `db34025` ·
+`TEAM-INVITE-001` `91bad37`. Working tree CLEAN.
+
+**The three-browser Playwright gate was STARTED and its verdict was not read.** It runs from
+`frontend/` (`cd frontend && npm run gate` — there is no root `package.json`, and the older note
+saying `npm run gate` at the root is wrong). Output was being written to
+`/private/tmp/claude-501/-Users-mohammedalharbimacbook-Desktop/a01b53b9-d87c-4258-ba62-d0f8f04c3d16/tasks/bi2qrnzpr.output`.
+If that file is gone, RUN IT AGAIN rather than assuming: it has not passed since `2ea6943`, and
+MAIL-011 replaced a settings screen the E2E suite touches.
+
+**Next, in order:** the payments audit described under «B. Plans, subscriptions and payments» above —
+starting with the entitlements gap, which is the one clause nothing in the codebase answers at all.
+
+---
+
 ## Session — TEAM-INVITE-001, one invitation path (`91bad37`)
 
 **Two paths, two answers to «is Sara a member?».** `/settings/team` provisioned a `User` immediately
