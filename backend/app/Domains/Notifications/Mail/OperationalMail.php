@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Mail;
 
-use App\Domains\Notifications\Support\MailDesign;
-use App\Domains\Notifications\Support\MailLinks;
+use App\Domains\Notifications\Support\MailShell;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -74,22 +73,13 @@ final class OperationalMail extends Mailable
          * where the brand header, the policy footer and the unsubscribe live — and an operational
          * message that lost the unsubscribe would be the one a person reports as spam.
          */
-        $body = [
-            // The design system's own values — MAIL-DS-001. The Arabic stack leads with faces that
-            // can actually render Arabic, which the shared Latin-first stack never could.
-            'font' => MailDesign::font($ar),
-            'numericFont' => MailDesign::numericFont(),
-            'locale' => $this->lang,
-            'dir' => $ar ? 'rtl' : 'ltr',
-            'startSide' => $ar ? 'right' : 'left',
-            'brand' => 'CampaignsHub',
-            'headerNote' => $ar
-                ? 'مساعدك لمتابعة كل حملاتك الإعلانية المدفوعة من مكان واحد'
-                : 'Your assistant for every paid campaign, in one place',
-            'subject' => $this->title,
+        $body = MailShell::build(
+            lang: $this->lang,
+            subject: $this->title,
             // The line an inbox shows beside the subject. It is the DETAIL, because the subject
             // already carries the title and repeating it wastes the only preview a reader gets.
-            'preheader' => $this->detail,
+            preheader: $this->detail,
+        ) + [
             'severity' => $this->severity,
             'title' => $this->title,
             'detail' => $this->detail,
@@ -99,18 +89,9 @@ final class OperationalMail extends Mailable
                 : ($this->recipientName !== '' ? "Hello, {$this->recipientName}" : 'Hello'),
             'actionLabel' => $this->action ?? ($ar ? 'فتح في CampaignsHub' : 'Open in CampaignsHub'),
             'actionUrl' => $app.$this->path,
-            // One place — see `MailLinks`. This class had the unsubscribe pointing at a path that
-            // only worked because the router happened to redirect it.
-            'urls' => MailLinks::footer(),
-            't' => $ar
-                ? ['manage_preferences' => 'إدارة إشعاراتك', 'privacy' => 'الخصوصية', 'terms' => 'الشروط', 'security' => 'الأمان',
-                    'why' => 'وصلتك هذه الرسالة لأنك تتابع هذا المشروع في CampaignsHub.']
-                : ['manage_preferences' => 'Manage your notifications', 'privacy' => 'Privacy', 'terms' => 'Terms', 'security' => 'Security',
-                    'why' => 'You are receiving this because you follow this project in CampaignsHub.'],
         ];
 
         return new Content(view: 'mail.layout', with: $body + [
-            'year' => date('Y'),
             'slot' => view('mail.operational', $body)->render(),
         ]);
     }

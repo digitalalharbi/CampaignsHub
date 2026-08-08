@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Domains\Identity\Services;
 
 use App\Domains\Access\Models\Role;
+use App\Domains\Notifications\Mail\InvitationMail;
+use App\Domains\Notifications\Services\TransactionalMailer;
+use App\Domains\Notifications\Support\MailLinks;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Tenancy\Actions\GrantMembership;
@@ -68,16 +71,48 @@ final class InvitationService
             'role_slug' => $roleSlug,
             'project_ids' => $projectIds !== null ? json_encode(array_values($projectIds)) : null,
             'token_hash' => hash('sha256', $token),
-            'delivery_status' => 'awaiting_provider_credentials', // no mailer → never "sent"
+            // Claimed, then replaced by whatever the attempt below actually produced.
+            'delivery_status' => 'pending',
             'invited_by' => $invitedBy->id,
             'expires_at' => Carbon::now()->addHours(self::TTL_HOURS),
             'created_at' => Carbon::now(),
             'updated_at' => Carbon::now(),
         ]);
 
+        /*
+         * The message is composed and handed to the mailer — MAIL-009.
+         *
+         * This column used to be written as the literal `awaiting_provider_credentials`, and no mail
+         * was ever built. The statement was true of an install with no mailer, and it was also
+         * unconditional: with real SMTP configured it would have gone on saying the same thing while
+         * no invitation ever arrived. The status is now the OUTCOME of an attempt — see
+         * `TransactionalMailer` for the four states it can be.
+         *
+         * The dedup key is the invitation's own id, so a retried request cannot mail the same person
+         * the same invitation twice.
+         */
+        $status = TransactionalMailer::asDeliveryStatus(app(TransactionalMailer::class)->send(
+            recipient: $email,
+            mail: new InvitationMail(
+                workspace: (string) $tenant->name,
+                roleSlug: $roleSlug,
+                acceptUrl: MailLinks::to("/invite/accept?token={$token}"),
+                lang: 'ar',
+                invitedBy: (string) $invitedBy->name,
+                expiresInHours: self::TTL_HOURS,
+            ),
+            kind: 'invitation',
+            template: 'mail.invitation',
+            tenantId: (string) $tenant->id,
+            dedupKey: "invitation:{$id}",
+        ));
+
+        DB::table('workspace_invitations')->where('id', $id)
+            ->update(['delivery_status' => $status, 'updated_at' => Carbon::now()]);
+
         return [
             'id' => $id,
-            'delivery_status' => 'awaiting_provider_credentials',
+            'delivery_status' => $status,
             'dev_link' => ContactVerificationService::exposeDevSecrets() ? "/invite/accept?token={$token}" : null,
         ];
     }

@@ -127,6 +127,26 @@ export async function requestPasswordReset(input: { email: string }): Promise<vo
   await postData('/auth/forgot-password', input)
 }
 
+/**
+ * Finish a reset — MAIL-009.
+ *
+ * Deliberately returns nothing and opens no session. Proving control of an inbox is not the same as
+ * knowing the password that was just chosen, and the next screen should be the one that checks it.
+ *
+ * Every failure comes back with the same message on `token`: the server will not say whether a link
+ * is wrong or merely stale, because the difference would tell somebody holding a forwarded copy
+ * whether the address has an open request.
+ */
+export async function resetPassword(input: {
+  email: string
+  token: string
+  password: string
+  password_confirmation: string
+}): Promise<void> {
+  await ensureCsrfCookie()
+  await postData('/auth/reset-password', input)
+}
+
 /** A social sign-in provider as the sign-in page needs to render it (LOGIN-004). */
 export interface OAuthProvider {
   provider: string

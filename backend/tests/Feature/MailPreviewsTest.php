@@ -57,12 +57,16 @@ final class MailPreviewsTest extends TestCase
             'digest-daily', 'digest-weekly',
             'alert-budget', 'alert-performance', 'alert-creative', 'alert-sync',
             'report-ready', 'billing', 'approval', 'message',
+            // MAIL-009 — the messages about somebody's account rather than their campaigns.
+            'account-password-reset', 'account-email-verification', 'account-sign-in-code',
+            'account-member-setup', 'account-invitation', 'account-invitation-unknown-role',
+            'account-security-sign-in', 'account-security-sparse',
         ] as $kind) {
             $this->assertArrayHasKey("{$kind}.ar.html", $files, "{$kind} has no Arabic preview");
             $this->assertArrayHasKey("{$kind}.en.html", $files, "{$kind} has no English preview");
         }
 
-        $this->assertCount(20, $files);
+        $this->assertCount(36, $files);
     }
 
     /** A preview that rendered a blank shell would pass every other assertion here. */
@@ -102,17 +106,116 @@ final class MailPreviewsTest extends TestCase
     }
 
     /**
-     * Every message carries the way out.
+     * Every message carries the policies; only the ones a person subscribed to carry the way out.
      *
      * An unsubscribe a person cannot find is how a useful digest becomes a spam report — which costs
-     * the sending domain, not just the message.
+     * the sending domain, not just the message. But an unsubscribe on a PASSWORD RESET is an offer
+     * the product will not honour: nothing in the preference centre can switch one off, and a reader
+     * who follows that link from a security alert leaves the message that was asking them to act.
+     *
+     * Both directions are asserted, on purpose. Dropping the second half would let an account
+     * message quietly regain the link, and dropping the first would let a digest lose it — and each
+     * of those is a different kind of harm.
      */
-    public function test_every_preview_offers_the_way_out_and_the_policies(): void
+    public function test_only_subscribed_messages_offer_the_way_out(): void
     {
         foreach ($this->render() as $name => $html) {
-            $this->assertStringContainsString('/app/account/notifications', $html, "{$name} has no unsubscribe");
             $this->assertStringContainsString('/privacy', $html, "{$name} has no privacy link");
+
+            if (str_starts_with($name, 'account-')) {
+                $this->assertStringNotContainsString(
+                    '/app/account/notifications', $html,
+                    "{$name} offers to unsubscribe from a message that cannot be switched off",
+                );
+
+                continue;
+            }
+
+            $this->assertStringContainsString('/app/account/notifications', $html, "{$name} has no unsubscribe");
         }
+    }
+
+    /**
+     * A secret never travels in the subject line — MAIL-009.
+     *
+     * Subjects are the part of an email that survives everywhere: a lock screen, a notification
+     * bubble, an assistant reading mail aloud, a mail server's own logs. A six-digit code shown on a
+     * locked phone has already been delivered to whoever is holding it.
+     */
+    public function test_no_credential_message_puts_its_secret_in_the_title(): void
+    {
+        foreach ($this->render() as $name => $html) {
+            if (! str_starts_with($name, 'account-')) {
+                continue;
+            }
+
+            preg_match('/<title>(.*?)<\/title>/s', $html, $m);
+            $this->assertNotEmpty($m, "{$name} has no title");
+            $this->assertStringNotContainsString('482913', $m[1], "{$name} put the code in its title");
+            $this->assertStringNotContainsString('k7Qm3xZa', $m[1], "{$name} put the token in its title");
+        }
+    }
+
+    /**
+     * Arabic is never set in the tabular face.
+     *
+     * `SF Mono`, `Menlo` and `Consolas` carry no Arabic at all, so a place name set in one falls back
+     * per glyph and loses its joining — «الرياض» is shown as «ا ل ر ي ا ض», which is not a spacing
+     * problem but a word that stops reading as a word. Found by rendering the security template and
+     * looking at it; this is what stops it coming back.
+     */
+    public function test_no_arabic_word_is_set_in_the_face_that_cannot_join_it(): void
+    {
+        $html = $this->render()['account-security-sign-in.ar.html'];
+
+        // Every cell that names the monospace stack, with what it contains.
+        preg_match_all('/font-family:[^"]*SF Mono[^"]*"[^>]*>([^<]*)</', $html, $matches);
+        $this->assertNotEmpty($matches[1], 'the tabular face is not used at all — the fixture has drifted');
+
+        foreach ($matches[1] as $content) {
+            $this->assertDoesNotMatchRegularExpression(
+                '/\p{Arabic}/u', $content,
+                "Arabic set in a face that cannot join it: «{$content}»",
+            );
+        }
+    }
+
+    /**
+     * A fact nobody knows is omitted, never printed as «unknown».
+     *
+     * A table with three rows of «غير معروف» reads as a broken feature and teaches the reader to skip
+     * the table — which is the one part of a security message that does any work.
+     */
+    public function test_an_unknown_fact_leaves_no_row_behind(): void
+    {
+        $sparse = $this->render()['account-security-sparse.ar.html'];
+
+        $this->assertStringContainsString('الوقت', $sparse, 'the one known fact is missing');
+        foreach (['الجهاز', 'الموقع التقريبي', 'عنوان IP'] as $absent) {
+            $this->assertStringNotContainsString($absent, $sparse, "«{$absent}» was printed with nothing in it");
+        }
+    }
+
+    /**
+     * The product declines to describe a role it does not know, rather than inventing one.
+     *
+     * A description guessed for an unknown role is a statement about somebody's ACCESS that nothing
+     * checks — and access is the one thing in an invitation a reader takes literally.
+     */
+    public function test_an_unknown_role_is_named_but_not_described(): void
+    {
+        $files = $this->render();
+
+        $this->assertStringContainsString('مدير حسابات', $files['account-invitation.ar.html']);
+        $this->assertStringContainsString(
+            'متابعة المشاريع المسندة إليه',
+            $files['account-invitation.ar.html'],
+            'a known role lost its description',
+        );
+
+        $unknown = $files['account-invitation-unknown-role.ar.html'];
+        $this->assertStringContainsString('campaign_ops', $unknown, 'the unknown role is not named at all');
+        $this->assertStringNotContainsString('متابعة المشاريع المسندة إليه', $unknown, 'a description was invented');
     }
 
     /**

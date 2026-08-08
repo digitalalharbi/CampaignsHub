@@ -6,6 +6,7 @@ namespace App\Domains\Settings\Http\Controllers;
 
 use App\Domains\Access\Models\Role;
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Identity\Services\PasswordResetService;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\DTOs\MembershipGrant;
@@ -67,8 +68,15 @@ final class TeamController extends Controller
 
         $role = Role::where('tenant_id', $tenantId)->where('slug', $data['role'])->firstOrFail();
 
-        // Provision a pending member with a random password (real invite email is delivered by the
-        // Scheduled Reports & Email phase; the account is usable via password reset meanwhile).
+        /*
+         * Provision the member with a random password they will never be told — MAIL-009.
+         *
+         * That part is unchanged and correct: nobody, including this workspace's owner, should be
+         * able to sign in as a colleague. What was missing is the other half. The comment here used
+         * to say the account was «usable via password reset meanwhile», and password reset was a
+         * TODO — so every member added through this screen held an account with an unknown
+         * 24-character password and no route to a known one. The setup link below IS that route.
+         */
         $user = User::create([
             'name' => $data['name'], 'email' => $data['email'],
             'password' => Str::password(24),
@@ -90,9 +98,23 @@ final class TeamController extends Controller
             grantedBy: $request->user(),
         ));
 
+        $tenant = Tenant::query()->findOrFail($tenantId);
+        $delivery = app(PasswordResetService::class)->inviteExistingMember($user, (string) $tenant->name);
+
         $audit->log(action: 'settings.team.invited', entityType: 'user', entityId: $user->uuid, after: ['email' => $user->email, 'role' => $role->slug]);
 
-        return ApiResponse::success(['id' => $user->uuid], 'Member invited.', status: 201);
+        /*
+         * The delivery state travels back with the id.
+         *
+         * The screen that invited somebody is the only place a person will look for «did they get
+         * it?», and on an install with no mail provider the honest answer is `awaiting_credentials` —
+         * which the interface can then say out loud instead of implying an email that never left.
+         */
+        return ApiResponse::success(
+            ['id' => $user->uuid, 'delivery_status' => $delivery],
+            'Member invited.',
+            status: 201,
+        );
     }
 
     public function updateRole(Request $request, string $user, AuditLogger $audit): JsonResponse

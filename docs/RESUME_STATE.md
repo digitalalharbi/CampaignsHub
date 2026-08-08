@@ -248,7 +248,7 @@ account.
 
 ### Where this session got to — read this first
 
-Four units landed after the green isolated gate, each committed on its own and each with tests:
+Five units landed after the green isolated gate, each committed on its own and each with tests:
 
 | unit | commit | what it was |
 |---|---|---|
@@ -256,6 +256,54 @@ Four units landed after the green isolated gate, each committed on its own and e
 | `BRAND-GUARD-001` | `873ab08` | a scanner that fails the suite when a superseded identity ships anywhere outside a test |
 | `MAIL-DS-001` | `d196367` | email design tokens; an Arabic font stack that can render Arabic; tabular figures; the escaping bug that would have broken it in Outlook |
 | `METRIC-NAMES-001` | `d0b357d` | plain Arabic metric names, objective-aware layouts everywhere, `add_to_cart` promoted to a real metric |
+| `MAIL-009` | see below | the account messages, and a delivery state that is an outcome rather than a literal |
+
+### MAIL-009 — and the three holes it closed
+
+Backend **1698 passed (9957 assertions), exit 0** · Pint clean · `tsc -b` clean · oxlint 0 errors ·
+vitest **908 passed (123 files)** · production build clean.
+
+The unit was «the remaining email templates». Building them surfaced that the templates were not what
+was missing.
+
+**1. Three flows wrote «awaiting credentials» as a LITERAL and composed no message at all.**
+`InvitationService::invite()`, `RegistrationVerificationService::send()` and the mobile challenge each
+set `delivery_status => 'awaiting_provider_credentials'` unconditionally. The value was true of an
+install with no mailer, so nothing looked wrong — and it could never become false. Wire real SMTP and
+all three keep saying it while no invitation ever arrives. **Honesty that cannot change when the world
+changes is a constant, not honesty.** `TransactionalMailer` makes the status the RESULT of an attempt:
+`sent` only after the transport returns, `sandbox` for a driver that works and reaches nobody,
+`awaiting_credentials`, or `failed` with the transport's own message.
+
+**2. `/auth/forgot-password` had shipped months ago and led nowhere.** It matched the address, wrote a
+log line, and returned success — no token issued, no endpoint to consume one, no page. «تحقق من بريدك»
+pointed at an email that was never sent and a link that had nothing to open. An account whose password
+was lost was an account lost.
+
+**3. Every member added through the team screen held an account they could not sign in to.**
+`TeamController::invite` creates the user with a random 24-character password — correct, nobody should
+be able to sign in as a colleague — and the comment said the account was «usable via password reset
+meanwhile». Password reset was the TODO in (2). They now receive a setup link with its own lifetime
+(72 hours, not the reset's hour: a new member has asked for nothing and may not read their mail until
+tomorrow).
+
+**Two defects were found by rendering and looking, again.** «الرياض، السعودية» was set in the tabular
+face — `SF Mono`/`Menlo`/`Consolas` carry no Arabic, so the letters lost their joining and the word
+stopped reading as a word. And the first `claim()` caught the unique violation as its answer, which on
+PostgreSQL aborts the whole transaction: every later query on that connection answers `25P02`. A
+duplicate invitation would not have been skipped, it would have broken whatever ran after it.
+`insertOrIgnore` is the fix — same guarantee, no failed statement.
+
+**One thing deliberately NOT renamed.** `TransactionalMailer` returns `awaiting_credentials`, matching
+`digest_sends` and `MailTransportState`. The older `delivery_status` column on four tables uses
+`awaiting_provider_credentials`, and `AccountStatusPage` asserts it. Converging them would be a rename
+dressed as a cleanup — four tables and a frontend contract, to fix nothing anybody can see. There is a
+mapper at the boundary and a docblock saying why.
+
+**Open, recorded rather than half-fixed:** there are two invitation paths. `/settings/team` provisions a
+user immediately; `/app/team/invitations` uses `InvitationService` with a token and creates nobody until
+it is accepted. The settings screen is the one the interface uses. Converging them changes what the
+team list shows, so it is its own unit — `TEAM-INVITE-001`.
 
 **Three defects were found by rendering and reading, not by a failing test.** The digest's path table
 showed «الوعي» twice with the conversion path's 20,668 SAR under the awareness label; `pathLabel()`
@@ -266,10 +314,11 @@ total it.
 
 ### Still to do, in order
 
-**A. Identity, notifications and automation** — `BRAND-001`, `BRAND-GUARD-001`, `MAIL-DS-001` and
-`METRIC-NAMES-001` are done. Remaining: a dedicated template per message type (OTP, email
-verification, password reset, security alerts, team invitations, report ready, approvals, requests,
-conversations, billing, subscription, integration/OAuth) inside the design system now in place;
+**A. Identity, notifications and automation** — `BRAND-001`, `BRAND-GUARD-001`, `MAIL-DS-001`,
+`METRIC-NAMES-001` and `MAIL-009` are done. The message catalogue is complete: the digest, the four
+alerts, report-ready, billing, approval and conversation messages (`MAIL-006`), and now the account
+messages — password reset, email verification, sign-in code, member setup, invitation and security
+alert (`MAIL-009`). Remaining:
 recipient management honouring Tenant → Agency → Client → Project **fail-closed**, so a manager
 cannot widen a colleague's access through notification settings; a preferences centre listing every
 message type by category with per-type channel, frequency, projects, recipients, language, timezone

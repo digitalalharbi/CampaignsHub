@@ -77,6 +77,14 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
         ->middleware('throttle:otp-check');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password')
         ->middleware('throttle:6,1');
+    /*
+     * Public, because somebody resetting a password cannot sign in — that is what they are here for.
+     * The token in the body is the authorisation. Throttled like an OTP check: it is the one endpoint
+     * where guessing has a payoff, and `PasswordResetService` answers every failure identically so a
+     * caller learns nothing from the attempt except that it did not work.
+     */
+    Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('reset-password')
+        ->middleware('throttle:otp-check');
     // Personal Access Token issuance for non-browser API clients only.
     Route::post('/tokens', [AuthController::class, 'issueToken'])->name('tokens')
         ->middleware('throttle:6,1');

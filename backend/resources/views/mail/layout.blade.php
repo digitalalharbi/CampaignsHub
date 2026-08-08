@@ -83,18 +83,34 @@
                     {{--
                       The footer carries the three policies every portal footer carries, and the way
                       out. An unsubscribe a person cannot find is how a useful digest becomes spam.
+
+                      `$showPreferences` is FALSE for account messages — MAIL-009.
+
+                      A password reset, a sign-in code and a security alert are not subscriptions, and
+                      offering «إدارة إشعاراتك» beside one is an offer the product cannot honour: it
+                      implies the reader could turn this off, and nothing in the preference centre
+                      does or should. Worse, a person who follows that link from a security alert
+                      leaves the one message that was asking them to act. The footnote below says
+                      plainly why the message cannot be switched off instead.
                     --}}
                     <tr>
                         <td class="ch-pad" style="padding:16px 24px; background-color:#f8fafa; border-top:1px solid #e2e8e6;">
                             <div style="font-family:{!! $font !!}; font-size:12px; color:#5b6b68; line-height:1.7;">
-                                <a href="{{ $urls['preferences'] }}" style="color:#0f766e; text-decoration:underline;">{{ $t['manage_preferences'] }}</a>
-                                &nbsp;·&nbsp;
+                                @if (($showPreferences ?? true) === true)
+                                    <a href="{{ $urls['preferences'] }}" style="color:#0f766e; text-decoration:underline;">{{ $t['manage_preferences'] }}</a>
+                                    &nbsp;·&nbsp;
+                                @endif
                                 <a href="{{ $urls['privacy'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['privacy'] }}</a>
                                 &nbsp;·&nbsp;
                                 <a href="{{ $urls['terms'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['terms'] }}</a>
                                 &nbsp;·&nbsp;
                                 <a href="{{ $urls['security'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['security'] }}</a>
                             </div>
+                            @if (($footerNote ?? '') !== '')
+                                <div style="font-family:{!! $font !!}; font-size:12px; color:#8b9a97; padding-top:8px; line-height:1.7;">
+                                    {{ $footerNote }}
+                                </div>
+                            @endif
                             <div style="font-family:{!! $font !!}; font-size:12px; color:#8b9a97; padding-top:8px;">
                                 © {{ $year }} {{ $brand }}
                             </div>

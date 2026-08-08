@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Console;
 
+use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Mail\DailyDigestMail;
+use App\Domains\Notifications\Mail\InvitationMail;
 use App\Domains\Notifications\Mail\OperationalMail;
+use App\Domains\Notifications\Mail\SecurityAlertMail;
+use App\Domains\Notifications\Support\MailLinks;
 use Illuminate\Console\Command;
+use Illuminate\Mail\Mailable;
 
 /**
  * Every email this product can send, rendered to a file — MAIL-008.
@@ -62,12 +67,12 @@ final class RenderMailPreviews extends Command
         return self::SUCCESS;
     }
 
-    /** @return array<string, DailyDigestMail|OperationalMail> */
+    /** @return array<string, Mailable> */
     private function messages(string $locale): array
     {
         $ar = $locale === 'ar';
 
-        return [
+        return $this->accountMessages($locale) + [
             'digest-daily' => new DailyDigestMail($this->digest(), $locale, $ar ? 'محمد' : 'Mohammed', 'daily'),
             'digest-weekly' => new DailyDigestMail($this->digest(weekly: true), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly'),
 
@@ -157,6 +162,98 @@ final class RenderMailPreviews extends Command
                 context: $ar ? 'متجر تجريبي' : 'Demo store',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/conversations', action: $ar ? 'فتح المحادثة' : 'Open the conversation',
+            ),
+        ];
+    }
+
+    /**
+     * The messages about somebody's ACCOUNT — MAIL-009.
+     *
+     * Kept in their own method because they are the ones nobody looks at until they are wrong. A
+     * digest is read every morning and a broken one is reported by lunchtime; a password reset is read
+     * once, by somebody already locked out, who has no way to tell anybody that the button did not
+     * render. These are the templates that most need a person to open them on purpose.
+     *
+     * The example URLs carry realistic token lengths, because a 64-character token is what actually
+     * breaks a 600px table — a preview with `?token=abc` proves the layout for a case that never
+     * happens.
+     *
+     * @return array<string, Mailable>
+     */
+    private function accountMessages(string $locale): array
+    {
+        $ar = $locale === 'ar';
+        $app = MailLinks::app();
+        $token = str_repeat('k7Qm3xZa', 8);
+
+        return [
+            'account-password-reset' => new CredentialMail(
+                purpose: CredentialMail::PASSWORD_RESET, lang: $locale,
+                url: "{$app}/reset-password?token={$token}&email=mohammed%40example.com",
+                expiresInMinutes: 60,
+            ),
+
+            'account-email-verification' => new CredentialMail(
+                purpose: CredentialMail::EMAIL_VERIFICATION, lang: $locale,
+                url: "{$app}/signup/status?request=01J9Z0PY8QF3T4V6&token={$token}",
+                expiresInMinutes: 1440,
+            ),
+
+            // The code path, which the two above do not exercise: a different block, a different
+            // warning, and the one place `letter-spacing` and the tabular face have to hold.
+            'account-sign-in-code' => new CredentialMail(
+                purpose: CredentialMail::SIGN_IN_CODE, lang: $locale,
+                code: '482913', expiresInMinutes: 15,
+            ),
+
+            'account-member-setup' => new CredentialMail(
+                purpose: CredentialMail::MEMBER_SETUP, lang: $locale,
+                url: "{$app}/reset-password?token={$token}&email=sara%40example.com",
+                expiresInMinutes: 4320,
+                workspace: $ar ? 'وكالة المدى' : 'Almada Agency',
+            ),
+
+            'account-invitation' => new InvitationMail(
+                workspace: $ar ? 'وكالة المدى' : 'Almada Agency',
+                roleSlug: 'manager',
+                acceptUrl: "{$app}/invite/accept?token={$token}",
+                lang: $locale,
+                invitedBy: $ar ? 'محمد الحربي' : 'Mohammed Alharbi',
+            ),
+
+            /*
+             * An invitation to a role the map does not carry.
+             *
+             * Rendered on purpose: the name falls back to the slug and the DESCRIPTION disappears
+             * entirely. A reviewer needs to see that the card does not collapse or leave a dangling
+             * label when the product declines to describe somebody's access.
+             */
+            'account-invitation-unknown-role' => new InvitationMail(
+                workspace: $ar ? 'وكالة المدى' : 'Almada Agency',
+                roleSlug: 'campaign_ops',
+                acceptUrl: "{$app}/invite/accept?token={$token}",
+                lang: $locale,
+            ),
+
+            'account-security-sign-in' => new SecurityAlertMail(
+                event: SecurityAlertMail::NEW_SIGN_IN, lang: $locale,
+                recipientName: $ar ? 'محمد' : 'Mohammed',
+                at: '2026-08-15 09:42',
+                device: 'Chrome · macOS',
+                location: $ar ? 'الرياض، السعودية' : 'Riyadh, Saudi Arabia',
+                ip: '176.44.12.90',
+            ),
+
+            /*
+             * The same message with everything unknown but the time.
+             *
+             * A facts table where three of four rows are absent is the case that reveals whether
+             * omission was implemented or whether the rows quietly became «غير معروف».
+             */
+            'account-security-sparse' => new SecurityAlertMail(
+                event: SecurityAlertMail::PASSWORD_CHANGED, lang: $locale,
+                recipientName: $ar ? 'محمد' : 'Mohammed',
+                at: '2026-08-15 09:42',
             ),
         ];
     }

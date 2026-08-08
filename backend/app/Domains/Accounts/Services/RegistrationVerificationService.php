@@ -6,6 +6,9 @@ namespace App\Domains\Accounts\Services;
 
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Models\RegistrationVerification;
+use App\Domains\Notifications\Mail\CredentialMail;
+use App\Domains\Notifications\Services\TransactionalMailer;
+use App\Domains\Notifications\Support\MailLinks;
 use App\Domains\Requests\Services\ContactVerificationService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -57,23 +60,67 @@ final class RegistrationVerificationService
             'registration_request_id' => $request->getKey(),
             'channel' => $channel,
             'token_hash' => hash('sha256', $secret),
-            'delivery_status' => 'awaiting_provider_credentials',
+            'delivery_status' => 'pending',
             'expires_at' => $expiresAt,
         ])->save();
 
         $dev = ContactVerificationService::exposeDevSecrets();
+        $path = '/signup/status?request='.$request->getKey().'&token='.$secret;
+        $status = $this->deliver($request, $channel, $path, $verification);
 
         return [
             'channel' => $channel,
-            // Never 'sent'. No provider is wired, and saying otherwise would be the exact claim the
-            // contract forbids.
-            'delivery_status' => 'awaiting_provider_credentials',
-            'dev_link' => $dev && $channel === 'email'
-                ? '/signup/status?request='.$request->getKey().'&token='.$secret
-                : null,
+            /*
+             * The OUTCOME of an attempt — MAIL-009.
+             *
+             * This was the literal `awaiting_provider_credentials`, and no message was ever composed.
+             * True of an install with no mailer, and unconditionally so: configure real SMTP and it
+             * would still have said the same thing while no applicant ever received a link. The
+             * honest state is now whatever `TransactionalMailer` actually achieved.
+             */
+            'delivery_status' => $status,
+            'dev_link' => $dev && $channel === 'email' ? $path : null,
             'dev_code' => $dev && $channel === 'mobile' ? $secret : null,
             'expires_at' => $expiresAt->toIso8601String(),
         ];
+    }
+
+    /**
+     * Attempt delivery on the channel this challenge belongs to.
+     *
+     * Email is composed and sent. MOBILE IS NOT: there is no SMS provider, `NullSmsProvider` reports
+     * so, and emailing a mobile code to an address the applicant has not proved they own would leak
+     * one channel's secret into another. It stays `awaiting_provider_credentials`, which for that
+     * channel is still the truthful answer.
+     */
+    private function deliver(
+        RegistrationRequest $request,
+        string $channel,
+        string $path,
+        RegistrationVerification $verification,
+    ): string {
+        if ($channel !== 'email') {
+            $verification->forceFill(['delivery_status' => 'awaiting_provider_credentials'])->save();
+
+            return 'awaiting_provider_credentials';
+        }
+
+        $status = TransactionalMailer::asDeliveryStatus(app(TransactionalMailer::class)->send(
+            recipient: (string) $request->email,
+            mail: new CredentialMail(
+                purpose: CredentialMail::EMAIL_VERIFICATION,
+                lang: 'ar',
+                url: MailLinks::to($path),
+                expiresInMinutes: self::EMAIL_TTL_MINUTES,
+            ),
+            kind: 'email_verification',
+            template: 'mail.credential',
+            dedupKey: 'registration_email:'.$verification->getKey(),
+        ));
+
+        $verification->forceFill(['delivery_status' => $status])->save();
+
+        return $status;
     }
 
     /**

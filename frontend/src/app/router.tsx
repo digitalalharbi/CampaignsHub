@@ -4,6 +4,7 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { RegisterPage } from '@/features/auth/RegisterPage'
 import { AccountStatusPage } from '@/features/signup/AccountStatusPage'
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
+import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { CampaignDetailPage } from '@/features/campaigns/CampaignDetailPage'
 import { CampaignsPage } from '@/features/campaigns/CampaignsPage'
@@ -136,6 +137,13 @@ export const router = createBrowserRouter(withErrorBoundary([
    */
   { path: '/signup/status', element: <AccountStatusPage /> },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
+  /*
+   * Where the reset link lands, carrying `?token=` and `?email=` — MAIL-009.
+   *
+   * Public, and it has to be: the person opening it cannot sign in, which is why they are here. The
+   * token in the URL is the authorisation, and the server refuses a stale or wrong one identically.
+   */
+  { path: '/reset-password', element: <ResetPasswordPage /> },
   { path: '/requests/new', element: <RequestIntakePage /> },
   { path: '/requests/track', element: <RequestTrackPage /> },
   // Public policy + company pages behind the footer links. One route with a slug so adding a page is a

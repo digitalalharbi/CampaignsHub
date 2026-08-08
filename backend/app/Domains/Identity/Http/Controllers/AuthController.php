@@ -6,6 +6,7 @@ namespace App\Domains\Identity\Http\Controllers;
 
 use App\Domains\Identity\Http\Requests\LoginRequest;
 use App\Domains\Identity\Resources\UserResource;
+use App\Domains\Identity\Services\PasswordResetService;
 use App\Domains\Identity\Services\SignInMethodResolver;
 use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Tenancy\Enums\Portal;
@@ -146,21 +147,50 @@ final class AuthController extends Controller
     }
 
     /**
-     * Password-reset request. Responds with the SAME generic message whether or not the account
-     * exists (no account enumeration). Actual email delivery depends on mail credentials — until a
-     * mailer is configured this records the intent in the log and returns success (Awaiting
-     * Credentials), so the UI flow is complete end-to-end without leaking real vs. unknown emails.
+     * Password-reset request — MAIL-009.
+     *
+     * Responds with the SAME generic message whether or not the account exists. That is not
+     * politeness: an unauthenticated form that answers differently for a known address is a directory
+     * of who has an account here, and it is the cheapest one a product can offer.
+     *
+     * The delivery state is deliberately NOT in the response. Whether a message was sent, is awaiting
+     * credentials, or failed is exactly the fact that would distinguish a real address from an unknown
+     * one — so it lives in `mail_deliveries`, where an operator can read it and a stranger cannot.
+     *
+     * What used to be here was a log line and a TODO: no token was issued and no reset endpoint
+     * existed, so «check your email» pointed at nothing and an account with a lost password was lost.
      */
-    public function forgotPassword(Request $request): JsonResponse
+    public function forgotPassword(Request $request, PasswordResetService $resets): JsonResponse
     {
         $data = $request->validate(['email' => ['required', 'email']]);
 
-        if (User::where('email', $data['email'])->exists()) {
-            // TODO(Awaiting Credentials): once a mailer is configured, dispatch the reset link here.
-            logger()->info('Password reset requested', ['email' => $data['email']]);
-        }
+        $resets->request((string) $data['email']);
 
         return ApiResponse::success(null, __('api.password_reset_sent'));
+    }
+
+    /**
+     * Consume a reset link and set the new password.
+     *
+     * Public — the person using it cannot sign in by definition, which is the whole point. The token
+     * is the authorisation, and `PasswordResetService` answers every failure identically so a stale
+     * link cannot be used to probe for open requests.
+     *
+     * No session is opened on success. Signing somebody in because they proved control of an email
+     * inbox skips the password they have just chosen, and the next screen should be the one that
+     * checks it.
+     */
+    public function resetPassword(Request $request, PasswordResetService $resets): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email'],
+            'token' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $resets->reset((string) $data['email'], (string) $data['token'], (string) $data['password']);
+
+        return ApiResponse::success(null, __('api.password_reset_done'));
     }
 
     /**
