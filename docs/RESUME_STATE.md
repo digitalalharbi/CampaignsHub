@@ -246,7 +246,44 @@ account.
   rather than the 100 it was created with. A live link that does not move is a snapshot with a
   longer name.
 
-### Exact next task
+### Exact next task — two large commissions, in this order
+
+Both were given while the §14 work was finishing. Neither is started beyond the first unit noted
+below. They are recorded in full here because the instruction was «do not come back until they are
+done», which means whoever reads this next is the one finishing them.
+
+**A. Identity, notifications and automation.** The official identity is
+«CampaignsHub — كل حملاتك الإعلانية المدفوعة في مكان واحد».
+
+- `BRAND-001` — **DONE** (`16985db`). Tagline and description in both languages in
+  `config/brand.php` and `lib/brand.ts`; title, description, OG, Twitter card and structured data
+  built from them; `mediabuying-api` gone from the health endpoint; the homepage eyebrow no longer
+  says «الميديا باينج». Pinned by `brand.test.ts`.
+- Still to do: a dedicated template per message type (OTP, verification, password reset, security
+  alerts, invitations, the digests and alerts already built, report ready, approvals, requests,
+  conversations, billing, subscription, integration/OAuth) inside ONE email design system;
+  typography with a strong email-safe fallback; recipient management honouring
+  Tenant → Agency → Client → Project scope **fail-closed** so a manager cannot widen a colleague's
+  access through notification settings; a preferences centre listing every message type by category
+  with per-type channel, frequency, projects, recipients, language, timezone and hour; a team
+  notifications view; quiet hours and digest aggregation on top of the dedup and cooldown that
+  `AlertDispatcher` already has; admin delivery monitoring; and an in-product preview gallery
+  extending `notifications:preview`.
+
+**B. Plans, subscriptions and payments.** No free tier; a paid subscription is required to use the
+product; USD; an introductory first month that is PAID and once-per-entity; annual with a real
+discount; every price, limit and duration editable from `/admin` and never hard-coded. Entitlements
+must gate real features with an in-context upgrade path rather than a bare 403. A subscription state
+machine covering introductory → active → annual → upgrade → scheduled downgrade → renewal → failed
+payment → grace → suspended → cancel → reactivate → refund. Moyasar and Stripe behind the existing
+provider abstraction, with webhooks as the only source of truth, signature verification,
+idempotency and duplicate-event protection. Provisioning stays strictly behind verified payment.
+
+**Standing constraints for both:** every figure from the Unified Data Pipeline that the dashboard and
+reports use — an email and a dashboard must never disagree for the same period and scope. Nothing
+claims live sending or live payments without real credentials; both stay `Awaiting Credentials`.
+
+### Superseded next task
 
 The tree is clean and every contract item below §14 is now closed. In priority order:
 
