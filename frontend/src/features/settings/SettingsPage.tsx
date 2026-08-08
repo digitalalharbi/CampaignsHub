@@ -5,6 +5,7 @@ import { DisclaimerTab } from './tabs/DisclaimerTab'
 import { TeamTab } from './tabs/TeamTab'
 import { NotificationsTab } from './tabs/NotificationsTab'
 import { NotificationRecipients } from './tabs/NotificationRecipients'
+import { TeamNotifications } from './tabs/TeamNotifications'
 import { SecurityTab } from './tabs/SecurityTab'
 import { BrandingTab } from './tabs/BrandingTab'
 import { ClientsTab } from './tabs/ClientsTab'
@@ -87,6 +88,12 @@ export function SettingsPage({ only, title, subtitle }: Props = {}) {
             <div className="space-y-6">
               <NotificationsTab />
               <NotificationRecipients />
+              {/*
+                Third, and last — MAIL-012. «What everyone actually receives» is the read a manager
+                does when something has already gone wrong, so it sits below the two screens that
+                change things rather than above them.
+              */}
+              <TeamNotifications />
             </div>
           )}
           {tab === 'security' && <SecurityTab />}

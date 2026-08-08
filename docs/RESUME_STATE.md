@@ -346,7 +346,6 @@ rather than grants, resolved against each recipient's live ceiling at send time.
 
 | unit | what it is |
 |---|---|
-| `MAIL-012` | a team notifications view — person, email, role, projects, message types, frequency, last message sent, email status. Most of the data already exists: `mail_deliveries` (MAIL-009), `notification_recipients` (MAIL-010), `digest_sends` |
 | `MAIL-013` | quiet hours and digest aggregation on top of the dedup and cooldown `AlertDispatcher` already has. `quiet_hours` is STORED and honoured by nothing — check before building anything new |
 | `MAIL-014` | admin email operations over `mail_deliveries` (counts, delivered/failed/awaiting credentials, type, recipient, tenant/project, time, attempts, reason, transport, template) plus an in-product preview gallery extending `notifications:preview` |
 | `TEAM-INVITE-001` | two invitation paths — see below |
@@ -404,6 +403,39 @@ summary on and the hour to 6, saved, then ticked an unrelated per-message box an
 digest and the hour survived, which is the regression above. The project picker offered five projects,
 three of them named «Q3 Launch — Demo», each qualified by its client. The demo row was deleted
 afterwards, leaving the account exactly as it was found (no preference row).
+
+---
+
+## Session — MAIL-012, the team notification board (`PENDING`)
+
+**What it is.** `GET /settings/notifications/team` behind `settings.manage`, and a board under
+Settings → Notifications. Per person: name, address, roles, portal, the projects they cover, the
+categories they would actually receive by email, their digest rhythms, whether a manager arranged
+them, the last message attempted at them, and one word for the state.
+
+**The unit is the two states that look identical from outside.** «لا يصله شيء» — every category off,
+no digest, no alerts, so nothing will ever arrive — and «لم يُرسل شيء بعد» — subscribed, and a quiet
+week. Both render as an empty inbox. A table printing «—» for both is read as the first every time,
+which is how a real misconfiguration sits for a month.
+
+**Two ledgers, not one.** `mail_deliveries` holds transactional messages by address (MAIL-009);
+`digest_sends` holds digests and alerts by user and period (MAIL-003, MAIL-006). Reading either alone
+reports «nothing has ever been sent» to somebody who receives a summary every morning.
+
+**Fail-closed, the same rule as the recipient screen.** Only people whose reachable projects overlap
+the reader's own are listed, and only the overlapping projects are named — the board carries
+colleagues, their clients and their addresses.
+
+**Found by opening the screen.** A client-portal contact appeared under a heading that says «الفريق».
+They belong on the board — they receive report and billing mail, and «the client contact has every
+email switched off» is exactly what it exists to surface — so the row now names the portal. The first
+attempt at that vocabulary guessed `client` and `advertiser`; the `Portal` enum has `portal` and
+`app`, which is precisely the pair a guess gets backwards.
+
+**Gates:** backend suite green (see below) · frontend **922 passed** (125 files) · `tsc -b`, oxlint
+(0 errors) and the production build clean · Pint clean. Live-reviewed at
+`/agency/settings` → الإشعارات: five people, each with their portal, their client-qualified projects
+and «لم يُرسل شيء بعد» — correct, because no provider is wired and nothing has been sent in dev.
 
 **B. Plans, subscriptions and payments** — not started. No free tier; a paid subscription required;
 USD; a PAID introductory first month, once per entity; annual with a real discount; every price,

@@ -283,3 +283,35 @@ export function useNotifRecipientActions() {
     }),
   }
 }
+
+// ---- Team notification status (MAIL-012) ---------------------------------------------------------
+
+export interface TeamNotificationPerson {
+  user_id: number
+  name: string
+  email: string | null
+  roles: string[]
+  /** `agency` · `client` · `advertiser` — a client contact receives notifications too. */
+  portal: string
+  /** Client-qualified, and only the projects the reader can reach themselves. */
+  projects: string[]
+  categories: string[]
+  rhythms: { daily: boolean; weekly: boolean; alerts: boolean }
+  arranged_by_manager: boolean
+  last_message: { at: string | null; kind: string; status: string; source: string } | null
+  /** `silent` · `never_sent` · `sent` · `awaiting_credentials` · `failed` · `sandbox` */
+  state: string
+}
+
+export interface TeamNotifications {
+  people: TeamNotificationPerson[]
+  email_provider_configured: boolean
+  available_categories: string[]
+}
+
+export function useTeamNotifications() {
+  return useQuery({
+    queryKey: ['settings', 'notif-team'],
+    queryFn: () => getData<TeamNotifications>('/settings/notifications/team'),
+  })
+}
