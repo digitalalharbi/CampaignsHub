@@ -68,10 +68,13 @@ export function MarketingPage() {
           {/*
             BRAND-001 — the product's own words, not the industry's.
 
-            This read «منصة إدارة الميديا باينج», a transliteration of the old positioning, sitting
-            directly above the official tagline. «الحملات الإعلانية المدفوعة» is what the rest of the
-            product calls this, and a visitor should not have to know the English term to read the
-            first line of the homepage.
+            This transliterated «media buying» into Arabic and sat directly above the official
+            tagline, so the first line of the homepage asked a visitor to know an English industry
+            term. «الحملات الإعلانية المدفوعة» is what the rest of the product calls this.
+
+            The superseded wording is deliberately not repeated here: `BrandIdentityGuardTest`
+            fails on it wherever it appears outside a test, which is what stops a rename from
+            decaying back into a habit.
           */}
           {ar ? 'منصة إدارة الحملات الإعلانية المدفوعة' : 'Paid advertising management platform'}
         </span>
