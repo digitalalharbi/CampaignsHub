@@ -246,7 +246,52 @@ account.
   rather than the 100 it was created with. A live link that does not move is a snapshot with a
   longer name.
 
-### Exact next task — two large commissions, in this order
+### Where this session got to — read this first
+
+Four units landed after the green isolated gate, each committed on its own and each with tests:
+
+| unit | commit | what it was |
+|---|---|---|
+| `BRAND-001` | `16985db` | the official identity in one place; title/description/OG/Twitter/structured data built from it; the old service name gone from the health endpoint |
+| `BRAND-GUARD-001` | `873ab08` | a scanner that fails the suite when a superseded identity ships anywhere outside a test |
+| `MAIL-DS-001` | `d196367` | email design tokens; an Arabic font stack that can render Arabic; tabular figures; the escaping bug that would have broken it in Outlook |
+| `METRIC-NAMES-001` | `d0b357d` | plain Arabic metric names, objective-aware layouts everywhere, `add_to_cart` promoted to a real metric |
+
+**Three defects were found by rendering and reading, not by a failing test.** The digest's path table
+showed «الوعي» twice with the conversion path's 20,668 SAR under the awareness label; `pathLabel()`
+silently fell back to Awareness for any key it did not recognise. `{{ $font }}` escaped the quotes in
+the Arabic stack, which Outlook cannot parse — the exact failure the stack exists to prevent. And
+«الإضافة للسلة» was collected and read by the funnel but absent from the pivot, so no surface could
+total it.
+
+### Still to do, in order
+
+**A. Identity, notifications and automation** — `BRAND-001`, `BRAND-GUARD-001`, `MAIL-DS-001` and
+`METRIC-NAMES-001` are done. Remaining: a dedicated template per message type (OTP, email
+verification, password reset, security alerts, team invitations, report ready, approvals, requests,
+conversations, billing, subscription, integration/OAuth) inside the design system now in place;
+recipient management honouring Tenant → Agency → Client → Project **fail-closed**, so a manager
+cannot widen a colleague's access through notification settings; a preferences centre listing every
+message type by category with per-type channel, frequency, projects, recipients, language, timezone
+and hour; a team notifications view showing who receives what and when it last sent; quiet hours and
+digest aggregation on top of the dedup and cooldown `AlertDispatcher` already has; admin delivery
+monitoring; and an in-product preview gallery extending `notifications:preview`.
+
+**B. Plans, subscriptions and payments** — not started. No free tier; a paid subscription required;
+USD; a PAID introductory first month, once per entity; annual with a real discount; every price,
+limit and duration editable from `/admin`. Entitlements gating real features with an in-context
+upgrade path rather than a bare 403. A state machine covering introductory → active → annual →
+upgrade → scheduled downgrade → renewal → failed payment → grace → suspended → cancel → reactivate →
+refund. Moyasar and Stripe behind the existing provider abstraction, webhooks as the only source of
+truth, signature verification, idempotency, duplicate-event protection. Provisioning strictly behind
+verified payment.
+
+**Standing constraints:** every figure from the Unified Data Pipeline the dashboard and reports use —
+an email and a dashboard must never disagree for the same period and scope. Sending and payments
+stay `Awaiting Credentials` until real credentials exist. `TAB-PARAM-001` stays open for monitoring
+and must not block independent units.
+
+### The commissions, in full
 
 Both were given while the §14 work was finishing. Neither is started beyond the first unit noted
 below. They are recorded in full here because the instruction was «do not come back until they are
