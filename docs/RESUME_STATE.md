@@ -438,7 +438,7 @@ and «لم يُرسل شيء بعد» — correct, because no provider is wired 
 
 ---
 
-## Session — MAIL-013, quiet hours and one bulletin (`PENDING`)
+## Session — MAIL-013, quiet hours and one bulletin (`1d0ce97`)
 
 **Quiet hours were a promise the product did not keep.** Stored since MAIL-004, and the only reader
 was `NotificationDispatcher`'s email LEDGER row — which sends no mail — comparing the window against
