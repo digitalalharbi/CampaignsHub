@@ -82,7 +82,7 @@ export const SPECS: Record<string, Spec> = {
     hint: { ar: 'متوسط عدد مرات رؤية الشخص الواحد للإعلان = الظهور ÷ الوصول.', en: 'How many times the average person saw the ad — impressions ÷ reach.' },
   },
   cpm: {
-    label: { ar: 'CPM', en: 'CPM' },
+    label: { ar: 'تكلفة الألف ظهور', en: 'Cost per 1,000 impressions' },
     format: money,
     derived: true,
     invertGood: true,
@@ -94,13 +94,13 @@ export const SPECS: Record<string, Spec> = {
     hint: { ar: 'عدد النقرات على الإعلان.', en: 'How many times the ad was clicked.' },
   },
   ctr: {
-    label: { ar: 'CTR', en: 'CTR' },
+    label: { ar: 'معدل النقر', en: 'Click-through rate' },
     format: pct2,
     derived: true,
     hint: { ar: 'نسبة النقر = النقرات ÷ الظهور. تقيس مدى جذب الإعلان.', en: 'Click-through rate — clicks ÷ impressions. How compelling the ad is.' },
   },
   cpc: {
-    label: { ar: 'CPC', en: 'CPC' },
+    label: { ar: 'تكلفة النقرة', en: 'Cost per click' },
     format: money,
     derived: true,
     invertGood: true,
@@ -128,7 +128,7 @@ export const SPECS: Record<string, Spec> = {
     hint: { ar: 'نسبة من أكمل الفيديو من إجمالي من بدأه.', en: 'The share of viewers who watched to the end.' },
   },
   engagements: {
-    label: { ar: 'التفاعلات', en: 'Engagements' },
+    label: { ar: 'التفاعل', en: 'Engagement' },
     format: num,
     hint: { ar: 'إعجاب، تعليق، مشاركة، حفظ — كما تحسبها المنصة.', en: 'Likes, comments, shares and saves, as the platform counts them.' },
   },
@@ -139,7 +139,7 @@ export const SPECS: Record<string, Spec> = {
     hint: { ar: 'التفاعلات ÷ الظهور.', en: 'Engagements ÷ impressions.' },
   },
   cpe: {
-    label: { ar: 'CPE', en: 'CPE' },
+    label: { ar: 'تكلفة التفاعل', en: 'Cost per engagement' },
     format: money,
     derived: true,
     invertGood: true,
@@ -156,7 +156,7 @@ export const SPECS: Record<string, Spec> = {
     hint: { ar: 'العملاء المحتملون الذين اجتازوا تأهيل فريقك.', en: 'Leads your team has qualified.' },
   },
   cpl: {
-    label: { ar: 'CPL', en: 'CPL' },
+    label: { ar: 'تكلفة العميل المحتمل', en: 'Cost per lead' },
     format: money,
     derived: true,
     invertGood: true,
@@ -176,13 +176,23 @@ export const SPECS: Record<string, Spec> = {
     derived: true,
     hint: { ar: 'النتائج ÷ النقرات.', en: 'Results ÷ clicks.' },
   },
+  add_to_cart: {
+    label: { ar: 'الإضافة للسلة', en: 'Add to cart' },
+    format: num,
+    hint: { ar: 'عدد مرات إضافة منتج إلى السلة بعد الإعلان.', en: 'How many times a product was added to a basket after the ad.' },
+  },
+  checkout: {
+    label: { ar: 'بدء الدفع', en: 'Checkout started' },
+    format: num,
+    hint: { ar: 'من بدأ خطوة الدفع — ليس طلبًا مكتملًا.', en: 'People who began checkout — not a completed order.' },
+  },
   purchases: {
-    label: { ar: 'المشتريات', en: 'Purchases' },
+    label: { ar: 'الطلبات', en: 'Orders' },
     format: num,
     hint: { ar: 'عمليات الشراء التي أبلغت بها المنصات — لا سجل المتجر.', en: 'Purchases the platforms reported — not the store’s own ledger.' },
   },
   revenue: {
-    label: { ar: 'الإيرادات', en: 'Revenue' },
+    label: { ar: 'قيمة الطلبات', en: 'Order value' },
     format: money,
     hint: { ar: 'قيمة المبيعات كما تقدّرها بكسلات المنصات.', en: 'Sales value as the platforms’ pixels estimate it.' },
   },
@@ -194,7 +204,7 @@ export const SPECS: Record<string, Spec> = {
     hint: { ar: 'الإنفاق ÷ النتائج، لهذا الهدف وحده.', en: 'Spend ÷ results, for this objective alone.' },
   },
   roas: {
-    label: { ar: 'ROAS', en: 'ROAS' },
+    label: { ar: 'العائد على الإنفاق', en: 'Return on ad spend' },
     format: times,
     derived: true,
     hint: { ar: 'العائد على الإنفاق الإعلاني = الإيراد ÷ الإنفاق.', en: 'Return on ad spend — revenue ÷ spend.' },
@@ -206,12 +216,12 @@ export const SPECS: Record<string, Spec> = {
     hint: { ar: 'الإيراد ÷ عدد المشتريات.', en: 'Revenue ÷ purchases.' },
   },
   installs: {
-    label: { ar: 'التثبيتات', en: 'Installs' },
+    label: { ar: 'التحميلات', en: 'Installs' },
     format: num,
     hint: { ar: 'عدد مرات تثبيت التطبيق المنسوبة للحملة.', en: 'App installs attributed to the campaign.' },
   },
   cpi: {
-    label: { ar: 'CPI', en: 'CPI' },
+    label: { ar: 'تكلفة التحميل', en: 'Cost per install' },
     format: money,
     derived: true,
     invertGood: true,
@@ -251,9 +261,15 @@ const OBJECTIVE_LAYOUTS: Record<string, Layout> = {
     primary: ['leads', 'cpl', 'conversion_rate', 'spend'],
     secondary: ['qualified_leads', 'clicks', 'ctr', 'cpc', 'impressions', 'landing_page_views'],
   },
+  /*
+   * Sales leads with the order, its cost, its value and the return — the four a person decides on.
+   *
+   * «الإضافة للسلة» heads the secondary row rather than the primary one: it is a step ON THE WAY to
+   * an order, so it explains a number rather than being one, and a five-card row stops being scanned.
+   */
   sales: {
     primary: ['purchases', 'cpa', 'revenue', 'roas'],
-    secondary: ['spend', 'aov', 'conversion_rate', 'clicks', 'ctr', 'cpc', 'impressions', 'landing_page_views'],
+    secondary: ['add_to_cart', 'checkout', 'conversion_rate', 'spend', 'aov', 'clicks', 'ctr', 'cpc', 'impressions', 'landing_page_views'],
   },
   app_installs: {
     primary: ['installs', 'cpi', 'registrations', 'spend'],
@@ -288,7 +304,7 @@ const PATH_LAYOUTS: Record<string, Layout> = {
   },
   conversion: {
     primary: ['conversions', 'cpa', 'conversion_rate', 'spend'],
-    secondary: ['purchases', 'revenue', 'roas', 'aov', 'leads', 'cpl', 'clicks', 'ctr'],
+    secondary: ['purchases', 'add_to_cart', 'revenue', 'roas', 'aov', 'leads', 'cpl', 'clicks', 'ctr'],
   },
 }
 
@@ -302,6 +318,25 @@ const PATH_LAYOUTS: Record<string, Layout> = {
 const MIXED_LAYOUT: Layout = {
   primary: ['spend', 'impressions', 'clicks', 'ctr'],
   secondary: ['reach', 'cpm', 'cpc', 'frequency', 'landing_page_views'],
+}
+
+/**
+ * What a cost-per-result is CALLED, for this objective — METRIC-NAMES-001.
+ *
+ * `cpa` is one stored figure with several honest names: on a sales campaign it is the cost of an
+ * order, on a lead campaign the cost of a lead, on an app campaign the cost of an install. Printing
+ * «تكلفة النتيجة» everywhere is not wrong so much as vague — and vague is what makes a reader stop
+ * trusting the number, because they cannot tell what «نتيجة» meant for this campaign.
+ *
+ * A label override rather than separate metrics, because they are the same arithmetic over the same
+ * column: splitting them would mean four ways to compute one thing.
+ */
+const OBJECTIVE_LABELS: Record<string, Record<string, { ar: string; en: string }>> = {
+  // Sales is the only objective that needs one. A leads layout already leads with `cpl` and an app
+  // layout with `cpi`, each of which carries its own name — so overriding `cpa` for them would be a
+  // map entry describing behaviour that never happens, which is worse than none: the next reader
+  // would believe the mechanism is doing more than it is.
+  sales: { cpa: { ar: 'تكلفة الطلب', en: 'Cost per order' }, conversions: { ar: 'الطلبات', en: 'Orders' } },
 }
 
 export function layoutFor(objective: string, path: string): Layout {
@@ -346,9 +381,11 @@ export function dashboardMetrics(
       .map((key, index) => {
         const spec = SPECS[key]
 
+        const named = OBJECTIVE_LABELS[objective]?.[key]
+
         return {
           key,
-          label: ar ? spec.label.ar : spec.label.en,
+          label: named ? (ar ? named.ar : named.en) : (ar ? spec.label.ar : spec.label.en),
           reading: readMetric(key, spec, summary?.current, summary?.reported),
           delta: summary?.delta?.[key as keyof MetricTotals] ?? null,
           invertGood: spec.invertGood,

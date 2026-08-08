@@ -115,10 +115,12 @@ describe('the executive slide', () => {
     expect(screen.getByText('2.50 SAR')).toBeInTheDocument()
   })
 
-  it('still leads a sales report with the return', () => {
+  it('still leads a sales report with the return, named the way a client reads it', () => {
     render(<SlideBody slide={slide} data={sales} meta={meta} />)
 
-    expect(screen.getByText('ROAS')).toBeInTheDocument()
+    // METRIC-NAMES-001 — «ROAS» is jargon to everyone outside media buying, and it is the figure a
+    // client is most likely to repeat back to somebody else.
+    expect(screen.getByText('العائد على الإنفاق')).toBeInTheDocument()
     expect(screen.getByText('أفضل منصة (ROAS)')).toBeInTheDocument()
   })
 

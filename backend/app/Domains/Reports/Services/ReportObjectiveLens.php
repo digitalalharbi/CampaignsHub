@@ -165,8 +165,12 @@ final class ReportObjectiveLens
     public function rankingMetric(): array
     {
         return match ($this->objective) {
-            self::SALES => ['key' => 'roas', 'label_ar' => 'ROAS', 'lower_is_better' => false],
-            self::LEADS, self::APP_INSTALLS => ['key' => 'cpa', 'label_ar' => 'تكلفة النتيجة', 'lower_is_better' => true],
+            // METRIC-NAMES-001 — the words the person paying for the campaign already uses. «ROAS»
+            // is jargon to everyone outside media buying, and it is the figure a client is most
+            // likely to be quoted back.
+            self::SALES => ['key' => 'roas', 'label_ar' => 'العائد على الإنفاق', 'lower_is_better' => false],
+            self::LEADS => ['key' => 'cpa', 'label_ar' => 'تكلفة العميل المحتمل', 'lower_is_better' => true],
+            self::APP_INSTALLS => ['key' => 'cpa', 'label_ar' => 'تكلفة التحميل', 'lower_is_better' => true],
             self::TRAFFIC => ['key' => 'cpc', 'label_ar' => 'تكلفة النقرة', 'lower_is_better' => true],
             self::AWARENESS, self::VIDEO => ['key' => 'cpm', 'label_ar' => 'تكلفة الألف ظهور', 'lower_is_better' => true],
             // Mixed: the one figure that means the same thing whatever each campaign was for.

@@ -26,11 +26,21 @@ final class ReportTemplateEngine
 
     /** Objective → the KPIs that matter most (drives KPI emphasis + creative ranking). */
     private const METRIC_SETS = [
-        'sales' => ['spend', 'revenue', 'conversions', 'roas', 'cpa', 'ctr'],
+        /*
+         * Each set is what its objective is JUDGED on — METRIC-NAMES-001, and it must agree with
+         * `metricCatalog.ts` on the client. A report that leads with different metrics from the
+         * dashboard the reader just left is a report they have to reconcile by hand.
+         *
+         * Sales gained the basket step: the path from a basket to an order is the thing a merchant
+         * acts on, and it was collected but never shown. Leads and app installs now name their own
+         * count and their own cost rather than borrowing «النتائج» and «تكلفة النتيجة», which are
+         * true of both and specific to neither.
+         */
+        'sales' => ['spend', 'add_to_cart', 'purchases', 'revenue', 'cpa', 'roas'],
         'awareness' => ['impressions', 'reach', 'frequency', 'cpm', 'video_views', 'ctr'],
-        'traffic' => ['clicks', 'landing_page_views', 'ctr', 'cpc', 'conversions'],
-        'leads' => ['conversions', 'cpa', 'ctr', 'cpc', 'spend'],
-        'app_installs' => ['conversions', 'cpa', 'spend', 'ctr'],
+        'traffic' => ['clicks', 'landing_page_views', 'ctr', 'cpc', 'spend'],
+        'leads' => ['leads', 'cpl', 'conversion_rate', 'ctr', 'spend'],
+        'app_installs' => ['installs', 'cpi', 'registrations', 'spend', 'ctr'],
         'video' => ['video_views', 'impressions', 'cpm', 'ctr', 'clicks'],
         /*
          * Several objectives in one scope — operational figures only (§14.6).

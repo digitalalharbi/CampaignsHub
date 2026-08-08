@@ -38,6 +38,18 @@ final class MetricsAggregator
         'registrations' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'registrations'), 0)",
         'in_app_events' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'in_app_events'), 0)",
         'engagements' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'engagements'), 0)",
+        /*
+         * The two basket steps — METRIC-NAMES-001.
+         *
+         * Both were already STORED and already read by the funnel; they were simply absent from the
+         * pivot, so no surface could show «الإضافة للسلة» as a figure. A sales campaign is judged on
+         * the path from a basket to an order, and a metric the product collects but cannot total is
+         * a metric nobody can act on.
+         *
+         * They join the pivot rather than being recomputed anywhere: one definition, one place.
+         */
+        'add_to_cart' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'add_to_cart'), 0)",
+        'checkout' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'checkout'), 0)",
     ];
 
     /**
@@ -64,9 +76,11 @@ final class MetricsAggregator
     /**
      * Every `metric_key` this engine reads (NORM-001).
      *
-     * The union of the pivot and the funnel, not the pivot alone: `add_to_cart` and `checkout` are
-     * stored, are absent from `PIVOT`, and are funnel stages. A caller asking «which of my metrics does
-     * nothing read?» against `PIVOT` would be told those two are ignored when both are counted.
+     * The union of the pivot and the funnel. The two used to diverge — `add_to_cart` and `checkout`
+     * were stored and read by the funnel while being absent from `PIVOT` — so a caller asking «which
+     * of my metrics does nothing read?» against the pivot alone was told those two were ignored.
+     * They are in both now (METRIC-NAMES-001); the union stays because it is the honest expression
+     * of the question, not because the two lists currently happen to agree.
      *
      * @return list<string>
      */
