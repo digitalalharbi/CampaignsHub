@@ -56,6 +56,25 @@ final class ReportObservations
     private const REALLOCATION_GAP = 0.4;
 
     /**
+     * Which figures a note puts on the page, so a share that hides them can drop the note.
+     *
+     * A shared link can be told to hide spend or revenue, and it redacts the tables and the cards.
+     * A sentence that says «صُرف 27,745.88 SAR من أصل 16,666.67 SAR» publishes the same figure in
+     * prose, where no column redaction reaches it. Rather than parse the sentence back out, each
+     * detector declares what it reveals and {@see ShareService::sanitize()} drops the whole note.
+     *
+     * @var array<string, list<string>>
+     */
+    private const REVEALS = [
+        'spend' => ['spend'],
+        'revenue' => ['revenue'],
+        'roas' => ['spend', 'revenue'],
+        'cpa' => ['spend'],
+        'cpc' => ['spend'],
+        'cpm' => ['spend'],
+    ];
+
+    /**
      * @param  array<string,mixed>  $data  the snapshot as assembled so far
      * @return list<array<string,mixed>>
      */
@@ -106,6 +125,7 @@ final class ReportObservations
             'severity' => $good ? 'positive' : 'warning',
             'scope' => ['type' => 'period', 'name' => null],
             'metric' => $metric['key'],
+            'reveals' => self::REVEALS[$metric['key']] ?? [],
             'value' => $lens->formatRanking((float) $value, $currency),
             'change' => round((float) $change, 4),
             'title' => sprintf('%s %s مقارنة بالفترة السابقة', $metric['label_ar'], $rose ? 'ارتفع' : 'تراجع'),
@@ -145,6 +165,7 @@ final class ReportObservations
                 'severity' => 'warning',
                 'scope' => ['type' => 'period', 'name' => null],
                 'metric' => $key,
+                'reveals' => ['spend'],
                 'value' => number_format((float) $value, 2).' '.$currency,
                 'change' => round((float) $change, 4),
                 'title' => sprintf('ارتفاع %s', $label),
@@ -183,6 +204,8 @@ final class ReportObservations
                 'severity' => 'warning',
                 'scope' => ['type' => 'period', 'name' => null],
                 'metric' => $key,
+                // A rate is not a money figure — it survives a link that hides spend or revenue.
+                'reveals' => [],
                 'value' => number_format((float) $value * 100, 2).'%',
                 'change' => round((float) $change, 4),
                 'title' => sprintf('تراجع %s', $label),
@@ -221,6 +244,7 @@ final class ReportObservations
             'severity' => 'warning',
             'scope' => ['type' => 'period', 'name' => null],
             'metric' => 'frequency',
+            'reveals' => [],
             'value' => number_format((float) $frequency, 2),
             'change' => isset($data['delta']['frequency']) ? round((float) $data['delta']['frequency'], 4) : null,
             'title' => 'ارتفاع معدل التكرار',
@@ -254,6 +278,8 @@ final class ReportObservations
                 'severity' => $fast ? 'critical' : 'info',
                 'scope' => ['type' => 'campaign', 'name' => $row['campaign_name']],
                 'metric' => 'pace',
+                // The sentence names the money spent and the budget it came from.
+                'reveals' => ['spend'],
                 'value' => number_format((float) $pace, 2).'×',
                 'change' => null,
                 'title' => sprintf('حملة «%s» تستهلك الميزانية %s الخطة', $row['campaign_name'], $fast ? 'أسرع من' : 'أبطأ من'),
@@ -312,6 +338,7 @@ final class ReportObservations
             'severity' => 'info',
             'scope' => ['type' => 'platform', 'name' => $best['provider']],
             'metric' => $metric['key'],
+            'reveals' => self::REVEALS[$metric['key']] ?? [],
             'value' => $lens->formatRanking($bv, $currency),
             'change' => round($gap, 4),
             'title' => sprintf('فرصة لإعادة توزيع الميزانية نحو %s', $best['provider']),
@@ -358,6 +385,7 @@ final class ReportObservations
             'severity' => 'info',
             'scope' => ['type' => 'data', 'name' => null],
             'metric' => null,
+            'reveals' => [],
             'value' => (string) count($missing),
             'change' => null,
             'title' => 'مؤشرات لا ترسلها المنصات المرتبطة',
@@ -389,6 +417,7 @@ final class ReportObservations
             'severity' => $state === 'failed' ? 'critical' : 'warning',
             'scope' => ['type' => 'data', 'name' => null],
             'metric' => null,
+            'reveals' => [],
             'value' => $freshness['last_sync_at'] ?? null,
             'change' => null,
             'title' => $state === 'failed' ? 'تعذّرت آخر مزامنة للبيانات' : 'بيانات لم تتحدث مؤخرًا',

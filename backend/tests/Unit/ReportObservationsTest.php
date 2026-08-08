@@ -256,4 +256,41 @@ final class ReportObservationsTest extends TestCase
         sort($sorted);
         $this->assertSame($sorted, $order, 'a warning was printed above a critical note');
     }
+
+    /**
+     * Every note declares the money it puts on the page, so a link that hides that money can drop it.
+     *
+     * This is the half that column redaction cannot reach: a sentence reading «صُرف 27,745.88 SAR»
+     * publishes the spend as surely as the column does, and nulling table cells leaves it standing.
+     */
+    public function test_every_note_declares_what_it_reveals(): void
+    {
+        $notes = $this->build([
+            'kpis' => ['roas' => 4.0, 'ctr' => 0.02, 'frequency' => 6.0],
+            'delta' => ['roas' => 0.4, 'ctr' => -0.3],
+            'reported' => ['reach' => true],
+            'budget' => [['campaign_id' => 'a', 'campaign_name' => 'ح', 'budget' => 1000.0, 'spent' => 900.0, 'pace' => 1.9]],
+            'platforms' => [
+                ['provider' => 'meta', 'spend' => 5000, 'roas' => 8.0],
+                ['provider' => 'tiktok', 'spend' => 5000, 'roas' => 2.0],
+            ],
+            'freshness' => ['state' => 'failed', 'failing' => []],
+        ]);
+
+        $this->assertNotSame([], $notes);
+        foreach ($notes as $note) {
+            $this->assertArrayHasKey('reveals', $note, "«{$note['title']}» does not say what it publishes");
+            $this->assertIsArray($note['reveals']);
+        }
+
+        $byKind = array_column($notes, 'reveals', 'kind');
+        // The budget sentence names the money spent and the budget it came from.
+        $this->assertSame(['spend'], $byKind['budget_pace']);
+        // A ROAS headline needs both halves of the division to be showable.
+        $this->assertSame(['spend', 'revenue'], $byKind['period_comparison']);
+        // A rate, a frequency and a sync failure carry no money at all.
+        $this->assertSame([], $byKind['falling_rate']);
+        $this->assertSame([], $byKind['frequency_saturation']);
+        $this->assertSame([], $byKind['stale_data']);
+    }
 }

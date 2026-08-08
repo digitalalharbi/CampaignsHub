@@ -200,6 +200,37 @@ final class ShareService
             unset($data['summary']); // summary embeds spend/revenue figures
         }
 
+        /*
+         * A note that states a hidden figure in PROSE is not covered by column redaction.
+         *
+         * «صُرف 27,745.88 SAR من أصل 16,666.67 SAR» publishes the spend as surely as the column
+         * does, and no amount of nulling table cells reaches it. Each detector declares what it
+         * reveals (see {@see ReportObservations}); a note whose declaration intersects what this
+         * link hides is dropped whole rather than reworded into something true but useless.
+         *
+         * Notes with no declaration are kept — every one of them is a rate, a count or a data-quality
+         * statement — and a note carrying an unknown key is dropped, because the safe direction for
+         * a redaction that has not been thought about is out.
+         */
+        $hidden = array_merge(
+            $share->hide_spend ? ['spend'] : [],
+            $share->hide_revenue ? ['revenue'] : [],
+        );
+        if ($hidden !== [] && ! empty($data['observations'])) {
+            $data['observations'] = array_values(array_filter(
+                $data['observations'],
+                fn ($note) => array_intersect((array) ($note['reveals'] ?? []), $hidden) === [],
+            ));
+        }
+
+        if ($share->hide_campaign_names && ! empty($data['observations'])) {
+            $data['observations'] = array_values(array_filter(
+                $data['observations'],
+                // A note ABOUT one campaign is nothing once the campaign cannot be named.
+                fn ($note) => ($note['scope']['type'] ?? '') !== 'campaign',
+            ));
+        }
+
         return $data;
     }
 

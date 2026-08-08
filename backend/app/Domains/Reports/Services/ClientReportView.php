@@ -61,6 +61,27 @@ final class ClientReportView
         if (isset($out['best']['campaign'])) {
             $out['best']['campaign'] = self::clientName((string) $out['best']['campaign']);
         }
+        /*
+         * §14.7's observations name campaigns in prose, so they need the same treatment.
+         *
+         * «حملة «Meta — Lead Gen (burner)» تستهلك الميزانية أسرع من الخطة» would otherwise put an
+         * internal marker in front of a client, in the section they are most likely to read.
+         */
+        if (! empty($out['observations'])) {
+            $out['observations'] = array_map(function ($note) {
+                foreach (['title', 'detail'] as $f) {
+                    if (isset($note[$f])) {
+                        $note[$f] = self::clientName((string) $note[$f]);
+                    }
+                }
+                if (! empty($note['scope']['name'])) {
+                    $note['scope']['name'] = self::clientName((string) $note['scope']['name']);
+                }
+
+                return $note;
+            }, $out['observations']);
+        }
+
         // Sanitise campaign names referenced inside findings/recommendations text too.
         foreach (['findings', 'recommendations'] as $key) {
             if (! empty($out[$key])) {
@@ -120,6 +141,14 @@ final class ClientReportView
          * document as the least qualified one.
          */
         'objective_performance',
+        /*
+         * The notes stay in the SHORT form too (§14.7).
+         *
+         * They are the most decision-shaped thing in the deck — a budget running 67% ahead of plan
+         * is exactly what an executive summary is for — and unlike the per-platform pages they are
+         * already the compressed version.
+         */
+        'observations',
         'platform_comparison', 'budget', 'next_steps',
     ];
 

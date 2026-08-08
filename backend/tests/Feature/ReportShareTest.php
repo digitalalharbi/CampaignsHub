@@ -53,6 +53,75 @@ final class ReportShareTest extends TestCase
         app(TenantContext::class)->forget();
     }
 
+    /**
+     * A note that states a hidden figure in prose is dropped, not reworded.
+     *
+     * Column redaction nulls table cells. It does not reach «صُرف 27,745.88 SAR من أصل 16,666.67
+     * SAR», which publishes the same spend in a sentence — and a client link told to hide spend
+     * would have carried it in the section clients read first.
+     */
+    public function test_a_link_that_hides_spend_drops_the_notes_that_state_it(): void
+    {
+        $this->report->forceFill(['data' => $this->report->data + ['observations' => [
+            ['id' => 'a', 'kind' => 'budget_pace', 'severity' => 'critical', 'reveals' => ['spend'],
+                'title' => 'حملة «الصيف» تستهلك الميزانية أسرع من الخطة',
+                'detail' => 'صُرف 27,745.88 SAR من أصل 16,666.67 SAR.',
+                'scope' => ['type' => 'campaign', 'name' => 'الصيف']],
+            ['id' => 'b', 'kind' => 'falling_rate', 'severity' => 'warning', 'reveals' => [],
+                'title' => 'تراجع معدل النقر', 'detail' => 'معدل النقر تراجع 30%.',
+                'scope' => ['type' => 'period', 'name' => null]],
+        ]]])->saveQuietly();
+
+        [, $raw] = app(ShareService::class)->create($this->report, ['hide_spend' => true], null);
+        $notes = $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->json('data.data.observations');
+
+        $this->assertSame(['b'], array_column($notes, 'id'));
+        // Belt and braces: the figure itself must not survive anywhere in the payload.
+        $this->assertStringNotContainsString('27,745.88', json_encode($notes, JSON_UNESCAPED_UNICODE));
+    }
+
+    /** A note ABOUT one campaign is nothing once the campaign cannot be named. */
+    public function test_a_link_that_hides_campaign_names_drops_the_notes_about_one_campaign(): void
+    {
+        $this->report->forceFill(['data' => $this->report->data + ['observations' => [
+            ['id' => 'a', 'kind' => 'budget_pace', 'severity' => 'critical', 'reveals' => [],
+                'title' => 'حملة «الصيف»', 'detail' => '…', 'scope' => ['type' => 'campaign', 'name' => 'الصيف']],
+            ['id' => 'b', 'kind' => 'data_gap', 'severity' => 'info', 'reveals' => [],
+                'title' => 'مؤشرات ناقصة', 'detail' => '…', 'scope' => ['type' => 'data', 'name' => null]],
+        ]]])->saveQuietly();
+
+        [, $raw] = app(ShareService::class)->create($this->report, ['hide_campaign_names' => true], null);
+        $notes = $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->json('data.data.observations');
+
+        $this->assertSame(['b'], array_column($notes, 'id'));
+    }
+
+    /**
+     * An internal marker in a campaign name must not reach a client through a NOTE.
+     *
+     * Every other surface that prints a campaign name goes through `clientName`. The observations
+     * were prose the sanitiser did not know about.
+     */
+    public function test_an_internal_campaign_name_is_cleaned_inside_a_note(): void
+    {
+        $this->report->forceFill(['data' => $this->report->data + ['observations' => [
+            ['id' => 'a', 'kind' => 'budget_pace', 'severity' => 'critical', 'reveals' => [],
+                'title' => 'حملة «Meta — Lead Gen (burner)» تستهلك الميزانية أسرع من الخطة',
+                'detail' => 'راجع «Meta — Lead Gen (burner)».',
+                'scope' => ['type' => 'campaign', 'name' => 'Meta — Lead Gen (burner)']],
+        ]]])->saveQuietly();
+
+        [, $raw] = app(ShareService::class)->create($this->report, [], null);
+        $notes = $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->json('data.data.observations');
+
+        $encoded = json_encode($notes, JSON_UNESCAPED_UNICODE);
+        // The MARKER goes; the name it was attached to is legitimate and stays, which is what
+        // `clientName` has always done everywhere else a campaign is printed.
+        $this->assertStringNotContainsString('burner', $encoded);
+        $this->assertStringContainsString('Meta — Lead Gen', $encoded);
+        $this->assertSame('Meta — Lead Gen', $notes[0]['scope']['name']);
+    }
+
     public function test_only_token_hash_is_stored(): void
     {
         [$share, $raw] = app(ShareService::class)->create($this->report, [], null);
