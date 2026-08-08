@@ -41,9 +41,23 @@ final class DigestDeliveryTest extends TestCase
 
     private User $user;
 
+    /**
+     * The instant this whole fixture lives at.
+     *
+     * Frozen BEFORE anything is seeded, because the metrics below are written relative to «today»
+     * and two of the tests then pin the clock to a literal date. While the freeze happened inside
+     * those tests, the seeded day and the pinned day agreed on exactly ONE calendar day — the day
+     * they were written — and the suite went red the following morning for no change to the product.
+     *
+     * 05:00 UTC is 08:00 in Riyadh, which is the default digest hour: the sweep has something to do
+     * at the frozen instant without any test having to move the clock forward to make it work.
+     */
+    private const NOW = '2026-08-07 05:00:00';
+
     protected function setUp(): void
     {
         parent::setUp();
+        Carbon::setTestNow(Carbon::parse(self::NOW, 'UTC'));
         $this->seed(PermissionSeeder::class);
 
         $this->tenant = Tenant::create(['name' => 'A', 'slug' => 'a-digest-delivery', 'status' => 'active']);
@@ -75,6 +89,12 @@ final class DigestDeliveryTest extends TestCase
         ]);
 
         app(TenantContext::class)->forget();
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
     }
 
     private function preference(array $over = []): void
@@ -252,9 +272,8 @@ final class DigestDeliveryTest extends TestCase
         Mail::fake();
         $this->withConfiguredEmail();
 
-        // 05:00 UTC is 08:00 in Riyadh (+03) and 06:00 in London (+01 in August).
-        Carbon::setTestNow(Carbon::parse('2026-08-07 05:00:00', 'UTC'));
-
+        // The frozen 05:00 UTC is 08:00 in Riyadh (+03) and 06:00 in London (+01 in August), so one
+        // recipient's hour has come and the other's has not.
         $this->preference(['timezone' => 'Asia/Riyadh', 'digest_hour' => 8]);
 
         $other = User::create(['name' => 'Late', 'email' => 'late@digest.test', 'password' => 'secret123']);
@@ -277,8 +296,6 @@ final class DigestDeliveryTest extends TestCase
 
         Mail::assertSent(DailyDigestMail::class, 1);
         Mail::assertSent(DailyDigestMail::class, fn (DailyDigestMail $m) => $m->hasTo('ops@digest.test'));
-
-        Carbon::setTestNow();
     }
 
     /**
@@ -291,7 +308,6 @@ final class DigestDeliveryTest extends TestCase
     {
         Mail::fake();
         $this->withConfiguredEmail();
-        Carbon::setTestNow(Carbon::parse('2026-08-07 05:00:00', 'UTC'));
 
         // No `digests` key at all — the shape every existing row already has.
         $this->preference(['digests' => null]);
@@ -299,7 +315,6 @@ final class DigestDeliveryTest extends TestCase
         $this->artisan('notifications:send-digests')->assertSuccessful();
 
         Mail::assertNothingSent();
-        Carbon::setTestNow();
     }
 
     /**
@@ -312,7 +327,8 @@ final class DigestDeliveryTest extends TestCase
     {
         Mail::fake();
         $this->withConfiguredEmail();
-        Carbon::setTestNow(Carbon::parse('2026-08-07 08:00:00', 'UTC'));
+        // Same DAY as the fixture — only the hour moves, so «yesterday» still holds the seeded spend.
+        Carbon::setTestNow(Carbon::parse(self::NOW, 'UTC')->setTime(8, 0));
 
         $this->preference(['timezone' => 'Mars/Olympus', 'digest_hour' => 8]);
 
@@ -320,7 +336,6 @@ final class DigestDeliveryTest extends TestCase
 
         // It falls back to UTC, where the hour DOES match — so the sweep completes and delivers.
         Mail::assertSent(DailyDigestMail::class, 1);
-        Carbon::setTestNow();
     }
 }
 
