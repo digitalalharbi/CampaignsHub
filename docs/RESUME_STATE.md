@@ -507,7 +507,7 @@ SMTP reason, one digest awaiting credentials — all three rendered with their c
 
 ---
 
-## Session — TEAM-INVITE-001, one invitation path (`PENDING`)
+## Session — TEAM-INVITE-001, one invitation path (`91bad37`)
 
 **Two paths, two answers to «is Sara a member?».** `/settings/team` provisioned a `User` immediately
 with a random 24-character password; `/app/team/invitations` issued an expiring token and created
