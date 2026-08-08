@@ -5,6 +5,14 @@ import { money, num, percent, ratio } from '@/features/analytics/format'
 /**
  * Which metrics lead, for the money this campaign is — UX-DASH-001, and §14.6's rule applied.
  *
+ * ## One catalogue, read by the dashboard AND the reports
+ *
+ * This began under `features/dashboard`. It moved here when the reports needed the same answer,
+ * because the alternative was a second list of layouts — and two lists describing one rule is how
+ * the dashboard and the report come to disagree about what an awareness campaign is judged on
+ * without anybody noticing. The server says the same thing in `MarketingPath::headlineMetrics()`
+ * and `ReportObjectiveLens`; this is the client's single copy of it.
+ *
  * ## Why a layout per objective rather than one row of everything
  *
  * `MetricTotals` carries thirty-odd figures and a dashboard that prints all of them has ranked
@@ -29,7 +37,7 @@ type Fmt = (n: number) => string
 const pct2 = (n: number) => percent(n, 2)
 const times = (n: number) => ratio(n, '×')
 
-type Spec = {
+export type Spec = {
   label: { ar: string; en: string }
   format: Fmt
   /** Computed from sums rather than sent — a null means «no denominator», not «never reported». */
@@ -48,7 +56,7 @@ type Spec = {
  * jargon to the person paying for the campaign, and a dashboard that assumes its reader is a media
  * buyer is a dashboard only media buyers can use.
  */
-const SPECS: Record<string, Spec> = {
+export const SPECS: Record<string, Spec> = {
   spend: {
     label: { ar: 'الإنفاق', en: 'Spend' },
     format: money,
@@ -228,7 +236,7 @@ const SPECS: Record<string, Spec> = {
  * campaign was for. It is never the LEAD metric though: what the money bought is the answer, and
  * what it cost is the question.
  */
-type Layout = { primary: string[]; secondary: string[] }
+export type Layout = { primary: string[]; secondary: string[] }
 
 const OBJECTIVE_LAYOUTS: Record<string, Layout> = {
   awareness: {
@@ -254,6 +262,17 @@ const OBJECTIVE_LAYOUTS: Record<string, Layout> = {
   engagement: {
     primary: ['engagements', 'engagement_rate', 'cpe', 'spend'],
     secondary: ['video_views', 'video_completion_rate', 'impressions', 'reach', 'clicks', 'ctr'],
+  },
+  /*
+   * A video buy is awareness money with a different unit of attention.
+   *
+   * It leads with views and how many of them finished — not with reach, because the question a video
+   * budget answers is whether the thing was WATCHED, and a completion rate says that where an
+   * impression count cannot.
+   */
+  video: {
+    primary: ['video_views', 'video_completion_rate', 'cpm', 'impressions'],
+    secondary: ['spend', 'video_completions', 'reach', 'frequency', 'clicks', 'ctr', 'engagements'],
   },
 }
 
@@ -299,8 +318,13 @@ export function layoutFor(objective: string, path: string): Layout {
  * metric, because `current[key]` is a coalesced `0` in exactly that case and reading the value
  * first would print the zero the rest of this file exists to prevent.
  */
-function read(key: string, spec: Spec, totals: MetricTotals | undefined, reported: Record<string, boolean> | undefined): MetricReading {
-  const value = totals?.[key as keyof MetricTotals] as number | null | undefined
+export function readMetric(
+  key: string,
+  spec: Spec,
+  totals: Record<string, number | null> | MetricTotals | undefined,
+  reported: Record<string, boolean> | undefined,
+): MetricReading {
+  const value = (totals as Record<string, number | null> | undefined)?.[key] as number | null | undefined
 
   if (!spec.derived && reported && reported[key] === false) return { kind: 'not_provided' }
   if (value === null || value === undefined) return { kind: 'no_data' }
@@ -325,7 +349,7 @@ export function dashboardMetrics(
         return {
           key,
           label: ar ? spec.label.ar : spec.label.en,
-          reading: read(key, spec, summary?.current, summary?.reported),
+          reading: readMetric(key, spec, summary?.current, summary?.reported),
           delta: summary?.delta?.[key as keyof MetricTotals] ?? null,
           invertGood: spec.invertGood,
           neutral: spec.neutral,

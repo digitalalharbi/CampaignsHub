@@ -15,6 +15,9 @@ import { compact, money, moneyExact, num, percent, ratio } from '@/features/anal
 import { TrendPill } from '@/features/analytics/components'
 import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import type { ResolvedDisclaimer } from '@/features/disclaimers/api'
+import type { MetricReading } from '@/components/ui/MetricStrip'
+import { SPECS } from '@/features/analytics/metricCatalog'
+import { type ReportMetric, reportMetrics, trendSeries } from './reportMetrics'
 
 export interface Slide { id: string; type: string; platform?: string; order: number; visible: boolean }
 type Row = Record<string, number | string | null>
@@ -24,13 +27,45 @@ export interface ReportData {
   objective?: string
   kpis: Record<string, number | null>
   delta?: Record<string, number | null>
+  /**
+   * §14.6 — the metrics this report leads with, chosen by the objective at generation time.
+   *
+   * Read from the snapshot rather than recomputed, so a link opened a month later shows the report
+   * that was sent. Absent on snapshots written before this existed; `reportMetrics` falls back to
+   * the catalogue's layout for the objective.
+   */
+  metric_set?: string[]
+  /**
+   * Which base metrics any connected platform actually SENT over the window.
+   *
+   * The pivot coalesces to 0, so without this a metric no platform publishes is indistinguishable
+   * from a measured zero — «الوصول 0» on a brand report whose platforms simply do not report reach.
+   */
+  reported?: Record<string, boolean>
+  /** The same answer per platform — Meta publishes reach and X does not. */
+  reported_by_platform?: Record<string, Record<string, boolean>>
   timeseries: Row[]
   platform_series?: Record<string, Row[]>
   platforms: Row[]
   campaigns: Row[]
   top_creatives?: Row[]
   platform_notes?: Record<string, { strengths: string[]; weaknesses: string[] }>
-  best?: { platform_by_roas?: string; platform_by_cpa?: string; platform_by_results?: string; campaign?: string }
+  /**
+   * The leader board, ranked on the metric this report's money was buying (§14.6).
+   *
+   * `basis` names that metric. The three `platform_by_*` keys are populated only where they mean
+   * something — null on a brand report, which used to crown a «best platform (ROAS)» chosen by
+   * whichever row a sort over a column of nulls happened to return first.
+   */
+  best?: {
+    basis?: { key: string; label_ar: string }
+    platform?: string | null
+    platform_value?: string | null
+    platform_by_roas?: string | null
+    platform_by_cpa?: string | null
+    platform_by_results?: string | null
+    campaign?: string
+  }
   /** FUNNEL-NULL-001 — `count` is null for a stage no platform reported; `reported` says which. */
   funnel?: Array<{ stage?: string; label: string; reported?: boolean; count: number | null; step_rate: number | null; cost_per: number | null }>
   budget?: Row[]
@@ -212,8 +247,42 @@ function Kpi({ label, value, exact, delta, invert, spark, accent }: { label: str
   )
 }
 
-const seriesOf = (rows: Row[], k: string) => rows.map((r) => Number(r[k] ?? 0))
+/**
+ * A sparkline for a column, or nothing when the column is not in the series.
+ *
+ * `?? 0` inside the map is safe for a day a metric happened to miss; returning a whole series of
+ * zeros for a metric that is not in the timeseries at all is not — it draws a flat line along the
+ * bottom of a card, which reads as «this was zero every day» rather than «this was never plotted».
+ */
+const seriesOf = (rows: Row[], k: string | null): number[] | undefined => {
+  if (!k || !rows.some((r) => r[k] !== undefined && r[k] !== null)) return undefined
+
+  return rows.map((r) => Number(r[k] ?? 0))
+}
 const pRow = (data: ReportData, p: string) => data.platforms.find((r) => r.provider === p) as Record<string, number> | undefined
+
+/** How an absent reading is written on a card — the same two states the dashboard uses. */
+const readingText = (r: MetricReading): string =>
+  r.kind === 'value' ? r.text : r.kind === 'not_provided' ? 'لم ترسله المنصة' : 'لا توجد بيانات'
+
+/** The un-abbreviated figure for the selectable strip under the cards. */
+const exactOf = (m: ReportMetric, data: ReportData): string => {
+  const direct = data.objective_performance?.direct
+  const value = direct && (m.key === 'cpa' || m.key === 'roas') ? direct[m.key] : data.kpis[m.key]
+  if (value === null || value === undefined) return '—'
+
+  return SPECS[m.key]?.format === money ? moneyExact(value, data.currency) : (m.reading.kind === 'value' ? m.reading.text : '—')
+}
+
+/** Card accents, so an objective-driven row still reads as a designed row rather than six greys. */
+const ACCENTS: Record<string, string> = {
+  spend: 'var(--brand-600)', revenue: 'var(--info)', roas: 'var(--info)',
+  conversions: 'var(--purple)', purchases: 'var(--purple)', cpa: 'var(--purple)',
+  ctr: 'var(--teal)', cpc: 'var(--teal)', clicks: 'var(--teal)',
+  impressions: 'var(--brand-600)', reach: 'var(--info)', frequency: 'var(--purple)', cpm: 'var(--teal)',
+  video_views: 'var(--info)', video_completions: 'var(--purple)', video_completion_rate: 'var(--teal)',
+  leads: 'var(--purple)', cpl: 'var(--teal)', landing_page_views: 'var(--info)',
+}
 
 function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
   return (
@@ -300,63 +369,106 @@ function RecommendationsSlide({ data }: { data: ReportData }) {
 
 function ExecutiveSlide({ data }: { data: ReportData }) {
   const k = data.kpis
-  const d = data.delta ?? {}
-  // Present on every report generated since REPORT-OBJECTIVE-001; absent on older snapshots, which
-  // then keep the figures they were generated with rather than showing blanks.
-  const op = data.objective_performance
-  const direct = op?.direct
   const donut = data.platforms.map((p) => ({ name: String(p.provider), value: Number(p.spend ?? 0) }))
   const totalSpend = donut.reduce((a, b) => a + b.value, 0)
+  /*
+    §14.6 — the cards follow the objective, and the DIRECT pair still leads where it exists.
+
+    These six used to be hard-coded: spend, revenue, ROAS, results, CPA, CTR on every report. A brand
+    report therefore opened with «ROAS —» and «CPA —» in its two largest cards, which reads as a
+    return that could not be measured rather than one that was never bought.
+  */
+  const cards = reportMetrics(data)
+  const trend = trendSeries(data.objective)
   return (
     <div>
       <Title sub="نظرة سريعة على أداء الحملة خلال الفترة">الملخص التنفيذي</Title>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Kpi label="الإنفاق" value={money(k.spend, data.currency)} delta={d.spend} invert spark={seriesOf(data.timeseries, 'spend')} accent="var(--brand-600)" />
-        <Kpi label="الإيرادات" value={money(k.revenue, data.currency)} delta={d.revenue} spark={seriesOf(data.timeseries, 'revenue')} accent="var(--info)" />
-        {/*
-          The DIRECT figures lead, and they say so (REPORT-OBJECTIVE-003).
-
-          These two cards used to read «ROAS» and «CPA» from `kpis`, which rolls every path together
-          — so a month with a large brand campaign showed a cost per order inflated by the whole
-          brand budget, under a label that claimed to be the cost of an order. The blended pair is a
-          real figure answering a different question, and it is shown below under its own name.
-        */}
-        <Kpi label={direct ? 'ROAS (مبيعات مباشرة)' : 'ROAS'} value={ratio((direct ? direct.roas : k.roas) ?? null)} delta={direct ? undefined : d.roas} spark={seriesOf(data.timeseries, 'roas')} accent="var(--info)" />
-        <Kpi label="النتائج" value={num(k.conversions)} delta={d.conversions} spark={seriesOf(data.timeseries, 'conversions')} accent="var(--purple)" />
-        <Kpi label={direct ? 'CPA (مبيعات مباشرة)' : 'CPA'} value={money(direct ? direct.cpa : k.cpa, data.currency)} delta={direct ? undefined : d.cpa} invert spark={seriesOf(data.timeseries, 'cpa')} accent="var(--purple)" />
-        <Kpi label="CTR" value={percent(k.ctr, 2)} delta={d.ctr} spark={seriesOf(data.timeseries, 'ctr')} accent="var(--teal)" />
+        {cards.map((m) => (
+          <Kpi
+            key={m.key}
+            label={m.label}
+            value={readingText(m.reading)}
+            delta={m.delta ?? undefined}
+            invert={m.invertGood}
+            spark={m.reading.kind === 'value' ? seriesOf(data.timeseries, m.series) : undefined}
+            accent={ACCENTS[m.key] ?? 'var(--brand-600)'}
+          />
+        ))}
       </div>
-      {/* Exact figures (compact strip) so precise values are always in the report + PDF-extractable. */}
+      {/*
+        Exact figures (compact strip) so precise values are always in the report + PDF-extractable.
+
+        It follows the same cards: it used to name spend, revenue, results and CPA outright, so a
+        brand report printed «الإيرادات 0» and «النتائج 0» in text a PDF reader can select — the
+        clearest possible statement of a number that was never being measured. Spend is pinned
+        because it is the one figure that means the same thing on every report.
+      */}
       <div className="tnum mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-muted" data-exact>
         <span>الإنفاق {moneyExact(k.spend, data.currency)}</span>
-        <span>الإيرادات {moneyExact(k.revenue, data.currency)}</span>
-        <span>النتائج {num(k.conversions)}</span>
-        {/*
-          Qualified, like the card above it. `k.cpa` divides ALL spend by ALL conversions — a third
-          number again, and printing it here as a bare «CPA» would undo the labelling one line up.
-        */}
-        {direct
-          ? <span>CPA (مبيعات مباشرة) {moneyExact(direct.cpa, data.currency)}</span>
-          : <span>CPA {moneyExact(k.cpa, data.currency)}</span>}
+        {cards
+          .filter((m) => m.key !== 'spend' && m.reading.kind === 'value')
+          .map((m) => <span key={m.key}>{m.label} {exactOf(m, data)}</span>)}
       </div>
+      {/*
+        The trend follows the objective too.
+
+        «الإنفاق مقابل الإيرادات» was drawn on every report, so a brand month plotted a revenue
+        series that was zero on every one of its days — a flat line along the axis, which states
+        that the campaign earned nothing rather than that it was not selling anything. The chart
+        now plots spend against whatever this money was buying.
+      */}
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
-        <ChartCard title="الإنفاق مقابل الإيرادات" subtitle="الاتجاه اليومي" className="lg:col-span-2"><SpendRevenueAreaChart data={data.timeseries} currency={data.currency} height={200} /></ChartCard>
+        <ChartCard title={trend.title} subtitle="الاتجاه اليومي" className="lg:col-span-2">
+          {trend.key === 'revenue'
+            ? <SpendRevenueAreaChart data={data.timeseries} currency={data.currency} height={200} />
+            : <MetricLineChart
+                data={data.timeseries}
+                currency={data.currency}
+                series={[
+                  { key: 'spend', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' },
+                  { key: trend.key, name: trend.name, color: 'var(--info)', kind: trend.kind },
+                ]}
+                height={200}
+                rightAxisFor={trend.key}
+              />}
+        </ChartCard>
         <ChartCard title="توزيع الإنفاق" subtitle="حسب المنصة"><PlatformDonutChart data={donut} centerLabel="إجمالي الإنفاق" centerValue={compact(totalSpend)} currency={data.currency} height={200} /></ChartCard>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        <Highlight label="أفضل منصة (ROAS)" value={data.best?.platform_by_roas ?? '—'} />
-        <Highlight label="أقل CPA" value={data.best?.platform_by_cpa ?? '—'} />
-        <Highlight label="أفضل حملة" value={data.best?.campaign ?? '—'} />
+      {/*
+        The leader board names the metric it ranked on (§14.6).
+
+        «أفضل منصة (ROAS)» was printed on every report. Where no platform sells anything, every ROAS
+        is null and the sort returned whichever row came first — a winner of a competition nobody
+        entered, under a trophy.
+      */}
+      <div className={`mt-3 grid gap-2 ${data.best?.platform_by_cpa ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+        <Highlight
+          label={`أفضل منصة (${data.best?.basis?.label_ar ?? 'الأداء'})`}
+          value={data.best?.platform ?? '—'}
+          note={data.best?.platform_value ?? undefined}
+        />
+        {/*
+          No filler card where there is no second ranking. A count of platforms under a trophy is
+          not a highlight, and putting one there to keep three columns invites the reader to treat
+          it as one.
+        */}
+        {data.best?.platform_by_cpa && <Highlight label="أقل تكلفة نتيجة" value={data.best.platform_by_cpa} />}
+        <Highlight label="أعلى حملة إنفاقًا" value={data.best?.campaign ?? '—'} />
       </div>
     </div>
   )
 }
 
-function Highlight({ label, value }: { label: string; value: string }) {
+function Highlight({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-secondary p-3">
       <Trophy size={16} className="text-brand-600" />
-      <div><div className="text-xs text-text-muted">{label}</div><div className="font-bold text-text-primary">{value}</div></div>
+      <div>
+        <div className="text-xs text-text-muted">{label}</div>
+        <div className="font-bold text-text-primary">{value}</div>
+        {note && <div className="tnum text-[11px] text-text-muted">{note}</div>}
+      </div>
     </div>
   )
 }
@@ -366,16 +478,36 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
   const series = data.platform_series?.[platform] ?? []
   const campaigns = data.campaigns.filter((c) => c.provider === platform).slice(0, 6).map((c) => ({ label: String(c.campaign_name ?? '—'), spend: Number(c.spend ?? 0), platform }))
   if (!p) return <Title platform={platform}>{platform}</Title>
-  const kpis: Array<[string, string, string]> = [
-    ['الإنفاق', money(p.spend, data.currency), 'var(--brand-600)'], ['الإيرادات', money(p.revenue, data.currency), 'var(--info)'],
-    ['ROAS', ratio(p.roas), 'var(--info)'], ['النتائج', num(p.conversions), 'var(--purple)'],
-    ['CPA', money(p.cpa, data.currency), 'var(--purple)'], ['CTR', percent(p.ctr, 2), 'var(--teal)'],
-  ]
+  /*
+    The platform page follows the report's objective too (§14.6).
+
+    It carried its own hard-coded six, which is how a brand report's per-platform pages each showed
+    «الإيرادات 0» and «ROAS —» under the name of a platform that had done exactly what it was paid
+    to do. No `objective_performance` is passed: that split is a property of the whole scope, and a
+    Direct CPA for one platform is not a figure this snapshot holds. `reported` narrows to THIS
+    platform's own connector, because the scope-wide map would let a platform that publishes no
+    reach print a reach of zero.
+  */
+  const cards = reportMetrics({
+    ...data,
+    kpis: p as Record<string, number | null>,
+    delta: undefined,
+    objective_performance: undefined,
+    reported: data.reported_by_platform?.[platform] ?? data.reported,
+  })
   return (
     <div>
       <Title platform={platform} sub={`أداء ${platform} خلال الفترة`}>أداء {platform}</Title>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        {kpis.map(([l, v, c]) => <Kpi key={l} label={l} value={v} spark={seriesOf(series, l === 'ROAS' ? 'roas' : l === 'الإنفاق' ? 'spend' : l === 'الإيرادات' ? 'revenue' : l === 'النتائج' ? 'conversions' : l === 'CPA' ? 'cpa' : 'ctr')} accent={c} />)}
+        {cards.map((m) => (
+          <Kpi
+            key={m.key}
+            label={m.label}
+            value={readingText(m.reading)}
+            spark={m.reading.kind === 'value' ? seriesOf(series, m.series) : undefined}
+            accent={ACCENTS[m.key] ?? 'var(--brand-600)'}
+          />
+        ))}
       </div>
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         <ChartCard title="الأداء بمرور الوقت" subtitle="الإنفاق والإيرادات والنتائج">

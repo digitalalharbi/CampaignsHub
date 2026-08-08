@@ -73,7 +73,17 @@ final class ReportGenerator
         $platforms = $agg->byProvider($from, $to);
         $campaigns = $agg->byCampaign($from, $to);
 
-        $objective = $report->campaign_objective ?: $this->inferObjective($campaigns);
+        /*
+         * What this report is FOR, and therefore what it may claim (§14.6).
+         *
+         * An operator's own choice outranks the inference — they know something the data does not —
+         * but nothing else does, and the inference now reads the campaigns' declared objectives
+         * rather than guessing backwards from their outcomes. See {@see ReportObjectiveLens}.
+         */
+        $lens = $report->campaign_objective
+            ? new ReportObjectiveLens($report->campaign_objective)
+            : ReportObjectiveLens::infer($campaigns);
+        $objective = $lens->value();
         $providerList = array_values(array_map(fn ($p) => $p['provider'], $platforms));
 
         // Initialise the slide layout once (from the objective + connected platforms) if not authored yet.
@@ -94,19 +104,27 @@ final class ReportGenerator
             'kpis' => $totals,
             'previous' => $previous,
             'delta' => $delta,
+            /*
+             * Which base metrics any platform actually SENT over this window.
+             *
+             * The pivot coalesces to 0, so `kpis['reach'] === 0` means either «nobody was reached» or
+             * «no connected platform reports reach at all» — and a report is the one surface where
+             * that difference is read by somebody who cannot ask. Without this map an objective-aware
+             * layout would faithfully print «الوصول 0» on a brand report whose platforms simply do
+             * not publish the figure.
+             */
+            'reported' => $agg->reportedKeys($from, $to),
+            // Per platform, because «reported» is a fact about a connector: Meta publishes reach and
+            // X does not, and the scope-wide map above would let an X page print a reach of zero.
+            'reported_by_platform' => $agg->reportedKeysByProvider($from, $to),
             'timeseries' => $agg->timeseries($from, $to),
             'platform_series' => $agg->timeseriesByProvider($from, $to),
             'platforms' => $platforms,
-            'best' => [
-                'platform_by_roas' => collect($platforms)->sortByDesc('roas')->first()['provider'] ?? null,
-                'platform_by_cpa' => collect($platforms)->filter(fn ($p) => $p['cpa'] !== null)->sortBy('cpa')->first()['provider'] ?? null,
-                'platform_by_results' => collect($platforms)->sortByDesc('conversions')->first()['provider'] ?? null,
-                'campaign' => $campaigns[0]['campaign_name'] ?? null,
-            ],
+            'best' => $this->leaders($lens, $platforms, $campaigns, $report->currency),
             'campaigns' => $campaigns,
             'top_creatives' => $topCreatives,
             'creative_level' => 'campaign', // ad-level arrives once connectors provide it
-            'platform_notes' => $this->platformNotes($platforms, $report->currency),
+            'platform_notes' => $this->platformNotes($lens, $platforms, $report->currency),
             /*
              * `funnel` stays the stage LIST, and the spend it is derived from rides beside it.
              *
@@ -134,10 +152,10 @@ final class ReportGenerator
              * source — so the report's Direct CPA and the dashboard's agree by construction.
              */
             'objective_performance' => $scope->objectivePerformance()->build($from, $to),
-            'summary' => $this->executiveSummary($totals, $delta, $platforms, $campaigns, $report->currency),
+            'summary' => $this->executiveSummary($lens, $totals, $delta, $platforms, $campaigns, $report->currency),
             // Structured two-column content: findings (left) + recommendations (right). Cards, not prose.
-            'findings' => $this->tagAnnotations($this->findings($totals, $delta, $platforms, $campaigns, $report->currency), 'finding', $report),
-            'recommendations' => ($recs = $this->tagAnnotations($this->recommendations($platforms, $campaigns, $report->currency), 'recommendation', $report)),
+            'findings' => $this->tagAnnotations($this->findings($lens, $totals, $delta, $platforms, $campaigns, $report->currency), 'finding', $report),
+            'recommendations' => ($recs = $this->tagAnnotations($this->recommendations($lens, $platforms, $campaigns, $report->currency), 'recommendation', $report)),
             // Client "Next Steps" — built ONLY from approved recommendations (action/priority/owner/due).
             'next_steps' => $this->nextSteps($recs),
             'audience' => $report->audience ?? 'client',
@@ -168,33 +186,65 @@ final class ReportGenerator
         return $data;
     }
 
-    private function inferObjective(array $campaigns): string
+    /**
+     * The leader board, ranked on the metric this report's money was buying (§14.6).
+     *
+     * The previous version crowned a ROAS champion and a lowest-CPA platform on EVERY report. On a
+     * brand campaign every platform's ROAS is null, `sortByDesc` on a column of nulls returns
+     * whichever row happens to be first, and the report then named a «best platform (ROAS)» that had
+     * earned nothing — a made-up winner of a competition nobody entered.
+     *
+     * The two legacy keys stay in the payload so older readers keep working, and they are populated
+     * only where they mean something. Everywhere else they are null, which renders as «—».
+     *
+     * @return array<string,mixed>
+     */
+    private function leaders(ReportObjectiveLens $lens, array $platforms, array $campaigns, string $currency): array
     {
-        // Revenue present → sales; else conversions → leads; else traffic.
-        $revenue = array_sum(array_map(fn ($c) => (float) ($c['revenue'] ?? 0), $campaigns));
-        $conv = array_sum(array_map(fn ($c) => (float) ($c['conversions'] ?? 0), $campaigns));
+        $metric = $lens->rankingMetric();
+        $rated = collect($platforms)->filter(fn ($p) => ($p[$metric['key']] ?? null) !== null && (float) ($p['spend'] ?? 0) > 0);
+        $leader = ($metric['lower_is_better'] ? $rated->sortBy($metric['key']) : $rated->sortByDesc($metric['key']))->first();
 
-        return $revenue > 0 ? 'sales' : ($conv > 0 ? 'leads' : 'traffic');
+        return [
+            'basis' => ['key' => $metric['key'], 'label_ar' => $metric['label_ar']],
+            'platform' => $leader['provider'] ?? null,
+            'platform_value' => $leader ? $lens->formatRanking((float) $leader[$metric['key']], $currency) : null,
+            'campaign' => $campaigns[0]['campaign_name'] ?? null,
+            'platform_by_roas' => $lens->judgesOnRevenue()
+                ? (collect($platforms)->filter(fn ($p) => $p['roas'] !== null)->sortByDesc('roas')->first()['provider'] ?? null)
+                : null,
+            'platform_by_cpa' => $lens->judgesOnCostPerResult()
+                ? (collect($platforms)->filter(fn ($p) => $p['cpa'] !== null)->sortBy('cpa')->first()['provider'] ?? null)
+                : null,
+            'platform_by_results' => $lens->judgesOnCostPerResult()
+                ? (collect($platforms)->sortByDesc('conversions')->first()['provider'] ?? null)
+                : null,
+        ];
     }
 
-    /** Auto strengths/weaknesses per platform (suggestions — the user approves before a client sees them). */
-    private function platformNotes(array $platforms, string $currency): array
+    /**
+     * Auto strengths/weaknesses per platform, measured against the average of the metric that matters
+     * for this report (suggestions — the user approves before a client sees them).
+     *
+     * Comparing a platform to an average of ONE is the trap here: with a single connected platform
+     * `avg` equals its own value, so it was always «at or above average» and every report shipped a
+     * strength that says nothing. A comparison needs somebody to compare with.
+     */
+    private function platformNotes(ReportObjectiveLens $lens, array $platforms, string $currency): array
     {
+        $metric = $lens->rankingMetric();
+        $rated = array_values(array_filter($platforms, fn ($p) => ($p[$metric['key']] ?? null) !== null && (float) ($p['spend'] ?? 0) > 0));
+        $average = count($rated) > 1 ? $this->avg($rated, $metric['key']) : null;
+
         $notes = [];
-        $avgRoas = $this->avg($platforms, 'roas');
-        $avgCpa = $this->avg($platforms, 'cpa');
         foreach ($platforms as $p) {
             $strengths = [];
             $weaknesses = [];
-            if ($p['roas'] !== null && $avgRoas !== null && $p['roas'] >= $avgRoas) {
-                $strengths[] = sprintf('ROAS أعلى من المتوسط (%s×).', number_format((float) $p['roas'], 2));
-            } elseif ($p['roas'] !== null) {
-                $weaknesses[] = sprintf('ROAS أقل من المتوسط (%s×).', number_format((float) $p['roas'], 2));
-            }
-            if ($p['cpa'] !== null && $avgCpa !== null && $p['cpa'] <= $avgCpa) {
-                $strengths[] = sprintf('تكلفة نتيجة تنافسية (CPA %s %s).', number_format((float) $p['cpa']), $currency);
-            } elseif ($p['cpa'] !== null) {
-                $weaknesses[] = sprintf('تكلفة نتيجة مرتفعة (CPA %s %s).', number_format((float) $p['cpa']), $currency);
+            $value = $p[$metric['key']] ?? null;
+            if ($value !== null && $average !== null) {
+                $better = $metric['lower_is_better'] ? (float) $value <= $average : (float) $value >= $average;
+                $sentence = sprintf('%s %s المتوسط (%s).', $metric['label_ar'], $better ? 'أفضل من' : 'دون', $lens->formatRanking((float) $value, $currency));
+                $better ? $strengths[] = $sentence : $weaknesses[] = $sentence;
             }
             $notes[$p['provider']] = ['strengths' => $strengths, 'weaknesses' => $weaknesses];
         }
@@ -215,32 +265,52 @@ final class ReportGenerator
      *
      * @return list<array<string,mixed>>
      */
-    private function findings(array $t, array $delta, array $platforms, array $campaigns, string $currency): array
+    private function findings(ReportObjectiveLens $lens, array $t, array $delta, array $platforms, array $campaigns, string $currency): array
     {
         $out = [];
-        if ($platforms !== []) {
-            $bestRoas = collect($platforms)->sortByDesc('roas')->first();
-            if ($bestRoas && $bestRoas['roas'] !== null) {
-                $out[] = ['severity' => 'positive', 'title' => "أعلى ROAS على {$bestRoas['provider']}", 'platform' => $bestRoas['provider'],
-                    'kpi' => 'ROAS', 'value' => number_format((float) $bestRoas['roas'], 2).'×', 'detail' => 'أفضل عائد إنفاق خلال الفترة.'];
-            }
-            $bestCpa = collect($platforms)->filter(fn ($p) => $p['cpa'] !== null)->sortBy('cpa')->first();
-            if ($bestCpa) {
-                $out[] = ['severity' => 'positive', 'title' => "أقل تكلفة نتيجة على {$bestCpa['provider']}", 'platform' => $bestCpa['provider'],
-                    'kpi' => 'CPA', 'value' => number_format((float) $bestCpa['cpa']).' '.$currency, 'detail' => 'تكلفة نتيجة تنافسية.'];
-            }
-            $worstRoas = collect($platforms)->filter(fn ($p) => $p['roas'] !== null && $p['spend'] > 0)->sortBy('roas')->first();
-            if ($worstRoas && count($platforms) > 1) {
-                $out[] = ['severity' => 'warning', 'title' => "{$worstRoas['provider']} دون المتوسط", 'platform' => $worstRoas['provider'],
-                    'kpi' => 'ROAS', 'value' => number_format((float) $worstRoas['roas'], 2).'×', 'detail' => 'يحتاج مراجعة الاستهداف والمحتوى.'];
+        $metric = $lens->rankingMetric();
+
+        /*
+         * Ranked on what this report's money was buying, and only among platforms that HAVE the
+         * figure.
+         *
+         * The previous version opened every report with «أعلى ROAS على …» and «أقل تكلفة نتيجة على
+         * …». On a brand report both are claims about a return nobody was buying, printed above the
+         * fold, in the section a client reads first.
+         */
+        $rated = collect($platforms)->filter(fn ($p) => ($p[$metric['key']] ?? null) !== null && (float) ($p['spend'] ?? 0) > 0);
+        if ($rated->isNotEmpty()) {
+            $best = ($metric['lower_is_better'] ? $rated->sortBy($metric['key']) : $rated->sortByDesc($metric['key']))->first();
+            $out[] = ['severity' => 'positive', 'title' => "أفضل {$metric['label_ar']} على {$best['provider']}", 'platform' => $best['provider'],
+                'kpi' => $metric['label_ar'], 'value' => $lens->formatRanking((float) $best[$metric['key']], $currency),
+                'detail' => 'أفضل أداء على المؤشر الذي تُقاس به هذه الحملات.'];
+
+            // «Below average» needs somebody to be below it: with one platform there is no average.
+            if ($rated->count() > 1) {
+                $worst = ($metric['lower_is_better'] ? $rated->sortByDesc($metric['key']) : $rated->sortBy($metric['key']))->first();
+                $out[] = ['severity' => 'warning', 'title' => "{$worst['provider']} دون المتوسط", 'platform' => $worst['provider'],
+                    'kpi' => $metric['label_ar'], 'value' => $lens->formatRanking((float) $worst[$metric['key']], $currency),
+                    'detail' => 'يحتاج مراجعة الاستهداف والمحتوى.'];
             }
         }
-        $burner = collect($campaigns)->first(fn ($c) => ($c['spend'] ?? 0) > 3000 && ($c['conversions'] ?? 0) < 2);
-        if ($burner) {
-            $out[] = ['severity' => 'critical', 'title' => "حملة «{$burner['campaign_name']}» تنفق دون تحويلات", 'platform' => $burner['provider'] ?? null,
-                'kpi' => 'الإنفاق', 'value' => number_format((float) $burner['spend']).' '.$currency, 'detail' => 'مرشحة للإيقاف أو مراجعة التتبع.'];
+
+        /*
+         * «Spending without conversions» is a finding only where conversions were the point.
+         *
+         * On an awareness report every campaign spends without conversions — that is what awareness
+         * money does — and flagging it critical would fill a brand report with alarms about it
+         * working as intended.
+         */
+        if ($lens->judgesOnCostPerResult()) {
+            $burner = collect($campaigns)->first(fn ($c) => ($c['spend'] ?? 0) > 3000 && ($c['conversions'] ?? 0) < 2);
+            if ($burner) {
+                $out[] = ['severity' => 'critical', 'title' => "حملة «{$burner['campaign_name']}» تنفق دون تحويلات", 'platform' => $burner['provider'] ?? null,
+                    'kpi' => 'الإنفاق', 'value' => number_format((float) $burner['spend']).' '.$currency, 'detail' => 'مرشحة للإيقاف أو مراجعة التتبع.'];
+            }
         }
-        if (isset($delta['revenue']) && $delta['revenue'] > 0.1) {
+
+        // Revenue growth is a finding about revenue, and only a sales report is judged on it.
+        if ($lens->judgesOnRevenue() && isset($delta['revenue']) && $delta['revenue'] > 0.1) {
             $out[] = ['severity' => 'positive', 'title' => 'نمو الإيرادات مقابل الفترة السابقة', 'platform' => null,
                 'kpi' => 'الإيرادات', 'value' => '+'.number_format((float) $delta['revenue'] * 100, 0).'%', 'detail' => 'اتجاه إيجابي في العائد.'];
         }
@@ -254,28 +324,43 @@ final class ReportGenerator
      *
      * @return list<array<string,mixed>>
      */
-    private function recommendations(array $platforms, array $campaigns, string $currency): array
+    private function recommendations(ReportObjectiveLens $lens, array $platforms, array $campaigns, string $currency): array
     {
         $out = [];
-        $bestRoas = collect($platforms)->sortByDesc('roas')->first();
-        if ($bestRoas && $bestRoas['roas'] !== null && $bestRoas['roas'] > 1) {
-            $out[] = ['severity' => 'positive', 'title' => "زيادة ميزانية {$bestRoas['provider']} تدريجيًا", 'platform' => $bestRoas['provider'],
-                'action' => 'scale', 'detail' => 'أعلى ROAS — وسّع بحذر مع مراقبة مرحلة التعلّم.', 'kpi' => 'ROAS'];
+        $metric = $lens->rankingMetric();
+        $rated = collect($platforms)->filter(fn ($p) => ($p[$metric['key']] ?? null) !== null && (float) ($p['spend'] ?? 0) > 0);
+
+        /*
+         * «Spend more here» has to name the thing that is going well, and it must be a thing this
+         * money was buying. A ROAS above 1 is the right gate for a sales report and no gate at all
+         * for a brand one, where the figure does not exist.
+         */
+        if ($rated->isNotEmpty()) {
+            $best = ($metric['lower_is_better'] ? $rated->sortBy($metric['key']) : $rated->sortByDesc($metric['key']))->first();
+            $worthScaling = ! $lens->judgesOnRevenue() || (float) $best['roas'] > 1;
+            if ($worthScaling) {
+                $out[] = ['severity' => 'positive', 'title' => "زيادة ميزانية {$best['provider']} تدريجيًا", 'platform' => $best['provider'],
+                    'action' => 'scale', 'detail' => "أفضل {$metric['label_ar']} — وسّع بحذر مع مراقبة مرحلة التعلّم.", 'kpi' => $metric['label_ar']];
+            }
+
+            if ($rated->count() > 1) {
+                $worst = ($metric['lower_is_better'] ? $rated->sortByDesc($metric['key']) : $rated->sortBy($metric['key']))->first();
+                $out[] = ['severity' => 'warning', 'title' => "تحسين استهداف {$worst['provider']}", 'platform' => $worst['provider'],
+                    'action' => 'optimize', 'detail' => "أضعف {$metric['label_ar']} — راجع الجمهور والمحتوى والصفحة.", 'kpi' => $metric['label_ar']];
+            }
         }
-        $worstCpa = collect($platforms)->filter(fn ($p) => $p['cpa'] !== null && $p['spend'] > 0)->sortByDesc('cpa')->first();
-        if ($worstCpa && count($platforms) > 1) {
-            $out[] = ['severity' => 'warning', 'title' => "تحسين استهداف {$worstCpa['provider']}", 'platform' => $worstCpa['provider'],
-                'action' => 'optimize', 'detail' => 'أعلى تكلفة نتيجة — راجع الجمهور والإبداع والصفحة.', 'kpi' => 'CPA'];
-        }
-        $burner = collect($campaigns)->first(fn ($c) => ($c['spend'] ?? 0) > 3000 && ($c['conversions'] ?? 0) < 2);
-        if ($burner) {
-            $out[] = ['severity' => 'critical', 'title' => "إيقاف مؤقت ومراجعة «{$burner['campaign_name']}»", 'platform' => $burner['provider'] ?? null,
-                'action' => 'pause', 'detail' => 'إنفاق دون تحويلات — تحقق من التتبع قبل الاستمرار.', 'kpi' => 'الإنفاق'];
-        }
-        $topConv = collect($campaigns)->sortByDesc('conversions')->first();
-        if ($topConv && ($topConv['conversions'] ?? 0) > 0) {
-            $out[] = ['severity' => 'positive', 'title' => "توسيع ما ينجح في «{$topConv['campaign_name']}»", 'platform' => $topConv['provider'] ?? null,
-                'action' => 'expand', 'detail' => 'أعلى نتائج — كرّر الزوايا الرابحة على جماهير مشابهة.', 'kpi' => 'النتائج'];
+
+        if ($lens->judgesOnCostPerResult()) {
+            $burner = collect($campaigns)->first(fn ($c) => ($c['spend'] ?? 0) > 3000 && ($c['conversions'] ?? 0) < 2);
+            if ($burner) {
+                $out[] = ['severity' => 'critical', 'title' => "إيقاف مؤقت ومراجعة «{$burner['campaign_name']}»", 'platform' => $burner['provider'] ?? null,
+                    'action' => 'pause', 'detail' => 'إنفاق دون تحويلات — تحقق من التتبع قبل الاستمرار.', 'kpi' => 'الإنفاق'];
+            }
+            $topConv = collect($campaigns)->sortByDesc('conversions')->first();
+            if ($topConv && ($topConv['conversions'] ?? 0) > 0) {
+                $out[] = ['severity' => 'positive', 'title' => "توسيع ما ينجح في «{$topConv['campaign_name']}»", 'platform' => $topConv['provider'] ?? null,
+                    'action' => 'expand', 'detail' => 'أعلى نتائج — كرّر الزوايا الرابحة على جماهير مشابهة.', 'kpi' => 'النتائج'];
+            }
         }
 
         return array_slice($out, 0, 5);
@@ -355,28 +440,44 @@ final class ReportGenerator
     }
 
     /** A few plain-language findings derived from the numbers (not fabricated). */
-    private function executiveSummary(array $t, array $delta, array $platforms, array $campaigns, string $currency): array
+    private function executiveSummary(ReportObjectiveLens $lens, array $t, array $delta, array $platforms, array $campaigns, string $currency): array
     {
         $out = [];
-        $out[] = sprintf(
-            'إجمالي الإنفاق %s %s بعائد ROAS %s خلال الفترة.',
-            number_format((float) ($t['spend'] ?? 0)),
-            $currency,
-            $t['roas'] !== null ? number_format((float) $t['roas'], 2).'×' : '—',
-        );
-        if ($platforms !== []) {
-            $bestRoas = collect($platforms)->sortByDesc('roas')->first();
-            $bestCpa = collect($platforms)->filter(fn ($p) => $p['cpa'] !== null)->sortBy('cpa')->first();
-            if ($bestRoas) {
-                $out[] = sprintf('أعلى ROAS من منصة %s (%s×).', $bestRoas['provider'], number_format((float) $bestRoas['roas'], 2));
-            }
-            if ($bestCpa) {
-                $out[] = sprintf('أقل تكلفة نتيجة (CPA) على %s بـ %s %s.', $bestCpa['provider'], number_format((float) $bestCpa['cpa']), $currency);
+        $metric = $lens->rankingMetric();
+
+        /*
+         * The opening sentence names the money and the ONE figure this money is judged on.
+         *
+         * It used to name ROAS on every report, so a brand month opened with «إجمالي الإنفاق 40,000
+         * SAR بعائد ROAS —». A dash is honest about the value and dishonest about the question: it
+         * says the return is unknown, when in fact no return was being bought.
+         */
+        $headline = $t[$metric['key']] ?? null;
+        $out[] = $headline !== null
+            ? sprintf('إجمالي الإنفاق %s %s خلال الفترة، ومتوسط %s %s.', number_format((float) ($t['spend'] ?? 0)), $currency, $metric['label_ar'], $lens->formatRanking((float) $headline, $currency))
+            : sprintf('إجمالي الإنفاق %s %s خلال الفترة.', number_format((float) ($t['spend'] ?? 0)), $currency);
+
+        $rated = collect($platforms)->filter(fn ($p) => ($p[$metric['key']] ?? null) !== null && (float) ($p['spend'] ?? 0) > 0);
+        if ($rated->isNotEmpty()) {
+            $best = ($metric['lower_is_better'] ? $rated->sortBy($metric['key']) : $rated->sortByDesc($metric['key']))->first();
+            $out[] = sprintf('أفضل %s على منصة %s (%s).', $metric['label_ar'], $best['provider'], $lens->formatRanking((float) $best[$metric['key']], $currency));
+        }
+
+        if ($lens->judgesOnCostPerResult()) {
+            $burner = collect($campaigns)->first(fn ($c) => ($c['spend'] ?? 0) > 3000 && ($c['conversions'] ?? 0) < 2);
+            if ($burner) {
+                $out[] = sprintf('تنبيه: حملة «%s» تنفق دون تحويلات تُذكر — يُنصح بمراجعتها.', $burner['campaign_name'] ?? '—');
             }
         }
-        $burner = collect($campaigns)->first(fn ($c) => ($c['spend'] ?? 0) > 3000 && ($c['conversions'] ?? 0) < 2);
-        if ($burner) {
-            $out[] = sprintf('تنبيه: حملة «%s» تنفق دون تحويلات تُذكر — يُنصح بمراجعتها.', $burner['campaign_name'] ?? '—');
+
+        /*
+         * A scope with several objectives says so, rather than picking one of them to lead with.
+         *
+         * This is the sentence that stops a reader averaging a brand budget and a sales budget in
+         * their head, which is what a single blended headline invites.
+         */
+        if ($lens->isMixed()) {
+            $out[] = 'تضم هذه الفترة حملات بأهداف مختلفة، لذلك تُعرض مؤشرات كل مسار على حدة ولا تُدمج تكلفة النتيجة أو العائد بينها.';
         }
 
         return $out;

@@ -52,22 +52,36 @@ export function MetricLineChart({
   series,
   height = 288,
   currency = 'SAR',
+  rightAxisFor,
 }: {
   data: Array<Record<string, unknown>>
   series: Array<{ key: string; name: string; color?: string; kind?: FmtKind }>
   height?: number
   currency?: string
+  /**
+   * Move this series onto its own scale.
+   *
+   * Two series of different ORDERS of magnitude on one axis is not a comparison, it is one line and
+   * one flat mark along the bottom — and a line pinned to the axis reads as «this was zero», which
+   * is a claim the data does not make. A daily spend of 300 beside a daily impression count of
+   * 10,000 is exactly that shape.
+   */
+  rightAxisFor?: string
 }) {
+  const split = rightAxisFor !== undefined && series.some((s) => s.key === rightAxisFor)
+  const axisOf = (key: string) => (split && key === rightAxisFor ? 'right' : 'left')
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
         {GRID}
         <XAxis dataKey="date" tick={AXIS} tickFormatter={(d) => String(d).slice(5)} minTickGap={24} />
-        <YAxis tick={AXIS} tickFormatter={(v) => compact(Number(v))} width={44} />
+        <YAxis yAxisId="left" tick={AXIS} tickFormatter={(v) => compact(Number(v))} width={44} />
+        {split && <YAxis yAxisId="right" orientation="right" tick={AXIS} tickFormatter={(v) => compact(Number(v))} width={44} />}
         <Tooltip {...tooltipProps} formatter={(v: number, name, item) => fmt((item?.payload && series.find((s) => s.name === name)?.kind) || 'num', currency)(v)} />
         <Legend wrapperStyle={{ fontSize: 13 }} />
         {series.map((s, i) => (
-          <Line key={s.key} name={s.name} type="monotone" dataKey={s.key} stroke={s.color ?? CHART_SERIES[i % CHART_SERIES.length]} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+          <Line key={s.key} yAxisId={axisOf(s.key)} name={s.name} type="monotone" dataKey={s.key} stroke={s.color ?? CHART_SERIES[i % CHART_SERIES.length]} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
         ))}
       </LineChart>
     </ResponsiveContainer>

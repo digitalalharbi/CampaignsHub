@@ -301,6 +301,36 @@ final class MetricsAggregator
     }
 
     /**
+     * The same answer, per platform — because «reported» is a fact about a CONNECTOR, not a scope.
+     *
+     * Meta publishes reach and X does not. A scope-wide map says reach was reported, so an X page
+     * showing the coalesced `0` would state that an X campaign reached nobody. The distinction only
+     * exists per provider, which is where the question is actually asked.
+     *
+     * @return array<string, array<string,bool>> provider → metric key → was it ever sent
+     */
+    public function reportedKeysByProvider(Carbon $from, Carbon $to): array
+    {
+        $rows = $this->base($from, $to)
+            ->select('provider', 'metric_key')
+            ->distinct()
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(string) $row->provider][(string) $row->metric_key] = true;
+        }
+
+        foreach ($out as $provider => $present) {
+            foreach (array_keys(self::PIVOT) as $key) {
+                $out[$provider][$key] = $present[$key] ?? false;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * REPORT-OBJECTIVE-005 — what the single «conversions» figure above actually is.
      *
      * `SUM(conversions)` over more than one platform is the sum of each platform's own claim, and
@@ -496,19 +526,31 @@ final class MetricsAggregator
     {
         $rows = $this->base($from, $to)
             ->leftJoin('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
-            ->select('daily_metrics.unified_campaign_id as campaign_id', 'unified_campaigns.name as campaign_name', 'unified_campaigns.client_display_name as client_display_name')
+            ->select('daily_metrics.unified_campaign_id as campaign_id', 'unified_campaigns.name as campaign_name', 'unified_campaigns.client_display_name as client_display_name', 'unified_campaigns.objective as objective', 'unified_campaigns.objective_source as objective_source')
             ->selectRaw('MAX(daily_metrics.provider) AS provider')
             ->selectRaw(implode(', ', array_map(
                 fn ($e, $a) => str_replace('value', 'daily_metrics.value', str_replace('metric_key', 'daily_metrics.metric_key', $e))." AS {$a}",
                 self::PIVOT,
                 array_keys(self::PIVOT),
             )))
-            ->groupBy('daily_metrics.unified_campaign_id', 'unified_campaigns.name', 'unified_campaigns.client_display_name')
+            /*
+             * `objective` joins the grouping because a report has to know what each campaign's money
+             * was FOR, not only what it did (§14.6). `objective_source` rides with it because the
+             * column DEFAULTS to `other`, so the value alone cannot tell «classified as unclassified»
+             * from «nobody has looked» — and a report that read the default as a declaration would
+             * file every unclassified project as brand spend.
+             *
+             * Neither can change the row count: both are columns of `unified_campaigns` and the group
+             * is already keyed by that table's id.
+             */
+            ->groupBy('daily_metrics.unified_campaign_id', 'unified_campaigns.name', 'unified_campaigns.client_display_name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
             ->get()
             ->map(fn ($r) => [
                 'campaign_id' => $r->campaign_id,
                 'campaign_name' => $r->campaign_name,
                 'client_display_name' => $r->client_display_name,
+                'objective' => $r->objective,
+                'objective_source' => $r->objective_source,
                 'provider' => $r->provider,
             ] + $this->withDerived((array) $r))
             ->all();

@@ -32,7 +32,19 @@ final class ReportTemplateEngine
         'leads' => ['conversions', 'cpa', 'ctr', 'cpc', 'spend'],
         'app_installs' => ['conversions', 'cpa', 'spend', 'ctr'],
         'video' => ['video_views', 'impressions', 'cpm', 'ctr', 'clicks'],
-        'custom' => ['spend', 'revenue', 'conversions', 'roas', 'cpa', 'ctr'],
+        /*
+         * Several objectives in one scope — operational figures only (§14.6).
+         *
+         * This set was a copy of the sales set, so a month mixing a brand campaign and a sales
+         * campaign led with ROAS and a cost per result computed across both: one objective's money
+         * divided by another objective's events. The arithmetic works and the number means nothing,
+         * which is worse than a gap, because nothing on the page tells the reader not to act on it.
+         *
+         * Spend, impressions, clicks and CTR mean the same thing whatever each campaign was for. The
+         * per-path figures are not lost — `objective_performance` states them path by path, and that
+         * section is in every template.
+         */
+        'custom' => ['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'reach'],
     ];
 
     // One rich slide per platform by default (KPIs + charts + top creative + notes + recommendations).
@@ -80,7 +92,16 @@ final class ReportTemplateEngine
         if (count($ordered) > 1) {
             $slides[] = ['id' => 'platform_comparison', 'type' => 'platform_comparison', 'order' => $order++, 'visible' => true];
         }
-        if (in_array($objective, ['sales', 'traffic', 'leads'], true)) {
+        /*
+         * A funnel is drawn wherever the money was meant to move somebody THROUGH something.
+         *
+         * The list used to be the three objectives that existed when it was written, which meant an
+         * app-install report and a mixed-objective report — both of which have a real click →
+         * arrival → result path — silently lost the section. Naming the two that genuinely have no
+         * funnel is the smaller and more durable list: an objective added later gets one by default
+         * rather than being forgotten.
+         */
+        if (! in_array($objective, ['awareness', 'video'], true)) {
             $slides[] = ['id' => 'funnel', 'type' => 'funnel', 'order' => $order++, 'visible' => true];
         }
         $slides[] = ['id' => 'budget', 'type' => 'budget', 'order' => $order++, 'visible' => true];
