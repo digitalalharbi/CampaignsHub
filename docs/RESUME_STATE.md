@@ -10,6 +10,58 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## GATE — 2026-08-08 (§14.6–14.8, attribution, mail) · **RED at the time of writing** · 829/1
+
+`PLAYWRIGHT_EXIT_CODE=1` at `316e4d6` — 829 passed, **1 failed**, 0 skipped, 0 flaky, 28.8m.
+Backend **1671 passed (9534 assertions), exit 0** · Pint clean · `tsc -b` clean · oxlint 0 errors ·
+vitest **887 passed (120 files)** · production build clean · working tree CLEAN.
+
+Read this section before touching either spec named in it.
+
+### The one failure, and what is actually known about it
+
+`[firefox] campaigns.spec.ts › open a campaign detail and switch tabs`. Two gates in a row, always
+firefox, and it has now been "fixed at the cause" three times by three different people-hours. Here
+is what is EVIDENCED rather than assumed:
+
+| experiment | result |
+|---|---|
+| the two heavy specs alone, firefox | 10 passed |
+| the ENTIRE firefox project alone (278 tests) | 278 passed |
+| three-browser gate | fails |
+
+So it needs chromium's 276 tests to have run first, in the same invocation.
+
+**The saved snapshot settles what the failure IS.** Twenty-eight seconds after the Performance tab
+was clicked, the accessibility tree still showed `tab "نظرة عامة" [selected]`. The tab was not slow
+to render — it was never selected. The tab lives in the URL (`?tab=`), so something DROPPED the
+query parameter after the click.
+
+**What drops it is not proven.** `CampaignDetailPage` also resolves the project context on mount and
+calls `setCurrentProjectId`; a late redirect there is the obvious suspect and is recorded as its own
+open item below rather than guessed at. The spec now asserts the URL before the chart, so the next
+failure says which of the two happened instead of timing out mutely.
+
+**Two mistakes of mine are recorded here on purpose**, because both cost a whole gate:
+
+1. An earlier "fix" set the assertion timeout to 60s in a spec whose TEST timeout is 30s. An
+   assertion cannot outlive its test; the number was decoration.
+2. After the first red gate I re-ran the failing specs immediately — which made Playwright wipe
+   `test-results/`, destroying the `error-context.md` that would have answered the question two
+   hours earlier. **Read the artefacts before re-running anything.**
+
+### The gate's own design defect, found while diagnosing the above
+
+`e2e/global-setup.ts` runs `migrate:fresh --seed` **once per invocation**, and `workers: 1` with
+three projects means chromium, firefox and webkit share one database that only ever grows. Chromium
+always runs against the seed alone; firefox runs against the seed plus everything chromium created;
+webkit against both. That is why chromium has never once failed a gate in this repo's history, and
+why every order-sensitive failure has been firefox or webkit.
+
+The file's own docblock says «nothing accumulates across runs» — true, and it is the wrong axis. It
+accumulates across PROJECTS within a run. Not fixed here: reseeding between projects is a change to
+how the gate is invoked, and it should not be made in the same breath as a diagnosis.
+
 ## GATE — 2026-08-08 (open items + digests) · **GREEN.** `PLAYWRIGHT_EXIT_CODE=0` · 830 passed · 0 failed · **0 skipped** · 30.7m
 
 Run at `9839287`, three browsers, one worker, `retries: 0`, no file or database change during it.
@@ -127,7 +179,30 @@ account.
 
 ### Exact next task
 
-Nothing is half-made and the tree is clean. In priority order:
+The tree is clean and every contract item below §14 is now closed. In priority order:
+
+1. **The campaign detail page loses its `?tab=` parameter** under load — see the gate section at the
+   top of this file for the evidence. Suspect: the project-context resolution on mount redirecting
+   after the tab has been set. This is a user-facing defect (a person clicks «الأداء» and is put back
+   on «نظرة عامة»), not only a test problem.
+2. **Reseed the E2E database between browser projects**, so a gate stops being three runs against a
+   monotonically growing dataset. Until then, a single-browser run is the only clean signal.
+3. `report-pdf-download.spec.ts` failed once in the same gate and passed in the next; it is the other
+   heavy spec and shares the accumulation cause. Its artefacts were destroyed by a re-run before
+   anybody read them — do not repeat that.
+
+**Closed in this session:** §14.6 objective layouts on the reports · §14.7–14.8 comparisons, pacing,
+funnel drop-off and derived observations · §14.8 objective-aware creative analysis · ATTRIB-VIS-001
+attribution visibility as a fail-closed link permission · MAIL-005 the digest as a mini dashboard ·
+MAIL-006 alerts with dedup and cooldown · MAIL-007 the Arabic voice pass · MAIL-008 rendered demos of
+all ten message types. Real sending stays **Awaiting Credentials**.
+
+**Still carried, unchanged and honest:** `initiate_checkout` on TikTok is the one field spelling not
+confirmed verbatim against a vendor's documentation — it fails SAFE, returning no key and showing
+«لم تُرسل». LinkedIn's adAnalytics has no purchase metric, so `purchases` and `revenue` stay absent
+rather than being approximated. Both wait on a real sync; neither was guessed at.
+
+Superseded priorities, kept for the record:
 
 1. **§14.6 objective layouts**, then **§14.7–14.8** — comparisons, pacing, funnel drop-off, anomaly
    detection. The longest-outstanding contract items.

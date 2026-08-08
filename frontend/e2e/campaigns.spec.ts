@@ -96,9 +96,21 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
    * there — rather than on one packet arriving.
    */
   await page.getByRole('tab', { name: /Performance|الأداء/ }).click()
-  await expect(
-    page.getByText(/الإنفاق مقابل الإيرادات|Spend vs revenue/),
-  ).toBeVisible({ timeout: 60000 })
+
+  /*
+   * The tab lives in the URL (`?tab=`), so this is asserted BEFORE the chart.
+   *
+   * When this failed in a three-browser gate the saved snapshot showed «نظرة عامة» still selected
+   * twenty-eight seconds after the click — the tab parameter was gone, not slow. Waiting only on the
+   * chart turned that into a mute timeout that looked like a slow query and was nothing of the kind;
+   * checking the address first makes the failure say which of the two actually happened.
+   *
+   * What drops the parameter is NOT yet proven — the page also resolves the project context on
+   * mount, and a late redirect there is the obvious suspect. It is recorded as its own open item
+   * rather than guessed at here.
+   */
+  await expect(page).toHaveURL(/[?&]tab=performance/)
+  await expect(page.getByText(/الإنفاق مقابل الإيرادات|Spend vs revenue/)).toBeVisible()
 
   // Platforms tab lists linked external campaigns (or an empty state).
   await page.getByRole('tab', { name: /Platforms|المنصات/ }).click()
