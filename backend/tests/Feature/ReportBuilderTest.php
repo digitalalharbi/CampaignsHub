@@ -30,13 +30,24 @@ final class ReportBuilderTest extends TestCase
             ['cover', 'recommendations', 'executive_summary', 'objective_performance'],
             array_slice($types, 0, 4),
         );
-        // 4 fixed + 1 rich slide per platform × 2 platforms
-        // + closing (platform_comparison, funnel since sales, budget, next_steps) = 4 + 2 + 4 = 10.
-        $this->assertCount(10, $config['slides']);
+        /*
+         * 4 fixed + 1 rich slide per platform × 2 + the closing sequence §14.10 asks for:
+         * platform_comparison, funnel (sales), budget, comparison, observations, next_steps,
+         * data_quality = 4 + 2 + 7 = 13.
+         */
+        $this->assertCount(13, $config['slides']);
         $this->assertContains('platform_comparison', $types);
         $this->assertContains('funnel', $types);
         $this->assertContains('budget', $types);
         $this->assertContains('next_steps', $types);
+        /*
+         * §14.7's analysis, in §14.10's order: interpretation comes AFTER the figures it interprets,
+         * and data quality is last because it says how much weight the rest of the deck can carry.
+         */
+        $this->assertSame(
+            ['comparison', 'observations', 'next_steps', 'data_quality'],
+            array_slice($types, -4),
+        );
         // Exactly one performance slide per connected platform, and none for unconnected platforms.
         $platforms = array_filter(array_column($config['slides'], 'platform'));
         $this->assertEqualsCanonicalizing(['meta', 'snapchat'], array_values($platforms));

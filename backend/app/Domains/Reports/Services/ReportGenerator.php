@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Services;
 
 use App\Domains\Disclaimers\Services\DisclaimerResolver;
+use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\Report;
@@ -26,6 +27,8 @@ final class ReportGenerator
         private readonly ReportTemplateEngine $template,
         private readonly CreativeRankingService $ranking,
         private readonly DisclaimerResolver $disclaimers,
+        private readonly ReportObservations $observations,
+        private readonly DataFreshnessService $freshness,
     ) {}
 
     public function generate(Report $report): array
@@ -152,12 +155,40 @@ final class ReportGenerator
              * source — so the report's Direct CPA and the dashboard's agree by construction.
              */
             'objective_performance' => $scope->objectivePerformance()->build($from, $to),
+            /*
+             * The same split for the PREVIOUS window — §14.7's comparison, done honestly.
+             *
+             * Without it the comparison table put this period's DIRECT cost per order beside last
+             * period's BLENDED one, because `previous` only ever held the rolled-up totals. Two
+             * different scopes under one heading is the exact confusion `objective_performance`
+             * exists to prevent, and a client reading «75 vs 87» would have seen an improvement that
+             * is partly an artefact of which campaigns each figure counted.
+             */
+            'objective_performance_previous' => $scope->objectivePerformance()->build($prevFrom, $prevTo),
             'summary' => $this->executiveSummary($lens, $totals, $delta, $platforms, $campaigns, $report->currency),
+            /*
+             * The professional analysis — §14.7.
+             *
+             * Filled in AFTER `$data` is assembled, because every detector reads the snapshot rather
+             * than the database: an observation is a statement about the figures this report is
+             * showing, and computing it from a second query is how a note comes to contradict the
+             * chart printed above it.
+             */
+            'observations' => [],
             // Structured two-column content: findings (left) + recommendations (right). Cards, not prose.
             'findings' => $this->tagAnnotations($this->findings($lens, $totals, $delta, $platforms, $campaigns, $report->currency), 'finding', $report),
             'recommendations' => ($recs = $this->tagAnnotations($this->recommendations($lens, $platforms, $campaigns, $report->currency), 'recommendation', $report)),
             // Client "Next Steps" — built ONLY from approved recommendations (action/priority/owner/due).
             'next_steps' => $this->nextSteps($recs),
+            /*
+             * How old these figures are, travelling WITH them (§14.7, §14.10).
+             *
+             * A report that quotes a month of spend from a source that stopped syncing four days
+             * before the period ended is confidently wrong, and a reader has no way to tell. The
+             * observations engine reads this too, so «قد تكون بعض المؤشرات غير مكتملة» is a
+             * conclusion drawn from the sync state rather than a disclaimer printed on everything.
+             */
+            'freshness' => $this->freshnessFor($report, $from, $to),
             'audience' => $report->audience ?? 'client',
             'slides' => $config['slides'] ?? [],
             // Effective disclaimer/methodology copy, snapshotted so a shared report is self-contained
@@ -171,6 +202,9 @@ final class ReportGenerator
 
         // Canonical-snapshot metadata: every export format renders from this exact data, and the
         // checksum lets the print pipeline verify it rendered the snapshot it was given.
+        // Now that every figure is in place, read them back and say what happened (§14.7).
+        $data['observations'] = $this->observations->build($lens, $data);
+
         $data['data_version'] = 1;
         $data['tenant_id'] = (string) $report->tenant_id;
         $data['project_id'] = (string) $report->project_id;
@@ -184,6 +218,50 @@ final class ReportGenerator
         app(ProjectContext::class)->forget();
 
         return $data;
+    }
+
+    /**
+     * How current the figures are, and whether any source failed.
+     *
+     * Read for the report's OWN window rather than «now»: a monthly report closed three weeks ago is
+     * not stale because nothing has synced since — it is finished. What matters is whether the
+     * sources were keeping up while the period it covers was running.
+     *
+     * @return array<string,mixed>
+     */
+    private function freshnessFor(Report $report, Carbon $from, Carbon $to): array
+    {
+        $state = $this->freshness->state(
+            (string) $report->tenant_id,
+            [(string) $report->project_id],
+            $from,
+            $to,
+            null,
+            // The clock the sync is judged against is the end of the window, not today.
+            Carbon::now()->min($to->copy()->endOfDay()),
+        );
+
+        return [
+            'state' => $state['state'] ?? 'unknown',
+            'last_sync_at' => $state['last_sync_at'] ?? null,
+            'missing_days' => $state['missing_days'] ?? null,
+            'sync_failed' => (bool) ($state['sync_failed'] ?? false),
+            'sources' => array_values(array_map(
+                static fn (array $s): array => [
+                    'name' => $s['name'] ?? $s['provider'] ?? null,
+                    'provider' => $s['provider'] ?? null,
+                    'state' => $s['state'] ?? 'unknown',
+                    'last_sync_at' => $s['last_sync_at'] ?? null,
+                ],
+                $state['sources'] ?? [],
+            )),
+            'failing' => array_values(array_filter(array_map(
+                static fn (array $s): ?array => ($s['state'] ?? null) === 'failed'
+                    ? ['name' => $s['name'] ?? $s['provider'], 'provider' => $s['provider']]
+                    : null,
+                $state['sources'] ?? [],
+            ))),
+        ];
     }
 
     /**

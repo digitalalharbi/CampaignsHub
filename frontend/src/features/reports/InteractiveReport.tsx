@@ -17,7 +17,7 @@ import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import type { ResolvedDisclaimer } from '@/features/disclaimers/api'
 import type { MetricReading } from '@/components/ui/MetricStrip'
 import { SPECS } from '@/features/analytics/metricCatalog'
-import { type ReportMetric, reportMetrics, trendSeries } from './reportMetrics'
+import { type ReportMetric, creativeReadings, previousReading, reportMetrics, trendSeries } from './reportMetrics'
 
 export interface Slide { id: string; type: string; platform?: string; order: number; visible: boolean }
 type Row = Record<string, number | string | null>
@@ -69,6 +69,24 @@ export interface ReportData {
   /** FUNNEL-NULL-001 — `count` is null for a stage no platform reported; `reported` says which. */
   funnel?: Array<{ stage?: string; label: string; reported?: boolean; count: number | null; step_rate: number | null; cost_per: number | null }>
   budget?: Row[]
+  /** The previous window of the same length — what «‎+28%» is a change FROM. */
+  previous?: Record<string, number | null>
+  /**
+   * §14.7 — what this report's own figures say, each one derived and none of it generic copy.
+   *
+   * Empty is a real answer: a period with nothing alarming in it produces no notes, and the slide
+   * says so rather than filling the space.
+   */
+  observations?: Observation[]
+  /** §14.10 — how current these figures are, and whether any source failed while the period ran. */
+  freshness?: {
+    state?: string
+    last_sync_at?: string | null
+    missing_days?: number | null
+    sync_failed?: boolean
+    sources?: Array<{ name?: string | null; provider?: string | null; state?: string; last_sync_at?: string | null }>
+    failing?: Array<{ name?: string | null; provider?: string | null }>
+  }
   summary?: string[]
   findings?: NoteCardData[]
   recommendations?: NoteCardData[]
@@ -83,6 +101,14 @@ export interface ReportData {
    * budget. This block is what lets the report say which it is showing.
    */
   objective_performance?: ObjectivePerformance
+  /**
+   * The same split for the PREVIOUS window — §14.7's comparison, done honestly.
+   *
+   * Without it the comparison table set this period's Direct cost per order beside last period's
+   * BLENDED one, because `previous` only ever held the rolled-up totals. Two different scopes under
+   * one heading, and the gap between them is not a change in performance.
+   */
+  objective_performance_previous?: ObjectivePerformance
   slides?: Slide[]
   disclaimer?: ResolvedDisclaimer | null
   mode?: string
@@ -129,6 +155,17 @@ export interface ObjectivePerformance {
     includes_non_sales_spend: number
   }
 }
+export interface Observation {
+  id: string
+  kind: string
+  severity: 'critical' | 'warning' | 'positive' | 'info'
+  title: string
+  detail: string
+  metric?: string | null
+  value?: string | null
+  change?: number | null
+  scope?: { type: string; name?: string | null }
+}
 export interface NoteCardData {
   severity?: 'positive' | 'warning' | 'critical' | 'info'
   title: string
@@ -163,6 +200,9 @@ export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportDat
     case 'platform_comparison': return <ComparisonSlide data={data} />
     case 'objective_performance': return <ObjectiveSplitSlide data={data} />
     case 'funnel': return <FunnelSlide data={data} />
+    case 'comparison': return <PeriodComparisonSlide data={data} />
+    case 'observations': return <ObservationsSlide data={data} />
+    case 'data_quality': return <DataQualitySlide data={data} />
     case 'budget': return <BudgetSlide data={data} />
     case 'next_steps': return <NextStepsSlide data={data} />
     case '__methodology': return <PerformanceNotice data={data.disclaimer} variant="methodology" objective={data.objective} />
@@ -542,8 +582,9 @@ function PlatformInsights({ data, platform }: { data: ReportData; platform: stri
           <div>
             <div className="truncate font-semibold text-text-primary" title={String(creative.campaign_name ?? '')}>{String(creative.campaign_name ?? '—')}</div>
             <div className="mt-1.5 grid grid-cols-2 gap-1.5 text-xs">
-              <span className="rounded-lg bg-surface px-2 py-1">ROAS <b className="tnum">{ratio(creative.roas as number)}</b></span>
-              <span className="rounded-lg bg-surface px-2 py-1">CPA <b className="tnum">{money(creative.cpa as number, data.currency)}</b></span>
+              {creativeReadings(creative, data.objective, data.reported_by_platform?.[platform] ?? data.reported).slice(0, 2).map((r) => (
+                <span key={r.key} className="rounded-lg bg-surface px-2 py-1">{r.label} <b className="tnum">{readingText(r.reading)}</b></span>
+              ))}
             </div>
             {creative.reason && <div className="mt-1.5 rounded-lg bg-[var(--brand-background)] px-2 py-1 text-xs text-brand-700">{String(creative.reason)}</div>}
           </div>
@@ -616,11 +657,11 @@ function CreativesSlide({ data, platform }: { data: ReportData; platform: string
               </div>
               <div className="flex flex-1 flex-col gap-2 p-3">
                 <div className="truncate font-bold text-text-primary" title={String(c.campaign_name ?? '')}>{String(c.campaign_name ?? '—')}</div>
+                {/* §14.8 — judged on what this content was made to do, not on a fixed four. */}
                 <div className="grid grid-cols-2 gap-1.5 text-xs">
-                  <span className="rounded-lg bg-surface px-2 py-1">ROAS <b className="tnum">{ratio(c.roas as number)}</b></span>
-                  <span className="rounded-lg bg-surface px-2 py-1">CPA <b className="tnum">{money(c.cpa as number, data.currency)}</b></span>
-                  <span className="rounded-lg bg-surface px-2 py-1">إنفاق <b className="tnum">{compact(Number(c.spend ?? 0))}</b></span>
-                  <span className="rounded-lg bg-surface px-2 py-1">نتائج <b className="tnum">{num(Number(c.conversions ?? 0))}</b></span>
+                  {creativeReadings(c, data.objective, data.reported_by_platform?.[platform] ?? data.reported).map((r) => (
+                    <span key={r.key} className="rounded-lg bg-surface px-2 py-1">{r.label} <b className="tnum">{readingText(r.reading)}</b></span>
+                  ))}
                 </div>
                 <div className="mt-auto rounded-lg bg-[var(--brand-background)] px-2 py-1.5 text-xs text-brand-700">{String(c.reason ?? '')}</div>
               </div>
@@ -927,6 +968,182 @@ function BudgetSlide({ data }: { data: ReportData }) {
             </table>
           </div>
         </ChartCard>
+      )}
+    </div>
+  )
+}
+
+/**
+ * §14.7 — the same metrics, this period against the last one.
+ *
+ * The executive cards already carry a change pill, which answers «up or down» and not «from what».
+ * A client asking whether 96,121 SAR is a lot needs the 75,000 it was last month beside it, and a
+ * percentage on its own has never answered that.
+ *
+ * The rows follow the objective, so a brand report compares reach and CPM rather than revenue.
+ */
+function PeriodComparisonSlide({ data }: { data: ReportData }) {
+  // `previousReading` reads a Direct figure against the previous period's DIRECT figure, never
+  // against the blended total that `previous` holds under the same key.
+  const rows = reportMetrics(data).map((m) => ({ ...m, before: previousReading(m, data) }))
+
+  return (
+    <div>
+      <Title sub="الفترة الحالية مقابل الفترة السابقة بنفس الطول">المقارنات والاتجاهات</Title>
+      <div className="overflow-x-auto rounded-2xl border border-border">
+        <table className="w-full min-w-[520px] text-sm">
+          <thead className="bg-surface-secondary text-text-secondary">
+            <tr>
+              <th className="p-2.5 text-start font-semibold">المؤشر</th>
+              <th className="p-2.5 text-start font-semibold">الفترة الحالية</th>
+              <th className="p-2.5 text-start font-semibold">الفترة السابقة</th>
+              <th className="p-2.5 text-start font-semibold">التغير</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} className="border-t border-border">
+                <td className="p-2.5 text-text-primary">{r.label}</td>
+                <td className="tnum p-2.5 font-bold text-text-primary">{readingText(r.reading)}</td>
+                {/* «لا مقارنة» is not «0» — an absent previous period has nothing to compare with. */}
+                <td className="tnum p-2.5 text-text-secondary">{r.before.text ?? '—'}</td>
+                <td className="p-2.5">
+                  {r.before.change === null
+                    ? <span className="text-text-muted">—</span>
+                    : <TrendPill delta={r.before.change} invertGood={r.invertGood} />}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-xs text-text-muted">
+        تُقارن الفترة بفترة سابقة مساوية لها في عدد الأيام، وتُترك المقارنة فارغة عند غياب بيانات الفترة السابقة.
+      </p>
+    </div>
+  )
+}
+
+const NOTE_TONE: Record<string, { border: string; text: string; Icon: typeof TriangleAlert }> = {
+  critical: { border: 'border-danger/40', text: 'text-danger', Icon: OctagonAlert },
+  warning: { border: 'border-warning/40', text: 'text-warning', Icon: TriangleAlert },
+  positive: { border: 'border-success/40', text: 'text-success', Icon: CircleCheck },
+  info: { border: 'border-border', text: 'text-text-secondary', Icon: Info },
+}
+
+/**
+ * §14.7 — what this report's own numbers say, and nothing that they do not.
+ *
+ * Every card here was produced by a detector that found its condition in this scope's data and
+ * printed the figures that made it true. When none fires the slide says so plainly: a report with
+ * nothing alarming in it is a result, and filling the space with generic advice would teach a
+ * reader that this section is decoration.
+ */
+function ObservationsSlide({ data }: { data: ReportData }) {
+  const notes = data.observations ?? []
+
+  return (
+    <div>
+      <Title sub="ملاحظات مستخرجة من أرقام هذا التقرير ونطاقه">الملاحظات والتنبيهات</Title>
+      {notes.length === 0 ? (
+        <p className="rounded-2xl border border-border bg-surface-secondary p-6 text-center text-sm text-text-secondary">
+          لا توجد ملاحظات تستدعي الانتباه في هذه الفترة.
+        </p>
+      ) : (
+        <div className="grid gap-2.5 md:grid-cols-2">
+          {notes.map((n) => {
+            const tone = NOTE_TONE[n.severity] ?? NOTE_TONE.info
+
+            return (
+              <div key={n.id} className={`rounded-2xl border ${tone.border} bg-surface-secondary p-3`}>
+                <div className="flex items-start gap-2">
+                  <tone.Icon size={16} className={`mt-0.5 shrink-0 ${tone.text}`} />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-sm font-bold text-text-primary">{n.title}</h4>
+                      {n.value && <span className="tnum rounded-md bg-surface px-1.5 py-0.5 text-xs text-text-secondary">{n.value}</span>}
+                    </div>
+                    <p className="mt-1 text-sm text-text-secondary">{n.detail}</p>
+                    {/* Only when the title does not already name it — a card that repeats its own
+                        subject reads as two facts where there is one. */}
+                    {n.scope?.name && !n.title.includes(n.scope.name) && <p className="mt-1 text-xs text-text-muted">{n.scope.name}</p>}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const FRESHNESS_LABEL: Record<string, { ar: string; tone: string }> = {
+  fresh: { ar: 'محدثة', tone: 'text-success' },
+  stale: { ar: 'لم تتحدث مؤخرًا', tone: 'text-warning' },
+  failed: { ar: 'تعذّرت المزامنة', tone: 'text-danger' },
+  no_data: { ar: 'لا يوجد مصدر مرتبط', tone: 'text-text-muted' },
+  unknown: { ar: 'غير معروفة', tone: 'text-text-muted' },
+}
+
+/**
+ * §14.10's last section — how much weight the rest of the deck can carry.
+ *
+ * It is always rendered, including when everything is healthy. A quality slide that appears only
+ * when something is wrong teaches its reader that its absence means nothing, so the one time it
+ * matters they have no baseline to read it against.
+ */
+function DataQualitySlide({ data }: { data: ReportData }) {
+  const f = data.freshness
+  const state = FRESHNESS_LABEL[f?.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown
+  const missing = Object.entries(data.reported ?? {}).filter(([, sent]) => !sent).map(([key]) => SPECS[key]?.label.ar ?? key)
+
+  return (
+    <div>
+      <Title sub="مصدر الأرقام وحداثتها ومدى اكتمالها">جودة البيانات وحداثتها</Title>
+      <div className="grid gap-2.5 sm:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-surface-secondary p-3">
+          <div className="text-xs text-text-muted">حالة البيانات</div>
+          <div className={`font-bold ${state.tone}`}>{state.ar}</div>
+        </div>
+        <div className="rounded-2xl border border-border bg-surface-secondary p-3">
+          <div className="text-xs text-text-muted">آخر مزامنة</div>
+          <div className="tnum font-bold text-text-primary">{f?.last_sync_at ? new Date(f.last_sync_at).toLocaleString('en-GB') : '—'}</div>
+        </div>
+        <div className="rounded-2xl border border-border bg-surface-secondary p-3">
+          <div className="text-xs text-text-muted">أيام بلا بيانات</div>
+          {/* A null is «not measured», which is not the same claim as «no days were missing». */}
+          <div className="tnum font-bold text-text-primary">{f?.missing_days ?? '—'}</div>
+        </div>
+      </div>
+      {(f?.sources?.length ?? 0) > 0 && (
+        <div className="mt-3 overflow-x-auto rounded-2xl border border-border">
+          <table className="w-full min-w-[420px] text-sm">
+            <thead className="bg-surface-secondary text-text-secondary">
+              <tr>
+                <th className="p-2.5 text-start font-semibold">المصدر</th>
+                <th className="p-2.5 text-start font-semibold">الحالة</th>
+                <th className="p-2.5 text-start font-semibold">آخر مزامنة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {f!.sources!.map((s, i) => (
+                <tr key={`${s.provider}-${i}`} className="border-t border-border">
+                  <td className="p-2.5 text-text-primary">{s.name ?? s.provider}</td>
+                  <td className={`p-2.5 ${(FRESHNESS_LABEL[s.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown).tone}`}>
+                    {(FRESHNESS_LABEL[s.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown).ar}
+                  </td>
+                  <td className="tnum p-2.5 text-text-secondary">{s.last_sync_at ? new Date(s.last_sync_at).toLocaleString('en-GB') : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {missing.length > 0 && (
+        <p className="mt-3 rounded-2xl border border-border bg-surface-secondary p-3 text-sm text-text-secondary">
+          مؤشرات لا ترسلها المنصات المرتبطة خلال هذه الفترة: {missing.join('، ')} — تظهر في التقرير بلا قيمة بدلًا من صفر.
+        </p>
       )}
     </div>
   )

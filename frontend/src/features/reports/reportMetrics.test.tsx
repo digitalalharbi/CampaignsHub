@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { SlideBody, type ReportData, type Slide } from './InteractiveReport'
-import { reportMetrics, trendSeries } from './reportMetrics'
+import { creativeChips, creativeReadings, previousReading, reportMetrics, trendSeries } from './reportMetrics'
 
 /**
  * §14.6 on the client — a report renders the cards its objective calls for, and nothing else.
@@ -168,5 +168,164 @@ describe('the daily trend', () => {
 
     expect(screen.queryByText('عدد المنصات')).not.toBeInTheDocument()
     expect(screen.queryByText('أقل تكلفة نتيجة')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * §14.7 — the comparison table, and the scope trap inside it.
+ *
+ * `previous.cpa` is the BLENDED cost per order of the earlier window. Setting it beside this
+ * period's Direct CPA compares two different sets of campaigns under one heading, and the
+ * difference between them is not a change in performance. Caught live: 75 against a blended 87
+ * where the honest previous Direct figure was 80.
+ */
+describe('the period comparison', () => {
+  const split = {
+    ...sales,
+    previous: { spend: 15000, revenue: 60000, conversions: 500, cpa: 87.42, roas: 4.0, ctr: 0.025 },
+    objective_performance: {
+      paths: [],
+      direct: { label_ar: '', label_en: '', spend: 5000, orders: 250, revenue: 40000, cpa: 74.54, roas: 9.82, aov: 160, formula: { cpa: '', roas: '' }, included_campaigns: [], excluded_campaigns: [] },
+      blended: { label_ar: '', label_en: '', spend: 20000, orders: 700, revenue: 80000, blended_cpa: 28.57, blended_roas: 4, formula: { blended_cpa: '', blended_roas: '' }, includes_non_sales_spend: 15000 },
+    },
+    objective_performance_previous: {
+      paths: [],
+      direct: { label_ar: '', label_en: '', spend: 4000, orders: 200, revenue: 30000, cpa: 80.21, roas: 11.28, aov: 150, formula: { cpa: '', roas: '' }, included_campaigns: [], excluded_campaigns: [] },
+      blended: { label_ar: '', label_en: '', spend: 15000, orders: 500, revenue: 60000, blended_cpa: 87.42, blended_roas: 4, formula: { blended_cpa: '', blended_roas: '' }, includes_non_sales_spend: 11000 },
+    },
+  } as ReportData
+
+  it('compares a direct figure with the previous period’s direct figure, not the blended one', () => {
+    const cpa = reportMetrics(split).find((m) => m.key === 'cpa')!
+    const before = previousReading(cpa, split)
+
+    expect(cpa.substituted).toBe(true)
+    // The cell is formatted like the card it sits under — the precision lives in the exact strip.
+    expect(before.text).toBe('80 SAR')
+    /*
+     * The change is the discriminator, and it is why this test exists. Direct against Direct is
+     * 74.54 ÷ 80.21 — a 7% improvement. Against the blended 87.42 it would read as 15%, and half of
+     * that «improvement» would be the difference between which campaigns each figure counted.
+     */
+    expect(before.change).toBeCloseTo(-0.0707, 3)
+    expect(before.change).not.toBeCloseTo(-0.1473, 3)
+  })
+
+  it('compares an ordinary metric with the ordinary previous total', () => {
+    const spend = reportMetrics(split).find((m) => m.key === 'spend')!
+
+    expect(spend.substituted).toBe(false)
+    expect(previousReading(spend, split).text).toBe('15K SAR')
+  })
+
+  it('leaves the comparison empty rather than inventing one when the previous period is absent', () => {
+    const { previous: _p, objective_performance_previous: _o, ...alone } = split
+    const cpa = reportMetrics(alone as ReportData).find((m) => m.key === 'cpa')!
+
+    expect(previousReading(cpa, alone as ReportData)).toEqual({ text: null, change: null })
+  })
+
+  it('renders the table with both periods side by side', () => {
+    render(<SlideBody slide={{ id: 'comparison', type: 'comparison', order: 1, visible: true }} data={split} meta={meta} />)
+
+    expect(screen.getByText('المقارنات والاتجاهات')).toBeInTheDocument()
+    expect(screen.getByText('80 SAR')).toBeInTheDocument()
+    // The blended previous figure must not appear anywhere in the table.
+    expect(screen.queryByText('87 SAR')).not.toBeInTheDocument()
+    expect(screen.getByText('11.28×')).toBeInTheDocument()
+  })
+})
+
+/** §14.7 — the notes slide says nothing rather than filling itself with generic advice. */
+describe('the observations slide', () => {
+  it('states plainly that there is nothing to flag', () => {
+    render(<SlideBody slide={{ id: 'observations', type: 'observations', order: 1, visible: true }} data={brand} meta={meta} />)
+
+    expect(screen.getByText('لا توجد ملاحظات تستدعي الانتباه في هذه الفترة.')).toBeInTheDocument()
+  })
+
+  it('renders each derived note with the figures that produced it', () => {
+    const withNotes = {
+      ...brand,
+      observations: [
+        { id: 'a', kind: 'budget_pace', severity: 'critical' as const, title: 'حملة «الصيف» تستهلك الميزانية أسرع من الخطة', detail: 'صُرف 8,000.00 SAR من أصل 10,000.00 SAR.', value: '1.60×', scope: { type: 'campaign', name: 'الصيف' } },
+      ],
+    }
+    render(<SlideBody slide={{ id: 'observations', type: 'observations', order: 1, visible: true }} data={withNotes} meta={meta} />)
+
+    expect(screen.getByText('1.60×')).toBeInTheDocument()
+    expect(screen.getByText('صُرف 8,000.00 SAR من أصل 10,000.00 SAR.')).toBeInTheDocument()
+  })
+})
+
+/** §14.10 — always rendered, so its absence never has to be interpreted. */
+describe('the data quality slide', () => {
+  it('reports a healthy state as clearly as a broken one', () => {
+    const fresh = { ...brand, freshness: { state: 'fresh', last_sync_at: '2026-08-07T09:00:00Z', missing_days: 0, sources: [{ name: 'Meta Ads', provider: 'meta', state: 'fresh', last_sync_at: '2026-08-07T09:00:00Z' }] } }
+    render(<SlideBody slide={{ id: 'data_quality', type: 'data_quality', order: 1, visible: true }} data={fresh} meta={meta} />)
+
+    // Twice: the overall state, and the one source behind it.
+    expect(screen.getAllByText('محدثة')).toHaveLength(2)
+    expect(screen.getByText('Meta Ads')).toBeInTheDocument()
+  })
+
+  it('shows a missing day count of «—» rather than 0 when nothing measured it', () => {
+    const unknown = { ...brand, freshness: { state: 'unknown', last_sync_at: null, missing_days: null } }
+    const { container } = render(<SlideBody slide={{ id: 'data_quality', type: 'data_quality', order: 1, visible: true }} data={unknown} meta={meta} />)
+
+    expect(container.textContent).toContain('أيام بلا بيانات')
+    expect(container.textContent).not.toContain('أيام بلا بيانات0')
+  })
+})
+
+/**
+ * §14.8 — content is judged on what it was made to do.
+ *
+ * `CreativeRankingService` has ranked by objective since it was written, and the CARDS then
+ * labelled every winner «ROAS —» and «CPA —». A brand report therefore ordered its content
+ * correctly and presented each one as a failure.
+ */
+describe('creative analysis by objective', () => {
+  it('compares brand content on attention, and sales content on the return', () => {
+    expect(creativeChips('awareness')).toEqual(['reach', 'cpm', 'impressions', 'engagements'])
+    expect(creativeChips('traffic')).toEqual(['ctr', 'cpc', 'landing_page_views', 'clicks'])
+    expect(creativeChips('leads')).toContain('cpa')
+    expect(creativeChips('sales')).toContain('roas')
+  })
+
+  it('never puts a return or a cost per order on brand content', () => {
+    expect(creativeChips('awareness')).not.toContain('roas')
+    expect(creativeChips('awareness')).not.toContain('cpa')
+    expect(creativeChips('video')).not.toContain('roas')
+  })
+
+  it('mixed objectives get operational chips only', () => {
+    const mixed = creativeChips('custom')
+
+    expect(mixed).not.toContain('roas')
+    expect(mixed).not.toContain('cpa')
+    expect(mixed).toContain('clicks')
+  })
+
+  /** A chip for a metric the creative's own platform never sends is a state, not a zero. */
+  it('reads an unreported chip as a state', () => {
+    const row = { campaign_name: 'حملة', reach: 0, cpm: 12, impressions: 400000, engagements: 0 }
+    const readings = creativeReadings(row, 'awareness', { reach: false, cpm: true, impressions: true, engagements: false })
+
+    expect(readings.find((r) => r.key === 'reach')!.reading).toEqual({ kind: 'not_provided' })
+    expect(readings.find((r) => r.key === 'cpm')!.reading).toEqual({ kind: 'value', text: '12 SAR' })
+  })
+
+  it('renders the brand report’s creative card without a ROAS chip', () => {
+    const withCreatives = {
+      ...brand,
+      top_creatives: [{ provider: 'meta', campaign_name: 'حملة الوعي', reach: 900000, cpm: 4, impressions: 6_000_000, engagements: 12000, reason: 'أعلى مدى بأقل CPM.' }],
+    }
+    render(<SlideBody slide={{ id: 'c', type: 'top_creatives', platform: 'meta', order: 1, visible: true }} data={withCreatives} meta={meta} />)
+
+    expect(screen.getByText('حملة الوعي')).toBeInTheDocument()
+    expect(screen.getByText('الوصول')).toBeInTheDocument()
+    expect(screen.queryByText('ROAS')).not.toBeInTheDocument()
+    expect(screen.queryByText('CPA')).not.toBeInTheDocument()
   })
 })

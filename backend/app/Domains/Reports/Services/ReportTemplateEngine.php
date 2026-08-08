@@ -105,8 +105,26 @@ final class ReportTemplateEngine
             $slides[] = ['id' => 'funnel', 'type' => 'funnel', 'order' => $order++, 'visible' => true];
         }
         $slides[] = ['id' => 'budget', 'type' => 'budget', 'order' => $order++, 'visible' => true];
+        /*
+         * The closing sequence §14.10 asks for, in its order: trends and comparisons → notes and
+         * alerts → recommendations → data quality and freshness.
+         *
+         * `comparison` and `observations` are new (§14.7). They sit here rather than near the top
+         * because they INTERPRET what the reader has just been shown; put first, they would be
+         * conclusions about figures nobody had seen yet.
+         */
+        $slides[] = ['id' => 'comparison', 'type' => 'comparison', 'order' => $order++, 'visible' => true];
+        $slides[] = ['id' => 'observations', 'type' => 'observations', 'order' => $order++, 'visible' => true];
         // Client-facing action plan — rendered only when there are approved recommendations.
         $slides[] = ['id' => 'next_steps', 'type' => 'next_steps', 'order' => $order++, 'visible' => true];
+        /*
+         * Data quality LAST, and always present.
+         *
+         * It is the slide that says how much weight the rest of the deck can carry, and a report
+         * that omits it when everything is healthy teaches its reader that its absence means
+         * nothing — so when it does appear, they have no baseline to read it against.
+         */
+        $slides[] = ['id' => 'data_quality', 'type' => 'data_quality', 'order' => $order++, 'visible' => true];
 
         return [
             'version' => self::VERSION,
