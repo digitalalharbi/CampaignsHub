@@ -10,6 +10,7 @@ use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
+use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
 use App\Domains\Platform\Console\BackupCommand;
 use App\Domains\Projects\Middleware\ResolveProject;
@@ -63,6 +64,8 @@ return Application::configure(basePath: dirname(__DIR__))
         EvaluateAlerts::class,
         // MAIL-003 — the hourly sweep that sends each recipient their digest at their own local hour.
         SendDailyDigests::class,
+        // MAIL-006 — the alert sweep, for the findings that should not wait until tomorrow morning.
+        SendAlerts::class,
         // INTEG-SYNC-001 — the sweep that drives synced data, the token refresh that runs ahead of
         // need, and the retention that keeps raw payloads from becoming the largest table here.
         SyncAdPlatformsCommand::class,

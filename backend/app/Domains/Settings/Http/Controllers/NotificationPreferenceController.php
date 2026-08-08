@@ -31,7 +31,14 @@ final class NotificationPreferenceController extends Controller
      * it is a mailing list, and the first scheduled run after a deploy is the worst possible moment
      * to discover the difference.
      */
-    private const DIGESTS = ['daily', 'weekly'];
+    /**
+     * The rhythms a person can opt into.
+     *
+     * `alerts` joins the same map rather than getting a column of its own, because it answers the
+     * same question — «what may reach my inbox on its own?» — and a row written before it existed
+     * has no `alerts` key, which reads as «never asked» exactly as it should.
+     */
+    private const DIGESTS = ['daily', 'weekly', 'alerts'];
 
     public function show(Request $request): JsonResponse
     {

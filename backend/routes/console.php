@@ -104,6 +104,19 @@ Schedule::command('integrations:refresh-tokens')->hourly()->withoutOverlapping()
 Schedule::command('notifications:send-digests')->hourly()->withoutOverlapping();
 
 /*
+ * The alert sweep (MAIL-006) — four times a day, not hourly.
+ *
+ * An alert says «this needs a decision», and the decisions this product surfaces do not change
+ * between nine and ten in the morning: a budget running ahead of plan is still ahead an hour later,
+ * and a source that stopped syncing has not started. Four sweeps is soon enough to act on and rare
+ * enough not to become noise — and the cooldown inside `AlertDispatcher` is what stops the same
+ * finding arriving four times in one day.
+ *
+ * At :40, out of the way of the digest sweep on the hour.
+ */
+Schedule::command('notifications:send-alerts')->cron('40 6,10,14,18 * * *')->withoutOverlapping();
+
+/*
  * The store sweep (COMMERCE-001) — Salla and Zid.
  *
  * Hourly, at :20, out of the way of both ad sweeps: a store's four paginated reads should not be

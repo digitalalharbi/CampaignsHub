@@ -18,7 +18,8 @@ interface NotifPrefs {
    * Both digests default to FALSE on the server. A summary that arrives because nobody turned it
    * off is a mailing list, not a preference.
    */
-  digests: { daily: boolean; weekly: boolean }
+  /** Which rhythms may reach this inbox. `alerts` is not a rhythm — it is «when something needs a decision». */
+  digests: { daily: boolean; weekly: boolean; alerts: boolean }
   timezone: string
   locale: 'ar' | 'en'
   digest_hour: number
@@ -38,6 +39,8 @@ const COPY = {
     daily_hint: 'إنفاق أمس ونتائجه، وأفضل وأضعف منصة، والميزانيات التي تحتاج انتباهًا.',
     weekly: 'الملخص التنفيذي الأسبوعي',
     weekly_hint: 'أداء الأسبوع عبر كل المشاريع والمنصات والاتجاهات.',
+    alerts: 'التنبيهات الفورية',
+    alerts_hint: 'ما لا يحتمل الانتظار حتى الغد: تجاوز الميزانية، ارتفاع التكلفة، تراجع الأداء، أو توقف المزامنة. لا يتكرر التنبيه نفسه خلال ثلاثة أيام.',
     when: 'وقت الوصول',
     hour: 'الساعة (بتوقيتك)',
     timezone: 'المنطقة الزمنية',
@@ -56,6 +59,8 @@ const COPY = {
     daily_hint: 'Yesterday’s spend and results, the best and weakest platform, and any budget that needs attention.',
     weekly: 'Weekly executive digest',
     weekly_hint: 'The week across every project, platform and trend.',
+    alerts: 'Immediate alerts',
+    alerts_hint: 'What should not wait until tomorrow: a budget running ahead, a cost climbing, performance slipping, or a source that stopped syncing. The same finding is not repeated within three days.',
     when: 'When it arrives',
     hour: 'Hour (your local time)',
     timezone: 'Timezone',
@@ -130,6 +135,27 @@ export function PersonalNotificationsPage() {
               <span>
                 <span className="font-semibold text-text-primary">{c.weekly}</span>
                 <span className="block text-xs">{c.weekly_hint}</span>
+              </span>
+            </label>
+
+            {/*
+              MAIL-006 — the one rhythm that is not a rhythm.
+
+              An alert arrives when something needs a decision rather than at a chosen hour, so it
+              sits with the digests (same question: what may reach my inbox on its own?) and says
+              plainly that it is throttled — otherwise «immediate» reads as «constant».
+            */}
+            <label className="flex items-start gap-2 text-sm text-text-secondary">
+              <input
+                type="checkbox"
+                data-testid="digest-alerts"
+                className="mt-1"
+                checked={p.digests?.alerts ?? false}
+                onChange={(e) => set({ digests: { ...p.digests, alerts: e.target.checked } })}
+              />
+              <span>
+                <span className="font-semibold text-text-primary">{c.alerts}</span>
+                <span className="block text-xs">{c.alerts_hint}</span>
               </span>
             </label>
 
