@@ -473,7 +473,7 @@ product, and MAIL-014 puts this gallery in front of an operator.
 
 ---
 
-## Session — MAIL-014, the operator's mail console (`PENDING`)
+## Session — MAIL-014, the operator’s mail console (`db34025`)
 
 **`/admin/email`, behind `is_platform_admin`.** The transport banner first, then counts by state
 over the window, then filters (status, ledger, recipient, period), the merged table, and the
