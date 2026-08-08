@@ -117,6 +117,79 @@
                         </table>
                     @endif
 
+                    {{--
+                      The funnel — MAIL-005.
+
+                      Bars are table cells with a width, because a `div` with a percentage width is
+                      the one layout Outlook renders as a full-width block. Stages nobody reported
+                      are absent rather than drawn at zero: a bar of length nothing reads as a step
+                      where everybody left.
+                    --}}
+                    @if ($p['funnel'])
+                        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-top:16px;">{{ $t['funnel'] }}</div>
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px; font-size:13px;">
+                            @foreach ($p['funnel'] as $stage)
+                                <tr>
+                                    <td width="35%" style="padding:5px 0; color:#0f172a;">{{ $stage['label'] }}</td>
+                                    <td width="40%" style="padding:5px 0;">
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef2f1; border-radius:4px;">
+                                            <tr><td width="{{ $stage['width'] }}%" style="background-color:#0f766e; height:8px; line-height:8px; border-radius:4px; font-size:0;">&nbsp;</td><td>&nbsp;</td></tr>
+                                        </table>
+                                    </td>
+                                    <td style="padding:5px 0; color:#0f172a; text-align:{{ $endSide }};" dir="ltr">{{ $stage['count'] }}</td>
+                                </tr>
+                            @endforeach
+                        </table>
+                    @endif
+
+                    {{-- Content: what is working, and what has started to slip. --}}
+                    @if ($p['creatives'])
+                        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-top:16px;">{{ $t['content'] }}</div>
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px; font-size:13px;">
+                            @if ($p['creatives']['best'])
+                                <tr>
+                                    <td style="padding:4px 0; color:#0f766e; font-weight:700; white-space:nowrap;">{{ $t['best_content'] }}</td>
+                                    <td style="padding:4px 0; color:#0f172a;">
+                                        {{ $p['creatives']['best']['name'] }}
+                                        @if ($p['creatives']['best']['reason'])
+                                            <span style="color:#5b6b68;">— {{ $p['creatives']['best']['reason'] }}</span>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endif
+                            @foreach ($p['creatives']['declining'] as $c)
+                                <tr>
+                                    <td style="padding:4px 0; color:#b45309; font-weight:700; white-space:nowrap;">{{ $t['declining'] }}</td>
+                                    <td style="padding:4px 0; color:#0f172a;">{{ $c['name'] }}</td>
+                                </tr>
+                            @endforeach
+                            @foreach ($p['creatives']['fatigued'] as $c)
+                                <tr>
+                                    <td style="padding:4px 0; color:#b45309; font-weight:700; white-space:nowrap;">{{ $t['fatigued'] }}</td>
+                                    <td style="padding:4px 0; color:#0f172a;">{{ $c['name'] }}</td>
+                                </tr>
+                            @endforeach
+                        </table>
+                    @endif
+
+                    {{--
+                      The notes: what happened, what it means, what to do.
+
+                      Three at most. A fourth is not read, and a mail that lists ten alerts every
+                      morning teaches its reader that the alerts mean nothing.
+                    --}}
+                    @if ($p['notes'])
+                        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-top:16px;">{{ $t['notes'] }}</div>
+                        @foreach ($p['notes'] as $note)
+                            <div style="margin-top:6px; padding:9px 11px; border-radius:8px;
+                                        background-color:{{ $toneBg[$note['tone']] }};
+                                        border-{{ $startSide }}:3px solid {{ $tone[$note['tone']] }};">
+                                <div style="font-size:13px; font-weight:700; color:#0f172a;">{{ $note['title'] }}</div>
+                                <div style="font-size:12px; color:#5b6b68; line-height:1.6; padding-top:2px;">{{ $note['detail'] }}</div>
+                            </div>
+                        @endforeach
+                    @endif
+
                     {{-- How old the figures are, beside the figures (§15.15). --}}
                     <div style="font-size:11px; color:#8b9a97; margin-top:12px;">{{ $p['freshness'] }}</div>
 

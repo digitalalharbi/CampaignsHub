@@ -191,4 +191,111 @@ final class DigestPresenter
     {
         return $this->ar() ? 'لا توجد بيانات' : 'No data';
     }
+
+    /**
+     * The label, the shape and the good direction of every metric a digest can lead with — MAIL-005.
+     *
+     * The email's KPI cards used to be spend, results, cost-per-result and impressions on every
+     * project. On a brand project the third of those is an arithmetic accident — spend divided by
+     * whatever events happened to be reported — printed in bold beside three real figures, which is
+     * the §14.6 mistake in an inbox where nobody can click through to check it.
+     *
+     * The keys and the wording match `metricCatalog.ts` on the client on purpose: a reader who opens
+     * the dashboard from the email must find the same words on the same numbers.
+     *
+     * @var array<string, array{ar: string, en: string, kind: string, lower_is_better?: bool, neutral?: bool}>
+     */
+    private const METRICS = [
+        'spend' => ['ar' => 'الإنفاق', 'en' => 'Spend', 'kind' => 'money', 'neutral' => true],
+        'impressions' => ['ar' => 'الظهور', 'en' => 'Impressions', 'kind' => 'count', 'neutral' => true],
+        'reach' => ['ar' => 'الوصول', 'en' => 'Reach', 'kind' => 'count'],
+        'frequency' => ['ar' => 'التكرار', 'en' => 'Frequency', 'kind' => 'ratio', 'neutral' => true],
+        'cpm' => ['ar' => 'تكلفة الألف ظهور', 'en' => 'CPM', 'kind' => 'money', 'lower_is_better' => true],
+        'clicks' => ['ar' => 'النقرات', 'en' => 'Clicks', 'kind' => 'count'],
+        'ctr' => ['ar' => 'معدل النقر', 'en' => 'CTR', 'kind' => 'percent'],
+        'cpc' => ['ar' => 'تكلفة النقرة', 'en' => 'CPC', 'kind' => 'money', 'lower_is_better' => true],
+        'landing_page_views' => ['ar' => 'زيارات الصفحة', 'en' => 'Landing page views', 'kind' => 'count'],
+        'video_views' => ['ar' => 'مشاهدات الفيديو', 'en' => 'Video views', 'kind' => 'count'],
+        'conversions' => ['ar' => 'النتائج', 'en' => 'Results', 'kind' => 'count'],
+        'purchases' => ['ar' => 'المشتريات', 'en' => 'Purchases', 'kind' => 'count'],
+        'revenue' => ['ar' => 'الإيرادات', 'en' => 'Revenue', 'kind' => 'money'],
+        'cpa' => ['ar' => 'تكلفة النتيجة', 'en' => 'Cost per result', 'kind' => 'money', 'lower_is_better' => true],
+        'roas' => ['ar' => 'العائد على الإنفاق', 'en' => 'ROAS', 'kind' => 'ratio'],
+    ];
+
+    /**
+     * One KPI card, or null when the metric is not one this product measures.
+     *
+     * @param  array<string,mixed>  $totals
+     * @param  array<string,bool>  $reported
+     * @param  array<string,float|null>  $change
+     * @return array<string,mixed>|null
+     */
+    public function card(string $key, array $totals, array $reported, array $change): ?array
+    {
+        $spec = self::METRICS[$key] ?? null;
+        if ($spec === null) {
+            return null;
+        }
+
+        $value = $totals[$key] ?? null;
+        $delta = $change[$key] ?? null;
+
+        return [
+            'label' => $this->ar() ? $spec['ar'] : $spec['en'],
+            'value' => match ($spec['kind']) {
+                // `count` is the only one that consults `reported`: it is the only kind whose zero
+                // could have been coalesced from a metric nobody ever sent.
+                'count' => $this->count($totals, $reported, $key),
+                'money' => $this->money(is_numeric($value) ? (float) $value : null),
+                'percent' => $this->percent(is_numeric($value) ? (float) $value : null),
+                default => $this->ratio(is_numeric($value) ? (float) $value : null),
+            },
+            'change' => $this->change($delta),
+            // Neutral figures are never coloured: spending more is neither good nor bad on its own,
+            // and an arrow beside it is a judgement the number does not support.
+            'change_colour' => ($spec['neutral'] ?? false)
+                ? '#8b9a97'
+                : $this->changeColour($delta, lowerIsBetter: $spec['lower_is_better'] ?? false),
+        ];
+    }
+
+    /**
+     * The cards this project leads with, in the order its objective ranks them.
+     *
+     * Four is the ceiling because a phone shows two per row and a third row of figures is where an
+     * email stops being scanned and starts being scrolled past.
+     *
+     * @param  array<string,mixed>  $block
+     * @return list<array<string,mixed>>
+     */
+    public function cards(array $block): array
+    {
+        $totals = (array) ($block['totals'] ?? []);
+        $reported = (array) ($block['reported'] ?? []);
+        $change = (array) ($block['change'] ?? []);
+
+        /*
+         * No stated set means «several objectives, or none we can name» — the same answer the
+         * reports give a mixed scope: the operational figures, which mean the same thing whatever
+         * each campaign was for, and never a cost per result across them.
+         */
+        $keys = (array) ($block['metric_set'] ?? []);
+        if ($keys === []) {
+            $keys = ['spend', 'impressions', 'clicks', 'ctr'];
+        }
+
+        $out = [];
+        foreach ($keys as $key) {
+            $card = $this->card((string) $key, $totals, $reported, $change);
+            if ($card !== null) {
+                $out[] = $card;
+            }
+            if (count($out) === 4) {
+                break;
+            }
+        }
+
+        return $out;
+    }
 }

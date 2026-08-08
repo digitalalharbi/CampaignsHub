@@ -91,6 +91,9 @@ final class DailyDigestMail extends Mailable
                 // Padding and alignment follow the reader's direction; `end` is right in LTR and left
                 // in RTL. Email clients do not support logical properties, so it is computed here.
                 'endSide' => $ar ? 'left' : 'right',
+                // The side a border sits on. Logical properties do not exist in Outlook, so the
+                // direction is resolved once here rather than guessed at in the template.
+                'startSide' => $ar ? 'right' : 'left',
                 'brand' => (string) config('brand.name'),
                 'year' => date('Y'),
                 'subject' => $this->envelope()->subject,
@@ -114,6 +117,7 @@ final class DailyDigestMail extends Mailable
                 'slot' => view('mail.daily-digest', [
                     't' => $this->copy($ar),
                     'endSide' => $ar ? 'left' : 'right',
+                    'startSide' => $ar ? 'right' : 'left',
                     'totals' => [
                         'spend' => $p->money($this->digest['totals']['spend'] ?? null),
                         'conversions' => number_format((float) ($this->digest['totals']['conversions'] ?? 0)),
@@ -144,6 +148,89 @@ final class DailyDigestMail extends Mailable
      *
      * @return list<array<string,mixed>>
      */
+    /**
+     * The funnel, as far as it was actually reported — MAIL-005.
+     *
+     * `count` is null for a stage no platform sent (FUNNEL-NULL-001), and those stages are DROPPED
+     * rather than drawn at zero: a bar of length nothing in an email reads as a step where everybody
+     * left, which is the opposite of «nobody measured this».
+     *
+     * @param  list<array<string,mixed>>  $stages
+     * @return list<array<string,mixed>>
+     */
+    private function funnel(DigestPresenter $p, bool $ar, array $stages): array
+    {
+        /*
+         * The stage names in the reader's own language.
+         *
+         * `MetricsAggregator::funnel()` labels in English — it is the engine, and the client has
+         * `funnelStageLabel()` for the same job. An Arabic email that printed «Landing Page View»
+         * beside «الظهور» is half-translated, which reads worse than either language alone.
+         */
+        $labels = [
+            'impressions' => 'الظهور',
+            'clicks' => 'النقرات',
+            'landing_page_views' => 'زيارات الصفحة',
+            'add_to_cart' => 'الإضافة للسلة',
+            'checkout' => 'بدء الدفع',
+            'purchases' => 'الشراء',
+        ];
+
+        $reported = array_values(array_filter($stages, static fn (array $s): bool => is_numeric($s['count'] ?? null)));
+        if (count($reported) < 2) {
+            return [];
+        }
+
+        $top = max(1.0, (float) $reported[0]['count']);
+
+        return array_map(static fn (array $s): array => [
+            'label' => $ar ? ($labels[$s['stage'] ?? ''] ?? (string) ($s['label'] ?? '')) : (string) ($s['label'] ?? ''),
+            'count' => number_format((float) $s['count']),
+            // A percentage of the widest stage, so the bars mean something without an axis.
+            'width' => (int) round(((float) $s['count'] / $top) * 100),
+            'step' => is_numeric($s['step_rate'] ?? null) ? $p->percent((float) $s['step_rate'], 1) : null,
+        ], $reported);
+    }
+
+    /**
+     * Best content and what is slipping — never a heading with nothing under it.
+     *
+     * @param  array<string,mixed>|null  $creatives
+     * @return array<string,mixed>|null
+     */
+    private function creatives(?array $creatives): ?array
+    {
+        if ($creatives === null) {
+            return null;
+        }
+
+        return [
+            'best' => $creatives['best'] ?? null,
+            'declining' => array_slice((array) ($creatives['declining'] ?? []), 0, 2),
+            'fatigued' => array_slice((array) ($creatives['fatigued'] ?? []), 0, 2),
+        ];
+    }
+
+    /**
+     * The notes, most serious first, capped at what a reader will actually read.
+     *
+     * Three. A fourth is not read, and an email that lists ten alerts every morning teaches its
+     * reader that the alerts do not mean anything — which costs more than the notes were worth.
+     *
+     * @param  list<array<string,mixed>>  $observations
+     * @return list<array<string,mixed>>
+     */
+    private function notes(array $observations): array
+    {
+        $tone = ['critical' => 'bad', 'warning' => 'warn', 'positive' => 'good', 'info' => 'neutral'];
+
+        return array_map(static fn (array $o): array => [
+            'title' => (string) ($o['title'] ?? ''),
+            'detail' => (string) ($o['detail'] ?? ''),
+            'tone' => $tone[$o['severity'] ?? 'info'] ?? 'neutral',
+        ], array_slice($observations, 0, 3));
+    }
+
     private function projects(DigestPresenter $p, bool $ar, string $app): array
     {
         $out = [];
@@ -156,38 +243,31 @@ final class DailyDigestMail extends Mailable
             $out[] = [
                 'name' => (string) ($block['project_name'] ?? ''),
                 'verdict' => $p->verdict($block),
-                'kpis' => [
-                    [
-                        'label' => $ar ? 'الإنفاق' : 'Spend',
-                        'value' => $p->money($totals['spend'] ?? null),
-                        'change' => $p->change($change['spend'] ?? null),
-                        // Spending more is neither good nor bad on its own, so it is never coloured.
-                        'change_colour' => '#8b9a97',
-                    ],
-                    [
-                        'label' => $ar ? 'النتائج' : 'Results',
-                        'value' => $p->count($totals, $reported, 'conversions'),
-                        'change' => $p->change($change['conversions'] ?? null),
-                        'change_colour' => $p->changeColour($change['conversions'] ?? null),
-                    ],
-                    [
-                        'label' => $ar ? 'تكلفة النتيجة' : 'Cost per result',
-                        'value' => $p->money($totals['cpa'] ?? null),
-                        'change' => $p->change($change['cpa'] ?? null),
-                        // A cost improves by falling — the one figure whose arrow inverts.
-                        'change_colour' => $p->changeColour($change['cpa'] ?? null, lowerIsBetter: true),
-                    ],
-                    [
-                        'label' => $ar ? 'الظهور' : 'Impressions',
-                        'value' => $p->count($totals, $reported, 'impressions'),
-                        'change' => $p->change($change['impressions'] ?? null),
-                        'change_colour' => '#8b9a97',
-                    ],
-                ],
+                /*
+                  The cards this project's money is judged on — MAIL-005, §14.6 in an inbox.
+
+                  They were spend, results, cost-per-result and impressions on every project. On a
+                  brand project the third is spend divided by whatever events happened to be
+                  reported: an arithmetic accident printed in bold, in a medium where nobody can
+                  click through to check it.
+                */
+                'kpis' => $p->cards($block),
                 'paths' => $this->paths($p, $ar, $block['paths'] ?? []),
                 'best' => $this->named($p, $ar, $block['best_platform'] ?? null, $block['best_campaign'] ?? null),
                 'worst' => $this->named($p, $ar, $block['worst_platform'] ?? null, $block['worst_campaign'] ?? null),
                 'freshness' => $this->freshness($ar, $block['freshness'] ?? []),
+                // The funnel, the content and the notes — the three sections that turn a list of
+                // figures into something a reader can act on without opening the product.
+                'funnel' => $this->funnel($p, $ar, $block['funnel'] ?? []),
+                'creatives' => $this->creatives($block['creatives'] ?? null),
+                /*
+                  The budget is NOT a section of its own.
+
+                  `ReportObservations` already produces a budget-pace note with the money in it, and
+                  a separate row above it said the same thing in fewer words — two statements of one
+                  fact, which reads as two problems.
+                */
+                'notes' => $this->notes($block['observations'] ?? []),
                 'url' => $app.'/app/dashboard',
             ];
         }
@@ -271,6 +351,13 @@ final class DailyDigestMail extends Mailable
             'spend' => 'الإنفاق',
             'results' => 'النتائج',
             'projects' => 'المشاريع',
+            'funnel' => 'المسار',
+            'content' => 'المحتوى',
+            'best_content' => 'الأفضل',
+            'declining' => 'يتراجع',
+            'fatigued' => 'يحتاج تجديدًا',
+            'budget' => 'الميزانية',
+            'notes' => 'ما يستحق الانتباه',
             'no_blended_note' => 'لا تُجمَع تكلفة النتيجة ولا العائد عبر المشاريع — ذلك يقسم أموال عميل على نتائج عميل آخر. تجدها داخل كل مشروع، وبحسب المسار.',
             'by_path' => 'حسب المسار التسويقي',
             'best' => 'الأفضل',
@@ -290,6 +377,13 @@ final class DailyDigestMail extends Mailable
             'spend' => 'Spend',
             'results' => 'Results',
             'projects' => 'Projects',
+            'funnel' => 'Funnel',
+            'content' => 'Content',
+            'best_content' => 'Best',
+            'declining' => 'Slipping',
+            'fatigued' => 'Needs refreshing',
+            'budget' => 'Budget',
+            'notes' => 'Worth your attention',
             'no_blended_note' => 'Cost per result and return are not summed across projects — that would divide one client’s money by another client’s results. They appear inside each project, by marketing path.',
             'by_path' => 'By marketing path',
             'best' => 'Best',

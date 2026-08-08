@@ -56,6 +56,12 @@ final class DigestMailRenderTest extends TestCase
         return (new DailyDigestMail($this->digest($over), $locale, 'Mohammed'))->render();
     }
 
+    /** Renders a digest built in full, rather than one assembled from overrides. */
+    private function renderOf(array $digest, string $locale = 'ar'): string
+    {
+        return (new DailyDigestMail($digest, $locale, 'Mohammed'))->render();
+    }
+
     /**
      * The rule, in the place it is most dangerous: an inbox.
      *
@@ -172,5 +178,95 @@ final class DigestMailRenderTest extends TestCase
         $this->assertStringContainsString('/privacy', $html);
         $this->assertStringContainsString('/terms', $html);
         $this->assertStringContainsString('/security', $html);
+    }
+
+    /**
+     * The mini dashboard — MAIL-005.
+     *
+     * The email carries the funnel, the content and the notes, and it carries them as figures rather
+     * than as headings with «—» under them. Each assertion below is a section that used to be
+     * missing entirely: a reader had numbers and no way to tell what to do about them.
+     */
+    public function test_the_email_carries_a_funnel_content_and_the_notes(): void
+    {
+        $html = $this->renderOf($this->rich());
+
+        $this->assertStringContainsString('المسار', $html);
+        $this->assertStringContainsString('الظهور', $html);
+        // Arabic labels, not the engine's English ones: a half-translated funnel reads worse than
+        // either language alone.
+        $this->assertStringNotContainsString('Landing Page View', $html);
+        $this->assertStringContainsString('زيارات الصفحة', $html);
+
+        $this->assertStringContainsString('المحتوى', $html);
+        $this->assertStringContainsString('Bundle Carousel', $html);
+
+        $this->assertStringContainsString('ما يستحق الانتباه', $html);
+        $this->assertStringContainsString('تستهلك الميزانية أسرع من الخطة', $html);
+    }
+
+    /** A stage nobody reported is absent — a bar of length nothing reads as «everybody left here». */
+    public function test_an_unreported_funnel_stage_is_left_out_rather_than_drawn_at_zero(): void
+    {
+        $digest = $this->rich();
+        $digest['projects'][0]['funnel'] = [
+            ['stage' => 'impressions', 'label' => 'Impressions', 'count' => 400000, 'step_rate' => null],
+            ['stage' => 'clicks', 'label' => 'Clicks', 'count' => 9000, 'step_rate' => 0.0225],
+            // Never sent by any connected platform.
+            ['stage' => 'add_to_cart', 'label' => 'Add to Cart', 'count' => null, 'step_rate' => null],
+        ];
+
+        $html = $this->renderOf($digest);
+
+        $this->assertStringContainsString('النقرات', $html);
+        $this->assertStringNotContainsString('الإضافة للسلة', $html);
+    }
+
+    /**
+     * The KPI cards follow the objective — §14.6 in an inbox.
+     *
+     * A brand project must not be handed a cost per result: it is spend divided by whatever events
+     * happened to be reported, printed in bold, where nobody can click through to check it.
+     */
+    public function test_a_brand_project_is_not_given_a_cost_per_result_card(): void
+    {
+        $digest = $this->rich();
+        $digest['projects'][0]['metric_set'] = ['impressions', 'reach', 'frequency', 'cpm'];
+
+        $html = $this->renderOf($digest);
+
+        $this->assertStringContainsString('تكلفة الألف ظهور', $html);
+        $this->assertStringNotContainsString('>تكلفة النتيجة<', $html);
+    }
+
+    /**
+     * A digest with the new sections, built by hand.
+     *
+     * @return array<string,mixed>
+     */
+    private function rich(): array
+    {
+        $base = $this->digest();
+        $base['projects'][0]['metric_set'] = ['spend', 'conversions', 'cpa', 'impressions'];
+        $base['projects'][0]['funnel'] = [
+            ['stage' => 'impressions', 'label' => 'Impressions', 'count' => 400000, 'step_rate' => null],
+            ['stage' => 'landing_page_views', 'label' => 'Landing Page View', 'count' => 7400, 'step_rate' => 0.82],
+            ['stage' => 'purchases', 'label' => 'Purchase', 'count' => 210, 'step_rate' => 0.028],
+        ];
+        $base['projects'][0]['creatives'] = [
+            'best' => ['name' => 'Bundle Carousel', 'provider' => 'snapchat', 'reason' => 'أعلى ROAS (4.20×)'],
+            'declining' => [['name' => 'Static Offer', 'provider' => 'meta', 'reason' => null]],
+            'fatigued' => [],
+        ];
+        $base['projects'][0]['observations'] = [
+            [
+                'id' => 'b', 'kind' => 'budget_pace', 'severity' => 'critical', 'reveals' => ['spend'],
+                'title' => 'حملة «الصيف» تستهلك الميزانية أسرع من الخطة',
+                'detail' => 'صُرف 8,000.00 SAR من أصل 10,000.00 SAR.',
+                'scope' => ['type' => 'campaign', 'name' => 'الصيف'],
+            ],
+        ];
+
+        return $base;
     }
 }

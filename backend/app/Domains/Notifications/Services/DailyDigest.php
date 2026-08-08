@@ -10,6 +10,9 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Services\ReportObjectiveLens;
+use App\Domains\Reports\Services\ReportObservations;
+use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 
@@ -52,6 +55,9 @@ final class DailyDigest
     public function __construct(
         private readonly MetricsAggregator $metrics,
         private readonly DataFreshnessService $freshness,
+        private readonly ReportObservations $observations,
+        private readonly ReportTemplateEngine $template,
+        private readonly DigestCreatives $creatives,
     ) {}
 
     /**
@@ -142,7 +148,20 @@ final class DailyDigest
         $platforms = $scoped->byProvider($from, $to);
         $campaigns = $scoped->byCampaign($from, $to);
 
-        return [
+        /*
+         * What this project's money was FOR — the same lens the reports use (§14.6).
+         *
+         * It decides which KPI cards lead and which figures the notes are allowed to talk about, so
+         * a brand project's digest is not scored on a cost per order it never tried to produce.
+         */
+        $lens = ReportObjectiveLens::infer($campaigns);
+        $budget = $scoped->budgetPacing($from, $to, $to);
+        $funnel = $scoped->funnel($from, $to);
+        $freshness = $this->freshnessFor($projectId, $from, $to);
+
+        $block = [
+            'objective' => $lens->value(),
+            'metric_set' => $this->template->metricSet($lens->value()),
             'totals' => $current,
             'previous' => $previous,
             'reported' => $reported,
@@ -152,9 +171,33 @@ final class DailyDigest
             'worst_platform' => $this->pick($platforms, 'provider', best: false),
             'best_campaign' => $this->pick($campaigns, 'campaign_name', best: true),
             'worst_campaign' => $this->pick($campaigns, 'campaign_name', best: false),
-            'budget' => $this->budgetAttention($scoped->budgetPacing($from, $to, $to)),
-            'freshness' => $this->freshnessFor($projectId, $from, $to),
+            'budget' => $this->budgetAttention($budget),
+            // The funnel STAGES only — `funnel()` returns its own spend beside them and the email has
+            // no room for a second spend figure it would then have to reconcile.
+            'funnel' => $funnel['stages'],
+            'creatives' => $this->creatives->forProject($projectId, $from, $to),
+            'freshness' => $freshness,
         ];
+
+        /*
+         * The notes, from the SAME engine the reports use — MAIL-005.
+         *
+         * A second set of thresholds would mean the email and the report could disagree about
+         * whether a campaign is overspending, and the reader has no way to tell which is right. The
+         * detectors read a snapshot-shaped array, so the digest hands them one.
+         */
+        $block['observations'] = $this->observations->build($lens, [
+            'currency' => 'SAR',
+            'kpis' => $current,
+            'delta' => $block['change'],
+            'reported' => $reported,
+            'metric_set' => $block['metric_set'],
+            'platforms' => $platforms,
+            'budget' => $budget,
+            'freshness' => $freshness,
+        ]);
+
+        return $block;
     }
 
     /**
