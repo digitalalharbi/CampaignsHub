@@ -359,7 +359,7 @@ ledger `MAIL-014` renders).
 
 ---
 
-## Session — MAIL-011, the preferences centre (`PENDING`)
+## Session — MAIL-011, the preferences centre (`d2bdc25`)
 
 **What it is.** `MessageCatalogue` names all 26 message types the product can send, across the seven
 choosable categories (الأداء / الميزانية / المحتوى / التكاملات / التقارير / التشغيل / المالية) plus
