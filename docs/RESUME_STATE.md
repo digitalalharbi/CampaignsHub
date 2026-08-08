@@ -10,6 +10,64 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## GATE — 2026-08-08 (E2E-ISO-002) · **GREEN, and it is a different gate now**
+
+`npm run gate` · `GATE_EXIT_CODE=0` — chromium **286**, firefox **278**, webkit **278**, each in its
+own invocation against its own freshly seeded database and its own Redis keyspace.
+**Failed=0 · Skipped=0 · Flaky=0 · Retries=0 · Working tree CLEAN** at `42f0580`.
+
+### The gate was three browsers running three different suites
+
+`globalSetup` seeds ONCE per invocation. With `workers: 1` and three projects in one invocation,
+chromium met the seed, firefox met the seed plus everything chromium had created, and webkit met
+both — and the three reported one number. That is why chromium has never failed a gate in this
+repo's history, and why every order-dependent failure on record is firefox or webkit.
+
+The suite already knew. `campaigns.spec.ts` carries a comment explaining a selector had to be pinned
+by name because a project «did not exist yet when chromium ran», and calls itself «the fourth time
+this suite has outgrown a selector that guessed». Four workarounds, one cause.
+
+`npm run gate` now runs Playwright once per browser: own database, own servers, own browser
+lifecycle, own Node process. Separate invocations rather than a mid-run reset, because dropping
+every table while `artisan serve` holds connections to them BLOCKS rather than errors — the exact
+deadlock this repo hit earlier the same day.
+
+### The first isolated run failed, and the cause was the isolation itself
+
+Firefox and webkit each failed one spec, with no apparent connection: an advertiser «was not offered
+a password step», and the analytics page rendered without its metric catalogue.
+
+Both were the same thing. **Sessions, the cache and the queues live in Redis; `e2e:prepare` reset
+Postgres alone.** The second invocation met a fresh database while Redis still described the rows
+the first had just dropped — **1,739 keys of it**, which is the figure the reset now prints when it
+clears them. A stale cache entry is indistinguishable from a product defect from the outside, and
+«fixing» those two specs would have meant debugging the product for a problem the harness created.
+
+Only the gate's own keyspace is cleared: every key carries `REDIS_PREFIX`, so `keys('*')` on the
+prefixed connection cannot reach a developer's stack sharing the same Redis server. `flushdb()`
+could, which is why it is not used.
+
+### TAB-PARAM-001 — still OPEN, and not resolved by any of this
+
+The campaign detail page reverting from «الأداء» to «نظرة عامة» has **not** been reproduced. Five
+attempts, every one green:
+
+| experiment | result |
+|---|---|
+| the two heavy specs alone, firefox | 10 passed |
+| the whole firefox project, fresh database | 278 passed |
+| campaigns.spec against a chromium-grown database | 9 passed |
+| the whole firefox project against chromium's leftovers, no reseed | 278 passed |
+| a deliberately delayed campaign query, probing for a late settle | URL kept `?tab=performance` |
+
+Reading the code closed the other theory: only three call sites write the query string, all
+user-triggered, and nothing else in the campaign subtree calls `useSearchParams`.
+
+**Isolation removes the only condition under which it has ever appeared. That is not the same as
+having found it**, and this item stays open. Nothing was hidden to get here: no timeout was raised,
+no retry added, no assertion weakened. The spec now asserts the URL before the chart, so the next
+occurrence says whether the parameter was lost or the chart was slow.
+
 ## GATE — 2026-08-08 (§14.6–14.8, attribution, mail) · **GREEN** · `PLAYWRIGHT_EXIT_CODE=0` · 830 passed · 28 skipped=0 · 29.8m
 
 Run at `08e31f1`, three browsers, one worker, `retries: 0`, no file or database change during it.
