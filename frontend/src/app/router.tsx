@@ -86,6 +86,7 @@ import { PlatformLegalPage } from '@/features/admin/PlatformLegalPage'
 import { ProviderReviewPage } from '@/features/admin/ProviderReviewPage'
 import { BillingPage as AdminBillingPage } from '@/features/admin/BillingPage'
 import { AuditPage } from '@/features/admin/AuditPage'
+import { EmailOperationsPage } from '@/features/admin/EmailOperationsPage'
 import { CutoverPage } from '@/features/admin/CutoverPage'
 import { AgencyDashboardPage } from '@/features/agency/AgencyDashboardPage'
 import { RequireAgencyPortal } from '@/features/agency/RequireAgencyPortal'
@@ -434,6 +435,10 @@ export const router = createBrowserRouter(withErrorBoundary([
             // REVIEW-001 — per-provider platform-review readiness, eight distinct checklists.
             { path: 'integrations/review', element: <ProviderReviewPage /> },
             { path: 'cutover', element: <CutoverPage /> },
+            // MAIL-014 — the mail ledger and the message gallery. Its own entry rather than a tab
+            // inside Audit: it is the surface an operator opens when a customer says an email never
+            // arrived, and the audit trail is about people's actions rather than the mailer's.
+            { path: 'email', element: <EmailOperationsPage /> },
             { path: 'audit', element: <AuditPage /> },
           ],
         }],

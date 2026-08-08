@@ -8,6 +8,7 @@ use App\Domains\Legal\Http\Controllers\PlatformSettingsController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
+use App\Domains\Platform\Http\Controllers\PlatformEmailController;
 use App\Domains\Platform\Http\Controllers\PlatformGrantController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
@@ -37,6 +38,17 @@ Route::middleware(['auth:sanctum', 'platform'])
     ->prefix('admin')->name('admin.')
     ->group(function (): void {
         Route::get('/overview', PlatformOverviewController::class)->name('overview');
+
+        /*
+         * MAIL-014 — what this installation's mail has actually done.
+         *
+         * Read-only by design: no resend and no delete. A ledger an operator can edit stops being
+         * evidence, and a resend button on a console that reaches every tenant's recipients is a way
+         * to mail thousands of people by mis-click.
+         */
+        Route::get('/email/deliveries', [PlatformEmailController::class, 'index'])->name('email.deliveries');
+        Route::get('/email/previews', [PlatformEmailController::class, 'previews'])->name('email.previews');
+        Route::get('/email/previews/{key}', [PlatformEmailController::class, 'preview'])->name('email.preview');
 
         Route::get('/tenants', [PlatformTenantController::class, 'index'])->name('tenants.index');
         Route::get('/tenants/{tenant}', [PlatformTenantController::class, 'show'])->name('tenants.show');

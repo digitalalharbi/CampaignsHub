@@ -13,6 +13,7 @@ import {
   PanelLeft,
   Plug,
   Sun,
+  Mail,
   X,
 } from 'lucide-react'
 import { AccountMenu } from '@/features/account/UserMenu'
@@ -54,6 +55,9 @@ const adminNav = [
   { to: '/admin/registrations', ar: 'طلبات التسجيل', en: 'Registrations', icon: ClipboardCheck },
   { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: Building2 },
   { to: '/admin/billing', ar: 'الخطط والاشتراكات', en: 'Plans & subscriptions', icon: CreditCard },
+  // MAIL-014 — beside the audit trail, because both answer «what did the platform do?». Separate
+  // entries because one is about people's actions and the other about the mailer's.
+  { to: '/admin/email', ar: 'البريد والتسليم', en: 'Email & delivery', icon: Mail },
   { to: '/admin/audit', ar: 'السجلات والتدقيق', en: 'Logs & audit', icon: ScrollText },
   /*
    * PROVCFG-001 — a daily entry, not an advanced one.

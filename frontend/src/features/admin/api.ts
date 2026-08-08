@@ -645,3 +645,54 @@ export function setIntegrationProviderEnabled(
 export function forgetIntegrationCredential(provider: string, key: string): Promise<IntegrationProvider> {
   return deleteData(`/admin/settings/integrations/providers/${provider}/credentials/${key}`)
 }
+
+// ---- Email operations (MAIL-014) -----------------------------------------------------------------
+
+export interface EmailDelivery {
+  id: string
+  /** `transactional` (mail_deliveries) or `digest` (digest_sends) — two ledgers, one question. */
+  source: 'transactional' | 'digest'
+  at: string
+  kind: string
+  template: string
+  recipient: string | null
+  tenant_name: string | null
+  locale: string | null
+  status: string
+  transport: string | null
+  attempts: number
+  reason: string | null
+}
+
+export interface EmailLedger {
+  deliveries: EmailDelivery[]
+  total: number
+  page: number
+  per_page: number
+  by_state: Record<string, number>
+  transport: { state: 'awaiting_credentials' | 'sandbox' | 'live'; provider_configured: boolean; driver: string }
+  available_states: string[]
+}
+
+export function fetchEmailLedger(params: {
+  status?: string
+  kind?: string
+  recipient?: string
+  source?: string
+  days?: number
+  page?: number
+}): Promise<EmailLedger> {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== '' && v !== undefined) q.set(k, String(v))
+  }
+  return getData<EmailLedger>(`/admin/email/deliveries${q.size > 0 ? `?${q}` : ''}`)
+}
+
+export function fetchEmailPreviews(): Promise<{ keys: string[]; locales: string[] }> {
+  return getData('/admin/email/previews')
+}
+
+export function fetchEmailPreview(key: string, locale: string): Promise<{ key: string; locale: string; html: string }> {
+  return getData(`/admin/email/previews/${key}?locale=${locale}`)
+}

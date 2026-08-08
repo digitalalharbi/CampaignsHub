@@ -346,7 +346,6 @@ rather than grants, resolved against each recipient's live ceiling at send time.
 
 | unit | what it is |
 |---|---|
-| `MAIL-014` | admin email operations over `mail_deliveries` (counts, delivered/failed/awaiting credentials, type, recipient, tenant/project, time, attempts, reason, transport, template) plus an in-product preview gallery extending `notifications:preview` |
 | `TEAM-INVITE-001` | two invitation paths — see below |
 
 **Where to start reading:** `MessageCatalogue` (every message this product can send, and which
@@ -471,6 +470,41 @@ product, and MAIL-014 puts this gallery in front of an operator.
 
 **Gates:** backend **1749 passed** (10163 assertions) · frontend **923 passed** (125 files) · `tsc -b`, oxlint
 (0 errors) and the production build clean · Pint clean.
+
+---
+
+## Session — MAIL-014, the operator's mail console (`PENDING`)
+
+**`/admin/email`, behind `is_platform_admin`.** The transport banner first, then counts by state
+over the window, then filters (status, ledger, recipient, period), the merged table, and the
+gallery.
+
+**Two ledgers, one question.** `mail_deliveries` (transactional, by address) and `digest_sends`
+(digests and alerts, by user and period) are merged with the source named on each row. A console
+reading either alone shows a healthy install while the other half is failing.
+
+**`sandbox` gets the loudest banner.** The `log` mailer succeeds at everything and delivers nothing,
+so every row reads «أُرسلت» while not one message reached a human. An operator telling a customer
+their invoice went out would have been misled by their own console.
+
+**Read-only, and no bodies.** No resend, no delete, no export. A ledger an operator can edit stops
+being evidence; a resend button that reaches every tenant's recipients is a way to mail thousands of
+people by mis-click; and a delivery log is not an inbox.
+
+**One definition for the gallery.** The fixtures moved from the console command into `MailGallery`,
+which both `notifications:preview` and the page read — two callers building their own fixtures is how
+the gallery an operator opens and the files a developer renders stop being the same product. Pinned
+by a test comparing the endpoint's keys with `MailGallery::keys()`.
+
+**Found by opening the page.** The status filter offered «بانتظار بيانات الاعتماد» twice — the second
+was the older `awaiting_provider_credentials` vocabulary, which neither of these two tables can hold,
+so one of the two options matched nothing. And «آخر 7 يومًا» had the Arabic number agreement wrong:
+3–10 take the plural, «آخر 7 أيام».
+
+**Gates:** backend **1758 passed** (10199 assertions) · frontend **928 passed** (126 files) · `tsc -b`, oxlint
+(0 errors) and the production build clean · Pint clean. Live-reviewed at `/admin/email` as
+`admin@demo-campaignshub.local` with three temporary ledger rows — one sent, one failed with its
+SMTP reason, one digest awaiting credentials — all three rendered with their counts, then deleted.
 
 **B. Plans, subscriptions and payments** — not started. No free tier; a paid subscription required;
 USD; a PAID introductory first month, once per entity; annual with a real discount; every price,
