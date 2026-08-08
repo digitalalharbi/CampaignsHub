@@ -269,4 +269,23 @@ final class DigestMailRenderTest extends TestCase
 
         return $base;
     }
+
+    /**
+     * A path key the enum does not know is shown AS the key, never relabelled.
+     *
+     * `pathLabel()` fell back to Awareness, so an unrecognised key was quietly presented as brand
+     * spend — money labelled as something it is not, in the one section whose whole purpose is
+     * keeping the paths apart. Found when a preview fixture keyed the map as a list: every row
+     * rendered «الوعي», and the conversion path's spend appeared under the awareness label.
+     */
+    public function test_an_unknown_marketing_path_is_never_relabelled_as_awareness(): void
+    {
+        $presenter = new DigestPresenter('ar');
+
+        $this->assertSame('الوعي', $presenter->pathLabel('awareness'));
+        $this->assertSame('التحويل والمبيعات', $presenter->pathLabel('conversion'));
+        // The failure mode: a list index reaching a function that expects a path name.
+        $this->assertSame('0', $presenter->pathLabel('0'));
+        $this->assertSame('nonsense', $presenter->pathLabel('nonsense'));
+    }
 }

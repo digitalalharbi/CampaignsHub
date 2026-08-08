@@ -194,9 +194,17 @@ final class RenderMailPreviews extends Command
                     'clicks' => true, 'reach' => true, 'video_views' => false,
                 ],
                 'change' => ['spend' => 0.11, 'conversions' => -0.12, 'cpa' => 0.27, 'revenue' => 0.05],
+                /*
+                 * KEYED by path, exactly as `DailyDigest::byPath()` returns it.
+                 *
+                 * Written as a list first, which made the template read `0` and `1` as path names —
+                 * and every row rendered «الوعي», so the conversion path's 20,668 SAR appeared under
+                 * the awareness label. A fixture that does not match the shape it stands in for
+                 * tests the renderer against a world that does not exist.
+                 */
                 'paths' => [
-                    ['path' => 'awareness', 'spend' => 2003.5, 'campaigns' => 2, 'result_metrics_apply' => false, 'cost_per_result' => null],
-                    ['path' => 'conversion', 'spend' => 20668.58, 'campaigns' => 5, 'result_metrics_apply' => true, 'cost_per_result' => 86.84],
+                    'awareness' => ['spend' => 2003.5, 'campaigns' => 2, 'conversions' => 0, 'revenue' => 0, 'cost_per_result' => null, 'roas' => null],
+                    'conversion' => ['spend' => 20668.58, 'campaigns' => 5, 'conversions' => 238, 'revenue' => 96500.0, 'cost_per_result' => 86.84, 'roas' => 4.67],
                 ],
                 'best_platform' => ['label' => 'snapchat', 'spend' => 3124.0, 'cpa' => 48.81],
                 'worst_platform' => ['label' => 'google', 'spend' => 9119.63, 'cpa' => 140.3],

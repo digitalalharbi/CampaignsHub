@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Services\DigestPresenter;
+use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailLinks;
 use App\Support\AdPlatforms;
 use Illuminate\Bus\Queueable;
@@ -88,6 +89,9 @@ final class DailyDigestMail extends Mailable
         return new Content(
             view: 'mail.layout',
             with: [
+                // MAIL-DS-001 — one stack per language, Arabic faces first when the mail is Arabic.
+                'font' => MailDesign::font($ar),
+                'numericFont' => MailDesign::numericFont(),
                 'locale' => $this->lang,
                 'dir' => $ar ? 'rtl' : 'ltr',
                 // Padding and alignment follow the reader's direction; `end` is right in LTR and left
@@ -114,6 +118,8 @@ final class DailyDigestMail extends Mailable
                 ],
                 'projects' => $this->projects($p, $ar, $app),
                 'slot' => view('mail.daily-digest', [
+                    'font' => MailDesign::font($ar),
+                    'numericFont' => MailDesign::numericFont(),
                     't' => $this->copy($ar),
                     'endSide' => $ar ? 'left' : 'right',
                     'startSide' => $ar ? 'right' : 'left',

@@ -105,9 +105,20 @@ final class DigestPresenter
 
     public function pathLabel(string $path): string
     {
-        $case = MarketingPath::tryFrom($path) ?? MarketingPath::Awareness;
+        $case = MarketingPath::tryFrom($path);
 
-        return $case->labels()[$this->ar() ? 'ar' : 'en'];
+        /*
+         * An unknown key is shown AS the key, never relabelled.
+         *
+         * This fell back to Awareness, so any key the enum did not recognise was quietly presented
+         * as brand spend — money labelled as something it is not, in the one section of the digest
+         * whose entire purpose is keeping the paths apart. A caller passing a bad key has a bug, and
+         * the email should make that visible rather than paper over it with a plausible word.
+         *
+         * Found when a preview fixture keyed this map as a list: every row rendered «الوعي», and the
+         * conversion path's spend appeared under the awareness label.
+         */
+        return $case?->labels()[$this->ar() ? 'ar' : 'en'] ?? $path;
     }
 
     /**

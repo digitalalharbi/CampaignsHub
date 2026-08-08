@@ -15,7 +15,7 @@
 @php($colour = $tone[$severity] ?? $tone['info'])
 @php($background = $toneBg[$severity] ?? $toneBg['info'])
 
-<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:#0f172a;">
+<div style="font-family:{!! $font !!}; color:#0f172a;">
 
     <div style="font-size:15px; color:#5b6b68; margin:0 0 16px;">{{ $greeting }}</div>
 

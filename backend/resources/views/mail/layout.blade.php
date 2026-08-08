@@ -24,6 +24,17 @@
   Widths are absolute for the same reason: 600px is what every client has agreed on for twenty
   years, and the media query below is the only thing that touches it.
 --}}
+{{--
+  `{!! $font !!}`, not `{{ $font }}`, and it matters.
+
+  The stack contains quoted family names — `'SF Arabic'`, `'Noto Sans Arabic'` — because a CSS family
+  with spaces needs them. Blade's escaping turns each into `&#039;`, and while a browser decodes that
+  inside a style attribute, email clients are not browsers: Outlook in particular does not, so the
+  whole stack becomes unparseable and every glyph falls back to the client's default. Which is the
+  precise failure the Arabic stack exists to prevent.
+
+  Unescaped is safe here because the value is a config constant. Nothing user-supplied reaches it.
+--}}
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="{{ $locale }}" dir="{{ $dir }}">
 <head>
@@ -54,10 +65,10 @@
                     {{-- Header: the brand as type and colour, because an image would be blocked. --}}
                     <tr>
                         <td class="ch-pad" style="background-color:#0f766e; padding:20px 24px;">
-                            <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; font-size:18px; font-weight:800; color:#ffffff; letter-spacing:-0.2px;">
+                            <div style="font-family:{!! $font !!}; font-size:18px; font-weight:800; color:#ffffff; letter-spacing:-0.2px;">
                                 {{ $brand }}
                             </div>
-                            <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; font-size:13px; color:#c6f0e9; padding-top:2px;">
+                            <div style="font-family:{!! $font !!}; font-size:13px; color:#c6f0e9; padding-top:2px;">
                                 {{ $headerNote }}
                             </div>
                         </td>
@@ -75,7 +86,7 @@
                     --}}
                     <tr>
                         <td class="ch-pad" style="padding:16px 24px; background-color:#f8fafa; border-top:1px solid #e2e8e6;">
-                            <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; font-size:12px; color:#5b6b68; line-height:1.7;">
+                            <div style="font-family:{!! $font !!}; font-size:12px; color:#5b6b68; line-height:1.7;">
                                 <a href="{{ $urls['preferences'] }}" style="color:#0f766e; text-decoration:underline;">{{ $t['manage_preferences'] }}</a>
                                 &nbsp;·&nbsp;
                                 <a href="{{ $urls['privacy'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['privacy'] }}</a>
@@ -84,7 +95,7 @@
                                 &nbsp;·&nbsp;
                                 <a href="{{ $urls['security'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['security'] }}</a>
                             </div>
-                            <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; font-size:12px; color:#8b9a97; padding-top:8px;">
+                            <div style="font-family:{!! $font !!}; font-size:12px; color:#8b9a97; padding-top:8px;">
                                 © {{ $year }} {{ $brand }}
                             </div>
                         </td>

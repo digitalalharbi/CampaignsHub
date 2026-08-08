@@ -12,7 +12,7 @@
 @php($tone = ['good' => '#0f766e', 'warn' => '#b45309', 'bad' => '#b91c1c', 'neutral' => '#5b6b68'])
 @php($toneBg = ['good' => '#ecfdf5', 'warn' => '#fffbeb', 'bad' => '#fef2f2', 'neutral' => '#f8fafa'])
 
-<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:#0f172a;">
+<div style="font-family:{!! $font !!}; color:#0f172a;">
 
     <div style="font-size:20px; font-weight:800; color:#0f172a; margin:0 0 4px;">{{ $t['greeting'] }}</div>
     <div style="font-size:14px; color:#5b6b68; margin:0 0 20px;">{{ $t['intro'] }}</div>

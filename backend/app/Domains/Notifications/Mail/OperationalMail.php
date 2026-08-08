@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Mail;
 
+use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -74,6 +75,10 @@ final class OperationalMail extends Mailable
          * message that lost the unsubscribe would be the one a person reports as spam.
          */
         $body = [
+            // The design system's own values — MAIL-DS-001. The Arabic stack leads with faces that
+            // can actually render Arabic, which the shared Latin-first stack never could.
+            'font' => MailDesign::font($ar),
+            'numericFont' => MailDesign::numericFont(),
             'locale' => $this->lang,
             'dir' => $ar ? 'rtl' : 'ltr',
             'startSide' => $ar ? 'right' : 'left',

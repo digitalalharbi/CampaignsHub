@@ -129,4 +129,31 @@ final class MailPreviewsTest extends TestCase
         // A funnel stage nobody sent is absent rather than drawn at zero.
         $this->assertStringNotContainsString('الإضافة للسلة', $html);
     }
+
+    /**
+     * The font stack survives Blade — MAIL-DS-001.
+     *
+     * The stack contains quoted family names, and `{{ }}` escapes each quote to `&#039;`. A browser
+     * decodes that inside a style attribute; Outlook does not, so the whole declaration becomes
+     * unparseable and every glyph falls back to the client's default — the precise failure the
+     * Arabic stack exists to prevent. Caught by rendering and reading the output, not by a test.
+     */
+    public function test_every_preview_carries_a_usable_font_stack_for_its_language(): void
+    {
+        foreach ($this->render() as $name => $html) {
+            $this->assertStringNotContainsString('font-family:&#039;', $html, "{$name} has an escaped font stack");
+
+            if (str_contains($name, '.ar.')) {
+                // Arabic faces, and first — order is what a client actually honours.
+                $this->assertStringContainsString("font-family:'SF Arabic'", $html, "{$name} does not lead with an Arabic face");
+                $this->assertStringContainsString('Noto Sans Arabic', $html);
+            } else {
+                $this->assertStringContainsString('font-family:-apple-system', $html, "{$name} does not use the Latin stack");
+            }
+
+            // Both stacks close with a generic, so a client with none of the named faces still
+            // renders text rather than something nobody chose.
+            $this->assertStringContainsString('sans-serif', $html);
+        }
+    }
 }
