@@ -8,7 +8,7 @@ use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
-use App\Domains\Notifications\Mail\OperationalMail;
+use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\MessageProvider;
 use App\Domains\Notifications\Services\AlertDispatcher;
 use App\Domains\Projects\Models\Project;
@@ -124,10 +124,12 @@ final class AlertDispatchTest extends TestCase
         $counts = app(AlertDispatcher::class)->sweep($this->user, (string) $this->tenant->id, Carbon::parse('2026-08-07'));
 
         $this->assertSame(1, $counts['sent'], 'the decline produced no alert');
-        Mail::assertSent(OperationalMail::class, function (OperationalMail $m): bool {
+        // One message carrying the findings — MAIL-013. It was one email per finding until then.
+        Mail::assertSent(AlertBundleMail::class, function (AlertBundleMail $m): bool {
             return $m->hasTo('ops@alerts.test')
-                && str_contains($m->title, 'معدل النقر')
-                && $m->context === 'مشروع';
+                && count($m->items) === 1
+                && str_contains($m->items[0]['title'], 'معدل النقر')
+                && $m->items[0]['context'] === 'مشروع';
         });
     }
 
@@ -151,7 +153,7 @@ final class AlertDispatchTest extends TestCase
         $this->assertSame(1, $first['sent']);
         $this->assertSame(1, $second['already_sent']);
         $this->assertSame(0, $second['sent']);
-        Mail::assertSent(OperationalMail::class, 1);
+        Mail::assertSent(AlertBundleMail::class, 1);
     }
 
     /**

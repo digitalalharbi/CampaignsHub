@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Services;
 
 use App\Domains\Notifications\Support\MessageCatalogue;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * What one person has actually chosen, for one message type — MAIL-011.
@@ -181,6 +183,56 @@ final class NotificationChoices
         $chosen = $types[$type]['rhythm'] ?? null;
 
         return is_string($chosen) && in_array($chosen, $offered, true) ? $chosen : 'immediate';
+    }
+
+    /**
+     * Is this person inside their quiet hours right now — MAIL-013.
+     *
+     * ## Their clock, not the server's
+     *
+     * The window was compared against `Carbon::now()` before this, which meant «22:00 to 08:00» was
+     * the SERVER's night. For a product whose readers are in Riyadh and whose containers run in UTC,
+     * that is a three-hour error in both directions: alerts held through somebody's working morning
+     * and delivered at one in the morning. The stored hour is local, exactly as `digest_hour` is, so
+     * it is converted here for the same reason.
+     *
+     * ## What it holds, and what it must never hold
+     *
+     * Alerts and the bell's email row. NOT a password reset, a sign-in code or a security alert —
+     * those answer something the person just did, or warn them somebody else is in their account,
+     * and a product that delays those to be polite has built the attacker a head start. Enforced by
+     * the caller: `TransactionalMailer` never asks this question.
+     */
+    public function inQuietHours(int $userId, string $tenantId, ?Carbon $at = null): bool
+    {
+        $row = $this->row($userId, $tenantId);
+        $window = $this->map($row, 'quiet_hours');
+
+        if (($window['enabled'] ?? false) !== true) {
+            return false;
+        }
+
+        $timezone = (string) ($row->timezone ?? 'Asia/Riyadh');
+
+        try {
+            $local = ($at ?? Carbon::now())->copy()->setTimezone($timezone);
+        } catch (Throwable) {
+            /*
+             * An identifier this process cannot resolve must not decide anything.
+             *
+             * The same trap `SendDailyDigests` documents: one malformed row throwing inside a sweep
+             * would abort it for everybody else. «Not in quiet hours» is the safe answer — it sends
+             * a message slightly early rather than silencing an entire installation.
+             */
+            $local = ($at ?? Carbon::now())->copy();
+        }
+
+        $now = $local->format('H:i');
+        $start = (string) ($window['start'] ?? '22:00');
+        $end = (string) ($window['end'] ?? '08:00');
+
+        // The window may wrap past midnight (22:00 → 08:00), which is the usual case.
+        return $start <= $end ? ($now >= $start && $now < $end) : ($now >= $start || $now < $end);
     }
 
     /** Forget the memo — for a caller that has just written the row and wants to read it back. */

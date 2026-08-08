@@ -69,7 +69,17 @@ final class NotificationDispatcher
         $perClient = $this->hasClientOverride($tenantId, $userId, $clientWorkspaceId);
         $inAppEnabled = $this->wants($prefs, $tenantId, $userId, $type, $category, 'in_app', $perClient);
         $emailEnabled = $this->wants($prefs, $tenantId, $userId, $type, $category, 'email', $perClient);
-        $inQuietHours = $this->inQuietHours($prefs);
+        /*
+         * The recipient's own night — MAIL-013.
+         *
+         * This compared the window against the SERVER's clock until now, so «22:00 to 08:00» meant
+         * whatever the container thought the hour was. For readers in Riyadh on a UTC host that is a
+         * three-hour error in both directions. `NotificationChoices` converts through their stored
+         * timezone, which is the same value the digest schedule already uses.
+         */
+        $inQuietHours = $userId !== null && ! $perClient
+            ? $this->choices->inQuietHours($userId, $tenantId)
+            : $this->inQuietHours($prefs);
 
         // 2) In-app: respect the user's per-category choice; if off, record suppression and stop.
         if (! $inAppEnabled) {
@@ -257,7 +267,16 @@ final class NotificationDispatcher
         return true;
     }
 
-    /** @param  array<string,mixed>|null  $prefs */
+    /**
+     * The per-CLIENT fallback only.
+     *
+     * A per-client preference row is a narrowing the per-type screen does not write, and it carries
+     * its own quiet-hours map. It has no timezone of its own, so this one still reads the process
+     * clock — the case is rare, it is the behaviour that row has always had, and inventing a
+     * timezone for it would be a guess rather than a fix.
+     *
+     * @param  array<string,mixed>|null  $prefs
+     */
     private function inQuietHours(?array $prefs): bool
     {
         $qh = $prefs['quiet_hours'] ?? null;

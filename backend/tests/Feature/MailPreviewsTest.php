@@ -55,7 +55,9 @@ final class MailPreviewsTest extends TestCase
 
         foreach ([
             'digest-daily', 'digest-weekly',
-            'alert-budget', 'alert-performance', 'alert-creative', 'alert-sync',
+            // MAIL-013 — one bulletin per sweep, so one preview of it and one of the single-finding
+            // case. Four separate `alert-*` previews would picture a product that no longer exists.
+            'alerts-bundle', 'alerts-one',
             'report-ready', 'billing', 'approval', 'message',
             // MAIL-009 — the messages about somebody's account rather than their campaigns.
             'account-password-reset', 'account-email-verification', 'account-sign-in-code',
@@ -66,7 +68,26 @@ final class MailPreviewsTest extends TestCase
             $this->assertArrayHasKey("{$kind}.en.html", $files, "{$kind} has no English preview");
         }
 
-        $this->assertCount(36, $files);
+        $this->assertCount(32, $files);
+    }
+
+    /**
+     * A bulletin about several clients does not claim to be about one project — MAIL-013.
+     *
+     * Found by rendering it: three findings across two clients sat above the shell's «you follow
+     * this project» line, which was written for a message about one. The sentence is the only thing
+     * standing between an unexplained email and a spam report, so it has to be true.
+     */
+    public function test_a_bulletin_about_several_clients_says_projects_not_project(): void
+    {
+        $files = $this->render();
+
+        $this->assertStringContainsString('تتابع هذه المشاريع', $files['alerts-bundle.ar.html']);
+        $this->assertStringContainsString('follow these projects', $files['alerts-bundle.en.html']);
+
+        // And one finding still reads as one.
+        $this->assertStringContainsString('تتابع هذا المشروع', $files['alerts-one.ar.html']);
+        $this->assertStringNotContainsString('تتابع هذه المشاريع', $files['alerts-one.ar.html']);
     }
 
     /** A preview that rendered a blank shell would pass every other assertion here. */

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
-use App\Domains\Notifications\Mail\OperationalMail;
+use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -94,8 +94,11 @@ final class AlertDispatcher
             // MAIL-011 — two reasons a finding produced no email, kept apart from `skipped` because
             // «you switched this off» and «you asked for it in tomorrow's digest» are different
             // answers to «why did nobody tell me?», and the console is where that gets read.
-            'switched_off' => 0, 'held_for_digest' => 0,
+            'switched_off' => 0, 'held_for_digest' => 0, 'held_by_quiet_hours' => 0,
         ];
+
+        /** @var list<array{severity: string, title: string, detail: string, context: string, period_key: string}> $eligible */
+        $eligible = [];
         $userId = (int) $user->getKey();
 
         try {
@@ -165,9 +168,36 @@ final class AlertDispatcher
                         continue;
                     }
 
-                    $state = $this->send($user, $tenantId, $block, $note, $day, $locale);
-                    $counts[$state] = ($counts[$state] ?? 0) + 1;
+                    /*
+                     * Their night, not the server's — MAIL-013.
+                     *
+                     * Nothing is CLAIMED here, which is what makes holding safe: the finding is
+                     * simply not sent this sweep, and the next sweep after the window closes finds
+                     * it again and sends it. No queue, no held-message table, and no risk of a
+                     * message that was parked and then forgotten.
+                     *
+                     * If the finding has stopped being true by morning, it is never sent — which is
+                     * the right outcome. An alert is «this needs a decision»; there is no decision
+                     * left to make about a budget that came back into line overnight.
+                     */
+                    if ($this->choices->inQuietHours($userId, $tenantId)) {
+                        $counts['held_by_quiet_hours']++;
+
+                        continue;
+                    }
+
+                    $eligible[] = [
+                        'severity' => (string) $note['severity'],
+                        'title' => (string) $note['title'],
+                        'detail' => (string) $note['detail'],
+                        'context' => (string) ($block['project_name'] ?? ''),
+                        'period_key' => $this->periodKey($block, $note, $day),
+                    ];
                 }
+            }
+
+            foreach ($this->deliver($user, $tenantId, $eligible, $locale) as $state => $n) {
+                $counts[$state] = ($counts[$state] ?? 0) + $n;
             }
 
             return $counts;
@@ -176,33 +206,71 @@ final class AlertDispatcher
         }
     }
 
-    /** @param array<string,mixed> $block @param array<string,mixed> $note */
-    private function send(User $user, string $tenantId, array $block, array $note, Carbon $day, string $locale): string
+    /**
+     * One message carrying everything this sweep found — MAIL-013.
+     *
+     * ## Why the claims stay per finding while the email is one
+     *
+     * The cooldown is a statement about a FINDING: «this budget is still running ahead» should not be
+     * repeated for three days. The email is a statement about a MOMENT: «here is what needs a
+     * decision now». Collapsing the claims into one would make the whole bulletin share a cooldown,
+     * so a new finding tomorrow would be silenced by an unrelated one sent today.
+     *
+     * So each finding is claimed on its own, exactly as before, and only the ones that CLAIM
+     * successfully go into the message. `already_sent` is still counted per finding.
+     *
+     * ## All or none, and it is the ledger that says which
+     *
+     * One send either succeeds for every finding in it or fails for every finding in it — so all the
+     * claimed rows are finished with the same state. A failure leaves them `failed`, and the next
+     * sweep re-claims them (up to three attempts) rather than this one retrying in a loop.
+     *
+     * @param  list<array{severity: string, title: string, detail: string, context: string, period_key: string}>  $eligible
+     * @return array<string,int>
+     */
+    private function deliver(User $user, string $tenantId, array $eligible, string $locale): array
     {
-        $periodKey = $this->periodKey($block, $note, $day);
+        $counts = [];
+        $claimed = [];
 
-        if (! $this->claim($tenantId, $user, $periodKey)) {
-            return 'already_sent';
+        foreach ($eligible as $item) {
+            if ($this->claim($tenantId, $user, $item['period_key'])) {
+                $claimed[] = $item;
+            } else {
+                $counts['already_sent'] = ($counts['already_sent'] ?? 0) + 1;
+            }
+        }
+
+        if ($claimed === []) {
+            return $counts;
+        }
+
+        $keys = array_column($claimed, 'period_key');
+
+        // Honest classification, from the product's own answer about the channel — never from an
+        // assumption that mail works because a mailer is configured in .env.
+        if (! $this->providers->isConfigured('email')) {
+            $counts['awaiting_credentials'] = $this->finishAll($user, $keys, 'awaiting_credentials', 'no_email_provider');
+
+            return $counts;
         }
 
         try {
-            // Honest classification, from the product's own answer about the channel — never from an
-            // assumption that mail works because a mailer is configured in .env.
-            if (! $this->providers->isConfigured('email')) {
-                return $this->finish($user, $periodKey, 'awaiting_credentials', 'no_email_provider');
-            }
-
-            Mail::to($user->email)->send(new OperationalMail(
-                kind: 'alert',
-                severity: (string) $note['severity'],
-                title: (string) $note['title'],
-                detail: (string) $note['detail'],
-                context: (string) ($block['project_name'] ?? ''),
+            Mail::to($user->email)->send(new AlertBundleMail(
+                items: array_map(
+                    static fn (array $item): array => [
+                        'severity' => $item['severity'],
+                        'title' => $item['title'],
+                        'detail' => $item['detail'],
+                        'context' => $item['context'],
+                    ],
+                    $claimed,
+                ),
                 lang: $locale,
                 recipientName: (string) $user->name,
             ));
 
-            return $this->finish($user, $periodKey, 'sent', null, Carbon::now());
+            $counts['sent'] = $this->finishAll($user, $keys, 'sent', null, Carbon::now());
         } catch (Throwable $e) {
             /*
              * Recorded and left alone, never retried in a loop.
@@ -210,8 +278,23 @@ final class AlertDispatcher
              * The standing rule in this repo is that an intermittent failure must not be hidden by a
              * retry; the next sweep re-claims a failed row and this one stops.
              */
-            return $this->finish($user, $periodKey, 'failed', 'exception', error: $e->getMessage());
+            $counts['failed'] = $this->finishAll($user, $keys, 'failed', 'exception', error: $e->getMessage());
         }
+
+        return $counts;
+    }
+
+    /**
+     * @param  list<string>  $periodKeys
+     * @return int how many findings were finished, which is what the counts report
+     */
+    private function finishAll(User $user, array $periodKeys, string $status, ?string $reason = null, ?Carbon $sentAt = null, ?string $error = null): int
+    {
+        foreach ($periodKeys as $key) {
+            $this->finish($user, $key, $status, $reason, $sentAt, $error);
+        }
+
+        return count($periodKeys);
     }
 
     /**

@@ -146,6 +146,19 @@ describe('the notification preferences centre', () => {
     expect(body.locale).toBe('en')
   })
 
+  /**
+   * Quiet hours say what they do, including the exception — MAIL-013.
+   *
+   * A person who assumes their security alerts are being held has been told something untrue about
+   * their own account, and the switch itself cannot say so.
+   */
+  it('explains that quiet hours delay alerts but never account messages', () => {
+    open()
+
+    expect(screen.getByText(/لا تصلك التنبيهات الفورية بالبريد، وتُرسل بعد انتهائها/)).toBeInTheDocument()
+    expect(screen.getByText(/رسائل الحساب والأمان .* فتصلك فورًا دائمًا/)).toBeInTheDocument()
+  })
+
   /** Two clients each own a «Q3 Launch»; an unqualified list would offer the same words twice. */
   it('names the client beside each project', () => {
     open()

@@ -325,6 +325,20 @@ export function NotificationsTab() {
             onCheckedChange={(v) => setP({ ...p, quiet_hours: { ...p.quiet_hours, enabled: v } })}
             label={ar ? 'تفعيل ساعات الهدوء' : 'Enable quiet hours'}
           />
+          {/*
+            What it does, and the exception — MAIL-013.
+
+            Quiet hours were stored and honoured by nothing that sends mail until then, so the switch
+            was a promise the product did not keep. Now that it holds alerts, the two things a reader
+            needs to know are that nothing is lost and that account messages are not delayed — the
+            second because somebody who assumes their security alerts are being held has been told
+            something untrue about their own account.
+          */}
+          <p className="mt-2 max-w-2xl text-[13px] leading-6 text-text-muted">
+            {ar
+              ? 'خلال هذه الساعات لا تصلك التنبيهات الفورية بالبريد، وتُرسل بعد انتهائها إن كانت الملاحظة ما زالت قائمة. الساعات محسوبة بتوقيتك أنت. أما رسائل الحساب والأمان — إعادة تعيين كلمة المرور ورموز الدخول والتنبيهات الأمنية — فتصلك فورًا دائمًا.'
+              : 'During these hours no alert reaches your inbox; it is sent once they end, if the finding still stands. The hours are read in your own timezone. Account and security messages — password resets, sign-in codes and security alerts — always arrive immediately.'}
+          </p>
         </div>
       </div>
 

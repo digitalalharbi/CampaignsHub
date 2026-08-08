@@ -78,22 +78,63 @@ final class NotificationHardeningTest extends TestCase
         $this->assertDatabaseHas('notification_deliveries', ['channel' => 'in_app', 'status' => 'suppressed_by_preference']);
     }
 
+    /**
+     * The window is the RECIPIENT's, not the server's — MAIL-013.
+     *
+     * The fixture builds it in their own timezone for that reason. It used to build it from the
+     * process clock, which passed while the product was wrong: «22:00 to 08:00» meant whatever hour
+     * the container thought it was, so a reader in Riyadh on a UTC host had their night held three
+     * hours late in both directions.
+     */
     public function test_quiet_hours_suppress_email_but_keep_in_app(): void
     {
-        // A quiet window that always contains "now" (±30 min; the dispatcher handles midnight wrap).
-        $start = now()->copy()->subMinutes(30)->format('H:i');
-        $end = now()->copy()->addMinutes(30)->format('H:i');
-        DB::table('notification_preferences')->insert([
-            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'user_id' => $this->user->id,
-            'channels' => json_encode(['in_app' => true, 'email' => true]),
-            'categories' => json_encode([]),
-            'quiet_hours' => json_encode(['enabled' => true, 'start' => $start, 'end' => $end]),
-            'frequency' => 'realtime', 'created_at' => now(), 'updated_at' => now(),
-        ]);
+        $this->quietWindowAround('Asia/Riyadh');
 
         $n = $this->dispatcher->dispatch($this->payload(['entity_id' => 'REQ-QH']));
         $this->assertNotNull($n); // in-app inbox still receives it
         $this->assertDatabaseHas('notification_deliveries', ['notification_id' => $n->id, 'channel' => 'email', 'status' => 'suppressed_by_quiet_hours']);
+    }
+
+    /**
+     * The same window, stored against a timezone where it is the middle of the working day.
+     *
+     * This is the assertion the old test could not make. `Pacific/Kiritimati` is UTC+14 and
+     * `Etc/GMT+12` is UTC-12, so a window built around one person's «now» cannot also contain the
+     * other's — whatever the server's clock happens to say.
+     */
+    public function test_a_quiet_window_belongs_to_the_hour_the_reader_is_living_in(): void
+    {
+        $this->quietWindowAround('Pacific/Kiritimati', 'Etc/GMT+12');
+
+        $n = $this->dispatcher->dispatch($this->payload(['entity_id' => 'REQ-TZ']));
+
+        $this->assertDatabaseHas('notification_deliveries', [
+            'notification_id' => $n->id, 'channel' => 'email', 'status' => 'awaiting_credentials',
+        ]);
+        $this->assertDatabaseMissing('notification_deliveries', ['status' => 'suppressed_by_quiet_hours']);
+    }
+
+    /**
+     * A quiet window of ±30 minutes around «now» in `$windowTimezone`, stored against `$storedAs`.
+     *
+     * When the two differ, the window is deliberately one the reader is NOT inside.
+     */
+    private function quietWindowAround(string $windowTimezone, ?string $storedAs = null): void
+    {
+        $local = now()->copy()->setTimezone($windowTimezone);
+
+        DB::table('notification_preferences')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'user_id' => $this->user->id,
+            'channels' => json_encode(['in_app' => true, 'email' => true]),
+            'categories' => json_encode([]),
+            'quiet_hours' => json_encode([
+                'enabled' => true,
+                'start' => $local->copy()->subMinutes(30)->format('H:i'),
+                'end' => $local->copy()->addMinutes(30)->format('H:i'),
+            ]),
+            'timezone' => $storedAs ?? $windowTimezone,
+            'frequency' => 'realtime', 'created_at' => now(), 'updated_at' => now(),
+        ]);
     }
 
     public function test_read_unread_via_api(): void

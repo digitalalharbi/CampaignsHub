@@ -346,7 +346,6 @@ rather than grants, resolved against each recipient's live ceiling at send time.
 
 | unit | what it is |
 |---|---|
-| `MAIL-013` | quiet hours and digest aggregation on top of the dedup and cooldown `AlertDispatcher` already has. `quiet_hours` is STORED and honoured by nothing — check before building anything new |
 | `MAIL-014` | admin email operations over `mail_deliveries` (counts, delivered/failed/awaiting credentials, type, recipient, tenant/project, time, attempts, reason, transport, template) plus an in-product preview gallery extending `notifications:preview` |
 | `TEAM-INVITE-001` | two invitation paths — see below |
 
@@ -436,6 +435,42 @@ attempt at that vocabulary guessed `client` and `advertiser`; the `Portal` enum 
 (0 errors) and the production build clean · Pint clean. Live-reviewed at
 `/agency/settings` → الإشعارات: five people, each with their portal, their client-qualified projects
 and «لم يُرسل شيء بعد» — correct, because no provider is wired and nothing has been sent in dev.
+
+---
+
+## Session — MAIL-013, quiet hours and one bulletin (`PENDING`)
+
+**Quiet hours were a promise the product did not keep.** Stored since MAIL-004, and the only reader
+was `NotificationDispatcher`'s email LEDGER row — which sends no mail — comparing the window against
+the SERVER's clock. `NotificationChoices::inQuietHours()` now reads it in the recipient's own
+timezone (the same value the digest schedule uses) and `AlertDispatcher` honours it.
+
+**Holding without claiming is the design.** A held finding is not written to `digest_sends`, so the
+next sweep after the window closes finds the same observation and sends it. No held-message table,
+no queue, and nothing that can forget. A finding that has stopped being true by morning is never
+sent — which is right: an alert is «this needs a decision», and there is no decision left about a
+budget that came back into line overnight.
+
+**Account messages are never held.** A password reset, a sign-in code and a security alert answer
+something the person just did, or warn them somebody else is in their account. `TransactionalMailer`
+never asks the question, and the screen says so.
+
+**One bulletin per sweep.** `AlertDispatcher` mailed one email per finding — a morning with a budget
+running ahead on two clients, a stopped sync and a climbing cost produced four emails in the same
+second. `AlertBundleMail` carries them all. The claims stay PER FINDING: collapsing them into one
+would give the whole bulletin a shared cooldown, so a new finding tomorrow would be silenced by an
+unrelated one sent today.
+
+**Found by rendering, again.** Three findings across two clients sat above the shell's «you follow
+this project» line, which was written for a message about one. The bulletin says «these projects»
+and a single-finding message still says the singular; both are pinned by a test.
+
+**Preview gallery:** the four `alert-*` previews became `alerts-bundle` and `alerts-one` — 32 files,
+not 36. Rendering four previews of a message the product no longer sends would picture last month's
+product, and MAIL-014 puts this gallery in front of an operator.
+
+**Gates:** backend **1749 passed** (10163 assertions) · frontend **923 passed** (125 files) · `tsc -b`, oxlint
+(0 errors) and the production build clean · Pint clean.
 
 **B. Plans, subscriptions and payments** — not started. No free tier; a paid subscription required;
 USD; a PAID introductory first month, once per entity; annual with a real discount; every price,

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Console;
 
+use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\InvitationMail;
@@ -76,48 +77,56 @@ final class RenderMailPreviews extends Command
             'digest-daily' => new DailyDigestMail($this->digest(), $locale, $ar ? 'محمد' : 'Mohammed', 'daily'),
             'digest-weekly' => new DailyDigestMail($this->digest(weekly: true), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly'),
 
-            'alert-budget' => new OperationalMail(
-                kind: 'alert', severity: 'critical',
-                title: $ar ? 'حملة «الصيف» تستهلك الميزانية أسرع من الخطة' : '“Summer” is spending ahead of plan',
-                detail: $ar
-                    ? 'صُرف 8,000.00 SAR من أصل 10,000.00 SAR، أي 167% من الإنفاق المتوقع حتى الآن.'
-                    : '8,000.00 SAR of a 10,000.00 SAR budget is spent — 167% of what was expected by now.',
-                context: $ar ? 'متجر تجريبي' : 'Demo store',
+            /*
+             * The alerts as they are actually sent — MAIL-013.
+             *
+             * There were four separate `alert-*` previews here, one per finding, which is how the
+             * product used to send them: four emails inside the same second. Rendering four separate
+             * previews of a message that no longer exists would make this gallery a picture of last
+             * month's product, and MAIL-014 puts it in front of an operator.
+             */
+            'alerts-bundle' => new AlertBundleMail(
+                items: [
+                    [
+                        'severity' => 'critical',
+                        'context' => $ar ? 'متجر تجريبي' : 'Demo store',
+                        'title' => $ar ? 'حملة «الصيف» تستهلك الميزانية أسرع من الخطة' : '“Summer” is spending ahead of plan',
+                        'detail' => $ar
+                            ? 'صُرف 8,000.00 SAR من أصل 10,000.00 SAR، أي 167% من الإنفاق المتوقع حتى الآن.'
+                            : '8,000.00 SAR of a 10,000.00 SAR budget is spent — 167% of what was expected by now.',
+                    ],
+                    [
+                        'severity' => 'warning',
+                        'context' => $ar ? 'متجر تجريبي' : 'Demo store',
+                        'title' => $ar ? 'تراجع معدل النقر' : 'Click-through rate is falling',
+                        'detail' => $ar
+                            ? 'تراجع معدل النقر 30% ليصل إلى 1.20%، وقد يشير ذلك إلى بداية ضعف في أداء المحتوى.'
+                            : 'Click-through rate fell 30% to 1.20%, which can be the first sign of creative wearing out.',
+                    ],
+                    [
+                        'severity' => 'critical',
+                        'context' => $ar ? 'عميل تجريبي' : 'Demo client',
+                        'title' => $ar ? 'تعذّرت آخر مزامنة لبيانات سناب شات' : 'The Snapchat sync could not complete',
+                        'detail' => $ar
+                            ? 'لم تتحدث بيانات سناب شات منذ ست ساعات، لذلك قد تكون بعض المؤشرات غير مكتملة.'
+                            : 'Snapchat data has not updated for six hours, so some figures may be incomplete.',
+                    ],
+                ],
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
-                path: '/app/campaigns', action: $ar ? 'مراجعة الحملة' : 'Review the campaign',
             ),
 
-            'alert-performance' => new OperationalMail(
-                kind: 'alert', severity: 'warning',
-                title: $ar ? 'تراجع معدل النقر' : 'Click-through rate is falling',
-                detail: $ar
-                    ? 'تراجع معدل النقر 30% ليصل إلى 1.20%، وقد يشير ذلك إلى بداية ضعف في أداء المحتوى.'
-                    : 'Click-through rate fell 30% to 1.20%, which can be the first sign of creative wearing out.',
-                context: $ar ? 'متجر تجريبي' : 'Demo store',
+            // The single-finding case, which reads differently: the subject is the finding itself
+            // rather than a count, and one card must not look like a list with an item missing.
+            'alerts-one' => new AlertBundleMail(
+                items: [[
+                    'severity' => 'warning',
+                    'context' => $ar ? 'متجر تجريبي' : 'Demo store',
+                    'title' => $ar ? 'ارتفاع معدل التكرار' : 'Frequency is climbing',
+                    'detail' => $ar
+                        ? 'يشاهد الشخص الواحد الإعلان 6 مرات في المتوسط، ونوصي بتوسيع الجمهور أو تحديث المحتوى.'
+                        : 'The average person has seen the ad 6 times — worth widening the audience or refreshing the creative.',
+                ]],
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
-                path: '/app/content', action: $ar ? 'مراجعة المحتوى' : 'Review the creatives',
-            ),
-
-            'alert-creative' => new OperationalMail(
-                kind: 'alert', severity: 'warning',
-                title: $ar ? 'ارتفاع معدل التكرار' : 'Frequency is climbing',
-                detail: $ar
-                    ? 'يشاهد الشخص الواحد الإعلان 6 مرات في المتوسط، ونوصي بتوسيع الجمهور أو تحديث المحتوى.'
-                    : 'The average person has seen the ad 6 times — worth widening the audience or refreshing the creative.',
-                context: $ar ? 'متجر تجريبي' : 'Demo store',
-                lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
-                path: '/app/content', action: $ar ? 'فتح مكتبة المحتوى' : 'Open the creative library',
-            ),
-
-            'alert-sync' => new OperationalMail(
-                kind: 'alert', severity: 'critical',
-                title: $ar ? 'تعذّرت آخر مزامنة لبيانات سناب شات' : 'The Snapchat sync could not complete',
-                detail: $ar
-                    ? 'لم تتحدث بيانات سناب شات منذ ست ساعات، لذلك قد تكون بعض المؤشرات غير مكتملة.'
-                    : 'Snapchat data has not updated for six hours, so some figures may be incomplete.',
-                context: $ar ? 'متجر تجريبي' : 'Demo store',
-                lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
-                path: '/app/integrations', action: $ar ? 'مراجعة الربط' : 'Check the connection',
             ),
 
             'report-ready' => new OperationalMail(
