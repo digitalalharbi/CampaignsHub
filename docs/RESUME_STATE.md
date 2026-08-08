@@ -346,15 +346,64 @@ rather than grants, resolved against each recipient's live ceiling at send time.
 
 | unit | what it is |
 |---|---|
-| `MAIL-011` | the preferences centre — every message type by category (الأداء / الميزانية / المحتوى / التكاملات / التقارير / التشغيل / المالية) with per-type email on/off, immediate / daily / weekly, projects, recipients, language, timezone and receiving hour. The current screen has six categories and two channels; the commission asks for per-TYPE control |
 | `MAIL-012` | a team notifications view — person, email, role, projects, message types, frequency, last message sent, email status. Most of the data already exists: `mail_deliveries` (MAIL-009), `notification_recipients` (MAIL-010), `digest_sends` |
 | `MAIL-013` | quiet hours and digest aggregation on top of the dedup and cooldown `AlertDispatcher` already has. `quiet_hours` is STORED and honoured by nothing — check before building anything new |
 | `MAIL-014` | admin email operations over `mail_deliveries` (counts, delivered/failed/awaiting credentials, type, recipient, tenant/project, time, attempts, reason, transport, template) plus an in-product preview gallery extending `notifications:preview` |
 | `TEAM-INVITE-001` | two invitation paths — see below |
 
-**Where to start reading:** `NotificationPreferenceController` (the six categories and the digest
-opt-ins), `NotificationAudience` (the fail-closed resolver every new surface should go through), and
-`TransactionalMailer` + `mail_deliveries` (the ledger `MAIL-014` renders).
+**Where to start reading:** `MessageCatalogue` (every message this product can send, and which
+category, rhythm and default each has), `NotificationChoices` (the ONE resolution order — the bell,
+the alert sweep and recipient arrangements all read it), `NotificationAudience` (the fail-closed
+resolver every new surface should go through), and `TransactionalMailer` + `mail_deliveries` (the
+ledger `MAIL-014` renders).
+
+---
+
+## Session — MAIL-011, the preferences centre (`PENDING`)
+
+**What it is.** `MessageCatalogue` names all 26 message types the product can send, across the seven
+choosable categories (الأداء / الميزانية / المحتوى / التكاملات / التقارير / التشغيل / المالية) plus
+`account`, which is shown and cannot be switched. `NotificationChoices` is the single resolution
+order — mandatory, then the digests' own map, then the master channel switch, then the person's
+per-type choice, then their older per-category choice, then the catalogue default. The bell
+(`NotificationDispatcher`), the alert sweep (`AlertDispatcher`) and recipient arrangements
+(`NotificationAudience`) all read it, so no two surfaces can answer the same question differently.
+
+**What was actually broken.** Two screens edited one row. `/account/notifications` — the page every
+email's unsubscribe link opens — had the digest opt-ins, the hour, the timezone and the language; the
+settings tab had the six category checkboxes and the quiet hours; the project scope had no control
+anywhere. The settings tab PUT a fixed body omitting the other's fields and `update()` wrote every
+column regardless, so **ticking a checkbox in settings cleared a digest chosen on the account page**
+and reset the hour, timezone and language to defaults. Nothing errored. Both routes now render one
+component, and `update()` writes only the keys it was sent.
+
+**The second defect** was the six categories: every type nobody had classified fell to `performance`,
+so switching «الأداء» off also stopped conversation messages and subscription notices.
+
+**Decisions worth keeping.**
+
+- The sweep asks `chose()` (an explicit «no») rather than `wants()` (defaults included). `alerts: true`
+  is somebody asking for findings as they happen; layering per-type defaults on top would silently
+  deliver a subset of what they asked for, with nothing on any screen to explain the rest.
+- **GET → PUT of the same document is a no-op.** `show()` returns EFFECTIVE values for every type
+  including the mandatory ones; a client that echoes them back must not be refused. Only a
+  CONTRADICTION is a 422 — «you may not switch that off», not «you may not say that».
+- A rhythm is offered only where one exists. The digest carries observation notes, so those get
+  immediate/daily/weekly; an invoice or a conversation message gets `immediate` alone rather than a
+  select whose other options do nothing.
+- `frequency_saturation` moved from `performance` to `content`, default kept OFF, so a
+  reclassification made nobody's inbox louder.
+- `notification_recipients` rows still hold `sync` and `token`; `MessageCatalogue::normaliseCategory()`
+  translates on read rather than a migration rewriting people's stored arrangements.
+
+**Gates:** backend **1729 passed** (10144 assertions) · frontend **915 passed** (124 files) · `tsc -b`,
+oxlint (0 errors) and the production build clean · Pint clean.
+
+**Live review** at `/agency/account/notifications` as `owner@demo-agency.local`: switched the daily
+summary on and the hour to 6, saved, then ticked an unrelated per-message box and saved again — the
+digest and the hour survived, which is the regression above. The project picker offered five projects,
+three of them named «Q3 Launch — Demo», each qualified by its client. The demo row was deleted
+afterwards, leaving the account exactly as it was found (no preference row).
 
 **B. Plans, subscriptions and payments** — not started. No free tier; a paid subscription required;
 USD; a PAID introductory first month, once per entity; annual with a real discount; every price,

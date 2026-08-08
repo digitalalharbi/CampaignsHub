@@ -39,7 +39,10 @@ use Illuminate\Support\Facades\DB;
  */
 final class NotificationAudience
 {
-    public function __construct(private readonly DigestScope $scope) {}
+    public function __construct(
+        private readonly DigestScope $scope,
+        private readonly NotificationChoices $choices,
+    ) {}
 
     /**
      * The people who should be told about `$projectId`, in `$category`.
@@ -140,35 +143,16 @@ final class NotificationAudience
     /**
      * The recipient's own answer for this category.
      *
-     * Absent preferences mean the defaults `NotificationPreferenceController` documents, which are
-     * on for everything except performance — a person who has never opened their settings should
-     * still be reachable, or a manager arranging a recipient list would find it worked for nobody.
-     * What is NOT inferred is a category they explicitly switched off.
+     * Delegated to `NotificationChoices` since MAIL-011, which is the single place the resolution
+     * order lives. This method used to read the row itself and answer from the six-category map
+     * alone — which meant a person who had switched a single message type off could still be
+     * arranged into it by a manager, because the arrangement path never looked at per-type choices.
+     *
+     * A category counts as wanted when any type inside it is. That is what the manager asked for:
+     * «tell them about the budget», not «tell them about all seven budget messages or none».
      */
     private function wantsCategory(User $user, string $tenantId, string $category): bool
     {
-        $row = DB::table('notification_preferences')
-            ->where('tenant_id', $tenantId)
-            ->where('user_id', $user->getKey())
-            ->whereNull('client_workspace_id')
-            ->first();
-
-        if ($row === null) {
-            return $category !== 'performance';
-        }
-
-        // The channel switch outranks the category map: email off is off, whatever else is set.
-        $channels = $row->channels === null ? [] : (array) json_decode((string) $row->channels, true);
-        if (($channels['email'] ?? true) !== true) {
-            return false;
-        }
-
-        $categories = $row->categories === null ? [] : (array) json_decode((string) $row->categories, true);
-
-        if (! array_key_exists($category, $categories)) {
-            return $category !== 'performance';
-        }
-
-        return (bool) (($categories[$category]['email'] ?? false));
+        return $this->choices->wantsCategory((int) $user->getKey(), $tenantId, $category);
     }
 }

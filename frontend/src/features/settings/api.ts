@@ -106,21 +106,61 @@ export function useTeamActions() {
 
 // ---- Notification preferences --------------------------------------------------------------------
 
+export type Rhythm = 'immediate' | 'daily' | 'weekly'
+
+/** One message this product can send, as the server describes it — MAIL-011. */
+export interface CatalogueType {
+  key: string
+  mandatory: boolean
+  /** Empty for the digests, which ARE a rhythm. `['immediate']` for events nothing batches. */
+  rhythms: Rhythm[]
+  /** `daily` or `weekly` when this row is switched through the digest opt-ins instead of `types`. */
+  digest_switch: 'daily' | 'weekly' | null
+  sent_by: string
+}
+
 export interface NotifPrefs {
   channels: { in_app: boolean; email: boolean }
   categories: Record<string, { in_app: boolean; email: boolean }>
+  /**
+   * EFFECTIVE per-type settings — what will actually happen, after mandatory types, the master
+   * channel switch, the person's own choices and the catalogue defaults have been applied. The
+   * screen renders these directly rather than re-deriving them, so there is one resolution order in
+   * the product and it lives in PHP.
+   */
+  types: Record<string, { email: boolean; in_app: boolean; rhythm: Rhythm }>
+  catalogue: { key: string; types: CatalogueType[] }[]
   quiet_hours: { enabled: boolean; start: string; end: string }
   frequency: 'realtime' | 'hourly' | 'daily'
   project_ids: string[] | null
+  projects: { id: string; name: string; client_name: string | null }[]
+  digests: { daily: boolean; weekly: boolean; alerts: boolean }
+  available_digests: string[]
+  timezone: string
+  locale: 'ar' | 'en'
+  digest_hour: number
+  available_timezones: string[]
   available_categories: string[]
 }
+
+/**
+ * What may be written back.
+ *
+ * Every key is optional and the server writes only what it receives. That is not a convenience: the
+ * old client PUT a fixed body without `digests`, `timezone`, `locale` or `digest_hour`, and the old
+ * server wrote them anyway from defaults — so saving a checkbox silently cleared somebody's digest.
+ */
+export type NotifPrefsInput = Partial<
+  Pick<NotifPrefs, 'channels' | 'categories' | 'types' | 'quiet_hours' | 'frequency' | 'project_ids' | 'digests' | 'timezone' | 'locale' | 'digest_hour'>
+>
+
 export function useNotifPrefs() {
   return useQuery({ queryKey: ['settings', 'notifications'], queryFn: () => getData<NotifPrefs>('/settings/notifications') })
 }
 export function useSaveNotifPrefs() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (b: Omit<NotifPrefs, 'available_categories'>) => putData<NotifPrefs>('/settings/notifications', b),
+    mutationFn: (b: NotifPrefsInput) => putData<NotifPrefs>('/settings/notifications', b),
     onSuccess: (d) => qc.setQueryData(['settings', 'notifications'], d),
   })
 }

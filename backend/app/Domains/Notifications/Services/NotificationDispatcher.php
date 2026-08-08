@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Services;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Models\NotificationDelivery;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Support\MessageCatalogue;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -22,9 +23,19 @@ final class NotificationDispatcher
 {
     private const DEDUP_WINDOW_MINUTES = 60;
 
-    public function __construct(private readonly ProviderRegistry $providers) {}
+    public function __construct(
+        private readonly ProviderRegistry $providers,
+        private readonly NotificationChoices $choices,
+    ) {}
 
-    /** Notification type → preference category. */
+    /**
+     * Notification type → preference category.
+     *
+     * Kept for the types that are NOT in `MessageCatalogue` — request-lifecycle strings such as
+     * `request.journey.approved`, which are generated per state and cannot be enumerated. A type the
+     * catalogue knows is answered by `NotificationChoices` instead, which reads the person's per-type
+     * switch first and only then falls back to a map like this one.
+     */
     private const CATEGORY = [
         'budget_risk' => 'budget',
         'sync_failed' => 'sync',
@@ -53,9 +64,11 @@ final class NotificationDispatcher
             return null;
         }
 
-        $prefs = $this->preferences($tenantId, $userId, $p['client_workspace_id'] ?? null);
-        $inAppEnabled = $this->channelEnabled($prefs, $category, 'in_app');
-        $emailEnabled = $this->channelEnabled($prefs, $category, 'email');
+        $clientWorkspaceId = $p['client_workspace_id'] ?? null;
+        $prefs = $this->preferences($tenantId, $userId, $clientWorkspaceId);
+        $perClient = $this->hasClientOverride($tenantId, $userId, $clientWorkspaceId);
+        $inAppEnabled = $this->wants($prefs, $tenantId, $userId, $type, $category, 'in_app', $perClient);
+        $emailEnabled = $this->wants($prefs, $tenantId, $userId, $type, $category, 'email', $perClient);
         $inQuietHours = $this->inQuietHours($prefs);
 
         // 2) In-app: respect the user's per-category choice; if off, record suppression and stop.
@@ -180,6 +193,52 @@ final class NotificationDispatcher
             'categories' => $row->categories ? json_decode($row->categories, true) : null,
             'quiet_hours' => $row->quiet_hours ? json_decode($row->quiet_hours, true) : null,
         ];
+    }
+
+    /**
+     * Does this person want this message on this channel — MAIL-011.
+     *
+     * Two paths, and the split is not arbitrary:
+     *
+     * - A type the catalogue knows goes through `NotificationChoices`, so the switch a person sees on
+     *   their preferences screen is the switch that decides. That is the whole point of the unit: the
+     *   screen used to offer six category checkboxes that controlled far more than they named.
+     * - A type it does not know keeps the older category route below. `request.journey.approved` and
+     *   its siblings are generated from a state machine and cannot be listed in a catalogue, and
+     *   silently reclassifying them would move somebody's existing choice without telling them.
+     *
+     * A tenant-wide notification has no `$userId` and therefore no preference to honour.
+     *
+     * `$perClient` is the third case: this person has a preference row for THIS client workspace, and
+     * a per-client row is a deliberate narrowing that the per-type screen does not yet write. Honour
+     * it as it has always been honoured rather than overruling a stored choice with a newer surface.
+     *
+     * @param  array<string,mixed>|null  $prefs
+     */
+    private function wants(?array $prefs, string $tenantId, ?int $userId, string $type, string $category, string $channel, bool $perClient): bool
+    {
+        if ($userId === null) {
+            return true;
+        }
+
+        if (! $perClient && MessageCatalogue::has($type)) {
+            return $this->choices->wants($userId, $tenantId, $type, $channel);
+        }
+
+        return $this->channelEnabled($prefs, $category, $channel);
+    }
+
+    /** Whether a preference row exists for this exact client workspace. */
+    private function hasClientOverride(string $tenantId, ?int $userId, ?string $clientWorkspaceId): bool
+    {
+        if ($userId === null || $clientWorkspaceId === null) {
+            return false;
+        }
+
+        return DB::table('notification_preferences')
+            ->where('tenant_id', $tenantId)->where('user_id', $userId)
+            ->where('client_workspace_id', $clientWorkspaceId)
+            ->exists();
     }
 
     /** @param  array<string,mixed>|null  $prefs */

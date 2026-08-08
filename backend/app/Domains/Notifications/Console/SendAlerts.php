@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Console;
 
 use App\Domains\Notifications\Services\AlertDispatcher;
 use App\Domains\Notifications\Services\NotificationAudience;
+use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -26,8 +27,14 @@ use Illuminate\Support\Facades\DB;
  */
 final class SendAlerts extends Command
 {
-    /** The same vocabulary the preference screen and the recipient screen use. One list, or three drift. */
-    private const CATEGORIES = ['budget', 'performance', 'sync', 'token', 'reports', 'security'];
+    /**
+     * The same vocabulary the preference screen and the recipient screen use.
+     *
+     * It was a literal here until MAIL-011, alongside two other copies. `MessageCatalogue` is the one
+     * list now — the categories a manager may actually arrange somebody into, which is narrower than
+     * every category a person can switch: nobody arranges a colleague into «الحساب».
+     */
+    private const CATEGORIES = MessageCatalogue::ARRANGEABLE;
 
     protected $signature = 'notifications:send-alerts
         {--user= : Sweep one user id only — for verifying a change without mailing an account}

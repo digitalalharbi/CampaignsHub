@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Http\Controllers;
 
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Services\NotificationAudience;
+use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -44,8 +45,15 @@ use Illuminate\Validation\Rule;
  */
 final class NotificationRecipientController extends Controller
 {
-    /** The same categories a person sees in their own preferences. One vocabulary, or the two drift. */
-    private const CATEGORIES = ['budget', 'performance', 'sync', 'token', 'reports', 'security'];
+    /**
+     * The categories a manager may arrange somebody into.
+     *
+     * From `MessageCatalogue` since MAIL-011 rather than a literal — one vocabulary, or the two
+     * drift. It gained `content` and folded `sync` and `token` into `integrations`; rows written
+     * under the older names keep working, because `NotificationAudience` translates on read rather
+     * than a migration rewriting people's stored arrangements.
+     */
+    private const CATEGORIES = MessageCatalogue::ARRANGEABLE;
 
     public function __construct(
         private readonly NotificationAudience $audience,

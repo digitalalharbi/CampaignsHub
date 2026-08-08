@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Services;
 
 use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -61,26 +62,16 @@ final class AlertDispatcher
         private readonly DailyDigest $daily,
         private readonly ProviderRegistry $providers,
         private readonly TenantContext $tenants,
+        private readonly NotificationChoices $choices,
     ) {}
 
-    /**
-     * A note's kind, in the vocabulary a person's preferences are written in — MAIL-010.
+    /*
+     * A note's kind and its category used to be a map here — MAIL-010.
      *
-     * Without this the `category` on a recipient arrangement is decorative for alerts: a manager
-     * asks for «budget only» and the person receives everything. Anything unmapped falls to
-     * `performance`, which is the category most of these notes are about and the one that defaults
-     * to OFF — so a note nobody classified is quiet rather than loud.
+     * It moved to `MessageCatalogue` in MAIL-011, because the same eight kinds were also being
+     * classified by the preferences screen and by the bell, and three copies of one mapping is three
+     * chances for a message to be filed under a category its own switch does not control.
      */
-    private const CATEGORY_OF = [
-        'budget_pace' => 'budget',
-        'rising_cost' => 'budget',
-        'reallocation' => 'budget',
-        'stale_data' => 'sync',
-        'data_gap' => 'sync',
-        'falling_rate' => 'performance',
-        'frequency_saturation' => 'performance',
-        'period_comparison' => 'performance',
-    ];
 
     /**
      * Send whatever this recipient needs to hear about today, and record what was sent.
@@ -98,7 +89,14 @@ final class AlertDispatcher
         ?array $onlyProjectIds = null,
         ?array $onlyCategories = null,
     ): array {
-        $counts = ['sent' => 0, 'already_sent' => 0, 'skipped' => 0, 'awaiting_credentials' => 0, 'failed' => 0];
+        $counts = [
+            'sent' => 0, 'already_sent' => 0, 'skipped' => 0, 'awaiting_credentials' => 0, 'failed' => 0,
+            // MAIL-011 — two reasons a finding produced no email, kept apart from `skipped` because
+            // «you switched this off» and «you asked for it in tomorrow's digest» are different
+            // answers to «why did nobody tell me?», and the console is where that gets read.
+            'switched_off' => 0, 'held_for_digest' => 0,
+        ];
+        $userId = (int) $user->getKey();
 
         try {
             $this->tenants->setTenantId($tenantId);
@@ -129,8 +127,41 @@ final class AlertDispatcher
                         continue;
                     }
 
-                    if ($onlyCategories !== null
-                        && ! in_array(self::CATEGORY_OF[$note['kind'] ?? ''] ?? 'performance', $onlyCategories, true)) {
+                    $kind = (string) ($note['kind'] ?? '');
+
+                    if ($onlyCategories !== null && ! in_array(
+                        MessageCatalogue::categoryOfNote($kind),
+                        array_map(MessageCatalogue::normaliseCategory(...), $onlyCategories),
+                        true,
+                    )) {
+                        continue;
+                    }
+
+                    /*
+                     * The person's own switch for THIS message — MAIL-011.
+                     *
+                     * `chose()` rather than `wants()`: `digests.alerts = true` is somebody asking for
+                     * findings as they happen, and applying the catalogue's per-type defaults on top
+                     * of that would quietly deliver a subset of what they asked for. Only an explicit
+                     * «no» stops a message here.
+                     */
+                    if ($this->choices->chose($userId, $tenantId, $kind, 'email') === false) {
+                        $counts['switched_off']++;
+
+                        continue;
+                    }
+
+                    /*
+                     * «Not now, in the digest.»
+                     *
+                     * The daily and weekly digests already print every observation for the period, so
+                     * a person who set this kind to `daily` genuinely receives it — later, in the
+                     * summary — rather than losing it. That is why the rhythm is honoured by skipping
+                     * here and nothing else needs to change.
+                     */
+                    if ($this->choices->rhythm($userId, $tenantId, $kind) !== 'immediate') {
+                        $counts['held_for_digest']++;
+
                         continue;
                     }
 

@@ -10,15 +10,10 @@ import { Skeleton } from '@/components/ui/States'
 import { Alert } from '@/components/ui/Alert'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+// The same words the preferences centre uses — one vocabulary, or a manager arranges «المزامنة»
+// while the recipient's own screen calls it «التكاملات» (MAIL-011).
+import { CATEGORY_LABELS, words } from '../messageLabels'
 
-const CAT_LABELS: Record<string, { ar: string; en: string }> = {
-  budget: { ar: 'الميزانية', en: 'Budget' },
-  performance: { ar: 'الأداء', en: 'Performance' },
-  sync: { ar: 'المزامنة', en: 'Syncing' },
-  token: { ar: 'انتهاء الصلاحيات', en: 'Token expiry' },
-  reports: { ar: 'التقارير', en: 'Reports' },
-  security: { ar: 'الأمان', en: 'Security' },
-}
 
 /**
  * Why an arrangement is doing nothing, in words a manager can act on.
@@ -93,7 +88,7 @@ export function NotificationRecipients() {
     setProjectId(''); setCategory('')
   }
 
-  const label = (c: string) => (CAT_LABELS[c] ? (ar ? CAT_LABELS[c].ar : CAT_LABELS[c].en) : c)
+  const label = (c: string) => words(CATEGORY_LABELS, c, ar)
 
   return (
     <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
