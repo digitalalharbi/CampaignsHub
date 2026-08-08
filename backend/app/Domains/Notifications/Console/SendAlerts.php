@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Console;
 
 use App\Domains\Notifications\Services\AlertDispatcher;
+use App\Domains\Notifications\Services\NotificationAudience;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -24,6 +26,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class SendAlerts extends Command
 {
+    /** The same vocabulary the preference screen and the recipient screen use. One list, or three drift. */
+    private const CATEGORIES = ['budget', 'performance', 'sync', 'token', 'reports', 'security'];
+
     protected $signature = 'notifications:send-alerts
         {--user= : Sweep one user id only — for verifying a change without mailing an account}
         {--date= : The day to examine, YYYY-MM-DD. Defaults to today}';
@@ -59,9 +64,128 @@ final class SendAlerts extends Command
             }
         }
 
+        foreach ($this->arranged($rows) as $arrangement) {
+            $counts = $alerts->sweep(
+                $arrangement['user'],
+                $arrangement['tenant_id'],
+                $day,
+                $arrangement['locale'],
+                $arrangement['project_ids'],
+                $arrangement['categories'],
+            );
+            foreach ($counts as $state => $n) {
+                $totals[$state] = ($totals[$state] ?? 0) + $n;
+            }
+        }
+
         $this->info('alerts '.json_encode($totals));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * People a MANAGER asked to have told, who did not ask for themselves — MAIL-010.
+     *
+     * ## Why they are swept separately rather than merged into the loop above
+     *
+     * The two are different questions. A preference row is somebody saying «send me alerts», and it
+     * is unrestricted: everything they can reach. An arrangement is somebody else saying «tell them
+     * about this client», and it is bounded by whatever the arrangement named.
+     *
+     * Anyone who appears in BOTH is skipped here: they already received the unrestricted sweep, and
+     * sweeping them again would produce nothing new (the ledger's unique index refuses the second
+     * claim) at the cost of a second pass over the same digest.
+     *
+     * ## The arrangement narrows and cannot widen
+     *
+     * A NULL `project_id` or `category` means «everything» — which, after `AlertDispatcher`
+     * intersects with the person's own ceiling, means everything THEY can reach. The narrowing lists
+     * are built here; the guarantee is enforced there.
+     *
+     * @param  Collection<int,object>  $preferenceRows
+     * @return list<array{user: User, tenant_id: string, locale: string, project_ids: ?list<string>, categories: ?list<string>}>
+     */
+    private function arranged($preferenceRows): array
+    {
+        $alreadySwept = $preferenceRows
+            ->filter(fn ($row): bool => $this->wantsAlerts($row))
+            ->map(fn ($row): string => $row->tenant_id.':'.$row->user_id)
+            ->all();
+
+        $rows = DB::table('notification_recipients')
+            ->when($this->option('user') !== null, fn ($q) => $q->where('user_id', (int) $this->option('user')))
+            ->get();
+
+        /** @var array<string, array{tenant_id: string, user_id: int, project_ids: ?list<string>, categories: ?list<string>}> $byPerson */
+        $byPerson = [];
+
+        foreach ($rows as $row) {
+            $key = $row->tenant_id.':'.$row->user_id;
+            if (in_array($key, $alreadySwept, true)) {
+                continue;
+            }
+
+            $existing = $byPerson[$key] ?? [
+                'tenant_id' => (string) $row->tenant_id,
+                'user_id' => (int) $row->user_id,
+                'project_ids' => [],
+                'categories' => [],
+            ];
+
+            // NULL wins and stays won: one blanket row means the person's own ceiling is the limit,
+            // and a narrower row alongside it must not claw that back.
+            $existing['project_ids'] = $row->project_id === null || $existing['project_ids'] === null
+                ? null
+                : array_values(array_unique([...$existing['project_ids'], (string) $row->project_id]));
+
+            $existing['categories'] = $row->category === null || $existing['categories'] === null
+                ? null
+                : array_values(array_unique([...$existing['categories'], (string) $row->category]));
+
+            $byPerson[$key] = $existing;
+        }
+
+        $audience = app(NotificationAudience::class);
+        $out = [];
+
+        foreach ($byPerson as $entry) {
+            $user = User::query()->find($entry['user_id']);
+            if ($user === null || $user->email === null) {
+                continue;
+            }
+
+            /*
+             * The recipient's own switches, applied to the manager's arrangement.
+             *
+             * Without this the arrangement would OVERRIDE somebody's preferences: `AlertDispatcher`
+             * resolves recipients from arrangements and never reads the preferences table, so a
+             * category the person switched off would still reach them. A manager decides who is
+             * informed; they do not decide how somebody's inbox works.
+             *
+             * A blanket arrangement (`categories === null`) becomes the explicit list of what this
+             * person allows — narrowing a NULL is the correct direction, and it is the only place
+             * where NULL stops meaning «everything».
+             */
+            $allowed = $audience->allowedCategories($user, $entry['tenant_id'], $entry['categories'] ?? self::CATEGORIES);
+
+            if ($allowed === []) {
+                continue;
+            }
+
+            $locale = DB::table('notification_preferences')
+                ->where('tenant_id', $entry['tenant_id'])->where('user_id', $entry['user_id'])
+                ->whereNull('client_workspace_id')->value('locale');
+
+            $out[] = [
+                'user' => $user,
+                'tenant_id' => $entry['tenant_id'],
+                'locale' => (string) ($locale ?? 'ar'),
+                'project_ids' => $entry['project_ids'],
+                'categories' => $allowed,
+            ];
+        }
+
+        return $out;
     }
 
     /**

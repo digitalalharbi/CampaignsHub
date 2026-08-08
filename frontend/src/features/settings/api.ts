@@ -187,3 +187,59 @@ export function useClientActions() {
     archive: useMutation({ mutationFn: (id: string) => deleteData(`/client-workspaces/${id}`), onSuccess: inv }),
   }
 }
+
+// ---- Notification recipients (MAIL-010) -----------------------------------------------------------
+
+/**
+ * Who a manager has arranged to be told, and whether it is doing anything.
+ *
+ * `status` is resolved server-side on every read, against the person's LIVE access. A row whose
+ * recipient has since been moved off the client comes back `eligible: false` — the screen must show
+ * that, because a list that looks correct and mails nobody is worse than no list.
+ */
+export interface NotifRecipient {
+  id: string
+  user_id: number
+  name: string | null
+  email: string | null
+  project_id: string | null
+  project_name: string | null
+  category: string | null
+  status: { eligible: boolean; reason: string | null }
+}
+
+export interface AssignableRecipients {
+  people: { user_id: number; name: string; email: string; project_ids: string[] }[]
+  projects: { id: string; name: string; client_name: string | null }[]
+  available_categories: string[]
+}
+
+export function useNotifRecipients() {
+  return useQuery({
+    queryKey: ['settings', 'notif-recipients'],
+    queryFn: () => getData<{ recipients: NotifRecipient[]; available_categories: string[] }>('/settings/notifications/recipients'),
+  })
+}
+
+export function useAssignableRecipients() {
+  return useQuery({
+    queryKey: ['settings', 'notif-assignable'],
+    queryFn: () => getData<AssignableRecipients>('/settings/notifications/recipients/assignable'),
+  })
+}
+
+export function useNotifRecipientActions() {
+  const qc = useQueryClient()
+  const inv = () => qc.invalidateQueries({ queryKey: ['settings', 'notif-recipients'] })
+  return {
+    add: useMutation({
+      mutationFn: (b: { user_id: number; project_id: string | null; category: string | null }) =>
+        postData('/settings/notifications/recipients', b),
+      onSuccess: inv,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => deleteData(`/settings/notifications/recipients/${id}`),
+      onSuccess: inv,
+    }),
+  }
+}

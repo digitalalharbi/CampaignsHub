@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
+use App\Domains\Notifications\Http\Controllers\NotificationRecipientController;
 use App\Domains\Settings\Http\Controllers\BrandingController;
 use App\Domains\Settings\Http\Controllers\NotificationPreferenceController;
 use App\Domains\Settings\Http\Controllers\OrganizationSettingsController;
@@ -39,6 +40,20 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     // Notification preferences (per-user).
     Route::get('notifications', [NotificationPreferenceController::class, 'show'])->name('notifications.show');
     Route::match(['put', 'patch'], 'notifications', [NotificationPreferenceController::class, 'update'])->name('notifications.update');
+
+    /*
+     * Who a manager wants told — MAIL-010. Distinct from the routes above, which are a person's own
+     * inbox and need no permission beyond being signed in. These arrange OTHER people, so all four
+     * sit behind `settings.manage` — including the listing, which names colleagues and the clients
+     * they are attached to.
+     *
+     * A row created here cannot grant access. `NotificationAudience` resolves every recipient against
+     * their own live ceiling at send time, so the worst a mistake here can do is nothing.
+     */
+    Route::get('notifications/recipients', [NotificationRecipientController::class, 'index'])->name('notifications.recipients.index');
+    Route::get('notifications/recipients/assignable', [NotificationRecipientController::class, 'assignable'])->name('notifications.recipients.assignable');
+    Route::post('notifications/recipients', [NotificationRecipientController::class, 'store'])->name('notifications.recipients.store');
+    Route::delete('notifications/recipients/{recipient}', [NotificationRecipientController::class, 'destroy'])->name('notifications.recipients.destroy');
 
     // Security (account + org policy).
     Route::get('security/activity', [SecurityController::class, 'activity'])->name('security.activity');

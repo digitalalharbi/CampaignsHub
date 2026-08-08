@@ -4,6 +4,7 @@ import { GeneralTab } from './tabs/GeneralTab'
 import { DisclaimerTab } from './tabs/DisclaimerTab'
 import { TeamTab } from './tabs/TeamTab'
 import { NotificationsTab } from './tabs/NotificationsTab'
+import { NotificationRecipients } from './tabs/NotificationRecipients'
 import { SecurityTab } from './tabs/SecurityTab'
 import { BrandingTab } from './tabs/BrandingTab'
 import { ClientsTab } from './tabs/ClientsTab'
@@ -73,7 +74,21 @@ export function SettingsPage({ only, title, subtitle }: Props = {}) {
           {tab === 'disclaimer' && <DisclaimerTab />}
           {tab === 'clients' && <ClientsTab />}
           {tab === 'team' && <TeamTab />}
-          {tab === 'notifications' && <NotificationsTab />}
+          {/*
+            Two things, in this order — MAIL-010.
+
+            «My own inbox» first, because everyone who opens this tab has one; «who else is told»
+            below it, because only an administrator can act on it and it is the longer read. Both on
+            one tab rather than two: they are the same question asked about different people, and a
+            manager who arranges a colleague usually wants to check their own settings in the same
+            visit.
+          */}
+          {tab === 'notifications' && (
+            <div className="space-y-6">
+              <NotificationsTab />
+              <NotificationRecipients />
+            </div>
+          )}
           {tab === 'security' && <SecurityTab />}
           {tab === 'branding' && <BrandingTab />}
           {tab === 'projects' && <ProjectsTab />}

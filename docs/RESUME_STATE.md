@@ -300,6 +300,27 @@ duplicate invitation would not have been skipped, it would have broken whatever 
 dressed as a cleanup — four tables and a frontend contract, to fix nothing anybody can see. There is a
 mapper at the boundary and a docblock saying why.
 
+### MAIL-010 — arranging who is told, without arranging who may see
+
+A manager can now name who on the team is told about a project. **A row in `notification_recipients`
+is a request; a membership is the authorisation** — and the check is at SEND time, not at write time,
+because access changes after the arrangement is made and an email is the one surface a later
+permission change cannot reach.
+
+The test that matters writes straight into the table, bypassing the controller. If the only thing
+standing between a scoped member and another client's spend were a validation rule in an HTTP
+handler, a seeder or a console command would each be a way around it.
+
+**A real gap surfaced while wiring it.** `AlertDispatcher` resolves its own recipients and never reads
+the preferences table, so an arrangement would have overridden a category somebody had explicitly
+switched off — a product where turning something off in your settings does not turn it off. The
+property held by `NotificationAudience` was not, on its own, a property of the product. Both are now
+asserted, and the second is asserted on the SWEEP rather than on the resolver.
+
+**Found by opening the screen:** three different clients each have a project called «Q3 Launch —
+Demo», so the picker offered the same words three times with no way to tell them apart. Project names
+are only unique inside a client, and this is a workspace-wide list.
+
 **Open, recorded rather than half-fixed:** there are two invitation paths. `/settings/team` provisions a
 user immediately; `/app/team/invitations` uses `InvitationService` with a token and creates nobody until
 it is accepted. The settings screen is the one the interface uses. Converging them changes what the

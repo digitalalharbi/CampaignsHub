@@ -64,18 +64,59 @@ final class AlertDispatcher
     ) {}
 
     /**
+     * A note's kind, in the vocabulary a person's preferences are written in — MAIL-010.
+     *
+     * Without this the `category` on a recipient arrangement is decorative for alerts: a manager
+     * asks for «budget only» and the person receives everything. Anything unmapped falls to
+     * `performance`, which is the category most of these notes are about and the one that defaults
+     * to OFF — so a note nobody classified is quiet rather than loud.
+     */
+    private const CATEGORY_OF = [
+        'budget_pace' => 'budget',
+        'rising_cost' => 'budget',
+        'reallocation' => 'budget',
+        'stale_data' => 'sync',
+        'data_gap' => 'sync',
+        'falling_rate' => 'performance',
+        'frequency_saturation' => 'performance',
+        'period_comparison' => 'performance',
+    ];
+
+    /**
      * Send whatever this recipient needs to hear about today, and record what was sent.
      *
+     * @param  list<string>|null  $onlyProjectIds  narrows to a manager's arrangement — NEVER widens,
+     *                                             because it is intersected with the person's own ceiling
+     * @param  list<string>|null  $onlyCategories  likewise: a subset of what they would otherwise get
      * @return array<string,int> what happened, by state — for the console and the tests
      */
-    public function sweep(User $user, string $tenantId, Carbon $day, string $locale = 'ar'): array
-    {
+    public function sweep(
+        User $user,
+        string $tenantId,
+        Carbon $day,
+        string $locale = 'ar',
+        ?array $onlyProjectIds = null,
+        ?array $onlyCategories = null,
+    ): array {
         $counts = ['sent' => 0, 'already_sent' => 0, 'skipped' => 0, 'awaiting_credentials' => 0, 'failed' => 0];
 
         try {
             $this->tenants->setTenantId($tenantId);
 
             $projectIds = $this->scope->projectIdsFor($user, $tenantId);
+
+            /*
+             * Intersection, not replacement.
+             *
+             * The narrowing argument arrives from a recipient arrangement, which is a REQUEST rather
+             * than a grant (MAIL-010). Assigning it here instead of intersecting would turn this
+             * parameter into a way to mail somebody a project they cannot reach — the single thing
+             * the whole recipient design exists to prevent.
+             */
+            if ($onlyProjectIds !== null) {
+                $projectIds = array_values(array_intersect($projectIds, $onlyProjectIds));
+            }
+
             if ($projectIds === []) {
                 return $counts;
             }
@@ -85,6 +126,11 @@ final class AlertDispatcher
             foreach ($digest['projects'] ?? [] as $block) {
                 foreach ($block['observations'] ?? [] as $note) {
                     if (! in_array($note['severity'] ?? '', self::ALERTABLE, true)) {
+                        continue;
+                    }
+
+                    if ($onlyCategories !== null
+                        && ! in_array(self::CATEGORY_OF[$note['kind'] ?? ''] ?? 'performance', $onlyCategories, true)) {
                         continue;
                     }
 
