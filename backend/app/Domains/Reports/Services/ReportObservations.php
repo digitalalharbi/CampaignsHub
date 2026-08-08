@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Support\AdPlatforms;
+
 /**
  * What actually happened in this report's own numbers — §14.7.
  *
@@ -128,12 +130,15 @@ final class ReportObservations
             'reveals' => self::REVEALS[$metric['key']] ?? [],
             'value' => $lens->formatRanking((float) $value, $currency),
             'change' => round((float) $change, 4),
-            'title' => sprintf('%s %s مقارنة بالفترة السابقة', $metric['label_ar'], $rose ? 'ارتفع' : 'تراجع'),
+            // Verb first — «تراجع معدل النقر», not «معدل النقر تراجع». The second is grammatical and
+            // reads like a translation; the first is how somebody would actually say it.
+            'title' => sprintf('%s %s مقارنة بالفترة السابقة', $rose ? 'ارتفاع' : 'تراجع', $metric['label_ar']),
             'detail' => sprintf(
-                '%s الآن %s، بفارق %s%% عن الفترة السابقة.',
+                '%s %s إلى %s، بفارق %s عن الفترة السابقة.',
+                $rose ? 'ارتفع' : 'تراجع',
                 $metric['label_ar'],
                 $lens->formatRanking((float) $value, $currency),
-                number_format(abs((float) $change) * 100, 1),
+                self::percent(abs((float) $change)),
             ),
         ]];
     }
@@ -170,9 +175,9 @@ final class ReportObservations
                 'change' => round((float) $change, 4),
                 'title' => sprintf('ارتفاع %s', $label),
                 'detail' => sprintf(
-                    '%s ارتفعت %s%% لتصل إلى %s %s، وقد يشير ذلك إلى منافسة أعلى أو ضعف في المحتوى.',
+                    'ارتفعت %s %s لتصل إلى %s %s، وقد يعود ذلك إلى منافسة أعلى أو ضعف في أداء المحتوى.',
                     $label,
-                    number_format((float) $change * 100, 1),
+                    self::percent((float) $change),
                     number_format((float) $value, 2),
                     $currency,
                 ),
@@ -210,10 +215,10 @@ final class ReportObservations
                 'change' => round((float) $change, 4),
                 'title' => sprintf('تراجع %s', $label),
                 'detail' => sprintf(
-                    '%s تراجع %s%% ليصل إلى %s%%، وقد يدل ذلك على بداية ضعف في أداء المحتوى.',
+                    'تراجع %s %s ليصل إلى %s، وقد يشير ذلك إلى بداية ضعف في أداء المحتوى.',
                     $label,
-                    number_format(abs((float) $change) * 100, 1),
-                    number_format((float) $value * 100, 2),
+                    self::percent(abs((float) $change)),
+                    self::percent((float) $value, 2),
                 ),
             ];
         }
@@ -249,8 +254,8 @@ final class ReportObservations
             'change' => isset($data['delta']['frequency']) ? round((float) $data['delta']['frequency'], 4) : null,
             'title' => 'ارتفاع معدل التكرار',
             'detail' => sprintf(
-                'يشاهد الشخص الواحد الإعلان %s مرة في المتوسط، ويُنصح بتوسيع الجمهور أو تحديث المحتوى.',
-                number_format((float) $frequency, 1),
+                'يشاهد الشخص الواحد الإعلان %s في المتوسط، ونوصي بتوسيع الجمهور أو تحديث المحتوى.',
+                self::times((float) $frequency),
             ),
         ]];
     }
@@ -284,12 +289,12 @@ final class ReportObservations
                 'change' => null,
                 'title' => sprintf('حملة «%s» تستهلك الميزانية %s الخطة', $row['campaign_name'], $fast ? 'أسرع من' : 'أبطأ من'),
                 'detail' => sprintf(
-                    'صُرف %s %s من أصل %s %s، بما يعادل %s%% من المتوقع حتى الآن.',
+                    'صُرف %s %s من أصل %s %s، أي %s من الإنفاق المتوقع حتى الآن.',
                     number_format((float) $row['spent'], 2),
                     $currency,
                     number_format((float) $row['budget'], 2),
                     $currency,
-                    number_format((float) $pace * 100, 0),
+                    self::percent((float) $pace),
                 ),
             ];
         }
@@ -341,15 +346,15 @@ final class ReportObservations
             'reveals' => self::REVEALS[$metric['key']] ?? [],
             'value' => $lens->formatRanking($bv, $currency),
             'change' => round($gap, 4),
-            'title' => sprintf('فرصة لإعادة توزيع الميزانية نحو %s', $best['provider']),
+            'title' => sprintf('فرصة لإعادة توزيع الميزانية نحو %s', AdPlatforms::name((string) $best['provider'])),
             'detail' => sprintf(
-                '%s على %s %s، مقابل %s على %s — بفارق %s%% لصالح الأولى.',
+                '%s على %s هو %s، مقابل %s على %s — بفارق %s لصالح الأولى.',
                 $metric['label_ar'],
-                $best['provider'],
+                AdPlatforms::name((string) $best['provider']),
                 $lens->formatRanking($bv, $currency),
                 $lens->formatRanking($wv, $currency),
-                $worst['provider'],
-                number_format($gap * 100, 0),
+                AdPlatforms::name((string) $worst['provider']),
+                self::percent($gap),
             ),
         ]];
     }
@@ -425,6 +430,40 @@ final class ReportObservations
                 ? 'لم تتحدث بيانات هذه الفترة مؤخرًا، لذلك قد تكون بعض المؤشرات غير مكتملة.'
                 : sprintf('لم تتحدث بيانات %s مؤخرًا، لذلك قد تكون بعض المؤشرات غير مكتملة.', $this->arabicList($failing)),
         ]];
+    }
+
+    /**
+     * A ratio as a percentage, without the decimal nobody reads — MAIL-007.
+     *
+     * «بفارق 40%» is what a person says. «بفارق 40.0%» is what a machine prints, and the extra
+     * digit is precision the figure does not have: a period-over-period change is a comparison of
+     * two sampled windows, not a measurement to one decimal place.
+     *
+     * The decimal is kept only where dropping it would round a real value to zero.
+     */
+    private static function percent(float $ratio, int $digits = 0): string
+    {
+        $value = $ratio * 100;
+        if ($digits === 0 && $value > 0 && $value < 1) {
+            $digits = 2;
+        }
+
+        return number_format($value, $digits).'%';
+    }
+
+    /**
+     * «6 مرات», not «6.0 مرة».
+     *
+     * Arabic counts 3–10 with a plural and everything else with a singular. Getting this wrong is
+     * the difference between copy that was written and copy that was generated.
+     */
+    private static function times(float $value): string
+    {
+        $rounded = round($value, 1);
+        $whole = (int) round($value);
+        $text = $rounded == $whole ? (string) $whole : number_format($rounded, 1);
+
+        return $whole >= 3 && $whole <= 10 ? $text.' مرات' : $text.' مرة';
     }
 
     /**

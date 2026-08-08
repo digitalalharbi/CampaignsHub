@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Services\DigestPresenter;
+use App\Support\AdPlatforms;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -325,9 +326,15 @@ final class DailyDigestMail extends Mailable
             return null;
         }
 
+        // A PLATFORM is named in the reader's language; a CAMPAIGN keeps the name its operator gave
+        // it. «تيك توك» is a translation, «Meta — Retargeting» is a proper noun (MAIL-007).
+        $label = $platform !== null
+            ? AdPlatforms::name((string) $row['label'], $ar ? 'ar' : 'en')
+            : (string) $row['label'];
+
         $cost = $ar ? 'تكلفة النتيجة ' : 'cost/result ';
 
-        return $row['label'].' · '.$p->money($row['spend']).' · '.$cost.$p->money($row['cpa']);
+        return $label.' · '.$p->money($row['spend']).' · '.$cost.$p->money($row['cpa']);
     }
 
     /** @param  array<string,mixed>  $freshness */

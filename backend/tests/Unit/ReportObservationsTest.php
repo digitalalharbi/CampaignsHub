@@ -74,7 +74,12 @@ final class ReportObservationsTest extends TestCase
         $this->assertSame('period_comparison', $note['kind']);
         $this->assertSame('positive', $note['severity'], 'a rising return is not a warning');
         $this->assertStringContainsString('4.00×', $note['detail']);
-        $this->assertStringContainsString('40.0%', $note['detail']);
+        // «40%», not «40.0%» — a period-over-period change is a comparison of two sampled windows,
+        // not a measurement to one decimal place, and the extra digit reads as machine output.
+        $this->assertStringContainsString('40%', $note['detail']);
+        $this->assertStringNotContainsString('40.0%', $note['detail']);
+        // Verb first, the way somebody would actually say it.
+        $this->assertStringStartsWith('ارتفاع', $note['title']);
     }
 
     /** The same movement on a cost is the other direction of good. */
@@ -130,7 +135,8 @@ final class ReportObservationsTest extends TestCase
             'reported' => ['reach' => true],
         ]);
         $this->assertContains('frequency_saturation', $this->kinds($reported));
-        $this->assertStringContainsString('6.0 مرة', $reported[0]['detail']);
+        // Arabic counts 3–10 with a plural; «6.0 مرة» is two mistakes in three characters.
+        $this->assertStringContainsString('6 مرات', $reported[0]['detail']);
     }
 
     /** A campaign with no budget has no plan to deviate from. */
@@ -188,7 +194,10 @@ final class ReportObservationsTest extends TestCase
             ],
         ]);
         $note = $wide[array_search('reallocation', $this->kinds($wide), true)];
-        $this->assertStringContainsString('meta', $note['title']);
+        // The platform is NAMED, in Arabic — «نحو tiktok» reads as a log line nobody translated.
+        $this->assertStringContainsString('ميتا', $note['title']);
+        $this->assertStringNotContainsString('meta', $note['title']);
+        $this->assertStringContainsString('تيك توك', $note['detail']);
         $this->assertStringContainsString('75%', $note['detail']);
     }
 

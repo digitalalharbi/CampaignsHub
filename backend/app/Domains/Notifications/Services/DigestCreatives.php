@@ -124,7 +124,7 @@ final class DigestCreatives
         }
 
         return match ((string) $metric) {
-            'roas' => sprintf('أعلى ROAS (%s×)', number_format((float) $value, 2)),
+            'roas' => sprintf('أعلى عائد على الإنفاق (%s×)', number_format((float) $value, 2)),
             'cpa' => sprintf('أقل تكلفة نتيجة (%s)', number_format((float) $value, 2)),
             'cpm' => sprintf('أقل تكلفة ألف ظهور (%s)', number_format((float) $value, 2)),
             'ctr' => sprintf('أعلى معدل نقر (%s%%)', number_format((float) $value * 100, 2)),

@@ -40,6 +40,39 @@ final class AdPlatforms
     public const ORDER = ['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin'];
 
     /**
+     * How a platform is NAMED in a sentence — MAIL-007.
+     *
+     * Short, because these appear inside prose: «أفضل تكلفة ألف ظهور على تيك توك» reads as Arabic,
+     * and «أفضل تكلفة ألف ظهور على tiktok» reads as a log line somebody forgot to translate.
+     *
+     * Deliberately NOT the same strings as `PlatformOverviewController::PLATFORMS`. That map names
+     * the CONNECTOR on the integrations page — «ميتا (فيسبوك وإنستقرام)», «إعلانات جوجل» — where a
+     * reader is choosing what to connect and the extra words are the point. In the middle of a
+     * sentence they are a parenthesis nobody asked for.
+     *
+     * An unrecognised key falls back to itself: a new platform appearing in a note should read as
+     * its own key, not as an empty space where a name should be.
+     *
+     * @var array<string, array{ar: string, en: string}>
+     */
+    private const NAMES = [
+        'snapchat' => ['ar' => 'سناب شات', 'en' => 'Snapchat'],
+        'tiktok' => ['ar' => 'تيك توك', 'en' => 'TikTok'],
+        'meta' => ['ar' => 'ميتا', 'en' => 'Meta'],
+        'google' => ['ar' => 'جوجل', 'en' => 'Google'],
+        'x' => ['ar' => 'إكس', 'en' => 'X'],
+        'linkedin' => ['ar' => 'لينكدإن', 'en' => 'LinkedIn'],
+    ];
+
+    /** The prose name of a platform, in the reader's language. */
+    public static function name(string $key, string $locale = 'ar'): string
+    {
+        $canonical = self::canonical($key);
+
+        return self::NAMES[$canonical][$locale === 'ar' ? 'ar' : 'en'] ?? $key;
+    }
+
+    /**
      * Every spelling this codebase uses, mapped to its canonical key.
      *
      * Deliberately generous. A key that is not recognised sorts last rather than throwing: a new
