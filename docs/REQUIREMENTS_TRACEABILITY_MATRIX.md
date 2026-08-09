@@ -1054,6 +1054,13 @@ artefacts, not evidence of a sync.
 | PAGES-001 | ADMIN | The public marketing site and the three public portals belong to the PLATFORM, and the console that renders them can load them | Moved to `/admin/settings/public-pages` behind `platform`; `PublicPageSetting::scopePlatform`; migration makes `tenant_id` nullable + partial unique index | `publicPagesApi` targets `/admin/…`; the editor gates on `is_platform_admin`, not on a tenant permission; the dead tenant-settings nav entry removed | `PublicPageSettingsTest` rewritten (10 cases incl. legacy per-tenant rows served to nobody, tenant admin fail-closed) | **VERIFIED** | `2ea6943` | The API sat behind `tenant` + `portal:app,agency,influencers` while the console is `/admin`, where the operator holds no membership — «تعذّر تحميل إعدادات الصفحات». It also hid a worse defect: the public read took `latest('published_at')` across ALL tenants, so any customer could rewrite the platform's own homepage. Live: load → edit → draft (not live) → publish → visible → row removed |
 | TAX-ADMIN-001 | ADMIN | The shared taxonomy layer is reachable from the platform console | `/admin/taxonomies*` behind `platform`; the engine already resolves «platform ∪ current tenant», so no tenant in context reads/writes exactly the platform options | `taxonomyApi` prefixes `/admin` for a platform operator | `TaxonomyEngineTest` +2 (operator reads only platform definitions; tenant user fail-closed on the platform door, own door still works) | **VERIFIED** | `2ea6943` | Same cause as PAGES-001 — «تعذّر تحميل البيانات». A door was ADDED, not moved: a customer editing their own options is a different, equally legitimate job. Live: 30 definitions, all `المنصة` |
 
+> **Supersession — 2026-08-10.** The `REPORT-OBJECTIVE-001…005` rows in the block below are
+> HISTORICAL. Each of them has a LATER row in this file recording the delivered state with its commit
+> and its tests, and that later row is authoritative. A row here reading `NOT_STARTED` or `PARTIAL`
+> where a later one reads `VERIFIED` is documentation debt, not a gap in the product — reconcile it,
+> do not rebuild the unit. `REPORT-LINKS-13` and `AGENCY-PERMS-006` below are NOT superseded: both
+> carry a real, named, non-external gap and are the first things to close.
+
 ## §13 — Client report links: executive summary + detailed (`REPORT-LINKS-13`)
 
 | ID | AREA | Requirement | Status | Notes |

@@ -10,6 +10,67 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## ⚠️ START HERE — handoff written 2026-08-10 at a context-window close
+
+**HEAD is `1fef134`. Working tree CLEAN.** Everything below `1fef134` is committed and verified as
+stated; nothing is half-applied.
+
+### The one thing in flight
+
+A **full three-browser gate was running when this was written** (`cd frontend && npm run gate`, alone,
+exit code captured on its own line — never through a pipe, see the warning at the bottom of this
+file). Its verdict is NOT recorded here because it had not finished. **Read it before anything else**:
+the log is `/tmp/gate-v3.log` if the machine has not been rebooted; otherwise just re-run the gate.
+
+The two runs before it, for context:
+
+| run | chromium | firefox | webkit |
+|---|---|---|---|
+| before the webkit fix | 287 PASS | PASS | **FAIL ×4** |
+| after it (`47c9ef9`) | 287 PASS | **FAIL ×1** | 279 PASS |
+
+Both of those failures are FIXED at `1fef134`; the run in flight is the confirmation, not a hope.
+The firefox one was verified in isolation (`advertiser-portal.spec.ts`, firefox, 13 passed).
+
+### Exact next task, in the owner's mandated order
+
+1. **Read the gate verdict.** If green: record it here and in the matrix, and move to 2. If red:
+   diagnose the named test from its `error-context.md` — do NOT raise a timeout, add a retry, skip,
+   or sleep. Both defects closed this session were found by reading evidence, and both were real.
+2. **Close the non-external open items.** They are, exactly:
+   - `REPORT-LINKS-13` — `ShareService` separates *live vs snapshot*, not *executive summary vs full
+     detail*. The security half is done and gate-covered (`LiveReportShareTest`, 14 cases).
+   - `AGENCY-PERMS-006` — inline `optionsError` on taxonomy selects. The influencer surfaces in that
+     row are behind a disabled feature flag and are NOT a gap.
+   - **The two full live journeys**, which is the one thing the owner has asked for repeatedly and
+     which has NOT been done since the signup UI changed: new Self signup → plan → checkout →
+     provision → `/app`, and new Agency signup → plan → checkout → provision → `/agency`. Seeing the
+     plan card is not enough; walk it to a provisioned workspace.
+3. **Then** the production-readiness programme (Moyasar test integration, the integration readiness
+   matrix, production config validation, FX, stores/funnel, the handoff pack). **None of it is
+   started.** See «What is NOT built» below — do not let the adapter's existence read as readiness.
+
+### What is NOT built, stated plainly
+
+- **Moyasar is a provider adapter behind the payment port with sandbox settlement in the gate.** It
+  is NOT a configured test integration. There is no tokenization, no saved payment method, no
+  recurring-billing scheduler, no webhook-secret configuration surface, no `/admin` readiness state
+  for it.
+- **There is no production-configuration readiness check** — nothing fails a boot on `localhost` in
+  production, a test secret in production, an HTTP callback, or a missing webhook secret.
+- **The FX half of the currency decision is not implemented.** Subscriptions are USD and advertising
+  reporting is SAR, but original-amount + original-currency + FX rate/date/source is not built.
+- **`PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md` and `INTEGRATION_CREDENTIALS_CHECKLIST.md`
+  do not exist.** `PRODUCTION_HANDOVER.md` does, and is older than all of this.
+
+### Matrix debt to reconcile, NOT to rebuild
+
+`REPORT-OBJECTIVE-001…005` each appear two or three times. The EARLIER rows say `NOT_STARTED` or
+`PARTIAL`; the LATER rows say `VERIFIED` and cite commits and tests. The later rows are authoritative.
+Reconcile the duplicates with a supersession note — do not reopen those units.
+
+---
+
 ## Session — LAUNCH PRICING, plan fit, limits and the signup fit (2026-08-09, late)
 
 Everything below is **done and verified**. The five-item punch list this file carried at `48723d4`
