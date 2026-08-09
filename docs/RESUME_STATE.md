@@ -10,6 +10,63 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## ⚠️ UNCOMMITTED WORK IN THE TREE — read before anything else (2026-08-09, late)
+
+The tree holds a **finished** unit and a **half-finished** one. Nothing is committed. The last green
+gate is `0179ec7`; everything below is on top of it.
+
+### Finished and verified (needs only tests re-run + gate)
+
+- **SUB-USD-001** — `config/subscriptions.currency` USD (it defaulted to SAR and is the fallback for
+  every renewal, reactivation, proration and notification). `config/billing.currency` stays SAR.
+  Walked live on a new account: signup → plan → checkout → billing, zero SAR.
+- **SUB-COMMIT-001** — `minimum_commitment_months` on the plan, `commitment_ends_at` on the
+  subscription, fixed from the plan as it stood when they paid. `chargeDueRenewals` keeps a
+  cancellation pending and keeps charging until the commitment is served, then honours it.
+  `MinimumCommitmentTest` (10) passed.
+- **SUB-CONSENT-001** — the quote carries `regular_monthly`, `commitment_months`, `total_committed`,
+  `next_payment_on`; `CommitmentDisclosure` shows six facts and gates the Pay button; the server
+  refuses **422** without the agreement. Found live: it answered 500 first, because the service threw
+  and the handler rendered a crash.
+
+### LAUNCH PRICING — applied to the catalogue, NOT finished in the product
+
+| plan | monthly | annual | intro | commit | projects/clients/conns/team/reports |
+|---|---|---|---|---|---|
+| starter | $19 | $190 | — | — | 3 / 1 / 3 / 3 / 10 |
+| growth **(recommended)** | $49 | $490 | $9 for 30d | 3 months | 25 / 5 / 25 / 15 / 100 |
+| agency *(was `scale`)* | $99 | $990 | — | — | ∞ |
+| enterprise | contact sales | — | — | — | ∞ |
+
+`scale` → `agency` was checked before renaming: `tenants.subscription_plan` is only displayed or
+grouped, never compared to a literal, and plan codes share no namespace with `account_type` or the
+portals. The migration carries tenants, registrations and payments.
+
+`enterprise` uses a real `contact_sales` column rather than a 0.00 price, because 0.00 already means
+FREE here and «there is no free tier» is a rule with a test behind it.
+
+### THE PUNCH LIST — what is NOT done
+
+1. **The Enterprise card is not rendered.** `contactPlans()` exists in `planFit.ts` and nothing calls it.
+2. **The `clients` cap is published but NOT ENFORCED.** No `EnsureWithinPlanLimit` mount on the
+   client-workspace create route, and `SubscriptionService::usage()` does not count client
+   workspaces. Today it is exactly the «promise nobody is keeping» this file warns about — fix it the
+   way PAY-AUDIT-001 did: count the rows, wire the middleware, test through HTTP.
+3. **Tests are stale** against Launch Pricing and the rename. They were green at the PREVIOUS prices
+   (26.99/79.99/129.99). Expect the same class of failure as before: money literals, and webhook
+   amounts in minor units that no longer match the charge.
+4. **`contact_sales` is not editable from `/admin`.**
+5. **No live re-walk of both journeys since the restructure, and NO GATE RUN.**
+
+### On the entitlements list in the brief
+
+`automation` and `advanced analytics` **do not exist anywhere in the product** and were deliberately
+NOT added to the comparison — the brief itself says not to invent limits. `ai_assist` is the nearest
+real capability and is listed under its own name. `connections` is the ad-account axis. The six ad
+platforms are not gated by plan; only how many connections is capped.
+
+---
+
 ## GATE — 2026-08-09 · **GREEN at `0179ec7`**
 
 `cd frontend && npm run gate` — chromium **286**, firefox **278**, webkit **278**, each in its own
@@ -632,6 +689,64 @@ firefox is the slowest of the three here, so its settling most often overlaps th
 meets exactly the same thing: reach for More filters and it moves 655px sideways as you click.
 
 **If a click-does-nothing failure appears again, measure the target's box before reading any code.**
+
+---
+
+## Session — SUB-USD-001 / SUB-COMMIT-001 / SUB-CONSENT-001
+
+### The catalogue, as the owner priced it (2026-08-09, marketing pricing — supersedes everything earlier)
+
+| plan | monthly | annual | introductory offer | minimum commitment |
+|---|---|---|---|---|
+| Starter | $26.99 | $269.99 | — | — |
+| **Growth** (recommended) | $79.99 | $799.99 | **30 days at $8.99** | **3 months** |
+| Scale | $129.99 | $1,299.99 | — | — |
+
+All USD. The offer is **Growth's alone** — Starter and Scale are sold outright at their own prices,
+which is not a free plan but a plan without an offer. The annual term never passes through an
+introductory month on any plan.
+
+Growth's committed total is **$168.97** — 8.99 + 79.99 + 79.99 — and that figure is shown to the
+customer rather than left to be worked out.
+
+### What changed
+
+- **`config/subscriptions.currency` defaulted to SAR.** It is the fallback every renewal,
+  reactivation, plan change, proration and notification lands on when a subscription carries no
+  currency of its own, so anything that fell back was quietly re-denominated. Now USD.
+  **`config/billing.currency` stays SAR** — an agency invoicing its client is a different party and a
+  different transaction, and the advertising side reports in SAR untouched.
+- **The commitment is real machinery, not copy.** `minimum_commitment_months` on the plan (editable
+  from `/admin`, audited like a price) and `commitment_ends_at` on the subscription, fixed from the
+  plan as it stood when they paid — so editing the offer later cannot move a commitment somebody
+  already agreed to. `chargeDueRenewals` keeps a cancellation PENDING and keeps charging until the
+  commitment is served, then honours it without anybody asking twice.
+- **The disclosure is a gate.** Six facts before payment — due today, regular monthly, commitment,
+  next payment date, total committed, renewal/cancellation — and a checkbox the Pay button waits on.
+
+### Two things found by driving it live rather than by reading
+
+1. **The consent gate answered 500.** The service threw a `RuntimeException` and the handler rendered
+   it as a crash, with the exception text in `errors.exception`. Exactly the mistake
+   `EnsureWithinPlanLimit` had already recorded. A refusal that looks like a broken server tells
+   somebody to try again later instead of ticking the box in front of them — it is a 422 now, with
+   the exception kept as the backstop for a caller that skips the controller.
+2. **The dev database still held the old catalogue.** The seeder had changed and nobody had re-run
+   it, so the first live check showed SAR prices that no longer existed in the code. Re-seed before
+   trusting a live reading — `php artisan db:seed --class=SubscriptionPlanSeeder` is idempotent.
+
+### Verified live, on a genuinely new account
+
+Signup → plan selection → checkout → billing. Plan step `26.99 / 79.99 / 129.99 USD`; the sandbox
+gateway said «Authorise a payment of 8.99 USD»; `/app/subscriptions` showed `79.99 USD / شهرياً` with
+**zero** occurrences of SAR. The disclosure rendered with all six facts and the Pay button was
+disabled until the box was ticked.
+
+### Not done
+
+**«Growth — Recommended» is not marked in the product.** The pricing table names it; there is no
+`is_recommended` flag on a plan and nothing renders a badge. Left rather than invented, because it is
+presentation and was not in the work list.
 
 ---
 
