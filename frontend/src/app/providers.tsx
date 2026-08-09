@@ -6,6 +6,7 @@ import { useAuth } from '@/stores/auth'
 import { applyDocument, useUi } from '@/stores/ui'
 import { upgradeRefusalFrom, useUpgrade } from '@/stores/upgrade'
 import { UpgradeRequiredDialog } from '@/components/UpgradeRequiredDialog'
+import { OverlayBoundary } from '@/components/OverlayBoundary'
 
 const queryClient = new QueryClient({
   /*
@@ -118,7 +119,13 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       {children}
-      <UpgradeRequiredDialog />
+      {/*
+        Bounded, because this sits outside the router where nothing else would catch it — a throw
+        here unmounts the entire root and the page goes blank. See `OverlayBoundary`.
+      */}
+      <OverlayBoundary>
+        <UpgradeRequiredDialog />
+      </OverlayBoundary>
     </QueryClientProvider>
   )
 }
