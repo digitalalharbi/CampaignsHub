@@ -15,22 +15,36 @@
 **HEAD is `1fef134`. Working tree CLEAN.** Everything below `1fef134` is committed and verified as
 stated; nothing is half-applied.
 
-### The one thing in flight
+### GATE — 2026-08-10 · **GREEN at `1fef134`**
 
-A **full three-browser gate was running when this was written** (`cd frontend && npm run gate`, alone,
-exit code captured on its own line — never through a pipe, see the warning at the bottom of this
-file). Its verdict is NOT recorded here because it had not finished. **Read it before anything else**:
-the log is `/tmp/gate-v3.log` if the machine has not been rebooted; otherwise just re-run the gate.
+`cd frontend && npm run gate`, run ALONE, exit code captured on its own line (never through a pipe).
 
-The two runs before it, for context:
+```
+PASS  chromium  (exit 0)   287 passed  (7.9m)
+PASS  firefox   (exit 0)   279 passed  (12.9m)
+PASS  webkit    (exit 0)   279 passed  (9.8m)
+[gate] all three browsers passed        REAL_GATE_EXIT=0
+```
 
-| run | chromium | firefox | webkit |
-|---|---|---|---|
-| before the webkit fix | 287 PASS | PASS | **FAIL ×4** |
-| after it (`47c9ef9`) | 287 PASS | **FAIL ×1** | 279 PASS |
+**Failed=0 · Flaky=0 · Retries=0 (`retries: 0` in the config) · Unexplained skipped=0.**
 
-Both of those failures are FIXED at `1fef134`; the run in flight is the confirmation, not a hope.
-The firefox one was verified in isolation (`advertiser-portal.spec.ts`, firefox, 13 passed).
+Backend **1802 passed** (10440 assertions) · Frontend **954 passed** (129 files) · `tsc`, `oxlint`,
+Pint and `vite build` all clean.
+
+Two defects were closed to get here, both diagnosed from evidence rather than guessed:
+
+- **GATE-WK-001** — four webkit tests hung on `page.goto … waiting until "load"`. The gate was
+  spawning a SECOND headless browser at its own Vite dev server: `.env` sets
+  `REPORTS_CHROMIUM_ENABLED=true` and the gate never overrode it, so `GenerateReportJob` printed
+  through `{E2E_ORIGIN}/reports/print/…` and pulled the whole SPA module graph out of the server the
+  tests were driving. Proven by stashing all 58 changed files and reproducing it on a clean tree.
+  Fixed by giving the print browser its OWN frontend on :5373 — switching Chromium printing off also
+  removed the proof that the exported Arabic PDF is a real Chromium file, which is coverage this
+  product had already had to earn once.
+- **GATE-FF-002** — `openSection` asserted the URL before `/app/settings` resolved to its default
+  section, so it was really testing «the redirect has not happened yet». Firefox got there first.
+
+No timeout was raised, no retry added, nothing skipped, and no browser-specific branch exists.
 
 ### Exact next task, in the owner's mandated order
 
