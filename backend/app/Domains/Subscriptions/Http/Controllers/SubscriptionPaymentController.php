@@ -85,9 +85,43 @@ final class SubscriptionPaymentController extends Controller
             return ApiResponse::error(__('billing.no_payment_due'), status: 422);
         }
 
-        $data = $request->validate(['provider' => ['sometimes', 'string', 'max:32']]);
+        $data = $request->validate([
+            'provider' => ['sometimes', 'string', 'max:32'],
+            /*
+             * Explicit agreement to the commitment — SUB-CONSENT-001.
+             *
+             * Only meaningful where there IS one, and `SubscriptionCheckout` is what decides that:
+             * validating it as required here would refuse an annual purchase, which has no commitment
+             * to agree to. So the flag is carried and the refusal lives with the terms it protects.
+             */
+            'commitment_agreed' => ['sometimes', 'boolean'],
+        ]);
 
-        $result = $this->checkout->startRegistrationPayment($registration, $data['provider'] ?? null);
+        /*
+         * Recorded BEFORE the charge is opened.
+         *
+         * The consent belongs to the application, not to the payment: a customer who agreed and then
+         * had their card refused agreed all the same, and asking them again on the retry would be
+         * asking twice for the same promise.
+         */
+        if ($request->boolean('commitment_agreed') && $registration->commitment_consent_at === null) {
+            $registration->forceFill(['commitment_consent_at' => now()])->save();
+        }
+
+        /*
+         * Refused as an incomplete FORM, not as a crash — SUB-CONSENT-001.
+         *
+         * `SubscriptionCheckout` throws when a committed charge is opened without the agreement, and
+         * that throw is the right backstop for a caller reaching the service directly. Reaching the
+         * customer, it rendered as a 500 with the exception text in `errors.exception` — the same
+         * mistake `EnsureWithinPlanLimit` records: a refusal that looks like a broken server tells
+         * somebody to try again later instead of ticking the box in front of them.
+         */
+        if ($this->checkout->requiresCommitmentConsent($registration->refresh())) {
+            return ApiResponse::error(__('billing.commitment_not_agreed'), status: 422);
+        }
+
+        $result = $this->checkout->startRegistrationPayment($registration->refresh(), $data['provider'] ?? null);
         $payment = $result['payment'];
 
         return ApiResponse::success([

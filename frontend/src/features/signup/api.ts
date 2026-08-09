@@ -32,6 +32,10 @@ export interface RegistrationStatus {
   email: string
   requested_portal: string | null
   plan_code: string | null
+  /** The TERM chosen — monthly opens with the introductory month, annual is bought outright. */
+  billing_interval: BillingInterval | null
+  /** Whether the minimum commitment has already been agreed to (SUB-CONSENT-001). */
+  commitment_agreed: boolean
   email_verified: boolean
   mobile_verified: boolean
   /** The one thing this applicant can do now, or null when the application is waiting on us. */
@@ -149,6 +153,10 @@ export interface Plan {
   price_annual: string | null
   trial_days: number
   trial_fee: string
+  /** 0 when this plan carries no minimum commitment. Only Growth does. */
+  minimum_commitment_months?: number
+  /** True for a plan sold by conversation — no published price, no checkout (LAUNCH-PRICING-001). */
+  contact_sales?: boolean
   features: Record<string, unknown> | null
   limits: Record<string, number | null> | null
   trial_limits: Record<string, number | null> | null
@@ -165,6 +173,16 @@ export interface PlanQuote {
   renews_in_days: number
   trial_days: number
   trial_fee: string | null
+  /** The ordinary monthly price the introductory month converts into. */
+  regular_monthly: string
+  /** 0 when this term carries no minimum commitment — annual never does. */
+  commitment_months: number
+  /** Intro price + the remaining committed months at the full price, or null when uncommitted. */
+  total_committed: string | null
+  /** Charges still to come inside the commitment AFTER today's — 0 when uncommitted. */
+  remaining_committed_payments: number
+  /** The date money moves again, as a date rather than «in 30 days». */
+  next_payment_on: string
 }
 
 export function fetchPlans(): Promise<{ plans: Plan[] }> {
@@ -210,7 +228,20 @@ export function fetchPaymentProviders(): Promise<{ providers: PaymentProviderSta
   return getData('/payments/providers')
 }
 
-export async function startCheckout(registrationId: string): Promise<CheckoutResult> {
+/**
+ * Open the charge — carrying the applicant's agreement to the commitment (SUB-CONSENT-001).
+ *
+ * The flag is sent rather than assumed: the server refuses to open a committed charge without it, so
+ * an interface that forgot to ask would fail loudly instead of quietly committing somebody to three
+ * months they never saw.
+ */
+export async function startCheckout(
+  registrationId: string,
+  commitmentAgreed = false,
+): Promise<CheckoutResult> {
   await ensureCsrfCookie()
-  return postData<CheckoutResult>(`/auth/registration/${registrationId}/checkout`, {})
+
+  return postData<CheckoutResult>(`/auth/registration/${registrationId}/checkout`, {
+    commitment_agreed: commitmentAgreed,
+  })
 }

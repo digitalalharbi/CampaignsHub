@@ -115,6 +115,18 @@ final class SubscriptionCheckout
          * The payment-method identity is not known yet (it arrives with the webhook), so this is the
          * first of two checks; the second runs when the event lands.
          */
+        /*
+         * A committed offer cannot be bought without agreeing to the commitment — SUB-CONSENT-001.
+         *
+         * Refused BEFORE the charge is opened, like trial abuse above and for the same reason: taking
+         * money and then discovering the terms were never agreed means refunding money we should not
+         * have asked for. `422` rather than a refused-payment row, because nothing was attempted —
+         * this is the form being incomplete, not the customer being turned away.
+         */
+        if ($plan->commitmentMonthsFor($interval) > 0 && $request->commitment_consent_at === null) {
+            throw new RuntimeException('The minimum commitment has not been agreed to.');
+        }
+
         $refused = $this->trials->reasonsToRefuse($request);
 
         if ($refused !== []) {
@@ -376,6 +388,26 @@ final class SubscriptionCheckout
     }
 
     /** True when this application is sitting at a payment gate it has not cleared. */
+    /**
+     * Does this application still owe an agreement to a minimum commitment? — SUB-CONSENT-001.
+     *
+     * Asked by the controller so the refusal can be a 422 the customer can act on, rather than the
+     * exception below rendering as a 500. The exception stays as the backstop: a caller reaching this
+     * service directly — a console command, a future admin action — must not be able to open a
+     * committed charge on terms nobody agreed to just because it skipped the controller.
+     */
+    public function requiresCommitmentConsent(RegistrationRequest $request): bool
+    {
+        $plan = $this->catalogue->byCode($request->plan_code);
+
+        if ($plan === null) {
+            return false;
+        }
+
+        return $plan->commitmentMonthsFor((string) ($request->billing_interval ?? 'monthly')) > 0
+            && $request->commitment_consent_at === null;
+    }
+
     public function owesPayment(RegistrationRequest $request): bool
     {
         return in_array($request->state, [

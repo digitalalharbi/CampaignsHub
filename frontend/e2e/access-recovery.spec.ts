@@ -179,6 +179,18 @@ test.describe('signing out from a refusal', () => {
      * changes lands mid-navigation and the execution context is torn down underneath the call.
      */
     await page.waitForLoadState('domcontentloaded')
+    /*
+     * …and wait for something that only the FINAL document has.
+     *
+     * `toHaveURL` matches as soon as the SPA route changes, which happens BEFORE the hard navigation
+     * `signOutCompletely` performs. `waitForLoadState` then resolves against the document that is
+     * about to be replaced, and the reload tears the execution context out from under the very next
+     * `page.evaluate` — «Execution context was destroyed», seen on firefox.
+     *
+     * Waiting for the login form is a state assertion, not a pause: the field cannot be visible
+     * until the document that owns the storage being read is the one on screen.
+     */
+    await expect(page.locator('input[type="email"]')).toBeVisible({ timeout: 20000 })
 
     const state = await page.evaluate(() => ({
       project: window.localStorage.getItem('campaign-hub-project-storage'),

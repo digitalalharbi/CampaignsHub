@@ -83,7 +83,7 @@ final class PaidRegistrationTest extends TestCase
         $registration = $this->verifiedApplication();
 
         config(['services.moyasar.secret_key' => 'sk_test', 'services.moyasar.webhook_token' => 'shared-secret']);
-        $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
 
         $this->assertSame('pending', SubscriptionPayment::query()->firstOrFail()->status);
         $this->assertFalse($registration->refresh()->isProvisioned());
@@ -101,7 +101,7 @@ final class PaidRegistrationTest extends TestCase
         $registration = $this->verifiedApplication();
 
         config(['services.moyasar.secret_key' => 'sk_test', 'services.moyasar.webhook_token' => 'shared-secret']);
-        $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
         $payment = SubscriptionPayment::query()->firstOrFail();
 
         $this->postJson('/api/v1/payments/webhook/moyasar', [
@@ -124,7 +124,7 @@ final class PaidRegistrationTest extends TestCase
         $registration = $this->verifiedApplication();
 
         config(['services.moyasar.secret_key' => 'sk_test', 'services.moyasar.webhook_token' => 'shared-secret']);
-        $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
         $payment = SubscriptionPayment::query()->firstOrFail();
 
         $this->postJson('/api/v1/payments/webhook/moyasar', [
@@ -170,10 +170,10 @@ final class PaidRegistrationTest extends TestCase
          * The subscription the money bought — on the term that was chosen, opening with the paid
          * introductory month (PAY-AUDIT-003).
          *
-         * This asserted «active, not trialing» and «a plan bought outright has no trial window»,
-         * which was true while «البداية» was the one plan sold without an introductory period. Every
-         * plan now opens with one on the MONTHLY term, so a monthly registration is `trialing` — and
-         * the bought-outright case moved to the annual term, where it is asserted below.
+         * This claim has been true, then false, then true again inside one day, which is worth
+         * recording: «البداية» was sold outright, briefly gained an introductory month when every
+         * plan did, and lost it again when the owner's marketing pricing put the offer on Growth
+         * alone. The assertion follows the decision rather than the other way round.
          *
          * `unit_amount` is the FULL monthly price, not the introductory one: the subscription records
          * what this customer owes each period, and the introductory charge is a payment against the
@@ -182,8 +182,8 @@ final class PaidRegistrationTest extends TestCase
         $subscription = Subscription::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $tenant->getKey())->firstOrFail();
         $plan = SubscriptionPlan::where('code', 'starter')->firstOrFail();
-        $this->assertSame('trialing', $subscription->status);
-        $this->assertNotNull($subscription->trial_ends_at, 'the paid introductory month opens no window');
+        $this->assertSame('active', $subscription->status);
+        $this->assertNull($subscription->trial_ends_at, 'a plan bought outright has no introductory window');
         $this->assertSame('monthly', $subscription->billing_interval);
         $this->assertSame((string) $plan->price_monthly, (string) $subscription->unit_amount);
 
@@ -256,7 +256,7 @@ final class PaidRegistrationTest extends TestCase
 
         $registration = $this->verifiedApplication();
 
-        $res = $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout")->assertOk();
+        $res = $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
 
         $this->assertSame('awaiting_credentials', $res->json('data.status'));
         $this->assertNull($res->json('data.checkout_url'));

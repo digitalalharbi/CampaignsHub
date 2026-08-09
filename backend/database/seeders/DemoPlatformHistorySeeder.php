@@ -47,11 +47,11 @@ final class DemoPlatformHistorySeeder extends Seeder
      * @var list<array{int, string, string, string, ?string}>
      */
     private const POPULATION = [
-        [10, 'Najd Media', 'agency', 'scale', 'active'],
+        [10, 'Najd Media', 'agency', 'agency', 'active'],
         [9, 'Rawaa Store', 'brand', 'growth', 'active'],
         [8, 'Mishaal Freelance', 'freelancer', 'starter', 'active'],
         [8, 'Layan Cosmetics', 'brand', 'growth', 'past_due'],
-        [6, 'Tuwaiq Digital', 'agency', 'scale', 'active'],
+        [6, 'Tuwaiq Digital', 'agency', 'agency', 'active'],
         [5, 'Hala Foods', 'self_serve_company', 'growth', 'trialing'],
         [4, 'Sadeem Tech', 'in_house_team', 'growth', 'active'],
         [3, 'Wateen Clinics', 'brand', 'starter', 'cancelled'],

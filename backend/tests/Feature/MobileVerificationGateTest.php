@@ -147,7 +147,7 @@ final class MobileVerificationGateTest extends TestCase
         $this->assertSame(AccountState::MobileVerificationRequired, $registration->state);
 
         // There is nothing to pay for yet — the application has not reached a charge.
-        $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout")->assertStatus(422);
+        $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout", ['commitment_agreed' => true])->assertStatus(422);
 
         $this->assertSame(0, Tenant::withoutGlobalScopes()->count());
         $this->assertSame(0, User::query()->count());

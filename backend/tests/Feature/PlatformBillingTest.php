@@ -276,7 +276,7 @@ final class PlatformBillingTest extends TestCase
      */
     public function test_the_platform_stream_uses_the_agreed_price_not_the_plan_s_current_one(): void
     {
-        $plan = $this->plan('scale', 500);
+        $plan = $this->plan('agency', 500);
         $tenant = $this->tenant('Early Bird');
         Subscription::create([
             'tenant_id' => $tenant->id, 'plan_id' => $plan->id, 'status' => 'active', 'seats' => 1,

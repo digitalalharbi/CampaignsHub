@@ -161,7 +161,7 @@ final class SubscriptionService
      *
      * ## Why counting beats metering here
      *
-     * A meter would have been wrong even once fed. `projects`, `campaigns`, `team_members` and
+     * A meter would have been wrong even once fed. `projects`, `clients`, `team_members` and
      * `connections` are STOCK, not flow — they can be archived, revoked and removed — and a
      * monotonic counter never gives the slot back. A customer who tidied up would watch the capacity
      * they had paid for ratchet away, which is worse than not enforcing at all, because it takes
@@ -198,7 +198,18 @@ final class SubscriptionService
             'projects' => DB::table('projects')->where('tenant_id', $id)
                 ->whereNull('deleted_at')->where('status', '!=', 'archived')->count(),
 
-            'campaigns' => DB::table('unified_campaigns')->where('tenant_id', $id)
+            /*
+             * The agency's client roster — the axis the Agency plan is actually sold on.
+             *
+             * Published as a cap since Launch Pricing and enforced by nothing: `usage()` did not
+             * know how to count it, so `withinLimit()` fell through to the meter, the meter read 0,
+             * and «1 client» on Starter admitted a hundred. Exactly the failure PAY-AUDIT-001 fixed
+             * for the other four, reproduced by adding a fifth cap and not the count behind it.
+             *
+             * Archived and soft-deleted rosters do not hold a slot, for the same reason an archived
+             * project does not: the customer gave the capacity back and must get it back.
+             */
+            'clients' => DB::table('client_workspaces')->where('tenant_id', $id)
                 ->whereNull('deleted_at')->where('status', '!=', 'archived')->count(),
 
             /*
@@ -286,13 +297,17 @@ final class SubscriptionService
 
     /**
      * The most permissive active plan — the default for a tenant with no subscription. "Most permissive" is the
-     * highest-priced active plan (scale > growth > starter), i.e. the one with the largest caps.
+     * highest-priced active plan (agency > growth > starter), i.e. the one with the largest caps.
+     *
+     * `contact_sales` plans are excluded: their 0.00 is «no published price», not a price, so they
+     * are neither the most nor the least permissive thing in the catalogue by this measure.
      */
     public function mostPermissivePlan(): ?SubscriptionPlan
     {
         /** @var SubscriptionPlan|null $plan */
         $plan = SubscriptionPlan::query()
             ->where('is_active', true)
+            ->where('contact_sales', false)
             ->orderByDesc('price_monthly')
             ->first();
 

@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Services\PlanCatalogue;
+use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -29,9 +30,19 @@ use Tests\TestCase;
  *
  * ## There is no free anything
  *
- * Every plan opens with a PAID first month at an introductory price and then charges in full. Not a
- * free trial, not a free tier, and — since the annual term already carries its own discount — not on
- * the annual term either: somebody buying a year is not made to pass through a cheaper month first.
+ * No free tier and no free trial. Every plan costs money from its first day.
+ *
+ * The INTRODUCTORY month is a separate question from that, and the answer moved more than once
+ * before Launch Pricing settled it: the offer belongs to **Growth alone** — 30 days at 9 against a
+ * regular 49, with a three-month minimum commitment behind it. Starter and Agency are sold outright
+ * at their own prices, which is not a free plan; it is a plan without an offer.
+ *
+ * Every assertion below names the RULE and reads the figures from the catalogue. The prices changed
+ * three times in a single day and each repricing broke a test that had a number typed into it; a
+ * test asserting `19.00` proves only what a seeder said this morning.
+ *
+ * The annual term never passes through an introductory month on any plan: it already carries its own
+ * discount, and somebody buying a year should not be made to walk through a cheaper month first.
  */
 final class PlanCommercialTermsTest extends TestCase
 {
@@ -67,7 +78,7 @@ final class PlanCommercialTermsTest extends TestCase
     /** And the quote a customer is shown says so, rather than leaving them to assume. */
     public function test_a_quote_states_its_currency(): void
     {
-        foreach (['starter', 'growth', 'scale'] as $code) {
+        foreach (['starter', 'growth', 'agency'] as $code) {
             $quote = $this->catalogue()->quote($this->plan($code), 'monthly');
 
             $this->assertSame('USD', $quote['currency'], "{$code} quoted in the wrong currency");
@@ -102,24 +113,147 @@ final class PlanCommercialTermsTest extends TestCase
 
     // ── PAY-AUDIT-003: the paid introductory month ───────────────────────────────────────────────
 
-    /** No plan is free, and no plan is free for a while either. */
-    public function test_no_plan_is_free_and_none_offers_a_free_period(): void
+    /**
+     * No plan is free, and no plan is free for a while either.
+     *
+     * Two separate claims. Every plan costs money from its first day — there is no free tier — and
+     * where a plan DOES open with an introductory month, that month is priced rather than given away.
+     * A plan without an offer is not a free plan; it is simply sold at its own price.
+     *
+     * A `contact_sales` plan is skipped and is not an exception to the rule: it publishes NO price,
+     * which the schema can only store as 0.00. That «no plan is priced at zero unless it is sold by
+     * conversation» is itself asserted, separately, by
+     * {@see test_only_a_contact_sales_plan_may_publish_no_price} — so the skip here cannot become a
+     * hole to hide a free tier in.
+     */
+    public function test_no_plan_is_free_and_no_introductory_period_is_free(): void
     {
         foreach (SubscriptionPlan::all() as $plan) {
+            if ($plan->contact_sales) {
+                continue;
+            }
+
             $this->assertGreaterThan(0, (float) $plan->price_monthly, "{$plan->code} is free");
-            $this->assertGreaterThan(
-                0,
-                (float) $plan->trial_fee,
-                "{$plan->code} opens with a FREE period — the decision was a paid introductory month",
+
+            if ($plan->trial_days > 0) {
+                $this->assertGreaterThan(
+                    0,
+                    (float) $plan->trial_fee,
+                    "{$plan->code} opens with a FREE period — there is no free trial in this product",
+                );
+            }
+        }
+    }
+
+    /**
+     * The introductory month belongs to GROWTH, and to it alone — the owner's pricing of 2026-08-09.
+     *
+     * Named per plan rather than looped, because «which plans carry the offer» is the commercial
+     * decision itself: a loop over whatever the seeder happens to contain would assert nothing.
+     */
+    public function test_only_growth_opens_with_an_introductory_month(): void
+    {
+        $this->assertSame(30, $this->plan('growth')->trial_days, 'Growth must open with a 30-day offer');
+        $this->assertSame(3, $this->plan('growth')->minimum_commitment_months);
+
+        foreach (['starter', 'agency'] as $code) {
+            $this->assertSame(0, $this->plan($code)->trial_days, "{$code} must not carry an introductory month");
+            $this->assertSame(0, $this->plan($code)->minimum_commitment_months, "{$code} must not be committed");
+        }
+    }
+
+    // ── LAUNCH-PRICING-001: what is on sale, and what is not ─────────────────────────────────────
+
+    /**
+     * Enterprise exists and is NOT on sale — the owner's decision of 2026-08-09.
+     *
+     * Three separate facts, and the test names all three because they are easy to conflate: it is
+     * ACTIVE (real, in `/admin`, ready for the day there is a conversation to have), it is NOT
+     * PUBLIC (absent from signup), and it is `contact_sales` (it publishes no price at all).
+     *
+     * `isOffered()` is the assertion that matters: without it the plan is merely hidden, and a code
+     * typed into a URL would still reach a checkout for a plan whose price is 0.00.
+     */
+    public function test_enterprise_is_in_the_catalogue_and_not_on_sale(): void
+    {
+        $enterprise = $this->plan('enterprise');
+
+        $this->assertTrue($enterprise->is_active, 'Enterprise must stay real for the operator');
+        $this->assertFalse($enterprise->is_public, 'Enterprise must not appear in signup yet');
+        $this->assertTrue($enterprise->contact_sales, 'Enterprise publishes no price');
+
+        $this->assertFalse($this->catalogue()->isOffered('enterprise'), 'Enterprise must not be buyable');
+
+        $offered = $this->catalogue()->offered()->pluck('code')->all();
+        $this->assertSame(['starter', 'growth', 'agency'], $offered);
+    }
+
+    /**
+     * A plan sold by conversation is the ONLY one allowed to publish no price.
+     *
+     * `price_monthly` is NOT NULL, so «no price» is stored as 0.00 — the same value that means free.
+     * `contact_sales` is what tells the two apart, and this is the assertion that keeps «no plan is
+     * free» (above) meaning what it says rather than quietly acquiring an exception.
+     */
+    public function test_only_a_contact_sales_plan_may_publish_no_price(): void
+    {
+        foreach (SubscriptionPlan::all() as $plan) {
+            if ((float) $plan->price_monthly > 0) {
+                continue;
+            }
+
+            $this->assertTrue(
+                (bool) $plan->contact_sales,
+                "{$plan->code} is priced at zero and is not sold by conversation — that is a free tier",
             );
         }
     }
 
-    /** Thirty days, on every plan — including the entry plan, which used to be excluded. */
-    public function test_every_plan_opens_with_a_thirty_day_introductory_month(): void
+    /**
+     * **Every cap a plan publishes is one the backend can actually measure** — LAUNCH-LIMITS-001.
+     *
+     * The `clients` cap shipped in the catalogue and in nothing else: `usage()` had no branch for
+     * it, so it fell through to a meter nothing writes, read 0, and «1 client» admitted a hundred.
+     * A limit that is published and not counted is a promise nobody is keeping, and the catalogue is
+     * where such a promise is cheapest to make.
+     *
+     * So this walks the catalogue rather than a list — adding a cap in `/admin` or in the seeder
+     * without teaching the service to count it fails here.
+     */
+    public function test_every_published_limit_is_one_the_service_can_measure(): void
     {
-        foreach (['starter', 'growth', 'scale'] as $code) {
-            $this->assertSame(30, $this->plan($code)->trial_days, "{$code} does not open with a month");
+        $tenant = Tenant::create(['name' => 'Measured', 'slug' => 'measured', 'status' => 'active']);
+        $service = app(SubscriptionService::class);
+
+        $keys = SubscriptionPlan::all()
+            ->flatMap(fn (SubscriptionPlan $p) => array_keys($p->limits ?? []))
+            ->unique()->values();
+
+        $this->assertNotEmpty($keys, 'the catalogue publishes no limits at all');
+
+        foreach ($keys as $metric) {
+            /*
+             * A metric the service cannot count returns the meter, and the meter is never written —
+             * so «0» here is ambiguous on its own. What is unambiguous is the reflection: `count()`
+             * must recognise the metric by name.
+             */
+            $counted = (new \ReflectionMethod($service, 'count'))->invoke($service, $tenant, $metric);
+
+            $this->assertNotNull($counted, "the plan limit «{$metric}» is published and cannot be counted");
+        }
+    }
+
+    /** A plan with no offer is quoted at its own price, due today, with nothing owed later. */
+    public function test_a_plan_without_an_offer_is_bought_at_its_own_price(): void
+    {
+        foreach (['starter', 'agency'] as $code) {
+            $plan = $this->plan($code);
+            $quote = $this->catalogue()->quote($plan, 'monthly');
+
+            $this->assertSame((string) $plan->price_monthly, $quote['due_now'], "{$code} is misquoted");
+            $this->assertNull($quote['due_later'], "{$code} owes nothing later");
+            $this->assertSame(0, $quote['commitment_months']);
+            $this->assertNull($quote['total_committed']);
         }
     }
 
@@ -183,6 +317,10 @@ final class PlanCommercialTermsTest extends TestCase
     public function test_the_introductory_price_is_below_the_full_monthly_price(): void
     {
         foreach (SubscriptionPlan::all() as $plan) {
+            if ($plan->trial_days === 0) {
+                continue; // No offer to be cheaper than.
+            }
+
             $this->assertLessThan(
                 (float) $plan->price_monthly,
                 (float) $plan->trial_fee,
@@ -200,9 +338,10 @@ final class PlanCommercialTermsTest extends TestCase
             ->givePermissionTo(...Permission::pluck('key')->all());
         app(TenantContext::class)->forget();
 
-        $starter = $this->plan('starter');
+        // Growth is the plan that has one, so it is the plan whose caps are asserted.
+        $growth = $this->plan('growth');
 
-        $this->assertNotNull($starter->trial_limits, 'the entry plan gained a month with no caps of its own');
-        $this->assertSame(3, $starter->trialLimitFor('projects'));
+        $this->assertNotNull($growth->trial_limits, 'the introductory month has no caps of its own');
+        $this->assertNotNull($growth->trialLimitFor('projects'));
     }
 }

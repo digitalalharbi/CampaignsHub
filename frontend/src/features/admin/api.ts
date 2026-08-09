@@ -126,8 +126,15 @@ export interface PlatformPlan {
   price_monthly: string
   /** Null is a statement: this plan is not sold on an annual term. */
   price_annual: string | null
+  /** The introductory month: what it costs and how long it runs. 0 days means no offer. */
+  trial_fee: string
+  trial_days: number
+  /** How many months the introductory price is bought with. 0 is «cancel whenever you like». */
+  minimum_commitment_months: number
   is_active: boolean
   is_public: boolean
+  /** Sold by conversation: no published price, and nothing checks out on it. */
+  contact_sales: boolean
   features: Record<string, unknown> | unknown[]
   limits: Record<string, unknown> | unknown[]
   /** Split by status: 40 cancelled subscribers is not 40 customers. */
@@ -174,8 +181,21 @@ export function updatePlan(
     name?: string
     is_active?: boolean
     is_public?: boolean
+    contact_sales?: boolean
     price_monthly?: string
     price_annual?: string | null
+    /*
+     * The offer and what stands behind it — SUB-COMMIT-001.
+     *
+     * Three numbers that are ONE commercial decision: the discount is what the commitment buys. They
+     * are sent together for the same reason they are shown together, so an operator cannot lengthen
+     * a commitment and forget the price it was supposed to justify.
+     */
+    trial_fee?: string
+    trial_days?: number
+    minimum_commitment_months?: number
+    /** A null value is «unlimited» — an absent key would leave the old cap in place. */
+    limits?: Record<string, number | null>
     features?: Record<string, unknown>
     /** Why the commercial terms changed — recorded on the audit entry, never on the plan. */
     reason?: string

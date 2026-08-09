@@ -47,6 +47,10 @@ final class RegistrationRequest extends Model
      * `tenant_id` decides whether a workspace exists. A request payload carrying either would let an
      * applicant grant themselves the thing the gate exists to withhold. They are written by
      * AdvanceRegistration and ProvisionWorkspace, which check first.
+     *
+     * `commitment_consent_at` is absent for the same reason: agreeing to a three-month commitment is
+     * a thing a person does, and a mass-assignable column would let a crafted payload do it for
+     * them. `SubscriptionPaymentController` force-fills it when the flag arrives on the request.
      */
 
     protected $hidden = ['password'];
@@ -55,6 +59,7 @@ final class RegistrationRequest extends Model
         'state' => AccountState::class,
         'email_verified_at' => 'datetime',
         'mobile_verified_at' => 'datetime',
+        'commitment_consent_at' => 'datetime',
         'reviewed_at' => 'datetime',
         'info_requested_at' => 'datetime',
         'provisioned_at' => 'datetime',
@@ -110,6 +115,10 @@ final class RegistrationRequest extends Model
             'email' => $this->email,
             'requested_portal' => $this->requested_portal,
             'plan_code' => $this->plan_code,
+            // The TERM the applicant chose. Without it the payment step cannot quote what they are
+            // about to authorise: monthly opens with an introductory month, annual does not.
+            'billing_interval' => $this->billing_interval,
+            'commitment_agreed' => $this->commitment_consent_at !== null,
             'email_verified' => $this->emailIsVerified(),
             'mobile_verified' => $this->mobileIsVerified(),
             // Present only when there is something the applicant can act on, so the screen never

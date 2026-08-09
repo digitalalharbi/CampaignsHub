@@ -50,7 +50,20 @@ return [
      */
     'sandbox_secret' => env('SUBSCRIPTION_SANDBOX_SECRET', env('APP_ENV') === 'production' ? '' : 'local-sandbox-secret'),
 
-    'currency' => env('SUBSCRIPTION_CURRENCY', 'SAR'),
+    /*
+     * What CampaignsHub charges a customer IN — USD (PAY-AUDIT-002, SUB-USD-001).
+     *
+     * This is the fallback every subscription charge lands on when the subscription row itself
+     * carries no currency: renewals, reactivations, plan changes, proration and the notifications
+     * that quote them all read it. It defaulted to `SAR`, so a subscription that had somehow lost its
+     * own currency was quietly re-denominated on its next charge.
+     *
+     * NOT to be confused with `billing.currency`, which stays SAR. That one governs an AGENCY
+     * invoicing its own CLIENT — a different party, a different transaction, and deliberately not
+     * tied to what the agency pays CampaignsHub. Nor with the advertising side, which reports in SAR
+     * and keeps each platform's original amount and currency untouched.
+     */
+    'currency' => env('SUBSCRIPTION_CURRENCY', 'USD'),
 
     /*
     |---------------------------------------------------------------------------

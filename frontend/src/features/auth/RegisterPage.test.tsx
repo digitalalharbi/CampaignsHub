@@ -20,9 +20,37 @@ const aCatalogue = {
     {
       code: 'starter', name: 'Starter', name_ar: 'البداية',
       summary_ar: 'متابعة الحملات والتقارير.', summary_en: 'Campaign tracking and reports.',
-      currency: 'SAR', price_monthly: '99.00', price_annual: '990.00',
-      trial_days: 0, trial_fee: '0.00', features: {}, limits: {}, trial_limits: null,
-      is_active: true, is_public: true, sort_order: 10,
+      currency: 'USD', price_monthly: '19.00', price_annual: '190.00',
+      trial_days: 0, trial_fee: '0.00', minimum_commitment_months: 0,
+      features: { reports: true, ai_assist: false, white_label: false, support: 'community' },
+      limits: { projects: 3, clients: 1, connections: 3, team_members: 3, reports_per_month: 10 },
+      trial_limits: null, is_active: true, is_public: true, sort_order: 10,
+    },
+    /*
+     * The three plans that are actually on sale, at Launch Pricing — LAUNCH-PRICING-001.
+     *
+     * Enterprise is deliberately absent: it is `is_public: false` server-side and never reaches a
+     * signup catalogue at all, so a fixture containing it would be testing a response the API does
+     * not produce.
+     */
+    {
+      code: 'growth', name: 'Growth', name_ar: 'النمو',
+      summary_ar: 'لعدة مشاريع وعملاء.', summary_en: 'For several projects and clients.',
+      currency: 'USD', price_monthly: '49.00', price_annual: '490.00',
+      trial_days: 30, trial_fee: '9.00', minimum_commitment_months: 3,
+      features: { reports: true, ai_assist: true, white_label: false, support: 'email' },
+      limits: { projects: 25, clients: 5, connections: 25, team_members: 15, reports_per_month: 100 },
+      trial_limits: null, is_active: true, is_public: true, sort_order: 20,
+    },
+    {
+      code: 'agency', name: 'Agency', name_ar: 'الوكالة',
+      summary_ar: 'لإدارة عدة عملاء وفريق وتقارير العملاء.',
+      summary_en: 'For managing several clients, a team, and client reports.',
+      currency: 'USD', price_monthly: '99.00', price_annual: '990.00',
+      trial_days: 0, trial_fee: '0.00', minimum_commitment_months: 0,
+      features: { reports: true, ai_assist: true, white_label: true, support: 'priority' },
+      limits: { projects: null, clients: null, connections: null, team_members: null, reports_per_month: null },
+      trial_limits: null, is_active: true, is_public: true, sort_order: 30,
     },
   ],
 } as never
@@ -43,26 +71,39 @@ describe('RegisterPage — journey handoff', () => {
 
   it('presets the agency path from ?journey=multi-client and keeps it editable', () => {
     renderWithProviders(<RegisterPage />, { route: '/register?journey=multi-client', locale: 'en' })
-    expect(screen.getByText('Your selected path')).toBeInTheDocument()
+    expect(screen.getByText('How would you like to start?')).toBeInTheDocument()
     // Agency card is the selected path (not a forced re-pick).
-    expect(screen.getByRole('button', { name: /I manage several clients/i })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: /I run my own campaigns/i })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('journey-multi-client')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('journey-self-service')).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByText(/Clients and requests enabled for the agency workspace/i)).toBeInTheDocument()
   })
 
   it('presets the self-managed path from ?journey=self-service with an editable account type', () => {
     renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service', locale: 'en' })
-    expect(screen.getByRole('button', { name: /I run my own campaigns/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('journey-self-service')).toHaveAttribute('aria-pressed', 'true')
     // Account-type select is offered (freelancer/brand/in-house), defaulting to freelancer.
     const select = screen.getByLabelText('Account type') as HTMLSelectElement
     expect(select.value).toBe('freelancer')
     expect(screen.getByRole('option', { name: 'In-house team' })).toBeInTheDocument()
   })
 
-  it('behaves as today when no ?journey param is present (no preset panel)', () => {
+  /**
+   * **The question is asked of everyone** — LAUNCH-PRICING-001.
+   *
+   * It used to appear only for visitors arriving from a homepage decision card, so anybody landing
+   * on `/register` directly reached the plan step with no path and was shown the whole catalogue:
+   * Starter beside Agency, three plans for two different products. The path decides which portal
+   * opens and which plans exist, so it is not optional.
+   */
+  it('asks how the product will be used even with no ?journey param', () => {
     renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
-    expect(screen.queryByText('Your selected path')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /I run my own campaigns/i })).not.toBeInTheDocument()
+
+    expect(screen.getByText('How would you like to start?')).toBeInTheDocument()
+    expect(screen.getByTestId('journey-self-service')).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('journey-multi-client')).toHaveAttribute('aria-pressed', 'false')
+
+    // …and neither follow-up question is asked before it is answered.
+    expect(screen.queryByLabelText('Account type')).not.toBeInTheDocument()
   })
 
   /** A public page shows the service by name; `paid-media` is a slug for us, not language for a visitor. */
@@ -96,7 +137,7 @@ describe('RegisterPage — the journey is submitted, not just displayed', () => 
   beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); vi.mocked(fetchPlans).mockResolvedValue(aCatalogue) })
   afterEach(() => { signOut(); localStorage.clear() })
 
-  const fill = async () => {
+  const fill = async (planCode: string) => {
     fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
     fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'new@test.dev' } })
@@ -105,16 +146,21 @@ describe('RegisterPage — the journey is submitted, not just displayed', () => 
     fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'secret123' } })
     // Step one collects the details; step two asks for the plan (PLAN-001e). The application is
     // submitted from the second, so every test that expects a POST has to walk both — including
-    // choosing a plan, which is required now that nothing is free.
+    /*
+     * Choosing a plan, which is required now that nothing is free — and the plan has to be one the
+     * CHOSEN PATH is offered (PLAN-FIT-001). No single code works for both any more: «for my
+     * clients» is sold Agency alone, and «for my own campaigns» is never shown it. So the caller
+     * names the plan its path can actually buy.
+     */
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
-    fireEvent.click(await screen.findByTestId('plan-starter'))
+    fireEvent.click(await screen.findByTestId(`plan-${planCode}`))
     fireEvent.click(screen.getByRole('button', { name: /Create account/i }))
   }
 
   it('submits the agency path as account_type + service', async () => {
     vi.mocked(apply).mockResolvedValue(anApplication)
     renderWithProviders(<RegisterPage />, { route: '/register?journey=multi-client&module=paid-media', locale: 'en' })
-    await fill()
+    await fill('agency')
     await waitFor(() => expect(apply).toHaveBeenCalled())
     expect(vi.mocked(apply).mock.calls[0][0]).toMatchObject({ account_type: 'agency', service: 'paid_media', phone: '+966501234567' })
   })
@@ -123,19 +169,44 @@ describe('RegisterPage — the journey is submitted, not just displayed', () => 
     vi.mocked(apply).mockResolvedValue(anApplication)
     renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service&module=paid-media', locale: 'en' })
     fireEvent.change(screen.getByLabelText('Account type'), { target: { value: 'brand' } })
-    await fill()
+    await fill('growth')
     await waitFor(() => expect(apply).toHaveBeenCalled())
     expect(vi.mocked(apply).mock.calls[0][0]).toMatchObject({ account_type: 'brand', service: 'paid_media' })
   })
 
-  it('presumes nothing when the visitor arrived without a journey', async () => {
+  /**
+   * **No path, no price list** — LAUNCH-PRICING-001.
+   *
+   * This used to assert that the form presumed nothing and applied anyway, carrying no
+   * `account_type`. It cannot any more, and should not: the plans DIFFER by path now — «for my
+   * clients» is sold Agency and nothing else — so a catalogue rendered before the question is
+   * answered would be three plans for two different products.
+   *
+   * The question is on screen from the first paint, so this is one press to resolve rather than a
+   * dead end.
+   */
+  it('will not show a catalogue before the visitor says how they will use it', async () => {
     vi.mocked(apply).mockResolvedValue(anApplication)
+    // No `?journey` — the case this test exists for.
     renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
-    await fill()
-    await waitFor(() => expect(apply).toHaveBeenCalled())
-    const payload = vi.mocked(apply).mock.calls[0][0] as unknown as Record<string, unknown>
-    expect(payload).not.toHaveProperty('account_type')
-    expect(payload).not.toHaveProperty('service')
+
+    fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
+    fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: 'new@test.dev' } })
+    fireEvent.change(screen.getByTestId('phone'), { target: { value: '0501234567' } })
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
+    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'secret123' } })
+    fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
+
+    expect(await screen.findByTestId('register-journey-required')).toBeInTheDocument()
+    expect(screen.queryByTestId('plan-starter')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('plan-agency')).not.toBeInTheDocument()
+
+    // Answering it produces the two plans that path is offered, and no others.
+    fireEvent.click(screen.getByTestId('journey-self-service'))
+    expect(await screen.findByTestId('plan-starter')).toBeInTheDocument()
+    expect(screen.getByTestId('plan-growth')).toBeInTheDocument()
+    expect(screen.queryByTestId('plan-agency')).not.toBeInTheDocument()
   })
 })
 
@@ -147,7 +218,7 @@ describe('RegisterPage — error summary + draft', () => {
     vi.mocked(apply).mockRejectedValue({
       response: { status: 422, data: { message: 'Validation failed', errors: { email: ['The email has already been taken.'] } } },
     })
-    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+    renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service', locale: 'en' })
 
     fireEvent.change(screen.getByLabelText(/Organization|Org/i), { target: { value: 'Acme' } })
     fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Tester' } })
@@ -205,7 +276,7 @@ describe('RegisterPage — details, then plan', () => {
 
   it('does not submit the application from the first step', async () => {
     vi.mocked(apply).mockResolvedValue(anApplication)
-    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+    renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service', locale: 'en' })
 
     fillDetails()
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
@@ -217,7 +288,7 @@ describe('RegisterPage — details, then plan', () => {
 
   /** Going back must not empty the form — the fields stay mounted across the step. */
   it('keeps what was typed when the visitor goes back', () => {
-    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+    renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service', locale: 'en' })
 
     fillDetails()
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
@@ -236,7 +307,7 @@ describe('RegisterPage — details, then plan', () => {
    */
   it('refuses to apply until a plan is chosen', async () => {
     vi.mocked(apply).mockResolvedValue(anApplication)
-    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+    renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service', locale: 'en' })
 
     fillDetails()
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
@@ -247,7 +318,7 @@ describe('RegisterPage — details, then plan', () => {
     expect(apply).not.toHaveBeenCalled()
 
     // …and it applies as soon as one is picked, carrying the term as well as the code.
-    fireEvent.click(screen.getByTestId('plan-starter'))
+    fireEvent.click(screen.getByTestId('plan-starter'))  // no journey chosen: the whole catalogue is offered
     fireEvent.click(screen.getByRole('button', { name: /Create account/i }))
 
     await waitFor(() => expect(apply).toHaveBeenCalled())
@@ -256,15 +327,15 @@ describe('RegisterPage — details, then plan', () => {
 
   /** The annual price is on screen before anybody is asked to pay it. */
   it('shows the annual amount when the annual term is chosen', async () => {
-    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+    renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service', locale: 'en' })
 
     fillDetails()
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
     await screen.findByTestId('plan-starter')
-    expect(screen.getByTestId('plan-starter')).toHaveTextContent('99.00')
+    expect(screen.getByTestId('plan-starter')).toHaveTextContent('19.00')
 
     fireEvent.click(screen.getByTestId('plan-interval-annual'))
-    expect(screen.getByTestId('plan-starter')).toHaveTextContent('990.00')
+    expect(screen.getByTestId('plan-starter')).toHaveTextContent('190.00')
   })
 })
 
@@ -334,7 +405,7 @@ describe('RegisterPage — the account step is validated before the packages ste
   })
 
   it('clears a field’s error as soon as it is corrected', () => {
-    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+    renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service', locale: 'en' })
 
     fillValid()
     fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'short' } })
@@ -347,7 +418,7 @@ describe('RegisterPage — the account step is validated before the packages ste
 
   /** Nothing from the account step is ever rendered on the packages step. */
   it('shows no account-step error on the packages step', async () => {
-    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+    renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service', locale: 'en' })
 
     fillValid()
     fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'short' } })
@@ -366,7 +437,7 @@ describe('RegisterPage — the account step is validated before the packages ste
 
   /** Going back and forward keeps everything, secrets included. */
   it('keeps the whole form across a round trip to the packages step', async () => {
-    renderWithProviders(<RegisterPage />, { route: '/register', locale: 'en' })
+    renderWithProviders(<RegisterPage />, { route: '/register?journey=self-service', locale: 'en' })
 
     fillValid()
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }))

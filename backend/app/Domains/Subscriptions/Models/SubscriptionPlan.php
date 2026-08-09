@@ -27,8 +27,8 @@ final class SubscriptionPlan extends Model
     protected $fillable = [
         'code', 'name', 'name_ar', 'summary_ar', 'summary_en',
         'price_monthly', 'price_annual', 'currency',
-        'trial_fee', 'trial_days', 'trial_limits',
-        'features', 'limits', 'is_active', 'is_public', 'sort_order',
+        'trial_fee', 'trial_days', 'trial_limits', 'minimum_commitment_months',
+        'features', 'limits', 'is_active', 'is_public', 'contact_sales', 'sort_order',
     ];
 
     protected $casts = [
@@ -36,11 +36,13 @@ final class SubscriptionPlan extends Model
         'price_annual' => 'decimal:2',
         'trial_fee' => 'decimal:2',
         'trial_days' => 'integer',
+        'minimum_commitment_months' => 'integer',
         'trial_limits' => 'array',
         'features' => 'array',
         'limits' => 'array',
         'is_active' => 'boolean',
         'is_public' => 'boolean',
+        'contact_sales' => 'boolean',
         'sort_order' => 'integer',
     ];
 
@@ -69,6 +71,41 @@ final class SubscriptionPlan extends Model
     public function offersIntroFor(string $interval): bool
     {
         return $interval === 'monthly' && $this->offersTrial();
+    }
+
+    /**
+     * How many months this term is committed for — SUB-COMMIT-001.
+     *
+     * The commitment belongs to the INTRODUCTORY OFFER, so it applies exactly where the offer does:
+     * the monthly term, on a plan that has one. An annual subscriber has already paid for a year up
+     * front and committing them on top of that would be charging twice for the same promise.
+     *
+     * A plan with no commitment configured returns 0, which is «cancel whenever you like» and is a
+     * perfectly ordinary way to sell a subscription — the column defaults to it.
+     */
+    public function commitmentMonthsFor(string $interval): int
+    {
+        return $this->offersIntroFor($interval) ? max(0, (int) $this->minimum_commitment_months) : 0;
+    }
+
+    /**
+     * What the customer is committing to spend in total, in this plan's currency.
+     *
+     * The introductory month plus the remaining months at the FULL price — the figure the contract
+     * asks to be shown before payment, and the one nobody works out for themselves from «9 now, then
+     * 149 a month, minimum three months».
+     */
+    public function totalCommittedFor(string $interval): ?string
+    {
+        $months = $this->commitmentMonthsFor($interval);
+
+        if ($months === 0) {
+            return null;
+        }
+
+        $total = (float) $this->trial_fee + ((float) $this->price_monthly * ($months - 1));
+
+        return number_format($total, 2, '.', '');
     }
 
     /**

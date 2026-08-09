@@ -11,6 +11,7 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -224,7 +225,7 @@ final class PlanLimitEnforcementTest extends TestCase
     {
         app(SubscriptionService::class)->assignPlan(
             $this->tenant,
-            SubscriptionPlan::where('code', 'scale')->firstOrFail(),
+            SubscriptionPlan::where('code', 'agency')->firstOrFail(),
         );
 
         for ($i = 1; $i <= 5; $i++) {
@@ -233,6 +234,142 @@ final class PlanLimitEnforcementTest extends TestCase
 
         $this->assertNull(app(SubscriptionService::class)->effectiveLimit($this->tenant, 'projects'));
         $this->assertNull(app(SubscriptionService::class)->remaining($this->tenant, 'projects'));
+    }
+
+    // ── The client roster — LAUNCH-LIMITS-001 ────────────────────────────────────────────────────
+
+    /**
+     * A user who can actually reach the roster.
+     *
+     * `client-workspaces` is `portal:agency`, and the fixture owner above is on the advertiser
+     * portal — a test that reused them would be refused by the portal guard and would prove nothing
+     * about the cap.
+     */
+    private function agencyOwner(): User
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $role = Role::where('tenant_id', $this->tenant->id)->where('slug', 'owner')->firstOrFail();
+        $user = User::create(['name' => 'A', 'email' => 'a@acme.test', 'password' => 'secret123']);
+        $this->grantMembership($user, $this->tenant, Portal::Agency);
+        $user->assignRole($role);
+        app(TenantContext::class)->forget();
+
+        return $user->refresh();
+    }
+
+    private function createClient(User $as, string $name): TestResponse
+    {
+        return $this->actingAs($as, 'sanctum')
+            ->postJson('/api/v1/client-workspaces', ['name' => $name, 'mode' => 'managed']);
+    }
+
+    /**
+     * **The cap that was sold and not kept.** Starter admits one client; the second is refused.
+     *
+     * The fixture already holds one — created directly in `setUp`, which is the point: the cap
+     * counts what EXISTS, not what this request created, so a roster filled by any other path
+     * still counts against it.
+     */
+    public function test_the_client_cap_refuses_the_create_that_would_exceed_it(): void
+    {
+        $agency = $this->agencyOwner();
+
+        $this->assertSame(1, app(SubscriptionService::class)->usage($this->tenant, 'clients'));
+
+        $refused = $this->createClient($agency, 'Second Client')->assertStatus(403);
+
+        // The numbers, not «you have reached your plan limit» — PLAN-003.
+        $refused->assertJsonPath('meta.plan_limit', true)
+            ->assertJsonPath('meta.metric', 'clients')
+            ->assertJsonPath('meta.used', 1)
+            ->assertJsonPath('meta.limit', 1)
+            /*
+             * The upgrade path names the portal the person is STANDING IN.
+             *
+             * It was `/app/subscriptions` for everyone, which was harmless while every capped route
+             * lived in the advertiser portal — and wrong the moment this cap existed, because a
+             * client workspace is `portal:agency` only. Every clients refusal would have offered an
+             * upgrade in a portal the customer was not in.
+             */
+            ->assertJsonPath('meta.upgrade_path', '/agency/subscriptions');
+
+        $this->assertSame(1, ClientWorkspace::withoutGlobalScopes()->count(), 'the refusal still created a row');
+    }
+
+    /** Archiving a client hands the slot back — capacity is not spent forever by tidying up. */
+    public function test_archiving_a_client_returns_the_slot(): void
+    {
+        $agency = $this->agencyOwner();
+
+        $this->createClient($agency, 'Second Client')->assertStatus(403);
+
+        $this->actingAs($agency, 'sanctum')
+            ->deleteJson("/api/v1/client-workspaces/{$this->workspace->id}")->assertOk();
+
+        $this->assertSame(0, app(SubscriptionService::class)->usage($this->tenant, 'clients'));
+        $this->createClient($agency, 'Second Client')->assertCreated();
+    }
+
+    /** …and restoring one takes it back, so restore is guarded exactly like create. */
+    public function test_restoring_an_archived_client_is_refused_when_the_slot_is_gone(): void
+    {
+        $agency = $this->agencyOwner();
+
+        $this->actingAs($agency, 'sanctum')
+            ->deleteJson("/api/v1/client-workspaces/{$this->workspace->id}")->assertOk();
+        $this->createClient($agency, 'Replacement')->assertCreated();
+
+        // The slot is occupied by the replacement, so the archived one cannot come back into it.
+        $this->actingAs($agency, 'sanctum')
+            ->postJson("/api/v1/client-workspaces/{$this->workspace->id}/restore")
+            ->assertStatus(403)
+            ->assertJsonPath('meta.metric', 'clients');
+    }
+
+    /** A larger plan admits more of them — the cap tracks the plan rather than being hard-coded. */
+    public function test_a_larger_plan_admits_more_clients(): void
+    {
+        $agency = $this->agencyOwner();
+
+        app(SubscriptionService::class)->assignPlan(
+            $this->tenant,
+            SubscriptionPlan::where('code', 'growth')->firstOrFail(),
+        );
+
+        // Growth sells five, and one is already held by the fixture.
+        for ($i = 2; $i <= 5; $i++) {
+            $this->createClient($agency, "Client {$i}")->assertCreated();
+        }
+
+        $this->createClient($agency, 'Client 6')->assertStatus(403);
+        $this->assertSame(0, app(SubscriptionService::class)->remaining($this->tenant, 'clients'));
+    }
+
+    // ── The axes that are NOT metered ────────────────────────────────────────────────────────────
+
+    /**
+     * **Campaigns are never capped** — LAUNCH-LIMITS-001.
+     *
+     * The plan is sold on what it costs us to hold: connections, projects, seats and clients. A
+     * campaign inside a connected account is the customer's own work, and metering it would charge
+     * more for using the product properly. Asserted rather than left implicit, because the gate was
+     * mounted here and only passed for want of a published cap — one `/admin` edit from becoming a
+     * paywall nobody decided on.
+     */
+    public function test_campaigns_are_not_capped_by_any_plan(): void
+    {
+        foreach (SubscriptionPlan::all() as $plan) {
+            $this->assertArrayNotHasKey(
+                'campaigns',
+                $plan->limits ?? [],
+                "{$plan->code} publishes a campaigns cap, which is not a thing this product sells",
+            );
+        }
+
+        $routes = collect(app('router')->getRoutes()->getRoutes())
+            ->filter(fn ($r) => str_contains(implode('|', $r->gatherMiddleware()), 'EnsureWithinPlanLimit:campaigns'));
+
+        $this->assertCount(0, $routes, 'a route still meters campaign creation');
     }
 
     /** Usage is read from the projects themselves, so it is right without anything having metered it. */

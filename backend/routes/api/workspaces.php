@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\ClientWorkspaces\Http\Controllers\ClientWorkspaceController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\FilesLibraryController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
+use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
 
@@ -21,11 +22,16 @@ use Illuminate\Support\Facades\Route;
  */
 Route::middleware(['auth:sanctum', 'tenant', 'portal:agency'])->group(function (): void {
     Route::get('client-workspaces', [ClientWorkspaceController::class, 'index'])->name('client-workspaces.index');
-    Route::post('client-workspaces', [ClientWorkspaceController::class, 'store'])->name('client-workspaces.store');
+    // The `clients` cap, enforced where a client is actually taken on — LAUNCH-LIMITS-001.
+    Route::post('client-workspaces', [ClientWorkspaceController::class, 'store'])->name('client-workspaces.store')
+        ->middleware(EnsureWithinPlanLimit::class.':clients');
     Route::get('client-workspaces/{clientWorkspace}', [ClientWorkspaceController::class, 'show'])->name('client-workspaces.show');
     Route::match(['put', 'patch'], 'client-workspaces/{clientWorkspace}', [ClientWorkspaceController::class, 'update'])->name('client-workspaces.update');
     Route::delete('client-workspaces/{clientWorkspace}', [ClientWorkspaceController::class, 'archive'])->name('client-workspaces.archive');
-    Route::post('client-workspaces/{clientWorkspace}/restore', [ClientWorkspaceController::class, 'restore'])->name('client-workspaces.restore');
+    // Restoring an archived client takes the slot back, so it is a create as far as the cap is
+    // concerned — the same reasoning that guards `projects.restore`.
+    Route::post('client-workspaces/{clientWorkspace}/restore', [ClientWorkspaceController::class, 'restore'])->name('client-workspaces.restore')
+        ->middleware(EnsureWithinPlanLimit::class.':clients');
 });
 
 /*

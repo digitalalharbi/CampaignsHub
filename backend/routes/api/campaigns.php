@@ -12,7 +12,6 @@ use App\Domains\Campaigns\Http\Controllers\CampaignStructureController;
 use App\Domains\Campaigns\Http\Controllers\ExternalCampaignController;
 use App\Domains\Campaigns\Http\Controllers\RelatedEntitiesController;
 use App\Domains\Campaigns\Http\Controllers\UnifiedCampaignController;
-use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use Illuminate\Support\Facades\Route;
 
 // Project-scoped campaigns (ResolveProject enforces tenant + project isolation; fail-closed 404).
@@ -21,8 +20,19 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
     ->name('projects.campaigns.')
     ->group(function (): void {
         Route::get('campaigns', [UnifiedCampaignController::class, 'index'])->name('index');
-        Route::post('campaigns', [UnifiedCampaignController::class, 'store'])->name('store')
-            ->middleware(EnsureWithinPlanLimit::class.':campaigns');
+        /*
+         * Campaigns are NOT metered — LAUNCH-LIMITS-001.
+         *
+         * The plan is sold on what it costs us to hold: connected ad accounts, projects, seats and
+         * client workspaces. Campaigns inside a connected account are the customer's own work, and
+         * charging for the number of them would penalise using the product for what it is for —
+         * somebody testing five variants would pay more than somebody running one badly.
+         *
+         * The gate is removed rather than left mounted against an absent cap: a mount that only
+         * passes because no plan happens to publish a `campaigns` limit is one admin edit away from
+         * silently becoming a paywall nobody decided on.
+         */
+        Route::post('campaigns', [UnifiedCampaignController::class, 'store'])->name('store');
         Route::get('campaigns/{campaign}', [UnifiedCampaignController::class, 'show'])->name('show');
         Route::match(['put', 'patch'], 'campaigns/{campaign}', [UnifiedCampaignController::class, 'update'])->name('update');
         Route::post('campaigns/{campaign}/pause', [UnifiedCampaignController::class, 'pause'])->name('pause');

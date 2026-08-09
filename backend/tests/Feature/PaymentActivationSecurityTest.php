@@ -92,7 +92,7 @@ final class PaymentActivationSecurityTest extends TestCase
             ->assertJsonPath('data.registration.state', 'approved_awaiting_payment');
 
         // …and opening a checkout is not paying for it.
-        $this->postJson("/api/v1/auth/registration/{$id}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$id}/checkout", ['commitment_agreed' => true])->assertOk();
 
         $this->assertSame(
             AccountState::ApprovedAwaitingPayment,
@@ -112,13 +112,13 @@ final class PaymentActivationSecurityTest extends TestCase
     public function test_an_unverified_webhook_activates_nothing(): void
     {
         $request = $this->owing();
-        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
 
         $payment = SubscriptionPayment::query()->firstOrFail();
 
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_forged', 'type' => 'payment_paid',
-            'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => 900, 'currency' => 'SAR',
+            'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => (int) round((float) $payment->amount * 100), 'currency' => $payment->currency,
                 'metadata' => ['reference' => $payment->idempotency_key]],
         ])->assertOk()->assertJsonPath('data.verified', false);
 
@@ -135,12 +135,12 @@ final class PaymentActivationSecurityTest extends TestCase
         config(['services.moyasar.secret_key' => 'sk_test', 'services.moyasar.webhook_token' => 'the-real-token']);
 
         $request = $this->owing();
-        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
         $payment = SubscriptionPayment::query()->firstOrFail();
 
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_wrong_secret', 'type' => 'payment_paid', 'secret_token' => 'not-the-real-token',
-            'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => 900, 'currency' => 'SAR',
+            'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => (int) round((float) $payment->amount * 100), 'currency' => $payment->currency,
                 'metadata' => ['reference' => $payment->idempotency_key]],
         ])->assertOk()->assertJsonPath('data.verified', false);
 
@@ -159,12 +159,12 @@ final class PaymentActivationSecurityTest extends TestCase
         config(['services.moyasar.secret_key' => 'sk_test', 'services.moyasar.webhook_token' => 'shared-secret']);
 
         $request = $this->owing();
-        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
         $payment = SubscriptionPayment::query()->firstOrFail();
 
         $event = [
             'id' => 'evt_real', 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
-            'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => 900, 'currency' => 'SAR',
+            'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => (int) round((float) $payment->amount * 100), 'currency' => $payment->currency,
                 'metadata' => ['reference' => $payment->idempotency_key]],
         ];
 
@@ -192,7 +192,7 @@ final class PaymentActivationSecurityTest extends TestCase
         config(['services.moyasar.secret_key' => 'sk_test', 'services.moyasar.webhook_token' => 'shared-secret']);
 
         $request = $this->owing();
-        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
         $payment = SubscriptionPayment::query()->firstOrFail();
 
         $this->postJson('/api/v1/payments/webhook/moyasar', [
@@ -251,7 +251,7 @@ final class PaymentActivationSecurityTest extends TestCase
     public function test_a_refunded_charge_does_not_satisfy_the_payment_gate(): void
     {
         $request = $this->owing();
-        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
 
         SubscriptionPayment::query()->firstOrFail()->forceFill([
             'status' => 'paid', 'paid_at' => now(), 'refunded_at' => now(),
@@ -278,8 +278,8 @@ final class PaymentActivationSecurityTest extends TestCase
         $request = $this->owing();
         $id = $request->getKey();
 
-        $first = $this->postJson("/api/v1/auth/registration/{$id}/checkout")->assertOk();
-        $second = $this->postJson("/api/v1/auth/registration/{$id}/checkout")->assertOk();
+        $first = $this->postJson("/api/v1/auth/registration/{$id}/checkout", ['commitment_agreed' => true])->assertOk();
+        $second = $this->postJson("/api/v1/auth/registration/{$id}/checkout", ['commitment_agreed' => true])->assertOk();
         $third = app(SubscriptionCheckout::class)->startTrial($request->refresh());
 
         $this->assertSame($first->json('data.payment.id'), $second->json('data.payment.id'));
@@ -355,7 +355,7 @@ final class PaymentActivationSecurityTest extends TestCase
     {
         $request = $this->owing();
 
-        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk()
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk()
             ->assertJsonPath('data.status', 'awaiting_credentials')
             ->assertJsonPath('data.checkout_url', null);
 

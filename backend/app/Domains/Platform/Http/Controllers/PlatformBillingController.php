@@ -89,11 +89,13 @@ final class PlatformBillingController extends Controller
             'price_annual' => $p->price_annual === null ? null : (string) $p->price_annual,
             'trial_fee' => (string) $p->trial_fee,
             'trial_days' => $p->trial_days,
+            'minimum_commitment_months' => $p->minimum_commitment_months,
             'trial_limits' => $p->trial_limits,
             'features' => $p->features ?? [],
             'limits' => $p->limits ?? [],
             'is_active' => (bool) $p->is_active,
             'is_public' => (bool) $p->is_public,
+            'contact_sales' => (bool) $p->contact_sales,
             'sort_order' => $p->sort_order,
         ];
     }
@@ -132,6 +134,14 @@ final class PlatformBillingController extends Controller
             'currency' => ['sometimes', 'string', 'size:3', 'alpha'],
             'trial_fee' => ['sometimes', 'numeric', 'min:0'],
             'trial_days' => ['sometimes', 'integer', 'min:0', 'max:365'],
+            /*
+             * The minimum commitment behind the introductory price — SUB-COMMIT-001.
+             *
+             * Editable beside the intro price and the regular price because they are ONE commercial
+             * decision: the discount is what the commitment buys. Capped at two years, which is far
+             * past anything defensible and still short of a typo.
+             */
+            'minimum_commitment_months' => ['sometimes', 'integer', 'min:0', 'max:24'],
             'trial_limits' => ['sometimes', 'nullable', 'array'],
             'limits' => ['sometimes', 'nullable', 'array'],
             'features' => ['sometimes', 'nullable', 'array'],
@@ -139,6 +149,15 @@ final class PlatformBillingController extends Controller
             // Withdrawing a plan from SALE is not the same as switching it off: everyone already on
             // it must keep working, which is why these are two fields and not one.
             'is_public' => ['sometimes', 'boolean'],
+            /*
+             * Sold by conversation rather than by checkout — LAUNCH-PRICING-001.
+             *
+             * A third availability axis, not a synonym for the other two: a `contact_sales` plan is
+             * active (people are on it) and may or may not be public (Enterprise is kept out of
+             * signup for now), and what it publishes is an invitation to talk rather than a price.
+             * Editable here so making it visible later is an operator's decision, not a deploy.
+             */
+            'contact_sales' => ['sometimes', 'boolean'],
             'sort_order' => ['sometimes', 'integer', 'min:0', 'max:9999'],
             /*
              * Why the terms changed, in the operator's own words.
@@ -167,7 +186,8 @@ final class PlatformBillingController extends Controller
             // `currency` is audited for the same reason a price is: re-denominating a plan is a
             // commercial decision, and one nobody wrote down is one nobody can defend later.
             'name', 'name_ar', 'price_monthly', 'price_annual', 'currency', 'trial_fee', 'trial_days',
-            'trial_limits', 'limits', 'features', 'is_active', 'is_public', 'sort_order',
+            'minimum_commitment_months', 'trial_limits', 'limits', 'features', 'is_active',
+            'is_public', 'contact_sales', 'sort_order',
         ];
         $before = $model->only($tracked);
         $model->fill($data)->save();

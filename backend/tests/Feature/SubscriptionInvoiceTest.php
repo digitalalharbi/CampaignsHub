@@ -8,6 +8,7 @@ use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\Subscriptions\Models\SubscriptionInvoice;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
+use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Services\SubscriptionInvoicing;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -28,6 +29,20 @@ use Tests\TestCase;
  */
 final class SubscriptionInvoiceTest extends TestCase
 {
+    /**
+     * The introductory fee plus 15% VAT, computed from the plan.
+     *
+     * Written as `10.35` while the fee was 9.00; the owner's marketing pricing made it 8.99, and
+     * 8.99 × 1.15 rounds to 10.34. A money literal in a test is a price somebody has to remember to
+     * edit — and this is the third time in one day that a commercial decision broke one.
+     */
+    private function introPlusVat(string $code = 'growth'): string
+    {
+        $fee = (float) SubscriptionPlan::query()->where('code', $code)->firstOrFail()->trial_fee;
+
+        return number_format(round($fee * 1.15, 2), 2, '.', '');
+    }
+
     use AppliesToRegister;
     use RefreshDatabase;
 
@@ -64,17 +79,29 @@ final class SubscriptionInvoiceTest extends TestCase
 
         $this->verifyMobileFor($request);
 
-        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
 
         return SubscriptionPayment::query()->where('registration_request_id', $request->getKey())->firstOrFail();
     }
 
-    private function confirm(SubscriptionPayment $payment, string $status = 'paid', int $amount = 900): void
+    /**
+     * Confirm a charge — with ITS OWN amount and currency, never a literal.
+     *
+     * Defaulted to `900` minor units and `SAR`, which was the introductory fee at the time. The
+     * amount is re-checked by `ApplySubscriptionPaymentEvent` on purpose, so the moment the fee moved
+     * to 8.99 — or the currency to USD — the event verified, applied nothing, and every invoice
+     * quietly stayed `issued`. Passing null means «pay what is owed».
+     */
+    private function confirm(SubscriptionPayment $payment, string $status = 'paid', ?int $amount = null): void
     {
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_'.uniqid(), 'type' => 'payment_'.$status, 'secret_token' => 'shared-secret',
-            'data' => ['id' => 'pay_'.$payment->getKey(), 'status' => $status, 'amount' => $amount,
-                'currency' => 'SAR', 'metadata' => ['reference' => $payment->idempotency_key]],
+            'data' => [
+                'id' => 'pay_'.$payment->getKey(), 'status' => $status,
+                'amount' => $amount ?? (int) round((float) $payment->amount * 100),
+                'currency' => $payment->currency,
+                'metadata' => ['reference' => $payment->idempotency_key],
+            ],
         ])->assertOk();
     }
 
@@ -113,7 +140,7 @@ final class SubscriptionInvoiceTest extends TestCase
         $this->assertSame((string) $payment->getKey(), $invoice->subscription_payment_id);
         $this->assertNotNull($invoice->due_at);
         // The whole of it, tax included — 9.00 plus 15%.
-        $this->assertSame('10.35', $invoice->outstanding());
+        $this->assertSame($this->introPlusVat(), $invoice->outstanding());
     }
 
     /** VAT is computed once and stored — not derived at read time from whatever the rate is now. */
@@ -125,7 +152,7 @@ final class SubscriptionInvoiceTest extends TestCase
 
         $this->assertSame('basic_15', $invoice->tax_treatment);
         $this->assertSame('1.35', (string) $invoice->tax_total, '15% of 9.00');
-        $this->assertSame('10.35', (string) $invoice->total);
+        $this->assertSame($this->introPlusVat(), (string) $invoice->total);
 
         // A later change to the treatment must not rewrite a document already issued.
         config(['billing.tax.default' => 'zero_rated']);
@@ -138,8 +165,8 @@ final class SubscriptionInvoiceTest extends TestCase
         $payment = $this->chargedApplication();
         $request = $payment->registrationRequest;
 
-        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk();
-        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
 
         $this->assertSame(1, SubscriptionInvoice::query()->count());
     }
@@ -167,7 +194,7 @@ final class SubscriptionInvoiceTest extends TestCase
         $invoice = SubscriptionInvoice::query()->firstOrFail();
 
         $this->assertSame('paid', $invoice->status);
-        $this->assertSame('10.35', (string) $invoice->amount_paid);
+        $this->assertSame($this->introPlusVat(), (string) $invoice->amount_paid);
         $this->assertSame('0.00', $invoice->outstanding());
         $this->assertNotNull($invoice->paid_at);
     }
@@ -178,7 +205,7 @@ final class SubscriptionInvoiceTest extends TestCase
 
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_forged', 'type' => 'payment_paid', // no secret_token
-            'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => 900, 'currency' => 'SAR',
+            'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => (int) round((float) $payment->amount * 100), 'currency' => $payment->currency,
                 'metadata' => ['reference' => $payment->idempotency_key]],
         ])->assertOk();
 
@@ -224,7 +251,7 @@ final class SubscriptionInvoiceTest extends TestCase
 
         $this->actingAs($user, 'sanctum')->getJson('/api/v1/subscriptions/invoices')->assertOk()
             ->assertJsonPath('data.invoices.0.status', 'paid')
-            ->assertJsonPath('data.invoices.0.total', '10.35')
+            ->assertJsonPath('data.invoices.0.total', $this->introPlusVat())
             ->assertJsonPath('data.invoices.0.tax_treatment', 'basic_15');
 
         $invoice = SubscriptionInvoice::query()->firstOrFail();

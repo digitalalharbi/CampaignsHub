@@ -75,7 +75,7 @@ final class SubscriptionLifecycleTest extends TestCase
 
         $this->verifyMobileFor($request);
 
-        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
 
         $payment = SubscriptionPayment::query()->where('registration_request_id', $request->getKey())->firstOrFail();
 
@@ -374,7 +374,7 @@ final class SubscriptionLifecycleTest extends TestCase
 
         $this->verifyMobileFor($request);
 
-        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk()
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk()
             ->assertJsonPath('data.status', 'refused')
             ->assertJsonPath('data.refused', ['company']);
 

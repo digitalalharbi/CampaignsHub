@@ -5,10 +5,13 @@ import {
   BadgeCheck, Clock, CreditCard, Loader2, MailCheck, RefreshCw, ShieldAlert, ShieldCheck, Smartphone,
 } from 'lucide-react'
 import {
-  fetchPaymentProviders, fetchRegistration, forgetRegistration, recallRegistration, rememberRegistration,
-  resendRegistrationChallenge, startCheckout, verifyRegistrationEmail, verifyRegistrationMobile,
-  type CheckoutResult, type RegistrationEnvelope, type RegistrationState, type VerificationIssued,
+  fetchPaymentProviders, fetchQuote, fetchRegistration, forgetRegistration, recallRegistration,
+  rememberRegistration, resendRegistrationChallenge, startCheckout, verifyRegistrationEmail,
+  verifyRegistrationMobile,
+  type CheckoutResult, type RegistrationEnvelope, type RegistrationState, type RegistrationStatus,
+  type VerificationIssued,
 } from './api'
+import { CommitmentDisclosure } from './CommitmentDisclosure'
 import { AuthShell } from '@/features/auth/AuthShell'
 import { Button } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/form'
@@ -348,7 +351,7 @@ export function AccountStatusPage() {
         )}
 
         {reg.state === 'approved_awaiting_payment' && (
-          <PaymentStep id={reg.id} copy={c} onOpened={(r) => { if (r.checkout_url) window.location.href = r.checkout_url }} />
+          <PaymentStep reg={reg} copy={c} ar={ar} onOpened={(r) => { if (r.checkout_url) window.location.href = r.checkout_url }} />
         )}
 
         {reg.provisioned && (
@@ -380,17 +383,35 @@ export function AccountStatusPage() {
  * account.
  */
 function PaymentStep({
-  id, copy, onOpened,
+  reg, copy, ar, onOpened,
 }: {
-  id: string
+  reg: RegistrationStatus
   copy: typeof COPY['en'] | typeof COPY['ar']
+  ar: boolean
   onOpened: (result: CheckoutResult) => void
 }) {
   const [result, setResult] = useState<CheckoutResult | null>(null)
+  const [agreed, setAgreed] = useState(reg.commitment_agreed)
   const providers = useQuery({ queryKey: ['payment-providers'], queryFn: fetchPaymentProviders })
 
+  /*
+   * The terms are quoted by the SERVER, for the applicant's own plan and term — SUB-CONSENT-001.
+   *
+   * Not recomputed here from the plan list: the amount shown and the amount charged have to be one
+   * statement, and the quote endpoint is the one that decides it.
+   */
+  const quote = useQuery({
+    queryKey: ['plan-quote', reg.plan_code, reg.billing_interval],
+    queryFn: () => fetchQuote(reg.plan_code!, reg.billing_interval ?? 'monthly'),
+    enabled: reg.plan_code !== null,
+  })
+
+  const terms = quote.data?.quote ?? null
+  // A commitment nobody has agreed to blocks the charge — the server refuses it, so the button does.
+  const blocked = terms !== null && terms.commitment_months > 0 && !agreed
+
   const checkout = useMutation({
-    mutationFn: () => startCheckout(id),
+    mutationFn: () => startCheckout(reg.id, agreed),
     onSuccess: (r) => { setResult(r); onOpened(r) },
   })
 
@@ -410,12 +431,16 @@ function PaymentStep({
       {/* Said whether or not a gateway exists: it is the rule, not a consolation for a missing one. */}
       <p data-testid="registration-payment-rule" className="text-center text-xs text-text-muted">{copy.paymentRule}</p>
 
+      {/* Shown BEFORE the button, because it is what the button agrees to. */}
+      {terms && <CommitmentDisclosure quote={terms} ar={ar} agreed={agreed} onAgreedChange={setAgreed} />}
+
       {live ? (
         <>
           <Button
             data-testid="registration-pay"
             onClick={() => checkout.mutate()}
             loading={checkout.isPending}
+            disabled={blocked}
             size="lg"
           >
             <CreditCard size={16} /> {copy.payNow}

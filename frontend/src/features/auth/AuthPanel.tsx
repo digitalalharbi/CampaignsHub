@@ -20,7 +20,15 @@ import type { Locale } from '@/features/marketing/homeCopy'
  * reach in the first place.
  */
 
-export type AuthPortal = 'default' | 'client' | 'influencer' | 'agency'
+/**
+ * `advertiser` is the SELF-SERVICE journey — PLAN-FIT-001.
+ *
+ * It used to reuse `default`, whose body reads «نظّم العملاء والمشاريع»: clients and projects, shown
+ * to somebody who had just said they run their own campaigns. `default` and `agency` in fact carried
+ * the SAME body, so the panel said the same thing on both paths while the toggle above it promised
+ * two different products.
+ */
+export type AuthPortal = 'default' | 'advertiser' | 'client' | 'influencer' | 'agency'
 
 /**
  * A feature is a card, not a bullet: the headline alone ("Professional reports") tells a visitor nothing
@@ -74,12 +82,25 @@ const COPY: Record<Locale, Record<AuthPortal, PanelCopy>> = {
         { title: 'تنبيهات ومتابعة مستمرة', desc: 'تنبيه عند تغيّر الإنفاق أو الأداء قبل أن تكبر المشكلة.' },
       ],
     },
+    advertiser: {
+      tagline: 'إدارة حملاتي الإعلانية',
+      eyebrow: 'منصة موحدة لإدارة الحملات الإعلانية',
+      title: 'أدِر حملاتك الإعلانية عبر جميع المنصات',
+      titleAccent: 'من مكان واحد',
+      body: 'اربط حساباتك الإعلانية، تابع الإنفاق والنتائج، قارن الأداء بين المنصات والمشاريع، واحصل على رؤية واضحة تساعدك على اتخاذ قرارات أفضل.',
+      features: [
+        { title: 'جميع المنصات في لوحة واحدة', desc: 'تابع حملاتك عبر Snapchat وTikTok وMeta وGoogle Ads وX وLinkedIn من مكان واحد.' },
+        { title: 'مؤشرات موحدة وقابلة للمقارنة', desc: 'قارن الإنفاق والنتائج والعائد بين المنصات والمشاريع دون التنقل بين الحسابات.' },
+        { title: 'تحليل يتوافق مع هدف الحملة', desc: 'اعرض المؤشرات المناسبة للوعي أو الزيارات أو العملاء المحتملين أو المبيعات دون خلط النتائج.' },
+        { title: 'تقارير وتنبيهات جاهزة لاتخاذ القرار', desc: 'تابع أهم التغيّرات وشارك تقارير واضحة ومحدثة دون إعداد يدوي متكرر.' },
+      ],
+    },
     agency: {
       tagline: 'إدارة حملات الوكالات',
       eyebrow: 'منصة متكاملة لإدارة حملات عدة عملاء',
       title: 'كل حملات عملائك المدفوعة',
       titleAccent: 'في مكان واحد',
-      body: 'تابع الأداء والميزانيات والنتائج عبر المنصات، نظّم العملاء والمشاريع، وأنشئ تقارير احترافية من مساحة عمل واحدة.',
+      body: 'مساحة مستقلة لكل عميل، ومشاريع منفصلة، وصلاحيات محدّدة لكل فرد في الفريق، وتقارير جاهزة لكل عميل باسمه.',
       features: [
         { title: 'مساحة مستقلة لكل عميل ومشروع', desc: 'بيانات كل عميل معزولة، وصلاحيات محدّدة لكل فرد في الفريق.' },
         { title: 'تحليلات تناسب هدف الحملة', desc: 'مؤشرات كل هدف على حدة، دون خلط الوعي بالزيارات أو المبيعات.' },
@@ -126,6 +147,19 @@ const COPY: Record<Locale, Record<AuthPortal, PanelCopy>> = {
         { title: 'Analytics matched to each objective', desc: 'Each goal measured on its own terms — awareness is never compared to sales.' },
         { title: 'Professional, shareable reports', desc: 'Produce a clear report for a client or your management in minutes.' },
         { title: 'Alerts and continuous monitoring', desc: 'Hear about a spend or performance shift before it becomes a problem.' },
+      ],
+    },
+    advertiser: {
+      tagline: 'My campaign management',
+      eyebrow: 'One platform for every ad campaign',
+      title: 'Run your advertising across every platform',
+      titleAccent: 'from one place',
+      body: 'Connect your ad accounts, follow spend and results, compare performance across platforms and projects, and get a clear view to decide from.',
+      features: [
+        { title: 'Every platform on one dashboard', desc: 'Follow your campaigns across Snapchat, TikTok, Meta, Google Ads, X and LinkedIn in one place.' },
+        { title: 'One set of comparable metrics', desc: 'Compare spend, results and return across platforms and projects without moving between accounts.' },
+        { title: 'Analysis that matches the objective', desc: 'See the metrics that fit awareness, traffic, leads or sales — never mixed together.' },
+        { title: 'Reports and alerts you can act on', desc: 'Follow what actually changed and share clear, current reports without rebuilding them each time.' },
       ],
     },
     agency: {
@@ -187,7 +221,7 @@ export function AuthPanel({ locale, portal }: { locale: Locale; portal: AuthPort
   return (
     <aside
       data-testid="auth-panel"
-      className="relative hidden overflow-hidden border-e border-border bg-surface-secondary px-8 py-8 lg:flex lg:flex-col lg:justify-center xl:px-10"
+      className="relative hidden min-w-0 overflow-hidden border-e border-border bg-surface-secondary px-[clamp(1.25rem,2.4vw,2.5rem)] py-[clamp(1.25rem,3vh,2rem)] lg:flex lg:flex-col lg:justify-center"
     >
       {/* A soft brand wash, the same green the homepage carries — not a slab of colour. */}
       <div aria-hidden className="pointer-events-none absolute -end-24 -top-28 h-72 w-72 rounded-full bg-brand-primary-soft blur-3xl" />
@@ -198,19 +232,20 @@ export function AuthPanel({ locale, portal }: { locale: Locale; portal: AuthPort
         works in both directions). Left to fill the column, the promise and the form drifted to opposite
         edges of a wide screen and stopped reading as one composition.
       */}
-      <div className="relative w-full max-w-[560px] ms-auto">
+      {/* `min(…, 100%)` so the measure can never exceed the track it sits in — AUTH-FIT-001. */}
+      <div className="relative w-full max-w-[min(35rem,100%)] ms-auto">
         {/* A real way back to the site the visitor came from. */}
         <Link to="/" className="flex w-fit items-center gap-2.5">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-[var(--shadow-small)]">
-            <Megaphone size={20} />
+          <span className="flex h-[clamp(2.25rem,3vw,2.75rem)] w-[clamp(2.25rem,3vw,2.75rem)] items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-[var(--shadow-small)]">
+            <Megaphone size={18} />
           </span>
           <span className="min-w-0">
-            <span className="block font-heading text-xl font-extrabold leading-tight tracking-tight text-text-primary">CampaignsHub</span>
-            <span className="block text-[12px] text-text-muted">{c.tagline}</span>
+            <span className="block font-heading text-[clamp(1.0625rem,1.35vw,1.25rem)] font-extrabold leading-tight tracking-tight text-text-primary">CampaignsHub</span>
+            <span className="block text-[clamp(0.6875rem,0.85vw,0.75rem)] text-text-muted">{c.tagline}</span>
           </span>
         </Link>
 
-        <p className="mt-5 inline-flex w-fit items-center gap-2 rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[12px] font-semibold text-brand-700">
+        <p className="mt-[clamp(0.75rem,2vh,1.25rem)] inline-flex w-fit items-center gap-2 rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-[clamp(0.6875rem,0.85vw,0.75rem)] font-semibold text-brand-700">
           <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
           {c.eyebrow}
         </p>
@@ -222,32 +257,40 @@ export function AuthPanel({ locale, portal }: { locale: Locale; portal: AuthPort
             one word for assistive tech. The label is the same sentence a sighted visitor reads. */}
         <h1
           aria-label={`${c.title} ${c.titleAccent}`}
-          className="mt-3 font-heading font-extrabold leading-[1.12] tracking-tight text-text-primary"
+          className="mt-[clamp(0.5rem,1.4vh,0.75rem)] font-heading font-extrabold leading-[1.12] tracking-tight text-text-primary"
         >
-          <span className="block text-[27px] sm:text-[30px] xl:text-[35px]">{c.title}</span>
+          {/*
+            One fluid ramp instead of three breakpoint steps — AUTH-FIT-001.
+
+            The old sizes were tuned for a wide screen and were simply too tall on a 768px-high
+            laptop, where the panel then needed scrolling to finish a sentence. `clamp()` keeps the
+            lower bound readable rather than merely small: the floor is what a 1024px laptop gets,
+            not a size chosen to make the numbers fit.
+          */}
+          <span className="block text-[clamp(1.5rem,2.15vw,2.1875rem)]">{c.title}</span>
           {/* Kept unbreakable: "in one place" split across two lines reads as a typo, not a promise. */}
-          <span className="mt-0.5 block whitespace-nowrap text-[34px] text-brand-600 sm:text-[38px] xl:text-[45px]">
+          <span className="mt-0.5 block whitespace-nowrap text-[clamp(1.875rem,2.75vw,2.8125rem)] text-brand-600">
             {c.titleAccent}
           </span>
         </h1>
-        <p className="mt-3 text-[14px] leading-relaxed text-text-secondary">{c.body}</p>
+        <p className="mt-[clamp(0.5rem,1.4vh,0.75rem)] text-[clamp(0.8125rem,0.95vw,0.875rem)] leading-relaxed text-text-secondary">{c.body}</p>
 
         {/* Feature cards, at the same weight the rest of the product gives them: an icon tile, the
             capability, and one plain sentence saying what it does. */}
-        <ul className="mt-4 grid gap-2">
+        <ul className="mt-[clamp(0.625rem,1.6vh,1rem)] grid gap-[clamp(0.375rem,0.9vh,0.5rem)]">
           {c.features.map((f, i) => {
             const Icon = FEATURE_ICONS[i] ?? Check
             return (
               <li
                 key={f.title}
-                className="flex items-start gap-3 rounded-2xl border border-border bg-surface px-3 py-2.5 shadow-[var(--shadow-small)]"
+                className="flex items-start gap-3 rounded-2xl border border-border bg-surface px-3 py-[clamp(0.5rem,1.1vh,0.625rem)] shadow-[var(--shadow-small)]"
               >
-                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ${FEATURE_TINTS[i] ?? 'bg-brand-primary-soft text-brand-600'}`}>
-                  <Icon size={16} />
+                <span className={`flex h-[clamp(1.75rem,2.2vw,2rem)] w-[clamp(1.75rem,2.2vw,2rem)] shrink-0 items-center justify-center rounded-[10px] ${FEATURE_TINTS[i] ?? 'bg-brand-primary-soft text-brand-600'}`}>
+                  <Icon size={15} />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-[13.5px] font-bold leading-snug text-text-primary">{f.title}</span>
-                  <span className="mt-0.5 block text-[12px] leading-relaxed text-text-secondary">{f.desc}</span>
+                  <span className="block text-[clamp(0.8125rem,0.92vw,0.84375rem)] font-bold leading-snug text-text-primary">{f.title}</span>
+                  <span className="mt-0.5 block text-[clamp(0.75rem,0.85vw,0.75rem)] leading-relaxed text-text-secondary">{f.desc}</span>
                 </span>
               </li>
             )

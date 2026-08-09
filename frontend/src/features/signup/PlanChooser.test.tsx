@@ -42,8 +42,15 @@ describe('PlanChooser', () => {
       { locale: 'en' },
     )
 
-    expect(await screen.findByTestId('plan-growth')).toHaveTextContent('499.00 SAR')
-    expect(screen.getByTestId('plan-starter')).toHaveTextContent('0.00 SAR')
+    /*
+      The amount and its currency are separate elements — the figure is the headline and the code
+      sits beside it at a smaller weight — so they are asserted separately rather than as one
+      string. A test matching «499.00 SAR» would be asserting that they share a text node, which is
+      a fact about the markup and not about the price.
+    */
+    expect(await screen.findByTestId('plan-growth')).toHaveTextContent('499.00')
+    expect(screen.getByTestId('plan-growth')).toHaveTextContent('SAR')
+    expect(screen.getByTestId('plan-starter')).toHaveTextContent('0.00')
   })
 
   /**
@@ -79,7 +86,9 @@ describe('PlanChooser', () => {
       { locale: 'en' },
     )
 
-    expect(await screen.findByTestId('plan-growth-intro')).toHaveTextContent('First 7 days for 9.00 SAR')
+    // The offer states what it becomes, not only what it costs — SUB-COMMIT-001.
+    expect(await screen.findByTestId('plan-growth-intro'))
+      .toHaveTextContent('First 7 days for 9.00 SAR, then 499.00 SAR a month')
     expect(screen.queryByTestId('plan-starter-intro')).not.toBeInTheDocument()
   })
 
@@ -141,6 +150,110 @@ describe('PlanChooser', () => {
 
     fireEvent.click(await screen.findByTestId('plan-growth'))
     expect(onChange).toHaveBeenCalledWith('growth')
+  })
+
+  // ── The path decides the plans — PLAN-FIT-001 / LAUNCH-PRICING-001 ─────────────────────────────
+
+  /** «For my own campaigns» is sold Starter and Growth, and is never shown Agency. */
+  it('offers the self-service path the two plans that fit it', async () => {
+    vi.mocked(fetchPlans).mockResolvedValue({
+      plans: [
+        plan({ code: 'starter', name: 'Starter', trial_days: 0 }),
+        plan({}),
+        plan({ code: 'agency', name: 'Agency', trial_days: 0 }),
+      ],
+    })
+
+    renderWithProviders(
+      <PlanChooser value={null} interval="monthly" onChange={noop} onIntervalChange={noop} journey="self-service" />,
+      { locale: 'en' },
+    )
+
+    await screen.findByTestId('plan-starter')
+    expect(screen.getByTestId('plan-growth')).toBeInTheDocument()
+    expect(screen.queryByTestId('plan-agency')).not.toBeInTheDocument()
+  })
+
+  /**
+   * **«For my clients» is sold Agency, and only Agency.**
+   *
+   * Growth was briefly offered here too, and it does not fit: client workspaces, per-client team
+   * scopes and white-label reports are Agency's. Offering Growth to somebody who has just said they
+   * manage several clients sells them a plan they must leave.
+   */
+  it('offers the agency path one plan and nothing to compare it against', async () => {
+    vi.mocked(fetchPlans).mockResolvedValue({
+      plans: [
+        plan({ code: 'starter', name: 'Starter', trial_days: 0 }),
+        plan({}),
+        plan({ code: 'agency', name: 'Agency', trial_days: 0 }),
+      ],
+    })
+
+    renderWithProviders(
+      <PlanChooser value={null} interval="monthly" onChange={noop} onIntervalChange={noop} journey="multi-client" />,
+      { locale: 'en' },
+    )
+
+    expect(await screen.findByTestId('plan-agency')).toBeInTheDocument()
+    expect(screen.queryByTestId('plan-starter')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('plan-growth')).not.toBeInTheDocument()
+
+    // One card has nothing to be compared with, so the comparison is not offered.
+    expect(screen.queryByTestId('plan-compare-open')).not.toBeInTheDocument()
+  })
+
+  /**
+   * The full table lives behind a press, not on the cards.
+   *
+   * Seven axes on a card is a specification the reader has to hold in their head; side by side it is
+   * one glance. The cards carry at most four differences and this carries the rest.
+   */
+  it('puts the whole comparison behind one press', async () => {
+    vi.mocked(fetchPlans).mockResolvedValue({
+      plans: [
+        plan({ code: 'starter', name: 'Starter', trial_days: 0, limits: { projects: 3 } }),
+        plan({ limits: { projects: 25 } }),
+      ],
+    })
+
+    renderWithProviders(
+      <PlanChooser value={null} interval="monthly" onChange={noop} onIntervalChange={noop} journey="self-service" />,
+      { locale: 'en' },
+    )
+
+    expect(screen.queryByTestId('plan-comparison')).not.toBeInTheDocument()
+
+    fireEvent.click(await screen.findByTestId('plan-compare-open'))
+
+    expect(await screen.findByTestId('plan-comparison')).toBeInTheDocument()
+    expect(screen.getByTestId('compare-projects-starter')).toHaveTextContent('3')
+    expect(screen.getByTestId('compare-projects-growth')).toHaveTextContent('25')
+  })
+
+  /**
+   * **The introductory price is not the headline.** The regular price is.
+   *
+   * Leading with 9 sells a number nobody pays for more than a month, and the surprise arrives on the
+   * second charge. The card states the regular price large, and the offer — with the commitment
+   * behind it — beneath.
+   */
+  it('leads with the regular price and states the offer beneath it', async () => {
+    vi.mocked(fetchPlans).mockResolvedValue({
+      plans: [plan({ trial_days: 30, trial_fee: '9.00', price_monthly: '49.00', minimum_commitment_months: 3 })],
+    })
+
+    renderWithProviders(
+      <PlanChooser value={null} interval="monthly" onChange={noop} onIntervalChange={noop} journey="self-service" />,
+      { locale: 'en' },
+    )
+
+    const card = await screen.findByTestId('plan-growth')
+    expect(card).toHaveTextContent('49.00')
+
+    const offer = screen.getByTestId('plan-growth-intro')
+    expect(offer).toHaveTextContent('First 30 days for 9.00 SAR, then 49.00 SAR a month')
+    expect(screen.getByTestId('plan-growth-commitment')).toHaveTextContent('3-month minimum commitment')
   })
 
   /**

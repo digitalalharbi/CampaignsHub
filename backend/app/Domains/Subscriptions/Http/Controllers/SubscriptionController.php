@@ -21,7 +21,7 @@ use Illuminate\Http\Request;
 final class SubscriptionController extends Controller
 {
     /** The metrics surfaced in the usage summary — mirror the plan `limits` keys. */
-    private const METERED = ['projects', 'team_members', 'connections', 'reports_per_month'];
+    private const METERED = ['projects', 'clients', 'team_members', 'connections', 'reports_per_month'];
 
     public function __construct(
         private readonly SubscriptionService $subscriptions,
@@ -33,8 +33,19 @@ final class SubscriptionController extends Controller
     {
         abort_unless($request->user()?->hasPermission('subscriptions.view'), 403);
 
+        /*
+         * A plan sold by conversation is not listed here — LAUNCH-PRICING-001.
+         *
+         * This orders by price, and a `contact_sales` plan publishes none: Enterprise stores 0.00 to
+         * satisfy a NOT NULL column, so it sorted ABOVE Starter and would have been rendered to a
+         * paying customer as the cheapest plan in the catalogue, at zero. Nobody can move themselves
+         * onto it either — there is no price to charge — so listing it offers a button that cannot
+         * work.
+         */
         $plans = SubscriptionPlan::query()
             ->where('is_active', true)
+            ->where('contact_sales', false)
+            ->orderBy('sort_order')
             ->orderBy('price_monthly')
             ->get()
             ->map(fn (SubscriptionPlan $p) => $this->planShape($p));

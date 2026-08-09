@@ -157,6 +157,8 @@ async function openAccount(
   await page.locator('input[type="password"]').last().fill('secret1234')
   await page.getByRole('button', { name: /Continue|التالي/ }).click()
 
+  // The path decides which plans exist, so it is answered first — LAUNCH-PRICING-001.
+  await page.getByTestId('journey-self-service').click()
   await page.getByTestId('plan-starter').click()
   await page.getByRole('button', { name: /Create account|إنشاء حساب/ }).click()
 

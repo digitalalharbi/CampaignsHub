@@ -42,6 +42,20 @@ use Tests\TestCase;
  */
 final class CommercialJourneyTest extends TestCase
 {
+    /**
+     * The introductory fee plus 15% VAT, computed from the plan.
+     *
+     * Written as `10.35` while the fee was 9.00; the owner's marketing pricing made it 8.99, and
+     * 8.99 × 1.15 rounds to 10.34. A money literal in a test is a price somebody has to remember to
+     * edit — and this is the third time in one day that a commercial decision broke one.
+     */
+    private function introPlusVat(string $code = 'growth'): string
+    {
+        $fee = (float) SubscriptionPlan::query()->where('code', $code)->firstOrFail()->trial_fee;
+
+        return number_format(round($fee * 1.15, 2), 2, '.', '');
+    }
+
     use AppliesToRegister;
     use RefreshDatabase;
 
@@ -139,23 +153,26 @@ final class CommercialJourneyTest extends TestCase
         $this->flushSession();
         $this->app['auth']->forgetGuards();
 
-        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
 
         $trialCharge = SubscriptionPayment::query()->where('purpose', 'trial')->firstOrFail();
         $trialInvoice = SubscriptionInvoice::query()->firstOrFail();
 
-        $this->assertSame('9.00', (string) $trialCharge->amount);
+        $this->assertSame(
+            (string) SubscriptionPlan::query()->where('code', 'growth')->firstOrFail()->trial_fee,
+            (string) $trialCharge->amount,
+        );
         $this->assertSame('issued', $trialInvoice->status, 'the document exists before the money does');
-        $this->assertSame('10.35', $trialInvoice->outstanding(), 'the trial fee plus VAT');
+        $this->assertSame($this->introPlusVat(), $trialInvoice->outstanding(), 'the trial fee plus VAT');
         $this->assertSame(0, Tenant::count());
 
         // A repeat press of "pay" resolves to the SAME charge — «منع تكرار الخصم».
-        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
         $this->assertSame(1, SubscriptionPayment::query()->count());
         $this->assertSame(1, SubscriptionInvoice::query()->count());
 
         // ── 5. The verified webhook — the ONLY thing that activates anything ──────────────────
-        $this->webhook($trialCharge, 'paid', 900);
+        $this->webhook($trialCharge, 'paid', (int) round((float) $trialCharge->amount * 100));
 
         $request->refresh();
         $this->assertSame(AccountState::Active, $request->state);

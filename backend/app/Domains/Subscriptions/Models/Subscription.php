@@ -37,7 +37,8 @@ final class Subscription extends Model
     protected $fillable = [
         'tenant_id', 'plan_id', 'status', 'billing_interval', 'unit_amount', 'currency',
         'current_period_start', 'current_period_end', 'trial_ends_at', 'grace_ends_at',
-        'auto_convert_consent_at', 'cancel_at_period_end', 'seats',
+        'auto_convert_consent_at', 'commitment_consent_at', 'commitment_ends_at',
+        'cancel_at_period_end', 'seats',
     ];
 
     /*
@@ -54,6 +55,8 @@ final class Subscription extends Model
         'trial_ends_at' => 'datetime',
         'grace_ends_at' => 'datetime',
         'auto_convert_consent_at' => 'datetime',
+        'commitment_consent_at' => 'datetime',
+        'commitment_ends_at' => 'datetime',
         'cancel_at_period_end' => 'boolean',
         'unit_amount' => 'decimal:2',
         'seats' => 'integer',

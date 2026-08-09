@@ -114,6 +114,21 @@ final class SubscriptionLifecycle
         $interval = (string) ($request->billing_interval ?? 'monthly');
         $trialEnds = Carbon::now()->addDays(max(1, $plan->trial_days));
 
+        /*
+         * The commitment is fixed HERE, from the plan as it stood when they paid — SUB-COMMIT-001.
+         *
+         * Stored on the subscription rather than read from the catalogue for the same reason
+         * `unit_amount` is: an owner shortening or lengthening the offer next month must not move a
+         * commitment somebody has already agreed to. It is a term of their contract, not a property
+         * of the current price list.
+         *
+         * Measured from the day the money was taken, so «three months» means three months of service
+         * and not «until the third renewal», which would be two months and a day for anybody who
+         * signed up late in a period.
+         */
+        $commitmentMonths = $plan->commitmentMonthsFor($interval);
+        $commitmentEnds = $commitmentMonths > 0 ? Carbon::now()->addMonths($commitmentMonths) : null;
+
         $subscription = $this->subscriptions->assignPlan(
             $tenant,
             $plan,
@@ -131,6 +146,17 @@ final class SubscriptionLifecycle
              * a customer disputing a charge will ask.
              */
             'auto_convert_consent_at' => Carbon::now(),
+            'commitment_ends_at' => $commitmentEnds,
+            /*
+             * Consent to the COMMITMENT, carried from the application where it was ticked.
+             *
+             * A different promise from the one above — «you may charge me when the month ends» is not
+             * «I will be here for three of them» — so it is recorded separately and only when the
+             * applicant actually gave it. `SubscriptionCheckout` refuses to open a committed charge
+             * without it, so a null here on a committed subscription would be a bug rather than a
+             * customer who declined.
+             */
+            'commitment_consent_at' => $commitmentMonths > 0 ? $request->commitment_consent_at : null,
             'provider' => $payment->provider,
         ])->save();
 
@@ -139,13 +165,19 @@ final class SubscriptionLifecycle
             'amount' => (string) $payment->amount,
             'currency' => $payment->currency,
             'date' => $trialEnds->toDateString(),
+            'commitment_months' => $commitmentMonths,
+            'commitment_ends' => $commitmentEnds?->toDateString() ?? '',
         ]);
 
         $this->audit->log(
             action: 'subscription.trial.started',
             entityType: Subscription::class,
             entityId: (string) $subscription->getKey(),
-            after: ['plan' => $plan->code, 'interval' => $interval, 'trial_ends_at' => $trialEnds->toIso8601String()],
+            after: [
+                'plan' => $plan->code, 'interval' => $interval,
+                'trial_ends_at' => $trialEnds->toIso8601String(),
+                'commitment_ends_at' => $commitmentEnds?->toIso8601String(),
+            ],
             tenantId: (string) $tenant->getKey(),
         );
 
@@ -272,7 +304,20 @@ final class SubscriptionLifecycle
             ->get();
 
         foreach ($due as $subscription) {
-            if ($subscription->cancel_at_period_end) {
+            /*
+             * A cancellation requested inside a minimum commitment waits for it — SUB-COMMIT-001.
+             *
+             * The request stands: `cancel_at_period_end` is left set, so the moment the commitment is
+             * served this same sweep ends the subscription without anybody asking again. What it does
+             * NOT do is stop the months in between, which are the ones the introductory price was
+             * discounted against.
+             *
+             * The renewal charge is opened as usual, because that is what «the payments agreed inside
+             * the commitment still run» means in practice — and it is opened through the same
+             * `chargeSubscription` every other renewal uses, so it is a real charge with a real
+             * webhook and not a special case that quietly bypasses verification.
+             */
+            if ($subscription->cancel_at_period_end && ! $this->withinCommitment($subscription)) {
                 $this->cancel($subscription, 'Cancelled at the customer’s request at the end of the period.');
 
                 continue;
@@ -453,6 +498,33 @@ final class SubscriptionLifecycle
         }
     }
 
+    /**
+     * Is this subscription still inside a minimum commitment it agreed to? — SUB-COMMIT-001.
+     *
+     * Null means there never was one; a past date means one that has been served. Both are «free to
+     * leave», and they are deliberately different states so a customer can be told which.
+     */
+    public function withinCommitment(Subscription $subscription, ?Carbon $at = null): bool
+    {
+        return $subscription->commitment_ends_at !== null
+            && $subscription->commitment_ends_at->isAfter($at ?? Carbon::now());
+    }
+
+    /**
+     * Cancelling — and what a minimum commitment does to it (SUB-COMMIT-001).
+     *
+     * The customer may always ASK. What changes inside a commitment is when the answer takes effect:
+     * the subscription stops renewing at the END OF THE COMMITMENT rather than at the end of the
+     * current period, and the payments already agreed inside it still run. That is the whole of what
+     * the commitment is — without it the introductory price is an arbitrage, taken at 9 and dropped
+     * on day 29, repeatedly.
+     *
+     * Note what it does NOT do. It does not refuse the request, it does not take away service that
+     * has been paid for, and it does not cancel immediately to punish anybody. An immediate
+     * cancellation (`$atPeriodEnd = false`) is still honoured, because that is the platform owner
+     * ending an account, not a customer walking out of a term — and the two must not be the same
+     * button.
+     */
     public function cancel(Subscription $subscription, string $why, bool $atPeriodEnd = false): Subscription
     {
         $subscription->auditReason = $why;

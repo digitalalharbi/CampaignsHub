@@ -21,7 +21,9 @@ function plan(over: Partial<PlatformPlan> = {}): PlatformPlan {
   return {
     id: 'p1', code: 'growth', name: 'Growth', name_ar: 'النمو', price_monthly: '300.00',
     price_annual: '3000.00', currency: 'SAR',
-    is_active: true, is_public: true, features: [], limits: [], subscribers: { active: 2, total: 5 },
+    trial_fee: '0.00', trial_days: 0, minimum_commitment_months: 0,
+    is_active: true, is_public: true, contact_sales: false,
+    features: [], limits: [], subscribers: { active: 2, total: 5 },
     ...over,
   }
 }
@@ -94,9 +96,20 @@ describe('BillingPage', () => {
     fireEvent.click(screen.getByTestId('plan-save-growth'))
 
     // An empty annual field is null, not zero: withdrawn from the term, not sold for nothing.
+    /*
+      The WHOLE commercial state, not the two fields that changed.
+
+      Prices, the offer, the commitment and the caps are one decision — the discount is what the
+      commitment buys — so they travel together, and a `null` cap means unlimited rather than a cap
+      of nothing.
+    */
     await waitFor(() => expect(updatePlan).toHaveBeenCalledWith('p1', {
       price_monthly: '300.00',
       price_annual: null,
+      trial_fee: '0.00',
+      trial_days: 0,
+      minimum_commitment_months: 0,
+      limits: { projects: null, clients: null, connections: null, team_members: null, reports_per_month: null },
       features: { campaign_tracking: false, reports: false, ai_assist: false, white_label: false },
       reason: 'Withdrawn from the annual term for Q4.',
     }))
@@ -120,16 +133,59 @@ describe('BillingPage', () => {
     expect(vi.mocked(updatePlan).mock.calls[0][1].features).toMatchObject({ campaign_tracking: true, reports: true })
   })
 
-  it('toggles a plan’s availability', async () => {
+  /**
+   * Three availability axes, and they are genuinely three questions — LAUNCH-PRICING-001.
+   *
+   * ACTIVE is «does this plan work at all». PUBLIC is «is it offered at signup» — Enterprise is
+   * active and not public, which is how a plan is real and held back. CONTACT SALES is «does it
+   * publish a price», which is what stops its 0.00 being read as free.
+   *
+   * Asserted one by one because collapsing them would be the bug: a single switch would mean
+   * withdrawing a plan from signup also stopped it working for everyone already on it.
+   */
+  it('toggles each of a plan’s three availability axes on its own', async () => {
     // Built from the same factory as every other fixture — a hand-written partial drifted out of
     // shape and nothing caught it, because the typecheck was running against no files at all.
     vi.mocked(updatePlan).mockResolvedValue({ plan: plan({ is_active: false }) })
     renderWithProviders(<BillingPage />, { route: '/admin/billing', locale: 'en' })
 
     await waitFor(() => expect(screen.getByTestId('plan-growth')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('switch'))
 
+    fireEvent.click(screen.getByLabelText('Active'))
     await waitFor(() => expect(updatePlan).toHaveBeenCalledWith('p1', { is_active: false }))
+
+    fireEvent.click(screen.getByLabelText('Offered at signup'))
+    await waitFor(() => expect(updatePlan).toHaveBeenCalledWith('p1', { is_public: false }))
+
+    fireEvent.click(screen.getByLabelText('Sold by conversation'))
+    await waitFor(() => expect(updatePlan).toHaveBeenCalledWith('p1', { contact_sales: true }))
+  })
+
+  /**
+   * The offer, the commitment and the caps are editable here — the owner's decision of 2026-08-09.
+   *
+   * «All prices, limits, the offer and the commitment manageable from /admin» was true of the two
+   * prices and of nothing else: the introductory month, the commitment behind it and every cap the
+   * backend enforces were seeder literals, so changing one was a deploy.
+   */
+  it('edits the introductory offer, the commitment and the caps', async () => {
+    vi.mocked(updatePlan).mockResolvedValue({ plan: plan() })
+    renderWithProviders(<BillingPage />, { route: '/admin/billing', locale: 'en' })
+
+    await waitFor(() => expect(screen.getByTestId('plan-intro-fee-growth')).toBeInTheDocument())
+
+    fireEvent.change(screen.getByTestId('plan-intro-fee-growth'), { target: { value: '9.00' } })
+    fireEvent.change(screen.getByTestId('plan-intro-days-growth'), { target: { value: '30' } })
+    fireEvent.change(screen.getByTestId('plan-commitment-growth'), { target: { value: '3' } })
+    fireEvent.change(screen.getByTestId('plan-limit-growth-clients'), { target: { value: '5' } })
+    fireEvent.change(screen.getByTestId('plan-reason-growth'), { target: { value: 'Launch offer on Growth.' } })
+    fireEvent.click(screen.getByTestId('plan-save-growth'))
+
+    await waitFor(() => expect(updatePlan).toHaveBeenCalled())
+    const body = vi.mocked(updatePlan).mock.calls[0][1]
+    expect(body).toMatchObject({ trial_fee: '9.00', trial_days: 30, minimum_commitment_months: 3 })
+    // The cap that was typed is a number; the ones left blank stay unlimited.
+    expect(body.limits).toMatchObject({ clients: 5, projects: null })
   })
 
   /**

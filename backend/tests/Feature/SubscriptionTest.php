@@ -158,9 +158,9 @@ final class SubscriptionTest extends TestCase
         $this->assertSame($this->tenant->id, $sub->tenant_id);
 
         // Moving to another plan updates the SAME row (one subscription per tenant).
-        $this->service()->assignPlan($this->tenant, $this->plan('scale'));
+        $this->service()->assignPlan($this->tenant, $this->plan('agency'));
         $this->assertSame(1, Subscription::query()->where('tenant_id', $this->tenant->id)->count());
-        $this->assertSame('scale', $this->service()->currentPlan($this->tenant)->code);
+        $this->assertSame('agency', $this->service()->currentPlan($this->tenant)->code);
     }
 
     public function test_within_limit_is_true_under_the_cap_and_false_at_the_cap(): void
@@ -211,7 +211,7 @@ final class SubscriptionTest extends TestCase
         $this->assertSame(23, $this->service()->remaining($this->tenant, 'projects'));
 
         // On scale, projects is unlimited (null cap) → remaining is null.
-        $this->service()->assignPlan($this->tenant, $this->plan('scale'));
+        $this->service()->assignPlan($this->tenant, $this->plan('agency'));
         $this->assertNull($this->service()->remaining($this->tenant, 'projects'));
         $this->assertTrue($this->service()->withinLimit($this->tenant, 'projects'));
     }
@@ -238,7 +238,7 @@ final class SubscriptionTest extends TestCase
     {
         // No subscription assigned.
         $this->assertNull($this->service()->subscriptionFor($this->tenant));
-        $this->assertSame('scale', $this->service()->currentPlan($this->tenant)->code);
+        $this->assertSame('agency', $this->service()->currentPlan($this->tenant)->code);
 
         // Even after usage, an unlimited default never blocks.
         $this->makeProjects(5);
@@ -271,7 +271,7 @@ final class SubscriptionTest extends TestCase
         $this->actingAs($user, 'sanctum')->getJson('/api/v1/subscriptions/plans')
             ->assertOk()
             ->assertJsonPath('data.0.code', 'starter')
-            ->assertJsonPath('data.2.code', 'scale');
+            ->assertJsonPath('data.2.code', 'agency');
     }
 
     public function test_current_endpoint_reports_usage_and_default_plan_flag(): void
@@ -282,7 +282,7 @@ final class SubscriptionTest extends TestCase
         $this->actingAs($user, 'sanctum')->getJson('/api/v1/subscriptions/current')
             ->assertOk()
             ->assertJsonPath('data.is_default_plan', true)
-            ->assertJsonPath('data.plan.code', 'scale')
+            ->assertJsonPath('data.plan.code', 'agency')
             ->assertJsonPath('data.usage.projects.used', 0);
     }
 

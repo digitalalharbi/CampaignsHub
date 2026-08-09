@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Subscriptions\Services;
 
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
@@ -73,7 +74,9 @@ final class PlanCatalogue
      * @return array{
      *     plan_code: string, currency: string, interval: string,
      *     due_now: string, due_later: string|null, renews_in_days: int,
-     *     trial_days: int, trial_fee: string|null
+     *     trial_days: int, trial_fee: string|null,
+     *     regular_monthly: string, commitment_months: int, total_committed: string|null,
+     *     remaining_committed_payments: int, next_payment_on: string
      * }|null
      */
     public function quote(SubscriptionPlan $plan, string $interval): ?array
@@ -109,6 +112,33 @@ final class PlanCatalogue
             'renews_in_days' => $intro ? $plan->trial_days : ($interval === 'annual' ? 365 : 30),
             'trial_days' => $intro ? $plan->trial_days : 0,
             'trial_fee' => $intro ? (string) $plan->trial_fee : null,
+
+            /*
+             * Everything the customer has to agree to before paying — SUB-CONSENT-001.
+             *
+             * The figures were all derivable from the four above, and «derivable» is the problem: an
+             * offer of «9 now, then 149 a month, minimum three months» asks somebody to do arithmetic
+             * in their head at the exact moment they are being asked for a card. So the quote states
+             * the answers — the regular price, the commitment, the date of the next charge, and the
+             * total the commitment actually costs — and the interface shows them rather than
+             * computing its own, because two implementations of the same sum eventually disagree.
+             */
+            'regular_monthly' => (string) $plan->price_monthly,
+            'commitment_months' => $plan->commitmentMonthsFor($interval),
+            'total_committed' => $plan->totalCommittedFor($interval),
+            /*
+             * How many charges are still to come inside the commitment, AFTER today's.
+             *
+             * «3 months» and «total 107.00» both describe the whole term; neither answers «how many
+             * more times will this card be charged before I am free to stop?», which is the question
+             * somebody actually has at the moment of paying. Today's payment is excluded because it
+             * is the one they are authorising right now and is stated on its own line.
+             */
+            'remaining_committed_payments' => max(0, $plan->commitmentMonthsFor($interval) - 1),
+            // The day money moves again, as a date rather than as «in 30 days».
+            'next_payment_on' => Carbon::now()
+                ->addDays($intro ? $plan->trial_days : ($interval === 'annual' ? 365 : 30))
+                ->toDateString(),
         ];
     }
 
@@ -131,6 +161,10 @@ final class PlanCatalogue
                 'price_annual' => $plan->price_annual === null ? null : (string) $plan->price_annual,
                 'trial_days' => $plan->trial_days,
                 'trial_fee' => (string) $plan->trial_fee,
+                // The offer and what stands behind it travel together — SUB-COMMIT-001.
+                'minimum_commitment_months' => $plan->minimum_commitment_months,
+                // Sold by conversation: no published price, and nothing checks out on it.
+                'contact_sales' => $plan->contact_sales,
                 'features' => $plan->features,
                 'limits' => $plan->limits,
                 'trial_limits' => $plan->trial_limits,

@@ -187,7 +187,7 @@ trait AppliesToRegister
             'services.moyasar.webhook_token' => 'shared-secret',
         ]);
 
-        $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
 
         $payment = SubscriptionPayment::query()
             ->where('registration_request_id', $registration->getKey())

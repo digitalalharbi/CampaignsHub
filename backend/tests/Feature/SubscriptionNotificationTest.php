@@ -73,13 +73,13 @@ final class SubscriptionNotificationTest extends TestCase
 
         $this->verifyMobileFor($request);
 
-        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout")->assertOk();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
 
         $payment = SubscriptionPayment::query()->where('registration_request_id', $request->getKey())->firstOrFail();
 
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_'.$payment->getKey(), 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
-            'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => 900, 'currency' => 'SAR',
+            'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => (int) round((float) $payment->amount * 100), 'currency' => $payment->currency,
                 'metadata' => ['reference' => $payment->idempotency_key]],
         ])->assertOk();
 

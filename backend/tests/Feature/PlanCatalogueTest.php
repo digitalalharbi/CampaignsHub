@@ -54,7 +54,7 @@ final class PlanCatalogueTest extends TestCase
         $res = $this->getJson('/api/v1/plans')->assertOk();
 
         $codes = array_column((array) $res->json('data.plans'), 'code');
-        $this->assertSame(['starter', 'growth', 'scale'], $codes, 'ordered by the catalogue, not by id');
+        $this->assertSame(['starter', 'growth', 'agency'], $codes, 'ordered by the catalogue, not by id');
 
         /*
          * Both terms are published, because both are sold — read from the catalogue rather than

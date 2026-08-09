@@ -15,7 +15,20 @@ import { aFreshSaudiNumber, signIn, switchToEnglish } from './helpers'
  */
 test.use({ storageState: { cookies: [], origins: [] } })
 
-async function registerAndVerify(page: import('@playwright/test').Page, email: string, workspace: string) {
+/**
+ * Walk the whole gated registration for a given KIND OF ACCOUNT.
+ *
+ * The path is what decides the account type now — LAUNCH-PRICING-001. «كيف تريد البدء؟» is asked of
+ * everyone, its answer is submitted with the application, and onboarding therefore no longer asks
+ * for the account type or the service a second time: it opens at the workspace step with both
+ * already answered. So the caller names the path it wants, and the plan that path is actually sold.
+ */
+async function registerAndVerify(
+  page: import('@playwright/test').Page,
+  email: string,
+  workspace: string,
+  opts: { journey: 'self-service' | 'multi-client'; plan: string; selfType?: 'brand' | 'in_house_team' },
+) {
   await page.goto('/register')
   await switchToEnglish(page)
   await page.getByLabel(/Organization name|اسم المؤسسة/).fill(workspace)
@@ -32,7 +45,18 @@ async function registerAndVerify(page: import('@playwright/test').Page, email: s
    */
   await page.getByRole('button', { name: /Continue|التالي/ }).click()
   await expect(page.getByTestId('register-panel-plan')).toBeVisible()
-  await page.getByTestId('plan-starter').click()
+  /*
+   * The path is answered before a plan exists to choose — LAUNCH-PRICING-001.
+   *
+   * Plans differ BY path now: «for my clients» is sold Agency alone. So the catalogue is not
+   * rendered until the question above it has an answer, and this walk answers it.
+   */
+  await page.getByTestId(`journey-${opts.journey}`).click()
+  // The self-managed path asks which kind of self-managed account; the agency path does not.
+  if (opts.selfType !== undefined) {
+    await page.getByLabel(/Account type|نوع الحساب/).selectOption(opts.selfType)
+  }
+  await page.getByTestId(`plan-${opts.plan}`).click()
   await page.getByRole('button', { name: /Create account|إنشاء حساب/ }).click()
 
   /*
@@ -113,10 +137,18 @@ async function payThroughSandbox(page: import('@playwright/test').Page) {
 
 test('personal (agency) account: register → onboard → full menu', async ({ page }, testInfo) => {
   const tag = `${testInfo.project.name}-${Date.now()}`
-  await registerAndVerify(page, `agency.${tag}@example.com`.toLowerCase(), `Agency ${tag}`)
+  /*
+   * «I run campaigns for several clients» — which IS the agency account type, and is sold Agency.
+   *
+   * The wizard's account-type and service steps are not walked any more: both were answered at
+   * signup, so onboarding opens at the workspace step with them already filled. Clicking «Agency»
+   * here would be asking the same question twice, which is the incoherence LAUNCH-PRICING-001
+   * removed.
+   */
+  await registerAndVerify(page, `agency.${tag}@example.com`.toLowerCase(), `Agency ${tag}`, {
+    journey: 'multi-client', plan: 'agency',
+  })
 
-  await page.getByRole('button', { name: /^Agency$|^وكالة$/ }).click()
-  await page.getByRole('button', { name: /Paid advertising management|الحملات الإعلانية المدفوعة/ }).click()
   await page.getByLabel(/Workspace name|اسم مساحة العمل/).fill('My Agency')
   await page.getByRole('button', { name: /Continue|متابعة/ }).click()
   await page.getByLabel(/Client name|اسم العميل/).fill('First Client')
@@ -137,10 +169,11 @@ test('personal (agency) account: register → onboard → full menu', async ({ p
 
 test('company (brand) account: register → onboard → simplified menu, no agency tools', async ({ page }, testInfo) => {
   const tag = `${testInfo.project.name}-${Date.now()}`
-  await registerAndVerify(page, `brand.${tag}@example.com`.toLowerCase(), `Brand ${tag}`)
+  // A brand runs its own campaigns, so it is the self-managed path with «Brand» as the account type.
+  await registerAndVerify(page, `brand.${tag}@example.com`.toLowerCase(), `Brand ${tag}`, {
+    journey: 'self-service', plan: 'starter', selfType: 'brand',
+  })
 
-  await page.getByRole('button', { name: /^Brand$|^علامة تجارية$/ }).click()
-  await page.getByRole('button', { name: /Paid advertising management|الحملات الإعلانية المدفوعة/ }).click()
   await page.getByLabel(/Workspace name|اسم مساحة العمل/).fill('BrandCo')
   await page.getByRole('button', { name: /Continue|متابعة/ }).click()
   // Company skips the client step → straight to first project.
@@ -176,6 +209,7 @@ test('the plan step reads the catalogue and quotes both terms before payment', a
   await page.locator('input[type="password"]').first().fill('secret1234')
   await page.locator('input[type="password"]').last().fill('secret1234')
   await page.getByRole('button', { name: /Continue|التالي/ }).click()
+  await page.getByTestId('journey-self-service').click()
 
   /*
    * Nothing on sale is free (PLAN-PAID-001) — «البداية» included — and every plan opens with a paid
@@ -242,9 +276,77 @@ test('an invalid password is caught on the account step, not beside the price li
 
   await expect(page.getByTestId('register-panel-plan')).toBeVisible()
   await expect(page.getByTestId('error-summary')).toHaveCount(0)
+  await page.getByTestId('journey-self-service').click()
 
   // Going back keeps everything, secrets included.
   await page.getByTestId('register-back').click()
   await expect(page.getByLabel(/Email|البريد/)).toHaveValue(`weak.${tag}@example.com`.toLowerCase())
   await expect(page.locator('input[type="password"]').first()).toHaveValue('secret1234')
+})
+
+/**
+ * **The path decides the plans, and the plans are priced in USD** — LAUNCH-PRICING-001.
+ *
+ * The incoherence this closes was on screen: both paths were shown the same three plans, with
+ * Growth and Agency describing themselves in terms of agencies even to somebody who had just said
+ * they run their own campaigns. A price list that does not change when the question changes is not a
+ * choice; it is a table somebody has to interpret.
+ *
+ * Asserted live rather than in a unit test because every part of it is a rendering decision made
+ * from server data: which plans the catalogue returns, which the path admits, and what currency the
+ * figures carry. The currency especially — SUB-USD-001 is the claim that a NEW customer never sees
+ * SAR anywhere in a CampaignsHub subscription price, and only a real page can prove that.
+ */
+test('the signup path decides which plans exist, and every price is USD', async ({ page }, testInfo) => {
+  const tag = `${testInfo.project.name}-${Date.now()}`
+
+  await page.goto('/register')
+  await switchToEnglish(page)
+  await page.getByLabel(/Organization name|اسم المؤسسة/).fill(`Paths ${tag}`)
+  await page.getByLabel(/Full name|الاسم الكامل/).fill('Path Picker')
+  await page.getByLabel(/Email|البريد/).fill(`paths.${tag}@example.com`.toLowerCase())
+  await page.getByTestId('phone').fill(aFreshSaudiNumber())
+  await page.locator('input[type="password"]').first().fill('secret1234')
+  await page.locator('input[type="password"]').last().fill('secret1234')
+  await page.getByRole('button', { name: /Continue|التالي/ }).click()
+
+  // No path, no price list — three plans for two different products is the thing being removed.
+  await expect(page.getByTestId('register-journey-required')).toBeVisible()
+  await expect(page.getByTestId('plan-starter')).toHaveCount(0)
+  await expect(page.getByTestId('plan-agency')).toHaveCount(0)
+
+  // «I run my own campaigns» — Starter and Growth, and never Agency.
+  await page.getByTestId('journey-self-service').click()
+  await expect(page.getByTestId('plan-starter')).toBeVisible()
+  await expect(page.getByTestId('plan-growth')).toBeVisible()
+  await expect(page.getByTestId('plan-agency')).toHaveCount(0)
+  // Growth is the recommended one, and it is the only plan carrying the introductory offer.
+  await expect(page.getByTestId('plan-growth-recommended')).toBeVisible()
+  await expect(page.getByTestId('plan-growth-commitment')).toBeVisible()
+  await expect(page.getByTestId('plan-starter-intro')).toHaveCount(0)
+
+  // «I run campaigns for several clients» — Agency alone. Growth does not carry agency work.
+  await page.getByTestId('journey-multi-client').click()
+  await expect(page.getByTestId('plan-agency')).toBeVisible()
+  await expect(page.getByTestId('plan-starter')).toHaveCount(0)
+  await expect(page.getByTestId('plan-growth')).toHaveCount(0)
+
+  /*
+   * Every figure on this step is USD — SUB-USD-001.
+   *
+   * Read from the rendered card rather than from the API, because the defect this guards against was
+   * a page showing SAR while the catalogue said USD. And asserted as «no SAR» as well as «USD», so a
+   * card that showed both would not pass.
+   */
+  await page.getByTestId('journey-self-service').click()
+  for (const code of ['starter', 'growth']) {
+    await expect(page.getByTestId(`plan-${code}`)).toContainText('USD')
+    await expect(page.getByTestId(`plan-${code}`)).not.toContainText('SAR')
+  }
+
+  // The whole comparison is one press away, and it reads from the same catalogue.
+  await page.getByTestId('plan-compare-open').click()
+  await expect(page.getByTestId('plan-comparison')).toBeVisible()
+  await expect(page.getByTestId('compare-clients-starter')).toBeVisible()
+  await expect(page.getByTestId('compare-clients-growth')).toBeVisible()
 })

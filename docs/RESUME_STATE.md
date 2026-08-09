@@ -10,60 +10,126 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ UNCOMMITTED WORK IN THE TREE — read before anything else (2026-08-09, late)
+## Session — LAUNCH PRICING, plan fit, limits and the signup fit (2026-08-09, late)
 
-The tree holds a **finished** unit and a **half-finished** one. Nothing is committed. The last green
-gate is `0179ec7`; everything below is on top of it.
+Everything below is **done and verified**. The five-item punch list this file carried at `48723d4`
+is closed; each item is named with what closed it.
 
-### Finished and verified (needs only tests re-run + gate)
+### The commercial shape, as sold today
 
-- **SUB-USD-001** — `config/subscriptions.currency` USD (it defaulted to SAR and is the fallback for
-  every renewal, reactivation, proration and notification). `config/billing.currency` stays SAR.
-  Walked live on a new account: signup → plan → checkout → billing, zero SAR.
-- **SUB-COMMIT-001** — `minimum_commitment_months` on the plan, `commitment_ends_at` on the
-  subscription, fixed from the plan as it stood when they paid. `chargeDueRenewals` keeps a
-  cancellation pending and keeps charging until the commitment is served, then honours it.
-  `MinimumCommitmentTest` (10) passed.
-- **SUB-CONSENT-001** — the quote carries `regular_monthly`, `commitment_months`, `total_committed`,
-  `next_payment_on`; `CommitmentDisclosure` shows six facts and gates the Pay button; the server
-  refuses **422** without the agreement. Found live: it answered 500 first, because the service threw
-  and the handler rendered a crash.
-
-### LAUNCH PRICING — applied to the catalogue, NOT finished in the product
-
-| plan | monthly | annual | intro | commit | projects/clients/conns/team/reports |
+| plan | monthly | annual | intro | commitment | projects/clients/conns/team/reports |
 |---|---|---|---|---|---|
 | starter | $19 | $190 | — | — | 3 / 1 / 3 / 3 / 10 |
-| growth **(recommended)** | $49 | $490 | $9 for 30d | 3 months | 25 / 5 / 25 / 15 / 100 |
+| growth **(recommended)** | $49 | $490 | $9 for 30 days | 3 months | 25 / 5 / 25 / 15 / 100 |
 | agency *(was `scale`)* | $99 | $990 | — | — | ∞ |
-| enterprise | contact sales | — | — | — | ∞ |
+| enterprise | by conversation | — | — | — | ∞ |
 
-`scale` → `agency` was checked before renaming: `tenants.subscription_plan` is only displayed or
-grouped, never compared to a literal, and plan codes share no namespace with `account_type` or the
-portals. The migration carries tenants, registrations and payments.
+Subscriptions are **USD**. Advertising dashboards, analytics and reports stay **SAR** — one decision,
+two currencies, and nothing here touches the second.
 
-`enterprise` uses a real `contact_sales` column rather than a 0.00 price, because 0.00 already means
-FREE here and «there is no free tier» is a rule with a test behind it.
+**Enterprise is internal.** `is_active: true`, `contact_sales: true`, `is_public: false`. It is real,
+editable in `/admin`, and absent from signup — and `isOffered()` refuses it at checkout too, so
+typing the code into a URL reaches nothing. Verified live on `/admin/billing`: Active on, «معروضة في
+التسجيل» off, «بالتواصل مع المبيعات» on.
 
-### THE PUNCH LIST — what is NOT done
+### The punch list at `48723d4`, item by item
 
-1. **The Enterprise card is not rendered.** `contactPlans()` exists in `planFit.ts` and nothing calls it.
-2. **The `clients` cap is published but NOT ENFORCED.** No `EnsureWithinPlanLimit` mount on the
-   client-workspace create route, and `SubscriptionService::usage()` does not count client
-   workspaces. Today it is exactly the «promise nobody is keeping» this file warns about — fix it the
-   way PAY-AUDIT-001 did: count the rows, wire the middleware, test through HTTP.
-3. **Tests are stale** against Launch Pricing and the rename. They were green at the PREVIOUS prices
-   (26.99/79.99/129.99). Expect the same class of failure as before: money literals, and webhook
-   amounts in minor units that no longer match the charge.
-4. **`contact_sales` is not editable from `/admin`.**
-5. **No live re-walk of both journeys since the restructure, and NO GATE RUN.**
+1. **The Enterprise card.** Not rendered — by decision, not omission. The owner's later instruction
+   keeps it internal, so `contactPlans()` was DELETED rather than wired: dead code that looks
+   deliberate is worse than none. `is_public: false` is what enforces it, server-side.
+2. **The `clients` cap.** Now counted (`SubscriptionService::count()`), enforced on
+   `client-workspaces.store` AND `.restore`, and tested through HTTP — 4 new cases. Verified
+   fails-first by stashing the route file alone.
+3. **Stale tests.** Fixed across the suite; the `scale` → `agency` rename reached tests, the demo
+   history seeder and every money literal.
+4. **`contact_sales` in `/admin`.** Editable, audited, and beside the two other availability axes —
+   plus the intro price, the intro length, the commitment and all five caps, which were seeder
+   literals until now.
+5. **The live re-walk and the gate.** Both journeys walked in the browser; the gate result is below.
 
-### On the entitlements list in the brief
+### What else changed, and why
 
-`automation` and `advanced analytics` **do not exist anywhere in the product** and were deliberately
-NOT added to the comparison — the brief itself says not to invent limits. `ai_assist` is the nearest
-real capability and is listed under its own name. `connections` is the ad-account axis. The six ad
-platforms are not gated by plan; only how many connections is capped.
+- **Campaigns are no longer metered.** The mount was removed rather than left inert against an
+  absent cap: a gate that passes only because no plan publishes the limit is one `/admin` edit from
+  becoming a paywall nobody decided on. `PlanLimitEnforcementTest` walks the route table to prove it.
+- **`upgrade_path` names the portal the person is in.** It was `/app/subscriptions` for everyone,
+  which was harmless until the `clients` cap existed — client workspaces are `portal:agency` only,
+  so every clients refusal would have pointed at a portal they were not in.
+- **The signup path is now asked of everyone** and is required before a catalogue appears. It used
+  to appear only for visitors arriving from a homepage card, so anybody landing on `/register`
+  directly saw all three plans — two products in one price list.
+- **AUTH-FIT-001** — fluid `clamp()` sizing across the signup shell, panel, form and plan cards, and
+  `minmax(0,…)` grid tracks so no wide child can force a sideways scroll. Horizontal scroll is zero
+  at 1440×900, 1366×768, 1280×720, 1024×768, 768×1024, 430×932, 390×844 and 375×667.
+
+### Honest limits of the fit work
+
+On the **plan step in English at 1366×768**, the primary CTA still sits ~28px below the fold.
+English wraps more lines than Arabic, and the remaining levers were shrinking text below a readable
+size — which the brief ranks below usability. Arabic fits at every desktop size tested; step 1 fits
+everywhere with no scroll at all.
+
+### Still open — named so nothing looks delivered that is not
+
+1. **The reporting half of the currency decision.** Original vs reporting currency shown together,
+   FX rates stored with date and source. Nothing in analytics changed; only subscriptions moved to
+   USD. No ticket yet.
+2. **«Trial» is the wrong word throughout the domain** — `trial_fee`, `trial_days`, `trial_limits`,
+   `TrialClaim`, `startTrial()`, `purpose: 'trial'`. The user-facing wording is right; the internals
+   still call a paid introductory month a trial.
+3. **Live payment and live OAuth remain `BLOCKED_EXTERNAL_CREDENTIALS`.** No gateway or platform
+   credentials exist in any environment. Everything is proven through the sandbox adapter and faked
+   responses, and nothing is ever reported as «sent» or «connected» without an acknowledgement.
+
+---
+
+## GATE — 2026-08-09, late · **chromium PASS · firefox PASS · webkit FAIL (pre-existing)**
+
+`cd frontend && npm run gate`, on an idle machine, exit code captured on its own line.
+
+```
+PASS  chromium  (exit 0)   287 passed
+PASS  firefox   (exit 0)
+FAIL  webkit    (exit 1)   275 passed · 4 failed
+```
+
+### The four webkit failures are NOT this session's work — proven, not assumed
+
+Every one is `page.goto(...)` timing out `waiting until "load"`, on `/login`, `/app/integrations`
+and `/admin`. The page is blank; the document never finished loading.
+
+**Attribution, by stashing the entire tree** (`git stash -u`, 58 files, back to `48723d4`) and running
+the full webkit project again: it fails **the same four**. So the defect is in the gate's dev-server
+or webkit's loading behaviour, not in Launch Pricing, plan fit, limits or the signup fit.
+
+Two more facts that pin it down:
+
+1. **Each failing test passes on webkit in isolation**, and the four spec files pass on webkit when
+   run as a group of four. Only the full 279-test project reproduces it.
+2. **The fourth failure MOVES between runs** — `rare tools are separated but still reachable` in one
+   run, `the advanced destinations still open` in the next. Both are in the same file and both call
+   `page.goto('/admin')`. So it is positional and timing-dependent: it lands on whichever test
+   navigates to `/admin` at that moment, not on a particular assertion.
+
+### The lead worth following
+
+The three routes that hang — `/login`, `/app/integrations`, `/admin` — are the three that read
+**provider / credential status** on mount (social sign-in availability, ad-platform states, platform
+integration status). If one of those endpoints makes an outbound call that hangs, it blocks a worker
+of the single `php artisan serve` (`PHP_CLI_SERVER_WORKERS=4`); with all four blocked, later requests
+queue and `load` never fires inside the 30s budget. That would explain why it only appears deep into
+a long single-worker run and never in isolation.
+
+**Not fixed here, and not papered over.** No retry was added, no timeout raised, no test weakened.
+It is a real, reproducible, pre-existing defect and it is the one thing standing between this tree
+and a green three-browser gate.
+
+### Everything else this session ran clean
+
+Backend **1802 passed** (10440 assertions) · Frontend **950 passed** (129 files) · `tsc`, `oxlint`,
+Pint and `vite build` all clean. The six auth visual baselines were regenerated deliberately: the
+responsive pass changed signup's scale and spacing, and `AuthShell`/`AuthPanel` are shared with
+`/login` and `/forgot-password`.
 
 ---
 

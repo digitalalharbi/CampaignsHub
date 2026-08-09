@@ -31,20 +31,24 @@ function parseJourney(raw: string | null): Journey | null {
 /** Bilingual copy for the journey panel — kept local so the shared i18n dictionary is untouched. */
 const JOURNEY_COPY = {
   ar: {
-    heading: 'مسارك المختار',
-    editable: 'يمكنك تعديله قبل المتابعة.',
+    heading: 'كيف تريد البدء؟',
+    editable: 'اختر ما يناسب احتياجك، وسنجهّز لك تجربة CampaignsHub المناسبة مباشرة.',
     selfManaged: 'أدير حملاتي بنفسي',
-    agency: 'أدير حملات عدة عملاء',
+    selfManagedDesc: 'حساب واحد يجمع حملاتك ومنصاتك وميزانياتك وتقاريرك في مكان واحد.',
+    agency: 'أدير حملات لعدة عملاء',
+    agencyDesc: 'نظّم عملاءك ومشاريعك وحملاتك، وتابع أداء كل عميل بشكل مستقل.',
     accountTypeLabel: 'نوع الحساب',
     accountTypes: { freelancer: 'مستقل', brand: 'علامة تجارية', in_house_team: 'فريق تسويق داخلي' } as Record<SelfAccountType, string>,
     agencyType: 'حساب وكالة',
     agencySummary: 'إدارة العملاء والطلبات مفعّلة لمساحة الوكالة.',
   },
   en: {
-    heading: 'Your selected path',
-    editable: 'You can adjust it before continuing.',
+    heading: 'How would you like to start?',
+    editable: 'Pick what matches your work, and we will set CampaignsHub up to suit it.',
     selfManaged: 'I run my own campaigns',
-    agency: "I manage several clients' campaigns",
+    selfManagedDesc: 'One account holding your campaigns, platforms, budgets and reports together.',
+    agency: 'I run campaigns for several clients',
+    agencyDesc: 'Organise your clients, projects and campaigns, and follow each client separately.',
     accountTypeLabel: 'Account type',
     accountTypes: { freelancer: 'Freelancer', brand: 'Brand', in_house_team: 'In-house team' } as Record<SelfAccountType, string>,
     agencyType: 'Agency account',
@@ -62,6 +66,7 @@ const REG_COPY = {
     next: 'التالي',
     back: 'رجوع',
     planRequired: 'اختر باقة للمتابعة.',
+    journeyRequired: 'اختر أولًا كيف ستستخدم CampaignsHub من الأعلى، لتظهر لك الباقات المناسبة.',
     planNote: 'يبدأ الاشتراك بعد تأكيد الدفع. لن تُفعّل مساحة العمل قبل ذلك.',
     fixAccount: 'يرجى تصحيح بيانات الحساب في الخطوة السابقة.',
     backToAccount: 'العودة إلى بيانات الحساب',
@@ -74,6 +79,7 @@ const REG_COPY = {
     next: 'Continue',
     back: 'Back',
     planRequired: 'Choose a plan to continue.',
+    journeyRequired: 'Choose how you will use CampaignsHub above, and the plans that fit will appear here.',
     planNote: 'Your subscription starts once the payment is confirmed. Nothing is activated before then.',
     fixAccount: 'Please correct your account details on the previous step.',
     backToAccount: 'Back to account details',
@@ -243,44 +249,92 @@ export function RegisterPage() {
     : Object.entries(error?.errors ?? {}).flatMap(([field, msgs]) =>
       msgs?.length && !ACCOUNT_FIELDS.includes(field) ? [{ field, message: msgs[0] }] : [])
 
-  return (
-    <AuthShell portal={journey === 'multi-client' ? 'agency' : 'default'}>
-      <h2 className="font-[var(--font-heading)] text-[22px] font-extrabold text-text-primary">{t('create_account_title')}</h2>
-      <p className="mt-1 text-[14px] text-text-secondary">{t('create_account_subtitle')}</p>
+  /*
+   * The panel follows the journey — PLAN-FIT-001.
+   *
+   * `default` and `agency` carried the SAME body («نظّم العملاء والمشاريع»), so the side of the page
+   * said the same thing on both paths while the toggle above promised two different products. The
+   * self-service path has its own now: my campaigns, my data, my reports — and no clients.
+   */
+  const panelPortal = journey === 'multi-client' ? 'agency' : journey === 'self-service' ? 'advertiser' : 'default'
 
-      {/* Journey preset — only when arriving from a decision-section card. Editable, not a forced re-pick. */}
-      {journey && (
-        <section data-testid="register-journey" className="mt-3 rounded-2xl border border-border bg-surface-secondary p-2.5" aria-label={jc.heading}>
-          <div className="flex items-center justify-between">
+  return (
+    <AuthShell portal={panelPortal}>
+      {/*
+        Fluid rather than fixed — AUTH-FIT-001.
+
+        The floor is the size a 1024px laptop gets, not a size chosen to make the form fit: the goal
+        is a compact page, and a page whose text has been shrunk until it is hard to read is not
+        compact, it is small.
+      */}
+      <h2 className="font-[var(--font-heading)] text-[clamp(1.1875rem,1.5vw,1.375rem)] font-extrabold text-text-primary">{t('create_account_title')}</h2>
+      <p className="mt-1 text-[clamp(0.8125rem,0.95vw,0.875rem)] text-text-secondary">{t('create_account_subtitle')}</p>
+
+      {/*
+        Always asked — LAUNCH-PRICING-001.
+
+        This used to appear only when the visitor arrived from a homepage decision card, so anybody
+        landing on `/register` directly reached the plan step with no path at all and was shown the
+        whole catalogue: Starter beside Agency, three plans for two different products. The path is
+        not decoration on the way in, it is the question that decides which portal opens and which
+        plans exist — so it is asked here, of everyone, and preset when we already know the answer.
+      */}
+      {(
+        <section data-testid="register-journey" className="mt-[clamp(0.5rem,1.4vh,0.75rem)] rounded-2xl border border-border bg-surface-secondary p-[clamp(0.4375rem,0.9vh,0.625rem)]" aria-label={jc.heading}>
+          {/*
+            Stacked, not opposed — AUTH-FIT-001.
+
+            These sat at either end of one row, which worked while the heading was two words and the
+            note was four. Both are sentences now, so on a narrow column the two spans met in the
+            middle and overlapped. A heading with its own subtitle beneath it is what this always
+            was; the row was only ever hiding that.
+          */}
+          <div className="flex flex-col gap-0.5">
             <span className="text-sm font-bold text-text-primary">{jc.heading}</span>
-            <span className="text-xs text-text-muted">{jc.editable}</span>
+            <span className="text-xs leading-snug text-text-muted">{jc.editable}</span>
           </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {/*
+            The two answers, each with the sentence that tells them apart.
+
+            The labels alone («لحملاتي وأعمالي» / «لعملائي») are short enough to be misread as the
+            same question asked twice; the line beneath each is what makes the choice a real one, and
+            it is the difference the rest of the signup then follows — which portal opens, and which
+            plans are offered.
+          */}
+          <div className="mt-[clamp(0.5rem,1.4vh,0.75rem)] grid gap-[clamp(0.375rem,0.9vh,0.5rem)] sm:grid-cols-2">
             {([
-              { key: 'self-service' as const, label: jc.selfManaged, Icon: LayoutDashboard },
-              { key: 'multi-client' as const, label: jc.agency, Icon: Users },
-            ]).map(({ key, label, Icon }) => {
+              { key: 'self-service' as const, label: jc.selfManaged, desc: jc.selfManagedDesc, Icon: LayoutDashboard },
+              { key: 'multi-client' as const, label: jc.agency, desc: jc.agencyDesc, Icon: Users },
+            ]).map(({ key, label, desc, Icon }) => {
               const on = journey === key
               return (
                 <button
-                  key={key} type="button" onClick={() => pickJourney(key)} aria-pressed={on}
-                  className={`flex items-center gap-2.5 rounded-xl border px-3.5 py-3 text-start text-sm font-semibold transition-colors ${on ? 'border-brand-500 bg-brand-primary-soft text-brand-700' : 'border-border bg-surface text-text-secondary hover:border-brand-400'}`}
+                  key={key} type="button" data-testid={`journey-${key}`} onClick={() => pickJourney(key)} aria-pressed={on}
+                  className={`flex min-w-0 items-start gap-2.5 rounded-xl border px-3 py-[clamp(0.4375rem,0.95vh,0.6875rem)] text-start transition-colors ${on ? 'border-brand-500 bg-brand-primary-soft' : 'border-border bg-surface hover:border-brand-400'}`}
                 >
-                  <Icon size={17} className="shrink-0" /> <span className="min-w-0 flex-1">{label}</span>
-                  {on && <Check size={16} className="shrink-0 text-brand-600" />}
+                  <Icon size={17} className={`mt-0.5 shrink-0 ${on ? 'text-brand-700' : 'text-text-secondary'}`} />
+                  <span className="min-w-0 flex-1">
+                    <span className={`flex items-center gap-1.5 text-[13px] font-semibold leading-snug ${on ? 'text-brand-700' : 'text-text-primary'}`}>
+                      {label}
+                      {on && <Check size={15} className="shrink-0 text-brand-600" />}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-[1.35] text-text-muted">{desc}</span>
+                  </span>
                 </button>
               )
             })}
           </div>
 
-          {journey === 'self-service' ? (
+          {/* Nothing chosen yet asks the follow-up of neither path — an account-type select above an
+              unanswered question is a second question nobody was asked. */}
+          {journey === null ? null : journey === 'self-service' ? (
             /* Label beside the control rather than stacked above it: the same question in one row instead
                of three, which is what keeps this page inside a 768px-tall screen. */
-            <div className="mt-3 flex flex-wrap items-center gap-2.5">
+            <div className="mt-[clamp(0.375rem,1vh,0.625rem)] flex flex-wrap items-center gap-2.5">
               <label htmlFor="self-account-type" className="text-sm font-semibold text-text-primary">{jc.accountTypeLabel}</label>
               <select
                 id="self-account-type"
-                className={`${controlClass} h-10 w-auto min-w-[9rem] flex-1 text-sm`}
+                className={`${controlClass} h-[clamp(2.125rem,4.6vh,2.5rem)] w-auto min-w-[9rem] flex-1 text-sm`}
                 value={selfType}
                 onChange={(e) => setSelfType(e.target.value as SelfAccountType)}
               >
@@ -290,7 +344,7 @@ export function RegisterPage() {
               </select>
             </div>
           ) : (
-            <div className="mt-3 flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm">
+            <div className="mt-[clamp(0.375rem,1vh,0.625rem)] flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2 text-sm">
               <Building2 size={17} className="shrink-0 text-brand-600" />
               <span className="font-semibold text-text-primary">{jc.agencyType}</span>
               <span className="text-text-muted">— {jc.agencySummary}</span>
@@ -298,7 +352,7 @@ export function RegisterPage() {
           )}
 
           {preset && (
-            <p className="mt-2 text-xs text-text-muted">
+            <p className="mt-1.5 text-xs leading-snug text-text-muted">
               {rc.moduleLabel}:{' '}
               <span className="font-semibold text-text-secondary">
                 {SERVICE_LABELS[preset.service][ar ? 'ar' : 'en']}
@@ -309,7 +363,7 @@ export function RegisterPage() {
       )}
 
       {/* Where the visitor is, in two words. Two steps do not need a progress bar. */}
-      <ol data-testid="register-steps" className="mt-2 flex items-center gap-2 text-xs font-semibold">
+      <ol data-testid="register-steps" className="mt-[clamp(0.25rem,0.7vh,0.5rem)] flex items-center gap-2 text-xs font-semibold">
         {([1, 2] as const).map((n) => (
           <li key={n} data-testid={`register-step-${n}`} data-current={step === n} className={`flex items-center gap-1.5 ${step === n ? 'text-brand-600' : 'text-text-muted'}`}>
             <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${step === n ? 'bg-brand-600 text-white' : 'bg-surface-secondary'}`}>{n}</span>
@@ -334,7 +388,7 @@ export function RegisterPage() {
         Left on, they also PREEMPT the check below, so a malformed address never reached our rules at
         all. The fields keep `required` for assistive technology; `validateAccountStep` decides.
       */}
-      <form noValidate className="mt-2 space-y-2" onSubmit={(e) => {
+      <form noValidate className="mt-[clamp(0.25rem,0.7vh,0.5rem)] space-y-[clamp(0.3125rem,0.85vh,0.5rem)]" onSubmit={(e) => {
         e.preventDefault()
 
         /*
@@ -391,7 +445,7 @@ export function RegisterPage() {
         */}
         {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={rc.errTitle} />}
 
-        <div className={step === 1 ? 'space-y-3' : 'hidden'} data-testid="register-panel-account">
+        <div className={step === 1 ? 'space-y-[clamp(0.5rem,1.4vh,0.75rem)]' : 'hidden'} data-testid="register-panel-account">
           {/*
             Three rows, not four.
 
@@ -405,7 +459,7 @@ export function RegisterPage() {
             number before activation — is said on the status page, at the moment it happens, which is
             where somebody actually needs to read it.
           */}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-[clamp(0.5rem,1.4vh,0.75rem)] sm:grid-cols-2">
             <TextInput id="tenant_name" label={t('org_name')} value={form.tenant_name} onChange={setDraft('tenant_name')} required error={err('tenant_name')} />
             <PhoneField
               id="phone"
@@ -419,25 +473,45 @@ export function RegisterPage() {
               error={err('phone')}
             />
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-[clamp(0.5rem,1.4vh,0.75rem)] sm:grid-cols-2">
             <TextInput id="name" label={t('full_name')} value={form.name} onChange={setDraft('name')} autoComplete="name" required error={err('name')} />
             <EmailInput id="email" label={t('email')} value={form.email} onChange={setDraft('email')} required error={err('email')} />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-[clamp(0.5rem,1.4vh,0.75rem)] sm:grid-cols-2">
             <PasswordInput id="password" label={t('password')} value={form.password} onChange={setSecretField('password')} autoComplete="new-password" required error={err('password')} showLabel={t('show_password')} hideLabel={t('hide_password')} />
             <PasswordInput id="password_confirmation" label={t('confirm_password')} value={form.password_confirmation} onChange={setSecretField('password_confirmation')} autoComplete="new-password" required showLabel={t('show_password')} hideLabel={t('hide_password')} />
           </div>
         </div>
 
         {step === 2 && (
-          <div data-testid="register-panel-plan" className="space-y-3">
-            <PlanChooser
-              value={planCode}
-              interval={interval}
-              onChange={(code) => { setPlanCode(code); setPlanError(null) }}
-              onIntervalChange={setInterval}
-            />
+          <div data-testid="register-panel-plan" className="space-y-[clamp(0.5rem,1.4vh,0.75rem)]">
+            {/*
+              The plans follow the journey — PLAN-FIT-001.
+
+              Both paths used to be shown all three plans with the same three sentences, so somebody
+              who had just said «I run my own campaigns» was offered a plan whose summary talked
+              about agencies. A price list that does not change when the question changes is not a
+              choice.
+            */}
+            {journey === null ? (
+              /*
+                No path, no price list. The plans differ BY path now — «لعملائي» is sold Agency and
+                nothing else — so a catalogue shown before the question is answered is three plans
+                for two products, which is the incoherence this restructure exists to remove.
+              */
+              <p data-testid="register-journey-required" className="rounded-xl border border-border bg-surface-secondary p-3 text-sm text-text-secondary">
+                {rc.journeyRequired}
+              </p>
+            ) : (
+              <PlanChooser
+                value={planCode}
+                interval={interval}
+                onChange={(code) => { setPlanCode(code); setPlanError(null) }}
+                onIntervalChange={setInterval}
+                journey={journey}
+              />
+            )}
             {planError && (
               <p data-testid="register-plan-error" role="alert" className="text-[13px] font-semibold text-danger">
                 {planError}
@@ -445,7 +519,7 @@ export function RegisterPage() {
             )}
             {/* Said before the payment page, not after it: nothing is activated until the money is
                 confirmed, and the visitor should know that before they choose a term. */}
-            <p className="text-xs text-text-muted">{rc.planNote}</p>
+            <p className="text-xs leading-snug text-text-muted">{rc.planNote}</p>
           </div>
         )}
 
@@ -468,7 +542,7 @@ export function RegisterPage() {
         </div>
       </form>
 
-      <p className="mt-4 text-center text-sm text-text-secondary">
+      <p className="mt-[clamp(0.5rem,1.6vh,1rem)] text-center text-sm text-text-secondary">
         {t('have_account')} <Link to="/login" className="font-semibold text-brand-600 hover:underline">{t('sign_in')}</Link>
       </p>
     </AuthShell>

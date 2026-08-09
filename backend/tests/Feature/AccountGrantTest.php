@@ -216,7 +216,7 @@ final class AccountGrantTest extends TestCase
 
         $created = $this->actingAs($admin, 'sanctum')
             ->postJson("/api/v1/admin/tenants/{$tenant->getKey()}/grants", [
-                'kind' => 'plan', 'value' => 'scale', 'reason' => 'Complimentary for the launch partner.',
+                'kind' => 'plan', 'value' => 'agency', 'reason' => 'Complimentary for the launch partner.',
             ])->assertStatus(201);
 
         $id = $created->json('data.grant.id');

@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Domains\Subscriptions\Http\Middleware;
 
 use App\Domains\Subscriptions\Services\SubscriptionService;
+use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use Closure;
 use Illuminate\Http\Request;
@@ -28,7 +30,27 @@ final class EnsureWithinPlanLimit
     public function __construct(
         private readonly TenantContext $context,
         private readonly SubscriptionService $subscriptions,
+        private readonly MembershipContext $memberships,
     ) {}
+
+    /**
+     * Where to go to lift this cap, IN THE PORTAL THE PERSON IS ACTUALLY IN — LAUNCH-LIMITS-001.
+     *
+     * This returned `/app/subscriptions` for everyone, which was harmless while every capped route
+     * lived in the advertiser portal and became wrong the moment the `clients` cap was enforced:
+     * client workspaces are `portal:agency` only, so EVERY clients refusal pointed the customer at a
+     * portal they were not in. Both portals mount `subscriptionsRoutes`, so the right answer is
+     * simply the one they are standing in.
+     *
+     * Falls back to `/app` rather than guessing, for the same reason the rest of this file
+     * fails open: a refusal that also sends somebody nowhere useful is two failures.
+     */
+    private function upgradePath(): string
+    {
+        return $this->memberships->membership()?->portal === Portal::Agency
+            ? '/agency/subscriptions'
+            : '/app/subscriptions';
+    }
 
     public function handle(Request $request, Closure $next, string $metric): Response
     {
@@ -75,7 +97,7 @@ final class EnsureWithinPlanLimit
                         'used' => $used,
                         'limit' => $limit,
                         // Named so the interface can offer the upgrade rather than inventing a route.
-                        'upgrade_path' => '/app/subscriptions',
+                        'upgrade_path' => $this->upgradePath(),
                     ],
                 ], 403);
             }

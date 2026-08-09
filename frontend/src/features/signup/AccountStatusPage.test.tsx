@@ -10,6 +10,7 @@ vi.mock('@/features/signup/api', async (orig) => {
     ...actual,
     fetchRegistration: vi.fn(),
     fetchPaymentProviders: vi.fn(),
+    fetchQuote: vi.fn(),
     startCheckout: vi.fn(),
     verifyRegistrationEmail: vi.fn(),
     verifyRegistrationMobile: vi.fn(),
@@ -18,7 +19,7 @@ vi.mock('@/features/signup/api', async (orig) => {
 })
 
 import {
-  fetchPaymentProviders, fetchRegistration, resendRegistrationChallenge, startCheckout,
+  fetchPaymentProviders, fetchQuote, fetchRegistration, resendRegistrationChallenge, startCheckout,
   verifyRegistrationEmail, verifyRegistrationMobile,
 } from '@/features/signup/api'
 
@@ -29,7 +30,7 @@ const envelope = (
 ): RegistrationEnvelope => ({
   registration: {
     id: 'reg-1', state, label: `state:${state}`, email: 'applicant@a.test',
-    requested_portal: null, plan_code: null,
+    requested_portal: null, plan_code: null, billing_interval: null, commitment_agreed: false,
     email_verified: state !== 'email_verification_required',
     mobile_verified: false, next_step: null, reason: null, provisioned: state === 'active',
     ...over,
@@ -120,6 +121,52 @@ describe('AccountStatusPage', () => {
   })
 
   /** With a live gateway the button appears and opens a checkout — and still claims nothing. */
+  /**
+   * SUB-CONSENT-001 — a committed offer cannot be paid for until the terms are agreed.
+   *
+   * The disclosure states the six facts the contract asks for, and the Pay button is DISABLED until
+   * the box is ticked. The server refuses a committed charge without the flag, so a button that
+   * could be pressed first would fail after the customer had already tried to pay.
+   */
+  it('states the commitment and refuses to open the charge until it is agreed', async () => {
+    vi.mocked(fetchRegistration).mockResolvedValue(
+      envelope('approved_awaiting_payment', { plan_code: 'growth', billing_interval: 'monthly' }, { requires_payment: true }),
+    )
+    vi.mocked(fetchPaymentProviders).mockResolvedValue({
+      providers: [{ provider: 'moyasar', is_default: true, status: 'live', available: true }],
+    })
+    vi.mocked(fetchQuote).mockResolvedValue({
+      quote: {
+        plan_code: 'growth', currency: 'USD', interval: 'monthly',
+        due_now: '9.00', due_later: '149.00', renews_in_days: 30, trial_days: 30, trial_fee: '9.00',
+        regular_monthly: '149.00', commitment_months: 3, total_committed: '307.00',
+        // Today's is excluded — it has its own line and is the charge being authorised now.
+        remaining_committed_payments: 2,
+        next_payment_on: '2026-09-08',
+      },
+    })
+
+    renderWithProviders(<AccountStatusPage />, { route: '/signup/status?request=reg-1', locale: 'en' })
+
+    const disclosure = await screen.findByTestId('commitment-disclosure')
+    // Every figure the contract asks to be shown before payment.
+    expect(disclosure).toHaveTextContent('9.00 USD')
+    expect(disclosure).toHaveTextContent('149.00 USD')
+    expect(disclosure).toHaveTextContent('3 months')
+    expect(disclosure).toHaveTextContent('2026-09-08')
+    expect(screen.getByTestId('commitment-total')).toHaveTextContent('307.00 USD')
+    // …and what cancelling actually does, which is the part a customer disputes later.
+    expect(disclosure).toHaveTextContent(/cancellation takes effect after the 3-month commitment/i)
+
+    expect(screen.getByTestId('registration-pay')).toBeDisabled()
+
+    fireEvent.click(screen.getByTestId('commitment-agree'))
+    expect(screen.getByTestId('registration-pay')).toBeEnabled()
+
+    fireEvent.click(screen.getByTestId('registration-pay'))
+    await waitFor(() => expect(startCheckout).toHaveBeenCalledWith('reg-1', true))
+  })
+
   it('offers a checkout once a gateway is configured', async () => {
     vi.mocked(fetchRegistration).mockResolvedValue(
       envelope('approved_awaiting_payment', {}, { requires_payment: true }),
@@ -136,7 +183,8 @@ describe('AccountStatusPage', () => {
 
     fireEvent.click(await screen.findByTestId('registration-pay'))
 
-    await waitFor(() => expect(startCheckout).toHaveBeenCalledWith('reg-1'))
+    // A plan with no commitment: nothing to agree to, and the flag is carried as false.
+    await waitFor(() => expect(startCheckout).toHaveBeenCalledWith('reg-1', false))
     // The state does not move: only a webhook can do that.
     expect(screen.getByTestId('registration-status')).toHaveAttribute('data-state', 'approved_awaiting_payment')
   })

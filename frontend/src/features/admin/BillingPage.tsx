@@ -82,7 +82,8 @@ function PlansTab({ ar }: { ar: boolean }) {
   const qc = useQueryClient()
   const plans = useQuery({ queryKey: ['admin', 'plans'], queryFn: fetchPlans })
   const toggle = useMutation({
-    mutationFn: ({ id, active }: { id: string; active: boolean }) => updatePlan(id, { is_active: active }),
+    mutationFn: ({ id, body }: { id: string; body: { is_active?: boolean; is_public?: boolean; contact_sales?: boolean } }) =>
+      updatePlan(id, body),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin'] }),
   })
   /*
@@ -93,13 +94,8 @@ function PlansTab({ ar }: { ar: boolean }) {
    * one owes. Editing here cannot re-price anybody.
    */
   const reprice = useMutation({
-    mutationFn: ({ id, monthly, annual, features, reason }: {
-      id: string
-      monthly: string
-      annual: string | null
-      features: Record<string, unknown>
-      reason: string
-    }) => updatePlan(id, { price_monthly: monthly, price_annual: annual, features, reason }),
+    mutationFn: ({ id, terms, reason }: { id: string; terms: PlanTermsDraft; reason: string }) =>
+      updatePlan(id, { ...terms, reason }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin'] }),
   })
   const error = toggle.isError ? toApiError(toggle.error) : reprice.isError ? toApiError(reprice.error) : null
@@ -116,8 +112,8 @@ function PlansTab({ ar }: { ar: boolean }) {
       <p className="mb-4 flex items-start gap-2.5 rounded-xl border border-border bg-surface-secondary px-4 py-3 text-sm text-text-secondary">
         <Info size={16} className="mt-0.5 shrink-0 text-info" aria-hidden />
         {ar
-          ? 'إيقاف الباقة يمنع الاشتراكات الجديدة فقط ولا يمس المشتركين الحاليين. تعديل السعر يسري على المشتركين الجدد فقط؛ فكل اشتراك قائم يحتفظ بالسعر المتفق عليه عند بدايته. اترك السعر السنوي فارغًا لسحب الباقة من الاشتراك السنوي.'
-          : 'Deactivating a plan stops new sign-ups only and leaves existing subscribers untouched. A price change applies to NEW subscribers only — every existing subscription keeps the amount it was sold at. Leave the annual price empty to withdraw the plan from the yearly term.'}
+          ? 'إيقاف الباقة يمنع الاشتراكات الجديدة فقط ولا يمس المشتركين الحاليين، و«معروضة في التسجيل» تخفيها من صفحة الاشتراك دون إيقافها. تعديل السعر يسري على المشتركين الجدد فقط؛ فكل اشتراك قائم يحتفظ بالسعر المتفق عليه عند بدايته. اترك السعر السنوي فارغًا لسحب الباقة من الاشتراك السنوي، واترك أي حد فارغًا ليكون بلا حدود.'
+          : 'Deactivating a plan stops new sign-ups only and leaves existing subscribers untouched; “Offered at signup” hides it from the signup page without switching it off. A price change applies to NEW subscribers only — every existing subscription keeps the amount it was sold at. Leave the annual price empty to withdraw the plan from the yearly term, and leave a limit empty for unlimited.'}
       </p>
 
       {plans.data.plans.length === 0 ? (
@@ -150,16 +146,40 @@ function PlansTab({ ar }: { ar: boolean }) {
                   plan={p}
                   ar={ar}
                   saving={reprice.isPending}
-                  onSave={(monthly, annual, features, reason) =>
-                    reprice.mutate({ id: p.id, monthly, annual, features, reason })}
+                  onSave={(terms, reason) => reprice.mutate({ id: p.id, terms, reason })}
                 />
-                <Switch
-                  id={`plan-active-${p.code}`}
-                  checked={p.is_active}
-                  disabled={toggle.isPending}
-                  onCheckedChange={(next) => toggle.mutate({ id: p.id, active: next })}
-                  label={ar ? 'متاحة للاشتراك' : 'Open for sign-up'}
-                />
+                {/*
+                  Three separate questions, and they are genuinely separate — LAUNCH-PRICING-001.
+
+                  ACTIVE is «does this plan work at all» (switching it off strands nobody; existing
+                  subscribers keep running). PUBLIC is «is it offered at signup» — Enterprise is
+                  active and not public, which is how a plan can be real and held back. SOLD BY
+                  CONVERSATION is «does it publish a price at all»: such a plan cannot be quoted or
+                  checked out on, and its 0.00 means «ask us», not «free».
+                */}
+                <div className="flex flex-col gap-1.5">
+                  <Switch
+                    id={`plan-active-${p.code}`}
+                    checked={p.is_active}
+                    disabled={toggle.isPending}
+                    onCheckedChange={(next) => toggle.mutate({ id: p.id, body: { is_active: next } })}
+                    label={ar ? 'مفعّلة' : 'Active'}
+                  />
+                  <Switch
+                    id={`plan-public-${p.code}`}
+                    checked={p.is_public}
+                    disabled={toggle.isPending}
+                    onCheckedChange={(next) => toggle.mutate({ id: p.id, body: { is_public: next } })}
+                    label={ar ? 'معروضة في التسجيل' : 'Offered at signup'}
+                  />
+                  <Switch
+                    id={`plan-contact-${p.code}`}
+                    checked={p.contact_sales}
+                    disabled={toggle.isPending}
+                    onCheckedChange={(next) => toggle.mutate({ id: p.id, body: { contact_sales: next } })}
+                    label={ar ? 'بالتواصل مع المبيعات' : 'Sold by conversation'}
+                  />
+                </div>
               </div>
             </li>
           ))}
@@ -184,7 +204,41 @@ const FEATURE_LABELS: Record<string, { ar: string; en: string }> = {
 }
 
 /**
- * A plan's commercial terms, edited in place — prices and what it includes.
+ * The caps a plan sells — LAUNCH-LIMITS-001.
+ *
+ * Exactly the five the backend counts and enforces, named here so an operator cannot invent a sixth
+ * from this screen: a cap `SubscriptionService::usage()` cannot measure is published, never checked,
+ * and read by the customer as a promise. Campaigns are deliberately absent — they are not metered.
+ *
+ * An EMPTY field is «unlimited», not zero. Zero would sell a plan that permits nothing.
+ */
+const LIMIT_LABELS: Record<string, { ar: string; en: string }> = {
+  projects: { ar: 'المشاريع', en: 'Projects' },
+  clients: { ar: 'العملاء', en: 'Clients' },
+  connections: { ar: 'الحسابات الإعلانية', en: 'Ad accounts' },
+  team_members: { ar: 'أعضاء الفريق', en: 'Team members' },
+  reports_per_month: { ar: 'تقارير/شهر', en: 'Reports/mo' },
+}
+
+/**
+ * Everything about a plan that is a commercial decision, in one payload.
+ *
+ * Sent whole rather than field by field because they are read together: an intro price without its
+ * duration, or a commitment without the discount it buys, is not a state the catalogue should ever
+ * be able to reach halfway.
+ */
+interface PlanTermsDraft {
+  price_monthly: string
+  price_annual: string | null
+  trial_fee: string
+  trial_days: number
+  minimum_commitment_months: number
+  limits: Record<string, number | null>
+  features: Record<string, unknown>
+}
+
+/**
+ * A plan's commercial terms, edited in place — prices, the offer, the caps, and what it includes.
  *
  * The annual field is deliberately allowed to be EMPTY, and empty means null rather than zero: a
  * plan withdrawn from the yearly term has no annual price, and a plan sold for nothing a year is a
@@ -196,20 +250,42 @@ function PlanTerms({ plan, ar, saving, onSave }: {
   plan: PlatformPlan
   ar: boolean
   saving: boolean
-  onSave: (monthly: string, annual: string | null, features: Record<string, unknown>, reason: string) => void
+  onSave: (terms: PlanTermsDraft, reason: string) => void
 }) {
   const current = (plan.features && !Array.isArray(plan.features) ? plan.features : {}) as Record<string, unknown>
+  const currentLimits = (plan.limits && !Array.isArray(plan.limits) ? plan.limits : {}) as Record<string, unknown>
+
+  /** A cap as it is typed: '' is «unlimited», which is what null means in the catalogue. */
+  const limitText = (key: string) => {
+    const raw = currentLimits[key]
+
+    return typeof raw === 'number' ? String(raw) : ''
+  }
 
   const [monthly, setMonthly] = useState(plan.price_monthly)
   const [annual, setAnnual] = useState(plan.price_annual ?? '')
+  const [introFee, setIntroFee] = useState(plan.trial_fee ?? '0.00')
+  const [introDays, setIntroDays] = useState(String(plan.trial_days ?? 0))
+  const [commitment, setCommitment] = useState(String(plan.minimum_commitment_months ?? 0))
+  const [limits, setLimits] = useState<Record<string, string>>(
+    () => Object.fromEntries(Object.keys(LIMIT_LABELS).map((k) => [k, limitText(k)])),
+  )
   const [features, setFeatures] = useState<Record<string, boolean>>(
     () => Object.fromEntries(Object.keys(FEATURE_LABELS).map((k) => [k, current[k] === true])),
   )
   const [reason, setReason] = useState('')
 
   const featuresChanged = Object.keys(FEATURE_LABELS).some((k) => features[k] !== (current[k] === true))
-  const changed = monthly !== plan.price_monthly || annual !== (plan.price_annual ?? '') || featuresChanged
+  const limitsChanged = Object.keys(LIMIT_LABELS).some((k) => (limits[k] ?? '') !== limitText(k))
+  const changed = monthly !== plan.price_monthly
+    || annual !== (plan.price_annual ?? '')
+    || introFee !== (plan.trial_fee ?? '0.00')
+    || introDays !== String(plan.trial_days ?? 0)
+    || commitment !== String(plan.minimum_commitment_months ?? 0)
+    || featuresChanged
+    || limitsChanged
   const field = 'h-9 w-24 rounded-lg border border-border bg-surface px-2.5 text-sm tabular-nums text-text-primary outline-none focus:border-brand-500'
+  const small = `${field} w-20`
 
   return (
     <div className="flex flex-col gap-2" data-testid={`plan-prices-${plan.code}`}>
@@ -235,16 +311,72 @@ function PlanTerms({ plan, ar, saving, onSave }: {
           type="button"
           data-testid={`plan-save-${plan.code}`}
           disabled={!changed || reason.trim().length < 3 || saving}
-          onClick={() => onSave(
-            monthly.trim(),
-            annual.trim() === '' ? null : annual.trim(),
-            { ...current, ...features },
-            reason.trim(),
-          )}
+          onClick={() => onSave({
+            price_monthly: monthly.trim(),
+            price_annual: annual.trim() === '' ? null : annual.trim(),
+            trial_fee: introFee.trim() === '' ? '0' : introFee.trim(),
+            trial_days: Number(introDays.trim() === '' ? 0 : introDays.trim()),
+            minimum_commitment_months: Number(commitment.trim() === '' ? 0 : commitment.trim()),
+            // Empty is UNLIMITED, and unlimited is null — never 0, which would permit nothing.
+            limits: Object.fromEntries(Object.keys(LIMIT_LABELS).map((k) => [
+              k, (limits[k] ?? '').trim() === '' ? null : Number((limits[k] ?? '').trim()),
+            ])),
+            features: { ...current, ...features },
+          }, reason.trim())}
           className="h-9 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white disabled:opacity-45"
         >
           {ar ? 'حفظ' : 'Save'}
         </button>
+      </div>
+
+      {/*
+        The offer and the commitment behind it — SUB-COMMIT-001.
+
+        Three numbers that are one decision: the discount is what the commitment buys. Kept on one
+        row so an operator cannot lengthen a commitment on one screen and forget the price it was
+        meant to justify on another.
+      */}
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-[11.5px] font-semibold text-text-muted">
+          <span className="mb-1 block">{ar ? 'سعر تمهيدي' : 'Intro price'}</span>
+          <input
+            data-testid={`plan-intro-fee-${plan.code}`}
+            className={small} dir="ltr" inputMode="decimal"
+            value={introFee} onChange={(e) => setIntroFee(e.target.value)}
+          />
+        </label>
+        <label className="text-[11.5px] font-semibold text-text-muted">
+          <span className="mb-1 block">{ar ? 'مدته (يوم)' : 'Intro days'}</span>
+          <input
+            data-testid={`plan-intro-days-${plan.code}`}
+            className={small} dir="ltr" inputMode="numeric"
+            value={introDays} onChange={(e) => setIntroDays(e.target.value)}
+          />
+        </label>
+        <label className="text-[11.5px] font-semibold text-text-muted">
+          <span className="mb-1 block">{ar ? 'التزام (شهر)' : 'Commitment (mo)'}</span>
+          <input
+            data-testid={`plan-commitment-${plan.code}`}
+            className={small} dir="ltr" inputMode="numeric"
+            value={commitment} onChange={(e) => setCommitment(e.target.value)}
+          />
+        </label>
+      </div>
+
+      {/* The caps, every one of which the backend counts and enforces. Empty means unlimited. */}
+      <div className="flex flex-wrap items-end gap-2">
+        {Object.entries(LIMIT_LABELS).map(([key, label]) => (
+          <label key={key} className="text-[11.5px] font-semibold text-text-muted">
+            <span className="mb-1 block">{label[ar ? 'ar' : 'en']}</span>
+            <input
+              data-testid={`plan-limit-${plan.code}-${key}`}
+              className={small} dir="ltr" inputMode="numeric"
+              placeholder={ar ? 'بلا حدود' : 'Unlimited'}
+              value={limits[key] ?? ''}
+              onChange={(e) => setLimits((l) => ({ ...l, [key]: e.target.value }))}
+            />
+          </label>
+        ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
