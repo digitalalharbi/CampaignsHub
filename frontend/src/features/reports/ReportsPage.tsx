@@ -556,7 +556,20 @@ function ScopeEditor({
   })
 
   return (
-    <Modal open onClose={onClose} title={ar ? 'نطاق التقرير' : 'Report scope'} size="lg">
+    <Modal
+      open
+      onClose={onClose}
+      title={ar ? 'نطاق التقرير' : 'Report scope'}
+      size="lg"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button>
+          <Button loading={save.isPending} onClick={() => save.mutate()} data-testid="scope-save">
+            {ar ? 'حفظ وإعادة التوليد' : 'Save and regenerate'}
+          </Button>
+        </>
+      }
+    >
       {current.isLoading ? (
         <Skeleton className="h-48 w-full" />
       ) : (
@@ -567,12 +580,6 @@ function ScopeEditor({
               ? 'الحفظ يعيد توليد هذا التقرير نفسه — الرابط المُرسَل للعميل يبقى كما هو ويعرض النطاق الجديد.'
               : 'Saving regenerates this same report — a link already sent to the client keeps working and shows the new scope.'}
           </p>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button>
-            <Button loading={save.isPending} onClick={() => save.mutate()} data-testid="scope-save">
-              {ar ? 'حفظ وإعادة التوليد' : 'Save and regenerate'}
-            </Button>
-          </div>
         </div>
       )}
     </Modal>
@@ -656,7 +663,21 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
     ? (() => { const api = toApiError(create.error); return api.errors ? Object.entries(api.errors).flatMap(([f, m]) => (m?.length ? [{ field: RB_FIELD_IDS[f] ?? f, message: m[0] }] : [])) : [] })()
     : []
   return (
-    <Modal open onClose={onClose} title={ar ? 'منشئ التقرير' : 'Report builder'}>
+    <Modal
+      open
+      onClose={onClose}
+      title={ar ? 'منشئ التقرير' : 'Report builder'}
+      /*
+        Pinned, because the scope picker below fills in from two queries and used to carry these
+        buttons down the screen with it — CLICK-STABLE-001.
+      */
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button>
+          <Button loading={create.isPending} onClick={() => create.mutate()}>{ar ? 'إنشاء وتوليد' : 'Create and generate'}</Button>
+        </>
+      }
+    >
       <div className="space-y-4">
         {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={ar ? 'يرجى تصحيح الأخطاء التالية' : 'Please correct the following'} />}
         <Field label={ar ? 'اسم التقرير' : 'Report name'} htmlFor="rb-name">
@@ -712,10 +733,6 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
         </div>
         <div className="border-t border-border pt-4">
           <ReportScopePicker projectId={projectId} value={scope} onChange={setScope} />
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="secondary" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button>
-          <Button loading={create.isPending} onClick={() => create.mutate()}>{ar ? 'إنشاء وتوليد' : 'Create and generate'}</Button>
         </div>
       </div>
     </Modal>

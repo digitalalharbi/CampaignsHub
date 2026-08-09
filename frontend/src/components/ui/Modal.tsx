@@ -74,15 +74,32 @@ export function Modal({
         if (e.target === e.currentTarget) onClose()
       }}
     >
+      {/*
+        The body scrolls; the title and the actions do not — CLICK-STABLE-001.
+
+        The whole panel used to be one scrolling box, so its height followed its contents and the
+        actions sat wherever the content had reached. In a modal whose body fills in from a query
+        that means the buttons MOVE after the modal has been shown: the report builder's scope
+        picker stands in at 160px, settles far taller, and then grows again when its templates
+        arrive, and «إنشاء وتوليد» travelled down the screen twice.
+
+        A press and its release must reach the same element for a click to exist, so a button that
+        moves in between is a click that never happens — no error, no request, and a three-minute
+        wait for a response nobody asked for. That is exactly how `report-pdf-download.spec.ts` died
+        on firefox: `waitForResponse` on `POST /reports` timed out because no POST was ever sent.
+
+        Pinning the actions also fixes the ordinary version of the same problem, which is that in a
+        tall modal you had to scroll to find the button that finishes the job.
+      */}
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`max-h-[88vh] w-full overflow-y-auto rounded-[16px] border border-border bg-surface p-5 shadow-[var(--shadow-large)] ${sizes[size]}`}
+        className={`flex max-h-[88vh] w-full flex-col rounded-[16px] border border-border bg-surface shadow-[var(--shadow-large)] ${sizes[size]}`}
       >
         {title && (
-          <div className="mb-3 flex items-center justify-between">
+          <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3">
             <h3 className="font-[var(--font-heading)] text-base font-bold text-text-primary">{title}</h3>
             <button
               type="button"
@@ -94,8 +111,10 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="text-sm text-text-secondary">{children}</div>
-        {footer && <div className="mt-4 flex justify-end gap-2">{footer}</div>}
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 text-sm text-text-secondary">{children}</div>
+        {footer && (
+          <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-3">{footer}</div>
+        )}
       </div>
     </div>
   )
