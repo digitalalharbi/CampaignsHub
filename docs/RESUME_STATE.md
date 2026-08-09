@@ -549,8 +549,93 @@ saying `npm run gate` at the root is wrong). Output was being written to
 If that file is gone, RUN IT AGAIN rather than assuming: it has not passed since `2ea6943`, and
 MAIL-011 replaced a settings screen the E2E suite touches.
 
-**Next, in order:** the payments audit described under «B. Plans, subscriptions and payments» above —
-starting with the entitlements gap, which is the one clause nothing in the codebase answers at all.
+**RESOLVED — `15ba009`.** Three failures, one defect, and it was never a routing defect. See the
+session note «CLICK-STABLE-001» below.
+
+---
+
+## Session — CLICK-STABLE-001: a control that moves is a click that never happened (`15ba009`)
+
+**Closes TAB-PARAM-001 (open for four gates) and GATE-FF-001, and the saved-views failure with them.**
+
+The three firefox failures were in three different features and were one defect:
+
+| spec | symptom |
+|---|---|
+| `analytics-normalization.spec.ts:87` | the quality tab did not open |
+| `campaigns.spec.ts:73` | `?tab=performance` never appeared |
+| `verify-100.spec.ts:340` | More filters opened no dialog |
+
+No error at the click, no timeout at the click, no effect. **That shape is what a lost click looks
+like.** A press and its release have to reach the SAME element for the browser to synthesise a click
+at all; when the target slides out from under the pointer in between, nothing is dispatched and
+nothing is reported. Playwright's hit-target check only guards the first event, so it does not catch
+it either.
+
+**Measured rather than reasoned about**, sampling each target's box every 100ms on firefox from the
+moment it became clickable:
+
+```
+analytics quality tab     y=253 -> y=321                      68px down
+dashboard More filters    (192,210) -> (847,254) -> (689,277) 655px sideways
+campaign Performance tab  y=553 -> y=683                      130px down
+```
+
+All inside the first 200ms; all caused by content that mounts when its query lands:
+
+- `FilterMulti` returned `null` while it had no options, so the campaign axis appeared mid-flight and
+  shoved every control to its right along the flex row — `More filters` among them.
+- The project select was gated on `projects.length > 0` and did the same.
+- `RelatedEntitiesPanel` stood in with `Skeleton h-32` — 128px for a panel that settles at 273.
+
+**Fixed so none of the three change geometry:** the empty filter axis is `disabled` in place rather
+than absent; the project select is present from the first paint; the panel's placeholder is the
+panel's own frame, with fixed-height lines (`LINE`), so placeholder and answer are equal **by
+construction** rather than by a number kept in step by hand. `min-h` on the tile was the first
+attempt and was still arithmetic — it left the 3-line tile free to exceed the reserve and the strip
+still moved 10px.
+
+Re-measured after: analytics constant at `y=321`, dashboard constant at `(689,277)`, panel 273px
+before and after its data, all seven tiles 82px.
+
+**The method is the lesson.** Four gates read this as «the tab parameter is dropped» and looked at
+the router. The parameter was never dropped — the tab was never clicked. Firefox only because
+firefox is the slowest of the three here, so its settling most often overlaps the press. A person
+meets exactly the same thing: reach for More filters and it moves 655px sideways as you click.
+
+**If a click-does-nothing failure appears again, measure the target's box before reading any code.**
+
+---
+
+## Payments and subscriptions — first-pass audit against the ten clauses
+
+Read-only survey on 2026-08-09. **Two of the recorded assumptions were wrong and are corrected
+here.** Nothing below has been changed yet; each genuine gap needs a test that fails first.
+
+| # | clause | finding |
+|---|---|---|
+| 1 | No free tier; a paid subscription required | **Holds.** `starter` at 99/mo is the entry; no free plan in the catalogue. Enforcement closes properly: `SubscriptionLifecycle::suspend()` transitions the TENANT to `AccountState::Suspended`, and `EnsureAccountActive` then refuses every authenticated request. |
+| 2 | USD | **GAP.** All three plans are seeded `'currency' => 'SAR'`. |
+| 3 | A paid introductory first month, once per entity | **DIVERGES.** Implemented as a paid **7-day** trial (`trial_days => 7`, `trial_fee => 9`) — not a month. `starter` has no trial at all, which the seeder argues for deliberately («the entry plan IS the affordable way in»). «Once per entity» is sound: `TrialEligibility` keys `TrialClaim` on several hashed identities, each switchable via `subscriptions.trial.one_per.*`. |
+| 4 | Annual with a real discount | **Holds.** ~17% on all three (990 vs 1188, 4990 vs 5988, 14990 vs 17988). |
+| 5 | Every price, limit and duration editable from `/admin`, never hard-coded | **Holds except currency.** `PlatformBillingController::updatePlan` accepts name, prices, `trial_fee`, `trial_days`, `trial_limits`, `limits`, `features`, `is_active`, `is_public`, `sort_order` — but **not `currency`**, so clause 2 cannot even be fixed from the console. |
+| 6 | Entitlements gating features, with an in-context upgrade path rather than a bare 403 | **The recorded note «NO entitlements layer exists at all — the largest gap» is WRONG.** `app/Domains/Accounts` has `EnsureEntitlement` middleware, `AccountEntitlements` (plan-aware, with complimentary plans) and `AccountGrant`/`AccountGrants` for per-account overrides. The real gap is smaller and specific: `EnsureEntitlement` aborts with a **bare 403 and a message**, while its neighbour `EnsureWithinPlanLimit` returns used/limit numbers. Two adjacent gates, two standards. |
+| 7 | The full state machine | **Present.** grace, suspended, canceled, `cancel_at_period_end`, reactivated, refunded all exist in `SubscriptionLifecycle`. Not yet walked end to end in one test. |
+| 8 | Webhooks the only source of truth; signature, idempotency, duplicates | **Holds, and is the strongest part of the domain.** `payment_webhook_events.event_id` is unique; `ApplySubscriptionPaymentEvent` returns early on `verified: false`, re-checks the amount, and still records unverified events so they cannot squat a real event's id. `SubscriptionCheckout` derives its idempotency key from what the charge IS. |
+| 9 | Provisioning strictly behind verified payment | **Holds.** «There is deliberately no endpoint a browser can call to declare itself paid», and the sandbox gateway posts a signed event to the same webhook. |
+| 10 | Two webhook sinks — «two paths for one concept» | **NOT a duplication — the recorded suspicion is wrong.** `payments/webhook/{provider}` settles the tenant's own SaaS subscription to CampaignsHub; `billing/webhook/{provider}` settles agency→client invoices inside the product. Two different money flows, correctly separate. |
+
+**The one finding not on the commission's list, and the sharpest:** the enforced caps and the
+declared caps barely intersect.
+
+- Plans declare `projects`, `team_members`, `connections`, `reports_per_month`.
+- `EnsureWithinPlanLimit` is wired to exactly two routes: `projects` and **`campaigns`**.
+- No plan declares a `campaigns` cap, so `effectiveLimit` returns `null`, `withinLimit` returns
+  `true`, and **the middleware on campaign creation is a permanent no-op today.**
+- `team_members`, `connections` and `reports_per_month` are sold and never enforced.
+
+So of five metrics, one is enforced, one is guarded but uncapped, and three are advertised limits a
+customer can exceed freely. That is the first thing to fix, and it is provable with a test.
 
 ---
 
