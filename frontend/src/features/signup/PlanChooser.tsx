@@ -524,8 +524,13 @@ function PlanCard({
       /*
         Fluid padding and a fluid gap — AUTH-FIT-001. Two cards at fixed spacing pushed the submit
         button off a 1366×768 laptop, which is the screen this step is most often completed on.
+
+        `w-full` is load-bearing, not decoration. This is a BUTTON, and a button sizes to its content
+        even when `display: flex` makes it block-level — so the lone Agency card shrank to its text
+        and sat against one edge of a column it was supposed to fill, which is what read as
+        «off-centre». Grid items stretch anyway, so it changes nothing where there are two cards.
       */
-      className={`flex h-full min-w-0 flex-col gap-[clamp(0.125rem,0.45vh,0.25rem)] rounded-xl border p-[clamp(0.5rem,1.1vh,0.75rem)] text-start transition-colors disabled:opacity-50 ${selected ? 'border-brand-500 bg-brand-primary-soft' : 'border-border bg-surface hover:border-brand-400'}`}
+      className={`flex h-full w-full min-w-0 flex-col gap-[clamp(0.125rem,0.45vh,0.25rem)] rounded-xl border p-[clamp(0.5rem,1.1vh,0.75rem)] text-start transition-colors disabled:opacity-50 ${selected ? 'border-brand-500 bg-brand-primary-soft' : 'border-border bg-surface hover:border-brand-400'}`}
     >
       <span className="flex flex-wrap items-center gap-1.5 text-sm font-bold text-text-primary">
         {ar ? plan.name_ar : plan.name}
