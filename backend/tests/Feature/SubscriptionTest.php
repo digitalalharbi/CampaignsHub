@@ -17,15 +17,27 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\SubscriptionPlanSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
  * Subscriptions are honest and fail-open by construction: a tenant with no subscription defaults to the most
- * permissive plan (never blocked), limits are enforced against REAL usage counters, increments meter usage,
- * remaining computes, and every counter/subscription is isolated to its tenant. The plan-limit middleware
- * denies fail-closed only when a real cap is exceeded.
+ * permissive plan (never blocked), remaining computes, and every subscription is isolated to its tenant. The
+ * plan-limit middleware denies fail-closed only when a real cap is exceeded.
+ *
+ * ## The limit tests below used to reach the cap by calling `increment()`, and that is what hid PAY-AUDIT-001
+ *
+ * `increment()` is the only writer of `usage_counters` and had no callers in `app/` — so the table was
+ * written by these tests and by nothing else. Reaching the cap in the test meant the assertions proved
+ * the service's arithmetic and never that creating a project moved the number. In production `usage()`
+ * returned 0 for every tenant and every cap passed everything.
+ *
+ * `usage()` now counts the thing itself, so these reach the cap by CREATING PROJECTS. The enforcement
+ * across HTTP lives in `PlanLimitEnforcementTest`, which is the coverage that was missing entirely.
  */
 final class SubscriptionTest extends TestCase
 {
@@ -52,6 +64,69 @@ final class SubscriptionTest extends TestCase
     private function service(): SubscriptionService
     {
         return app(SubscriptionService::class);
+    }
+
+    /**
+     * Real projects, because `usage('projects')` counts projects.
+     *
+     * Written straight to the table rather than through the model so a test can hand them to ANY
+     * tenant — the isolation test needs two — without moving the request-scoped tenant context
+     * around underneath itself.
+     */
+    private function makeProjects(int $n, ?Tenant $for = null): void
+    {
+        $tenant = $for ?? $this->tenant;
+        $workspace = $this->workspaceFor($tenant);
+
+        for ($i = 0; $i < $n; $i++) {
+            DB::table('projects')->insert([
+                'id' => (string) Str::uuid(),
+                'tenant_id' => (string) $tenant->id,
+                'client_workspace_id' => $workspace,
+                'name' => 'Project '.Str::uuid(),
+                'status' => 'active',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+    }
+
+    /** One client workspace per tenant — `projects.client_workspace_id` is a real foreign key. */
+    private function workspaceFor(Tenant $tenant): string
+    {
+        $existing = DB::table('client_workspaces')->where('tenant_id', (string) $tenant->id)->value('id');
+        if ($existing !== null) {
+            return (string) $existing;
+        }
+
+        $id = (string) Str::uuid();
+        DB::table('client_workspaces')->insert([
+            'id' => $id,
+            'tenant_id' => (string) $tenant->id,
+            'name' => 'Client of '.$tenant->slug,
+            'slug' => 'client-'.$tenant->slug,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return $id;
+    }
+
+    /** One report, dated — the monthly allowance is a question about WHEN, not how many in total. */
+    private function makeReport(Carbon $at): void
+    {
+        $this->makeProjects(1);
+        $project = DB::table('projects')->where('tenant_id', (string) $this->tenant->id)->value('id');
+
+        DB::table('reports')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => (string) $this->tenant->id,
+            'project_id' => (string) $project,
+            'name' => 'Monthly '.$at->format('Y-m-d'),
+            'type' => 'executive',
+            'created_at' => $at,
+            'updated_at' => $at,
+        ]);
     }
 
     private function plan(string $code): SubscriptionPlan
@@ -94,29 +169,44 @@ final class SubscriptionTest extends TestCase
 
         $this->assertTrue($this->service()->withinLimit($this->tenant, 'projects')); // 0 < 3
 
-        $this->service()->increment($this->tenant, 'projects');
-        $this->service()->increment($this->tenant, 'projects');
+        $this->makeProjects(2);
         $this->assertTrue($this->service()->withinLimit($this->tenant, 'projects')); // 2 < 3
 
-        $this->service()->increment($this->tenant, 'projects'); // now 3
+        $this->makeProjects(1); // now 3
         $this->assertFalse($this->service()->withinLimit($this->tenant, 'projects')); // 3 !< 3
     }
 
-    public function test_increment_tracks_usage_as_an_upsert(): void
+    /**
+     * `increment()` still meters, for a metric nothing can count.
+     *
+     * Asserted on a metric `usage()` does NOT recognise — `projects` is counted from the projects
+     * table now, so metering it would prove nothing about either path. This is the fallback the
+     * service keeps for a future metric that leaves no row behind.
+     */
+    public function test_increment_tracks_usage_as_an_upsert_for_a_metric_nothing_can_count(): void
     {
-        $this->service()->increment($this->tenant, 'projects');
-        $this->service()->increment($this->tenant, 'projects');
+        $this->service()->increment($this->tenant, 'api_calls');
+        $this->service()->increment($this->tenant, 'api_calls');
 
-        $this->assertSame(2, $this->service()->usage($this->tenant, 'projects'));
+        $this->assertSame(2, $this->service()->usage($this->tenant, 'api_calls'));
         $this->assertSame(1, UsageCounter::query()
-            ->where('tenant_id', $this->tenant->id)->where('metric', 'projects')->count());
+            ->where('tenant_id', $this->tenant->id)->where('metric', 'api_calls')->count());
+    }
+
+    /** And a counted metric ignores the meter entirely — the row is the answer. */
+    public function test_a_counted_metric_ignores_the_meter(): void
+    {
+        $this->service()->assignPlan($this->tenant, $this->plan('starter'));
+        $this->service()->increment($this->tenant, 'projects', 99);
+
+        $this->assertSame(0, $this->service()->usage($this->tenant, 'projects'), 'the stale meter was read');
+        $this->assertTrue($this->service()->withinLimit($this->tenant, 'projects'));
     }
 
     public function test_remaining_computes_and_unlimited_returns_null(): void
     {
         $this->service()->assignPlan($this->tenant, $this->plan('growth')); // projects cap = 25
-        $this->service()->increment($this->tenant, 'projects');
-        $this->service()->increment($this->tenant, 'projects');
+        $this->makeProjects(2);
 
         $this->assertSame(23, $this->service()->remaining($this->tenant, 'projects'));
 
@@ -126,15 +216,21 @@ final class SubscriptionTest extends TestCase
         $this->assertTrue($this->service()->withinLimit($this->tenant, 'projects'));
     }
 
-    public function test_monthly_metric_uses_a_monthly_period(): void
+    /**
+     * The monthly metric counts THIS month, and last month's work does not spend this month's budget.
+     *
+     * The period used to live only in the counter's `period` column. It now lives in the query, which
+     * is what makes the allowance actually reset — a counter row for `2026-07` was never going to be
+     * cleared by anything, because nothing ever wrote or read it outside these tests.
+     */
+    public function test_the_monthly_report_allowance_counts_this_month_only(): void
     {
         $this->service()->assignPlan($this->tenant, $this->plan('starter')); // reports_per_month cap = 10
-        $this->service()->increment($this->tenant, 'reports_per_month');
 
-        $period = now()->format('Y-m');
-        $this->assertDatabaseHas('usage_counters', [
-            'tenant_id' => $this->tenant->id, 'metric' => 'reports_per_month', 'period' => $period, 'count' => 1,
-        ]);
+        $this->makeReport(now());
+        $this->makeReport(now()->startOfMonth()->subDay()); // last month
+
+        $this->assertSame(1, $this->service()->usage($this->tenant, 'reports_per_month'));
         $this->assertSame(9, $this->service()->remaining($this->tenant, 'reports_per_month'));
     }
 
@@ -145,7 +241,7 @@ final class SubscriptionTest extends TestCase
         $this->assertSame('scale', $this->service()->currentPlan($this->tenant)->code);
 
         // Even after usage, an unlimited default never blocks.
-        $this->service()->increment($this->tenant, 'projects', 1000);
+        $this->makeProjects(5);
         $this->assertTrue($this->service()->withinLimit($this->tenant, 'projects'));
     }
 
@@ -156,10 +252,10 @@ final class SubscriptionTest extends TestCase
         $this->service()->assignPlan($this->tenant, $this->plan('starter'));
         $this->service()->assignPlan($other, $this->plan('growth'));
 
-        $this->service()->increment($this->tenant, 'projects', 3); // A at its starter cap
-        $this->service()->increment($other, 'projects', 1);
+        $this->makeProjects(3);              // A at its starter cap
+        $this->makeProjects(1, $other);
 
-        // A is capped; B is not — counters do not bleed across tenants.
+        // A is capped; B is not — usage does not bleed across tenants.
         $this->assertFalse($this->service()->withinLimit($this->tenant, 'projects'));
         $this->assertTrue($this->service()->withinLimit($other, 'projects'));
         $this->assertSame(3, $this->service()->usage($this->tenant, 'projects'));

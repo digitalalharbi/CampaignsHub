@@ -10,6 +10,7 @@ use App\Domains\Settings\Http\Controllers\NotificationPreferenceController;
 use App\Domains\Settings\Http\Controllers\OrganizationSettingsController;
 use App\Domains\Settings\Http\Controllers\SecurityController;
 use App\Domains\Settings\Http\Controllers\TeamController;
+use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use Illuminate\Support\Facades\Route;
 
 // Organization settings (tenant-scoped; individual actions enforce settings.manage where needed).
@@ -33,7 +34,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
 
     // Team & permissions.
     Route::get('team', [TeamController::class, 'index'])->name('team.index');
-    Route::post('team', [TeamController::class, 'invite'])->name('team.invite');
+    // The seat is taken at the INVITE, not at acceptance — `usage('team_members')` counts pending
+    // invitations for exactly this reason (PAY-AUDIT-001).
+    Route::post('team', [TeamController::class, 'invite'])->name('team.invite')
+        ->middleware(EnsureWithinPlanLimit::class.':team_members');
     /*
      * TEAM-INVITE-001 — withdraw an invitation that has not been accepted.
      *

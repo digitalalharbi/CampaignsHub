@@ -10,15 +10,18 @@ use App\Domains\Subscriptions\Models\UsageCounter;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Scopes\TenantScope;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The subscription / plan-limit engine. It is honest and fail-open by construction:
  *
  *   - A tenant WITHOUT a subscription defaults to the MOST PERMISSIVE active plan, so nothing regresses when
  *     subscriptions are not yet provisioned (see {@see currentPlan()} and {@see mostPermissivePlan()}).
- *   - withinLimit() compares REAL usage_counters against the plan's cap for a metric. A null/absent cap means
- *     unlimited → always within.
- *   - increment() meters usage as a safe upsert on (tenant, metric, period).
+ *   - withinLimit() compares what the tenant is ACTUALLY using against the plan's cap for a metric. A
+ *     null/absent cap means unlimited → always within.
+ *   - usage() counts the thing itself — projects, campaigns, seats, connections, this month's reports —
+ *     rather than reading a meter somebody has to remember to feed. See usage() for why that was the
+ *     whole bug: the meter had no callers, so every cap passed everything (PAY-AUDIT-001).
  *
  * Every query is scoped EXPLICITLY to the passed tenant (and drops the tenant global scope) so the result is
  * deterministic regardless of the request-scoped TenantContext — the service can be called for any tenant.
@@ -141,8 +144,90 @@ final class SubscriptionService
         return max(0, $limit - $this->usage($tenant, $metric));
     }
 
-    /** Current metered usage for a metric in its active period. */
+    /**
+     * What the tenant is actually using — COUNTED FROM THE THING ITSELF (PAY-AUDIT-001).
+     *
+     * ## Why this stopped reading the meter
+     *
+     * This used to return `usage_counters` and nothing else, and `increment()` — the only writer of
+     * that table — had no callers anywhere in `app/`. The table was written by tests and by nothing
+     * else. So `usage()` returned 0 for every tenant, `withinLimit()` was always `0 < cap`, and both
+     * `EnsureWithinPlanLimit` mounts passed everything through. Five caps sold, five unenforced,
+     * while the docblock above claimed it compared REAL counters.
+     *
+     * The suite did not catch it because `SubscriptionTest` calls `increment()` itself and then
+     * asserts the comparison: it proved this class's arithmetic and never that creating a project
+     * moved the number.
+     *
+     * ## Why counting beats metering here
+     *
+     * A meter would have been wrong even once fed. `projects`, `campaigns`, `team_members` and
+     * `connections` are STOCK, not flow — they can be archived, revoked and removed — and a
+     * monotonic counter never gives the slot back. A customer who tidied up would watch the capacity
+     * they had paid for ratchet away, which is worse than not enforcing at all, because it takes
+     * something rather than merely failing to stop something.
+     *
+     * Every one of these leaves a row, so the row is the honest answer. Nothing to feed, nothing to
+     * forget to feed, and no drift possible between the meter and the thing being metered.
+     * `reports_per_month` is a genuine flow and is still derived — from the reports themselves,
+     * within the calendar month — for the same reason.
+     *
+     * `usage_counters` remains for a metric that leaves no row behind. Nothing is such a metric
+     * today, so nothing writes it; see {@see increment()}.
+     */
     public function usage(Tenant $tenant, string $metric): int
+    {
+        $counted = $this->count($tenant, $metric);
+
+        return $counted ?? $this->metered($tenant, $metric);
+    }
+
+    /**
+     * The live count for a metric this service knows how to measure, or null when it does not.
+     *
+     * Every query drops the tenant global scope and names the tenant explicitly — the service can be
+     * asked about any tenant, including from a console command with no request scope at all.
+     */
+    private function count(Tenant $tenant, string $metric): ?int
+    {
+        $id = (string) $tenant->id;
+
+        return match ($metric) {
+            // Archived is not deleted, and it is not occupying a slot either — restoring one is a
+            // create as far as the cap is concerned, which is why `restore` is guarded too.
+            'projects' => DB::table('projects')->where('tenant_id', $id)
+                ->whereNull('deleted_at')->where('status', '!=', 'archived')->count(),
+
+            'campaigns' => DB::table('unified_campaigns')->where('tenant_id', $id)
+                ->whereNull('deleted_at')->where('status', '!=', 'archived')->count(),
+
+            /*
+             * Seats held, not accounts created.
+             *
+             * A pending invitation holds a seat: since TEAM-INVITE-001 it creates no `User` at all,
+             * so counting memberships alone would let a workspace on a cap of three invite thirty
+             * people and pass every check until the day they all accepted.
+             */
+            'team_members' => DB::table('memberships')->where('tenant_id', $id)->where('status', 'active')->count()
+                + DB::table('workspace_invitations')->where('tenant_id', $id)
+                    ->whereNull('accepted_at')->where('expires_at', '>', now())->count(),
+
+            // A revoked connection is a connection somebody deliberately gave up; it must not go on
+            // costing them a slot.
+            'connections' => DB::table('provider_connections')->where('tenant_id', $id)
+                ->whereNotIn('status', ['revoked', 'disconnected'])->count(),
+
+            // The one genuine flow: what was produced this calendar month, from the reports rather
+            // than from a tally of them.
+            'reports_per_month' => DB::table('reports')->where('tenant_id', $id)
+                ->where('created_at', '>=', Carbon::now()->startOfMonth())->count(),
+
+            default => null,
+        };
+    }
+
+    /** The counter, for a metric nothing can count. See {@see usage()}. */
+    private function metered(Tenant $tenant, string $metric): int
     {
         $counter = UsageCounter::query()
             ->withoutGlobalScope(TenantScope::class)
@@ -154,7 +239,14 @@ final class SubscriptionService
         return $counter instanceof UsageCounter ? $counter->count : 0;
     }
 
-    /** Meter one unit of usage for a metric (safe upsert on the unique (tenant, metric, period) key). */
+    /**
+     * Meter one unit of usage for a metric (safe upsert on the unique (tenant, metric, period) key).
+     *
+     * NOTHING CALLS THIS, and that is now correct rather than a bug: every metric the product sells
+     * leaves a row, so {@see usage()} counts the rows. This stays for a future metric that leaves
+     * none — an API call, a delivered message — and `usage()` falls through to it automatically for
+     * any metric `count()` does not recognise.
+     */
     public function increment(Tenant $tenant, string $metric, int $by = 1): UsageCounter
     {
         $period = $this->periodFor($metric);

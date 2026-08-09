@@ -30,9 +30,18 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('proj
         ->middleware(EnsureWithinPlanLimit::class.':projects');
     Route::get('{project}', [ProjectController::class, 'show'])->name('show');
     Route::match(['put', 'patch'], '{project}', [ProjectController::class, 'update'])->name('update');
-    Route::post('{project}/clone', [ProjectController::class, 'clone'])->name('clone');
+    /*
+     * Clone and restore are CREATES as far as a cap is concerned — PAY-AUDIT-001.
+     *
+     * `usage('projects')` counts live, unarchived projects, so archiving frees a slot and restoring
+     * takes one back. A cap guarding only `store` would be trivially walked around by archiving,
+     * creating, and restoring.
+     */
+    Route::post('{project}/clone', [ProjectController::class, 'clone'])->name('clone')
+        ->middleware(EnsureWithinPlanLimit::class.':projects');
     Route::post('{project}/archive', [ProjectController::class, 'archive'])->name('archive');
-    Route::post('{project}/restore', [ProjectController::class, 'restore'])->name('restore');
+    Route::post('{project}/restore', [ProjectController::class, 'restore'])->name('restore')
+        ->middleware(EnsureWithinPlanLimit::class.':projects');
     Route::post('{project}/pause', [ProjectController::class, 'pause'])->name('pause');
     Route::post('{project}/resume', [ProjectController::class, 'resume'])->name('resume');
 });
@@ -119,7 +128,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * → period → metrics), rather than from an already-generated document.
      */
     Route::get('reports/live/options', [LiveReportBuilderController::class, 'options'])->name('reports.live.options');
-    Route::post('reports/live', [LiveReportBuilderController::class, 'store'])->name('reports.live.store');
+    Route::post('reports/live', [LiveReportBuilderController::class, 'store'])->name('reports.live.store')
+        ->middleware(EnsureWithinPlanLimit::class.':reports_per_month');
     Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
     // REPORT-SCHEDULING: the HTTP surface the dispatcher engine never had. Declared BEFORE
     // reports/{report} so "schedules" is not swallowed by the {report} wildcard.
@@ -144,7 +154,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::post('reports/scope-templates', [ReportScopeController::class, 'storeTemplate'])->name('reports.scope-templates.store');
     Route::match(['put', 'patch'], 'reports/scope-templates/{template}', [ReportScopeController::class, 'updateTemplate'])->name('reports.scope-templates.update');
     Route::delete('reports/scope-templates/{template}', [ReportScopeController::class, 'destroyTemplate'])->name('reports.scope-templates.destroy');
-    Route::post('reports', [ReportController::class, 'store'])->name('reports.store');
+    /*
+     * Both report creates are capped, and `regenerate` deliberately is not: regenerating writes no
+     * new row, so charging a monthly slot for it would bill the customer for the platform's retry.
+     */
+    Route::post('reports', [ReportController::class, 'store'])->name('reports.store')
+        ->middleware(EnsureWithinPlanLimit::class.':reports_per_month');
     Route::get('reports/{report}', [ReportController::class, 'show'])->name('reports.show');
     Route::match(['put', 'patch'], 'reports/{report}', [ReportController::class, 'update'])->name('reports.update');
     Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->name('reports.regenerate');

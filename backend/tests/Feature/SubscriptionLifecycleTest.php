@@ -21,6 +21,8 @@ use Database\Seeders\PermissionSeeder;
 use Database\Seeders\SubscriptionPlanSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\Concerns\AppliesToRegister;
 use Tests\TestCase;
 
@@ -381,10 +383,29 @@ final class SubscriptionLifecycleTest extends TestCase
         $tenant = Tenant::query()->withoutGlobalScopes()->findOrFail($subscription->tenant_id);
         $user = User::where('email', 'trialist@a.test')->firstOrFail();
 
-        // The trial caps projects at three. Meter it to the cap.
+        /*
+         * The trial caps projects at three, and the cap is reached by CREATING three — PAY-AUDIT-001.
+         *
+         * This used to call `increment()` three times, which fed a meter nothing in `app/` ever read
+         * or wrote. It reached the assertion below without the product having anything in it, so the
+         * test passed while the middleware refused nothing in production.
+         */
         $service = app(SubscriptionService::class);
-        for ($i = 0; $i < 3; $i++) {
-            $service->increment($tenant, 'projects');
+        $workspace = DB::table('client_workspaces')->where('tenant_id', (string) $tenant->id)->value('id')
+            ?? tap((string) Str::uuid(), fn (string $id) => DB::table('client_workspaces')->insert([
+                'id' => $id, 'tenant_id' => (string) $tenant->id,
+                'name' => 'Client', 'slug' => 'client-'.$tenant->id,
+                'created_at' => now(), 'updated_at' => now(),
+            ]));
+
+        // Filled UP TO the cap, not by a fixed three: registering already gave this workspace its
+        // first project, so adding three would put it at four and prove nothing about the boundary.
+        while ($service->usage($tenant, 'projects') < 3) {
+            DB::table('projects')->insert([
+                'id' => (string) Str::uuid(), 'tenant_id' => (string) $tenant->id,
+                'client_workspace_id' => (string) $workspace, 'name' => 'Project '.Str::uuid(),
+                'status' => 'active', 'created_at' => now(), 'updated_at' => now(),
+            ]);
         }
 
         $response = $this->actingAs($user, 'sanctum')

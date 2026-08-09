@@ -8,6 +8,7 @@ use App\Domains\Integrations\Http\Controllers\IntegrationWebhookController;
 use App\Domains\Integrations\Http\Controllers\PlatformOverviewController;
 use App\Domains\Integrations\Http\Controllers\ProjectIntegrationController;
 use App\Domains\Integrations\Http\Controllers\ProviderConnectionController;
+use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -52,7 +53,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     Route::prefix('integrations')->name('integrations.')->group(function (): void {
         Route::get('/', [IntegrationController::class, 'index'])->name('index');
         Route::get('{key}/health', [IntegrationController::class, 'health'])->name('health');
-        Route::post('{key}/connect', [IntegrationController::class, 'connect'])->name('connect');
+        Route::post('{key}/connect', [IntegrationController::class, 'connect'])->name('connect')
+            ->middleware(EnsureWithinPlanLimit::class.':connections');
         Route::post('{key}/sync', [IntegrationController::class, 'sync'])->name('sync');
 
         // Start the authorisation for one of the six ad platforms. Returns a URL rather than a 302,
@@ -72,7 +74,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
         Route::get('/', [ProjectIntegrationController::class, 'index'])->name('index');
         // PROJINT-001: the same project's integrations organised by the six real ad platforms.
         Route::get('platforms', [PlatformOverviewController::class, 'index'])->name('platforms');
-        Route::post('connect', [ProjectIntegrationController::class, 'connect'])->name('connect');
+        // Revoking frees the slot — `usage('connections')` skips revoked and disconnected rows.
+        Route::post('connect', [ProjectIntegrationController::class, 'connect'])->name('connect')
+            ->middleware(EnsureWithinPlanLimit::class.':connections');
         Route::post('bindings', [ProjectIntegrationController::class, 'bind'])->name('bind');
         Route::post('bindings/{binding}/sync', [ProjectIntegrationController::class, 'sync'])->name('sync');
         Route::delete('bindings/{binding}', [ProjectIntegrationController::class, 'detach'])->name('detach');

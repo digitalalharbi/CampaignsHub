@@ -607,6 +607,49 @@ meets exactly the same thing: reach for More filters and it moves 655px sideways
 
 ---
 
+## Session — PAY-AUDIT-001: the caps were sold and none were enforced
+
+**Fixed.** `SubscriptionService::usage()` now counts the thing itself instead of reading a meter
+nothing ever wrote, and `EnsureWithinPlanLimit` is mounted on every create path — nine mounts across
+five metrics.
+
+| metric | counted from | mounts |
+|---|---|---|
+| `projects` | live, unarchived `projects` | `store`, `clone`, `restore` |
+| `campaigns` | live, unarchived `unified_campaigns` | `store` |
+| `team_members` | active memberships **+ pending invitations** | `settings/team` (invite) |
+| `connections` | `provider_connections` minus revoked/disconnected | both `connect` paths |
+| `reports_per_month` | `reports` created this calendar month | `reports`, `reports/live` |
+
+**Three decisions worth keeping.**
+
+1. **Counting, not metering.** Feeding `increment()` at each create was the obvious fix and the wrong
+   one: four of the five are STOCK, and a monotonic counter never returns a slot. A customer who
+   archived last quarter's work would watch capacity they paid for ratchet away — worse than the bug,
+   because it takes something rather than failing to stop something.
+2. **`clone` and `restore` are creates.** Guarding only `store` leaves archive → create → restore,
+   which walks around the cap in three keystrokes.
+3. **The seat is taken at the INVITE.** Since TEAM-INVITE-001 an invitation creates no `User`, so a
+   cap counting memberships would let a three-seat workspace invite thirty people and refuse nothing
+   until they all accepted.
+
+**Proven by reverting.** `git stash` of `SubscriptionService.php` alone, with the new routes left in
+place: **7 of the 8 new tests fail**. The eighth («a plan with no ceiling refuses nothing») passes
+both ways by design — it guards against the fix inventing a cap where the plan sells none.
+
+**The tests that hid it are rewritten, not deleted.** `SubscriptionTest` reached the cap by calling
+`increment()` three times and then asserting the comparison; it now reaches the cap by creating
+projects, and `increment()` is asserted on a metric `usage()` deliberately does not recognise, which
+is the fallback path it still exists for. `PlanLimitEnforcementTest` is new and goes through HTTP
+throughout — a test that can reach the cap without creating the thing cannot tell whether creating
+the thing counts.
+
+Still open from the audit and each needing a decision rather than code: **PAY-AUDIT-002** (SAR vs
+USD, and `currency` not editable from `/admin`), **PAY-AUDIT-003** (a 7-day paid trial where the
+clause asks for a paid first month), **PAY-AUDIT-004** (`EnsureEntitlement`'s bare 403).
+
+---
+
 ## Payments and subscriptions — first-pass audit against the ten clauses
 
 Read-only survey on 2026-08-09. **Two of the recorded assumptions were wrong and are corrected
