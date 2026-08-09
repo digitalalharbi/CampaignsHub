@@ -444,18 +444,24 @@ export function DashboardPage() {
           />
         )}
 
-        {projects.length > 0 && (
-          <FilterSelect
-            label={t.project}
-            value={currentProjectId ?? ''}
-            testid="dashboard-project"
-            options={[
-              ...(currentProjectId ? [] : [{ value: '', label: t.noProject }]),
-              ...projects.map((p) => ({ value: p.id, label: p.name })),
-            ]}
-            onChange={setCurrentProjectId}
-          />
-        )}
+        {/*
+          Rendered before the projects arrive, not after — CLICK-STABLE-001.
+
+          Gated on `projects.length > 0`, this control appeared the moment its query landed and moved
+          every control to its right, `More filters` included. A control that arrives under a pointer
+          already travelling towards its neighbour is how a click gets lost, so the axis holds its
+          place from the first paint and fills in.
+        */}
+        <FilterSelect
+          label={t.project}
+          value={currentProjectId ?? ''}
+          testid="dashboard-project"
+          options={[
+            ...(currentProjectId ? [] : [{ value: '', label: t.noProject }]),
+            ...projects.map((p) => ({ value: p.id, label: p.name })),
+          ]}
+          onChange={setCurrentProjectId}
+        />
 
         <FilterMulti
           label={t.platform}

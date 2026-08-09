@@ -167,15 +167,22 @@ export function AnalyticsPage() {
           onChange={(v) => setDays(Number(v))}
         />
 
-        {projects.length > 0 && (
-          <FilterSelect
-            label={ar ? 'المشروع' : 'Project'}
-            value={currentProjectId ?? ''}
-            testid="analytics-project"
-            options={projects.map((pr) => ({ value: pr.id, label: pr.name }))}
-            onChange={setCurrentProjectId}
-          />
-        )}
+        {/*
+          Present from the first paint — CLICK-STABLE-001. Gated on the query, this control landed
+          late, wrapped the bar onto a second row, and took the tab strip below it down 68px with it.
+          A tab that moves between a press and its release is never clicked at all, which is how the
+          quality tab «did not open» on firefox while every other browser passed.
+        */}
+        <FilterSelect
+          label={ar ? 'المشروع' : 'Project'}
+          value={currentProjectId ?? ''}
+          testid="analytics-project"
+          options={[
+            ...(currentProjectId ? [] : [{ value: '', label: ar ? 'لا مشروع' : 'No project' }]),
+            ...projects.map((pr) => ({ value: pr.id, label: pr.name })),
+          ]}
+          onChange={setCurrentProjectId}
+        />
 
         <FilterMulti
           label={ar ? 'المنصة' : 'Platform'}

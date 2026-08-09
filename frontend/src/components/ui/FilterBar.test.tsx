@@ -109,12 +109,30 @@ describe('FilterMulti', () => {
     expect(screen.getByTestId('client')).toHaveTextContent('2')
   })
 
-  /** An axis with no options is not rendered — a control that can only disappoint is worse than none. */
-  it('renders nothing when the axis has no options', () => {
-    const { container } = render(
-      <FilterMulti label="Ad set" values={[]} options={[]} onChange={() => {}} ar={false} />,
+  /**
+   * An axis with no options still cannot be used — and it holds its place while it says so.
+   *
+   * This asserted `toBeEmptyDOMElement` until CLICK-STABLE-001, and the disappearing act was the
+   * defect: the campaign axis has no options until its query returns, so the control arrived late
+   * and shoved every control to its right — `More filters` among them — to a new position. A press
+   * and its release have to reach the same element for a click to exist, so a control that moves in
+   * between is a click that never happens. Three gate specs died of it on firefox.
+   *
+   * The original intent is kept by `disabled` rather than by absence: the control refuses the
+   * interaction, it just refuses it without moving the page.
+   */
+  it('keeps its place but refuses the interaction when the axis has no options', () => {
+    render(
+      <FilterMulti label="Ad set" values={[]} options={[]} onChange={() => {}} ar={false} testid="adset" />,
     )
-    expect(container).toBeEmptyDOMElement()
+
+    const trigger = screen.getByTestId('adset')
+    expect(trigger).toBeDisabled()
+    expect(trigger).toHaveTextContent('No options')
+
+    // And it cannot be opened by clicking it anyway.
+    fireEvent.click(trigger)
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 
   it('adds to the selection rather than replacing it', () => {

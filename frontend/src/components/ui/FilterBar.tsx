@@ -285,8 +285,23 @@ export function FilterMulti({
     return q === '' ? options : options.filter((o) => o.label.toLowerCase().includes(q))
   }, [options, term])
 
-  // An axis with nothing to choose from is not a filter — it is a control that can only disappoint.
-  if (options.length === 0) return null
+  /*
+   * An axis with nothing to choose from is not a filter — it is a control that can only disappoint.
+   * So it is DISABLED, and it stays where it is — CLICK-STABLE-001.
+   *
+   * It used to return `null`, which meant the bar's shape was a function of a query still in flight:
+   * the campaign axis appeared the instant its options landed and shoved every control after it —
+   * `More filters` among them — to a new position. Measured on the dashboard, that button moved 655px
+   * sideways and 67px down within 200ms of becoming clickable.
+   *
+   * A press and its release must reach the SAME element for a click to exist. When the target slides
+   * out from under the pointer in between, no click event is produced at all: no error, no effect,
+   * and a person who is certain they clicked. That is what took three specs down on firefox — the
+   * slowest of the three browsers, so the one whose settling most often overlapped the press.
+   *
+   * `disabled` still refuses the interaction. It just refuses it in place.
+   */
+  const empty = options.length === 0
 
   const toggle = (value: string) =>
     onChange(values.includes(value) ? values.filter((v) => v !== value) : [...values, value])
@@ -298,22 +313,25 @@ export function FilterMulti({
         <button
           type="button"
           data-testid={testid}
-          aria-expanded={open}
-          aria-haspopup="listbox"
+          disabled={empty}
+          aria-expanded={empty ? undefined : open}
+          aria-haspopup={empty ? undefined : 'listbox'}
           onClick={() => setOpen((o) => !o)}
-          className={`${CONTROL} w-full justify-between ${values.length > 0 ? 'border-brand-500/50 bg-brand-500/10' : ''}`}
+          className={`${CONTROL} w-full justify-between ${empty ? 'cursor-default text-text-muted' : ''} ${values.length > 0 ? 'border-brand-500/50 bg-brand-500/10' : ''}`}
         >
           <span className="truncate">
-            {values.length === 0
-              ? t('all', ar)
-              : values.length === 1
-                ? (options.find((o) => o.value === values[0])?.label ?? values[0])
-                : `${values.length}`}
+            {empty
+              ? t('none', ar)
+              : values.length === 0
+                ? t('all', ar)
+                : values.length === 1
+                  ? (options.find((o) => o.value === values[0])?.label ?? values[0])
+                  : `${values.length}`}
           </span>
           <ChevronDown size={14} aria-hidden className="shrink-0 text-text-muted" />
         </button>
 
-        {open && (
+        {open && !empty && (
           <div
             role="listbox"
             aria-label={label}
