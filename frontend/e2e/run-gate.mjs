@@ -42,7 +42,15 @@ const results = []
 for (const project of PROJECTS) {
   process.stdout.write(`\n${'='.repeat(72)}\n[gate] ${project} — its own database, its own servers, its own browser\n${'='.repeat(72)}\n`)
 
-  const run = spawnSync('npx', ['playwright', 'test', '--project', project, ...process.argv.slice(2)], {
+  /*
+   * Each project keeps its OWN artifacts.
+   *
+   * Playwright clears its output directory at the start of every invocation, and this script makes
+   * three of them — so a firefox failure's screenshot and error-context were deleted the moment
+   * webkit started, and the only copy of the evidence went with them. That is exactly what happened
+   * chasing an advertiser-portal failure: the run named the file and the file was already gone.
+   */
+  const run = spawnSync('npx', ['playwright', 'test', '--project', project, `--output=test-results/${project}`, ...process.argv.slice(2)], {
     stdio: 'inherit',
     // Never inherited: a leftover skip would silently hand this project the previous one's data,
     // which is the entire failure this script exists to remove.

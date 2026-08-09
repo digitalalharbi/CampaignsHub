@@ -9,6 +9,28 @@ import { AUTH, untranslatedChrome } from './helpers'
  * An interface that changes direction while its content does not reads as broken rather than as
  * unfinished, and it is the flagship page of this portal.
  */
+/**
+ * Open a section the way a person does — by clicking its rail link.
+ *
+ * These two walks used `page.goto()` per section, which is a full document load each time: fourteen
+ * of them, plus a language toggle, inside ONE default 30s budget. The walk had been finishing at
+ * 21–25s on firefox for three consecutive gates — 70–85% of its ceiling, with no headroom — and the
+ * fourth tipped it over at exactly 30.0s. Nothing had got slower: the sibling walk in the same run
+ * was FASTER than the gate before it (15.1s against 25.0s), and this one passes alone in 19s.
+ *
+ * Raising the timeout would have been the obvious move and the wrong one — it buys silence until the
+ * next few seconds of variance. Clicking navigates through the router instead of reloading the
+ * document, which costs a fraction of a `goto`, and it is also what the test claims to be doing:
+ * «every rail link opens a page».
+ *
+ * The URL is asserted after the click, so a link that navigates somewhere else fails here rather
+ * than three assertions later against the wrong page.
+ */
+async function openSection(page: import('@playwright/test').Page, href: string) {
+  await page.getByRole('navigation').first().locator(`a[href="${href}"]`).first().click()
+  await expect(page).toHaveURL(new RegExp(`${href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\?|$)`))
+}
+
 test.describe('the advertiser portal', () => {
   test.use({ storageState: AUTH.advertiser })
 
@@ -73,7 +95,7 @@ test.describe('the advertiser portal', () => {
     expect(hrefs.length).toBeGreaterThan(3)
 
     for (const href of hrefs) {
-      await page.goto(href)
+      await openSection(page, href)
       const main = page.locator('main')
       await expect(main).toBeVisible({ timeout: 20000 })
       await expect.poll(async () => (await main.innerText()).trim().length, { timeout: 20000 })
@@ -104,7 +126,7 @@ test.describe('the advertiser portal', () => {
 
     const stillArabic: string[] = []
     for (const href of hrefs) {
-      await page.goto(href)
+      await openSection(page, href)
       await expect(page.locator('main')).toBeVisible({ timeout: 20000 })
       // Give the section's own queries a moment to resolve before reading its text.
       await expect.poll(async () => (await page.locator('main').innerText()).trim().length, { timeout: 20000 })
