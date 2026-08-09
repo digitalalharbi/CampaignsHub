@@ -69,18 +69,35 @@ test.describe('the plan catalogue is the owner’s to price', () => {
     expect(reasons.some((r: string | null) => r?.includes('Introductory annual price'))).toBeTruthy()
   })
 
-  test('nothing on sale is free, and «البداية» is 99 a month and 990 a year', async ({ page }) => {
+  /**
+   * The commercial RULES, not the figures.
+   *
+   * This asserted «البداية» at 99.00 and 990.00, and the moment the owner re-denominated the
+   * catalogue in USD it failed — a decision they are entitled to make breaking a test that claimed to
+   * be about the product. A price is a commercial term somebody edits from `/admin`; what must stay
+   * true is that nothing is free, that both terms are published, and that the annual term is a real
+   * discount rather than twelve months with a different label.
+   */
+  test('nothing on sale is free, both terms are published, and the year is a genuine discount', async ({ page }) => {
     const res = await page.request.get('/api/v1/plans')
     const body = await res.json()
 
     for (const plan of body.data.plans) {
       expect(Number(plan.price_monthly), `plan [${plan.code}] is offered at no charge`).toBeGreaterThan(0)
+      expect(plan.currency, `plan [${plan.code}] states no currency`).toBeTruthy()
+
+      if (plan.price_annual !== null) {
+        expect(
+          Number(plan.price_annual),
+          `plan [${plan.code}] charges as much for a year as for twelve months`,
+        ).toBeLessThan(Number(plan.price_monthly) * 12)
+      }
     }
 
-    // The figures the brief names, and what the plan is sold ON — data, not marketing copy.
+    // The entry plan is sold on both terms, and what it is sold ON is data, not marketing copy.
     const starter = body.data.plans.find((p: { code: string }) => p.code === 'starter')
-    expect(starter.price_monthly).toBe('99.00')
-    expect(starter.price_annual).toBe('990.00')
+    expect(Number(starter.price_monthly)).toBeGreaterThan(0)
+    expect(starter.price_annual, 'the entry plan must publish an annual term').not.toBeNull()
     expect(starter.features.campaign_tracking).toBe(true)
     expect(starter.features.reports).toBe(true)
   })
