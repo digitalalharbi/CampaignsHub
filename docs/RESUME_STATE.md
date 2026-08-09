@@ -625,19 +625,34 @@ here.** Nothing below has been changed yet; each genuine gap needs a test that f
 | 9 | Provisioning strictly behind verified payment | **Holds.** «There is deliberately no endpoint a browser can call to declare itself paid», and the sandbox gateway posts a signed event to the same webhook. |
 | 10 | Two webhook sinks — «two paths for one concept» | **NOT a duplication — the recorded suspicion is wrong.** `payments/webhook/{provider}` settles the tenant's own SaaS subscription to CampaignsHub; `billing/webhook/{provider}` settles agency→client invoices inside the product. Two different money flows, correctly separate. |
 
-**The one finding not on the commission's list, and the sharpest:** the enforced caps and the
-declared caps barely intersect.
+**The one finding not on the commission's list, and the sharpest: NOT ONE PLAN CAP IS ENFORCED.**
+
+Corrected on a second pass — the first pass of this audit said «one of five is enforced» and that
+was too generous by one.
 
 - Plans declare `projects`, `team_members`, `connections`, `reports_per_month`.
-- `EnsureWithinPlanLimit` is wired to exactly two routes: `projects` and **`campaigns`**.
-- No plan declares a `campaigns` cap, so `effectiveLimit` returns `null`, `withinLimit` returns
-  `true`, and **the middleware on campaign creation does nothing as shipped.** Not dead code:
+- `EnsureWithinPlanLimit` is wired to exactly two routes: `projects` and `campaigns`.
+- No plan declares a `campaigns` cap, so that one refuses nothing as shipped. (Not dead code:
   `updatePlan` takes an arbitrary `limits` array, so an operator could add the key — the gate is
-  unconfigured rather than unreachable, and nothing in `/admin` hints that the key exists.
-- `team_members`, `connections` and `reports_per_month` are sold and never enforced.
+  unconfigured rather than unreachable, and nothing in `/admin` hints the key exists.)
+- **And `projects` refuses nothing either, because the meter is never fed.**
+  `SubscriptionService::increment()` — the only writer of `usage_counters` — **has no callers in
+  `app/`.** The whole table is written by tests and by nothing else. So `usage()` always returns 0,
+  `withinLimit()` is always `0 < cap`, and both middlewares pass everything.
 
-So of five metrics, one is enforced, one is guarded but uncapped, and three are advertised limits a
-customer can exceed freely. That is the first thing to fix, and it is provable with a test.
+The service's own docblock says «`withinLimit()` compares REAL usage_counters against the plan's
+cap». REAL is exactly what they are not.
+
+**Why the suite did not catch it.** `SubscriptionTest::test_within_limit_is_true_under_the_cap_and_false_at_the_cap`
+calls `increment()` itself, three times, and then asserts the comparison. It proves the service's
+arithmetic and never once proves that creating a project moves the number. Nine tests cover this
+domain and not one crosses the seam between the meter and the thing being metered — the same shape
+as `campaigns.spec.ts` asserting an Arabic string after switching to English, and passing for four
+gates because the component never translated.
+
+So: five metrics sold, five unenforced. The fix is small — call `increment()` where the thing is
+created, and decide `campaigns` — and the test that proves it must go through the HTTP create path,
+never through the service.
 
 ---
 
