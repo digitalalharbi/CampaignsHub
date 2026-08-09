@@ -28,7 +28,18 @@ import { AUTH, untranslatedChrome } from './helpers'
  */
 async function openSection(page: import('@playwright/test').Page, href: string) {
   await page.getByRole('navigation').first().locator(`a[href="${href}"]`).first().click()
-  await expect(page).toHaveURL(new RegExp(`${href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\?|$)`))
+  /*
+   * A SUB-PATH counts as having arrived — GATE-FF-002.
+   *
+   * `/app/settings` resolves to its default section, `/app/settings/workspace`. The pattern demanded
+   * the URL end at the rail's own href, so it was really asserting «the redirect has not happened
+   * yet» — a race, not a requirement. Firefox, being slower on this machine, got there first and
+   * failed on the settled destination while chromium and webkit passed on the intermediate one.
+   *
+   * What the test is for is that the link OPENS ITS SECTION, and it still says exactly that: the URL
+   * must be that section or somewhere inside it. A landing page is free to choose its own default.
+   */
+  await expect(page).toHaveURL(new RegExp(`${href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(/|\\?|$)`))
 }
 
 test.describe('the advertiser portal', () => {
