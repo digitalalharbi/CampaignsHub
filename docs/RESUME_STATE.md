@@ -607,6 +607,42 @@ meets exactly the same thing: reach for More filters and it moves 655px sideways
 
 ---
 
+## Session — CLICK-STABLE-002: the same defect, a third time, in every modal (`79feafa`)
+
+The gate that followed PAY-AUDIT-001 failed on firefox — one test, `report-pdf-download.spec.ts`,
+with `waitForResponse` on `POST /reports` timing out after three minutes.
+
+**The error shape ruled out the new caps before any code was read.** A 403 from
+`EnsureWithinPlanLimit` would have SATISFIED `waitForResponse`, and the spec would then have failed
+fast on `expect(reportId).toBeTruthy()`. A timeout means no POST was ever sent — so this was a lost
+click, not a refusal.
+
+Measured on firefox from the moment the modal opened:
+
+```
+before:  y=807 -> y=1437     630px down, within 200ms
+after:   y=624, constant
+```
+
+`ReportScopePicker` stands in with `Skeleton h-40` for a picker that renders six to nine axis
+blocks, and grows a SECOND time when its templates query lands. The builder's buttons sat in the
+body underneath both.
+
+**Third surface, so the fix moved to the primitive.** `Modal` is now a flex column whose body
+scrolls and whose title and actions do not. Any modal passing `footer` gets buttons its content
+cannot move. It also fixes the ordinary complaint — in a tall modal you had to scroll to find the
+button that finishes the job.
+
+**Watch for a fourth.** The pattern is always the same: a placeholder shorter than the answer, or a
+control that mounts when its query lands, with something clickable underneath. When a click-does-
+nothing failure appears, MEASURE THE TARGET'S BOX FIRST — three for three so far.
+
+**One loose end, recorded rather than dismissed.** The first `vitest run` after the Modal change
+reported `1 failed | 927 passed`; the output was truncated by `tail -8` so the test was never
+identified, and two subsequent full runs were 928/928. Unexplained, not reproduced.
+
+---
+
 ## Session — PAY-AUDIT-001: the caps were sold and none were enforced
 
 **Fixed.** `SubscriptionService::usage()` now counts the thing itself instead of reading a meter
