@@ -10,7 +10,35 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## GATE — 2026-08-08 (E2E-ISO-002) · **GREEN, and it is a different gate now**
+## GATE — 2026-08-09 · **GREEN at `0179ec7`**
+
+`cd frontend && npm run gate` — chromium **286**, firefox **278**, webkit **278**, each in its own
+invocation against its own freshly seeded database. Real exit code **0** (captured properly: an
+earlier run read `0` from a trailing `echo` rather than from the gate, which is how a FAILED gate was
+briefly reported as passing — put the `$?` capture on its own line).
+
+**Failed=0 · Skipped=0 · Flaky=0 · Retries=0 · Working tree CLEAN.**
+Backend **1782 passed** (10313 assertions) · Frontend **944 passed** (129 files) · tsc, oxlint, Pint clean.
+
+Closed this session: **CLICK-STABLE-001** (which closed TAB-PARAM-001 and GATE-FF-001),
+**CLICK-STABLE-002**, **PAY-AUDIT-001/002/003/004**.
+
+**Still open, and named so nothing looks delivered that is not:**
+1. **The reporting half of the currency decision.** Original vs reporting currency shown together,
+   and FX rates stored with their date and source. Nothing in analytics changed — only subscriptions
+   moved to USD. This is a real unit against the metrics pipeline and has no ticket yet.
+2. **The USD figures are mine, not the owner's** — 29/149/449 monthly, 290/1490/4490 annual, 9
+   introductory. Chosen to preserve the existing ~17% annual discount; all editable from `/admin`.
+3. **«Trial» is the wrong word throughout the domain** — `trial_fee`, `trial_days`, `trial_limits`,
+   `TrialClaim`, `TrialEligibility`, `startTrial()`, `purpose: 'trial'`. The user-facing wording is
+   fixed; the internals are not. It touches a paid-signup path and storage columns.
+4. **One unidentified frontend unit failure** (1 of 928) in the first run after the Modal change,
+   never reproduced across four subsequent full runs. The output was truncated so the test was never
+   named. Unexplained rather than dismissed.
+
+---
+
+## GATE — 2026-08-08 (E2E-ISO-002) · the previous green
 
 `npm run gate` · `GATE_EXIT_CODE=0` — chromium **286**, firefox **278**, webkit **278**, each in its
 own invocation against its own freshly seeded database and its own Redis keyspace.
