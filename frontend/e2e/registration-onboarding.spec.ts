@@ -177,15 +177,27 @@ test('the plan step reads the catalogue and quotes both terms before payment', a
   await page.locator('input[type="password"]').last().fill('secret1234')
   await page.getByRole('button', { name: /Continue|التالي/ }).click()
 
-  // Nothing on sale is free any more (PLAN-PAID-001) — «البداية» included.
+  /*
+   * Nothing on sale is free (PLAN-PAID-001) — «البداية» included — and every plan opens with a paid
+   * introductory month (PAY-AUDIT-003).
+   *
+   * The FIGURES come from the catalogue rather than from literals. This asserted `99` and `990`, and
+   * both broke the moment the owner re-denominated the plans in USD: a price is a commercial term
+   * somebody edits from /admin, and a test that writes one down is testing the seeder.
+   */
+  const priced = await page.request.get('/api/v1/plans').then((r) => r.json())
+  const starterPlan = priced.data.plans.find((p: { code: string }) => p.code === 'starter')
+
   await expect(page.getByTestId('plan-starter')).toBeEnabled()
-  await expect(page.getByTestId('plan-starter')).toContainText('99')
-  await expect(page.getByTestId('plan-growth-trial')).toBeVisible()
+  await expect(page.getByTestId('plan-starter')).toContainText(String(Number(starterPlan.price_monthly)))
+  await expect(page.getByTestId('plan-growth-intro')).toBeVisible()
 
   // The annual term quotes the WHOLE annual amount, not a monthly one — stated before payment.
   await page.getByTestId('plan-interval-annual').click()
   await expect(page.getByTestId('plan-starter')).toBeEnabled()
-  await expect(page.getByTestId('plan-starter')).toContainText('990')
+  await expect(page.getByTestId('plan-starter')).toContainText(String(Number(starterPlan.price_annual)))
+  // …and the introductory month is NOT advertised beside a year, because the year is bought outright.
+  await expect(page.getByTestId('plan-growth-intro')).toHaveCount(0)
   await page.getByTestId('plan-interval-monthly').click()
 
   // Applying without choosing one is refused — there is no free plan to fall through to.
