@@ -68,8 +68,8 @@ describe('PlanChooser', () => {
     expect(card).not.toHaveTextContent('0.00')
   })
 
-  /** A trial is announced only where the plan offers one, with the plan's own fee and length. */
-  it('announces a trial only where the plan has one', async () => {
+  /** The introductory month is announced only where the plan offers one, with its own price and length. */
+  it('announces the introductory month only where the plan has one', async () => {
     vi.mocked(fetchPlans).mockResolvedValue({
       plans: [plan({}), plan({ code: 'starter', name: 'Starter', trial_days: 0, price_annual: null })],
     })
@@ -79,8 +79,40 @@ describe('PlanChooser', () => {
       { locale: 'en' },
     )
 
-    expect(await screen.findByTestId('plan-growth-trial')).toHaveTextContent('7-day trial for 9.00 SAR')
-    expect(screen.queryByTestId('plan-starter-trial')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('plan-growth-intro')).toHaveTextContent('First 7 days for 9.00 SAR')
+    expect(screen.queryByTestId('plan-starter-intro')).not.toBeInTheDocument()
+  })
+
+  /**
+   * And never beside an ANNUAL price — PAY-AUDIT-003.
+   *
+   * The annual term is bought outright, so advertising an introductory month next to it would
+   * promise a charge the checkout will not make. The chooser used to show it on both terms.
+   */
+  it('does not announce an introductory month on the annual term', async () => {
+    vi.mocked(fetchPlans).mockResolvedValue({ plans: [plan({})] })
+
+    renderWithProviders(
+      <PlanChooser value={null} interval="annual" onChange={noop} onIntervalChange={noop} />,
+      { locale: 'en' },
+    )
+
+    expect(await screen.findByTestId('plan-growth')).toBeInTheDocument()
+    expect(screen.queryByTestId('plan-growth-intro')).not.toBeInTheDocument()
+  })
+
+  /** Arabic counts 3–10 with the plural and 11+ with the singular accusative: «30 يومًا», not «30 أيام». */
+  it('gets the Arabic number agreement right for a thirty-day month', async () => {
+    vi.mocked(fetchPlans).mockResolvedValue({ plans: [plan({ trial_days: 30 })] })
+
+    renderWithProviders(
+      <PlanChooser value={null} interval="monthly" onChange={noop} onIntervalChange={noop} />,
+      { locale: 'ar' },
+    )
+
+    const badge = await screen.findByTestId('plan-growth-intro')
+    expect(badge).toHaveTextContent('30 يومًا')
+    expect(badge).not.toHaveTextContent('30 أيام')
   })
 
   /** No annual toggle when nothing is sold annually — an empty choice is not a choice. */

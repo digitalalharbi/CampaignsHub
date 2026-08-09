@@ -10,6 +10,7 @@ use App\Domains\Subscriptions\Jobs\SendSubscriptionNotification;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionNotification;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
+use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Notifications\SubscriptionNotificationTemplates;
 use App\Domains\Subscriptions\Notifications\SubscriptionNotifier;
 use App\Domains\Subscriptions\Services\SubscriptionCheckout;
@@ -165,11 +166,21 @@ final class SubscriptionNotificationTest extends TestCase
 
         $notification = SubscriptionNotification::query()->where('event', 'trial_started')->firstOrFail();
 
-        // The message names the amount, the length and the date — "your subscription needs
-        // attention" is not something anybody can act on.
-        $this->assertStringContainsString('7', $notification->subject);
-        $this->assertStringContainsString('9.00 SAR', $notification->body);
-        $this->assertStringContainsString(Carbon::now()->addDays(7)->toDateString(), $notification->body);
+        /*
+         * The message names the amount, the length and the date — "your subscription needs
+         * attention" is not something anybody can act on.
+         *
+         * All three read from the PLAN: the length, the price and the currency are editable
+         * commercial terms, and PAY-AUDIT-002/003 moved every one of them at once.
+         */
+        $plan = SubscriptionPlan::where('code', 'growth')->firstOrFail();
+
+        $this->assertStringContainsString((string) $plan->trial_days, $notification->subject);
+        $this->assertStringContainsString((string) $plan->trial_fee.' '.$plan->currency, $notification->body);
+        $this->assertStringContainsString(
+            Carbon::now()->addDays($plan->trial_days)->toDateString(),
+            $notification->body,
+        );
     }
 
     /**
@@ -185,7 +196,9 @@ final class SubscriptionNotificationTest extends TestCase
         $this->assertSame(1, $this->lifecycle()->warnEndingTrials());
 
         $warning = SubscriptionNotification::query()->where('event', 'trial_ending')->firstOrFail();
-        $this->assertStringContainsString('499.00 SAR', $warning->body);
+        // The full price that is about to be charged, in the plan's own currency.
+        $plan = SubscriptionPlan::where('code', 'growth')->firstOrFail();
+        $this->assertStringContainsString((string) $plan->price_monthly.' '.$plan->currency, $warning->body);
 
         // Still trialing — the warning did not convert anything.
         $this->assertSame('trialing', $subscription->refresh()->status);

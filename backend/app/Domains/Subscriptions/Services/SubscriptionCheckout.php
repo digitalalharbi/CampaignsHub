@@ -59,11 +59,20 @@ final class SubscriptionCheckout
             throw new RuntimeException('This application names no plan to charge for.');
         }
 
-        if ($plan->offersTrial()) {
+        $interval = (string) ($request->billing_interval ?? 'monthly');
+
+        /*
+         * The TERM decides, not the plan — PAY-AUDIT-003.
+         *
+         * This asked `offersTrial()`, which reads the plan and cannot see what is being bought, so an
+         * annual applicant to a plan with an introductory month was charged the introductory price
+         * and given a monthly renewal. The public quote said one thing and the charge did another,
+         * which is the disagreement this product exists to refuse: the figure a customer authorises
+         * must be the figure they were shown.
+         */
+        if ($plan->offersIntroFor($interval)) {
             return $this->startTrial($request, $provider);
         }
-
-        $interval = (string) ($request->billing_interval ?? 'monthly');
         $quote = $this->catalogue->quote($plan, $interval);
 
         if ($quote === null) {
@@ -92,8 +101,10 @@ final class SubscriptionCheckout
     {
         $plan = $this->catalogue->byCode($request->plan_code);
 
-        if ($plan === null || ! $plan->offersTrial()) {
-            throw new RuntimeException('This application is not for a plan that offers a trial.');
+        $interval = (string) ($request->billing_interval ?? 'monthly');
+
+        if ($plan === null || ! $plan->offersIntroFor($interval)) {
+            throw new RuntimeException('This application is not for a plan and term that open with an introductory month.');
         }
 
         /*
@@ -115,7 +126,7 @@ final class SubscriptionCheckout
             amount: (string) $plan->trial_fee,
             currency: $plan->currency,
             planCode: $plan->code,
-            interval: $request->billing_interval ?? 'monthly',
+            interval: $interval,
             provider: $provider,
             registration: $request,
         ) + ['refused' => []];

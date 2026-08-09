@@ -119,6 +119,17 @@ final class PlatformBillingController extends Controller
             'summary_en' => ['sometimes', 'nullable', 'string', 'max:500'],
             'price_monthly' => ['sometimes', 'numeric', 'min:0'],
             'price_annual' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            /*
+             * The currency, editable — PAY-AUDIT-002.
+             *
+             * It was the one commercial term this endpoint did not accept, which meant the catalogue
+             * was priced in a currency nobody could change without a deploy. Subscriptions are sold
+             * in USD; the ADVERTISING side reports in SAR and is not affected by this field, because
+             * a plan's currency and a report's currency answer different questions.
+             *
+             * Three letters, upper-cased, so `usd` and `USD` cannot become two currencies.
+             */
+            'currency' => ['sometimes', 'string', 'size:3', 'alpha'],
             'trial_fee' => ['sometimes', 'numeric', 'min:0'],
             'trial_days' => ['sometimes', 'integer', 'min:0', 'max:365'],
             'trial_limits' => ['sometimes', 'nullable', 'array'],
@@ -143,12 +154,19 @@ final class PlatformBillingController extends Controller
         $reason = isset($data['reason']) ? trim((string) $data['reason']) : null;
         unset($data['reason']);
 
+        // `usd` and `USD` are one currency, and only one of them compares equal to what is stored.
+        if (isset($data['currency'])) {
+            $data['currency'] = strtoupper((string) $data['currency']);
+        }
+
         /** @var SubscriptionPlan|null $model */
         $model = SubscriptionPlan::query()->whereKey($plan)->first();
         abort_if($model === null, 404);
 
         $tracked = [
-            'name', 'name_ar', 'price_monthly', 'price_annual', 'trial_fee', 'trial_days',
+            // `currency` is audited for the same reason a price is: re-denominating a plan is a
+            // commercial decision, and one nobody wrote down is one nobody can defend later.
+            'name', 'name_ar', 'price_monthly', 'price_annual', 'currency', 'trial_fee', 'trial_days',
             'trial_limits', 'limits', 'features', 'is_active', 'is_public', 'sort_order',
         ];
         $before = $model->only($tracked);

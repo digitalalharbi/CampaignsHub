@@ -56,11 +56,18 @@ final class PlanCatalogueTest extends TestCase
         $codes = array_column((array) $res->json('data.plans'), 'code');
         $this->assertSame(['starter', 'growth', 'scale'], $codes, 'ordered by the catalogue, not by id');
 
-        // Both terms are published, because both are sold.
+        /*
+         * Both terms are published, because both are sold — read from the catalogue rather than
+         * hard-coded, so re-pricing is a commercial decision and not a test failure. The literals
+         * that were here (`499.00`, `4990.00`, `7`) had to be edited by hand the moment the owner
+         * moved the catalogue to USD and to a thirty-day introductory month.
+         */
+        $plan = SubscriptionPlan::where('code', 'growth')->firstOrFail();
         $growth = collect($res->json('data.plans'))->firstWhere('code', 'growth');
-        $this->assertSame('499.00', $growth['price_monthly']);
-        $this->assertSame('4990.00', $growth['price_annual']);
-        $this->assertSame(7, $growth['trial_days']);
+        $this->assertSame((string) $plan->price_monthly, $growth['price_monthly']);
+        $this->assertSame((string) $plan->price_annual, $growth['price_annual']);
+        $this->assertSame($plan->trial_days, $growth['trial_days']);
+        $this->assertSame('USD', $growth['currency'], 'subscriptions are sold in USD (PAY-AUDIT-002)');
     }
 
     /**
@@ -85,28 +92,50 @@ final class PlanCatalogueTest extends TestCase
     // ── Quotes ────────────────────────────────────────────────────────────────────────────────
 
     /**
-     * A trial quotes the TRIAL fee as due now, and the subscription price as due later.
+     * The introductory month quotes the INTRODUCTORY price now and the full price later.
      *
      * Quoting the subscription price as "due now" would misstate the charge the customer is about to
-     * authorise — which is the difference between a symbolic trial fee and a full month's billing.
+     * authorise — the difference between a symbolic first month and a full month's billing.
+     *
+     * Asked on the MONTHLY term, because the introductory month is a monthly offer: this test used to
+     * ask for `interval=annual` and expect the introductory price, which is the defect PAY-AUDIT-003
+     * removed — an annual buyer was quoted a cheap month and a renewal thirty days later.
      */
-    public function test_a_trial_quote_separates_what_is_taken_now_from_what_falls_due_later(): void
+    public function test_the_introductory_quote_separates_what_is_taken_now_from_what_falls_due_later(): void
     {
-        $res = $this->getJson('/api/v1/plans/growth/quote?interval=annual')->assertOk();
-
-        $res->assertJsonPath('data.quote.due_now', '9.00')
-            ->assertJsonPath('data.quote.due_later', '4990.00')
-            ->assertJsonPath('data.quote.renews_in_days', 7)
-            ->assertJsonPath('data.quote.trial_days', 7);
-    }
-
-    /** A plan with no trial charges its own price today, and renews on its own term. */
-    public function test_a_plan_without_a_trial_charges_its_price_today(): void
-    {
-        SubscriptionPlan::where('code', 'growth')->update(['trial_days' => 0]);
+        $plan = SubscriptionPlan::where('code', 'growth')->firstOrFail();
 
         $this->getJson('/api/v1/plans/growth/quote?interval=monthly')->assertOk()
-            ->assertJsonPath('data.quote.due_now', '499.00')
+            ->assertJsonPath('data.quote.due_now', (string) $plan->trial_fee)
+            ->assertJsonPath('data.quote.due_later', (string) $plan->price_monthly)
+            ->assertJsonPath('data.quote.renews_in_days', $plan->trial_days)
+            ->assertJsonPath('data.quote.trial_days', $plan->trial_days);
+    }
+
+    /** And the ANNUAL term never passes through it — see PlanCommercialTermsTest for the full case. */
+    public function test_the_annual_term_skips_the_introductory_month(): void
+    {
+        $plan = SubscriptionPlan::where('code', 'growth')->firstOrFail();
+
+        $this->getJson('/api/v1/plans/growth/quote?interval=annual')->assertOk()
+            ->assertJsonPath('data.quote.due_now', (string) $plan->price_annual)
+            ->assertJsonPath('data.quote.due_later', null)
+            ->assertJsonPath('data.quote.renews_in_days', 365);
+    }
+
+    /**
+     * A plan with no introductory month charges its own price today, and renews on its own term.
+     *
+     * Every seeded plan now opens with one, so this withdraws it from `growth` first — which is also
+     * what an owner does from `/admin` when they end an offer.
+     */
+    public function test_a_plan_without_an_introductory_month_charges_its_price_today(): void
+    {
+        SubscriptionPlan::where('code', 'growth')->update(['trial_days' => 0]);
+        $plan = SubscriptionPlan::where('code', 'growth')->firstOrFail();
+
+        $this->getJson('/api/v1/plans/growth/quote?interval=monthly')->assertOk()
+            ->assertJsonPath('data.quote.due_now', (string) $plan->price_monthly)
             ->assertJsonPath('data.quote.due_later', null)
             ->assertJsonPath('data.quote.renews_in_days', 30);
     }
@@ -127,7 +156,7 @@ final class PlanCatalogueTest extends TestCase
          */
         $monthlyOnly = SubscriptionPlan::query()->create([
             'code' => 'monthly-only', 'name' => 'Monthly Only', 'name_ar' => 'شهري فقط',
-            'price_monthly' => 199, 'price_annual' => null, 'currency' => 'SAR',
+            'price_monthly' => 199, 'price_annual' => null, 'currency' => 'USD',
             'trial_fee' => 0, 'trial_days' => 0, 'is_active' => true, 'is_public' => true, 'sort_order' => 90,
         ]);
 
@@ -146,10 +175,11 @@ final class PlanCatalogueTest extends TestCase
     {
         $res = $this->getJson('/api/v1/plans')->assertOk();
 
+        $plan = SubscriptionPlan::where('code', 'starter')->firstOrFail();
         $starter = collect($res->json('data.plans'))->firstWhere('code', 'starter');
-        $this->assertSame('99.00', $starter['price_monthly'], 'the entry plan must cost 99 SAR a month');
-        $this->assertSame('990.00', $starter['price_annual'], 'the annual term must be published before payment');
-        $this->assertNotSame('0.00', $starter['price_monthly'], 'there is no free tier');
+        $this->assertSame((string) $plan->price_monthly, $starter['price_monthly']);
+        $this->assertSame((string) $plan->price_annual, $starter['price_annual'], 'the annual term must be published before payment');
+        $this->assertGreaterThan(0, (float) $starter['price_monthly'], 'there is no free tier');
 
         // What the plan is sold ON, as data rather than as marketing copy.
         $this->assertTrue((bool) $starter['features']['campaign_tracking']);
@@ -157,7 +187,7 @@ final class PlanCatalogueTest extends TestCase
 
         // The quote a visitor is shown before paying names the whole annual amount, not a monthly one.
         $this->getJson('/api/v1/plans/starter/quote?interval=annual')->assertOk()
-            ->assertJsonPath('data.quote.due_now', '990.00')
+            ->assertJsonPath('data.quote.due_now', (string) $plan->price_annual)
             ->assertJsonPath('data.quote.renews_in_days', 365);
     }
 
@@ -212,11 +242,22 @@ final class PlanCatalogueTest extends TestCase
             ])->assertOk()
             ->assertJsonPath('data.plan.trial_days', 14);
 
-        // And the PUBLIC quote moves with it — one statement, not two.
-        $this->getJson('/api/v1/plans/growth/quote?interval=annual')->assertOk()
+        /*
+         * And the PUBLIC quote moves with it — one statement, not two.
+         *
+         * Asked on the MONTHLY term. This used to ask the annual quote to reflect a change to the
+         * introductory terms, which it can no longer do and should never have done: the annual term
+         * is bought outright (PAY-AUDIT-003). The annual PRICE change is asserted separately below,
+         * because that one does belong to the annual term.
+         */
+        $this->getJson('/api/v1/plans/growth/quote?interval=monthly')->assertOk()
             ->assertJsonPath('data.quote.due_now', '15.00')
-            ->assertJsonPath('data.quote.due_later', '5990.00')
+            ->assertJsonPath('data.quote.due_later', (string) $plan->refresh()->price_monthly)
             ->assertJsonPath('data.quote.renews_in_days', 14);
+
+        $this->getJson('/api/v1/plans/growth/quote?interval=annual')->assertOk()
+            ->assertJsonPath('data.quote.due_now', '5990.00')
+            ->assertJsonPath('data.quote.renews_in_days', 365);
     }
 
     /** A price change is a commercial decision, so it is audited like one. */
@@ -243,7 +284,7 @@ final class PlanCatalogueTest extends TestCase
             ->patchJson("/api/v1/admin/plans/{$plan->getKey()}", ['price_monthly' => 0])
             ->assertForbidden();
 
-        $this->assertSame('499.00', (string) $plan->refresh()->price_monthly);
+        $this->assertSame((string) $plan->price_monthly, (string) $plan->refresh()->price_monthly);
     }
 
     // ── Registration reads the same catalogue ─────────────────────────────────────────────────

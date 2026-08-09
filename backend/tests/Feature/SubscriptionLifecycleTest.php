@@ -79,10 +79,25 @@ final class SubscriptionLifecycleTest extends TestCase
 
         $payment = SubscriptionPayment::query()->where('registration_request_id', $request->getKey())->firstOrFail();
 
+        /*
+         * Pay what the charge ACTUALLY is.
+         *
+         * The amount was written here as `900` — the introductory fee in minor units — which quietly
+         * assumed every applicant opens with one. Since PAY-AUDIT-003 the annual term is bought
+         * outright, so an annual applicant owes the annual price and a literal here made the webhook
+         * fail its own amount check: the event verified, applied nothing, and the subscription this
+         * helper returns simply did not exist.
+         *
+         * `ApplySubscriptionPaymentEvent` re-checks the amount on purpose — a verified event proves
+         * the gateway sent it, not that it says what we think. So the test has to send the truth.
+         */
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_'.$payment->getKey(), 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
-            'data' => ['id' => 'pay_'.$payment->getKey(), 'status' => 'paid', 'amount' => 900, 'currency' => 'SAR',
-                'metadata' => ['reference' => $payment->idempotency_key]],
+            'data' => [
+                'id' => 'pay_'.$payment->getKey(), 'status' => 'paid',
+                'amount' => (int) round((float) $payment->amount * 100), 'currency' => $payment->currency,
+                'metadata' => ['reference' => $payment->idempotency_key],
+            ],
         ])->assertOk()->assertJsonPath('data.verified', true);
 
         return Subscription::query()->withoutGlobalScope(TenantScope::class)
@@ -97,10 +112,16 @@ final class SubscriptionLifecycleTest extends TestCase
 
         $this->assertSame('trialing', $subscription->status);
         $this->assertTrue($subscription->isTrialing());
-        // Compared as a DATE: `diffInDays` truncates, so the milliseconds spent walking the webhook
-        // would make a seven-day trial measure six.
+        /*
+         * Compared as a DATE: `diffInDays` truncates, so the milliseconds spent walking the webhook
+         * would make the period measure one day short.
+         *
+         * The LENGTH is read from the plan rather than written here — it is an editable commercial
+         * term, and PAY-AUDIT-003 moved it from seven days to thirty.
+         */
+        $introDays = $subscription->plan->trial_days;
         $this->assertSame(
-            Carbon::now()->addDays(7)->toDateString(),
+            Carbon::now()->addDays($introDays)->toDateString(),
             $subscription->trial_ends_at?->toDateString(),
         );
         // Consent to auto-conversion is recorded WHEN it was given, not merely that it was.
@@ -167,13 +188,23 @@ final class SubscriptionLifecycleTest extends TestCase
         $this->assertSame(0, SubscriptionPayment::query()->where('subscription_id', $subscription->getKey())->count());
     }
 
-    /** An annual trial converts onto the annual term, not silently onto a month. */
-    public function test_the_term_the_applicant_chose_is_what_the_trial_converts_into(): void
+    /**
+     * An annual applicant buys the year outright — PAY-AUDIT-003.
+     *
+     * This used to read «an annual trial converts onto the annual term, not silently onto a month»,
+     * and it was covering for a defect rather than describing a decision: the checkout asked the PLAN
+     * whether it offered a trial, could not see the TERM, and so charged an annual applicant a cheap
+     * first month and set them renewing in thirty days. The owner's decision is that the annual term
+     * carries its own discount and does not pass through an introductory month at all.
+     */
+    public function test_the_annual_term_is_bought_outright_rather_than_opening_an_introductory_month(): void
     {
         $subscription = $this->paidTrial('annual@a.test', 'annual');
 
         $this->assertSame('annual', $subscription->billing_interval);
-        $this->assertSame('4990.00', (string) $subscription->unit_amount);
+        $this->assertSame((string) $subscription->plan->price_annual, (string) $subscription->unit_amount);
+        $this->assertSame('active', $subscription->status, 'a year bought outright is not a trial');
+        $this->assertNull($subscription->trial_ends_at, 'the annual term opens no introductory window');
     }
 
     // ── Failure, grace and suspension ─────────────────────────────────────────────────────────

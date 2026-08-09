@@ -57,6 +57,21 @@ final class SubscriptionPlan extends Model
     }
 
     /**
+     * Does this term begin with the paid introductory period? — PAY-AUDIT-003.
+     *
+     * The introductory month is a MONTHLY offer. Somebody committing to a year is already committing,
+     * and the annual price already carries its own discount; putting a symbolic first month in front
+     * of it would discount the discount and delay the year they asked to buy.
+     *
+     * So the answer depends on the term, which `offersTrial()` alone cannot express — it reads the
+     * plan and not the purchase.
+     */
+    public function offersIntroFor(string $interval): bool
+    {
+        return $interval === 'monthly' && $this->offersTrial();
+    }
+
+    /**
      * The amount to charge for a term, in the plan's currency.
      *
      * Returns null when the plan is not sold on that term — a caller must not fall back to the other

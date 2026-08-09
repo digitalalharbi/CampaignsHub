@@ -8,6 +8,7 @@ use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
+use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Scopes\TenantScope;
@@ -165,13 +166,26 @@ final class PaidRegistrationTest extends TestCase
         $this->assertSame('app', $membership->portal->value);
         $this->assertSame((string) $tenant->getKey(), (string) $membership->tenant_id);
 
-        // The subscription the money bought — active, not trialing, on the term that was chosen.
+        /*
+         * The subscription the money bought — on the term that was chosen, opening with the paid
+         * introductory month (PAY-AUDIT-003).
+         *
+         * This asserted «active, not trialing» and «a plan bought outright has no trial window»,
+         * which was true while «البداية» was the one plan sold without an introductory period. Every
+         * plan now opens with one on the MONTHLY term, so a monthly registration is `trialing` — and
+         * the bought-outright case moved to the annual term, where it is asserted below.
+         *
+         * `unit_amount` is the FULL monthly price, not the introductory one: the subscription records
+         * what this customer owes each period, and the introductory charge is a payment against the
+         * first of them rather than a re-pricing of the plan.
+         */
         $subscription = Subscription::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $tenant->getKey())->firstOrFail();
-        $this->assertSame('active', $subscription->status);
-        $this->assertNull($subscription->trial_ends_at, 'a plan bought outright has no trial window');
+        $plan = SubscriptionPlan::where('code', 'starter')->firstOrFail();
+        $this->assertSame('trialing', $subscription->status);
+        $this->assertNotNull($subscription->trial_ends_at, 'the paid introductory month opens no window');
         $this->assertSame('monthly', $subscription->billing_interval);
-        $this->assertSame('99.00', (string) $subscription->unit_amount);
+        $this->assertSame((string) $plan->price_monthly, (string) $subscription->unit_amount);
 
         // A first project exists, so the workspace is not an empty room.
         $this->assertDatabaseHas('projects', ['tenant_id' => $tenant->getKey(), 'status' => 'setup']);
@@ -185,15 +199,19 @@ final class PaidRegistrationTest extends TestCase
     /** The annual term charges the annual amount, and says so before anybody pays. */
     public function test_the_annual_term_charges_the_annual_price(): void
     {
+        $annual = (string) SubscriptionPlan::where('code', 'starter')->firstOrFail()->price_annual;
+
         $this->getJson('/api/v1/plans/starter/quote?interval=annual')->assertOk()
-            ->assertJsonPath('data.quote.due_now', '990.00');
+            ->assertJsonPath('data.quote.due_now', $annual)
+            // Bought outright: the annual term does not pass through the introductory month.
+            ->assertJsonPath('data.quote.due_later', null);
 
         ['registration' => $registration] = $this->applyAndVerify([
             'email' => 'annual@a.test', 'tenant_name' => 'Annual Co', 'billing_interval' => 'annual',
         ]);
 
         $payment = SubscriptionPayment::query()->where('registration_request_id', $registration->getKey())->firstOrFail();
-        $this->assertSame('990.00', (string) $payment->amount);
+        $this->assertSame($annual, (string) $payment->amount);
 
         $subscription = Subscription::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $registration->tenant_id)->firstOrFail();

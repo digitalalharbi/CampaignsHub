@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
@@ -81,8 +82,20 @@ final class PlatformOverviewTest extends TestCase
      */
     public function test_committed_value_is_priced_from_the_subscription_not_the_plan(): void
     {
+        /*
+         * The currency is read from the subscription rather than named here — subscriptions are sold
+         * in USD since PAY-AUDIT-002, and a literal «SAR» silently selected an empty bucket and
+         * turned this into an assertion about nothing.
+         *
+         * Money is reported PER currency and never summed across them, so picking the currency the
+         * seeded subscription actually carries is also the only correct way to read this figure.
+         */
+        $currency = (string) Subscription::query()->withoutGlobalScopes()
+            ->where('status', 'active')->value('currency');
+        $this->assertNotSame('', $currency, 'the demo seed has no active subscription at all');
+
         $before = collect($this->overview()['subscriptions']['committed_monthly'])
-            ->firstWhere('currency', 'SAR')['monthly'] ?? 0.0;
+            ->firstWhere('currency', $currency)['monthly'] ?? 0.0;
 
         $this->assertGreaterThan(0, $before, 'the demo seed has no active subscription to price');
 
@@ -90,7 +103,7 @@ final class PlatformOverviewTest extends TestCase
         DB::table('subscription_plans')->where('code', 'growth')->update(['price_monthly' => 99999]);
 
         $after = collect($this->overview()['subscriptions']['committed_monthly'])
-            ->firstWhere('currency', 'SAR')['monthly'] ?? 0.0;
+            ->firstWhere('currency', $currency)['monthly'] ?? 0.0;
 
         $this->assertEquals($before, $after);
     }

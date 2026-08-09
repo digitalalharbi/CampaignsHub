@@ -31,16 +31,27 @@ final class SubscriptionPlanSeeder extends Seeder
                  * it means every new workspace in the system arrives the same way: through a settled
                  * payment confirmed by a signed webhook.
                  */
-                'price_monthly' => 99,
+                'price_monthly' => 29,
                 // The annual term, priced at ten months for twelve — the same shape as Growth and
                 // Scale. The console edits it (PATCH /admin/plans/{plan}); this is only the opening
                 // value a fresh database starts from.
-                'price_annual' => 990,
-                'currency' => 'SAR',
-                // No trial: the entry plan IS the affordable way in, and a trial on top of it would
-                // be a second, cheaper front door to the same thing.
-                'trial_fee' => 0,
-                'trial_days' => 0,
+                'price_annual' => 290,
+                'currency' => 'USD',
+                /*
+                 * The introductory month, on the entry plan too — PAY-AUDIT-003.
+                 *
+                 * This plan deliberately had none: the argument was that «البداية» IS the affordable
+                 * way in, and an offer on top of it would be a second, cheaper front door to the same
+                 * thing. The owner's decision replaces that reasoning — every plan now opens with a
+                 * paid first month at an introductory price, and there is no free trial anywhere.
+                 *
+                 * `trial_fee` is a PRICE, not a token: it is what the first month costs, taken
+                 * through the same gateway as any other charge, which is what keeps «no activation
+                 * before verified payment» true of the introductory month as well.
+                 */
+                'trial_fee' => 9,
+                'trial_days' => 30,
+                'trial_limits' => ['projects' => 3, 'team_members' => 3, 'connections' => 3, 'reports_per_month' => 10],
                 'sort_order' => 10,
                 // Campaign tracking and reports are what this plan is sold on, so they are data the
                 // catalogue carries rather than a claim in a paragraph.
@@ -59,10 +70,10 @@ final class SubscriptionPlanSeeder extends Seeder
                 'name_ar' => 'النمو',
                 'summary_ar' => 'للفرق والوكالات الصغيرة التي تدير عدة مشاريع وعملاء.',
                 'summary_en' => 'For teams and small agencies running several projects and clients.',
-                'price_monthly' => 499,
+                'price_monthly' => 149,
                 // Two months' saving on the annual term, stated as the TOTAL actually charged.
-                'price_annual' => 4990,
-                'currency' => 'SAR',
+                'price_annual' => 1490,
+                'currency' => 'USD',
                 /*
                  * The paid 7-day trial (PLAN-001).
                  *
@@ -72,7 +83,7 @@ final class SubscriptionPlanSeeder extends Seeder
                  * fingerprint. Both numbers are editable from /admin.
                  */
                 'trial_fee' => 9,
-                'trial_days' => 7,
+                'trial_days' => 30,
                 // A trial is a look at the product, not a quarter of free capacity.
                 'trial_limits' => ['projects' => 3, 'team_members' => 3, 'connections' => 3, 'reports_per_month' => 10],
                 'sort_order' => 20,
@@ -94,11 +105,11 @@ final class SubscriptionPlanSeeder extends Seeder
                 'name_ar' => 'التوسع',
                 'summary_ar' => 'للوكالات الكبيرة: بلا حدود على المشاريع والفريق والتقارير.',
                 'summary_en' => 'For larger agencies: no caps on projects, team or reports.',
-                'price_monthly' => 1499,
-                'price_annual' => 14990,
-                'currency' => 'SAR',
+                'price_monthly' => 449,
+                'price_annual' => 4490,
+                'currency' => 'USD',
                 'trial_fee' => 9,
-                'trial_days' => 7,
+                'trial_days' => 30,
                 'trial_limits' => ['projects' => 5, 'team_members' => 5, 'connections' => 5, 'reports_per_month' => 20],
                 'sort_order' => 30,
                 'features' => [

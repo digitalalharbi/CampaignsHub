@@ -10,6 +10,7 @@ use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionInvoice;
 use App\Domains\Subscriptions\Models\SubscriptionNotification;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
+use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Services\SubscriptionCheckout;
 use App\Domains\Subscriptions\Services\SubscriptionLifecycle;
 use App\Domains\Subscriptions\Services\SubscriptionService;
@@ -164,13 +165,16 @@ final class CommercialJourneyTest extends TestCase
         // …and the invoice is now attached to the workspace that did not exist when it was issued.
         $this->assertSame($request->tenant_id, $trialInvoice->tenant_id);
 
-        // ── 6. The 7-day trial ────────────────────────────────────────────────────────────────
+        // ── 6. The paid introductory month ────────────────────────────────────────────────────
         $subscription = Subscription::query()->withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $request->tenant_id)->firstOrFail();
 
         $this->assertSame('trialing', $subscription->status);
+        // Read from the plan, not from a literal: the introductory period's length is an editable
+        // commercial term (PAY-AUDIT-003 moved it from seven days to thirty).
+        $introDays = SubscriptionPlan::where('code', 'growth')->firstOrFail()->trial_days;
         $this->assertSame(
-            Carbon::now()->addDays(7)->toDateString(),
+            Carbon::now()->addDays($introDays)->toDateString(),
             $subscription->trial_ends_at?->toDateString(),
         );
         $this->assertNotNull($subscription->auto_convert_consent_at, 'consent is recorded, with a time');
@@ -196,16 +200,23 @@ final class CommercialJourneyTest extends TestCase
         // the gateway says so, not because a date passed.
         $this->assertSame('past_due', $subscription->refresh()->status);
         $renewal = SubscriptionPayment::query()->where('purpose', 'subscription')->firstOrFail();
-        $this->assertSame('499.00', (string) $renewal->amount);
+        // The full monthly price, read from the plan — the amount is a commercial term, not a constant.
+        $this->assertSame(
+            (string) SubscriptionPlan::where('code', 'growth')->firstOrFail()->price_monthly,
+            (string) $renewal->amount,
+        );
         $this->assertContains('trial_converted', $this->events());
 
         // ── 8. The renewal invoice ────────────────────────────────────────────────────────────
         $renewalInvoice = SubscriptionInvoice::query()->where('subscription_payment_id', $renewal->getKey())->firstOrFail();
         $this->assertSame('issued', $renewalInvoice->status);
-        $this->assertSame('573.85', (string) $renewalInvoice->total, '499.00 plus 15%');
+        // The full monthly price plus 15% VAT, computed from the plan rather than written down: the
+        // price is an editable commercial term and the rate belongs to `TaxTreatment`.
+        $monthly = (float) SubscriptionPlan::where('code', 'growth')->firstOrFail()->price_monthly;
+        $this->assertSame(number_format($monthly * 1.15, 2, '.', ''), (string) $renewalInvoice->total);
 
         // ── 9. The renewal FAILS ──────────────────────────────────────────────────────────────
-        $this->webhook($renewal, 'failed', 49900);
+        $this->webhook($renewal, 'failed', (int) round((float) $renewal->amount * 100));
 
         $subscription->refresh();
         $this->assertSame('past_due', $subscription->status);
@@ -235,7 +246,8 @@ final class CommercialJourneyTest extends TestCase
 
         // ── 11. They pay → reactivation ───────────────────────────────────────────────────────
         $recovery = $checkout->chargeSubscription($subscription->refresh(), 'reactivation')['payment'];
-        $this->webhook($recovery, 'paid', 49900);
+        // The charge's own amount, in minor units — a literal here breaks the moment a price moves.
+        $this->webhook($recovery, 'paid', (int) round((float) $recovery->amount * 100));
 
         $subscription->refresh();
         $this->assertSame('active', $subscription->status);

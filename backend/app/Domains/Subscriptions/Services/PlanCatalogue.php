@@ -84,22 +84,31 @@ final class PlanCatalogue
             return null;
         }
 
-        $trial = $plan->offersTrial();
+        /*
+         * The introductory period is a MONTHLY offer — PAY-AUDIT-003.
+         *
+         * This read `offersTrial()`, which asks about the plan and not the purchase, so an annual
+         * buyer was quoted the symbolic first-month price and a renewal a month later. Somebody
+         * committing to a year is already committing, and the annual price carries its own discount:
+         * putting an introductory month in front of it discounts the discount and delays the year
+         * they asked to buy.
+         */
+        $intro = $plan->offersIntroFor($interval);
 
         return [
             'plan_code' => $plan->code,
             'currency' => $plan->currency,
             'interval' => $interval,
             /*
-             * What is taken TODAY. On a trial that is the symbolic trial fee, and the subscription
-             * price is what falls due when the trial converts — quoting the subscription price as
-             * "due now" would misstate the charge the customer is about to authorise.
+             * What is taken TODAY. On the introductory month that is the introductory price, and the
+             * full subscription price is what falls due when it converts — quoting the subscription
+             * price as "due now" would misstate the charge the customer is about to authorise.
              */
-            'due_now' => $trial ? (string) $plan->trial_fee : $recurring,
-            'due_later' => $trial ? $recurring : null,
-            'renews_in_days' => $trial ? $plan->trial_days : ($interval === 'annual' ? 365 : 30),
-            'trial_days' => $plan->trial_days,
-            'trial_fee' => $trial ? (string) $plan->trial_fee : null,
+            'due_now' => $intro ? (string) $plan->trial_fee : $recurring,
+            'due_later' => $intro ? $recurring : null,
+            'renews_in_days' => $intro ? $plan->trial_days : ($interval === 'annual' ? 365 : 30),
+            'trial_days' => $intro ? $plan->trial_days : 0,
+            'trial_fee' => $intro ? (string) $plan->trial_fee : null,
         ];
     }
 

@@ -607,6 +607,56 @@ meets exactly the same thing: reach for More filters and it moves 655px sideways
 
 ---
 
+## Session — PAY-AUDIT-002 and 003: the currency separation and the paid introductory month
+
+Both are **owner decisions of 2026-08-09**, recorded permanently in memory as
+`campaignshub-currency-and-trial`. They are not open questions any more.
+
+**Currency is a SEPARATION, not a switch.**
+
+| what | currency |
+|---|---|
+| Plans, subscriptions, CampaignsHub's own billing | **USD** |
+| Dashboard, analytics, reports, cross-platform comparison | **SAR**, as the reporting currency |
+
+Every platform's ORIGINAL amount and currency is always kept; SAR is for the unified view and the
+comparison only. Original campaign data is never rewritten to USD. FX rates carry their date and
+source — no hidden fixed conversion. Agency→client invoices keep their own currency and do **not**
+follow the subscription currency.
+
+Delivered here: the catalogue is priced in USD and `currency` became editable from `/admin` (it was
+the one commercial term the endpoint refused, so the denomination came from a seeder and only a
+deploy could change it). **Existing subscribers are deliberately untouched** — `assignPlan` captures
+`unit_amount` and `currency` on the subscription row, so anyone already paying keeps what they
+agreed to. Migrating them moves real money and is a decision, not a side effect.
+
+**NOT delivered here, and it is the larger half:** the reporting side — original vs reporting
+currency shown side by side, and FX rates stored with their date and source. That is a real unit of
+work and folding it into a plan repricing would have buried it. It has no ticket yet.
+
+**The introductory month.** No free tier, no free trial, no seven free days. Every plan — starter
+included, which had been excluded — opens with a paid 30-day introductory price and then charges in
+full. The ANNUAL term is bought outright: it already carries its own discount, and putting a cheap
+month in front of it would discount the discount.
+
+**Implementing it surfaced a defect the old terms had hidden.** `PlanCatalogue::quote()` and
+`SubscriptionCheckout::forRegistration()` both asked `offersTrial()`, which reads the PLAN and cannot
+see what is being bought. So an annual applicant was quoted a symbolic first month and charged one,
+and set renewing in thirty days — the public quote and the actual charge disagreeing about the same
+purchase, which is the exact class of thing this product refuses elsewhere. Both now ask
+`offersIntroFor($interval)`.
+
+Two more found on the way, both in the signup badge: it called a CHARGE «تجربة», and it would have
+read «30 أيام» — the Arabic agreement error MAIL-007 and MAIL-014 each had to correct, since 11 and
+above take the singular accusative («30 يومًا»).
+
+**The word «trial» is now wrong throughout the domain** — `trial_fee`, `trial_days`, `trial_limits`,
+`TrialClaim`, `TrialEligibility`, `startTrial()`, `purpose: 'trial'`. The user-facing wording is
+fixed; the internals are not. Renaming them touches a paid-signup path and the storage columns, so it
+is deliberate work rather than a side effect of this unit, and it is not done.
+
+---
+
 ## Session — PAY-AUDIT-004: the upgrade path nothing read
 
 `EnsureWithinPlanLimit` had answered properly since PLAN-003 — the metric, the usage, the cap and an

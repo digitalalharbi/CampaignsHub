@@ -10,7 +10,7 @@ import { useUi } from '@/stores/ui'
  * price that will eventually disagree with the one the checkout charges, and the whole point of the
  * plans engine is that the figure quoted and the figure billed are one statement.
  *
- * What it does NOT do is claim a trial the plan does not offer, or an annual term a plan is not sold
+ * What it does NOT do is claim an introductory month the plan does not offer, or an annual term a plan is not sold
  * on: both are read per plan, and the annual toggle disappears when nothing is sold that way.
  */
 
@@ -21,8 +21,16 @@ const COPY = {
     annual: 'سنوي',
     perMonth: '/شهريًا',
     perYear: '/سنويًا',
-    trial: (days: number, fee: string, currency: string) =>
-      `تجربة ${days} أيام مقابل ${fee} ${currency}`,
+    /*
+      The paid introductory month — PAY-AUDIT-003. It is a PRICE, not a trial: there is no free
+      period anywhere in this product, and calling a charge «تجربة» invites somebody to expect one.
+
+      Arabic number agreement: 3–10 take the plural («7 أيام»), 11 and above the singular accusative
+      («30 يومًا»). The old string said «30 أيام» the moment the term became a month — the same
+      mistake MAIL-007 and MAIL-014 each had to correct.
+    */
+    intro: (days: number, fee: string, currency: string) =>
+      `أول ${days} ${days <= 10 ? 'أيام' : 'يومًا'} بـ ${fee} ${currency}`,
     noAnnual: 'غير متاحة سنويًا',
     loading: 'جارٍ تحميل الباقات…',
     unavailable: 'تعذّر تحميل الباقات الآن، ولا يمكن إتمام التسجيل دون اختيار باقة.',
@@ -34,8 +42,8 @@ const COPY = {
     annual: 'Annual',
     perMonth: '/month',
     perYear: '/year',
-    trial: (days: number, fee: string, currency: string) =>
-      `${days}-day trial for ${fee} ${currency}`,
+    intro: (days: number, fee: string, currency: string) =>
+      `First ${days} days for ${fee} ${currency}`,
     noAnnual: 'Not sold annually',
     loading: 'Loading plans…',
     unavailable: 'Plans could not be loaded right now, and registration cannot be completed without one.',
@@ -155,9 +163,13 @@ function PlanPill({
   const price = interval === 'annual' ? plan.price_annual : plan.price_monthly
   const unavailable = price === null
 
-  // Stated only where the plan actually offers one, and never on a term it is not sold on.
-  const trial = plan.trial_days > 0 && !unavailable
-    ? copy.trial(plan.trial_days, plan.trial_fee, plan.currency)
+  /*
+    Stated only where it applies: a plan that offers one, a term it is sold on, and the MONTHLY term.
+    The annual term is bought outright (PAY-AUDIT-003), so advertising an introductory month beside
+    an annual price would promise a charge the checkout will not make.
+  */
+  const intro = interval === 'monthly' && plan.trial_days > 0 && !unavailable
+    ? copy.intro(plan.trial_days, plan.trial_fee, plan.currency)
     : undefined
 
   return (
@@ -186,9 +198,9 @@ function PlanPill({
         </span>
       )}
 
-      {trial && (
-        <span data-testid={`plan-${plan.code}-trial`} className="text-xs font-semibold text-brand-600">
-          {trial}
+      {intro && (
+        <span data-testid={`plan-${plan.code}-intro`} className="text-xs font-semibold text-brand-600">
+          {intro}
         </span>
       )}
 
