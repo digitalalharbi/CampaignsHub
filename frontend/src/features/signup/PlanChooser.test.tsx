@@ -273,4 +273,95 @@ describe('PlanChooser', () => {
 
     expect(await screen.findByTestId('plans-unavailable')).toBeInTheDocument()
   })
+
+  // ── The four outcomes are four different things — SIGNUP-CAT-001 ──────────────────────────────
+
+  /**
+   * **A successful load that offers nothing must SAY so.**
+   *
+   * This rendered the heading and an empty space: no plans, no explanation, no way forward. An
+   * applicant sat on a step that could not be completed with nothing on screen to explain it, and
+   * nothing in the suite noticed — which is how a signup blocker survives a green run.
+   *
+   * It must not borrow the «could not be loaded» sentence either: the load SUCCEEDED, and sending
+   * somebody to check their connection over a fault that is ours is the wrong instruction.
+   */
+  it('says the catalogue is empty rather than rendering nothing', async () => {
+    vi.mocked(fetchPlans).mockResolvedValue({ plans: [] })
+
+    renderWithProviders(
+      <PlanChooser value={null} interval="monthly" onChange={noop} onIntervalChange={noop} journey="self-service" />,
+      { locale: 'en' },
+    )
+
+    const blocked = await screen.findByTestId('plans-empty')
+    expect(blocked).toHaveTextContent(/No plan is on sale/i)
+    // Named as a configuration fault, not as a failure to load.
+    expect(blocked).toHaveTextContent(/configuration fault/i)
+    expect(screen.queryByTestId('plans-unavailable')).not.toBeInTheDocument()
+  })
+
+  /**
+   * …and so must a catalogue that has plans but none for THIS path.
+   *
+   * Reachable whenever the offered codes and the codes on sale drift apart — precisely what a rename
+   * like `scale` → `agency` does if the catalogue is not migrated with it. Silence would strand the
+   * agency applicants alone, which is the kind of half-broken nobody notices.
+   */
+  it('says when the catalogue is fine but this path is offered nothing', async () => {
+    vi.mocked(fetchPlans).mockResolvedValue({
+      plans: [plan({ code: 'starter', name: 'Starter', trial_days: 0 })],
+    })
+
+    renderWithProviders(
+      <PlanChooser value={null} interval="monthly" onChange={noop} onIntervalChange={noop} journey="multi-client" />,
+      { locale: 'en' },
+    )
+
+    const blocked = await screen.findByTestId('plans-none-for-path')
+    expect(blocked).toHaveTextContent(/No plan is offered for this path/i)
+    // Retrying a correct answer is a loop with no exit, so none is offered.
+    expect(screen.queryByTestId('plans-none-for-path-retry')).not.toBeInTheDocument()
+  })
+
+  /** The retry re-issues the REAL request — it does not clear the message and hope. */
+  it('retries by asking the server again', async () => {
+    vi.mocked(fetchPlans).mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ plans: [plan({ code: 'starter', name: 'Starter', trial_days: 0 }), plan({})] })
+
+    renderWithProviders(
+      <PlanChooser value={null} interval="monthly" onChange={noop} onIntervalChange={noop} journey="self-service" />,
+      { locale: 'en' },
+    )
+
+    await screen.findByTestId('plans-unavailable')
+    expect(fetchPlans).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByTestId('plans-unavailable-retry'))
+
+    expect(await screen.findByTestId('plan-starter')).toBeInTheDocument()
+    expect(fetchPlans).toHaveBeenCalledTimes(2)
+  })
+
+  /**
+   * **A successful load can never be rendered as a failure.** The other direction of the same rule.
+   *
+   * Asserted explicitly because the four states are now decided by three conditions in a row, and an
+   * ordering mistake there would put a working catalogue behind an error message.
+   */
+  it('never shows a failure state when the catalogue loaded and fits the path', async () => {
+    vi.mocked(fetchPlans).mockResolvedValue({
+      plans: [plan({ code: 'starter', name: 'Starter', trial_days: 0 }), plan({})],
+    })
+
+    renderWithProviders(
+      <PlanChooser value={null} interval="monthly" onChange={noop} onIntervalChange={noop} journey="self-service" />,
+      { locale: 'en' },
+    )
+
+    await screen.findByTestId('plan-starter')
+    for (const state of ['plans-loading', 'plans-unavailable', 'plans-empty', 'plans-none-for-path']) {
+      expect(screen.queryByTestId(state), `${state} was shown over a working catalogue`).not.toBeInTheDocument()
+    }
+  })
 })

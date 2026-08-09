@@ -46,8 +46,14 @@ export function AuthShell({ children, portal = 'default' }: { children: React.Re
           like and is why the page got shorter: at 460px the English journey descriptions and plan
           summaries each wrapped to three lines, and the column spent that height on wrapping rather
           than on content. Still well inside a comfortable reading measure for text this size.
+
+          And it is CENTRED at every width. An `xl:ms-…` used to pull it toward the divider on wide
+          screens, which left the content sitting off-centre in its own track — most visible on the
+          agency path, where a single plan card had nothing beside it to balance against. Centring is
+          also the behaviour that does not depend on a breakpoint, which is what makes it look the
+          same on every device and in every browser.
         */}
-        <div className="mx-auto flex w-full max-w-[min(33rem,100%)] flex-1 flex-col justify-center py-[clamp(0.25rem,0.8vh,0.75rem)] xl:ms-[clamp(1rem,3.5vw,3.5rem)]">
+        <div className="mx-auto flex w-full max-w-[min(33rem,100%)] flex-1 flex-col justify-center py-[clamp(0.25rem,0.8vh,0.75rem)]">
           {children}
           {/* Phones get the value proposition here, collapsed, after the form. */}
           <AuthPanelMobile locale={locale as Locale} portal={portal} />

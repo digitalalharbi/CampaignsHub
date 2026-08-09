@@ -89,14 +89,22 @@ export interface ComparisonRow {
 }
 
 const UNLIMITED = { ar: 'بلا حدود', en: 'Unlimited' }
-const YES = { ar: 'متاح', en: 'Included' }
+const YES = { ar: '✓ متاح', en: '✓ Included' }
 const NO = { ar: '—', en: '—' }
 
+/**
+ * A cap, said the way somebody reads it — «حتى 3», not «3».
+ *
+ * The bare number was ambiguous: 3 could be read as «three included» or «three allowed». «Up to»
+ * says which. Latin digits in both languages, as everywhere in this product — an Eastern-Arabic
+ * numeral cannot be compared against the figure on a card or an invoice.
+ */
 const cap = (key: string) => (plan: Plan, ar: boolean) => {
   const n = limit(plan, key)
 
-  // Latin digits in both languages, as everywhere in this product.
-  return n === null ? (ar ? UNLIMITED.ar : UNLIMITED.en) : String(n)
+  if (n === null) return ar ? UNLIMITED.ar : UNLIMITED.en
+
+  return ar ? `حتى ${n}` : `Up to ${n}`
 }
 
 const flag = (key: string) => (plan: Plan, ar: boolean) =>
@@ -106,6 +114,102 @@ const SUPPORT: Record<string, { ar: string; en: string }> = {
   community: { ar: 'المجتمع', en: 'Community' },
   email: { ar: 'البريد', en: 'Email' },
   priority: { ar: 'أولوية', en: 'Priority' },
+}
+
+
+/**
+ * The comparison, in GROUPS rather than as one flat table — SIGNUP-CMP-001.
+ *
+ * A single list of eight rows makes the reader do the sorting: capacity, capability and support all
+ * look alike, so nothing stands out and the whole thing reads as a spreadsheet. Three named groups
+ * answer three different questions — how much can I run, what can I get out of it, and who helps me.
+ *
+ * Every row here is backed by a real catalogue axis. Nothing is invented, and rows that would be
+ * dead weight for a particular reader are removed by {@see comparisonFor}.
+ */
+export interface ComparisonGroup {
+  key: string
+  ar: string
+  en: string
+  rows: ComparisonRow[]
+}
+
+const GROUPS: ComparisonGroup[] = [
+  {
+    key: 'usage',
+    ar: 'الاستخدام',
+    en: 'Usage',
+    rows: [
+      { key: 'connections', ar: 'الحسابات الإعلانية المرتبطة', en: 'Connected ad accounts', value: cap('connections') },
+      { key: 'projects', ar: 'المشاريع', en: 'Projects', value: cap('projects') },
+      { key: 'team_members', ar: 'أعضاء الفريق', en: 'Team members', value: cap('team_members') },
+      // Agency work only — see `comparisonFor`.
+      { key: 'clients', ar: 'العملاء', en: 'Clients', value: cap('clients') },
+    ],
+  },
+  {
+    key: 'insight',
+    ar: 'التحليل والتقارير',
+    en: 'Analysis and reports',
+    rows: [
+      { key: 'reports_per_month', ar: 'التقارير الشهرية', en: 'Monthly reports', value: cap('reports_per_month') },
+      { key: 'ai_assist', ar: 'المساعد الذكي', en: 'AI assist', value: flag('ai_assist') },
+      { key: 'white_label', ar: 'تقارير بعلامتك', en: 'White-label reports', value: flag('white_label') },
+    ],
+  },
+  {
+    key: 'support',
+    ar: 'الدعم',
+    en: 'Support',
+    rows: [
+      {
+        key: 'support',
+        ar: 'مستوى الدعم',
+        en: 'Support level',
+        value: (plan, ar) => {
+          const s = String(feature(plan, 'support') ?? '')
+
+          return SUPPORT[s] ? (ar ? SUPPORT[s].ar : SUPPORT[s].en) : s
+        },
+      },
+    ],
+  },
+]
+
+/**
+ * Which rows are worth showing to THIS reader, comparing THESE plans.
+ *
+ * Two rules, and both remove noise rather than hide substance:
+ *
+ *   - **`clients` belongs to agency work.** Growth carries a roster cap, but Growth is not an agency
+ *     plan, and putting «العملاء» in front of somebody who said they run their own campaigns invites
+ *     them to buy for a need they do not have.
+ *   - **A capability nobody in this comparison has is not a comparison.** `white_label` is false on
+ *     both Starter and Growth, so on the self-managed path it is a row of «—» against «—»: it costs
+ *     a line, teaches nothing, and makes the table look like a specification.
+ *
+ * Caps are never dropped for being equal — «بلا حدود» against «بلا حدود» is still the answer to the
+ * question, and its absence would read as an omission.
+ */
+export function comparisonFor(plans: Plan[], journey: Journey | null): ComparisonGroup[] {
+  const isAgencyReader = journey === 'multi-client'
+  const flags = new Set(['ai_assist', 'white_label'])
+
+  return GROUPS
+    .map((group) => ({
+      ...group,
+      rows: group.rows.filter((row) => {
+        if (row.key === 'clients' && !isAgencyReader) return false
+
+        // A flag that is off for every plan on screen differentiates nothing.
+        if (flags.has(row.key)) {
+          return plans.some((p) => feature(p, row.key) === true)
+        }
+
+        return true
+      }),
+    }))
+    .filter((group) => group.rows.length > 0)
 }
 
 /**
