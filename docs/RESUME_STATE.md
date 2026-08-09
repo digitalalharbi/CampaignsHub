@@ -631,7 +631,9 @@ declared caps barely intersect.
 - Plans declare `projects`, `team_members`, `connections`, `reports_per_month`.
 - `EnsureWithinPlanLimit` is wired to exactly two routes: `projects` and **`campaigns`**.
 - No plan declares a `campaigns` cap, so `effectiveLimit` returns `null`, `withinLimit` returns
-  `true`, and **the middleware on campaign creation is a permanent no-op today.**
+  `true`, and **the middleware on campaign creation does nothing as shipped.** Not dead code:
+  `updatePlan` takes an arbitrary `limits` array, so an operator could add the key — the gate is
+  unconfigured rather than unreachable, and nothing in `/admin` hints that the key exists.
 - `team_members`, `connections` and `reports_per_month` are sold and never enforced.
 
 So of five metrics, one is enforced, one is guarded but uncapped, and three are advertised limits a
