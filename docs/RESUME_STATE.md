@@ -650,9 +650,21 @@ domain and not one crosses the seam between the meter and the thing being metere
 as `campaigns.spec.ts` asserting an Arabic string after switching to English, and passing for four
 gates because the component never translated.
 
-So: five metrics sold, five unenforced. The fix is small — call `increment()` where the thing is
-created, and decide `campaigns` — and the test that proves it must go through the HTTP create path,
-never through the service.
+So: five metrics sold, five unenforced.
+
+**And the obvious fix is the wrong one.** A counter is the wrong instrument for three of the four.
+`projects`, `team_members` and `connections` are STOCK, not flow — the routes beside `POST /projects`
+include `archive` and `restore`, so a monotonic counter would never give the slot back and a
+customer's capacity would ratchet down every time they tidied up. That is worse than not enforcing
+at all: it silently takes capacity they paid for. Those three want `COUNT(*)` against the live
+tenant-scoped table. Only `reports_per_month` is a genuine flow, and `usage_counters` already
+carries its `YYYY-MM` period.
+
+The team cap must also count members **plus pending invitations**, or it is bypassable by inviting —
+since TEAM-INVITE-001 an invitation no longer creates a `User`, so counting users alone undercounts.
+
+Whatever the instrument, the test that proves it must go through the HTTP create path and never
+through the service, which is precisely the seam the existing nine tests do not cross.
 
 ---
 
