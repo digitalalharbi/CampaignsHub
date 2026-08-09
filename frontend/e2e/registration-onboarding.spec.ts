@@ -347,6 +347,14 @@ test('the signup path decides which plans exist, and every price is USD', async 
   // The whole comparison is one press away, and it reads from the same catalogue.
   await page.getByTestId('plan-compare-open').click()
   await expect(page.getByTestId('plan-comparison')).toBeVisible()
-  await expect(page.getByTestId('compare-clients-starter')).toBeVisible()
-  await expect(page.getByTestId('compare-clients-growth')).toBeVisible()
+  /*
+   * Ad accounts, NOT clients.
+   *
+   * This asserted the `clients` row, and `comparisonFor()` correctly drops it on the self-managed
+   * path — «العملاء» in front of somebody who runs their own campaigns invites them to buy for a
+   * need they do not have. The assertion was pinning the behaviour that was removed on purpose, so
+   * it moves to a row this reader is actually shown.
+   */
+  await expect(page.getByTestId('compare-connections-starter')).toBeVisible()
+  await expect(page.getByTestId('compare-connections-growth')).toBeVisible()
 })

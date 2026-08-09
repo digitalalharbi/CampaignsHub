@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
-import { E2E_API_TARGET, E2E_BACKEND_ENV, E2E_BACKEND_PORT, E2E_FRONTEND_PORT, E2E_ORIGIN } from './e2e/env'
+import { E2E_API_TARGET, E2E_BACKEND_ENV, E2E_BACKEND_PORT, E2E_FRONTEND_PORT, E2E_ORIGIN, E2E_PRINT_ORIGIN, E2E_PRINT_PORT } from './e2e/env'
 
 /**
  * E2E config. Self-contained: Playwright starts BOTH servers itself.
@@ -109,6 +109,25 @@ export default defineConfig({
        */
       command: `npm run dev -- --port ${E2E_FRONTEND_PORT}`,
       url: E2E_ORIGIN,
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      env: { VITE_API_TARGET: E2E_API_TARGET },
+    },
+    {
+      /*
+       * A SECOND frontend, for the report print browser alone — GATE-WK-001.
+       *
+       * `ChromiumPdfRenderer` drives a headless browser at `{REPORTS_PRINT_APP_URL}/reports/print/…`.
+       * Pointed at the tests' own dev server it pulled the whole SPA module graph out of it at a
+       * moment nothing coordinates, and a `page.goto` waiting on that server never saw `load` — four
+       * webkit failures, only in a full run, moving between sibling tests, and reproducing on a
+       * stashed tree, which is what proved it was never the product.
+       *
+       * Two servers rather than one switch: switching Chromium printing off also removes the proof
+       * that the exported Arabic PDF is a real Chromium file, which this product had to fix once.
+       */
+      command: `npm run dev -- --port ${E2E_PRINT_PORT}`,
+      url: E2E_PRINT_ORIGIN,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
       env: { VITE_API_TARGET: E2E_API_TARGET },

@@ -12,6 +12,9 @@ export const E2E_FRONTEND_PORT = 5273
 export const E2E_BACKEND_PORT = 8100
 
 export const E2E_ORIGIN = `http://localhost:${E2E_FRONTEND_PORT}`
+/** A second frontend, for the report print browser alone — see `REPORTS_PRINT_APP_URL`. */
+export const E2E_PRINT_PORT = 5373
+export const E2E_PRINT_ORIGIN = `http://localhost:${E2E_PRINT_PORT}`
 export const E2E_API_TARGET = `http://127.0.0.1:${E2E_BACKEND_PORT}`
 
 /**
@@ -72,7 +75,21 @@ export const E2E_BACKEND_ENV: Record<string, string> = {
    * «report_error / print route reported a data error» and the export was correctly marked FAILED.
    * The exporter was doing exactly the right thing; it was pointed at the wrong installation.
    */
-  REPORTS_PRINT_APP_URL: E2E_ORIGIN,
+  /*
+   * …and it prints from a frontend OF ITS OWN — GATE-WK-001.
+   *
+   * Pointed at `E2E_ORIGIN` the print browser pulled the whole SPA module graph out of the SAME Vite
+   * dev server the tests were driving, at a moment nothing coordinates. That is the four-failure
+   * webkit hang exactly: only in long runs (a report spec has to have queued a job first), never in
+   * isolation, moving between sibling tests between runs, and always a `page.goto` that never sees
+   * `load` because the server it is waiting on is busy serving somebody else's print job.
+   *
+   * Switching Chromium printing OFF would have removed the contention and taken real coverage with
+   * it — `report-pdf-download.spec.ts` asserts the downloaded Arabic PDF is a valid CHROMIUM file,
+   * and it fails against the Dompdf fallback. Proven, not assumed: that run went 4 failures → 2, and
+   * this was one of the two. So the print browser keeps Chromium and gets its own server instead.
+   */
+  REPORTS_PRINT_APP_URL: E2E_PRINT_ORIGIN,
   // The gate walks the paid-signup journey, which needs a provider it can actually settle against.
   SUBSCRIPTION_PROVIDER: 'sandbox',
 }
