@@ -41,7 +41,33 @@ final class EnsureEntitlement
             $portal = $this->memberships->membership()?->portal;
 
             if ($tenant !== null && ! $this->entitlements->allows($tenant, $navKey, $portal)) {
-                abort(403, __('accounts.portal_capability_unavailable'));
+                /*
+                 * The refusal names what was refused and where to go — PAY-AUDIT-004.
+                 *
+                 * This was `abort(403, …)`, a sentence and nothing else, while the middleware
+                 * standing next to it (`EnsureWithinPlanLimit`) already answered with the metric,
+                 * the usage, the cap and an upgrade path. Two adjacent gates refusing the same
+                 * customer to two different standards, and the leaner one is the one that refuses a
+                 * whole SECTION.
+                 *
+                 * RETURNED rather than thrown, for the reason recorded on the other one: `abort()`
+                 * with a Response raises HttpResponseException, and this application's handler
+                 * renders that as a 500 — the refusal never reaches the customer and looks like a
+                 * crash.
+                 */
+                return response()->json([
+                    'success' => false,
+                    'message' => __('accounts.portal_capability_unavailable'),
+                    'data' => null,
+                    'errors' => null,
+                    'meta' => [
+                        'entitlement' => true,
+                        'capability' => $navKey,
+                        // The plan in force, so the interface can say what it is upgrading FROM.
+                        'plan' => $tenant->subscription_plan,
+                        'upgrade_path' => '/app/subscriptions',
+                    ],
+                ], 403);
             }
         }
 

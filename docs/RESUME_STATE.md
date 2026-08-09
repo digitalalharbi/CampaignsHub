@@ -607,6 +607,42 @@ meets exactly the same thing: reach for More filters and it moves 655px sideways
 
 ---
 
+## Session — PAY-AUDIT-004: the upgrade path nothing read
+
+`EnsureWithinPlanLimit` had answered properly since PLAN-003 — the metric, the usage, the cap and an
+`upgrade_path` — and `grep -rn "plan_limit\|upgrade_path" frontend/src` returned **nothing**. The
+server named a route to upgrade and every caller showed a red toast carrying the sentence alone.
+`EnsureEntitlement`, refusing a whole SECTION, did not even carry that much: `abort(403, …)`.
+
+Both now answer in one shape, and one `MutationCache.onError` turns either into
+`UpgradeRequiredDialog` — mounted once above the router, so an advertiser hitting a project cap and
+an agency hitting a seat cap have the same conversation. `upgradeRefusalFrom` is deliberately strict
+about the two flags: most 403s in this product are PERMISSION refusals, and telling somebody to buy
+a bigger plan when a colleague simply has not granted them a role would be worse than silence.
+
+**Two defects the suite did not catch and the live review did.**
+
+1. **`<Link>` throws above the router**, which is exactly where this is mounted. The first live run
+   logged «An error occurred in the `<Link>` component» and showed nothing, while the 403 it exists
+   to explain arrived perfectly. The unit test had wrapped the component in a `MemoryRouter` — a
+   mounting condition the application never uses — so it was green throughout. It now renders bare,
+   and the component uses a plain anchor.
+2. **The first backend test proved only that `portal:agency` refuses first.** `entitlement:` guards
+   exactly two route groups, `app/clients` and `app/requests`, and both also carry `portal:agency`;
+   anybody who could fail the entitlement check is refused by the portal guard before reaching it,
+   and the two capabilities are unconditional for the portal that can. So **no production route can
+   currently trigger `EnsureEntitlement` at all** — live code nothing can reach, the same shape as
+   the `campaigns` cap no plan gives a number to. Recorded rather than papered over; the module-gated
+   sections (`collaborations`, `roster`, `deliverables`) are the ones that will need the guard when
+   the influencer module ships.
+
+Verified live end to end by putting the demo agency on `starter` over its cap and creating a project
+through the real form: «لقد بلغت حد باقتك من المشاريع (5 من 3)», the usage row «5 / 3», the plans
+link, and the form still open behind the dialog with the typed input intact. Dev plans restored to
+`growth` afterwards and the probe rows deleted.
+
+---
+
 ## Session — CLICK-STABLE-002: the same defect, a third time, in every modal (`79feafa`)
 
 The gate that followed PAY-AUDIT-001 failed on firefox — one test, `report-pdf-download.spec.ts`,

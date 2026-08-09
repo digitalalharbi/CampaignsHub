@@ -1,10 +1,33 @@
 import { useEffect, type ReactNode } from 'react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fetchCurrentUser } from '@/features/auth/api'
+import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
 import { applyDocument, useUi } from '@/stores/ui'
+import { upgradeRefusalFrom, useUpgrade } from '@/stores/upgrade'
+import { UpgradeRequiredDialog } from '@/components/UpgradeRequiredDialog'
 
 const queryClient = new QueryClient({
+  /*
+   * Every commercial refusal, caught in one place — PAY-AUDIT-004.
+   *
+   * `EnsureWithinPlanLimit` and `EnsureEntitlement` both answer 403 with the metric, the usage, the
+   * cap and an upgrade path. Nothing in this application read any of it: the backend named a route
+   * to upgrade and every caller showed a red toast carrying the sentence alone.
+   *
+   * Wired at the MutationCache rather than at each call site because there is one answer for all of
+   * them — your plan does not currently allow this, here is the way through — and there are
+   * hundreds of mutations. A refusal that is not commercial is left entirely alone here and still
+   * surfaces wherever it always did; see `upgradeRefusalFrom`, which is deliberately strict, because
+   * telling somebody to upgrade when a colleague simply has not granted them a role would be worse
+   * than saying nothing.
+   */
+  mutationCache: new MutationCache({
+    onError: (error) => {
+      const refusal = upgradeRefusalFrom(toApiError(error))
+      if (refusal !== null) useUpgrade.getState().show(refusal)
+    },
+  }),
   defaultOptions: {
     queries: {
       /**
@@ -87,5 +110,15 @@ export function Providers({ children }: { children: ReactNode }) {
     })
   }, [setUser])
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  /*
+   * The upgrade prompt is mounted ABOVE the router, so a commercial refusal is answered the same way
+   * in every portal — an advertiser hitting a project cap and an agency hitting a seat cap are the
+   * same conversation, and neither should depend on the page they happened to be on.
+   */
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+      <UpgradeRequiredDialog />
+    </QueryClientProvider>
+  )
 }

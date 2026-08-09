@@ -13,6 +13,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 /**
@@ -78,6 +79,45 @@ final class EntitlementMatrixTest extends TestCase
 
         $this->actingAs($advertiser, 'sanctum')->getJson('/api/v1/app/clients')->assertForbidden();
         $this->actingAs($advertiser, 'sanctum')->getJson('/api/v1/app/requests')->assertForbidden();
+    }
+
+    /**
+     * The refusal says what was refused and where to go — PAY-AUDIT-004.
+     *
+     * It used to be `abort(403, …)`: one sentence, nothing to act on. Meanwhile the middleware
+     * standing next to it, `EnsureWithinPlanLimit`, already answered with the metric, the usage, the
+     * cap and an upgrade path — two adjacent gates refusing the same customer to two different
+     * standards, and the leaner one refusing a whole SECTION.
+     *
+     * ## Why this registers its own route
+     *
+     * Because no route in the application can currently reach this refusal, and the first draft of
+     * this test proved only that. `entitlement:` guards exactly two route groups — `app/clients` and
+     * `app/requests` — and BOTH also carry `portal:agency`, whose guard runs first and refuses
+     * anybody who could have failed the entitlement check. Meanwhile `clients` and `requests` are
+     * unconditional for the agency portal, so a member who gets past `portal:agency` always passes.
+     *
+     * `EnsureEntitlement` is therefore live code that nothing can currently trigger — the same shape
+     * as the `campaigns` plan cap no plan gives a number to (PAY-AUDIT-001). Recorded rather than
+     * papered over, and the module-gated sections (`collaborations`, `roster`, `deliverables`) are
+     * the ones that will need the guard when the influencer module ships.
+     *
+     * So the refusal is exercised where it actually lives, against a capability a workspace without
+     * the influencer module genuinely does not hold.
+     */
+    public function test_an_entitlement_refusal_carries_the_capability_and_the_way_forward(): void
+    {
+        $agency = $this->ownerFor('agency', 'shape@a.test', Portal::Agency);
+
+        Route::middleware(['auth:sanctum', 'tenant', 'entitlement:collaborations'])
+            ->get('api/v1/test-only/collaborations', fn () => response()->json(['ok' => true]));
+
+        $this->actingAs($agency, 'sanctum')->getJson('/api/v1/test-only/collaborations')
+            ->assertForbidden()
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('meta.entitlement', true)
+            ->assertJsonPath('meta.capability', 'collaborations')
+            ->assertJsonPath('meta.upgrade_path', '/app/subscriptions');
     }
 
     /**
