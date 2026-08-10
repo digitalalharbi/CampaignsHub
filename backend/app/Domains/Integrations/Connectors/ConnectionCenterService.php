@@ -12,6 +12,7 @@ use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
@@ -34,6 +35,7 @@ final class ConnectionCenterService
         private readonly UpsertDailyMetrics $upsert,
         private readonly ProjectContext $project,
         private readonly TenantContext $tenant,
+        private readonly ReportingCurrency $currency,
     ) {}
 
     /** @return array<string, Connector> */
@@ -205,6 +207,20 @@ final class ConnectionCenterService
                 if (! array_key_exists($key, $record)) {
                     continue;
                 }
+
+                /*
+                 * FX-001 — a sandbox row is labelled with its currency like any other.
+                 *
+                 * These figures are already in the project's reporting currency, so the conversion is
+                 * an identity. Writing it anyway is the point: a monetary row with NO currency columns
+                 * is indistinguishable from one whose conversion was WITHHELD, and the coverage count
+                 * that warns an operator about withheld figures would report demo data as a problem.
+                 */
+                $reporting = $this->currency->forProject($projectId);
+                $money = $this->currency->isMonetary($key)
+                    ? $this->currency->normalise((float) $record[$key], $reporting, $reporting, $date)
+                    : null;
+
                 $metrics[] = new NormalizedMetric(
                     tenantId: $tenantId,
                     projectId: $projectId,
@@ -213,8 +229,15 @@ final class ConnectionCenterService
                     provider: $connector->provider(),
                     metricKey: $key,
                     metricDate: $date,
-                    value: (float) $record[$key],
+                    value: $money === null ? (float) $record[$key] : $money['value'],
                     connectionId: $connectionId,
+                    originalCurrency: $money['original_currency'] ?? null,
+                    projectCurrency: $money['project_currency'] ?? null,
+                    originalAmount: $money['original_amount'] ?? null,
+                    convertedAmount: $money['converted_amount'] ?? null,
+                    exchangeRate: $money['exchange_rate'] ?? null,
+                    rateDate: $money['rate_date'] ?? null,
+                    rateSource: $money['rate_source'] ?? null,
                     sourceType: 'api',
                     dataFreshnessAt: $now,
                     syncRunId: $runId,

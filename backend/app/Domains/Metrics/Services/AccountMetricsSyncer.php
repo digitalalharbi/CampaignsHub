@@ -12,7 +12,6 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
-use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
@@ -36,6 +35,7 @@ final class AccountMetricsSyncer
     public function __construct(
         private readonly AdvertisingConnectorRegistry $registry,
         private readonly UpsertDailyMetrics $upsert,
+        private readonly InsightRowNormaliser $normaliser,
     ) {}
 
     /**
@@ -162,46 +162,9 @@ final class AccountMetricsSyncer
      */
     private function ingest(ExternalAccount $account, array $records): array
     {
-        $metrics = [];
-        $skipped = 0;
-
-        // Provider campaign id → the external campaign row we already know about.
-        $known = ExternalCampaign::withoutGlobalScopes()
-            ->where('external_account_id', $account->id)
-            ->get(['id', 'external_id', 'project_id', 'unified_campaign_id'])
-            ->keyBy('external_id');
-
-        foreach ($records as $row) {
-            $externalCampaignId = (string) ($row['campaign_id'] ?? '');
-            $link = $known->get($externalCampaignId);
-
-            if ($link === null) {
-                // An insight for a campaign we have never discovered is not silently dropped — it is
-                // counted so the run can report itself as partial.
-                $skipped++;
-
-                continue;
-            }
-
-            $date = Carbon::parse((string) ($row['date'] ?? Carbon::now()->toDateString()));
-
-            foreach (self::carriedKeys() as $key) {
-                if (! array_key_exists($key, $row)) {
-                    continue;
-                }
-                $metrics[] = new NormalizedMetric(
-                    tenantId: $account->tenant_id,
-                    projectId: $link->project_id,
-                    externalAccountId: $account->id,
-                    externalCampaignId: $link->id,
-                    provider: $account->provider,
-                    metricKey: $key,
-                    metricDate: $date,
-                    value: (float) $row[$key],
-                    unifiedCampaignId: $link->unified_campaign_id,
-                );
-            }
-        }
+        // Mapping lives in its own class (FX-001): this method is pipeline plumbing, and what a row
+        // MEANS — including which currency its money is in — is a separate question with its own tests.
+        [$metrics, $skipped] = $this->normaliser->normalise($account, $records, self::carriedKeys());
 
         if ($metrics !== []) {
             $this->upsert->handle($metrics);

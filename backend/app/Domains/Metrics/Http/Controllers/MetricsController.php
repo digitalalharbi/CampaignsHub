@@ -298,6 +298,10 @@ final class MetricsController extends Controller
             ->selectRaw('MIN(exchange_rate) AS rate_min')
             ->selectRaw('MAX(exchange_rate) AS rate_max')
             ->selectRaw('MAX(metric_date) AS latest_date')
+            // FX-001. A row whose conversion was WITHHELD carries its original amount and no value,
+            // and it must be countable: `SUM` skips nulls, so a total that quietly excluded these
+            // would under-report and look exactly like a total that included everything.
+            ->selectRaw('COUNT(*) FILTER (WHERE value IS NULL) AS withheld_count')
             ->groupBy('original_currency', 'project_currency')
             ->get()
             ->map(fn ($r) => [
@@ -305,6 +309,9 @@ final class MetricsController extends Controller
                 'to' => (string) $r->project_currency,
                 'converted' => $r->original_currency !== $r->project_currency,
                 'rows' => (int) $r->rows_count,
+                // Rows excluded from every monetary total in this window, because no rate for their
+                // date could be vouched for. Zero is the normal answer and the one to expect.
+                'withheld' => (int) $r->withheld_count,
                 'rate_min' => $r->rate_min !== null ? round((float) $r->rate_min, 6) : null,
                 'rate_max' => $r->rate_max !== null ? round((float) $r->rate_max, 6) : null,
                 'latest_date' => $r->latest_date ? Carbon::parse($r->latest_date)->toDateString() : null,

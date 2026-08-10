@@ -590,6 +590,47 @@ final class MetricsTest extends TestCase
         $this->assertTrue($body['timezones'][0]['shifted']);
 
         $this->assertSame('7d_click_1d_view', $body['attribution_windows'][0]['window']);
+
+        // FX-001. Nothing was withheld here, and the endpoint says so rather than omitting the key —
+        // an absent field and a zero are the same on the wire only until the field starts appearing.
+        $this->assertSame(0, $body['currencies'][0]['withheld']);
+    }
+
+    /**
+     * FX-001 — a figure the pipeline REFUSED to convert is reported, not quietly dropped.
+     *
+     * A row with no trustworthy rate carries a null `value`, so `SUM` skips it and every money total
+     * on the page is short by that amount while looking complete. This count is the only thing
+     * standing between an operator and a total they have no reason to distrust.
+     */
+    public function test_normalization_counts_the_figures_that_could_not_be_converted(): void
+    {
+        $withheld = new NormalizedMetric(
+            tenantId: $this->tenant->id,
+            projectId: $this->projectA->id,
+            externalAccountId: $this->uid('acc-1'),
+            externalCampaignId: $this->uid('ext-jpy'),
+            provider: 'meta',
+            metricKey: 'spend',
+            metricDate: Carbon::parse('2026-06-01'),
+            // No rate existed for JPY on this date, so the pipeline published no figure at all.
+            value: null,
+            originalCurrency: 'JPY',
+            projectCurrency: 'SAR',
+            originalAmount: 5000.0,
+        );
+        app(UpsertDailyMetrics::class)->handle([$withheld]);
+
+        $body = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/normalization?from=2026-06-01&to=2026-06-02")
+            ->assertOk()
+            ->json('data');
+
+        $jpy = collect($body['currencies'])->firstWhere('from', 'JPY');
+
+        $this->assertNotNull($jpy, 'a withheld row vanished from the basis entirely');
+        $this->assertSame(1, $jpy['withheld']);
+        $this->assertNull($jpy['rate_min'], 'a rate was reported for a conversion that never happened');
     }
 
     /**

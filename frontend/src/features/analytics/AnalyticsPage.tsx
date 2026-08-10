@@ -592,6 +592,13 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
   const d = n.data
 
   const converted = (d?.currencies ?? []).filter((c) => c.converted)
+  /*
+   * FX-001 — figures LEFT OUT of every money total here, because no rate for their date could be
+   * vouched for. This is the one number on the panel whose absence would itself be a false claim: a
+   * total missing them looks identical to a complete one, so silence would read as «nothing to say».
+   */
+  const withheld = (d?.currencies ?? []).reduce((sum, c) => sum + (c.withheld ?? 0), 0)
+  const withheldFrom = (d?.currencies ?? []).filter((c) => (c.withheld ?? 0) > 0).map((c) => c.from)
   const shifted = (d?.timezones ?? []).filter((t) => t.shifted)
   const windows = d?.attribution_windows ?? []
   const demoRows = (d?.sources ?? []).filter((s) => s.is_demo).reduce((sum, s) => sum + s.rows, 0)
@@ -621,6 +628,13 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
             : d?.project_currency
               ? (ar ? `كل المبالغ بعملة ${d.project_currency} أصلًا — لم يُجرَ أي تحويل.` : `Every amount was already in ${d.project_currency}. Nothing was converted.`)
               : (ar ? 'لا توجد مبالغ مالية في هذه الفترة.' : 'There are no money figures in this period.')}
+          {withheld > 0 && (
+            <span data-testid="normalization-withheld" className="mt-1 block font-semibold text-warning">
+              {ar
+                ? `${num(withheld)} صفًا (${withheldFrom.join(' · ')}) لا يوجد له سعر صرف موثّق لتاريخه، ولم يُدرج في أي مبلغ أعلاه. المبالغ المعروضة ناقصة بهذا القدر.`
+                : `${num(withheld)} rows (${withheldFrom.join(' · ')}) have no trustworthy rate for their date and are in none of the amounts above. The figures shown are short by that much.`}
+            </span>
+          )}
           {(d?.project_currencies.length ?? 0) > 1 && (
             <span className="mt-1 block font-semibold text-warning">
               {ar

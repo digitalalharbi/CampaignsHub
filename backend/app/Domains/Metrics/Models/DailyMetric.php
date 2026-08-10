@@ -30,6 +30,7 @@ final class DailyMetric extends Model
         'tenant_id', 'project_id', 'connection_id', 'external_account_id', 'external_campaign_id',
         'unified_campaign_id', 'provider', 'metric_key', 'metric_date', 'value',
         'original_currency', 'project_currency', 'original_amount', 'converted_amount', 'exchange_rate',
+        'rate_date', 'rate_source',
         'original_timezone', 'project_timezone', 'attribution_window', 'source_type',
         'data_freshness_at', 'sync_run_id', 'raw',
     ];
@@ -40,6 +41,7 @@ final class DailyMetric extends Model
         'original_amount' => 'decimal:6',
         'converted_amount' => 'decimal:6',
         'exchange_rate' => 'decimal:12',
+        'rate_date' => 'date',
         'data_freshness_at' => 'datetime',
         'raw' => 'array',
     ];

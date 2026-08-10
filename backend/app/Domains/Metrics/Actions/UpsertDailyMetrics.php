@@ -20,6 +20,9 @@ final class UpsertDailyMetrics
     private const UPDATE_COLUMNS = [
         'unified_campaign_id', 'connection_id', 'provider', 'value',
         'original_currency', 'project_currency', 'original_amount', 'converted_amount', 'exchange_rate',
+        // FX-001. On the update path too, so a re-sync that now HAS a rate replaces a withheld
+        // figure — omitting these would leave the first, rateless answer in place forever.
+        'rate_date', 'rate_source',
         'original_timezone', 'project_timezone', 'source_type', 'data_freshness_at',
         'sync_run_id', 'raw', 'is_demo', 'updated_at',
     ];

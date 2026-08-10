@@ -10,6 +10,12 @@ use Illuminate\Support\Str;
 /**
  * One fully-normalized daily metric ready to be upserted into daily_metrics. Carries the original
  * currency/amount + the project-normalized value, plus provenance (timezone, attribution, freshness).
+ *
+ * `value` is NULLABLE, and that is FX-001's fail-closed half: null means «there is a monetary fact
+ * here and no rate anybody can vouch for», which is the only honest answer when a conversion cannot
+ * be made. Zero would read as «spent nothing» and the unconverted figure would be the very defect
+ * this pipeline exists to stop. `originalAmount` and `originalCurrency` are written regardless, so
+ * nothing is lost and the row converts itself the day a rate exists.
  */
 final class NormalizedMetric
 {
@@ -21,7 +27,7 @@ final class NormalizedMetric
         public readonly string $provider,
         public readonly string $metricKey,
         public readonly Carbon $metricDate,
-        public readonly float $value,
+        public readonly ?float $value,
         public readonly ?string $unifiedCampaignId = null,
         public readonly ?string $connectionId = null,
         public readonly ?string $originalCurrency = null,
@@ -29,6 +35,8 @@ final class NormalizedMetric
         public readonly ?float $originalAmount = null,
         public readonly ?float $convertedAmount = null,
         public readonly ?float $exchangeRate = null,
+        public readonly ?string $rateDate = null,
+        public readonly ?string $rateSource = null,
         public readonly ?string $originalTimezone = null,
         public readonly ?string $projectTimezone = null,
         public readonly string $attributionWindow = 'default',
@@ -59,6 +67,8 @@ final class NormalizedMetric
             'original_amount' => $this->originalAmount,
             'converted_amount' => $this->convertedAmount,
             'exchange_rate' => $this->exchangeRate,
+            'rate_date' => $this->rateDate,
+            'rate_source' => $this->rateSource,
             'original_timezone' => $this->originalTimezone,
             'project_timezone' => $this->projectTimezone,
             'attribution_window' => $this->attributionWindow,

@@ -179,6 +179,12 @@ export interface CurrencyBasis {
   to: string
   converted: boolean
   rows: number
+  /**
+   * Rows EXCLUDED from every money total in this window, because no rate for their date could be
+   * vouched for (FX-001). `SUM` skips them, so a screen that did not say this would under-report and
+   * look exactly like a complete total. Zero is the normal answer.
+   */
+  withheld: number
   rate_min: number | null
   rate_max: number | null
   latest_date: string | null
