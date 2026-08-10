@@ -12,7 +12,8 @@
 
 ## ⚠️ START HERE — handoff written 2026-08-11
 
-**HEAD is `c0d44cd`. Working tree CLEAN.** Two units landed on top of the green gate at `4d96f68`:
+**Working tree CLEAN.** Last CODE commit `c0d44cd`; the gate below ran on the tree at `8b0b04f`
+(commits after it are documentation only). Two units landed on top of the green gate at `4d96f68`:
 
 | Ref | What | State |
 |---|---|---|
