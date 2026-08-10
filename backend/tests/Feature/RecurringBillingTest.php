@@ -8,11 +8,13 @@ use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPaymentMethod;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Services\RecurringBilling;
+use App\Domains\Subscriptions\Services\SubscriptionCheckout;
 use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\SubscriptionPlanSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
@@ -257,6 +259,158 @@ final class RecurringBillingTest extends TestCase
         $this->billing()->forget($method);
 
         $this->assertNull($this->billing()->methodFor($this->subscription($tenant)));
+    }
+
+    // ── PAY-TOKEN-002: the renewal actually taken from the card ───────────────────────────────
+
+    /** Moyasar answers both endpoints this fork can touch: the hosted invoice and the token charge. */
+    private function fakeMoyasar(int $chargeStatus = 200): void
+    {
+        Http::fake([
+            'api.moyasar.com/v1/invoices' => Http::response(['id' => 'inv_1', 'url' => 'https://pay.example/inv_1'], 200),
+            'api.moyasar.com/v1/payments' => $chargeStatus === 200
+                ? Http::response(['id' => 'pay_unattended_1', 'status' => 'initiated'], 200)
+                : Http::response(['message' => 'declined'], $chargeStatus),
+        ]);
+    }
+
+    private function checkout(): SubscriptionCheckout
+    {
+        return app(SubscriptionCheckout::class);
+    }
+
+    /**
+     * A renewal with a card on file is TAKEN, not asked for — and there is no page to pay.
+     *
+     * The absent `checkout_url` is the assertion that matters. A charge that both debited the card
+     * and produced an invoice would look entirely normal in the interface until the customer's
+     * statement arrived with two lines on it.
+     */
+    public function test_a_renewal_with_a_saved_card_debits_it_and_opens_no_page(): void
+    {
+        $this->configureMoyasar();
+        $this->fakeMoyasar();
+        $tenant = $this->tenant();
+        $this->billing()->remember((string) $tenant->getKey(), 'moyasar', [
+            'token' => 'tok_live', 'brand' => 'visa', 'last4' => '4242', 'exp_month' => 12, 'exp_year' => 2099,
+        ]);
+
+        $result = $this->checkout()->chargeSubscription($this->subscription($tenant), 'subscription');
+
+        $this->assertNull($result['checkout_url'], 'a page to pay was opened beside a debited card');
+        $this->assertSame('created', $result['status']);
+        $this->assertSame('pay_unattended_1', $result['payment']->refresh()->provider_payment_id);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/v1/payments'));
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/v1/invoices'));
+    }
+
+    /**
+     * «Submitted» is not «paid». The payment stays pending until a verified webhook says otherwise.
+     *
+     * Settling here would be a second, weaker way to activate an account — on the word of the party
+     * being paid, and without the re-read PAY-CONFIRM-001 exists for.
+     */
+    public function test_an_unattended_charge_does_not_settle_anything(): void
+    {
+        $this->configureMoyasar();
+        $this->fakeMoyasar();
+        $tenant = $this->tenant();
+        $this->billing()->remember((string) $tenant->getKey(), 'moyasar', ['token' => 'tok_live']);
+
+        $payment = $this->checkout()->chargeSubscription($this->subscription($tenant), 'subscription')['payment'];
+
+        $this->assertSame('pending', $payment->refresh()->status);
+        $this->assertNull($payment->paid_at);
+    }
+
+    /** The card that paid is stamped, so «last used» is a fact rather than a guess. */
+    public function test_a_successful_attempt_stamps_the_card(): void
+    {
+        $this->configureMoyasar();
+        $this->fakeMoyasar();
+        $tenant = $this->tenant();
+        $method = $this->billing()->remember((string) $tenant->getKey(), 'moyasar', ['token' => 'tok_live']);
+
+        $this->checkout()->chargeSubscription($this->subscription($tenant), 'subscription');
+
+        $this->assertNotNull($method->refresh()->last_used_at);
+    }
+
+    /**
+     * A refusal is recorded and stops there — no hosted page is offered as a second attempt.
+     *
+     * From here a decline and a timeout look identical, and offering a page to pay for something that
+     * may already have been taken is exactly the risk this fork avoids. The customer is not stranded:
+     * the sweep moves the subscription to past due with its grace period.
+     */
+    public function test_a_refused_unattended_charge_is_recorded_and_not_retried_behind_a_page(): void
+    {
+        $this->configureMoyasar();
+        $this->fakeMoyasar(chargeStatus: 402);
+        $tenant = $this->tenant();
+        $this->billing()->remember((string) $tenant->getKey(), 'moyasar', ['token' => 'tok_live']);
+
+        $result = $this->checkout()->chargeSubscription($this->subscription($tenant), 'subscription');
+
+        $this->assertSame('failed', $result['status']);
+        $this->assertNull($result['checkout_url']);
+        $this->assertSame('failed', $result['payment']->refresh()->status);
+        $this->assertNotNull($result['payment']->error);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/v1/invoices'));
+    }
+
+    /** No card on file: the hosted page is exactly what it always was. */
+    public function test_a_renewal_without_a_saved_card_still_opens_a_page(): void
+    {
+        $this->configureMoyasar();
+        $this->fakeMoyasar();
+
+        $result = $this->checkout()->chargeSubscription($this->subscription($this->tenant()), 'subscription');
+
+        $this->assertSame('https://pay.example/inv_1', $result['checkout_url']);
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/v1/invoices'));
+    }
+
+    /**
+     * The fork is narrow on purpose: only the sweep's own renewals.
+     *
+     * A reactivation happens with the customer in front of the screen, and the card on file is
+     * usually the one that just failed — silently charging it again would spend a second decline and
+     * tell them nothing. A plan change is the same shape: somebody is there, so they get the page.
+     */
+    public function test_a_reactivation_keeps_the_hosted_page_even_with_a_card_on_file(): void
+    {
+        $this->configureMoyasar();
+        $this->fakeMoyasar();
+        $tenant = $this->tenant();
+        $this->billing()->remember((string) $tenant->getKey(), 'moyasar', ['token' => 'tok_live']);
+
+        $result = $this->checkout()->chargeSubscription($this->subscription($tenant), 'reactivation');
+
+        $this->assertSame('https://pay.example/inv_1', $result['checkout_url']);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/v1/payments'));
+    }
+
+    /**
+     * Two sweeps in one period take the money ONCE.
+     *
+     * The idempotency key is derived from what the charge is, not from when it was asked for, so the
+     * second call finds the open charge and hands it back rather than reaching the gateway again.
+     */
+    public function test_the_sweep_running_twice_charges_the_card_once(): void
+    {
+        $this->configureMoyasar();
+        $this->fakeMoyasar();
+        $tenant = $this->tenant();
+        $this->billing()->remember((string) $tenant->getKey(), 'moyasar', ['token' => 'tok_live']);
+        $subscription = $this->subscription($tenant);
+
+        $first = $this->checkout()->chargeSubscription($subscription, 'subscription')['payment'];
+        $second = $this->checkout()->chargeSubscription($subscription->refresh(), 'subscription')['payment'];
+
+        $this->assertTrue($first->is($second));
+        Http::assertSentCount(1);
     }
 
     // ── the platform-wide answer ──────────────────────────────────────────────────────────────

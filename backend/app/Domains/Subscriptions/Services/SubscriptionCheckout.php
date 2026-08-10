@@ -6,9 +6,11 @@ namespace App\Domains\Subscriptions\Services;
 
 use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
+use App\Domains\Billing\Providers\PaymentProvider;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
+use App\Domains\Subscriptions\Models\SubscriptionPaymentMethod;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Support\Frontend;
@@ -34,6 +36,7 @@ final class SubscriptionCheckout
         private readonly PlanCatalogue $catalogue,
         private readonly TrialEligibility $trials,
         private readonly SubscriptionInvoicing $invoices,
+        private readonly RecurringBilling $recurring,
     ) {}
 
     /**
@@ -279,13 +282,41 @@ final class SubscriptionCheckout
             return $payment->refresh();
         });
 
-        $session = $adapter->createSession([
-            'amount' => $amount,
-            'currency' => $currency,
-            'description' => $this->describe($purpose, $planCode),
-            'reference' => $idempotencyKey,
-            'return_url' => Frontend::origin().'/signup/status',
-        ]);
+        /*
+         * PAY-TOKEN-002 — a renewal with a card on file is taken, not asked for.
+         *
+         * This is the fork `RecurringBilling` was written against and deliberately left open: a
+         * charge that BOTH created a hosted invoice and debited the saved card would ask the customer
+         * to pay for something already taken from them. So it is one route or the other, and the
+         * saved card wins only where the customer is genuinely absent.
+         *
+         * `subscription` is that case, and only that case — the daily sweep's renewals and trial
+         * conversions. A registration, a plan change and a reactivation all happen with somebody
+         * sitting in front of the screen, and they keep the hosted page: for a reactivation that is
+         * the point, since the card that just failed is usually the one on file.
+         *
+         * Nothing here settles anything. `chargeStoredMethod` reports what the gateway said about the
+         * ATTEMPT; the payment becomes paid through the verified webhook and the re-read in
+         * `ApplySubscriptionPaymentEvent`, exactly as an attended one does.
+         */
+        $savedCard = $purpose === 'subscription' && $subscription !== null && $adapter->supportsUnattendedCharge()
+            ? $this->recurring->methodFor($subscription)
+            : null;
+
+        $session = $savedCard !== null
+            ? $this->takeFromSavedCard($adapter, $savedCard, $payment, [
+                'amount' => $amount,
+                'currency' => $currency,
+                'description' => $this->describe($purpose, $planCode),
+                'reference' => $idempotencyKey,
+            ])
+            : $adapter->createSession([
+                'amount' => $amount,
+                'currency' => $currency,
+                'description' => $this->describe($purpose, $planCode),
+                'reference' => $idempotencyKey,
+                'return_url' => Frontend::origin().'/signup/status',
+            ]);
 
         /*
          * `awaiting_credentials` is recorded as exactly that.
@@ -314,6 +345,67 @@ final class SubscriptionCheckout
             'payment' => $payment->refresh(),
             'status' => (string) $session['status'],
             'checkout_url' => $session['checkout_url'] ?? null,
+        ];
+    }
+
+    /**
+     * Take the renewal from the card on file, and report it in the shape a session would have.
+     *
+     * ## No URL, and that is the whole difference
+     *
+     * `checkout_url` comes back null because nobody is being sent anywhere to pay. Returning one
+     * alongside a debited card is the double-charge this fork exists to prevent, and it would look
+     * entirely normal in the interface right up until the customer's statement arrived.
+     *
+     * ## `submitted` is not `paid`
+     *
+     * The payment stays PENDING. The gateway has been asked to take money and has said it will try;
+     * the money is only real once a verified webhook says so and `ApplySubscriptionPaymentEvent`
+     * re-reads it from the gateway (PAY-CONFIRM-001). Marking it paid here would be a second, weaker
+     * way to activate an account, on the word of the party being paid.
+     *
+     * ## A refusal is recorded, not retried behind a hosted page
+     *
+     * A failed attempt marks the payment `failed` and stops. It does NOT fall back to a checkout URL:
+     * a refusal and a timeout are indistinguishable from here, and offering a page to pay for
+     * something that may already have been taken is exactly the risk this is avoiding. The customer
+     * is not stranded — the sweep moves the subscription to past due with its grace period, and the
+     * reactivation path is attended and hosted, which is the right shape for a card that just failed.
+     *
+     * @param  array<string,mixed>  $payload
+     * @return array{session_id: ?string, checkout_url: ?string, status: string, error: ?string}
+     */
+    private function takeFromSavedCard(
+        PaymentProvider $adapter,
+        SubscriptionPaymentMethod $method,
+        SubscriptionPayment $payment,
+        array $payload,
+    ): array {
+        $result = $adapter->chargeStoredMethod((string) $method->provider_token, $payload);
+
+        $status = match ($result['status']) {
+            'submitted' => 'created',
+            'awaiting_credentials' => 'awaiting_credentials',
+            default => 'failed',
+        };
+
+        $payment->forceFill([
+            'provider_payment_id' => $result['provider_payment_id'] ?? null,
+            'status' => $status === 'created' ? 'pending' : $status,
+            'error' => $result['error'] ?? null,
+        ])->save();
+
+        if ($status === 'created') {
+            $method->forceFill(['last_used_at' => now()])->save();
+        }
+
+        return [
+            // No session was created, so `provider_session_id` stays empty. The gateway's own payment
+            // id is on the payment, which is what the confirming webhook is matched against.
+            'session_id' => null,
+            'checkout_url' => null,
+            'status' => $status,
+            'error' => $result['error'] ?? null,
         ];
     }
 

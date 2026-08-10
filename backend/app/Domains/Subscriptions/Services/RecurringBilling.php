@@ -28,13 +28,16 @@ use App\Domains\Subscriptions\Models\SubscriptionPaymentMethod;
  * Those are different problems with different owners: the first two belong to whoever deploys this,
  * the third to the customer. Collapsing them into «renewal failed» sends the wrong person a message.
  *
- * ## What this deliberately does NOT do
+ * ## What this does NOT do — and what now reads it
  *
- * It does not charge anything. Switching the renewal sweep onto the token is a separate change and a
- * careful one: `SubscriptionCheckout::open()` creates a gateway invoice as part of opening a charge,
- * so a naive «also charge the token» would ask the customer to pay a page AND take the money from
- * their card. Until `open()` can be told to skip the invoice, this reports readiness and the renewal
- * stays attended — which asks the customer rather than silently letting them lapse.
+ * It still charges nothing itself. `SubscriptionCheckout::open()` is what acts on the answer
+ * (PAY-TOKEN-002): where `methodFor()` returns a card and the gateway supports unattended charging,
+ * a renewal debits that card INSTEAD of creating a hosted invoice — one route or the other, never
+ * both, because a charge that did both would ask the customer to pay for money already taken.
+ *
+ * The fork is deliberately narrow: only `purpose === 'subscription'`, which is the daily sweep's
+ * renewals and trial conversions. A registration, a plan change and a reactivation all happen with
+ * somebody in front of the screen and keep the hosted page.
  */
 final class RecurringBilling
 {
