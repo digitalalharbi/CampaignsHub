@@ -316,14 +316,23 @@ export async function seededProject(request: APIRequestContext, name: string): P
  * surviving the sign-in IS what those tests are about.
  */
 async function openLogin(page: Page, form?: 'phone'): Promise<void> {
+  /*
+   * Built from a RELATIVE path, never from `current.origin`.
+   *
+   * A context that has not navigated yet sits on `about:blank`, whose origin is the string «null» —
+   * and `new URL('/login', 'null')` throws `Invalid URL`. Several specs call the sign-in helpers as
+   * their very first action, so this is the normal case rather than an edge one, and the throw read
+   * as a helper bug rather than as «there is no page yet».
+   */
   const current = new URL(page.url())
   const here = /\/login(\?|$)/.test(current.pathname + current.search)
 
-  const target = new URL(here ? current.href : new URL('/login', current.origin).href)
-  if (form) target.searchParams.set('e2e', form)
+  const search = new URLSearchParams(here ? current.search : '')
+  if (form) search.set('e2e', form)
 
   if (!here || (form && current.searchParams.get('e2e') !== form)) {
-    await page.goto(target.pathname + target.search)
+    const qs = search.toString()
+    await page.goto(`/login${qs === '' ? '' : `?${qs}`}`)
   }
 }
 

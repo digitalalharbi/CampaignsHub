@@ -249,16 +249,25 @@ test.describe('signing in', () => {
   })
 
 
-  /** Google and Apple are shown, and shown honestly, without credentials configured. */
-  test('social sign-in is offered but reports its real state', async ({ page }) => {
+  /**
+   * No third party stands between somebody and their own account (LOGIN-CARD-001).
+   *
+   * This test used to assert the opposite: that Google and Apple were offered, disabled, and honest
+   * about having no credentials. Honest, and still the wrong thing to show — an unconfigured button
+   * on the door is a dead control that every visitor has to read past, and a configured one hands a
+   * fifth party the ability to decide who gets into this product.
+   *
+   * The OAuth ENDPOINTS are untouched and still covered by their own tests. What changed is that the
+   * sign-in card does not advertise them.
+   */
+  test('the sign-in card offers no third-party button', async ({ page }) => {
     await page.goto('/login')
 
-    await expect(page.getByTestId('oauth-google')).toBeVisible()
-    await expect(page.getByTestId('oauth-apple')).toBeVisible()
-    // Not configured in this environment, so inert and saying why — never a button that fails.
-    await expect(page.getByTestId('oauth-google')).toBeDisabled()
-    await expect(page.getByTestId('oauth-apple')).toBeDisabled()
-    await expect(page.getByTestId('oauth-awaiting')).toContainText(/بانتظار|awaiting/i)
+    await expect(page.getByTestId('login-email')).toBeVisible()
+
+    await expect(page.getByTestId('oauth-google')).toHaveCount(0)
+    await expect(page.getByTestId('oauth-apple')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Google|Apple|WhatsApp/i })).toHaveCount(0)
   })
 
   /** And the advertiser portal now refuses an agency operator the same way every other one does. */

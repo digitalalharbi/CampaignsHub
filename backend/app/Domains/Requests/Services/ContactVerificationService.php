@@ -28,8 +28,20 @@ final class ContactVerificationService
      * would silently kill a code a second flow had already sent and handed to somebody. The callers
      * that need the stricter contract ask for it.
      *
+     * ## `$deliver` is how a code actually reaches somebody
+     *
+     * The plaintext exists for the length of this method and nowhere else — only its hash is stored —
+     * so a caller that wants the code SENT cannot compose the message itself afterwards. It passes a
+     * closure instead, receives the plaintext, and returns whatever its transport recorded. The
+     * message stays with the caller that knows what it is (a sign-in code and a registration
+     * challenge are not the same email), and the secret never leaves this scope.
+     *
+     * Without one, nothing is sent and the row says so. That is the state every caller was in before
+     * this parameter existed.
+     *
      * @param  int  $cooldownSeconds  refuse a second code to the same destination inside this window
      * @param  bool  $invalidatePrevious  expire every live code for this destination+purpose first
+     * @param  (\Closure(string, string): string)|null  $deliver  (plaintext code, verification id) → delivery state
      * @return array{id: string, channel: string, destination: string, delivery_status: string, dev_code: ?string, resend_after: int}
      */
     public function start(
@@ -39,6 +51,7 @@ final class ContactVerificationService
         ?string $tenantId = null,
         int $cooldownSeconds = 0,
         bool $invalidatePrevious = false,
+        ?\Closure $deliver = null,
     ): array {
         if ($cooldownSeconds > 0) {
             $this->assertOutOfCooldown($channel, $destination, $purpose, $cooldownSeconds);
@@ -78,7 +91,26 @@ final class ContactVerificationService
             'last_sent_at' => Carbon::now(),
         ]);
 
-        // NOTE: with no provider we do NOT send anything. When a provider is wired, dispatch happens here.
+        /*
+         * The send, and the row telling the truth about it afterwards.
+         *
+         * `delivery_status` above is a GUESS from configuration — «a provider is switched on, so this
+         * is queued». Once something has actually been attempted, the guess is replaced by the
+         * outcome: `sent`, `sandbox`, `awaiting_credentials` or `failed`, straight from the ledger.
+         * A throw is caught and recorded rather than propagated, because a sign-in form that returns
+         * 500 when a mail host is briefly unreachable tells the visitor nothing and loses the code
+         * that was already minted for them — they can ask for another, and the ledger says why.
+         */
+        if ($deliver !== null) {
+            try {
+                $state = $deliver($code, (string) $v->id);
+            } catch (\Throwable $e) {
+                report($e);
+                $state = 'failed';
+            }
+
+            $v->forceFill(['delivery_status' => $state])->save();
+        }
 
         return [
             'id' => (string) $v->id,
@@ -106,6 +138,16 @@ final class ContactVerificationService
             ->where('destination', $destination)
             ->where('purpose', $purpose)
             ->whereNotNull('last_sent_at')
+            /*
+             * A code that was USED imposes no wait on the next one.
+             *
+             * Without this the window is «one sign-in per minute per address», not «one message per
+             * minute» — somebody who signs out and straight back in is told to wait 43 seconds by a
+             * control that exists to stop a stranger mailing them repeatedly. It cannot weaken that:
+             * consuming a challenge requires holding the code, which is precisely what an attacker
+             * spamming somebody else's inbox does not have.
+             */
+            ->whereNull('consumed_at')
             ->orderByDesc('last_sent_at')
             ->first();
 
@@ -133,15 +175,15 @@ final class ContactVerificationService
         /** @var ContactVerification|null $v */
         $v = ContactVerification::find($verificationId);
         if ($v === null || $v->isExpired()) {
-            throw ValidationException::withMessages(['code' => 'This verification code has expired. Request a new one.']);
+            throw ValidationException::withMessages(['code' => __('auth.code_expired')]);
         }
         if ($v->attempts >= (int) config('requests.verification.max_attempts', 5)) {
-            throw ValidationException::withMessages(['code' => 'Too many attempts. Request a new code.']);
+            throw ValidationException::withMessages(['code' => __('auth.code_attempts')]);
         }
         $v->increment('attempts');
 
         if (! hash_equals($v->code_hash, hash('sha256', $code))) {
-            throw ValidationException::withMessages(['code' => 'Incorrect code.']);
+            throw ValidationException::withMessages(['code' => __('auth.code_incorrect')]);
         }
 
         $v->forceFill(['verified_at' => Carbon::now()])->save();

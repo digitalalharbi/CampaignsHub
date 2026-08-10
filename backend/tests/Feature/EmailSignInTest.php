@@ -191,6 +191,43 @@ final class EmailSignInTest extends TestCase
             ->assertStatus(422);
     }
 
+    /**
+     * A code that was USED imposes no wait on the next sign-in.
+     *
+     * The window exists to stop a stranger mailing somebody repeatedly, and consuming a challenge
+     * requires holding the code — which is exactly what such a stranger does not have. Without this
+     * exemption the rule is «one sign-in per minute per address», and somebody who signs out and
+     * straight back in is told to wait by a control that was never aimed at them.
+     */
+    public function test_signing_in_again_immediately_after_a_used_code_is_allowed(): void
+    {
+        $user = $this->verifiedUser();
+        ['id' => $id, 'code' => $code] = $this->codeFor($user->email);
+
+        $this->withHeaders($this->spa)
+            ->postJson('/api/v1/auth/email-code/verify', ['verification_id' => $id, 'code' => $code])
+            ->assertOk();
+
+        Auth::guard('web')->logout();
+        $this->flushSession();
+
+        // No `forgetCooldown()` here — that is the whole point.
+        $this->withHeaders($this->spa)
+            ->postJson('/api/v1/auth/email-code/start', ['email' => $user->email])
+            ->assertOk();
+    }
+
+    /** An UNUSED code still holds the window shut, which is the property that bounds harassment. */
+    public function test_an_unused_code_still_holds_the_window_shut(): void
+    {
+        $this->verifiedUser();
+        $this->codeFor('owner@example.test');
+
+        $this->withHeaders($this->spa)
+            ->postJson('/api/v1/auth/email-code/start', ['email' => 'owner@example.test'])
+            ->assertStatus(422);
+    }
+
     public function test_a_resend_is_allowed_once_the_cooldown_has_passed(): void
     {
         $this->verifiedUser();
@@ -318,10 +355,21 @@ final class EmailSignInTest extends TestCase
     {
         config(['requests.verification.providers.email' => false]);
 
-        $this->withHeaders($this->spa)
+        $status = (string) $this->withHeaders($this->spa)
             ->postJson('/api/v1/auth/email-code/start', ['email' => 'owner@example.test'])
             ->assertOk()
-            ->assertJsonPath('data.delivery_status', 'awaiting_provider_credentials');
+            ->json('data.delivery_status');
+
+        /*
+         * The status now comes from the mail LEDGER rather than from a configuration guess.
+         *
+         * It used to be the literal `awaiting_provider_credentials`, written before anything was
+         * attempted because nothing ever was. Now `TransactionalMailer` answers — `awaiting_credentials`
+         * when the channel reports no provider, `sandbox` when the driver reaches nobody — and the
+         * claim worth pinning is the one the page depends on: whatever this says, it must never be a
+         * state that means «it arrived».
+         */
+        $this->assertNotContains($status, ['sent', 'delivered', 'queued']);
     }
 
     /**

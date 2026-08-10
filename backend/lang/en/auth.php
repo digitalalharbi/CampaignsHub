@@ -18,6 +18,10 @@ return [
     'code_sent' => 'A verification code has been sent.',
     // LOGIN-OTP-001 — the server-side resend window, stated in the same words the countdown uses.
     'resend_cooldown' => 'Please wait :seconds seconds before requesting another code.',
+    // The three ways a code can be refused, in the reader's own language (LOGIN-E2E-001).
+    'code_expired' => 'This verification code has expired. Request a new one.',
+    'code_attempts' => 'Too many attempts. Request a new code.',
+    'code_incorrect' => 'Incorrect code.',
     'signed_out' => 'Signed out successfully.',
     'current_user' => 'Current user.',
     'token_issued' => 'Token issued successfully.',

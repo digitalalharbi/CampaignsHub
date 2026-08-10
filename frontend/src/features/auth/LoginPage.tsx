@@ -72,6 +72,7 @@ const COPY = {
     resendIn: 'إعادة الإرسال بعد :seconds ثانية',
     changeEmail: 'تغيير البريد الإلكتروني',
     notDelivered: 'لم يُرسل الرمز: خدمة البريد غير مفعّلة بعد على هذه البيئة.',
+    deliveryFailed: 'تعذّر إرسال الرمز إلى بريدك. جرّب إعادة الإرسال بعد قليل.',
     // DEV/E2E only — never rendered in a production build.
     phone: 'رقم الجوال',
     phoneHint: 'سنرسل رمز تحقق إلى هذا الرقم.',
@@ -104,12 +105,26 @@ const COPY = {
     resendIn: 'You can ask again in :seconds seconds',
     changeEmail: 'Use a different email address',
     notDelivered: 'The code was not sent: email delivery is not configured on this environment yet.',
+    deliveryFailed: 'The code could not be delivered to your inbox. Try sending it again in a moment.',
     phone: 'Mobile number',
     phoneHint: 'We will send a verification code to this number.',
     phoneInvalid: 'Enter a valid mobile number.',
     continue: 'Continue',
   },
 } as const
+
+/**
+ * The delivery states that mean a message is genuinely on its way to somebody.
+ *
+ * Everything else — `awaiting_credentials`, `awaiting_provider_credentials`, `sandbox`, `failed` —
+ * is said out loud on the page. Written as an allow-list rather than a deny-list on purpose: a state
+ * this browser has not been taught about is far more likely to be a new way of NOT arriving than a
+ * new way of arriving, and the failure that matters is somebody waiting for a code that never left.
+ *
+ * `sandbox` is in the honest half deliberately: the transport accepted it and it reached nobody,
+ * which is a developer's log file, not an inbox.
+ */
+const DELIVERED = new Set(['sent', 'queued', 'delivered'])
 
 /** Which engine minted the code being held — the three end in three different kinds of session. */
 type Engine = 'platform' | 'portal' | 'sms'
@@ -491,9 +506,9 @@ export function LoginPage() {
               sent. Saying «check your inbox» over that would be the product claiming a message it
               never made, and would leave somebody waiting for something that is not coming.
             */}
-            {delivery === 'awaiting_provider_credentials' && (
+            {delivery !== null && !DELIVERED.has(delivery) && (
               <p data-testid="login-code-undelivered" role="status" className="rounded-xl bg-surface-secondary px-4 py-3 text-[13px] leading-relaxed text-text-secondary">
-                {c.notDelivered}
+                {delivery === 'failed' ? c.deliveryFailed : c.notDelivered}
               </p>
             )}
 
@@ -600,7 +615,15 @@ function IconField({
           dir="ltr"
           onChange={(e) => onChange(e.target.value)}
           style={{ textAlign: ar ? 'right' : 'left' }}
-          className="min-w-0 flex-1 border-0 bg-transparent py-3 text-[15px] text-text-primary outline-none placeholder:text-text-secondary/70"
+          /*
+           * `self-stretch` and 16px, both load-bearing.
+           *
+           * The input is a flex CHILD now, so without `self-stretch` its own box is only as tall as
+           * its line — the row looked right and the touch target had quietly shrunk to about 46px,
+           * under the 50px this product holds itself to. And 16px is the threshold below which iOS
+           * zooms the whole page on focus, which on a phone throws the layout somebody was reading.
+           */
+          className="min-w-0 flex-1 self-stretch border-0 bg-transparent text-[16px] text-text-primary outline-none placeholder:text-text-secondary/70"
           aria-invalid={error ? true : undefined}
           {...props}
         />
@@ -611,15 +634,25 @@ function IconField({
   )
 }
 
-/** The page's one error surface, so a failure never renders twice or in two different shapes. */
+/**
+ * The page's one error surface, so a failure never renders twice or in two different shapes.
+ *
+ * On the code step it also has to carry what a FIELD would normally say. A refused resend comes back
+ * as a validation error on `destination` — «الرجاء الانتظار 43 ثانية قبل طلب رمز جديد» — and there
+ * is no destination field on that step to render it. Falling back to the envelope's own `message`
+ * there would print Laravel's generic «the given data was invalid», which tells somebody waiting out
+ * a cooldown nothing at all. The specific sentence wins whenever there is one.
+ */
 function ErrorNote({ error, always = false }: { error: ReturnType<typeof toApiError> | null; always?: boolean }) {
   // Field-level messages are rendered BY the field. Repeating them here would say the same thing
   // twice — except on the code step, which has no field-level slot of its own.
   if (!error || (!always && error.errors)) return null
 
+  const specific = error.errors ? Object.values(error.errors).flat().find(Boolean) : undefined
+
   return (
     <p data-testid="login-error" role="alert" className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">
-      {error.message}
+      {specific ?? error.message}
     </p>
   )
 }

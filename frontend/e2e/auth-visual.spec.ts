@@ -46,10 +46,19 @@ test('login: keyboard-only navigation reaches the address, the code and submit',
    * Both credentials are on one card (LOGIN-CARD-001); the code step is a second state of the same
    * space, reached by asking for a code, so it is reached here by asking for one.
    */
+  /*
+   * Its own address, not a demo account's.
+   *
+   * This test asks for a code and never uses it, which leaves a live challenge — and a live
+   * challenge holds the resend window shut for that destination for a minute. Sharing an address
+   * with a journey spec meant whichever ran second was refused a code and failed on an empty field,
+   * describing itself as «the issued code never arrived». The window is correct; the sharing was not.
+   */
+  const probe = 'keyboard-probe@example.test'
   const identifier = page.getByTestId('login-email')
   await identifier.focus()
-  await page.keyboard.type('owner@demo-agency.local')
-  await expect(identifier).toHaveValue('owner@demo-agency.local')
+  await page.keyboard.type(probe)
+  await expect(identifier).toHaveValue(probe)
 
   const pw = page.getByTestId('login-password').locator('input[type="password"]')
   await pw.focus()

@@ -7,6 +7,8 @@ namespace App\Domains\Identity\Http\Controllers;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Identity\Resources\UserResource;
 use App\Domains\Identity\Support\AccountSuspension;
+use App\Domains\Notifications\Mail\CredentialMail;
+use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Requests\Services\ContactVerificationService;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -48,6 +50,15 @@ use Illuminate\Validation\ValidationException;
  *   production, where `dev_code` is hard-gated off, that means sign-in cannot complete. That is the
  *   honest outcome of an unconfigured provider, and it is `READY_FOR_CREDENTIALS`, not «Live».
  *
+ * ## The message is real, and so is the state that reports it
+ *
+ * `TransactionalMailer` composes `CredentialMail::SIGN_IN_CODE` and records a `NotificationDelivery`
+ * row before attempting anything. `delivery_status` on the response is that ledger's own answer —
+ * `sent` only after a transport accepted it, `sandbox` when the driver reaches nobody,
+ * `awaiting_credentials` when the channel reports no provider, `failed` with the transport's message
+ * when it threw. The moment real credentials are entered, the same code path starts delivering; no
+ * second implementation has to be written and nothing has to be switched on.
+ *
  * ## No enumeration
  *
  * `start` answers identically for an address nobody holds: a verification id and a delivery status.
@@ -63,7 +74,10 @@ final class EmailSignInController extends Controller
     /** The resend window, in seconds. The browser counts the same number down; this one is binding. */
     private const RESEND_COOLDOWN = 60;
 
-    public function __construct(private readonly ContactVerificationService $verification) {}
+    public function __construct(
+        private readonly ContactVerificationService $verification,
+        private readonly TransactionalMailer $mailer,
+    ) {}
 
     /** POST /auth/email/start — send a one-time code to an email address. */
     public function start(Request $request): JsonResponse
@@ -80,6 +94,9 @@ final class EmailSignInController extends Controller
          * endpoint into a directory of who has an account here, answerable by anybody with a mailing
          * list. The cost is one message to a stranger, which the throttle and the cooldown bound.
          */
+        $locale = app()->getLocale() === 'en' ? 'en' : 'ar';
+        $ttl = (int) config('requests.verification.code_ttl_minutes', 10);
+
         $result = $this->verification->start(
             'email',
             $email,
@@ -87,6 +104,31 @@ final class EmailSignInController extends Controller
             null,
             cooldownSeconds: self::RESEND_COOLDOWN,
             invalidatePrevious: true,
+            /*
+             * The message itself, composed where the plaintext lives and nowhere else.
+             *
+             * `TransactionalMailer` is the product's one way to send an account message: it asks
+             * `ProviderRegistry` — not `mail.default` — whether email is configured, writes a
+             * `NotificationDelivery` row before attempting anything, and returns the OUTCOME rather
+             * than an intention. `sent` is written only after the transport accepted it.
+             *
+             * The verification id is the dedup key, so a retried request cannot mail the same code
+             * twice. There is no automatic retry by design: re-sending is «إعادة إرسال الرمز», a
+             * decision somebody makes, not a background job that mails a stranger four times.
+             */
+            deliver: fn (string $code, string $id): string => $this->mailer->send(
+                recipient: $email,
+                mail: new CredentialMail(
+                    purpose: CredentialMail::SIGN_IN_CODE,
+                    lang: $locale,
+                    code: $code,
+                    expiresInMinutes: $ttl,
+                ),
+                kind: CredentialMail::SIGN_IN_CODE,
+                template: 'credential.sign_in_code',
+                locale: $locale,
+                dedupKey: $id,
+            ),
         );
 
         $this->audit($request, 'auth.email_code.requested', [
