@@ -19,6 +19,19 @@
 | `AUTH-PHONE-002` | The mobile number panel in **personal** Account security — the screen that puts the proof back after `AUTH-PHONE-001` | **VERIFIED** (`d3a54b9` — 14 unit tests + `account-settings` E2E on chromium) |
 | `PAY-TOKEN-002` | A renewal with a card on file is **taken**, not asked for — `SubscriptionCheckout::open()` forks onto the saved token instead of opening a hosted invoice | **READY_FOR_CREDENTIALS** (`c0d44cd` — 7 new tests; no Moyasar credentials exist to prove a live round trip) |
 
+### GATE — **GREEN** on this exact tree, one invocation
+
+```
+PASS  chromium  (exit 0)   299 passed  (7.6m)
+PASS  firefox   (exit 0)   291 passed  (11.9m)
+PASS  webkit    (exit 0)   291 passed  (9.7m)
+REAL_GATE_EXIT=0     0 failed · 0 flaky · retries: 0 (config)
+```
+
+Backend **1912 passed** · Frontend **999 passed** · tsc · lint · Pint · production build — all clean.
+Chromium is +1 spec (the new `account-settings` phone journey) and stayed at 7.6m, so `GATE-VITE-001`
+is holding.
+
 ### What those two units settled, so nobody re-opens them
 
 - **The panel is personal, not workspace.** `/me/phone` is self-only; the number decides how THIS
