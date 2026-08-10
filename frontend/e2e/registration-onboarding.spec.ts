@@ -157,14 +157,19 @@ test('personal (agency) account: register → onboard → full menu', async ({ p
   await page.getByRole('button', { name: /Continue|متابعة/ }).click()
   await page.getByRole('button', { name: /Go to dashboard|لوحة التحكم/ }).click()
 
-  await expect(page).toHaveURL(/\/dashboard/)
+  /*
+   * The AGENCY portal, not merely «a dashboard» — that binding is the whole point of the signup
+   * question (LAUNCH-PRICING-001): «لعملائي» → `/agency`, «لحملاتي وأعمالي» → `/app`. A walk that
+   * asserted `/dashboard` alone passed for either portal and so proved neither.
+   */
+  await expect(page).toHaveURL(/\/agency\/dashboard/)
   // Personal full menu: Clients is present.
   await switchToEnglish(page)
   await expect(page.getByRole('link', { name: /Clients|العملاء/ }).first()).toBeVisible()
 
   // Persistence across reload — stays onboarded on the dashboard.
   await page.reload()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/agency\/dashboard/)
 })
 
 test('company (brand) account: register → onboard → simplified menu, no agency tools', async ({ page }, testInfo) => {
@@ -181,7 +186,8 @@ test('company (brand) account: register → onboard → simplified menu, no agen
   await page.getByRole('button', { name: /Continue|متابعة/ }).click()
   await page.getByRole('button', { name: /Go to dashboard|لوحة التحكم/ }).click()
 
-  await expect(page).toHaveURL(/\/dashboard/)
+  // The SELF-managed path is sold `/app`, and this is where the walk proves it landed there.
+  await expect(page).toHaveURL(/\/app\/dashboard/)
   await switchToEnglish(page)
   // Simplified menu: Campaigns present, but NO Clients / Requests (the agency tools).
   await expect(page.getByRole('link', { name: /Campaigns|الحملات/ }).first()).toBeVisible()
