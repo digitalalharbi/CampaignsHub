@@ -50,6 +50,21 @@ final class NullPaymentProvider implements PaymentProvider
         return null;
     }
 
+    /** Nothing is configured, so nothing can be charged — attended or not. */
+    public function supportsUnattendedCharge(): bool
+    {
+        return false;
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     * @return array{status: string, provider_payment_id?: string|null, error?: string|null}
+     */
+    public function chargeStoredMethod(string $token, array $payload): array
+    {
+        return ['status' => 'awaiting_credentials', 'provider_payment_id' => null, 'error' => null];
+    }
+
     /** @param  array<string,mixed>  $payload */
     public function paymentMethodFingerprint(array $payload): ?string
     {

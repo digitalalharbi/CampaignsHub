@@ -67,6 +67,36 @@ interface PaymentProvider
     public function fetchPayment(string $providerPaymentId): ?array;
 
     /**
+     * Can this provider charge a saved token with nobody present? (PAY-TOKEN-001)
+     *
+     * The difference between a subscription and a series of invoices somebody has to remember to
+     * pay. False here is not a defect — it is the honest state of an adapter whose tokenization is
+     * not wired — and the renewal path answers it by opening an attended charge instead, so a
+     * customer is asked rather than silently allowed to lapse.
+     */
+    public function supportsUnattendedCharge(): bool;
+
+    /**
+     * Charge a saved token — the renewal nobody has to attend (PAY-TOKEN-001).
+     *
+     * ## This does NOT settle anything
+     *
+     * It asks the gateway to take money and reports what the gateway said about the ATTEMPT. The
+     * payment becomes paid the same way every other payment in this product does: a webhook the
+     * adapter verifies, re-read from the gateway where the signature cannot prove the body, through
+     * the single call site in `ApplySubscriptionPaymentEvent`. An adapter that marked a charge paid
+     * from this return value would be a second, weaker way to activate an account.
+     *
+     * `reference` is our idempotency key and must travel with the charge, so a retry of this call
+     * cannot take the money twice and the confirming webhook can find what it belongs to.
+     *
+     * @param  array<string,mixed>  $payload  amount · currency · reference · description
+     * @return array{status: string, provider_payment_id?: string|null, error?: string|null}
+     *                                                                                       status ∈ submitted|awaiting_credentials|unsupported|failed
+     */
+    public function chargeStoredMethod(string $token, array $payload): array;
+
+    /**
      * A stable identifier for the PAYMENT METHOD a verified event used, or null when the provider
      * does not publish one (PAY-004).
      *

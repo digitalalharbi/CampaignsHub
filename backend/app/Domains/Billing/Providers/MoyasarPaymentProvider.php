@@ -195,6 +195,76 @@ final class MoyasarPaymentProvider implements PaymentProvider
     }
 
     /**
+     * Moyasar can, and this install cannot prove it — READY_FOR_CREDENTIALS.
+     *
+     * The API below is Moyasar's real one: a payment created against a saved `token` source. What is
+     * missing is a credential to exercise it with, and the token itself, which only arrives from a
+     * real tokenised checkout. So this reports the capability honestly and refuses to pretend: with
+     * no secret key it answers `awaiting_credentials`, and nothing anywhere reads that as a charge.
+     */
+    public function supportsUnattendedCharge(): bool
+    {
+        return $this->isConfigured();
+    }
+
+    /**
+     * `POST /v1/payments` with a saved token as the source.
+     *
+     * The reference travels as metadata AND is what the confirming webhook matches on, so a retried
+     * call cannot take the money twice: Moyasar sees the same idempotent intent, and our own ledger
+     * already holds an open charge under that key.
+     *
+     * A non-2xx is a FAILED ATTEMPT, never a silent success, and never a settlement — a paid state
+     * comes only from a verified webhook, re-read from the gateway (PAY-CONFIRM-001).
+     *
+     * @param  array<string,mixed>  $payload
+     * @return array{status: string, provider_payment_id?: string|null, error?: string|null}
+     */
+    public function chargeStoredMethod(string $token, array $payload): array
+    {
+        if (! $this->isConfigured()) {
+            return ['status' => 'awaiting_credentials', 'provider_payment_id' => null, 'error' => null];
+        }
+
+        if ($token === '') {
+            return ['status' => 'failed', 'provider_payment_id' => null, 'error' => 'No saved payment method.'];
+        }
+
+        try {
+            $response = Http::withBasicAuth((string) $this->secretKey(), '')
+                ->timeout(20)
+                ->asForm()
+                ->post(self::API.'/payments', [
+                    // Smallest unit, exactly as `createSession` — see the note there.
+                    'amount' => (int) round(((float) $payload['amount']) * 100),
+                    'currency' => (string) ($payload['currency'] ?? 'SAR'),
+                    'description' => (string) ($payload['description'] ?? 'CampaignsHub subscription renewal'),
+                    'source[type]' => 'token',
+                    'source[token]' => $token,
+                    'metadata[reference]' => (string) ($payload['reference'] ?? ''),
+                ]);
+
+            if (! $response->successful()) {
+                return [
+                    'status' => 'failed',
+                    'provider_payment_id' => null,
+                    'error' => 'Moyasar refused the charge: '.$response->status(),
+                ];
+            }
+
+            $body = (array) $response->json();
+
+            return [
+                'status' => 'submitted',
+                'provider_payment_id' => (string) ($body['id'] ?? ''),
+                'error' => null,
+            ];
+        } catch (Throwable $e) {
+            return ['status' => 'failed', 'provider_payment_id' => null, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
      * Moyasar publishes no card fingerprint (PAY-004).
      *
      * The most identifying thing on the payload is the brand and the last four digits, and that is NOT

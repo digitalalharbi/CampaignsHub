@@ -155,6 +155,27 @@ final class StripePaymentProvider implements PaymentProvider
     }
 
     /**
+     * Not wired here — READY_FOR_CREDENTIALS, stated rather than implied.
+     *
+     * Stripe does off-session charging well, and building it against no credentials would produce an
+     * untested code path that claims a capability nobody has exercised. The renewal falls back to an
+     * attended charge, which asks the customer instead of letting them lapse silently.
+     */
+    public function supportsUnattendedCharge(): bool
+    {
+        return false;
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     * @return array{status: string, provider_payment_id?: string|null, error?: string|null}
+     */
+    public function chargeStoredMethod(string $token, array $payload): array
+    {
+        return ['status' => 'unsupported', 'provider_payment_id' => null, 'error' => null];
+    }
+
+    /**
      * Stripe's card fingerprint is stable across customers, which is exactly what "one trial per
      * payment method" needs (PAY-004).
      *

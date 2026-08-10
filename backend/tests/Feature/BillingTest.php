@@ -400,6 +400,21 @@ final class ConfiguredFakePaymentProvider implements PaymentProvider
         return null;
     }
 
+    /** Attended only — this double stands in for a gateway checkout, not for recurring billing. */
+    public function supportsUnattendedCharge(): bool
+    {
+        return false;
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     * @return array{status: string, provider_payment_id?: string|null, error?: string|null}
+     */
+    public function chargeStoredMethod(string $token, array $payload): array
+    {
+        return ['status' => 'unsupported', 'provider_payment_id' => null, 'error' => null];
+    }
+
     public function name(): string
     {
         return 'fake';

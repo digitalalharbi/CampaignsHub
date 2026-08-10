@@ -154,6 +154,28 @@ final class SandboxPaymentProvider implements PaymentProvider
     }
 
     /**
+     * No. The sandbox exists to make the ATTENDED path walkable without credentials.
+     *
+     * An unattended charge here would have to invent a settlement, and inventing one is precisely
+     * what this adapter refuses to do everywhere else: it signs a real webhook and lets the real
+     * pipeline decide. A renewal on a sandbox install therefore opens a checkout somebody walks
+     * through, which is the honest simulation of what happens with no stored card.
+     */
+    public function supportsUnattendedCharge(): bool
+    {
+        return false;
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     * @return array{status: string, provider_payment_id?: string|null, error?: string|null}
+     */
+    public function chargeStoredMethod(string $token, array $payload): array
+    {
+        return ['status' => 'unsupported', 'provider_payment_id' => null, 'error' => null];
+    }
+
+    /**
      * No fingerprint, deliberately.
      *
      * There is no payment method here to identify, and returning a made-up one would either block
