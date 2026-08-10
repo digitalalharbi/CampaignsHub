@@ -8,6 +8,7 @@ use App\Domains\Notifications\Services\DigestPresenter;
 use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailLinks;
 use App\Support\AdPlatforms;
+use App\Support\Frontend;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -84,7 +85,7 @@ final class DailyDigestMail extends Mailable
         $p = new DigestPresenter($this->lang);
         $ar = $this->lang === 'ar';
         $app = rtrim((string) config('brand.application_url'), '/');
-        $site = rtrim((string) config('brand.frontend_url'), '/');
+        $site = Frontend::origin();
 
         return new Content(
             view: 'mail.layout',

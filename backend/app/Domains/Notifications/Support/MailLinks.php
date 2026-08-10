@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Support\Frontend;
+
 /**
  * Where an email's links actually go — MAIL-008.
  *
@@ -24,7 +26,7 @@ final class MailLinks
     /** The application's own origin, without a trailing slash. */
     public static function app(): string
     {
-        return rtrim((string) config('brand.frontend_url', 'https://campaignshub.io'), '/');
+        return Frontend::origin();
     }
 
     public static function to(string $path): string

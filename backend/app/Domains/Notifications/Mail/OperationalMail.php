@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Support\MailShell;
+use App\Support\Frontend;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -64,7 +65,7 @@ final class OperationalMail extends Mailable
     public function content(): Content
     {
         $ar = $this->lang === 'ar';
-        $app = rtrim((string) config('brand.frontend_url', 'https://campaignshub.io'), '/');
+        $app = Frontend::origin();
 
         /*
          * Rendered through the shared shell, exactly as the digest is.

@@ -18,6 +18,7 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
 use App\Support\ApiResponse;
+use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -229,7 +230,7 @@ final class AdPlatformOAuthController extends Controller
     /** Back to the SPA's integrations page, carrying an outcome it can render in the reader's language. */
     private function back(string $provider, string $outcome, ?string $reason, int $accounts = 0): RedirectResponse
     {
-        return redirect()->away(rtrim((string) config('brand.frontend_url', config('app.url')), '/').'/app/integrations?'.http_build_query(array_filter([
+        return redirect()->away(Frontend::origin().'/app/integrations?'.http_build_query(array_filter([
             'provider' => $provider,
             'outcome' => $outcome,
             'accounts' => $outcome === 'connected' ? (string) $accounts : null,

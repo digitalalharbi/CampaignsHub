@@ -9,6 +9,7 @@ use App\Domains\Subscriptions\Services\SubscriptionInvoicing;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -135,7 +136,7 @@ final class SubscriptionInvoiceController extends Controller
     {
         return $invoice->share_token === null
             ? null
-            : rtrim((string) config('app.frontend_url', config('app.url')), '/').'/invoices/'.$invoice->share_token;
+            : Frontend::origin().'/invoices/'.$invoice->share_token;
     }
 
     /** @return array<string, mixed> */

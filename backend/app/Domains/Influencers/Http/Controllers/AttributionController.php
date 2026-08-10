@@ -11,6 +11,7 @@ use App\Domains\Influencers\Models\InfluencerTrackingAsset;
 use App\Domains\Influencers\Services\InfluencerAttribution;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use RuntimeException;
@@ -140,7 +141,7 @@ final class AttributionController extends Controller
     {
         $asset = $this->attribution->resolveAndCount($code);
 
-        $fallback = rtrim((string) config('app.frontend_url', config('app.url')), '/').'/';
+        $fallback = Frontend::origin().'/';
 
         return redirect()->away($asset?->destination_url ?: $fallback, 302);
     }

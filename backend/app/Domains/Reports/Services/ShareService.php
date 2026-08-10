@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Support\Frontend;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -60,7 +61,7 @@ final class ShareService
      */
     public static function urlFor(string $rawToken): string
     {
-        return rtrim((string) config('brand.frontend_url'), '/').self::pathFor($rawToken);
+        return Frontend::origin().self::pathFor($rawToken);
     }
 
     /** @return array{0: ReportShare, 1: string} the share + the raw token (show once) */

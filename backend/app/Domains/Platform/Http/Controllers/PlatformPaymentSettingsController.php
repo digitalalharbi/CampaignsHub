@@ -9,6 +9,7 @@ use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use App\Domains\Subscriptions\Notifications\MailTransportState;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -89,7 +90,7 @@ final class PlatformPaymentSettingsController extends Controller
             'currency' => (string) config('subscriptions.currency'),
             'description' => 'CampaignsHub connection test',
             'reference' => 'connection-test:'.now()->timestamp,
-            'return_url' => rtrim((string) config('app.frontend_url', config('app.url')), '/').'/admin/settings',
+            'return_url' => Frontend::origin().'/admin/settings',
         ]);
 
         $reachable = ($result['status'] ?? '') === 'created';

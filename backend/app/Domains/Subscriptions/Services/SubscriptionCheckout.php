@@ -11,6 +11,7 @@ use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Support\Frontend;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -283,7 +284,7 @@ final class SubscriptionCheckout
             'currency' => $currency,
             'description' => $this->describe($purpose, $planCode),
             'reference' => $idempotencyKey,
-            'return_url' => rtrim((string) config('app.frontend_url', config('app.url')), '/').'/signup/status',
+            'return_url' => Frontend::origin().'/signup/status',
         ]);
 
         /*

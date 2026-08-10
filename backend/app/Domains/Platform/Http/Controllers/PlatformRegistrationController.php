@@ -14,6 +14,7 @@ use App\Domains\Subscriptions\Notifications\SubscriptionNotifier;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -161,7 +162,7 @@ final class PlatformRegistrationController extends Controller
         try {
             $this->notify->notifyApplicant($registration->refresh(), 'registration_information_requested', [
                 'reason' => $data['note'],
-                'url' => rtrim((string) config('app.frontend_url', config('app.url')), '/')
+                'url' => Frontend::origin()
                     .'/signup/status?request='.$registration->getKey(),
             ], occasion: $registration->getKey().':'.now()->toDateString());
         } catch (\Throwable $e) {

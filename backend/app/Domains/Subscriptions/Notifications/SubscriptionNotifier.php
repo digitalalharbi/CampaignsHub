@@ -13,6 +13,7 @@ use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Scopes\TenantScope;
 use App\Models\User;
+use App\Support\Frontend;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -107,7 +108,7 @@ final class SubscriptionNotifier
             'currency' => (string) ($subscription->currency ?? config('subscriptions.currency')),
             'date' => $subscription->current_period_end?->toDateString()
                 ?? $subscription->trial_ends_at?->toDateString() ?? '',
-            'url' => rtrim((string) config('app.frontend_url', config('app.url')), '/').'/app/subscriptions',
+            'url' => Frontend::origin().'/app/subscriptions',
         ], $extra);
     }
 

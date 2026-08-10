@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Support\MailShell;
+use App\Support\Frontend;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -90,7 +91,7 @@ final class AlertBundleMail extends Mailable
                 ? 'هذه الملاحظات ظهرت في آخر فحص، وكل واحدة منها تستحق قرارًا اليوم.'
                 : 'These came up in the last sweep, and each is worth a decision today.',
             'actionLabel' => $ar ? 'فتح في CampaignsHub' : 'Open in CampaignsHub',
-            'actionUrl' => rtrim((string) config('brand.frontend_url', 'https://campaignshub.io'), '/').'/app/dashboard',
+            'actionUrl' => Frontend::origin().'/app/dashboard',
         ];
 
         return new Content(view: 'mail.layout', with: $body + [

@@ -9,6 +9,7 @@ use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Subscriptions\Notifications\SubscriptionNotifier;
+use App\Support\Frontend;
 
 /**
  * Moves an application to the next thing it is actually waiting on (SIGNUP-002).
@@ -190,7 +191,7 @@ final class AdvanceRegistration
     {
         try {
             $this->notify->notifyApplicant($request, $event, $context + [
-                'url' => rtrim((string) config('app.frontend_url', config('app.url')), '/')
+                'url' => Frontend::origin()
                     .'/signup/status?request='.$request->getKey(),
             ]);
         } catch (\Throwable $e) {

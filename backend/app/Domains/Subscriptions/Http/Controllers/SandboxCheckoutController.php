@@ -9,6 +9,7 @@ use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Services\ApplySubscriptionPaymentEvent;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
+use App\Support\Frontend;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -105,7 +106,7 @@ final class SandboxCheckoutController extends Controller
             'x-sandbox-signature' => hash_hmac('sha256', $body, $this->sandbox->secret()),
         ]);
 
-        $return = rtrim((string) config('app.frontend_url', config('app.url')), '/').'/signup/status';
+        $return = Frontend::origin().'/signup/status';
 
         if ($payment->registration_request_id !== null) {
             $return .= '?request='.$payment->registration_request_id;

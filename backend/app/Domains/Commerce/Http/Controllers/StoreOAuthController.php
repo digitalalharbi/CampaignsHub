@@ -19,6 +19,7 @@ use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -225,7 +226,7 @@ final class StoreOAuthController extends Controller
     /** Back to the SPA's integrations page, carrying an outcome it can render in the reader's language. */
     private function back(string $provider, string $outcome, ?string $reason, int $stores = 0): RedirectResponse
     {
-        return redirect()->away(rtrim((string) config('brand.frontend_url', config('app.url')), '/').'/app/integrations?'.http_build_query(array_filter([
+        return redirect()->away(Frontend::origin().'/app/integrations?'.http_build_query(array_filter([
             'provider' => $provider,
             'outcome' => $outcome,
             'stores' => $outcome === 'connected' ? (string) $stores : null,

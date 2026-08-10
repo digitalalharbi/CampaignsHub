@@ -105,11 +105,12 @@ because of any difficulty in the work.
 4. **Integration readiness** uniformly across ad platforms and commerce. `/admin` payment settings is
    further along than earlier handoffs said: it already reports state, detects test-vs-live,
    describes the webhook URL, gives rotation guidance and makes a real safe test call.
-5. **`config('app.frontend_url')` does not exist** — eight call sites read it and silently fall back
-   to `APP_URL`, including the Moyasar **payment callback**, the registration approval link, the
-   invoice share link and subscription notifications. The OAuth redirects and all mail correctly read
-   `brand.frontend_url`. In a split api/app deployment every one of those sends the customer to the
-   API host. Found by grep, NOT yet fixed. One helper, not a second config key.
+5. ~~`config('app.frontend_url')` does not exist~~ — **that claim was WRONG and is retracted.**
+   It resolves to `FRONTEND_URL` on an untouched tree, exactly like `brand.frontend_url`; no
+   customer was ever sent to the API host. It came from grepping `config/*.php` instead of asking
+   the application what the key resolves to. What WAS true — two config paths for one fact, only one
+   of them declared — is closed at `FRONTEND-URL-001` as a refactor onto a single reader
+   (`App\Support\Frontend`), 15 call sites, 7 tests, 175 passing across every suite that touches them.
 
 ### The handoff pack now exists
 
