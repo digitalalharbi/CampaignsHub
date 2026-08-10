@@ -95,7 +95,13 @@ final class CommercialJourneyTest extends TestCase
             'secret_token' => 'sandbox-webhook-secret',
             'data' => [
                 'id' => 'pay_'.$payment->getKey(), 'status' => $status,
-                'amount' => $amountInHalalas, 'currency' => 'SAR',
+                /*
+                 * The gateway echoes back the currency it was ASKED to charge, so this walk must
+                 * too. It said `SAR` against a subscription sold in USD (PAY-AUDIT-002) and passed,
+                 * because until PAY-VERIFY-001 only the figure was compared — the test was
+                 * depending on the gap it now proves is closed.
+                 */
+                'amount' => $amountInHalalas, 'currency' => $payment->currency,
                 'metadata' => ['reference' => $payment->idempotency_key],
             ],
         ])->assertOk()->assertJsonPath('data.verified', true);
