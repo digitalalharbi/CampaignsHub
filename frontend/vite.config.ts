@@ -5,8 +5,32 @@ import { defineConfig } from 'vitest/config'
 
 const API_TARGET = process.env.VITE_API_TARGET ?? 'http://127.0.0.1:8000'
 
+/**
+ * GATE-VITE-001 — one dependency cache per dev server, never one shared between two.
+ *
+ * The gate runs TWO dev servers at once: the tests' own, and a second one that exists solely so the
+ * PDF print browser stops pulling the SPA's module graph out from under a `page.goto` (GATE-WK-001,
+ * documented in `playwright.config.ts`). Both defaulted to `node_modules/.vite`.
+ *
+ * Two Vite processes cannot share a dependency cache. Each runs its own optimizer, and the moment
+ * either one encounters a dep it has not pre-bundled it rewrites that directory and bumps the hash
+ * every client URL carries. The other server's in-flight requests are then asking for a `?v=` that
+ * no longer exists — the browser reports «Load failed», the proxy answers 502, and a navigation
+ * waiting on a module being rewritten underneath it never fires `load` at all.
+ *
+ * That is the signature the chromium leg produced: a burst of full page loads (the login specs
+ * navigate on almost every test) stalling for tens of minutes, including a test that never calls the
+ * backend, and then recovering completely once the burst passed. Laravel was never the problem —
+ * a client-side validation test cannot take seventeen minutes because of the API.
+ *
+ * `VITE_CACHE_DIR` gives the second server its own. A developer's `npm run dev` sets nothing and
+ * keeps the default, so nothing about the ordinary workflow changes.
+ */
+const CACHE_DIR = process.env.VITE_CACHE_DIR
+
 // https://vite.dev/config/
 export default defineConfig({
+  ...(CACHE_DIR === undefined ? {} : { cacheDir: CACHE_DIR }),
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

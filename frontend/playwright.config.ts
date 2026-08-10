@@ -130,7 +130,16 @@ export default defineConfig({
       url: E2E_PRINT_ORIGIN,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
-      env: { VITE_API_TARGET: E2E_API_TARGET },
+      /*
+       * Its OWN dependency cache — GATE-VITE-001.
+       *
+       * Two Vite servers sharing `node_modules/.vite` is not a tidiness question: each runs its own
+       * optimizer, and either one re-optimizing rewrites the directory and bumps the hash every
+       * client URL carries. The other server's in-flight module requests then 404/504, which reaches
+       * the browser as «Load failed», the proxy as 502, and a `page.goto` as a navigation that never
+       * fires `load`.
+       */
+      env: { VITE_API_TARGET: E2E_API_TARGET, VITE_CACHE_DIR: 'node_modules/.vite-print' },
     },
   ],
 })

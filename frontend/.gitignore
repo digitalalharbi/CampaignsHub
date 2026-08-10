@@ -25,3 +25,4 @@ dist-ssr
 e2e/.auth/
 test-results/
 playwright-report/
+node_modules/.vite-print
