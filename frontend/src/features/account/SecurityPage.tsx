@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Monitor, ShieldCheck } from 'lucide-react'
 import { getSessions, logoutOtherSessions } from './api'
+import { PhoneCredentialCard } from './PhoneCredential'
 import { Button } from '@/components/ui/Button'
 import { PasswordInput } from '@/components/ui/form'
 import { toApiError } from '@/lib/api/client'
@@ -59,6 +60,14 @@ export function SecurityPage() {
             </div>
           </div>
         </section>
+
+        {/*
+          The mobile number as a credential — AUTH-PHONE-001.
+
+          Here rather than in workspace settings because it is personal: `/me/phone` is self-only,
+          and the number decides how THIS person signs in and how their account is recovered.
+        */}
+        <PhoneCredentialCard />
 
         {/* Two-factor — honestly gated until the external verification/mailer is wired. */}
         <section className="rounded-2xl border border-border bg-surface p-5">

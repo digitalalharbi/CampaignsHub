@@ -1,4 +1,4 @@
-import { deleteData, getData, patchData } from '@/lib/api/client'
+import { deleteData, getData, patchData, postData } from '@/lib/api/client'
 import type { AuthUser } from '@/lib/api/types'
 
 export interface ProfileInput {
@@ -46,3 +46,39 @@ export const getSessions = () => getData<SessionInfo>('/me/sessions')
 
 export const logoutOtherSessions = (current_password: string) =>
   deleteData<{ status: string }>('/me/sessions/others', { current_password })
+
+// ---- The mobile number as a credential (AUTH-PHONE-001) ------------------------------------------
+
+/**
+ * What the server says about this account's number, and about the channels that could reach it.
+ *
+ * `confirmed` is the whole point: a number typed into a profile is a contact detail, and only a code
+ * answered from the handset turns it into something that can sign anybody in. `channels` is reported
+ * per channel because it decides what the screen may OFFER — with `whatsapp: false` there is no
+ * WhatsApp provider wired, and presenting WhatsApp as a way in would be a button that cannot work.
+ */
+export interface PhoneCredential {
+  phone: string | null
+  confirmed: boolean
+  confirmed_at: string | null
+  channels: { sms: boolean; whatsapp: boolean }
+}
+
+export interface PhoneChallenge {
+  verification_id: string
+  /** `queued` · `sent` — or `awaiting_provider_credentials`, meaning NOTHING was sent to anybody. */
+  delivery_status: string
+  resend_after: number
+  /** Non-production only; hard-gated server-side, so this is null in production. */
+  dev_code: string | null
+}
+
+export const getPhoneCredential = () => getData<PhoneCredential>('/me/phone')
+
+export const startPhoneConfirmation = (phone: string, channel: 'sms' | 'whatsapp') =>
+  postData<PhoneChallenge>('/me/phone/start', { phone, channel })
+
+export const confirmPhone = (verification_id: string, code: string) =>
+  postData<{ phone: string; confirmed: boolean }>('/me/phone/confirm', { verification_id, code })
+
+export const revokePhoneCredential = () => deleteData<{ confirmed: boolean }>('/me/phone')

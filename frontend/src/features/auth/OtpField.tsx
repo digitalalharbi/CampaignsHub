@@ -46,6 +46,7 @@ export function OtpField({
   label,
   autoFocus = false,
   disabled = false,
+  testId = 'login-otp',
 }: {
   value: string
   onChange: (next: string) => void
@@ -54,6 +55,12 @@ export function OtpField({
   label: string
   autoFocus?: boolean
   disabled?: boolean
+  /**
+   * The control is used on more than one screen now (sign-in, and proving a number in Account
+   * security). A caller that renders it elsewhere names its own boxes, so a selector written for
+   * one screen cannot silently match the other.
+   */
+  testId?: string
 }) {
   const boxes = useRef<Array<HTMLInputElement | null>>([])
   const digits = value.padEnd(LENGTH, ' ').slice(0, LENGTH).split('')
@@ -80,12 +87,12 @@ export function OtpField({
   return (
     <div>
       <span className="mb-1.5 block text-sm font-semibold text-text-secondary">{label}</span>
-      <div data-testid="login-otp" dir="ltr" className="flex items-center justify-center gap-2">
+      <div data-testid={testId} dir="ltr" className="flex items-center justify-center gap-2">
         {digits.map((digit, i) => (
           <input
             key={i}
             ref={(el) => { boxes.current[i] = el }}
-            data-testid={`login-otp-${i}`}
+            data-testid={`${testId}-${i}`}
             aria-label={`${label} ${i + 1}`}
             inputMode="numeric"
             autoComplete={i === 0 ? 'one-time-code' : 'off'}
