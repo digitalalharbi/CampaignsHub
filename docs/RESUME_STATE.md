@@ -10,85 +10,93 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-10 at a context-window close
+## ⚠️ START HERE — handoff written 2026-08-10 (second close of the day)
 
-**HEAD is `1fef134`. Working tree CLEAN.** Everything below `1fef134` is committed and verified as
-stated; nothing is half-applied.
+**HEAD is `4f0edf3`. Working tree CLEAN.** Everything below is committed and verified as stated;
+nothing is half-applied.
 
-### GATE — 2026-08-10 · **GREEN at `1fef134`**
+### Step 1 of the owner's order is CLOSED — non-external open items = 0
 
-`cd frontend && npm run gate`, run ALONE, exit code captured on its own line (never through a pipe).
+All four are done, and two of them turned out to be stale documentation rather than missing work.
+Recorded in the matrix as **§19**.
 
-```
-PASS  chromium  (exit 0)   287 passed  (7.9m)
-PASS  firefox   (exit 0)   279 passed  (12.9m)
-PASS  webkit    (exit 0)   279 passed  (9.8m)
-[gate] all three browsers passed        REAL_GATE_EXIT=0
-```
+| item | what it was | closed by |
+|---|---|---|
+| `GATE-WK-001` | real — the gate spawned a second headless browser against its own Vite server | `47c9ef9` (print frontend on :5373) |
+| `AGENCY-PERMS-006` | real — ~19 taxonomy dropdowns printed one sentence for a refusal, an expired session, a deleted list and a dead server alike, beside a Retry that could only be refused again | `7f20c61` (classified at `PanelState`, 5 new tests) |
+| `REPORT-LINKS-13` | **stale** — the summary-vs-detail distinction, the scope picker, saveable scope templates and a real xlsx export are ALL built and covered (85 tests pass together). The `PARTIAL` row predates them | `21e8a13` (supersession row) |
+| the two full live journeys | **half-stale** — both walks existed and ran in the gate, but ended on `toHaveURL(/\/dashboard/)`, which matches `/app/dashboard` and `/agency/dashboard` alike and so proved neither | `581866a` (the portal is now named; 11 passed live on chromium) |
 
-**Failed=0 · Flaky=0 · Retries=0 (`retries: 0` in the config) · Unexplained skipped=0.**
+### Step 2 — plans and subscriptions, reviewed end to end
 
-Backend **1802 passed** (10440 assertions) · Frontend **954 passed** (129 files) · `tsc`, `oxlint`,
-Pint and `vite build` all clean.
+The catalogue matches the owner's launch decision exactly (`SubscriptionPlanSeeder`): Starter
+$19/$190 no intro · Growth $49/$490 with $9 for 30 days and a 3-month commitment · Agency $99/$990 ·
+Enterprise `contact_sales` + `is_public: false`. Currency USD throughout. **217 tests pass** across
+Billing, CommercialJourney, MinimumCommitment, PaidRegistration, PaymentActivationSecurity,
+PlanCatalogue, PlanChangeProration, PlanCommercialTerms, PlanLimitEnforcement,
+PlatformPaymentSettings, SubscriptionInvoice, SubscriptionLifecycle, SubscriptionNotification,
+Subscription and GatedRegistration.
 
-Two defects were closed to get here, both diagnosed from evidence rather than guessed:
+**One real defect was found and fixed there** — `PAY-VERIFY-001`, `1847122`. The confirmed
+**currency** was never checked. Subscriptions are USD and both live adapters default a stated
+currency to SAR, so a verified webhook reading `49.00 SAR` settled a `49.00 USD` invoice and
+activated the account for roughly a quarter of the price. Proven fail-first by stashing the service
+file alone. `CommercialJourneyTest` was depending on that gap (it hard-coded SAR) and was corrected
+at `4f0edf3`.
 
-- **GATE-WK-001** — four webkit tests hung on `page.goto … waiting until "load"`. The gate was
-  spawning a SECOND headless browser at its own Vite dev server: `.env` sets
-  `REPORTS_CHROMIUM_ENABLED=true` and the gate never overrode it, so `GenerateReportJob` printed
-  through `{E2E_ORIGIN}/reports/print/…` and pulled the whole SPA module graph out of the server the
-  tests were driving. Proven by stashing all 58 changed files and reproducing it on a clean tree.
-  Fixed by giving the print browser its OWN frontend on :5373 — switching Chromium printing off also
-  removed the proof that the exported Arabic PDF is a real Chromium file, which is coverage this
-  product had already had to earn once.
-- **GATE-FF-002** — `openSection` asserted the URL before `/app/settings` resolved to its default
-  section, so it was really testing «the redirect has not happened yet». Firefox got there first.
+### Step 3 — production readiness: STARTED, first unit landed
 
-No timeout was raised, no retry added, nothing skipped, and no browser-specific branch exists.
+`PROD-CONFIG-001`, `1475d6e`. `php artisan production:check [--json] [--warnings-as-failures]` —
+typed `fail`/`warn` findings over app debug/key, `APP_URL`/`FRONTEND_URL` (https, never localhost),
+the session cookie (secure, and a domain that actually covers the app's host), Postgres, a
+non-`sync` queue, **both payment gateways** (chosen-but-unconfigured · a secret key with no webhook
+secret · a TEST key in production · a test key mixed with a live one) and mail. Non-zero exit on any
+failure, so a deploy pipeline stops on it. **The report carries the SHAPE of a key, never its
+value** — asserted. 16 tests, each breaking one key and asserting that key is named. Run against
+this install: 0 failing, 1 warning (no mail provider). `.env.example` now names `MOYASAR_*` and
+`STRIPE_*` explicitly, empty, with the frontend/backend split and the test-live matching rule.
 
-### Exact next task, in the owner's mandated order
+### Exact next task
 
-1. ~~Read the gate verdict.~~ **DONE — green, recorded above at `df2fadb`.** Start at 2.
-2. **Close the non-external open items.** They are, exactly:
-   - `REPORT-LINKS-13` — `ShareService` separates *live vs snapshot*, not *executive summary vs full
-     detail*. The security half is done and gate-covered (`LiveReportShareTest`, 14 cases).
-   - `AGENCY-PERMS-006` — inline `optionsError` on taxonomy selects. The influencer surfaces in that
-     row are behind a disabled feature flag and are NOT a gap.
-   - **The two full live journeys**, which is the one thing the owner has asked for repeatedly and
-     which has NOT been done since the signup UI changed: new Self signup → plan → checkout →
-     provision → `/app`, and new Agency signup → plan → checkout → provision → `/agency`. Seeing the
-     plan card is not enough; walk it to a provisioned workspace.
-3. **Then** the production-readiness programme, in the owner's order: Moyasar test/sandbox
-   end-to-end through the EXISTING payment port (never a second payment system), the subscription
-   lifecycle review, FX/reporting currency, the integration readiness matrix, production environment
-   validation, `/admin` integration readiness, and the handoff pack
-   (`PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md`, `INTEGRATION_CREDENTIALS_CHECKLIST.md`).
-   **None of it is started.** See «What is NOT built» below — do not let the adapter's existence read
-   as readiness, and do not mark anything Live without a real round trip.
+Continue step 3 in the owner's order. What is genuinely NOT built, checked against the code today —
+do not take the adapter's existence for readiness, and do not mark anything Live without a real
+round trip:
 
-   The owner's standing classification, to be used exactly: `VERIFIED`, `READY_FOR_CREDENTIALS`,
-   `BLOCKED_EXTERNAL_CREDENTIALS`, `BLOCKED_OPERATIONAL_EVIDENCE`, `LIVE_VERIFIED` — where
-   `LIVE_VERIFIED` requires real credentials, a real auth round trip, account discovery, a first live
-   sync or payment, a real webhook, and the result visible in the product. Nothing less is «Live».
+1. **Moyasar tokenization + recurring billing.** `MoyasarPaymentProvider` builds real invoices and
+   verifies the real webhook scheme, and `chargeDueRenewals` exists. There is **no tokenization, no
+   saved payment method, and no stored-token handling**, so a renewal cannot actually charge a card
+   without the customer returning to a checkout. This is the single largest gap between here and
+   `READY_FOR_CREDENTIALS` on billing.
+2. **A backend-to-backend fetch of the payment.** The webhook body is verified, deduped by event id,
+   matched on our reference and now checked on amount AND currency — but nothing re-reads the
+   payment from `GET /v1/payments/{id}`. The owner asked for that explicitly. It is defence in depth
+   against a shared-secret scheme that cannot prove the body is unmodified.
+3. **Duplicate-job protection and failed-renewal handling** on the renewal scheduler — review, then
+   close what is missing.
+4. **FX / reporting currency.** Original amount + original currency + FX rate + FX date + FX source,
+   unified to SAR for reporting. **Not implemented.** No hidden fixed rate, and the original value is
+   never lost.
+5. **The integration readiness matrix** across every provider that actually exists. Note that
+   `/admin` payment settings is FURTHER ALONG than the previous handoff said: `PlatformPaymentSettingsController`
+   already reports state, detects test-vs-live (`environmentOf`), describes the webhook URL and its
+   required configuration, gives rotation guidance and performs a real safe `test` call. What is
+   missing is the SAME vocabulary applied uniformly to the ad platforms and the commerce providers,
+   and `production:check` surfaced there.
+6. **The handoff pack.** `PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md` and
+   `INTEGRATION_CREDENTIALS_CHECKLIST.md` still do not exist. `PRODUCTION_HANDOVER.md` does and is
+   older than all of this.
 
-### What is NOT built, stated plainly
-
-- **Moyasar is a provider adapter behind the payment port with sandbox settlement in the gate.** It
-  is NOT a configured test integration. There is no tokenization, no saved payment method, no
-  recurring-billing scheduler, no webhook-secret configuration surface, no `/admin` readiness state
-  for it.
-- **There is no production-configuration readiness check** — nothing fails a boot on `localhost` in
-  production, a test secret in production, an HTTP callback, or a missing webhook secret.
-- **The FX half of the currency decision is not implemented.** Subscriptions are USD and advertising
-  reporting is SAR, but original-amount + original-currency + FX rate/date/source is not built.
-- **`PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md` and `INTEGRATION_CREDENTIALS_CHECKLIST.md`
-  do not exist.** `PRODUCTION_HANDOVER.md` does, and is older than all of this.
+The owner's classification, to be used exactly: `VERIFIED`, `READY_FOR_CREDENTIALS`,
+`BLOCKED_EXTERNAL_CREDENTIALS`, `BLOCKED_OPERATIONAL_EVIDENCE`, `LIVE_VERIFIED` — where
+`LIVE_VERIFIED` requires real credentials, a real auth round trip, account discovery, a first live
+sync or payment, a real webhook, and the result visible in the product. Nothing less is «Live».
 
 ### Matrix debt to reconcile, NOT to rebuild
 
 `REPORT-OBJECTIVE-001…005` each appear two or three times. The EARLIER rows say `NOT_STARTED` or
 `PARTIAL`; the LATER rows say `VERIFIED` and cite commits and tests. The later rows are authoritative.
-Reconcile the duplicates with a supersession note — do not reopen those units.
+Reconcile the duplicates with a supersession note — do not reopen those units. `REPORT-LINKS-13` and
+`AGENCY-PERMS-006` were reconciled this way in §19 and are settled.
 
 ---
 
