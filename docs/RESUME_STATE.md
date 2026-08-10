@@ -48,9 +48,7 @@ No timeout was raised, no retry added, nothing skipped, and no browser-specific 
 
 ### Exact next task, in the owner's mandated order
 
-1. **Read the gate verdict.** If green: record it here and in the matrix, and move to 2. If red:
-   diagnose the named test from its `error-context.md` — do NOT raise a timeout, add a retry, skip,
-   or sleep. Both defects closed this session were found by reading evidence, and both were real.
+1. ~~Read the gate verdict.~~ **DONE — green, recorded above at `df2fadb`.** Start at 2.
 2. **Close the non-external open items.** They are, exactly:
    - `REPORT-LINKS-13` — `ShareService` separates *live vs snapshot*, not *executive summary vs full
      detail*. The security half is done and gate-covered (`LiveReportShareTest`, 14 cases).
@@ -60,9 +58,18 @@ No timeout was raised, no retry added, nothing skipped, and no browser-specific 
      which has NOT been done since the signup UI changed: new Self signup → plan → checkout →
      provision → `/app`, and new Agency signup → plan → checkout → provision → `/agency`. Seeing the
      plan card is not enough; walk it to a provisioned workspace.
-3. **Then** the production-readiness programme (Moyasar test integration, the integration readiness
-   matrix, production config validation, FX, stores/funnel, the handoff pack). **None of it is
-   started.** See «What is NOT built» below — do not let the adapter's existence read as readiness.
+3. **Then** the production-readiness programme, in the owner's order: Moyasar test/sandbox
+   end-to-end through the EXISTING payment port (never a second payment system), the subscription
+   lifecycle review, FX/reporting currency, the integration readiness matrix, production environment
+   validation, `/admin` integration readiness, and the handoff pack
+   (`PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md`, `INTEGRATION_CREDENTIALS_CHECKLIST.md`).
+   **None of it is started.** See «What is NOT built» below — do not let the adapter's existence read
+   as readiness, and do not mark anything Live without a real round trip.
+
+   The owner's standing classification, to be used exactly: `VERIFIED`, `READY_FOR_CREDENTIALS`,
+   `BLOCKED_EXTERNAL_CREDENTIALS`, `BLOCKED_OPERATIONAL_EVIDENCE`, `LIVE_VERIFIED` — where
+   `LIVE_VERIFIED` requires real credentials, a real auth round trip, account discovery, a first live
+   sync or payment, a real webhook, and the result visible in the product. Nothing less is «Live».
 
 ### What is NOT built, stated plainly
 
