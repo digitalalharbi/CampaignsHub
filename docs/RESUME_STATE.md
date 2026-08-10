@@ -83,13 +83,24 @@ no unintended change to the marketing side, Arabic alignment unchanged, light/da
 sound. If Email OTP would require a large change to the page design, DO NOT do it that way — keep
 the interface and change only the form elements.
 
-**Ask the owner before building, and do not guess:** the brief removes password sign-in entirely and
-makes email OTP the only door. With no mail provider configured — the current honest state — nobody
-could sign in at all, including the platform admin and the four demo logins the whole E2E suite
-depends on (`e2e/helpers.ts::signIn` drives `login-password`). Either a fallback stays, or a large
-part of the gate is rewritten with this unit. That question was put to the owner and **has not been
-answered**; it was not started for that reason and because the session hit its context limit, not
+**ANSWERED by the owner 2026-08-10 — this unit is UNBLOCKED. Build it as follows:**
+
+- **Production login UI is Email OTP only.** No Google, Apple, WhatsApp, password, forgot-password
+  or remember-me is visible to a user.
+- **Do NOT destructively remove the password backend flow.** Keep it as a DEV/E2E compatibility
+  path that is not visible in production and is not offered as a production UI option, so the demo
+  accounts and the existing suite keep working. `e2e/helpers.ts::signIn` drives `login-password`
+  and must continue to.
+- When a mail provider is configured AND verified, Email OTP becomes the real production path.
+- With no mail provider: `READY_FOR_CREDENTIALS` / Awaiting Credentials. Never claim live delivery,
+  and never let the production UI present an unready provider as Live.
+
+That was the only open question. It was not started because the session hit its context limit, not
 because of any difficulty in the work.
+
+**Do this first, before the unit:** the gate has NOT been run since `2892532`. `FRONTEND-URL-001`
+is therefore `IMPLEMENTED_NOT_VERIFIED`. Run backend, frontend, `tsc`, lint, Pint, build and the
+three-browser gate — Failed=0, Flaky=0, Retries=0 — and only then record it VERIFIED.
 
 ### Then continue the production-readiness order
 
