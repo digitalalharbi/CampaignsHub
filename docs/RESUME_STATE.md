@@ -10,131 +10,66 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-10 (third close of the day)
+## ⚠️ START HERE — handoff written 2026-08-10 (fourth close of the day)
 
-**HEAD is `0e481e0`. Working tree CLEAN.**
+**HEAD is `5e4c1ef`. Working tree CLEAN.**
 
-### GATE — **GREEN at `0e481e0`**, run alone, exit captured unpiped
+### GATE — **GREEN at `5e4c1ef`**, run alone on a tree nobody touched while it ran
 
 ```
-PASS  chromium  (exit 0)   287 passed  (8.1m)
-PASS  firefox   (exit 0)   279 passed  (16.9m)
-PASS  webkit    (exit 0)   279 passed  (13.3m)
-[gate] all three browsers passed        REAL_GATE_EXIT=0
+PASS  chromium  (exit 0)   298 passed  (8.2m)
+PASS  firefox   (exit 0)   290 passed  (11.8m)
+PASS  webkit    (exit 0)   290 passed  (9.8m)
+REAL_GATE_EXIT=0     0 failed · 0 flaky · retries: 0 (config)
 ```
 
-**Failed=0 · Flaky=0 · Retries=0 (`retries: 0` in the config) · Unexplained skipped=0.**
-Backend **1820 passed** · Frontend **959 passed** · `tsc`, oxlint, Pint clean.
+Backend **1870 passed**. Frontend **985 passed** across 132 files. tsc · lint · Pint · production
+build all clean.
 
-`72200dc` (2026-08-05) remains the historical verified baseline, is an ancestor of HEAD, and has
-NOT been rewritten. Everything after it is now gate-verified.
+> A run earlier the same day reported `REAL_GATE_EXIT=1` on all three browsers. Do not read that as
+> instability: a new spec file was created WHILE it was running, so Playwright discovered it partway
+> through and the three projects executed three different suites. Every failure in it was real and
+> every one is fixed below. **Never edit the tree during a gate.**
 
-### One defect found and fixed to get here
+### VERIFIED this session
 
-`portal-audit.spec.ts` holds five rail walks. Four budget the clock to the pages they open —
-`test.setTimeout(15_000 + hrefs.length * 8_000)` — and the fifth (the client-portal language walk)
-was left on the default 30s while doing strictly MORE per page: the same cold load of every href,
-plus a language toggle and an `untranslatedChrome` scan of each. It ran out of clock at 32.5s on
-firefox; its lighter sibling walks the identical hrefs in 16.1s. Chromium and webkit pass the same
-test against the same pages. Fixed at `0e481e0` by applying the file's own convention. **Stated
-plainly: this raises a clock budget.** It is not a hang being papered over — but it is a timeout
-change and is recorded as one.
+| Ref | What |
+|---|---|
+| `LOGIN-CARD-001` | The `/login` card: address, password, «تذكرني», «نسيت كلمة المرور؟», one primary button, then «أو الدخول بدون كلمة مرور» → email code. `AuthShell`, the marketing panel and the header untouched — `/register` and `/forgot-password` re-rendered pixel-identical against their existing snapshots, which is what proves it |
+| `LOGIN-OTP-001` | `POST /auth/email-code/{start,verify}` on the existing `ContactVerificationService`: single-use, hashed, expiring, per-IP throttled, per-destination cooldown, five attempts, previous codes retired, session rotated, audited without the secret, fail-closed, no enumeration |
+| `LOGIN-E2E-001` | The code is authentication, not a screen: destination from `GET /auth/memberships` for all five outcomes, `/auth/me` returns the person, a portal endpoint answers, every other portal is refused, proven again in three browsers over real cookies |
+| `LOGIN-HELP-001` | «تواصل معنا» — a panel over the page, reusing the `ContactMessage` intake with a closed `topic` and a `source`. Grants no session, creates no account |
 
-### STILL UNEXPLAINED — do not treat as closed
+### The owner's decisions, standing
 
-The FIRST gate run of the day had **chromium at 47.3m with 6 failures**; the second and third had
-**287 passed in 8.1m** on the same commit range. A 39-minute swing with no cause established. That
-run also failed `portal-distinctness.spec.ts:118` on firefox (the password step never rendered),
-which has not reproduced since. Both were left recorded rather than attributed to contention. If
-either returns, that is the thread to pull — the failures all stalled on a backend response, so the
-question is which request never resolved.
+- The card keeps the password as the primary route. Email OTP sits beside it as «الدخول بدون كلمة
+  مرور». Asked and answered 2026-08-10 — an earlier revision had removed the password entirely, and
+  with **no mail provider configured** a code-only door locks every account out, including yours.
+- No Google, Apple or WhatsApp on the door. The OAuth endpoints are untouched and still tested; the
+  card simply does not advertise them.
+- Fields mirror the language: in Arabic the label, the icon and the text all start at the right and
+  the reveal control sits at the left; in English every one of them mirrors. The VALUE stays `ltr`.
 
-### Exact next task — LOGIN: Email → OTP, under a UI VISUAL LOCK
+### Mail: `READY_FOR_CREDENTIALS`, and now genuinely so
 
-The owner's brief, and the constraints are the hard part:
+`CredentialMail::SIGN_IN_CODE` used to exist, render in the admin gallery, and be sent by nothing.
+It goes through `TransactionalMailer` now — provider abstraction, template, `mail_deliveries` ledger,
+dedup key, and `delivery_status` as the real outcome (`sent` · `sandbox` · `awaiting_credentials` ·
+`failed`). **Enter credentials and it delivers; nothing else has to be written or switched on.**
+No automatic retry, deliberately: re-sending is a button somebody presses.
 
-**The /login interface is visually APPROVED. Do not redesign it.** Take a screenshot first and treat
-it as the visual baseline. Unchanged: `AuthShell`, the two-column split, column widths and heights,
-the form's position, the right-hand marketing panel, the logo, the heading and its position, current
-alignment, fonts, colours, backgrounds, general padding and spacing, the responsive layout,
-light/dark and RTL/LTR. The heading text stays exactly «مرحباً بعودتك / سجّل الدخول للمتابعة إلى
-مساحة عملك.» with its current alignment.
+The page states the truth either way. `awaiting_credentials` renders «لم يُرسل الرمز…» — never
+«check your inbox».
 
-**Replace only the sign-in controls inside the existing space.** Out: the Email/Phone tabs, Google,
-Apple and the old methods. In: an email field (`name@company.com`), a primary button «إرسال رمز
-الدخول», and small helper text «سنرسل رمز تحقق إلى بريدك الإلكتروني.» Below the form «ليس لديك
-حساب؟ إنشاء حساب» stays.
-
-**Do NOT add** Google, Apple, WhatsApp, password, forgot-password, remember-me, or any new card or
-section.
-
-**After «إرسال رمز الدخول»:** no new page and no new design — replace the CONTENT of the same form
-area with the OTP state: «تحقق من بريدك الإلكتروني», «أرسلنا رمز التحقق إلى: user@example.com», six
-single-character inputs, a «تسجيل الدخول» button, and small links «إعادة إرسال الرمز» and «تغيير
-البريد الإلكتروني». Same width, spacing, card boundaries, alignment and typography hierarchy as now.
-Do not enlarge the card, do not add a logo inside the form, no security banner, no new ornament.
-
-**Backend:** a real OTP reusing the EXISTING structure — single-use, expiry, resend cooldown, rate
-limiting, attempt limits, session rotation, fail-closed. With no mail provider configured, classify
-`READY_FOR_CREDENTIALS` and never claim live delivery.
-
-**Then verify visually** at 1440×900, 1366×768 and 390×844: no layout change, no horizontal scroll,
-no unintended change to the marketing side, Arabic alignment unchanged, light/dark and RTL/LTR
-sound. If Email OTP would require a large change to the page design, DO NOT do it that way — keep
-the interface and change only the form elements.
-
-**ANSWERED by the owner 2026-08-10 — this unit is UNBLOCKED. Build it as follows:**
-
-- **Production login UI is Email OTP only.** No Google, Apple, WhatsApp, password, forgot-password
-  or remember-me is visible to a user.
-- **Do NOT destructively remove the password backend flow.** Keep it as a DEV/E2E compatibility
-  path that is not visible in production and is not offered as a production UI option, so the demo
-  accounts and the existing suite keep working. `e2e/helpers.ts::signIn` drives `login-password`
-  and must continue to.
-- When a mail provider is configured AND verified, Email OTP becomes the real production path.
-- With no mail provider: `READY_FOR_CREDENTIALS` / Awaiting Credentials. Never claim live delivery,
-  and never let the production UI present an unready provider as Live.
-
-That was the only open question. It was not started because the session hit its context limit, not
-because of any difficulty in the work.
-
-**Do this first, before the unit:** the gate has NOT been run since `2892532`. `FRONTEND-URL-001`
-is therefore `IMPLEMENTED_NOT_VERIFIED`. Run backend, frontend, `tsc`, lint, Pint, build and the
-three-browser gate — Failed=0, Flaky=0, Retries=0 — and only then record it VERIFIED.
-
-### Then continue the production-readiness order
+### Next, in order
 
 1. **Moyasar tokenization + recurring billing** — the largest real gap. `chargeDueRenewals` opens a
-   real renewal charge through the verified path, but with no stored token it cannot charge
-   unattended. `withoutOverlapping` already gives duplicate-job protection; past-due → grace →
-   suspension and post-commitment cancellation already exist.
-2. **A backend-to-backend re-fetch** of the payment from the gateway. The webhook is verified,
-   deduped by event id, matched on our reference and checked on amount AND currency (`1847122`) —
-   but never re-read from `GET /v1/payments/{id}`.
-3. **FX / reporting currency** — original amount + original currency + FX rate/date/source, unified
-   to SAR. Not implemented. No hidden fixed rate; never lose the original value.
-4. **Integration readiness** uniformly across ad platforms and commerce. `/admin` payment settings is
-   further along than earlier handoffs said: it already reports state, detects test-vs-live,
-   describes the webhook URL, gives rotation guidance and makes a real safe test call.
-5. ~~`config('app.frontend_url')` does not exist~~ — **that claim was WRONG and is retracted.**
-   It resolves to `FRONTEND_URL` on an untouched tree, exactly like `brand.frontend_url`; no
-   customer was ever sent to the API host. It came from grepping `config/*.php` instead of asking
-   the application what the key resolves to. What WAS true — two config paths for one fact, only one
-   of them declared — is closed at `FRONTEND-URL-001` as a refactor onto a single reader
-   (`App\Support\Frontend`), 15 call sites, 7 tests, 175 passing across every suite that touches them.
-
-### The handoff pack now exists
-
-`PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md`, `INTEGRATION_CREDENTIALS_CHECKLIST.md` (`e3246c4`).
-Every URL, env var and scheduled command in them was read out of the route files, config and
-`routes/console.php`. Nothing anywhere is `LIVE_VERIFIED`; no credential has existed on this machine.
-
-### Matrix debt to reconcile, NOT to rebuild
-
-`REPORT-OBJECTIVE-001…005` each appear two or three times; the LATER rows are authoritative.
-`REPORT-LINKS-13` and `AGENCY-PERMS-006` were reconciled this way in §19 and are settled.
-
----
+   renewal charge and, with no stored token, cannot charge unattended.
+2. A backend-to-backend re-fetch of the payment from `GET /v1/payments/{id}` before activation.
+3. FX / reporting currency: original amount + currency + rate + date + source → SAR. No hidden rate.
+4. Uniform integration readiness across ad platforms and commerce.
+5. Reconcile the duplicate `REPORT-OBJECTIVE-001…005` matrix rows (documentation debt; the later
+   rows are authoritative).
 
 ## Session — LAUNCH PRICING, plan fit, limits and the signup fit (2026-08-09, late)
 
