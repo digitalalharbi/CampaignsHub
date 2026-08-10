@@ -10,66 +10,62 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-10 (fourth close of the day)
+## ⚠️ START HERE — handoff written 2026-08-10 (fifth close of the day)
 
-**HEAD is `5e4c1ef`. Working tree CLEAN.**
+**HEAD is `0e0397b`. Working tree CLEAN.** Backend **1891 passed**.
 
-### GATE — **GREEN at `5e4c1ef`**, run alone on a tree nobody touched while it ran
+> The three-browser gate has NOT run since `c9f3250`. Both commits since are backend-only and the
+> E2E payment path uses the SANDBOX provider — which signs its webhook body, so none of the new
+> confirmation logic applies to it — but that is a reasoned expectation, not a result.
+> **`PAY-CONFIRM-001` and `PAY-TOKEN-001` are IMPLEMENTED_NOT_VERIFIED until the gate is green.**
 
-```
-PASS  chromium  (exit 0)   298 passed  (8.2m)
-PASS  firefox   (exit 0)   290 passed  (11.8m)
-PASS  webkit    (exit 0)   290 passed  (9.8m)
-REAL_GATE_EXIT=0     0 failed · 0 flaky · retries: 0 (config)
-```
+### Done this session
 
-Backend **1870 passed**. Frontend **985 passed** across 132 files. tsc · lint · Pint · production
-build all clean.
+| Ref | What | State |
+|---|---|---|
+| `PAY-CONFIRM-001` | A Moyasar webhook no longer settles money on its own word — the charge is re-read from `GET /v1/payments/{id}` first | tests green, gate pending |
+| `PAY-TOKEN-001` | `subscription_payment_methods` + `RecurringBilling`: a saved token, and the honest reason a renewal cannot be taken unattended | tests green, gate pending |
 
-> A run earlier the same day reported `REAL_GATE_EXIT=1` on all three browsers. Do not read that as
-> instability: a new spec file was created WHILE it was running, so Playwright discovered it partway
-> through and the three projects executed three different suites. Every failure in it was real and
-> every one is fixed below. **Never edit the tree during a gate.**
+### The next step, precisely
 
-### VERIFIED this session
+**Switch the renewal sweep onto the saved token.** Everything it needs now exists —
+`RecurringBilling::modeFor()` says whether a subscription can be charged unattended and why not, and
+`PaymentProvider::chargeStoredMethod()` submits the charge.
 
-| Ref | What |
-|---|---|
-| `LOGIN-CARD-001` | The `/login` card: address, password, «تذكرني», «نسيت كلمة المرور؟», one primary button, then «أو الدخول بدون كلمة مرور» → email code. `AuthShell`, the marketing panel and the header untouched — `/register` and `/forgot-password` re-rendered pixel-identical against their existing snapshots, which is what proves it |
-| `LOGIN-OTP-001` | `POST /auth/email-code/{start,verify}` on the existing `ContactVerificationService`: single-use, hashed, expiring, per-IP throttled, per-destination cooldown, five attempts, previous codes retired, session rotated, audited without the secret, fail-closed, no enumeration |
-| `LOGIN-E2E-001` | The code is authentication, not a screen: destination from `GET /auth/memberships` for all five outcomes, `/auth/me` returns the person, a portal endpoint answers, every other portal is refused, proven again in three browsers over real cookies |
-| `LOGIN-HELP-001` | «تواصل معنا» — a panel over the page, reusing the `ContactMessage` intake with a closed `topic` and a `source`. Grants no session, creates no account |
+What blocks it is one thing, and it is worth doing carefully rather than quickly:
 
-### The owner's decisions, standing
+`SubscriptionCheckout::open()` creates a gateway INVOICE as part of opening a charge. An unattended
+renewal must not create one — a naive «open the charge, then also charge the token» asks the customer
+to pay a page AND takes the money from their card. So `open()` needs a way to be told «record the
+charge, do not create a session», and `chargeDueRenewals()` then reads `modeFor()` and takes the
+unattended path when it says `ready`.
 
-- The card keeps the password as the primary route. Email OTP sits beside it as «الدخول بدون كلمة
-  مرور». Asked and answered 2026-08-10 — an earlier revision had removed the password entirely, and
-  with **no mail provider configured** a code-only door locks every account out, including yours.
-- No Google, Apple or WhatsApp on the door. The OAuth endpoints are untouched and still tested; the
-  card simply does not advertise them.
-- Fields mirror the language: in Arabic the label, the icon and the text all start at the right and
-  the reveal control sits at the left; in English every one of them mirrors. The VALUE stays `ltr`.
+Duplicate protection is already in place and needs nothing: `open()` returns the EXISTING payment when
+the idempotency key matches, and the key is derived from what is being charged plus the period — so a
+sweep that runs twice in a day cannot open a second renewal charge.
 
-### Mail: `READY_FOR_CREDENTIALS`, and now genuinely so
+After that, in the order the owner set:
 
-`CredentialMail::SIGN_IN_CODE` used to exist, render in the admin gallery, and be sent by nothing.
-It goes through `TransactionalMailer` now — provider abstraction, template, `mail_deliveries` ledger,
-dedup key, and `delivery_status` as the real outcome (`sent` · `sandbox` · `awaiting_credentials` ·
-`failed`). **Enter credentials and it delivers; nothing else has to be written or switched on.**
-No automatic retry, deliberately: re-sending is a button somebody presses.
+1. FX / reporting currency — original amount + currency + rate + date + source → SAR. No hidden rate.
+2. Integration readiness across Snapchat, TikTok, Meta, Google Ads, X, LinkedIn, Salla, Zid. Do NOT
+   re-verify the adapters; close real gaps only, to `READY_FOR_CREDENTIALS`.
+3. Production environment validation, clean install and upgrade path, `/admin` readiness.
+4. Refresh `PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md`, `INTEGRATION_CREDENTIALS_CHECKLIST.md`.
 
-The page states the truth either way. `awaiting_credentials` renders «لم يُرسل الرمز…» — never
-«check your inbox».
+### Two traps recorded so the next session does not pay for them again
 
-### Next, in order
+- **Never edit the tree while the gate runs.** A spec file created mid-run was discovered partway
+  through, so the three browsers executed three different suites and the run reported failures that
+  said nothing about the commit.
+- **`Http::fake()` MERGES stubs and the first match wins.** A test settling two charges checked both
+  against the first one's reference and failed as a `reference_mismatch` that looked exactly like a
+  product defect. `ConfirmsGatewayPayments` answers from a property at call time.
 
-1. **Moyasar tokenization + recurring billing** — the largest real gap. `chargeDueRenewals` opens a
-   renewal charge and, with no stored token, cannot charge unattended.
-2. A backend-to-backend re-fetch of the payment from `GET /v1/payments/{id}` before activation.
-3. FX / reporting currency: original amount + currency + rate + date + source → SAR. No hidden rate.
-4. Uniform integration readiness across ad platforms and commerce.
-5. Reconcile the duplicate `REPORT-OBJECTIVE-001…005` matrix rows (documentation debt; the later
-   rows are authoritative).
+### Standing decisions
+
+- `/login` keeps the password as the primary route, Email OTP beside it. No mail provider is
+  configured, so a code-only door would lock every account out.
+- Subscriptions are USD; advertising reporting is SAR. Campaigns are never metered numerically.
 
 ## Session — LAUNCH PRICING, plan fit, limits and the signup fit (2026-08-09, late)
 
