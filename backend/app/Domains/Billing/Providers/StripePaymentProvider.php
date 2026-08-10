@@ -127,6 +127,34 @@ final class StripePaymentProvider implements PaymentProvider
     }
 
     /**
+     * Yes. `Stripe-Signature` is an HMAC over the RAW BODY with the endpoint's own secret.
+     *
+     * Change a single digit of the amount and `signatureIsValid()` fails, so a verified event's
+     * figures are attested by Stripe rather than merely claimed by whoever posted them. That is the
+     * property Moyasar's shared-secret-in-body scheme does not have, and the only reason
+     * `fetchPayment()` exists.
+     */
+    public function confirmsPayloadIntegrity(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Not needed here, and deliberately not implemented.
+     *
+     * The signature already proves what this call would go and ask, so a round trip would add a
+     * network dependency and a new failure mode to a path that is already attested — and a caller
+     * that treated the resulting null as «unconfirmed» would refuse perfectly good payments whenever
+     * Stripe's API was briefly slow. `confirmsPayloadIntegrity()` is true, so nothing asks.
+     *
+     * @return array{status: string, amount: ?string, currency: ?string, reference: ?string}|null
+     */
+    public function fetchPayment(string $providerPaymentId): ?array
+    {
+        return null;
+    }
+
+    /**
      * Stripe's card fingerprint is stable across customers, which is exactly what "one trial per
      * payment method" needs (PAY-004).
      *

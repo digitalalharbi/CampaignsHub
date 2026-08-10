@@ -381,6 +381,25 @@ final class BillingTest extends TestCase
  */
 final class ConfiguredFakePaymentProvider implements PaymentProvider
 {
+    /**
+     * Signed, as far as this double is concerned — so nothing re-asks it.
+     *
+     * The re-fetch (PAY-CONFIRM-001) exists for providers whose webhook cannot prove its own body.
+     * A test double that answered false would be sent off to `fetchPayment()`, which has no gateway
+     * behind it, and every payment in this file would stop settling for a reason unrelated to what
+     * these tests are about.
+     */
+    public function confirmsPayloadIntegrity(): bool
+    {
+        return true;
+    }
+
+    /** @return array{status: string, amount: ?string, currency: ?string, reference: ?string}|null */
+    public function fetchPayment(string $providerPaymentId): ?array
+    {
+        return null;
+    }
+
     public function name(): string
     {
         return 'fake';

@@ -132,6 +132,28 @@ final class SandboxPaymentProvider implements PaymentProvider
     }
 
     /**
+     * Yes — `X-Sandbox-Signature` is an HMAC over the raw body, the same shape Stripe uses.
+     *
+     * That is the point of the sandbox: it exercises the live code path rather than a shortcut, so
+     * the branch that re-asks a gateway is one this adapter genuinely does not need instead of one
+     * it quietly skips.
+     */
+    public function confirmsPayloadIntegrity(): bool
+    {
+        return true;
+    }
+
+    /**
+     * There is no gateway to ask. The signature is the whole attestation here.
+     *
+     * @return array{status: string, amount: ?string, currency: ?string, reference: ?string}|null
+     */
+    public function fetchPayment(string $providerPaymentId): ?array
+    {
+        return null;
+    }
+
+    /**
      * No fingerprint, deliberately.
      *
      * There is no payment method here to identify, and returning a made-up one would either block

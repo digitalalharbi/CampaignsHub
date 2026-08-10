@@ -16,7 +16,9 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\SubscriptionPlanSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\Concerns\AppliesToRegister;
+use Tests\Concerns\ConfirmsGatewayPayments;
 use Tests\TestCase;
 
 /**
@@ -29,6 +31,7 @@ use Tests\TestCase;
 final class PaidRegistrationTest extends TestCase
 {
     use AppliesToRegister;
+    use ConfirmsGatewayPayments;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -104,6 +107,9 @@ final class PaidRegistrationTest extends TestCase
         $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
         $payment = SubscriptionPayment::query()->firstOrFail();
 
+        // The gateway's own confirmation, faked — see `ConfirmsGatewayPayments`.
+        $this->gatewayConfirms($payment);
+
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_forged', 'type' => 'payment_paid',
             'secret_token' => 'not-the-shared-secret',
@@ -127,11 +133,29 @@ final class PaidRegistrationTest extends TestCase
         $this->postJson("/api/v1/auth/registration/{$registration->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
         $payment = SubscriptionPayment::query()->firstOrFail();
 
+        /*
+         * The GATEWAY reports the short charge, not merely the webhook body (PAY-CONFIRM-001).
+         *
+         * Since the figures are re-read from `GET /v1/payments/{id}`, a short amount written into a
+         * webhook is simply overridden by the gateway's answer — that case is covered by
+         * `PaymentActivationSecurityTest::test_a_forged_amount_in_the_body_is_overridden_by_the_gateway`.
+         * What still has to refuse is a charge the gateway ITSELF says was for less than we quoted:
+         * a partial capture, or a charge that was never the one we opened.
+         */
+        Http::fake([
+            'api.moyasar.com/v1/payments/*' => Http::response([
+                'id' => 'pay_short', 'status' => 'paid',
+                'amount' => 100, // one riyal against a 99-riyal charge
+                'currency' => $payment->currency,
+                'metadata' => ['reference' => $payment->idempotency_key],
+            ], 200),
+        ]);
+
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_short', 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
             'data' => [
                 'id' => 'pay_short', 'status' => 'paid',
-                'amount' => 100, // one riyal against a 99-riyal charge
+                'amount' => 100,
                 'currency' => 'SAR',
                 'metadata' => ['reference' => $payment->idempotency_key],
             ],
@@ -226,6 +250,9 @@ final class PaidRegistrationTest extends TestCase
 
         $payment = SubscriptionPayment::query()->firstOrFail();
         $before = Tenant::withoutGlobalScopes()->count();
+
+        // The gateway's own confirmation, faked — see `ConfirmsGatewayPayments`.
+        $this->gatewayConfirms($payment);
 
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_'.$payment->getKey(), 'type' => 'payment_paid', 'secret_token' => 'shared-secret',

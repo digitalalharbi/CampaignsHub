@@ -24,6 +24,7 @@ use Database\Seeders\SubscriptionPlanSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\Concerns\AppliesToRegister;
+use Tests\Concerns\ConfirmsGatewayPayments;
 use Tests\TestCase;
 
 /**
@@ -42,6 +43,8 @@ use Tests\TestCase;
  */
 final class CommercialJourneyTest extends TestCase
 {
+    use ConfirmsGatewayPayments;
+
     /**
      * The introductory fee plus 15% VAT, computed from the plan.
      *
@@ -89,6 +92,9 @@ final class CommercialJourneyTest extends TestCase
     /** A verified webhook, as the gateway would send it. */
     private function webhook(SubscriptionPayment $payment, string $status, int $amountInHalalas): void
     {
+        // The gateway's own confirmation, faked — see `ConfirmsGatewayPayments`.
+        $this->gatewayConfirms($payment);
+
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_'.$status.'_'.$payment->getKey(),
             'type' => 'payment_'.$status,

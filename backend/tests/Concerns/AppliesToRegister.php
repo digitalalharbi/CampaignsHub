@@ -9,6 +9,7 @@ use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Models\User;
 use Database\Seeders\SubscriptionPlanSeeder;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Testing\TestResponse;
 
 /**
@@ -192,6 +193,24 @@ trait AppliesToRegister
         $payment = SubscriptionPayment::query()
             ->where('registration_request_id', $registration->getKey())
             ->latest('created_at')->firstOrFail();
+
+        /*
+         * Moyasar's own answer, faked (PAY-CONFIRM-001).
+         *
+         * A Moyasar webhook authenticates with a shared secret carried inside the body, so the
+         * product no longer settles on what that body says — it re-reads the charge from
+         * `GET /v1/payments/{id}` over its own connection. Without this fake the fetch fails, nothing
+         * settles, and every journey that pays for a registration stops at the payment gate.
+         */
+        Http::fake([
+            'api.moyasar.com/v1/payments/*' => Http::response([
+                'id' => 'pay_'.$payment->getKey(),
+                'status' => 'paid',
+                'amount' => (int) round(((float) $payment->amount) * 100),
+                'currency' => $payment->currency,
+                'metadata' => ['reference' => $payment->idempotency_key],
+            ], 200),
+        ]);
 
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_'.$payment->getKey(),

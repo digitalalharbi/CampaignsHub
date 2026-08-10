@@ -18,6 +18,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use RuntimeException;
 use Tests\Concerns\AppliesToRegister;
+use Tests\Concerns\ConfirmsGatewayPayments;
 use Tests\TestCase;
 
 /**
@@ -39,6 +40,7 @@ use Tests\TestCase;
 final class MinimumCommitmentTest extends TestCase
 {
     use AppliesToRegister;
+    use ConfirmsGatewayPayments;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -85,6 +87,9 @@ final class MinimumCommitmentTest extends TestCase
     /** Pay whatever the charge actually is — never a literal, which is how a repricing breaks a test. */
     private function settle(SubscriptionPayment $payment): void
     {
+        // The gateway's own confirmation, faked — see `ConfirmsGatewayPayments`.
+        $this->gatewayConfirms($payment);
+
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_'.$payment->getKey(), 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
             'data' => [

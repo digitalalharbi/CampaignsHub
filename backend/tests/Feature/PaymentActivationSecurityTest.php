@@ -8,7 +8,9 @@ use App\Domains\Accounts\Actions\ProvisionWorkspace;
 use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Services\AdvanceRegistration;
+use App\Domains\Billing\Providers\MoyasarPaymentProvider;
 use App\Domains\Billing\Providers\SandboxPaymentProvider;
+use App\Domains\Billing\Providers\StripePaymentProvider;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Services\SubscriptionCheckout;
 use App\Domains\Tenancy\Models\Membership;
@@ -17,6 +19,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\SubscriptionPlanSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use RuntimeException;
 use Tests\Concerns\AppliesToRegister;
 use Tests\TestCase;
@@ -64,6 +67,34 @@ final class PaymentActivationSecurityTest extends TestCase
         $this->assertSame(AccountState::ApprovedAwaitingPayment, $request->state, 'the payment gate must be holding it');
 
         return $request;
+    }
+
+    /**
+     * Moyasar's own answer to `GET /v1/payments/{id}` (PAY-CONFIRM-001).
+     *
+     * Every Moyasar settlement below goes through this, because the product no longer takes a
+     * webhook body's word for money: the token that authenticates a Moyasar webhook travels inside
+     * the body it is supposed to authenticate, so «verified» proves the sender knew a secret and
+     * nothing about the figures beside it. Faking the gateway here is what makes these tests
+     * exercise the real path rather than a shortcut round it.
+     */
+    private function gatewaySays(string $status, string $amount, string $currency, ?string $reference): void
+    {
+        Http::fake([
+            'api.moyasar.com/v1/payments/*' => Http::response([
+                'id' => 'pay_1',
+                'status' => $status === 'paid' ? 'paid' : $status,
+                'amount' => (int) round(((float) $amount) * 100),
+                'currency' => $currency,
+                'metadata' => $reference === null ? [] : ['reference' => $reference],
+            ], 200),
+        ]);
+    }
+
+    /** The gateway cannot be reached at all — silence, which must never read as consent. */
+    private function gatewayIsUnreachable(): void
+    {
+        Http::fake(['api.moyasar.com/*' => Http::response(null, 500)]);
     }
 
     private function assertNothingGranted(): void
@@ -162,6 +193,8 @@ final class PaymentActivationSecurityTest extends TestCase
         $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
         $payment = SubscriptionPayment::query()->firstOrFail();
 
+        $this->gatewaySays('paid', (string) $payment->amount, (string) $payment->currency, (string) $payment->idempotency_key);
+
         $event = [
             'id' => 'evt_real', 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
             'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => (int) round((float) $payment->amount * 100), 'currency' => $payment->currency,
@@ -183,17 +216,22 @@ final class PaymentActivationSecurityTest extends TestCase
     }
 
     /**
-     * A verified event that says a different amount settles nothing.
+     * A charge the GATEWAY itself reports short settles nothing.
      *
-     * Verification proves the gateway sent it, not that the gateway charged what we asked for.
+     * Since PAY-CONFIRM-001 the figure comes from `GET /v1/payments/{id}` rather than from the
+     * webhook, so this is now the only way a wrong amount can reach the check at all — a partial
+     * capture, or a charge that is genuinely not the one we quoted.
      */
-    public function test_a_verified_event_for_the_wrong_amount_does_not_settle(): void
+    public function test_a_charge_the_gateway_reports_short_does_not_settle(): void
     {
         config(['services.moyasar.secret_key' => 'sk_test', 'services.moyasar.webhook_token' => 'shared-secret']);
 
         $request = $this->owing();
         $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
         $payment = SubscriptionPayment::query()->firstOrFail();
+
+        // One riyal against the real fee — stated by the gateway, not merely claimed by a caller.
+        $this->gatewaySays('paid', '1.00', (string) $payment->currency, (string) $payment->idempotency_key);
 
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_short', 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
@@ -226,6 +264,7 @@ final class PaymentActivationSecurityTest extends TestCase
 
         // The exact figure we asked for — denominated in a currency we did not.
         $this->assertNotSame('SAR', strtoupper((string) $payment->currency));
+        $this->gatewaySays('paid', (string) $payment->amount, 'SAR', (string) $payment->idempotency_key);
 
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_currency', 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
@@ -250,6 +289,8 @@ final class PaymentActivationSecurityTest extends TestCase
         $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
         $payment = SubscriptionPayment::query()->firstOrFail();
 
+        $this->gatewaySays('paid', (string) $payment->amount, strtolower((string) $payment->currency), (string) $payment->idempotency_key);
+
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_case', 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
             'data' => [
@@ -261,6 +302,141 @@ final class PaymentActivationSecurityTest extends TestCase
         ])->assertOk()->assertJsonPath('data.verified', true);
 
         $this->assertSame('paid', $payment->refresh()->status);
+    }
+
+    // ── PAY-CONFIRM-001: the gateway is asked, not believed ───────────────────────────────────
+
+    /**
+     * A forged body with the right token is neutralised by the gateway's own answer.
+     *
+     * This is the attack the re-fetch exists for, and it is not theoretical. Moyasar's webhook
+     * authenticates with a shared secret carried INSIDE the payload, so anybody who learns that
+     * token — a leaked log line, a misconfigured proxy, a former contractor — can post a perfectly
+     * «verified» event claiming any amount they like. Before this, that event settled the invoice.
+     *
+     * Now the figures come from `GET /v1/payments/{id}` over our own connection, so what the caller
+     * wrote in the body simply does not matter: they claim one riyal, the gateway states the real
+     * fee, and the charge settles for the real fee.
+     */
+    public function test_a_forged_amount_in_the_body_is_overridden_by_the_gateway(): void
+    {
+        config(['services.moyasar.secret_key' => 'sk_test', 'services.moyasar.webhook_token' => 'shared-secret']);
+
+        $request = $this->owing();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
+        $payment = SubscriptionPayment::query()->firstOrFail();
+
+        $this->gatewaySays('paid', (string) $payment->amount, (string) $payment->currency, (string) $payment->idempotency_key);
+
+        $this->postJson('/api/v1/payments/webhook/moyasar', [
+            'id' => 'evt_forged', 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
+            // A lie, correctly signed with the shared token.
+            'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => 100, 'currency' => 'SAR',
+                'metadata' => ['reference' => $payment->idempotency_key]],
+        ])->assertOk()->assertJsonPath('data.verified', true);
+
+        $this->assertSame('paid', $payment->refresh()->status);
+        $this->assertSame(AccountState::Active, $request->refresh()->state);
+    }
+
+    /**
+     * A «paid» event the gateway does not call paid settles nothing.
+     *
+     * The status is as forgeable as the amount, and it is the one that grants the workspace.
+     */
+    public function test_a_paid_event_the_gateway_calls_pending_settles_nothing(): void
+    {
+        config(['services.moyasar.secret_key' => 'sk_test', 'services.moyasar.webhook_token' => 'shared-secret']);
+
+        $request = $this->owing();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
+        $payment = SubscriptionPayment::query()->firstOrFail();
+
+        $this->gatewaySays('initiated', (string) $payment->amount, (string) $payment->currency, (string) $payment->idempotency_key);
+
+        $this->postJson('/api/v1/payments/webhook/moyasar', [
+            'id' => 'evt_claim', 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
+            'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => (int) round((float) $payment->amount * 100),
+                'currency' => $payment->currency, 'metadata' => ['reference' => $payment->idempotency_key]],
+        ])->assertOk();
+
+        $this->assertNotSame('paid', $payment->refresh()->status);
+        $this->assertSame(AccountState::ApprovedAwaitingPayment, $request->refresh()->state);
+        $this->assertNothingGranted();
+    }
+
+    /**
+     * A gateway that cannot be reached has told us NOTHING, and nothing is not consent.
+     *
+     * The payment is left where it was rather than marked failed: nothing is known to be wrong with
+     * the money, only unconfirmed, and calling it failed would start dunning a customer who has paid.
+     * Gateways redeliver, and the next delivery asks again.
+     */
+    public function test_an_unreachable_gateway_settles_nothing_and_fails_nothing(): void
+    {
+        config(['services.moyasar.secret_key' => 'sk_test', 'services.moyasar.webhook_token' => 'shared-secret']);
+
+        $request = $this->owing();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
+        $payment = SubscriptionPayment::query()->firstOrFail();
+        $before = (string) $payment->status;
+
+        $this->gatewayIsUnreachable();
+
+        $this->postJson('/api/v1/payments/webhook/moyasar', [
+            'id' => 'evt_offline', 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
+            'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => (int) round((float) $payment->amount * 100),
+                'currency' => $payment->currency, 'metadata' => ['reference' => $payment->idempotency_key]],
+        ])->assertOk();
+
+        $this->assertSame($before, (string) $payment->refresh()->status, 'the charge must be left exactly as it was');
+        $this->assertNotSame('failed', (string) $payment->status);
+        $this->assertNothingGranted();
+
+        $this->assertDatabaseHas('audit_logs', ['action' => 'subscription.payment.unconfirmed']);
+    }
+
+    /**
+     * A genuinely paid charge belonging to somebody ELSE does not settle this invoice.
+     *
+     * The shape this closes: a real, verified, gateway-confirmed payment id pointed at a different
+     * reference. The event resolved to our charge, and the gateway attributes the money elsewhere.
+     */
+    public function test_a_charge_the_gateway_attributes_elsewhere_does_not_settle(): void
+    {
+        config(['services.moyasar.secret_key' => 'sk_test', 'services.moyasar.webhook_token' => 'shared-secret']);
+
+        $request = $this->owing();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
+        $payment = SubscriptionPayment::query()->firstOrFail();
+
+        $this->gatewaySays('paid', (string) $payment->amount, (string) $payment->currency, 'somebody-elses-reference');
+
+        $this->postJson('/api/v1/payments/webhook/moyasar', [
+            'id' => 'evt_other', 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
+            'data' => ['id' => 'pay_1', 'status' => 'paid', 'amount' => (int) round((float) $payment->amount * 100),
+                'currency' => $payment->currency, 'metadata' => ['reference' => $payment->idempotency_key]],
+        ])->assertOk();
+
+        $this->assertNotSame('paid', $payment->refresh()->status);
+        $this->assertNothingGranted();
+        $this->assertDatabaseHas('audit_logs', ['action' => 'subscription.payment.reference_mismatch']);
+    }
+
+    /**
+     * The sandbox is NOT re-asked, and must not be.
+     *
+     * It signs the raw body, so its events are already attested; sending it to a gateway that does
+     * not exist would strand every signup on a machine with no credentials — which is the exact
+     * situation the sandbox was built for.
+     */
+    public function test_a_signed_provider_is_not_re_asked(): void
+    {
+        Http::fake(['*' => Http::response(null, 500)]);
+
+        $this->assertTrue(app(SandboxPaymentProvider::class)->confirmsPayloadIntegrity());
+        $this->assertTrue(app(StripePaymentProvider::class)->confirmsPayloadIntegrity());
+        $this->assertFalse(app(MoyasarPaymentProvider::class)->confirmsPayloadIntegrity());
     }
 
     // ── The provisioner itself ────────────────────────────────────────────────────────────────

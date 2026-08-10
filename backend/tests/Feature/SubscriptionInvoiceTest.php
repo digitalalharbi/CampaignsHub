@@ -17,6 +17,7 @@ use Database\Seeders\SubscriptionPlanSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\Concerns\AppliesToRegister;
+use Tests\Concerns\ConfirmsGatewayPayments;
 use Tests\TestCase;
 
 /**
@@ -29,6 +30,8 @@ use Tests\TestCase;
  */
 final class SubscriptionInvoiceTest extends TestCase
 {
+    use ConfirmsGatewayPayments;
+
     /**
      * The introductory fee plus 15% VAT, computed from the plan.
      *
@@ -94,6 +97,9 @@ final class SubscriptionInvoiceTest extends TestCase
      */
     private function confirm(SubscriptionPayment $payment, string $status = 'paid', ?int $amount = null): void
     {
+        // The gateway's own confirmation, faked — see `ConfirmsGatewayPayments`.
+        $this->gatewayConfirms($payment, $status, $amount);
+
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_'.uniqid(), 'type' => 'payment_'.$status, 'secret_token' => 'shared-secret',
             'data' => [
@@ -202,6 +208,9 @@ final class SubscriptionInvoiceTest extends TestCase
     public function test_an_unverified_webhook_leaves_the_invoice_unpaid(): void
     {
         $payment = $this->chargedApplication();
+
+        // The gateway's own confirmation, faked — see `ConfirmsGatewayPayments`.
+        $this->gatewayConfirms($payment);
 
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_forged', 'type' => 'payment_paid', // no secret_token

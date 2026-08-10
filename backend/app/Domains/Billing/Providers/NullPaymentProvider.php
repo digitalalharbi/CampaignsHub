@@ -33,6 +33,23 @@ final class NullPaymentProvider implements PaymentProvider
         return ['verified' => false];
     }
 
+    /**
+     * Vacuously true: this adapter verifies nothing, so no event of its ever reaches settlement.
+     *
+     * Answering false would be worse than meaningless — it would send a caller off to `fetchPayment()`
+     * on a provider that has no gateway behind it at all.
+     */
+    public function confirmsPayloadIntegrity(): bool
+    {
+        return true;
+    }
+
+    /** @return array{status: string, amount: ?string, currency: ?string, reference: ?string}|null */
+    public function fetchPayment(string $providerPaymentId): ?array
+    {
+        return null;
+    }
+
     /** @param  array<string,mixed>  $payload */
     public function paymentMethodFingerprint(array $payload): ?string
     {

@@ -8,6 +8,7 @@ use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Services\AdvanceRegistration;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Billing\Models\PaymentWebhookEvent;
+use App\Domains\Billing\Providers\PaymentProvider;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -94,7 +95,7 @@ final class ApplySubscriptionPaymentEvent
         $payment = $this->matchPayment($provider, $result);
 
         if ($payment !== null) {
-            $this->applyTo($payment, $result, $adapter->paymentMethodFingerprint((array) ($result['payload'] ?? [])));
+            $this->applyTo($payment, $result, $adapter, $adapter->paymentMethodFingerprint((array) ($result['payload'] ?? [])));
         }
 
         $event->forceFill(['processed_at' => Carbon::now()])->save();
@@ -107,7 +108,7 @@ final class ApplySubscriptionPaymentEvent
      *
      * @param  array<string,mixed>  $result
      */
-    private function applyTo(SubscriptionPayment $payment, array $result, ?string $fingerprint): void
+    private function applyTo(SubscriptionPayment $payment, array $result, PaymentProvider $adapter, ?string $fingerprint): void
     {
         $status = (string) ($result['status'] ?? 'pending');
 
@@ -120,6 +121,45 @@ final class ApplySubscriptionPaymentEvent
          */
         if ($payment->isPaid() && $status === 'paid') {
             return;
+        }
+
+        /*
+         * PAY-CONFIRM-001 — where the webhook cannot prove its own body, ask the gateway.
+         *
+         * Moyasar authenticates with a shared secret carried INSIDE the payload, so «verified» there
+         * means the sender knew a token — not that the amount, currency or status beside it are the
+         * gateway's words. Anyone who learns that token can post a paid event for any figure and it
+         * verifies. So before money settles, the figures are re-read backend-to-backend over our own
+         * connection, with an id taken from the verified event and credentials the caller never had.
+         *
+         * Stripe and the sandbox sign the raw body, so their events are already attested and nothing
+         * is asked — a round trip there would only add a failure mode to a path that does not need it.
+         */
+        if ($status === 'paid' && ! $adapter->confirmsPayloadIntegrity()) {
+            $confirmed = $this->confirm($payment, $result, $adapter);
+
+            if ($confirmed === null) {
+                return;
+            }
+
+            $result = $confirmed;
+            $status = (string) ($result['status'] ?? 'pending');
+
+            /*
+             * The gateway may disagree with the event about the STATUS too, and its answer wins.
+             * A «paid» webhook over a payment the gateway still calls pending settles nothing.
+             */
+            if ($status !== 'paid') {
+                $this->audit->log(
+                    action: 'subscription.payment.event_contradicted',
+                    entityType: SubscriptionPayment::class,
+                    entityId: (string) $payment->getKey(),
+                    after: ['event_said' => 'paid', 'gateway_says' => $status],
+                    reason: 'The webhook claimed a paid charge the gateway does not report as paid.',
+                );
+
+                return;
+            }
         }
 
         if ($status === 'paid' && ! $this->chargeMatches($payment, $result)) {
@@ -326,6 +366,76 @@ final class ApplySubscriptionPaymentEvent
                     ->orWhere('provider_session_id', $providerPaymentId);
             })
             ->first();
+    }
+
+    /**
+     * Re-read the charge from the gateway, and refuse to settle without an answer.
+     *
+     * ## Why null must not mean «carry on»
+     *
+     * The whole point is that this adapter's webhook body is not trustworthy on its own. Falling
+     * back to it when the gateway cannot be reached would make the guarantee opt-out for anybody who
+     * can make one HTTP request fail — which, for a network they are already on, is not a high bar.
+     *
+     * So an unreachable gateway leaves the payment exactly where it was and records why. Nothing is
+     * marked `failed`: nothing is known to be wrong with the money, only unconfirmed, and calling it
+     * failed would fire `renewalFailed` and dunning at a customer who has paid. Gateways redeliver,
+     * and the next delivery re-asks.
+     *
+     * ## The reference is checked too
+     *
+     * A payment id from an event that resolved to OUR charge could still belong to a different one —
+     * so when the gateway states a reference, it must be the idempotency key of the payment about to
+     * be settled. That closes the shape where a real, verified, genuinely-paid event for somebody
+     * else's small charge is pointed at somebody's large invoice.
+     *
+     * @param  array<string,mixed>  $result
+     * @return array<string,mixed>|null the gateway's own figures, or null when it could not be asked
+     */
+    private function confirm(SubscriptionPayment $payment, array $result, PaymentProvider $adapter): ?array
+    {
+        $providerPaymentId = (string) ($result['payment_id'] ?? '');
+        $fetched = $providerPaymentId === '' ? null : $adapter->fetchPayment($providerPaymentId);
+
+        if ($fetched === null) {
+            $this->audit->log(
+                action: 'subscription.payment.unconfirmed',
+                entityType: SubscriptionPayment::class,
+                entityId: (string) $payment->getKey(),
+                after: ['provider' => $payment->provider, 'provider_payment_id' => $providerPaymentId ?: null],
+                reason: 'The gateway could not be asked to confirm this charge, so nothing was settled.',
+            );
+
+            return null;
+        }
+
+        $statedReference = (string) ($fetched['reference'] ?? '');
+
+        if ($statedReference !== '' && $statedReference !== (string) $payment->idempotency_key) {
+            $this->audit->log(
+                action: 'subscription.payment.reference_mismatch',
+                entityType: SubscriptionPayment::class,
+                entityId: (string) $payment->getKey(),
+                after: ['expected' => (string) $payment->idempotency_key, 'gateway_says' => $statedReference],
+                reason: 'The gateway attributes this charge to a different reference.',
+            );
+
+            return null;
+        }
+
+        /*
+         * The event's identity is kept; only the MONEY is replaced.
+         *
+         * `payment_id` and `payload` still describe the delivery that arrived — the audit trail
+         * should say which event triggered this — while status, amount and currency now come from
+         * the gateway, because those are the three the caller could otherwise have chosen.
+         */
+        return [
+            ...$result,
+            'status' => (string) ($fetched['status'] ?? 'pending'),
+            'amount' => $fetched['amount'] ?? null,
+            'currency' => $fetched['currency'] ?? null,
+        ];
     }
 
     /**

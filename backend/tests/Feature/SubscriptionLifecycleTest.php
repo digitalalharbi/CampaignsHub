@@ -24,6 +24,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Concerns\AppliesToRegister;
+use Tests\Concerns\ConfirmsGatewayPayments;
 use Tests\TestCase;
 
 /**
@@ -36,6 +37,7 @@ use Tests\TestCase;
 final class SubscriptionLifecycleTest extends TestCase
 {
     use AppliesToRegister;
+    use ConfirmsGatewayPayments;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -91,6 +93,9 @@ final class SubscriptionLifecycleTest extends TestCase
          * `ApplySubscriptionPaymentEvent` re-checks the amount on purpose — a verified event proves
          * the gateway sent it, not that it says what we think. So the test has to send the truth.
          */
+        // The gateway's own confirmation, faked — see `ConfirmsGatewayPayments`.
+        $this->gatewayConfirms($payment);
+
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_'.$payment->getKey(), 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
             'data' => [

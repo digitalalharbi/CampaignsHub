@@ -134,6 +134,67 @@ final class MoyasarPaymentProvider implements PaymentProvider
     }
 
     /**
+     * No. The token travels INSIDE the body it is supposed to authenticate.
+     *
+     * `hash_equals` above proves the sender knew the shared secret. It proves nothing about the
+     * amount, the currency, the status or the reference sitting beside it in the same JSON — those
+     * are simply what the caller wrote. So this adapter's word is not enough to settle money, and
+     * `ApplySubscriptionPaymentEvent` asks `fetchPayment()` before it does.
+     */
+    public function confirmsPayloadIntegrity(): bool
+    {
+        return false;
+    }
+
+    /**
+     * `GET /v1/payments/{id}` — what Moyasar itself says, over our own connection.
+     *
+     * This is the answer that settles a charge. It cannot be forged by whoever posted the webhook,
+     * because they are not on this connection and did not choose this URL: the id comes from the
+     * verified event, the credentials are ours, and the response is Moyasar's.
+     *
+     * Null on any failure, including an unreachable host. The caller MUST NOT read that as consent —
+     * an unconfirmed payment stays unconfirmed, and the gateway will redeliver.
+     *
+     * @return array{status: string, amount: ?string, currency: ?string, reference: ?string}|null
+     */
+    public function fetchPayment(string $providerPaymentId): ?array
+    {
+        if (! $this->isConfigured() || $providerPaymentId === '') {
+            return null;
+        }
+
+        try {
+            $response = Http::withBasicAuth((string) $this->secretKey(), '')
+                ->timeout(10)
+                ->acceptJson()
+                ->get(self::API.'/payments/'.rawurlencode($providerPaymentId));
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            /** @var array<string,mixed> $body */
+            $body = (array) $response->json();
+
+            if (($body['id'] ?? null) === null) {
+                return null;
+            }
+
+            return [
+                'status' => $this->mapStatus((string) ($body['status'] ?? '')),
+                // Back into major units, exactly as the webhook path does — see `createSession`.
+                'amount' => isset($body['amount']) ? number_format(((int) $body['amount']) / 100, 2, '.', '') : null,
+                'currency' => isset($body['currency']) ? (string) $body['currency'] : null,
+                'reference' => (string) (($body['metadata']['reference'] ?? '') ?: '') ?: null,
+            ];
+        } catch (Throwable) {
+            // A gateway we could not reach has told us nothing. Silence is not confirmation.
+            return null;
+        }
+    }
+
+    /**
      * Moyasar publishes no card fingerprint (PAY-004).
      *
      * The most identifying thing on the payload is the brand and the last four digits, and that is NOT

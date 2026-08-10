@@ -22,6 +22,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use Tests\Concerns\AppliesToRegister;
+use Tests\Concerns\ConfirmsGatewayPayments;
 use Tests\TestCase;
 
 /**
@@ -35,6 +36,7 @@ use Tests\TestCase;
 final class SubscriptionNotificationTest extends TestCase
 {
     use AppliesToRegister;
+    use ConfirmsGatewayPayments;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -76,6 +78,9 @@ final class SubscriptionNotificationTest extends TestCase
         $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
 
         $payment = SubscriptionPayment::query()->where('registration_request_id', $request->getKey())->firstOrFail();
+
+        // The gateway's own confirmation, faked — see `ConfirmsGatewayPayments`.
+        $this->gatewayConfirms($payment);
 
         $this->postJson('/api/v1/payments/webhook/moyasar', [
             'id' => 'evt_'.$payment->getKey(), 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
