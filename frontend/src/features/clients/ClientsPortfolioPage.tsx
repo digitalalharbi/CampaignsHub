@@ -142,7 +142,7 @@ export function ClientsPortfolioPage() {
                   onChange={(v) => patch({ industry: v ?? undefined })}
                   options={industryTax.options}
                   loading={industryTax.isPending}
-                  optionsError={industryTax.isError ? t('error_generic') : null}
+                  optionsError={industryTax.error}
                   onRetry={() => industryTax.refetch()}
                   placeholder={`${t('cc_filter_industry')}: ${t('cc_filter_all')}`}
                 />
@@ -170,7 +170,7 @@ export function ClientsPortfolioPage() {
               onChange={(v) => patch({ status: v ?? undefined })}
               options={statusTax.options}
               loading={statusTax.isPending}
-              optionsError={statusTax.isError ? t('error_generic') : null}
+              optionsError={statusTax.error}
               onRetry={() => statusTax.refetch()}
               placeholder={t('cc_filter_all')}
             />
@@ -183,7 +183,7 @@ export function ClientsPortfolioPage() {
               onChange={(v) => patch({ service_level: v ?? undefined })}
               options={serviceLevelTax.options}
               loading={serviceLevelTax.isPending}
-              optionsError={serviceLevelTax.isError ? t('error_generic') : null}
+              optionsError={serviceLevelTax.error}
               onRetry={() => serviceLevelTax.refetch()}
               placeholder={t('cc_filter_all')}
             />

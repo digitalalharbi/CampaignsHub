@@ -82,6 +82,11 @@ const FORMS_COPY_AR = {
     empty: 'لا توجد خيارات',
     loading: 'جارٍ التحميل…',
     error: 'تعذّر تحميل الخيارات',
+    // AGENCY-PERMS-006 — a refused list is not a broken one, and must not offer a Retry that
+    // can only be refused again.
+    errorPermission: 'لا تملك صلاحية الاطلاع على هذه الخيارات',
+    errorSession: 'انتهت جلستك — سجّل الدخول مرة أخرى',
+    errorNotFound: 'لم تعد هذه القائمة موجودة',
     retry: 'إعادة المحاولة',
     clear: 'مسح الاختيار',
     clearAll: 'مسح الكل',
@@ -127,6 +132,9 @@ export const FORMS_COPY: Record<Locale, FormsCopy> = {
     empty: 'No options',
     loading: 'Loading…',
     error: 'Could not load options',
+    errorPermission: 'You do not have access to these options',
+    errorSession: 'Your session has ended — sign in again',
+    errorNotFound: 'This list no longer exists',
     retry: 'Retry',
     clear: 'Clear selection',
     clearAll: 'Clear all',

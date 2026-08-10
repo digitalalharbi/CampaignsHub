@@ -17,7 +17,8 @@ export interface HierarchicalSelectProps extends BaseFieldProps {
   searchable?: boolean
   clearable?: boolean
   loading?: boolean
-  optionsError?: string | null
+  /** A sentence this caller owns, or the raw error — classified by `PanelState`. */
+  optionsError?: unknown
   onRetry?: () => void
   emptyText?: string
 }

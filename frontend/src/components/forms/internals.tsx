@@ -2,6 +2,8 @@ import { forwardRef, type ComponentType, type ReactNode } from 'react'
 import { AlertTriangle, Loader2, RefreshCw, Search, X } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
 import { controlClass } from '@/components/ui/Field'
+import { failureKind } from '@/components/ui/QueryFailure'
+import { toApiError } from '@/lib/api/client'
 import type { FormsCopy, Option } from './types'
 
 /** Trigger styling shared by every select-style control — mirrors the app's input control exactly. */
@@ -98,6 +100,34 @@ export const PanelSearch = forwardRef<HTMLInputElement, {
   )
 })
 
+/**
+ * AGENCY-PERMS-006 — say WHICH failure a dropdown hit, inline.
+ *
+ * These selects took a ready-made sentence («تعذّر تحميل الخيارات») and printed it for a refusal, an
+ * expired session and a dead server alike — the same defect `QueryFailure` closed on full-page
+ * surfaces, still living on inside every taxonomy control. A signed-in user without
+ * `clients.manage` opened the classification editor and was told the product was broken, beside a
+ * Retry button whose only possible outcome was the same 403.
+ *
+ * A caller may still pass its own string — that is its sentence and is used verbatim. Anything else
+ * is the raw error, and is classified here rather than at ~20 call sites.
+ */
+function describeFailure(error: unknown, copy: FormsCopy): { text: string; retryable: boolean } | null {
+  if (error === null || error === undefined || error === false) return null
+  if (typeof error === 'string') return error ? { text: error, retryable: true } : null
+
+  switch (failureKind(error)) {
+    case 'permission':
+      return { text: copy.errorPermission, retryable: false }
+    case 'session':
+      return { text: copy.errorSession, retryable: false }
+    case 'not_found':
+      return { text: copy.errorNotFound, retryable: false }
+    default:
+      return { text: toApiError(error).message || copy.error, retryable: true }
+  }
+}
+
 /** Loading / empty / error rows shown inside a listbox panel. */
 export function PanelState({
   loading,
@@ -107,7 +137,8 @@ export function PanelState({
   onRetry,
 }: {
   loading?: boolean
-  error?: string | null
+  /** A sentence the caller owns, or the raw error to be classified. */
+  error?: unknown
   isEmpty: boolean
   copy: FormsCopy
   onRetry?: () => void
@@ -119,13 +150,14 @@ export function PanelState({
       </div>
     )
   }
-  if (error) {
+  const failure = describeFailure(error, copy)
+  if (failure) {
     return (
       <div className="flex flex-col items-center gap-2 px-3 py-6 text-center text-sm text-text-secondary">
-        <span className="flex items-center gap-2 text-danger">
-          <AlertTriangle size={15} aria-hidden /> {error}
+        <span className="flex items-center gap-2 text-danger" data-testid="options-failure">
+          <AlertTriangle size={15} aria-hidden /> {failure.text}
         </span>
-        {onRetry && (
+        {onRetry && failure.retryable && (
           <button
             type="button"
             onClick={onRetry}

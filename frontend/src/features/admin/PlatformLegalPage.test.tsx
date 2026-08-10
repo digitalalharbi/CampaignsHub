@@ -49,12 +49,19 @@ describe('PlatformLegalPage', () => {
 
     renderWithProviders(<PlatformLegalPage />, { locale: 'ar' })
 
-    await waitFor(() => expect(screen.getByTestId('platform-legal_name_ar')).toBeInTheDocument())
+    /*
+     * Wait for the settings to have LANDED, not merely for the form to exist. The empty form
+     * renders first and every field on it reads '' — which is exactly what the blank-field
+     * assertions below expect, so waiting on the element alone can pass them against a form that
+     * has not been given any data yet, and then fail on the one field that should not be blank.
+     * Under a full-suite run that is a race, and it fired once the suite grew a 130th file.
+     */
+    await waitFor(() =>
+      expect((screen.getByTestId('platform-contact_email') as HTMLInputElement).value).toBe('info@campaignshub.io'),
+    )
     for (const key of ['legal_name_ar', 'legal_name_en', 'registration_number', 'tax_number', 'jurisdiction']) {
       expect((screen.getByTestId(`platform-${key}`) as HTMLInputElement).value).toBe('')
     }
-    // …and the one address the product genuinely owns is present.
-    expect((screen.getByTestId('platform-contact_email') as HTMLInputElement).value).toBe('info@campaignshub.io')
   })
 
   /**

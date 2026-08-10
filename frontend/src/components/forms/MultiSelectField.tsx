@@ -13,7 +13,8 @@ export interface MultiSelectFieldProps extends BaseFieldProps {
   placeholder?: string
   searchable?: boolean
   loading?: boolean
-  optionsError?: string | null
+  /** A sentence this caller owns, or the raw error — classified by `PanelState`. */
+  optionsError?: unknown
   onRetry?: () => void
   onSearchChange?: (query: string) => void
   /** Cap the number of selections; the list disables further picks once reached. */

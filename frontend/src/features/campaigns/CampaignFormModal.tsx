@@ -266,7 +266,7 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
           onChange={setObjective}
           options={objectiveTax.options}
           loading={objectiveTax.isPending}
-          optionsError={objectiveTax.isError ? t('error') : null}
+          optionsError={objectiveTax.error}
           onRetry={() => objectiveTax.refetch()}
           clearable={false}
         />
@@ -348,12 +348,12 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
           <DateField id="campaign-end" value={watch('ends_on') ?? ''} onChange={(v) => setValue('ends_on', v, { shouldValidate: true, shouldDirty: true })} />
         </Field>
 
-        <TaxonomyMultiSelect label={c.platforms} defKey="campaign.platforms" value={platforms} onChange={setPlatforms} tax={platformsTax} canCreate={canCreate} errText={t('error')} />
-        <TaxonomyMultiSelect label={c.creativeTypes} defKey="campaign.creative_types" value={creativeTypes} onChange={setCreativeTypes} tax={creativeTypesTax} canCreate={canCreate} errText={t('error')} />
-        <TaxonomyMultiSelect label={c.regions} defKey="campaign.regions" value={regions} onChange={setRegions} tax={regionsTax} canCreate={canCreate} errText={t('error')} />
-        <TaxonomyMultiSelect label={c.audiences} defKey="campaign.audiences" value={audiences} onChange={setAudiences} tax={audiencesTax} canCreate={canCreate} errText={t('error')} />
-        <TaxonomyMultiSelect label={c.conversionEvents} defKey="campaign.conversion_events" value={conversionEvents} onChange={setConversionEvents} tax={conversionEventsTax} canCreate={canCreate} errText={t('error')} />
-        <TaxonomyMultiSelect label={c.tags} defKey="campaign.tags" value={tags} onChange={setTags} tax={tagsTax} canCreate={canCreate} errText={t('error')} />
+        <TaxonomyMultiSelect label={c.platforms} defKey="campaign.platforms" value={platforms} onChange={setPlatforms} tax={platformsTax} canCreate={canCreate} />
+        <TaxonomyMultiSelect label={c.creativeTypes} defKey="campaign.creative_types" value={creativeTypes} onChange={setCreativeTypes} tax={creativeTypesTax} canCreate={canCreate} />
+        <TaxonomyMultiSelect label={c.regions} defKey="campaign.regions" value={regions} onChange={setRegions} tax={regionsTax} canCreate={canCreate} />
+        <TaxonomyMultiSelect label={c.audiences} defKey="campaign.audiences" value={audiences} onChange={setAudiences} tax={audiencesTax} canCreate={canCreate} />
+        <TaxonomyMultiSelect label={c.conversionEvents} defKey="campaign.conversion_events" value={conversionEvents} onChange={setConversionEvents} tax={conversionEventsTax} canCreate={canCreate} />
+        <TaxonomyMultiSelect label={c.tags} defKey="campaign.tags" value={tags} onChange={setTags} tax={tagsTax} canCreate={canCreate} />
 
         <Field label={t('audience_label')} htmlFor="campaign-audience">
           <Textarea id="campaign-audience" rows={3} {...register('audience')} />
@@ -365,7 +365,7 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
 
 /** A taxonomy-backed multi-select: creatable (drawer → createOption) when permitted, plain otherwise. */
 function TaxonomyMultiSelect({
-  label, defKey, value, onChange, tax, canCreate, errText,
+  label, defKey, value, onChange, tax, canCreate,
 }: {
   label: string
   defKey: string
@@ -373,7 +373,6 @@ function TaxonomyMultiSelect({
   onChange: (v: string[]) => void
   tax: ReturnType<typeof useTaxonomyOptions>
   canCreate: boolean
-  errText: string
 }) {
   const shared = {
     label,
@@ -381,7 +380,7 @@ function TaxonomyMultiSelect({
     onChange,
     options: tax.options,
     loading: tax.isPending,
-    optionsError: tax.isError ? errText : null,
+    optionsError: tax.error,
     onRetry: () => tax.refetch(),
   }
   return canCreate ? (

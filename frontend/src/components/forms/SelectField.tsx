@@ -25,7 +25,8 @@ export interface SelectFieldProps extends BaseFieldProps {
   clearable?: boolean
   /** Async/loader states — AsyncSelect drives these; local selects can ignore them. */
   loading?: boolean
-  optionsError?: string | null
+  /** A sentence this caller owns, or the raw error — classified by `PanelState`. */
+  optionsError?: unknown
   onRetry?: () => void
   /** Called on every search keystroke (server search hook). */
   onSearchChange?: (query: string) => void

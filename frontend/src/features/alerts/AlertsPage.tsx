@@ -436,7 +436,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           onChange={(v) => v && setForm((f) => ({ ...f, type: v as AlertType }))}
           options={typeTax.options}
           loading={typeTax.isPending}
-          optionsError={typeTax.isError ? c.load_error : null}
+          optionsError={typeTax.error}
           onRetry={() => typeTax.refetch()}
           clearable={false}
         />
@@ -458,7 +458,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           onChange={(v) => v && setForm((f) => ({ ...f, severity: v as 'info' | 'warning' | 'critical' }))}
           options={severityTax.options}
           loading={severityTax.isPending}
-          optionsError={severityTax.isError ? c.load_error : null}
+          optionsError={severityTax.error}
           onRetry={() => severityTax.refetch()}
           clearable={false}
         />
@@ -468,7 +468,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           onChange={(v) => setForm((f) => ({ ...f, channels: v }))}
           options={channelTax.options}
           loading={channelTax.isPending}
-          optionsError={channelTax.isError ? c.load_error : null}
+          optionsError={channelTax.error}
           onRetry={() => channelTax.refetch()}
         />
         <label className="flex items-center gap-2 text-xs font-semibold text-text-secondary">

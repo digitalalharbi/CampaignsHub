@@ -115,7 +115,7 @@ export function RequestsDashboardPage() {
             onChange={(v) => set({ status: v ?? undefined })}
             options={statusTax.options}
             loading={statusTax.isPending}
-            optionsError={statusTax.isError ? t('error_generic') : null}
+            optionsError={statusTax.error}
             onRetry={() => statusTax.refetch()}
             placeholder={t('all_statuses')}
           />
@@ -126,7 +126,7 @@ export function RequestsDashboardPage() {
             onChange={(v) => set({ priority: v ?? undefined })}
             options={priorityTax.options}
             loading={priorityTax.isPending}
-            optionsError={priorityTax.isError ? t('error_generic') : null}
+            optionsError={priorityTax.error}
             onRetry={() => priorityTax.refetch()}
             placeholder={t('all_priorities')}
           />

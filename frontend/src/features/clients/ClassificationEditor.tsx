@@ -80,7 +80,7 @@ export function ClassificationEditor({ clientId, current, onClose }: { clientId:
         onChange={(v) => set({ client_status: v })}
         options={statusTax.options}
         loading={statusTax.isPending}
-        optionsError={statusTax.isError ? t('error_generic') : null}
+        optionsError={statusTax.error}
         onRetry={() => statusTax.refetch()}
         clearable={false}
       />
@@ -90,7 +90,7 @@ export function ClassificationEditor({ clientId, current, onClose }: { clientId:
         onChange={(v) => set({ service_level: v })}
         options={serviceLevelTax.options}
         loading={serviceLevelTax.isPending}
-        optionsError={serviceLevelTax.isError ? t('error_generic') : null}
+        optionsError={serviceLevelTax.error}
         onRetry={() => serviceLevelTax.refetch()}
       />
       <SearchableSelect
@@ -99,7 +99,7 @@ export function ClassificationEditor({ clientId, current, onClose }: { clientId:
         onChange={(v) => set({ industry: v })}
         options={industryTax.options}
         loading={industryTax.isPending}
-        optionsError={industryTax.isError ? t('error_generic') : null}
+        optionsError={industryTax.error}
         onRetry={() => industryTax.refetch()}
       />
       <SearchableSelect
@@ -115,7 +115,7 @@ export function ClassificationEditor({ clientId, current, onClose }: { clientId:
         onChange={(v) => set({ priority: v })}
         options={priorityTax.options}
         loading={priorityTax.isPending}
-        optionsError={priorityTax.isError ? t('error_generic') : null}
+        optionsError={priorityTax.error}
         onRetry={() => priorityTax.refetch()}
         clearable={false}
       />
@@ -142,7 +142,7 @@ export function ClassificationEditor({ clientId, current, onClose }: { clientId:
             onChange={setTags}
             options={tagsTax.options}
             loading={tagsTax.isPending}
-            optionsError={tagsTax.isError ? t('error_generic') : null}
+            optionsError={tagsTax.error}
             onRetry={() => tagsTax.refetch()}
             onCreate={(draft) => createOptionFromDraft('client.tags', draft)}
           />
@@ -154,7 +154,7 @@ export function ClassificationEditor({ clientId, current, onClose }: { clientId:
             onChange={setTags}
             options={tagsTax.options}
             loading={tagsTax.isPending}
-            optionsError={tagsTax.isError ? t('error_generic') : null}
+            optionsError={tagsTax.error}
             onRetry={() => tagsTax.refetch()}
           />
         )}
@@ -168,7 +168,7 @@ export function ClassificationEditor({ clientId, current, onClose }: { clientId:
           onChange={setEnabledServices}
           options={servicesTax.options}
           loading={servicesTax.isPending}
-          optionsError={servicesTax.isError ? t('error_generic') : null}
+          optionsError={servicesTax.error}
           onRetry={() => servicesTax.refetch()}
         />
       </div>

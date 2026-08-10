@@ -689,7 +689,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
           onChange={setType}
           options={types.options}
           loading={types.isPending}
-          optionsError={types.isError ? (ar ? 'تعذّر تحميل الخيارات' : 'The options could not be loaded') : null}
+          optionsError={types.error}
           onRetry={() => types.refetch()}
           clearable={false}
         />
@@ -723,7 +723,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
           onChange={setAudience}
           options={audiences.options}
           loading={audiences.isPending}
-          optionsError={audiences.isError ? (ar ? 'تعذّر تحميل الخيارات' : 'The options could not be loaded') : null}
+          optionsError={audiences.error}
           onRetry={() => audiences.refetch()}
           clearable={false}
         />
