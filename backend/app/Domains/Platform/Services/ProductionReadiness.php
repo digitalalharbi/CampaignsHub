@@ -1,0 +1,229 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domains\Platform\Services;
+
+use Illuminate\Support\Facades\Config;
+
+/**
+ * PROD-CONFIG-001 — what must be true before this install may take a real customer's money.
+ *
+ * ## Why a check and not a boot guard
+ *
+ * Every fact below is already knowable from configuration, and none of them was checked anywhere.
+ * An install could boot in production with `APP_DEBUG=true`, a `localhost` callback URL, a Moyasar
+ * TEST key and no webhook token, and the only symptom would be customers paying into a gateway
+ * whose confirmation could never arrive. Nothing crashes; the money simply goes nowhere the product
+ * can see.
+ *
+ * It is a command rather than a `boot()` throw on purpose. A guard that aborts the application on a
+ * misconfiguration turns one wrong environment variable into a total outage — including for the
+ * customers already inside, whose sessions had nothing to do with it. The deploy pipeline runs this
+ * BEFORE traffic moves, `/admin` reads it, and the failure is loud in the place a person can act on
+ * it.
+ *
+ * ## `fail` versus `warn`
+ *
+ * `fail` is «this install will mislead somebody or lose their money». `warn` is «this is not
+ * finished, and the product already says so honestly» — an unconfigured mail provider is a warning
+ * because the product never claims a message was sent without one, which is a decision already
+ * taken and tested, not a hole.
+ *
+ * Everything here is derived from configuration only. **No secret is ever returned** — a check
+ * reports the shape of a key (test/live/absent), never its value.
+ */
+final class ProductionReadiness
+{
+    /** @var list<array{key: string, level: string, message: string, fix: string}> */
+    private array $findings = [];
+
+    /**
+     * @return array{ready: bool, environment: string, failures: int, warnings: int, findings: list<array{key: string, level: string, message: string, fix: string}>}
+     */
+    public function run(): array
+    {
+        $this->findings = [];
+
+        $env = (string) Config::get('app.env');
+        $production = $env === 'production';
+
+        $this->checkApplication($production);
+        $this->checkUrls($production);
+        $this->checkSession($production);
+        $this->checkInfrastructure($production);
+        $this->checkPayments($production);
+        $this->checkMail();
+
+        $failures = count(array_filter($this->findings, fn (array $f) => $f['level'] === 'fail'));
+
+        return [
+            'ready' => $failures === 0,
+            'environment' => $env,
+            'failures' => $failures,
+            'warnings' => count($this->findings) - $failures,
+            'findings' => array_values($this->findings),
+        ];
+    }
+
+    private function checkApplication(bool $production): void
+    {
+        if ($production && Config::get('app.debug') === true) {
+            $this->fail('app.debug', 'APP_DEBUG is on in production — a stack trace on any error publishes file paths, queries and configuration to whoever triggered it.', 'Set APP_DEBUG=false.');
+        }
+
+        if (! is_string(Config::get('app.key')) || Config::get('app.key') === '') {
+            $this->fail('app.key', 'APP_KEY is not set — every encrypted value, including stored provider tokens, is unreadable or unwritable.', 'Run php artisan key:generate and keep the value with your secrets.');
+        }
+    }
+
+    private function checkUrls(bool $production): void
+    {
+        foreach (['app.url' => 'APP_URL', 'brand.frontend_url' => 'FRONTEND_URL'] as $key => $name) {
+            $url = Config::get($key);
+
+            if (! is_string($url) || $url === '') {
+                // FRONTEND_URL is optional in a single-origin deployment; APP_URL never is.
+                if ($key === 'app.url') {
+                    $this->fail($key, "{$name} is not set — callbacks, webhooks and every link in an email are built from it.", "Set {$name} to the public origin, with https.");
+                }
+
+                continue;
+            }
+
+            $host = (string) (parse_url($url, PHP_URL_HOST) ?? '');
+
+            if ($production && parse_url($url, PHP_URL_SCHEME) !== 'https') {
+                $this->fail($key, "{$name} is not https — a payment callback and a session cookie both travel over it.", "Set {$name} to an https origin.");
+            }
+
+            if ($production && $this->isLocal($host)) {
+                $this->fail($key, "{$name} points at {$host}, which no customer and no gateway can reach.", "Set {$name} to the public hostname.");
+            }
+        }
+    }
+
+    private function checkSession(bool $production): void
+    {
+        if (! $production) {
+            return;
+        }
+
+        if (Config::get('session.secure') !== true) {
+            $this->fail('session.secure', 'SESSION_SECURE_COOKIE is off — the session cookie may be sent over plain http.', 'Set SESSION_SECURE_COOKIE=true.');
+        }
+
+        $domain = Config::get('session.domain');
+        $appHost = (string) (parse_url((string) Config::get('app.url'), PHP_URL_HOST) ?? '');
+
+        /*
+         * A cookie domain that does not cover the application's own host is the failure that reads
+         * as «login does nothing»: the browser accepts the response, stores nothing, and the next
+         * request is anonymous. Checked as a suffix so `.campaignshub.io` correctly covers
+         * `app.campaignshub.io`.
+         */
+        if (is_string($domain) && $domain !== '' && $appHost !== '') {
+            $bare = ltrim($domain, '.');
+
+            if ($appHost !== $bare && ! str_ends_with($appHost, '.'.$bare)) {
+                $this->fail('session.domain', "SESSION_DOMAIN ({$domain}) does not cover APP_URL's host ({$appHost}) — the session cookie will be discarded and every sign-in will appear to do nothing.", 'Set SESSION_DOMAIN to that host, or to a parent domain of it.');
+            }
+        }
+    }
+
+    private function checkInfrastructure(bool $production): void
+    {
+        if (! $production) {
+            return;
+        }
+
+        if (Config::get('database.default') !== 'pgsql') {
+            $this->fail('database.default', 'The database connection is not PostgreSQL, which is the only engine this schema is migrated and tested against.', 'Set DB_CONNECTION=pgsql.');
+        }
+
+        if (Config::get('queue.default') === 'sync') {
+            $this->fail('queue.default', 'The queue is sync — report generation, syncs and mail would run inside the web request, and a failed job would have nowhere to be retried from.', 'Set QUEUE_CONNECTION=redis and run a worker (Horizon).');
+        }
+
+        if (Config::get('cache.default') === 'array') {
+            $this->warn('cache.default', 'The cache is the array driver, which forgets everything between requests.', 'Set CACHE_STORE=redis.');
+        }
+    }
+
+    private function checkPayments(bool $production): void
+    {
+        $provider = (string) Config::get('subscriptions.default');
+
+        if ($production && in_array($provider, ['sandbox', 'null'], true)) {
+            $this->fail('subscriptions.default', "The subscription gateway is «{$provider}», which settles nothing real — customers would be activated without money moving, or unable to pay at all.", 'Set SUBSCRIPTION_PROVIDER=moyasar and supply its credentials.');
+        }
+
+        foreach (['moyasar' => ['secret_key', 'publishable_key', 'webhook_token'], 'stripe' => ['secret_key', 'publishable_key', 'webhook_secret']] as $gateway => $keys) {
+            [$secretKey, $publishableKey, $webhookKey] = $keys;
+
+            $secret = Config::get("services.{$gateway}.{$secretKey}");
+            $publishable = Config::get("services.{$gateway}.{$publishableKey}");
+            $webhook = Config::get("services.{$gateway}.{$webhookKey}");
+
+            $configured = is_string($secret) && $secret !== '';
+
+            if (! $configured) {
+                // Not an error anywhere: an unconfigured gateway reports awaiting_credentials and
+                // refuses to open a checkout. It is only a failure when it is the CHOSEN gateway.
+                if ($provider === $gateway) {
+                    $this->fail("services.{$gateway}", "«{$gateway}» is the chosen gateway and has no secret key, so no checkout can open.", 'Supply its live credentials.');
+                }
+
+                continue;
+            }
+
+            if (! is_string($webhook) || $webhook === '') {
+                $this->fail("services.{$gateway}.{$webhookKey}", "«{$gateway}» has a secret key but no webhook secret — a customer could pay and nothing would ever confirm it, because a webhook that cannot be verified is discarded.", 'Supply the webhook secret from the gateway dashboard.');
+            }
+
+            if ($production && $this->isTestKey($secret)) {
+                $this->fail("services.{$gateway}.{$secretKey}", "«{$gateway}» is using a TEST secret key in production — real customers would be charged nothing while the product reports them as paid.", 'Replace it with the live key.');
+            }
+
+            if ($production && is_string($publishable) && $this->isTestKey($publishable)) {
+                $this->fail("services.{$gateway}.{$publishableKey}", "«{$gateway}» is using a TEST publishable key in production.", 'Replace it with the live publishable key.');
+            }
+
+            /*
+             * A live secret against a test publishable key (or the reverse) is the mismatch that
+             * produces «the payment succeeded in the browser and never existed on the server».
+             */
+            if (is_string($publishable) && $publishable !== '' && $this->isTestKey($secret) !== $this->isTestKey($publishable)) {
+                $this->fail("services.{$gateway}", "«{$gateway}» mixes a test key with a live one — the browser and the server would be talking to two different gateways.", 'Use a matched pair: both test, or both live.');
+            }
+        }
+    }
+
+    private function checkMail(): void
+    {
+        if (in_array(Config::get('mail.default'), ['log', 'array'], true)) {
+            $this->warn('mail.default', 'No mail provider is configured, so nothing is delivered. The product already reports this honestly and never records a message as sent.', 'Supply SMTP or API credentials when they exist — READY_FOR_CREDENTIALS until then.');
+        }
+    }
+
+    /** Both gateways prefix their test credentials; anything else is treated as live. */
+    private function isTestKey(mixed $key): bool
+    {
+        return is_string($key) && (str_contains($key, '_test') || str_starts_with($key, 'sk_test') || str_starts_with($key, 'pk_test'));
+    }
+
+    private function isLocal(string $host): bool
+    {
+        return $host === 'localhost' || $host === '127.0.0.1' || $host === '::1' || str_ends_with($host, '.local') || str_ends_with($host, '.test');
+    }
+
+    private function fail(string $key, string $message, string $fix): void
+    {
+        $this->findings[] = ['key' => $key, 'level' => 'fail', 'message' => $message, 'fix' => $fix];
+    }
+
+    private function warn(string $key, string $message, string $fix): void
+    {
+        $this->findings[] = ['key' => $key, 'level' => 'warn', 'message' => $message, 'fix' => $fix];
+    }
+}
