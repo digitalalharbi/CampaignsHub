@@ -18,6 +18,8 @@ return [
     // Not part of Laravel's file — CampaignsHub's own auth answers.
     'signed_in' => 'تم تسجيل الدخول بنجاح.',
     'code_sent' => 'تم إرسال رمز التحقق.',
+    // LOGIN-OTP-001 — نافذة إعادة الإرسال على الخادم، بنفس الصياغة التي يستخدمها العدّاد في الواجهة.
+    'resend_cooldown' => 'الرجاء الانتظار :seconds ثانية قبل طلب رمز جديد.',
     'signed_out' => 'تم تسجيل الخروج بنجاح.',
     'current_user' => 'المستخدم الحالي.',
     'token_issued' => 'تم إصدار رمز الوصول بنجاح.',

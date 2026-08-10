@@ -5,7 +5,7 @@ import { renderWithProviders, signOut } from '@/test/utils'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, login: vi.fn(), signInMethod: vi.fn() }
+  return { ...actual, login: vi.fn(), signInMethod: vi.fn(), emailCodeStart: vi.fn(), emailCodeVerify: vi.fn() }
 })
 
 vi.mock('@/features/requests/clientPortalApi', async (orig) => {
@@ -13,45 +13,43 @@ vi.mock('@/features/requests/clientPortalApi', async (orig) => {
   return { ...actual, portalLoginStart: vi.fn(), portalLoginVerify: vi.fn() }
 })
 
-import { login, signInMethod } from './api'
+import { emailCodeStart, emailCodeVerify, login, signInMethod } from './api'
 import { portalLoginStart } from '@/features/requests/clientPortalApi'
 
 const mockedMethod = vi.mocked(signInMethod)
-const mockedStart = vi.mocked(portalLoginStart)
+const mockedPortalStart = vi.mocked(portalLoginStart)
+const mockedEmailStart = vi.mocked(emailCodeStart)
 
-/**
- * Type an address on the email path and press Continue.
- *
- * The page offers two paths now (LOGIN-PATHS-001) and the email one is what opens, so this is still
- * the first action most visitors take — but it is the EMAIL field, not a field that accepts either.
- */
-function identifyAs(value: string) {
+/** What `/auth/email-code/start` answers when a code has genuinely gone out. */
+const DELIVERED = { verification_id: 'v1', delivery_status: 'queued', resend_after: 60, dev_code: null }
+
+function typeEmail(value: string) {
   fireEvent.change(screen.getByLabelText(/Email address/i), { target: { value } })
-  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
 }
 
-/** Get past step 1 as a password account, ready for the password field. */
-async function reachPasswordStep(identifier = 'owner@demo-agency.local') {
+/** Ask for a code as an ordinary platform account, and wait for the step to arrive. */
+async function reachCodeStep(identifier = 'owner@demo-agency.local', start: unknown = DELIVERED) {
   mockedMethod.mockResolvedValue({ method: 'password', channel: 'email' })
-  identifyAs(identifier)
-  await waitFor(() => expect(screen.getByTestId('login-password')).toBeInTheDocument())
+  mockedEmailStart.mockResolvedValue(start as never)
+  typeEmail(identifier)
+  fireEvent.click(screen.getByTestId('login-request-code'))
+  await waitFor(() => expect(screen.getByTestId('login-code')).toBeInTheDocument())
 }
 
 /**
- * LOGIN-UNIFIED-001 — one door, and the server decides.
+ * LOGIN-CARD-001 — one card, two ways in, and the server decides where you land.
  *
- * The property under test is not the wording: it is that this page NEVER asks which portal the
- * visitor wants, and never claims one on their behalf. A page whose headings are rewritten should
- * keep passing; a page that puts a portal back in the visitor's hands is the regression.
+ * The property under test is not the wording. It is that the visitor is never asked which portal
+ * they want, that the URL cannot grant one, and that both routes out of this card end in a session
+ * the server chose.
  */
-describe('LoginPage — one door (LOGIN-UNIFIED-001)', () => {
+describe('LoginPage — the sign-in card', () => {
   afterEach(() => { signOut(); vi.clearAllMocks() })
 
   it('offers no portal choice at all', () => {
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 
-    // The container the three tabs lived in, and each tab by name.
     expect(screen.queryByTestId('login-portals')).not.toBeInTheDocument()
     for (const key of ['default', 'agency', 'client', 'influencer', 'admin']) {
       expect(screen.queryByTestId(`login-portal-${key}`)).not.toBeInTheDocument()
@@ -67,54 +65,40 @@ describe('LoginPage — one door (LOGIN-UNIFIED-001)', () => {
     renderWithProviders(<LoginPage />, { route: '/login?portal=agency', locale: 'en' })
 
     expect(screen.queryByTestId('login-portals')).not.toBeInTheDocument()
-    // The single approved panel, unchanged by the parameter.
     expect(screen.getByRole('heading', { name: 'All your paid ad campaigns in one place' })).toBeInTheDocument()
   })
 
+  /** The approved marketing panel is untouched by this unit — visual lock. */
   it('shows the single approved marketing panel', () => {
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
     expect(screen.getByText('One platform for every paid campaign')).toBeInTheDocument()
   })
 
-  it('asks only for an identifier before the server has answered', () => {
+  it('keeps the approved heading and subtitle', () => {
     signOut()
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'ar' })
 
-    expect(screen.getByTestId('login-identify')).toBeInTheDocument()
-    expect(screen.queryByTestId('login-password')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('login-code')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'مرحباً بعودتك' })).toBeInTheDocument()
+    expect(screen.getByText('سجّل الدخول إلى حسابك في CampaignsHub')).toBeInTheDocument()
   })
 
-  it('shows the password step when the server says this account has one', async () => {
+  /** Everything the card promises is on it, in one place, before anything is clicked. */
+  it('carries both credentials, both secondary actions and the security note', () => {
     signOut()
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'ar' })
 
-    await reachPasswordStep()
-    expect(screen.queryByTestId('login-code')).not.toBeInTheDocument()
-  })
-
-  /**
-   * The case the portal chooser used to get wrong.
-   *
-   * A client who picked «إدارة الحملات» was shown a password field their account has never had.
-   * Nobody picks anything now, and the code step is reached because the SERVER said so.
-   */
-  it('shows the code step for an account that signs in by one-time code', async () => {
-    signOut()
-    mockedMethod.mockResolvedValue({ method: 'code', channel: 'email' })
-    mockedStart.mockResolvedValue({ verification_id: 'v1', dev_code: null } as never)
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
-
-    identifyAs('client@example.test')
-
-    await waitFor(() => expect(screen.getByTestId('login-code')).toBeInTheDocument())
-    expect(screen.queryByTestId('login-password')).not.toBeInTheDocument()
-    expect(mockedStart).toHaveBeenCalledWith('email', 'client@example.test')
+    expect(screen.getByLabelText('البريد الإلكتروني')).toBeInTheDocument()
+    expect(screen.getByLabelText('كلمة المرور')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'نسيت كلمة المرور؟' })).toHaveAttribute('href', '/forgot-password')
+    expect(screen.getByTestId('login-request-code')).toBeInTheDocument()
+    expect(screen.getByText('دخول آمن ومشفّر لحماية بياناتك')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'إنشاء حساب' })).toHaveAttribute('href', '/register')
   })
 
   /**
-   * The rule the whole task turns on: the browser never states a portal.
+   * The rule the whole page turns on: the browser never states a portal.
    *
    * `portal: null` is what makes the sign-in URL grant nothing — the server has no preference to
    * honour, so it picks the destination from real memberships alone.
@@ -124,7 +108,7 @@ describe('LoginPage — one door (LOGIN-UNIFIED-001)', () => {
     vi.mocked(login).mockResolvedValue({ id: '1', name: 'X', email: 'x@y.z' } as never)
     renderWithProviders(<LoginPage />, { route: '/login?portal=admin', locale: 'en' })
 
-    await reachPasswordStep()
+    typeEmail('owner@demo-agency.local')
     fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
     fireEvent.click(screen.getByRole('button', { name: /Sign in/i }))
 
@@ -133,29 +117,15 @@ describe('LoginPage — one door (LOGIN-UNIFIED-001)', () => {
   })
 
   /**
-   * "Keep me signed in" drives `Auth::login($user, $remember)` on the server. Holding it in local
-   * state and never sending it would make the checkbox decorative, so the payload is asserted.
+   * «تذكرني» drives `Auth::login($user, $remember)` on the server. Holding it in local state and
+   * never sending it would make the checkbox decorative, so the payload is asserted both ways.
    */
-  it('sends the remember flag with the credentials', async () => {
+  it('sends the remember flag exactly as the box was left', async () => {
     signOut()
     vi.mocked(login).mockResolvedValue({ id: '1', name: 'T', email: 't@t.dev' } as never)
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 
-    await reachPasswordStep('t@t.dev')
-    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
-    fireEvent.click(screen.getByRole('button', { name: /Sign in/i }))
-
-    await waitFor(() => expect(login).toHaveBeenCalled())
-    expect(vi.mocked(login).mock.calls[0]![0]).toEqual({ email: 't@t.dev', password: 'secret123', remember: true, portal: null })
-  })
-
-  it('sends remember: false once the box is cleared', async () => {
-    signOut()
-    vi.mocked(login).mockResolvedValue({ id: '1', name: 'T', email: 't@t.dev' } as never)
-    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
-
-    await reachPasswordStep('t@t.dev')
-    fireEvent.click(screen.getByRole('checkbox'))
+    typeEmail('t@t.dev')
     fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
     fireEvent.click(screen.getByRole('button', { name: /Sign in/i }))
 
@@ -163,34 +133,194 @@ describe('LoginPage — one door (LOGIN-UNIFIED-001)', () => {
     expect(vi.mocked(login).mock.calls[0]![0]).toEqual({ email: 't@t.dev', password: 'secret123', remember: false, portal: null })
   })
 
+  it('sends remember: true once the box is ticked', async () => {
+    signOut()
+    vi.mocked(login).mockResolvedValue({ id: '1', name: 'T', email: 't@t.dev' } as never)
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    typeEmail('t@t.dev')
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
+    fireEvent.click(screen.getByRole('button', { name: /Sign in/i }))
+
+    await waitFor(() => expect(login).toHaveBeenCalled())
+    expect(vi.mocked(login).mock.calls[0]![0]).toMatchObject({ remember: true })
+  })
+
+  /** The password is masked until somebody asks for it, and the toggle is labelled both ways. */
+  it('reveals and re-hides the password on request', () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    const field = screen.getByLabelText(/^Password/i)
+    expect(field).toHaveAttribute('type', 'password')
+
+    fireEvent.click(screen.getByRole('button', { name: /Show password/i }))
+    expect(field).toHaveAttribute('type', 'text')
+
+    fireEvent.click(screen.getByRole('button', { name: /Hide password/i }))
+    expect(field).toHaveAttribute('type', 'password')
+  })
+})
+
+/**
+ * «أو الدخول بدون كلمة مرور» — the second route out of the same card.
+ */
+describe('LoginPage — the code route', () => {
+  afterEach(() => { signOut(); vi.clearAllMocks() })
+
+  it('sends the code through the platform engine and shows the code step', async () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    await reachCodeStep('owner@demo-agency.local')
+
+    expect(mockedEmailStart).toHaveBeenCalledWith('owner@demo-agency.local')
+    expect(screen.getByTestId('login-otp')).toBeInTheDocument()
+    expect(screen.getByTestId('login-code-destination')).toHaveTextContent('owner@demo-agency.local')
+  })
+
+  /** A code has to go somewhere. Asked for with an empty field, this says so instead of failing. */
+  it('asks for the address before it asks the server for anything', () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    fireEvent.click(screen.getByTestId('login-request-code'))
+
+    expect(mockedMethod).not.toHaveBeenCalled()
+    expect(screen.getByText(/Enter your email address first/i)).toBeInTheDocument()
+  })
+
+  /**
+   * A client contact reaches the SAME step through a different engine.
+   *
+   * `portalLoginStart` opens a portal session for a contact; `emailCodeStart` opens a platform
+   * session for a user. Using the portal's for a platform account would sign them into `/portal`,
+   * where they hold nothing, and the page would look like it had worked.
+   */
+  it('routes a client contact through the portal engine, not the platform one', async () => {
+    signOut()
+    mockedMethod.mockResolvedValue({ method: 'code', channel: 'email' })
+    mockedPortalStart.mockResolvedValue({ verification_id: 'v1', dev_code: null } as never)
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    typeEmail('client@example.test')
+    fireEvent.click(screen.getByTestId('login-request-code'))
+
+    await waitFor(() => expect(screen.getByTestId('login-code')).toBeInTheDocument())
+    expect(mockedPortalStart).toHaveBeenCalledWith('email', 'client@example.test')
+    expect(mockedEmailStart).not.toHaveBeenCalled()
+  })
+
+  /**
+   * Honest about delivery.
+   *
+   * `awaiting_provider_credentials` means no mail provider is configured and NOTHING was sent.
+   * Saying «check your inbox» over that would be the product claiming a message it never made.
+   */
+  it('says plainly when no code was actually sent', async () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    await reachCodeStep('owner@demo-agency.local', {
+      verification_id: 'v1', delivery_status: 'awaiting_provider_credentials', resend_after: 60, dev_code: null,
+    })
+
+    expect(screen.getByTestId('login-code-undelivered')).toBeInTheDocument()
+  })
+
+  it('does not warn about delivery when the code was queued', async () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    await reachCodeStep()
+    expect(screen.queryByTestId('login-code-undelivered')).not.toBeInTheDocument()
+  })
+
+  /**
+   * The resend is closed while the cooldown runs.
+   *
+   * The countdown is a courtesy — the server enforces the same window — but a button that can be
+   * pressed every second while the server refuses is a control that lies about what it does.
+   */
+  it('closes the resend until the cooldown has run', async () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    await reachCodeStep()
+    await waitFor(() => expect(screen.getByTestId('login-resend')).toBeDisabled())
+    // Latin digits, in both languages — the platform rule, and a countdown is a number.
+    expect(screen.getByTestId('login-resend')).toHaveTextContent(/\d+/)
+  })
+
+  it('will not submit a partial code', async () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    await reachCodeStep()
+
+    const submit = screen.getByTestId('login-code').querySelector('button[type="submit"]')!
+    expect(submit).toBeDisabled()
+
+    fireEvent.change(screen.getByTestId('login-otp-0'), { target: { value: '123456' } })
+    await waitFor(() => expect(submit).not.toBeDisabled())
+  })
+
+  it('verifies the code it was given', async () => {
+    signOut()
+    vi.mocked(emailCodeVerify).mockResolvedValue({ id: '1', name: 'X', email: 'x@y.z' } as never)
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    await reachCodeStep('owner@demo-agency.local')
+    fireEvent.change(screen.getByTestId('login-otp-0'), { target: { value: '424242' } })
+
+    await waitFor(() => expect(emailCodeVerify).toHaveBeenCalledWith('v1', '424242', false))
+  })
+
   /**
    * A mistyped address must be correctable without a reload.
    *
-   * Step two hides the field it came from, so without this the only signal of a wrong address is a
-   * password failure — which sends people looking for the wrong problem entirely.
+   * The code step hides the field it came from, so without this the only signal of a wrong address
+   * is a code that never arrives — which sends people looking for the wrong problem entirely.
    */
-  it('lets somebody go back and use a different account', async () => {
+  it('lets somebody go back and use a different address', async () => {
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 
-    await reachPasswordStep('typo@demo-agency.local')
+    await reachCodeStep('typo@demo-agency.local')
     fireEvent.click(screen.getByTestId('login-change-identifier'))
 
     expect(screen.getByTestId('login-identify')).toBeInTheDocument()
-    expect(screen.queryByTestId('login-password')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('login-code')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * LOGIN-HELP-001 — «تحتاج مساعدة في البدء؟», answered without leaving the page.
+ *
+ * It is a detour, not a journey: opening it must not cost the URL somebody arrived on, and it must
+ * not be mistakable for a second way to sign up.
+ */
+describe('LoginPage — the help route', () => {
+  afterEach(() => { signOut(); vi.clearAllMocks() })
+
+  it('opens in place, over a card that is still standing', () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'ar' })
+
+    fireEvent.click(screen.getByTestId('login-help-open'))
+
+    expect(screen.getByTestId('login-help-form')).toBeInTheDocument()
+    expect(screen.getByText('كيف يمكننا مساعدتك؟')).toBeInTheDocument()
+    expect(screen.getByTestId('login-identify')).toBeInTheDocument()
   })
 
-  /** Zero dead links: every secondary action points at a route that exists. */
-  it('links forgot-password and create-account to real routes', async () => {
+  it('is not offered beside a code that is already on its way', async () => {
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 
-    expect(screen.getByRole('link', { name: /Create an account/i })).toHaveAttribute('href', '/register')
-
-    // «نسيت كلمة المرور» belongs to the password step — it is meaningless before the server has said
-    // this account even has one.
-    await reachPasswordStep()
-    expect(screen.getByRole('link', { name: /Forgot/i })).toHaveAttribute('href', '/forgot-password')
+    await reachCodeStep()
+    expect(screen.queryByTestId('login-help-open')).not.toBeInTheDocument()
   })
 })
 
@@ -200,8 +330,7 @@ describe('LoginPage — one door (LOGIN-UNIFIED-001)', () => {
  * A dev-only block used to list two demo accounts under the form, with the shared password beside
  * them. It was honest about being development-only and it still had to go: it taught the page's
  * shape to everyone who saw a screenshot, and «حسابات تجريبية» under a sign-in box is the first
- * thing a reviewer reads as "this is not finished". The demo accounts still exist and are still
- * seeded — they are simply not advertised on the door.
+ * thing a reviewer reads as "this is not finished".
  */
 describe('LoginPage — nothing secret is printed on the page', () => {
   afterEach(() => { signOut(); localStorage.clear() })

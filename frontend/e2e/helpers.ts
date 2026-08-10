@@ -305,6 +305,29 @@ export async function seededProject(request: APIRequestContext, name: string): P
 }
 
 /**
+ * Open `/login`, optionally asking for the DEV-only mobile form (LOGIN-CARD-001).
+ *
+ * The address and the password are on the production card, so nothing is needed to reach them. The
+ * mobile path is not on it, and `?e2e=phone` re-exposes that one form — ONLY under
+ * `import.meta.env.DEV`, so it cannot exist in a production build.
+ *
+ * The parameter is appended rather than replacing the URL, because several specs arrive here as
+ * `/login?redirect=%2Fapp%2Freports` after being bounced off a guarded page, and that parameter
+ * surviving the sign-in IS what those tests are about.
+ */
+async function openLogin(page: Page, form?: 'phone'): Promise<void> {
+  const current = new URL(page.url())
+  const here = /\/login(\?|$)/.test(current.pathname + current.search)
+
+  const target = new URL(here ? current.href : new URL('/login', current.origin).href)
+  if (form) target.searchParams.set('e2e', form)
+
+  if (!here || (form && current.searchParams.get('e2e') !== form)) {
+    await page.goto(target.pathname + target.search)
+  }
+}
+
+/**
  * Sign in through the one door there is (LOGIN-UNIFIED-001).
  *
  * `/login` is two steps now: the identifier, then whichever form the SERVER says that account uses.
@@ -324,19 +347,16 @@ export async function signIn(page: Page, email: string, password = 'password'): 
    * always did `goto('/login')` would quietly throw that parameter away and the assertion would then
    * be checking a journey nobody takes.
    */
-  if (!/\/login(\?|$)/.test(new URL(page.url()).pathname + new URL(page.url()).search)) {
-    await page.goto('/login')
-  }
-  await page.getByTestId('login-identify').locator('input').fill(email)
-  await page.getByTestId('login-identify').locator('button[type="submit"]').click()
+  await openLogin(page)
 
   await expect(
-    page.getByTestId('login-password'),
-    `${email} was not offered a password step — the server says it signs in another way`,
+    page.getByTestId('login-identify'),
+    'the sign-in card never rendered',
   ).toBeVisible({ timeout: 20_000 })
 
+  await page.getByTestId('login-email').fill(email)
   await page.getByTestId('login-password').locator('input[type="password"]').fill(password)
-  await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()
+  await page.getByTestId('login-identify').locator('button[type="submit"]').click()
 }
 
 /**
@@ -350,11 +370,9 @@ export async function signIn(page: Page, email: string, password = 'password'): 
  * immediately, and submitting before `POST /client/login/start` has answered sends an empty code.
  */
 export async function signInWithCode(page: Page, contact: string): Promise<void> {
-  if (!/\/login(\?|$)/.test(new URL(page.url()).pathname + new URL(page.url()).search)) {
-    await page.goto('/login')
-  }
-  await page.getByTestId('login-identify').locator('input').fill(contact)
-  await page.getByTestId('login-identify').locator('button[type="submit"]').click()
+  await openLogin(page)
+  await page.getByTestId('login-email').fill(contact)
+  await page.getByTestId('login-request-code').click()
 
   const form = page.getByTestId('login-code')
   await expect(
@@ -362,7 +380,7 @@ export async function signInWithCode(page: Page, contact: string): Promise<void>
     `${contact} was not offered a code step — the server says it signs in another way`,
   ).toBeVisible({ timeout: 20_000 })
 
-  const field = form.locator('input[autocomplete="one-time-code"]')
+  const field = form.getByTestId('login-otp-5')
   await expect(field, 'the issued code never arrived, so there is nothing to submit').not.toHaveValue('', { timeout: 20_000 })
   await form.locator('button[type="submit"]').click()
 }
@@ -455,18 +473,15 @@ export function aFreshSaudiNumber(): string {
  * SMS provider.
  */
 export async function signInWithPhone(page: Page, phone: string): Promise<void> {
-  if (!/\/login(\?|$)/.test(new URL(page.url()).pathname + new URL(page.url()).search)) {
-    await page.goto('/login')
-  }
+  await openLogin(page, 'phone')
 
-  await page.getByTestId('login-path-phone').click()
   await page.getByTestId('login-phone-number').fill(phone)
   await page.getByTestId('login-phone').locator('button[type="submit"]').click()
 
   const form = page.getByTestId('login-code')
   await expect(form, `${phone} was not offered a code step`).toBeVisible({ timeout: 20_000 })
 
-  const field = form.locator('input[autocomplete="one-time-code"]')
+  const field = form.getByTestId('login-otp-5')
   await expect(field, 'the issued code never arrived, so there is nothing to submit').not.toHaveValue('', { timeout: 20_000 })
   await form.locator('button[type="submit"]').click()
 }

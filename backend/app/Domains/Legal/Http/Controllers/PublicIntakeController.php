@@ -55,16 +55,42 @@ final class PublicIntakeController extends Controller
     {
         $this->refuseBots($request);
 
+        /*
+         * LOGIN-HELP-001 — a closed `topic` may stand in for the open `subject` and `message`.
+         *
+         * The «تواصل معنا» panel on `/login` asks which of five things the sender needs and leaves
+         * the details optional, because insisting on ten characters of prose from somebody who has
+         * already told us exactly what they want is a form arguing with its own question. The
+         * long-form contact page is unchanged: with no topic, both fields stay required.
+         */
+        $hasTopic = filled($request->input('topic'));
+
         $data = $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:160'],
             'email' => ['required', 'email', 'max:160'],
             'phone' => ['nullable', 'string', 'max:40'],
             'company' => ['nullable', 'string', 'max:160'],
-            'subject' => ['required', 'string', 'min:2', 'max:200'],
-            'message' => ['required', 'string', 'min:10', 'max:5000'],
+            'topic' => ['nullable', Rule::in(ContactMessage::TOPICS)],
+            'source' => ['nullable', Rule::in(ContactMessage::SOURCES)],
+            'subject' => $hasTopic
+                ? ['nullable', 'string', 'max:200']
+                : ['required', 'string', 'min:2', 'max:200'],
+            'message' => $hasTopic
+                ? ['nullable', 'string', 'max:5000']
+                : ['required', 'string', 'min:10', 'max:5000'],
         ]);
 
-        ContactMessage::create([...$data, ...$this->trace($request)]);
+        $topic = $data['topic'] ?? null;
+        $standIn = $topic === null ? null : ContactMessage::subjectForTopic($topic);
+
+        ContactMessage::create([
+            ...$data,
+            // A topic with no prose still has to read as a message when a human opens the queue.
+            'subject' => filled($data['subject'] ?? null) ? $data['subject'] : $standIn,
+            'message' => filled($data['message'] ?? null) ? $data['message'] : $standIn,
+            'source' => $data['source'] ?? 'contact_page',
+            ...$this->trace($request),
+        ]);
 
         /*
          * No reference is returned, deliberately.

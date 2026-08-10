@@ -29,7 +29,7 @@ test.describe('auth visual regression @visual', () => {
   }
 })
 
-test('login: keyboard-only navigation reaches email, password and submit', async ({ page }) => {
+test('login: keyboard-only navigation reaches the address, the code and submit', async ({ page }) => {
   const errors: string[] = []
   page.on('console', (m) => {
     if (m.type() !== 'error') return
@@ -41,24 +41,41 @@ test('login: keyboard-only navigation reaches email, password and submit', async
 
   await page.goto('/login')
   /*
-   * Tab into the form and type — focus must land on real inputs, in order.
+   * Type into the card and then into the code step — focus must land on real inputs, in order.
    *
-   * Two steps now (LOGIN-UNIFIED-001): the identifier field takes an email OR a phone, so it is no
-   * longer `input[type=email]`, and the password field does not exist until the server has said this
-   * account has one.
+   * Both credentials are on one card (LOGIN-CARD-001); the code step is a second state of the same
+   * space, reached by asking for a code, so it is reached here by asking for one.
    */
-  const identifier = page.getByTestId('login-identify').locator('input')
+  const identifier = page.getByTestId('login-email')
   await identifier.focus()
   await page.keyboard.type('owner@demo-agency.local')
   await expect(identifier).toHaveValue('owner@demo-agency.local')
-
-  await page.getByTestId('login-identify').locator('button[type="submit"]').click()
-  await expect(page.getByTestId('login-password')).toBeVisible({ timeout: 20_000 })
 
   const pw = page.getByTestId('login-password').locator('input[type="password"]')
   await pw.focus()
   await page.keyboard.type('password')
   await expect(pw).toHaveValue('password')
+
+  await page.getByTestId('login-request-code').click()
+  await expect(page.getByTestId('login-code')).toBeVisible({ timeout: 20_000 })
+
+  /*
+   * Typing into the first box fills it and moves on, which is the whole point of six boxes.
+   *
+   * The field is cleared first: outside production the page pre-fills the issued code (`dev_code`,
+   * hard-gated server-side), and typing on top of a full code would be typing into a seventh box.
+   */
+  const first = page.getByTestId('login-otp-0')
+  await expect(first).not.toHaveValue('', { timeout: 20_000 })
+
+  for (let i = 0; i < 6; i++) {
+    await page.getByTestId(`login-otp-${5 - i}`).focus()
+    await page.keyboard.press('Backspace')
+  }
+
+  await first.focus()
+  await page.keyboard.type('123456')
+  await expect(page.getByTestId('login-otp-5')).toHaveValue('6')
 
   // No console errors while rendering + interacting with the login page.
   expect(errors, errors.join('\n')).toHaveLength(0)

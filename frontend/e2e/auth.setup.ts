@@ -33,13 +33,12 @@ for (const role of ROLES) {
      * than like a form that has changed shape.
      */
     await page.goto('/login')
-    await page.getByTestId('login-identify').locator('input').fill(role.email)
-    await page.getByTestId('login-identify').locator('button[type="submit"]').click()
+    await page.getByTestId('login-email').fill(role.email)
 
     await expect(
       page.getByTestId('login-password'),
-      `${role.email} was not offered a password step — the server said it signs in another way`,
-    ).toBeVisible({ timeout: 30_000 })
+      'the sign-in card never rendered its password field',
+    ).toBeVisible({ timeout: 20_000 })
     await page.getByTestId('login-password').locator('input[type="password"]').fill('password')
 
     /*

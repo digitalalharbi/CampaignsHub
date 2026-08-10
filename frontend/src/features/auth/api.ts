@@ -64,6 +64,36 @@ export async function phoneSignInVerify(verificationId: string, code: string, re
   return user
 }
 
+/**
+ * LOGIN-OTP-001 — the email code, which is the whole of the production sign-in.
+ *
+ * The email twin of the phone pair above, and separate from the client portal's OTP for the same
+ * reason: those open a PORTAL session for a contact, so a platform user signing in through them
+ * would land in `/portal`, hold nothing there, and see a page that looked like it had worked.
+ *
+ * `delivery_status` is not decoration. `awaiting_provider_credentials` means no mail provider is
+ * configured and NOTHING was sent — the page must not say «check your inbox» as though something
+ * were on its way.
+ */
+export async function emailCodeStart(email: string): Promise<{
+  verification_id: string
+  delivery_status: string
+  resend_after: number
+  dev_code: string | null
+}> {
+  await ensureCsrfCookie()
+  return postData('/auth/email-code/start', { email })
+}
+
+export async function emailCodeVerify(verificationId: string, code: string, remember: boolean): Promise<AuthUser> {
+  await ensureCsrfCookie()
+  const { user } = await postData<{ user: AuthUser }>('/auth/email-code/verify', {
+    verification_id: verificationId, code, remember,
+  })
+
+  return user
+}
+
 export async function signInMethod(identifier: string): Promise<{ method: 'password' | 'code'; channel: 'email' | 'sms' }> {
   await ensureCsrfCookie()
   return postData<{ method: 'password' | 'code'; channel: 'email' | 'sms' }>('/auth/method', { identifier })

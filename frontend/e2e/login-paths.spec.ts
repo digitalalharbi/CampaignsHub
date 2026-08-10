@@ -2,46 +2,52 @@ import { expect, test } from '@playwright/test'
 import { aFreshSaudiNumber, csrfHeaders, signInWithPhone, switchToEnglish } from './helpers'
 
 /**
- * LOGIN-PATHS-001 + PHONE-SA-001 — two ways in, and a phone field that speaks this market's language.
+ * LOGIN-OTP-001 + PHONE-SA-001 — one production door, and a phone field that speaks this market's
+ * language behind the DEV-only compatibility escape.
  *
- * The claims under test are not cosmetic. Choosing between an address and a number is choosing which
- * CREDENTIAL you hold, and it must not become a way to choose a portal; and `05…`, `9665…` and
- * `+9665…` must be one account rather than three, which is only true if the reading happens on the
- * server — a browser-side tidy-up would be undone by the first hand-written payload.
+ * The claims under test are not cosmetic. The production page offers exactly one credential — an
+ * address and a code — and nothing on it may become a way to choose a portal; and `05…`, `9665…`
+ * and `+9665…` must be one account rather than three, which is only true if the reading happens on
+ * the server, since a browser-side tidy-up is undone by the first hand-written payload.
  */
 test.use({ storageState: { cookies: [], origins: [] } })
 
-test.describe('the sign-in box offers two paths and no portal', () => {
-  test('both paths are offered, and neither is a portal', async ({ page }) => {
+test.describe('the sign-in box offers one door', () => {
+  test('one credential is asked for, and it is not a portal', async ({ page }) => {
     await page.goto('/login')
     await switchToEnglish(page)
 
-    await expect(page.getByTestId('login-paths')).toBeVisible()
-    await expect(page.getByTestId('login-path-email')).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByTestId('login-path-phone')).toHaveAttribute('aria-selected', 'false')
+    await expect(page.getByTestId('login-identify')).toBeVisible()
 
-    // The portal chooser stays gone (LOGIN-UNIFIED-001) — a method is not a portal.
+    // The portal chooser stays gone (LOGIN-UNIFIED-001), and so does the method chooser.
     for (const key of ['default', 'agency', 'client', 'influencer', 'admin']) {
       await expect(page.getByTestId(`login-portal-${key}`)).toHaveCount(0)
     }
+    await expect(page.getByTestId('login-paths')).toHaveCount(0)
+    await expect(page.getByTestId('login-path-phone')).toHaveCount(0)
   })
 
-  test('switching to the phone path replaces the form rather than adding to it', async ({ page }) => {
+  /**
+   * The card carries both routes, and no third-party button (LOGIN-CARD-001).
+   *
+   * The absence half matters as much as the presence half: a social button here would hand a fifth
+   * party the ability to decide who gets into this product, and none of them is configured.
+   */
+  test('the card carries both routes, and no social button', async ({ page }) => {
     await page.goto('/login')
+    await switchToEnglish(page)
 
-    await page.getByTestId('login-path-phone').click()
-    await expect(page.getByTestId('login-phone')).toBeVisible()
-    await expect(page.getByTestId('login-identify')).toHaveCount(0)
+    await expect(page.getByTestId('login-email')).toBeVisible()
+    await expect(page.getByTestId('login-password').locator('input[type="password"]')).toBeVisible()
+    await expect(page.getByTestId('login-request-code')).toBeVisible()
+    await expect(page.getByRole('link', { name: /Forgot/i })).toBeVisible()
 
-    await page.getByTestId('login-path-email').click()
-    await expect(page.getByTestId('login-identify')).toBeVisible()
-    await expect(page.getByTestId('login-phone')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Google|Apple|WhatsApp/i })).toHaveCount(0)
   })
 
   /** Saudi Arabia is the default and needs no typing — the brief's first phone requirement. */
   test('the country opens on +966 and offers others', async ({ page }) => {
-    await page.goto('/login')
-    await page.getByTestId('login-path-phone').click()
+    await page.goto('/login?e2e=phone')
 
     const dial = page.getByTestId('login-phone-number-dial-code')
     await expect(dial).toHaveValue('966')
@@ -53,9 +59,8 @@ test.describe('the sign-in box offers two paths and no portal', () => {
   })
 
   test('a number it cannot read is refused before anything is sent', async ({ page }) => {
-    await page.goto('/login')
+    await page.goto('/login?e2e=phone')
     await switchToEnglish(page)
-    await page.getByTestId('login-path-phone').click()
 
     await page.getByTestId('login-phone-number').fill('not a phone')
     await page.getByTestId('login-phone').locator('button[type="submit"]').click()
@@ -122,9 +127,8 @@ test.describe('signing in with a mobile number', () => {
    * have accounts here; signing them in would be worse still.
    */
   test('a number nobody holds is answered the same way, and signs nobody in', async ({ page }) => {
-    await page.goto('/login')
+    await page.goto('/login?e2e=phone')
     await switchToEnglish(page)
-    await page.getByTestId('login-path-phone').click()
 
     await page.getByTestId('login-phone-number').fill('0500000001')
     await page.getByTestId('login-phone').locator('button[type="submit"]').click()

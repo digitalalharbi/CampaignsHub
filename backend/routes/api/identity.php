@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Accounts\Http\Controllers\RegistrationController;
 use App\Domains\Identity\Http\Controllers\AuthController;
+use App\Domains\Identity\Http\Controllers\EmailSignInController;
 use App\Domains\Identity\Http\Controllers\EmailVerificationController;
 use App\Domains\Identity\Http\Controllers\InvitationController;
 use App\Domains\Identity\Http\Controllers\MeController;
@@ -74,6 +75,18 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
     Route::post('/phone/start', [PhoneSignInController::class, 'start'])->name('phone.start')
         ->middleware('throttle:otp-request');
     Route::post('/phone/verify', [PhoneSignInController::class, 'verify'])->name('phone.verify')
+        ->middleware('throttle:otp-check');
+
+    /*
+     * LOGIN-OTP-001 — the email path, which is the whole of the production sign-in UI.
+     *
+     * Throttled exactly like the phone pair, and for the same reason: `start` answers identically
+     * for an address nobody holds, which is the property that keeps it from being a directory of
+     * who has an account here, and the throttle is what bounds the cost of that answer.
+     */
+    Route::post('/email-code/start', [EmailSignInController::class, 'start'])->name('email-code.start')
+        ->middleware('throttle:otp-request');
+    Route::post('/email-code/verify', [EmailSignInController::class, 'verify'])->name('email-code.verify')
         ->middleware('throttle:otp-check');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password')
         ->middleware('throttle:6,1');

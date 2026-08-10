@@ -9,13 +9,33 @@ import { postData } from '@/lib/api/client'
  * both are things the sender is entitled to follow up on.
  */
 
+/**
+ * LOGIN-HELP-001 — the five things people actually write in about.
+ *
+ * A closed list, because the point is to be able to GROUP them: «choosing a plan» and «connecting
+ * accounts» go to different people, and a free-text subject cannot be routed. `other` keeps the list
+ * from ever forcing a wrong answer.
+ */
+export type ContactTopic =
+  | 'own_campaigns'
+  | 'multi_client_campaigns'
+  | 'plan_choice'
+  | 'connect_accounts'
+  | 'other'
+
+/** Where the panel was opened from — a triage hint for the operator, not a claim about the sender. */
+export type ContactSource = 'login' | 'contact_page' | 'pricing' | 'other'
+
 export interface ContactPayload {
   name: string
   email: string
   phone?: string
   company?: string
-  subject: string
-  message: string
+  /** With a topic, `subject` and `message` become optional — the server fills them from it. */
+  topic?: ContactTopic
+  source?: ContactSource
+  subject?: string
+  message?: string
   /** Honeypot — left empty by people, filled by bots. */
   website?: string
 }

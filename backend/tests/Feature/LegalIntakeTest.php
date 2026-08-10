@@ -305,4 +305,115 @@ final class LegalIntakeTest extends TestCase
 
         return $user;
     }
+
+    // ── LOGIN-HELP-001: the «تواصل معنا» panel on /login ───────────────────────────────────────
+
+    /**
+     * A topic stands in for the two long-form fields.
+     *
+     * The panel on the sign-in page asks which of five things somebody needs and leaves the details
+     * optional — insisting on ten characters of prose from a person who has already said exactly what
+     * they want is a form arguing with its own question.
+     */
+    public function test_a_topic_may_stand_in_for_the_subject_and_the_message(): void
+    {
+        $this->postJson('/api/v1/contact', [
+            'name' => 'سارة',
+            'email' => 'sara@example.test',
+            'topic' => 'plan_choice',
+            'source' => 'login',
+        ])->assertOk()->assertJsonPath('data.received', true);
+
+        $row = ContactMessage::query()->firstOrFail();
+
+        $this->assertSame('plan_choice', $row->topic);
+        $this->assertSame('login', $row->source);
+        $this->assertSame('مساعدة في اختيار الباقة', $row->subject);
+        $this->assertSame('مساعدة في اختيار الباقة', $row->message);
+        $this->assertSame('new', $row->status);
+        $this->assertNotNull($row->created_at);
+    }
+
+    /** The details, when written, are kept as written — the stand-in is a fallback, not a rewrite. */
+    public function test_written_details_are_kept_and_the_topic_is_kept_beside_them(): void
+    {
+        $this->postJson('/api/v1/contact', [
+            'name' => 'سارة',
+            'email' => 'sara@example.test',
+            'phone' => '0501234567',
+            'topic' => 'connect_accounts',
+            'source' => 'login',
+            'message' => 'لدينا حسابان على سناب ونحتاج ربطهما.',
+        ])->assertOk();
+
+        $row = ContactMessage::query()->firstOrFail();
+
+        $this->assertSame('لدينا حسابان على سناب ونحتاج ربطهما.', $row->message);
+        $this->assertSame('ربط الحسابات والمنصات', $row->subject);
+        $this->assertSame('0501234567', $row->phone);
+    }
+
+    /** The phone is optional, and an absent one is absent rather than an empty string. */
+    public function test_the_phone_is_optional(): void
+    {
+        $this->postJson('/api/v1/contact', [
+            'name' => 'سارة', 'email' => 'sara@example.test', 'topic' => 'own_campaigns',
+        ])->assertOk();
+
+        $this->assertNull(ContactMessage::query()->firstOrFail()->phone);
+    }
+
+    /** An unknown topic is refused rather than stored: an open list cannot be grouped or routed. */
+    public function test_an_unknown_topic_is_refused(): void
+    {
+        $this->postJson('/api/v1/contact', [
+            'name' => 'سارة', 'email' => 'sara@example.test', 'topic' => 'anything_at_all',
+        ])->assertStatus(422)->assertJsonValidationErrors('topic');
+
+        $this->assertSame(0, ContactMessage::query()->count());
+    }
+
+    /** Name and a real address are still required — a topic is not a whole enquiry on its own. */
+    public function test_a_topic_does_not_excuse_the_identity_fields(): void
+    {
+        $this->postJson('/api/v1/contact', ['topic' => 'plan_choice'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['name', 'email']);
+    }
+
+    /**
+     * The long-form contact page is untouched.
+     *
+     * With no topic, both fields stay required exactly as they were — the panel got a shorter form,
+     * the public contact page did not lose its longer one.
+     */
+    public function test_without_a_topic_the_subject_and_message_are_still_required(): void
+    {
+        $this->postJson('/api/v1/contact', [
+            'name' => 'سارة', 'email' => 'sara@example.test',
+        ])->assertStatus(422)->assertJsonValidationErrors(['subject', 'message']);
+    }
+
+    /** The honeypot still refuses a bot that fills every field it finds, topic or no topic. */
+    public function test_the_honeypot_still_refuses_a_bot(): void
+    {
+        $this->postJson('/api/v1/contact', [
+            'name' => 'سارة', 'email' => 'sara@example.test',
+            'topic' => 'plan_choice', 'website' => 'https://spam.example',
+        ])->assertStatus(422);
+
+        $this->assertSame(0, ContactMessage::query()->count());
+    }
+
+    /** Sending the request is not signing up: no user, no tenant, no subscription comes of it. */
+    public function test_sending_the_request_creates_no_account(): void
+    {
+        $before = User::query()->count();
+
+        $this->postJson('/api/v1/contact', [
+            'name' => 'سارة', 'email' => 'sara@example.test', 'topic' => 'own_campaigns', 'source' => 'login',
+        ])->assertOk();
+
+        $this->assertSame($before, User::query()->count());
+    }
 }

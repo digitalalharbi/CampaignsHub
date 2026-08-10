@@ -50,20 +50,14 @@ for (const width of [320, 375, 390]) {
     await page.goto('/login')
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)
     expect(overflow).toBe(false)
-    /*
-     * The form must be reachable at the top (marketing panel is hidden below lg).
-     *
-     * The identifier field is `type="text"`, not `type="email"` — since LOGIN-UNIFIED-001 it accepts
-     * a phone number too, and the server decides what that identifier signs in with. Asserting on
-     * the STEP rather than on an input type keeps this test about the layout it is named for.
-     */
+    // The card must be reachable at the top (the marketing panel is hidden below lg).
     await expect(page.getByTestId('login-identify')).toBeVisible()
-    await expect(page.getByTestId('login-identify').locator('input')).toBeVisible()
+    await expect(page.getByTestId('login-email')).toBeVisible()
 
-    // An empty submit goes nowhere: the identifier is required before the server is asked anything.
+    // An empty submit goes nowhere: both fields are required before the server is asked anything.
     await page.getByTestId('login-identify').locator('button[type="submit"]').click()
     await expect(page).toHaveURL(/\/login/)
-    await expect(page.getByTestId('login-password')).toHaveCount(0)
+    await expect(page.getByTestId('login-code')).toHaveCount(0)
   })
 }
 

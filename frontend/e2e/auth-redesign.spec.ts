@@ -134,9 +134,9 @@ test('the sign-in page offers one message and no portal to choose', async ({ pag
     await expect(page.getByTestId(`login-portal-${key}`)).toHaveCount(0)
   }
 
-  // The identity step, and nothing secret before the server has named the account.
+  // The credentials card, and the one primary action on it.
   await expect(page.getByTestId('login-identify')).toBeVisible()
-  await expect(page.locator('input[type="password"]')).toHaveCount(0)
+  await expect(page.getByTestId('login-email')).toBeVisible()
   await expect(page.locator('button[type="submit"]')).toBeVisible()
 })
 
@@ -222,14 +222,8 @@ test('forgot password and create account both lead somewhere real', async ({ pag
     await expect(page.getByTestId('login-identify')).toBeVisible({ timeout: 20000 })
   }
 
-  /*
-   * «نسيت كلمة المرور» belongs to the PASSWORD step (LOGIN-UNIFIED-001) — it is meaningless before
-   * the server has said this account even has one, so it is reached the way a person reaches it.
-   */
+  /* «نسيت كلمة المرور؟» sits on the card, beside the password it belongs to. */
   await loginReady()
-  await page.getByTestId('login-identify').locator('input').fill('owner@demo-agency.local')
-  await page.getByTestId('login-identify').locator('button[type="submit"]').click()
-  await expect(page.getByTestId('login-password')).toBeVisible({ timeout: 20000 })
   await page.getByRole('link', { name: /Forgot|نسيت/ }).click()
   await expect(page).toHaveURL(/\/forgot-password/)
   await expect(page.locator('input[type="email"]')).toBeVisible()
@@ -248,6 +242,17 @@ test('forgot password and create account both lead somewhere real', async ({ pag
    */
   await loginReady()
   await expect(page.getByRole('link', { name: /Track my requests|متابعة طلباتي/ })).toHaveCount(0)
+
+  /*
+   * The one secondary route this page DOES offer opens in place (LOGIN-HELP-001).
+   *
+   * Asserted here beside the dead-link sweep because it is the same claim in the other direction:
+   * «تواصل معنا» must reach something real, and it must not cost the URL somebody arrived on.
+   */
+  await loginReady()
+  await page.getByTestId('login-help-open').click()
+  await expect(page.getByTestId('login-help-form')).toBeVisible()
+  await expect(page).toHaveURL(/\/login/)
 })
 
 /** The redesign must hold in both writing directions and both themes. */

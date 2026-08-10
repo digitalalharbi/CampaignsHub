@@ -16,6 +16,8 @@ return [
 
     'signed_in' => 'Signed in successfully.',
     'code_sent' => 'A verification code has been sent.',
+    // LOGIN-OTP-001 — the server-side resend window, stated in the same words the countdown uses.
+    'resend_cooldown' => 'Please wait :seconds seconds before requesting another code.',
     'signed_out' => 'Signed out successfully.',
     'current_user' => 'Current user.',
     'token_issued' => 'Token issued successfully.',

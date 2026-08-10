@@ -33,8 +33,7 @@ async function signInAs(page: Page, email: string): Promise<void> {
    */
   // Two steps (LOGIN-UNIFIED-001): identify, then the form the SERVER says this account uses.
   await page.goto('/login')
-  await page.getByTestId('login-identify').locator('input').fill(email)
-  await page.getByTestId('login-identify').locator('button[type="submit"]').click()
+  await page.getByTestId('login-email').fill(email)
   await expect(page.getByTestId('login-password')).toBeVisible({ timeout: 20000 })
   await page.getByTestId('login-password').locator('input[type="password"]').fill('password')
   await page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click()

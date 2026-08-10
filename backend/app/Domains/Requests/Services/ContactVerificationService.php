@@ -20,10 +20,47 @@ final class ContactVerificationService
     /**
      * Start a challenge. Returns the verification id and, in non-prod only, the dev code.
      *
-     * @return array{id: string, channel: string, destination: string, delivery_status: string, dev_code: ?string}
+     * ## `$cooldownSeconds` and `$invalidatePrevious` are opt-in, and that is deliberate
+     *
+     * Both are properties a SIGN-IN credential must have (LOGIN-OTP-001), and neither is safe to
+     * switch on for every caller from here. Registration and the client portal issue codes on their
+     * own schedules and their suites depend on those schedules; turning invalidation on globally
+     * would silently kill a code a second flow had already sent and handed to somebody. The callers
+     * that need the stricter contract ask for it.
+     *
+     * @param  int  $cooldownSeconds  refuse a second code to the same destination inside this window
+     * @param  bool  $invalidatePrevious  expire every live code for this destination+purpose first
+     * @return array{id: string, channel: string, destination: string, delivery_status: string, dev_code: ?string, resend_after: int}
      */
-    public function start(string $channel, string $destination, string $purpose = 'contact_verify', ?string $tenantId = null): array
-    {
+    public function start(
+        string $channel,
+        string $destination,
+        string $purpose = 'contact_verify',
+        ?string $tenantId = null,
+        int $cooldownSeconds = 0,
+        bool $invalidatePrevious = false,
+    ): array {
+        if ($cooldownSeconds > 0) {
+            $this->assertOutOfCooldown($channel, $destination, $purpose, $cooldownSeconds);
+        }
+
+        /*
+         * One live code at a time.
+         *
+         * Without this, asking for a second code leaves the first one working for its whole TTL — so
+         * «that code was not mine, I asked for another» does not actually retire the first, and a
+         * code read off somebody's screen stays a key until it times out on its own.
+         */
+        if ($invalidatePrevious) {
+            ContactVerification::query()
+                ->where('channel', $channel)
+                ->where('destination', $destination)
+                ->where('purpose', $purpose)
+                ->whereNull('consumed_at')
+                ->where('expires_at', '>', Carbon::now())
+                ->update(['expires_at' => Carbon::now()->subSecond()]);
+        }
+
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         $providerOn = (bool) config("requests.verification.providers.{$this->providerKey($channel)}", false);
 
@@ -49,7 +86,42 @@ final class ContactVerificationService
             'destination' => $destination,
             'delivery_status' => $v->delivery_status,
             'dev_code' => self::exposeDevSecrets() ? $code : null,
+            'resend_after' => $cooldownSeconds,
         ];
+    }
+
+    /**
+     * Refuse a second code inside the resend window.
+     *
+     * Enforced on the SERVER because the countdown the visitor sees is a courtesy, not a control: it
+     * lives in a browser tab and disappears the moment somebody posts to the endpoint directly. The
+     * throttle bounds the volume; this bounds the rate to one destination, which is what stops the
+     * sign-in form from being usable as a way to send somebody a message every second.
+     */
+    private function assertOutOfCooldown(string $channel, string $destination, string $purpose, int $cooldownSeconds): void
+    {
+        /** @var ContactVerification|null $recent */
+        $recent = ContactVerification::query()
+            ->where('channel', $channel)
+            ->where('destination', $destination)
+            ->where('purpose', $purpose)
+            ->whereNotNull('last_sent_at')
+            ->orderByDesc('last_sent_at')
+            ->first();
+
+        if ($recent === null || $recent->last_sent_at === null) {
+            return;
+        }
+
+        $elapsed = $recent->last_sent_at->diffInSeconds(Carbon::now());
+
+        if ($elapsed >= $cooldownSeconds) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'destination' => [__('auth.resend_cooldown', ['seconds' => max(1, $cooldownSeconds - (int) $elapsed)])],
+        ]);
     }
 
     /**

@@ -25,15 +25,15 @@ test.describe('the portal chooser is gone', () => {
   })
 
   /**
-   * Nothing secret is asked for until the account is known.
+   * The card asks for credentials; it does not ask for a code nobody has requested.
    *
-   * A password field rendered before the server has said this account HAS a password is the exact
-   * shape of the old defect: a client typing into a field their account has never had.
+   * The code step is reached by ASKING for one, and a six-box field sitting there on arrival would
+   * be a form waiting for something that was never sent.
    */
-  test('asks who you are before it asks for anything secret', async ({ page }) => {
+  test('asks for credentials, and for no code nobody requested', async ({ page }) => {
     await page.goto('/login')
 
-    await expect(page.locator('input[type="password"]')).toHaveCount(0)
+    await expect(page.getByTestId('login-email')).toBeVisible()
     await expect(page.getByTestId('login-code')).toHaveCount(0)
   })
 })
@@ -107,11 +107,11 @@ test.describe('the server picks the portal, not the URL', () => {
 test.describe('the code branch of the same door', () => {
   test('a client contact is offered a code, not a password', async ({ page }) => {
     await page.goto('/login')
-    await page.getByTestId('login-identify').locator('input').fill(DEMO_CLIENT_CONTACT)
-    await page.getByTestId('login-identify').locator('button[type="submit"]').click()
+    await page.getByTestId('login-email').fill(DEMO_CLIENT_CONTACT)
+    await page.getByTestId('login-request-code').click()
 
     await expect(page.getByTestId('login-code')).toBeVisible({ timeout: 20000 })
-    // Not merely "a password field is absent" — the password STEP must never have rendered.
+    // The card it came from is gone, password field and all — one step at a time.
     await expect(page.getByTestId('login-password')).toHaveCount(0)
     await expect(page.locator('input[type="password"]')).toHaveCount(0)
   })
