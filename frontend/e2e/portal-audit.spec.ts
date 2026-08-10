@@ -244,6 +244,22 @@ test.describe('the client portal, in depth', () => {
     const hrefs = await page.getByRole('navigation').first().locator('a[href^="/portal"]')
       .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href')!))])
 
+    /*
+     * Budget the clock to the number of pages opened — the same rule the four other rail walks in
+     * this file already apply, and the only one of the five that was missing it.
+     *
+     * This walk does strictly MORE per page than its sibling above: the same cold load of every
+     * href, plus a language toggle and an `untranslatedChrome` scan of each page. It was
+     * nevertheless left on the default 30s, so on the slowest browser here it ran out of clock at
+     * 32.5s while its lighter sibling finished the identical set of hrefs in 16.1s.
+     *
+     * This is arithmetic, not a hang, and the evidence is that chromium and webkit run this exact
+     * test against the same pages and the same requests and pass. Raising a budget to cover work
+     * that is genuinely being done is not the same act as raising one to wait longer for something
+     * that never arrives.
+     */
+    test.setTimeout(15_000 + hrefs.length * 8_000)
+
     await page.getByRole('button', { name: 'Toggle language' }).first().click()
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr')
 
