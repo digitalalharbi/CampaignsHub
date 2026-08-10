@@ -10,69 +10,84 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-10 (fifth close of the day)
+## ⚠️ START HERE — handoff written 2026-08-10 (sixth close of the day)
 
-**HEAD is `216f217`. Working tree CLEAN.**
+**HEAD is `52a0b47`. Working tree CLEAN.**
 
-### GATE — **GREEN at `216f217`**, run alone on a tree nobody touched while it ran
+### Every suite is green. The three-browser gate has NOT passed in one invocation.
 
 ```
-PASS  chromium  (exit 0)   298 passed  (7.5m)
-PASS  firefox   (exit 0)   290 passed  (13.5m)
-PASS  webkit    (exit 0)   290 passed  (9.8m)
-REAL_GATE_EXIT=0     0 failed · 0 flaky · retries: 0 (config)
+Backend            1905 passed        Pint clean
+Frontend            985 passed        tsc clean · 0 lint errors · production build clean
+chromium ALONE      298 passed (8.4m) exit 0      ← npx playwright test --project=chromium
+gate · firefox      290 passed (14.3m) exit 0
+gate · webkit       290 passed (10.9m) exit 0
+gate · chromium       4 failed, 294 passed (43.6m)
+REAL_GATE_EXIT=1
 ```
 
-Backend **1891 passed**. Frontend **985 passed** across 132 files. tsc · lint · Pint · production
-build all clean.
+**AUTH-PHONE-001 is therefore IMPLEMENTED_NOT_VERIFIED.** Do not record it otherwise until one
+`npm run gate` exits 0.
+
+### The chromium gate leg, and why it is not the code
+
+The same 298 tests, on this exact commit, pass in **8.4 minutes alone** and took **43.6 minutes**
+inside the gate. Two of the four failures individually consumed **17.3** and **14.8 minutes** against
+a 30-second timeout — a test cannot exceed its own budget thirtyfold by failing; the server
+underneath stopped answering. Alongside them: four `Error: Load failed`, and in the run before this
+one, three `502` responses from the Vite proxy during chromium's `setup` project (the proxy could not
+reach Laravel at all — the application never ran).
+
+Firefox and webkit were normal in the very same invocation, and green.
+
+This has now happened **twice across sessions** — an earlier gate showed chromium at 47.3m with 6
+failures while chromium alone passed 287/287 in 9.2m. It is reproducible, it is confined to
+chromium's leg of a multi-leg gate on this machine, and it is **not diagnosed**. Recorded as an open
+question, not closed and not explained away.
+
+**Next session, before anything else:** run `npm run gate` once on a completely idle machine. If
+chromium degrades again, instrument the gate's backend leg — `e2e/run-gate.mjs` redirects `serve`'s
+stdout to a file precisely because Laravel's dev server can stall on a blocked pipe; check whether
+the process is alive and answering `/api/v1/health` throughout, and capture its log for the window
+where a test runs long.
 
 ### Done this session
 
 | Ref | What | State |
 |---|---|---|
-| `PAY-CONFIRM-001` | A Moyasar webhook no longer settles money on its own word — the charge is re-read from `GET /v1/payments/{id}` first | **VERIFIED** |
-| `PAY-TOKEN-001` | `subscription_payment_methods` + `RecurringBilling`: a saved token, and the honest reason a renewal cannot be taken unattended | **READY_FOR_CREDENTIALS** — the mechanism is verified; no Moyasar credentials exist to prove a live token round trip |
+| `PAY-CONFIRM-001` | A Moyasar webhook no longer settles money on its own word | **VERIFIED** at `216f217` |
+| `PAY-TOKEN-001` | Saved card + `RecurringBilling`; honest reason a renewal cannot go unattended | **READY_FOR_CREDENTIALS** |
+| `AUTH-PHONE-001` | A number is a sign-in credential only once proved; confirm flow at `/me/phone` | IMPLEMENTED_NOT_VERIFIED |
+| — | `SocialSignIn.tsx` removed (dead since LOGIN-CARD-001). OAuth endpoints, identities and migrations untouched | IMPLEMENTED_NOT_VERIFIED |
 
-### The next step, precisely
+### Authentication as it now stands
 
-**Switch the renewal sweep onto the saved token.** Everything it needs now exists —
-`RecurringBilling::modeFor()` says whether a subscription can be charged unattended and why not, and
-`PaymentProvider::chargeStoredMethod()` submits the charge.
+Login is Email + Password with «أو الدخول بدون كلمة مرور» → email code beside it. No Google, no
+Apple, no WhatsApp button. WhatsApp is a verification/recovery channel; `GET /me/phone` reports each
+channel's real state so the interface can only offer a WhatsApp sign-in once one is configured —
+`READY_FOR_CREDENTIALS` until then.
 
-What blocks it is one thing, and it is worth doing carefully rather than quickly:
+Still to do on the owner's list: the WhatsApp/phone panel in Account security (backend is complete
+and tested; no UI yet), and optional passkeys, which were explicitly not required.
 
-`SubscriptionCheckout::open()` creates a gateway INVOICE as part of opening a charge. An unattended
-renewal must not create one — a naive «open the charge, then also charge the token» asks the customer
-to pay a page AND takes the money from their card. So `open()` needs a way to be told «record the
-charge, do not create a session», and `chargeDueRenewals()` then reads `modeFor()` and takes the
-unattended path when it says `ready`.
+### Then, in order
 
-Duplicate protection is already in place and needs nothing: `open()` returns the EXISTING payment when
-the idempotency key matches, and the key is derived from what is being charged plus the period — so a
-sweep that runs twice in a day cannot open a second renewal charge.
+1. Switch the renewal sweep onto the saved token. `SubscriptionCheckout::open()` must first be able
+   to skip creating a gateway invoice — the naive version bills the customer twice.
+2. FX / reporting currency: original amount + currency + rate + date + source → SAR.
+3. Integration readiness across the ad platforms and commerce. Close real gaps only.
+4. Production validation, clean install/upgrade path, `/admin` readiness.
+5. Refresh the three handoff documents.
 
-After that, in the order the owner set:
+### Traps recorded
 
-1. FX / reporting currency — original amount + currency + rate + date + source → SAR. No hidden rate.
-2. Integration readiness across Snapchat, TikTok, Meta, Google Ads, X, LinkedIn, Salla, Zid. Do NOT
-   re-verify the adapters; close real gaps only, to `READY_FOR_CREDENTIALS`.
-3. Production environment validation, clean install and upgrade path, `/admin` readiness.
-4. Refresh `PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md`, `INTEGRATION_CREDENTIALS_CHECKLIST.md`.
-
-### Two traps recorded so the next session does not pay for them again
-
-- **Never edit the tree while the gate runs.** A spec file created mid-run was discovered partway
-  through, so the three browsers executed three different suites and the run reported failures that
-  said nothing about the commit.
-- **`Http::fake()` MERGES stubs and the first match wins.** A test settling two charges checked both
-  against the first one's reference and failed as a `reference_mismatch` that looked exactly like a
-  product defect. `ConfirmsGatewayPayments` answers from a property at call time.
-
-### Standing decisions
-
-- `/login` keeps the password as the primary route, Email OTP beside it. No mail provider is
-  configured, so a code-only door would lock every account out.
-- Subscriptions are USD; advertising reporting is SAR. Campaigns are never metered numerically.
+- **Never edit the tree while the gate runs.** A spec created mid-run made three browsers execute
+  three different suites.
+- **`Http::fake()` MERGES stubs; the first match wins.** Two settlements in one test both checked
+  against the first reference and failed as a `reference_mismatch` that looked like a product defect.
+- **`actingAs` sets the guard in the TEST process.** `assertGuest()` after an HTTP call cannot tell
+  «the server refused» from «the harness kept its own state». Assert the status code; prove sessions
+  in the browser.
 
 ## Session — LAUNCH PRICING, plan fit, limits and the signup fit (2026-08-09, late)
 
