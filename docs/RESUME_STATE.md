@@ -12,22 +12,62 @@
 
 ## ⚠️ START HERE — handoff written 2026-08-11
 
-**Working tree CLEAN.** Last CODE commit `c0d44cd`; the gate below ran on the tree at `8b0b04f`
-(commits after it are documentation only). Two units landed on top of the green gate at `4d96f68`:
+**Working tree CLEAN.** Last CODE commit `7130f20`, which is the tree the gate below ran on
+(anything after it is documentation only). Three units landed on top of the green gate at `4d96f68`:
 
 | Ref | What | State |
 |---|---|---|
-| `AUTH-PHONE-002` | The mobile number panel in **personal** Account security — the screen that puts the proof back after `AUTH-PHONE-001` | **VERIFIED** (`d3a54b9` — 14 unit tests + `account-settings` E2E on chromium) |
-| `PAY-TOKEN-002` | A renewal with a card on file is **taken**, not asked for — `SubscriptionCheckout::open()` forks onto the saved token instead of opening a hosted invoice | **READY_FOR_CREDENTIALS** (`c0d44cd` — 7 new tests; no Moyasar credentials exist to prove a live round trip) |
+| `AUTH-PHONE-002` | The mobile number panel in **personal** Account security — the screen that puts the proof back after `AUTH-PHONE-001` | **VERIFIED** (`d3a54b9`) |
+| `PAY-TOKEN-002` | A renewal with a card on file is **taken**, not asked for — `SubscriptionCheckout::open()` forks onto the saved token instead of opening a hosted invoice | **READY_FOR_CREDENTIALS** (`c0d44cd`; no Moyasar credentials exist to prove a live round trip) |
+| `FX-001` | Ad money is converted into the reporting currency at ingest, and a rate nobody can vouch for is refused rather than guessed | **VERIFIED** (`7130f20` — 18 FX tests + 2 endpoint tests) |
 
 ### GATE — **GREEN** on this exact tree, one invocation
 
 ```
-PASS  chromium  (exit 0)   299 passed  (7.6m)
-PASS  firefox   (exit 0)   291 passed  (11.9m)
-PASS  webkit    (exit 0)   291 passed  (9.7m)
+PASS  chromium  (exit 0)   299 passed  (7.4m)
+PASS  firefox   (exit 0)   291 passed  (11.3m)
+PASS  webkit    (exit 0)   291 passed  (9.6m)
 REAL_GATE_EXIT=0     0 failed · 0 flaky · retries: 0 (config)
 ```
+
+Backend **1930 passed** · Frontend **999 passed** · tsc · lint · Pint · production build — all clean.
+
+### FX-001 — what was wrong, and what the fix commits us to
+
+`daily_metrics` has carried `original_currency`, `project_currency`, `original_amount`,
+`converted_amount` and `exchange_rate` since C3.1 and **nothing populated them**:
+`AccountMetricsSyncer::ingest()` built every metric from `value` alone. A USD ad account's spend was
+written as a bare number and summed into a SAR dashboard as though it were riyals. The machinery to
+prevent it also already existed — `currency_rates`, `CurrencyConverter` — with exactly one caller: a
+test.
+
+**Measured, not recalled.** Reproducing the old pass-through makes a window holding $1,000 and
+1,000 SAR total **2,000** where the truth is **4,750**. Every screen was wrong identically, which is
+why nothing ever looked broken.
+
+Four decisions that must not be quietly undone:
+
+1. **Converted once, at ingest.** `value` IS the reporting-currency figure and every read path
+   already sums that column, so the dashboard, analytics, campaigns, funnel, reports and the public
+   links agree by construction. A per-screen conversion would be six chances to differ — and `/r/<token>`
+   has no session to resolve a rate against anyway.
+2. **Fail-closed writes NULL.** Not `0`, which reads as «this campaign spent nothing»; not the
+   unconverted figure, which is the original defect. `SUM` skips nulls, so
+   `/metrics/normalization` returns a **withheld** count and the basis panel draws it — a total short
+   by an unconvertible row looks exactly like a complete one, so silence there is itself a false claim.
+3. **`rate_date` + `rate_source`.** `exchange_rate` alone cannot be audited: the lookup is
+   nearest-on-or-before, so a Saturday converted at Thursday's rate is indistinguishable afterwards.
+4. **`metric_definitions.is_currency` decides what is money.** Impressions are never multiplied by a
+   rate, and a metric catalogued as money later is normalised without anybody editing the loop.
+
+Row mapping now lives in `InsightRowNormaliser`, out of `AccountMetricsSyncer`.
+`AdvertisingConnectorRegistry` is `final`, so testing the mapper previously meant standing up a whole
+connector — which is precisely how this gap survived behind a green suite.
+
+**What FX-001 does NOT include:** a live rate feed. `currency_rates` is populated by nothing
+automatic; rates are rows an operator or a future feed writes. Until one exists, a currency with no
+row converts nothing and says so. Wiring a published source (and deciding which) is the next FX step
+and is a credentials/vendor decision, not a code gap.
 
 Backend **1912 passed** · Frontend **999 passed** · tsc · lint · Pint · production build — all clean.
 Chromium is +1 spec (the new `account-settings` phone journey) and stayed at 7.6m, so `GATE-VITE-001`
@@ -124,15 +164,27 @@ password.
 
 ### Next, in order
 
-1. **WhatsApp/phone panel in Account security.** The backend is complete and tested — `GET /me/phone`
-   returns the number, whether it is confirmed, and each channel's real state; `POST /me/phone/start`
-   and `/confirm` prove it; `DELETE /me/phone` withdraws it. Only the UI is missing. It must not
-   present WhatsApp as a live sign-in method while `channels.whatsapp` is false.
-2. Switch the renewal sweep onto the saved token — `SubscriptionCheckout::open()` must first be able
-   to skip creating a gateway invoice, or the customer is billed twice.
-3. FX / reporting currency: original amount + currency + rate + date + source → SAR.
-4. Integration readiness across the ad platforms and commerce; Salla/Zid end to end.
-5. Unified pipeline/funnel; production environment validation; `/admin` integration readiness.
+Items 1–3 of the previous list are **done** — `AUTH-PHONE-002`, `PAY-TOKEN-002`, `FX-001` above.
+What remains, in the owner's stated priority:
+
+1. **Salla and Zid integration readiness — FIRST.** The bar the owner set: entering credentials
+   later must be *sufficient* to start OAuth → store discovery → project/client binding → initial
+   sync → incremental sync → webhooks → unified pipeline. Review each of these against the existing
+   adapters and close only REAL gaps, to `READY_FOR_CREDENTIALS`: products, orders, customers,
+   revenue, refunds, discounts, abandoned carts, UTM/click IDs, currency + timezone, token refresh,
+   pagination, webhook verification, idempotency, retry/backoff, disconnect/reconnect, last-sync and
+   error surfacing, tenant isolation. Do **not** re-verify adapters that already have tests, and do
+   not claim Live without credentials and a real round trip.
+   *Note for whoever picks this up:* commerce money now has the same question FX-001 just answered
+   for ads — a Salla store selling in USD must not add its revenue to a SAR report unconverted.
+   Check `StoreFunnelService` and the commerce tables against `ReportingCurrency` before calling
+   commerce ready.
+2. **Moyasar** — the remaining half of `PAY-TOKEN-002`: sandbox end-to-end once credentials exist.
+3. Integration readiness across the ad platforms (Snapchat, TikTok, Meta, Google Ads, X, LinkedIn).
+4. Unified pipeline/funnel verification; production environment validation; `/admin` integration
+   readiness.
+5. **An FX rate source.** `currency_rates` is populated by nothing automatic. Deciding the publisher
+   (ECB, a paid feed) and wiring the daily fetch is the last piece of FX and is a vendor decision.
 6. Refresh `PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md`, `INTEGRATION_CREDENTIALS_CHECKLIST.md`.
 
 Passkeys were explicitly optional and are not started.
