@@ -8,6 +8,7 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Identity\Resources\UserResource;
 use App\Models\User;
 use App\Rules\PhoneNumberRule;
+use App\Support\PhoneNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -50,7 +51,31 @@ final class MeController
         ]);
 
         $before = $user->only(array_keys($data));
+
+        /*
+         * Changing the number here does NOT make it a sign-in credential (AUTH-PHONE-001).
+         *
+         * `PhoneSignInController` signs in whoever answers a code sent to `users.phone`, so a number
+         * written straight from a payload would be a way into the account that nobody had proved
+         * they hold. That is not only an attack: somebody fixing a typo could put a stranger's number
+         * on their account, and that stranger — holding their own phone, doing nothing wrong — could
+         * then sign in as them.
+         *
+         * The number is still saved, because it is also a contact detail and people expect to be able
+         * to correct it. What it loses is the proof, until somebody confirms it from Account security.
+         */
+        $numberChanged = array_key_exists('phone', $data)
+            && PhoneNumber::normalise((string) ($data['phone'] ?? '')) !== PhoneNumber::normalise((string) $user->phone);
+
         $user->fill($data)->save();
+
+        if ($numberChanged) {
+            $user->forceFill(['phone_verified_at' => null])->save();
+
+            $this->audit->log('user.phone_unverified', 'user', $user->uuid, null, [
+                'reason' => 'The number was changed from the profile and has not been confirmed.',
+            ]);
+        }
 
         $this->audit->log('user.profile_updated', 'user', $user->uuid, $before, $user->only(array_keys($data)));
 

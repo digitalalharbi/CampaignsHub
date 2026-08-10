@@ -10,6 +10,7 @@ use App\Domains\Identity\Http\Controllers\InvitationController;
 use App\Domains\Identity\Http\Controllers\MeController;
 use App\Domains\Identity\Http\Controllers\OAuthController;
 use App\Domains\Identity\Http\Controllers\OnboardingController;
+use App\Domains\Identity\Http\Controllers\PhoneConfirmationController;
 use App\Domains\Identity\Http\Controllers\PhoneSignInController;
 use App\Domains\Identity\Http\Controllers\UserController;
 use App\Domains\Legal\Http\Controllers\ConsentController;
@@ -175,6 +176,21 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('me')->name('me.')->group(
     Route::get('/', [MeController::class, 'show'])->name('show');
     Route::patch('/profile', [MeController::class, 'updateProfile'])->name('profile.update');
     Route::get('/sessions', [MeController::class, 'sessions'])->name('sessions');
+
+    /*
+     * AUTH-PHONE-001 — proving the mobile number, from Account security.
+     *
+     * A proved number is a SIGN-IN credential, so these carry the same throttles the sign-in code
+     * paths do rather than the gentler profile ones: `otp-request` to send, `otp-check` to answer.
+     * `show` is a read and needs only the general limit.
+     */
+    Route::get('/phone', [PhoneConfirmationController::class, 'show'])->name('phone.show');
+    Route::post('/phone/start', [PhoneConfirmationController::class, 'start'])->name('phone.start')
+        ->middleware('throttle:otp-request');
+    Route::post('/phone/confirm', [PhoneConfirmationController::class, 'confirm'])->name('phone.confirm')
+        ->middleware('throttle:otp-check');
+    Route::delete('/phone', [PhoneConfirmationController::class, 'revoke'])->name('phone.revoke')
+        ->middleware('throttle:6,1');
 
     // Credential-changing actions are rate limited independently of login.
     Route::patch('/password', [MeController::class, 'updatePassword'])->name('password.update')

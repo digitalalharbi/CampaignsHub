@@ -160,10 +160,20 @@ final class ProvisionWorkspace
                 'phone' => $request->phone,
             ]);
 
-            // forceFill, because `email_verified_at` is not mass-assignable — marking an address
-            // verified is not something a payload may do. It was verified during the gated path, and
-            // asking the customer to prove it again after they have paid would be absurd.
-            $user->forceFill(['email_verified_at' => $request->email_verified_at])->save();
+            /*
+             * forceFill, because neither timestamp is mass-assignable — marking a credential proved
+             * is not something a payload may do. Both WERE proved on the gated path: the address by
+             * the email link, the number by the mobile gate (PHONE-VERIFY-001), and asking the
+             * customer to prove either again after they have paid would be absurd.
+             *
+             * The phone timestamp is what makes the number a sign-in credential at all
+             * (AUTH-PHONE-001). A number that arrives any other way — a profile edit, an import —
+             * carries no such proof and cannot open a session until somebody confirms it.
+             */
+            $user->forceFill([
+                'email_verified_at' => $request->email_verified_at,
+                'phone_verified_at' => $request->phone === null ? null : now(),
+            ])->save();
 
             $ownerRole = Role::firstOrCreate(
                 ['tenant_id' => $tenant->id, 'slug' => 'tenant-owner'],

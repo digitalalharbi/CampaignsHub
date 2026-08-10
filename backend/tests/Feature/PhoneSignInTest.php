@@ -42,7 +42,18 @@ final class PhoneSignInTest extends TestCase
     private function userWithPhone(string $e164 = '+966501234567'): User
     {
         $user = User::factory()->create();
-        $user->forceFill(['phone' => $e164, 'email_verified_at' => now()])->save();
+        /*
+         * `phone_verified_at` alongside the number (AUTH-PHONE-001).
+         *
+         * A number is only a sign-in credential once somebody proved they hold it — a bare
+         * `users.phone` is a contact detail. These fixtures stand in for accounts that cleared the
+         * mobile gate at registration, which is exactly what that timestamp records.
+         */
+        $user->forceFill([
+            'phone' => $e164,
+            'phone_verified_at' => now(),
+            'email_verified_at' => now(),
+        ])->save();
 
         return $user->refresh();
     }

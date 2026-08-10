@@ -119,8 +119,24 @@ final class PhoneSignInController extends Controller
 
         $e164 = PhoneNumber::normalise((string) $verification->destination);
 
+        /*
+         * The number must be one somebody PROVED they hold (AUTH-PHONE-001).
+         *
+         * Without `phone_verified_at`, this query matched any number sitting in `users.phone` —
+         * including one typed into a profile and never confirmed. That made a contact detail into a
+         * credential: somebody correcting a typo could put a stranger's number on their account, and
+         * that stranger, holding their own phone and doing nothing wrong, could sign in as them.
+         *
+         * `->oldest()` is deliberate beside it. Two accounts can carry the same number, and «whichever
+         * row the database happened to return» is not an acceptable answer to «whose account is this».
+         * The earliest proof wins, which is stable and explainable.
+         */
         /** @var User|null $user */
-        $user = $e164 === null ? null : User::query()->where('phone', $e164)->first();
+        $user = $e164 === null ? null : User::query()
+            ->where('phone', $e164)
+            ->whereNotNull('phone_verified_at')
+            ->oldest('phone_verified_at')
+            ->first();
 
         if ($user === null) {
             throw ValidationException::withMessages(['code' => [__('auth.failed')]]);
