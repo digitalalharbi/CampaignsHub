@@ -135,7 +135,23 @@ async function payThroughSandbox(page: import('@playwright/test').Page) {
   await expect(page.getByTestId('registration-status')).toHaveAttribute('data-state', 'active', { timeout: 20000 })
 }
 
+/*
+ * The longest walk in this file gets a clock to match it.
+ *
+ * This is arithmetic, not a workaround. The test does a full PAID registration — apply, verify the
+ * address, clear the mobile gate, pick a plan, open a charge, walk a gateway page, wait for the
+ * webhook to provision — then four onboarding steps, a language switch, and finally `page.reload()`,
+ * which re-boots the entire SPA. Its brand-account sibling below skips the client step and does not
+ * reload at all, which is why that one finishes in a third of the time on the same machine.
+ *
+ * On the default 30s it had no headroom: it passed at 10–15s on an idle machine and timed out at 30s
+ * on a loaded one, with the failure snapshot showing the app still mid-boot after the reload rather
+ * than any missing element. A budget that only holds when nothing else is running is a budget that
+ * reports the machine, not the product.
+ */
 test('personal (agency) account: register → onboard → full menu', async ({ page }, testInfo) => {
+  test.setTimeout(90_000)
+
   const tag = `${testInfo.project.name}-${Date.now()}`
   /*
    * «I run campaigns for several clients» — which IS the agency account type, and is sold Agency.
@@ -173,6 +189,9 @@ test('personal (agency) account: register → onboard → full menu', async ({ p
 })
 
 test('company (brand) account: register → onboard → simplified menu, no agency tools', async ({ page }, testInfo) => {
+  // The same paid registration, one step shorter and with no reload — but the same order of work.
+  test.setTimeout(90_000)
+
   const tag = `${testInfo.project.name}-${Date.now()}`
   // A brand runs its own campaigns, so it is the self-managed path with «Brand» as the account type.
   await registerAndVerify(page, `brand.${tag}@example.com`.toLowerCase(), `Brand ${tag}`, {
