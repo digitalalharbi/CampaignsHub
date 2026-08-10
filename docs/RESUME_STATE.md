@@ -10,84 +10,87 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-10 (sixth close of the day)
+## ⚠️ START HERE — handoff written 2026-08-10 (seventh close of the day)
 
-**HEAD is `52a0b47`. Working tree CLEAN.**
+**HEAD is `79158a2`. Working tree CLEAN.**
 
-### Every suite is green. The three-browser gate has NOT passed in one invocation.
+### GATE — **GREEN**, one invocation, frozen tree
 
 ```
-Backend            1905 passed        Pint clean
-Frontend            985 passed        tsc clean · 0 lint errors · production build clean
-chromium ALONE      298 passed (8.4m) exit 0      ← npx playwright test --project=chromium
-gate · firefox      290 passed (14.3m) exit 0
-gate · webkit       290 passed (10.9m) exit 0
-gate · chromium       4 failed, 294 passed (43.6m)
-REAL_GATE_EXIT=1
+PASS  chromium  (exit 0)   298 passed  (8.1m)      ← was 43.6m before GATE-VITE-001
+PASS  firefox   (exit 0)   290 passed  (13.5m)
+PASS  webkit    (exit 0)   290 passed  (10.6m)
+REAL_GATE_EXIT=0     0 failed · 0 flaky · retries: 0 (config)
 ```
 
-**AUTH-PHONE-001 is therefore IMPLEMENTED_NOT_VERIFIED.** Do not record it otherwise until one
-`npm run gate` exits 0.
+Backend **1905 passed** · Frontend **985 passed** · tsc · lint · Pint · production build — all clean.
 
-### The chromium gate leg, and why it is not the code
+### GATE-VITE-001 — the stall, diagnosed and closed
 
-The same 298 tests, on this exact commit, pass in **8.4 minutes alone** and took **43.6 minutes**
-inside the gate. Two of the four failures individually consumed **17.3** and **14.8 minutes** against
-a 30-second timeout — a test cannot exceed its own budget thirtyfold by failing; the server
-underneath stopped answering. Alongside them: four `Error: Load failed`, and in the run before this
-one, three `502` responses from the Vite proxy during chromium's `setup` project (the proxy could not
-reach Laravel at all — the application never ran).
+**Two Vite dev servers were sharing one dependency cache.** The gate runs the tests' own server and
+a second one that exists so the PDF print browser stops pulling the SPA's module graph out from under
+a `page.goto` (GATE-WK-001). Both defaulted to `node_modules/.vite`.
 
-Firefox and webkit were normal in the very same invocation, and green.
+Two Vite processes cannot share that directory. Each runs its own optimizer; when either meets a dep
+it has not pre-bundled it rewrites the cache and bumps the hash every client URL carries. The other
+server's in-flight requests then ask for a `?v=` that no longer exists — the browser reports
+«Load failed», the proxy answers 502, and a navigation waiting on a module being rewritten
+underneath it never fires `load`.
 
-This has now happened **twice across sessions** — an earlier gate showed chromium at 47.3m with 6
-failures while chromium alone passed 287/287 in 9.2m. It is reproducible, it is confined to
-chromium's leg of a multi-leg gate on this machine, and it is **not diagnosed**. Recorded as an open
-question, not closed and not explained away.
+**How it was found, and how Laravel was ruled out:** the degradation was confined to tests 161–182
+and recovered completely afterwards, and one test inside that window —
+`login-paths.spec.ts:61`, which fills an invalid number and expects client-side validation — took
+**17.3 minutes without calling the backend once**. A test that never reaches Laravel cannot take
+seventeen minutes because of Laravel. The login specs navigate on nearly every test, so they are the
+burst of full page loads that trips the race.
 
-**Next session, before anything else:** run `npm run gate` once on a completely idle machine. If
-chromium degrades again, instrument the gate's backend leg — `e2e/run-gate.mjs` redirects `serve`'s
-stdout to a file precisely because Laravel's dev server can stall on a blocked pipe; check whether
-the process is alive and answering `/api/v1/health` throughout, and capture its log for the window
-where a test runs long.
+**The proof:** the second server now gets `VITE_CACHE_DIR`. Same tree otherwise; chromium's leg fell
+from **43.6m to 8.1m** and the gate went green. No retry, no sleep, no raised timeout, no
+browser-specific branch.
 
-### Done this session
+### VERIFIED at `79158a2`
 
-| Ref | What | State |
-|---|---|---|
-| `PAY-CONFIRM-001` | A Moyasar webhook no longer settles money on its own word | **VERIFIED** at `216f217` |
-| `PAY-TOKEN-001` | Saved card + `RecurringBilling`; honest reason a renewal cannot go unattended | **READY_FOR_CREDENTIALS** |
-| `AUTH-PHONE-001` | A number is a sign-in credential only once proved; confirm flow at `/me/phone` | IMPLEMENTED_NOT_VERIFIED |
-| — | `SocialSignIn.tsx` removed (dead since LOGIN-CARD-001). OAuth endpoints, identities and migrations untouched | IMPLEMENTED_NOT_VERIFIED |
+| Ref | What |
+|---|---|
+| `AUTH-PHONE-001` | A mobile number is a sign-in credential only once proved. `phone_verified_at`; a profile edit keeps the number and withdraws the proof; `/me/phone` confirm flow; two accounts on one number resolve by earliest proof |
+| `LOGIN-CARD-001` · `LOGIN-OTP-001` · `LOGIN-E2E-001` · `LOGIN-HELP-001` | The sign-in card, the email code as real authentication, portal routing, the help panel |
+| `PAY-CONFIRM-001` | A Moyasar webhook no longer settles money on its own word |
+| `GATE-VITE-001` | The gate's two dev servers each get their own dependency cache |
 
-### Authentication as it now stands
+`PAY-TOKEN-001` stays **READY_FOR_CREDENTIALS** — the mechanism is verified; no Moyasar credentials
+exist to prove a live token round trip.
 
-Login is Email + Password with «أو الدخول بدون كلمة مرور» → email code beside it. No Google, no
-Apple, no WhatsApp button. WhatsApp is a verification/recovery channel; `GET /me/phone` reports each
-channel's real state so the interface can only offer a WhatsApp sign-in once one is configured —
-`READY_FOR_CREDENTIALS` until then.
+Google and Apple are gone from the UI (`SocialSignIn.tsx` removed — it had been dead since
+LOGIN-CARD-001). The OAuth endpoints, `oauth_identities`, the migrations and every linked identity
+are untouched: an account created through Google signs in with the email code, which needs no
+password.
 
-Still to do on the owner's list: the WhatsApp/phone panel in Account security (backend is complete
-and tested; no UI yet), and optional passkeys, which were explicitly not required.
+### Next, in order
 
-### Then, in order
+1. **WhatsApp/phone panel in Account security.** The backend is complete and tested — `GET /me/phone`
+   returns the number, whether it is confirmed, and each channel's real state; `POST /me/phone/start`
+   and `/confirm` prove it; `DELETE /me/phone` withdraws it. Only the UI is missing. It must not
+   present WhatsApp as a live sign-in method while `channels.whatsapp` is false.
+2. Switch the renewal sweep onto the saved token — `SubscriptionCheckout::open()` must first be able
+   to skip creating a gateway invoice, or the customer is billed twice.
+3. FX / reporting currency: original amount + currency + rate + date + source → SAR.
+4. Integration readiness across the ad platforms and commerce; Salla/Zid end to end.
+5. Unified pipeline/funnel; production environment validation; `/admin` integration readiness.
+6. Refresh `PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md`, `INTEGRATION_CREDENTIALS_CHECKLIST.md`.
 
-1. Switch the renewal sweep onto the saved token. `SubscriptionCheckout::open()` must first be able
-   to skip creating a gateway invoice — the naive version bills the customer twice.
-2. FX / reporting currency: original amount + currency + rate + date + source → SAR.
-3. Integration readiness across the ad platforms and commerce. Close real gaps only.
-4. Production validation, clean install/upgrade path, `/admin` readiness.
-5. Refresh the three handoff documents.
+Passkeys were explicitly optional and are not started.
 
 ### Traps recorded
 
 - **Never edit the tree while the gate runs.** A spec created mid-run made three browsers execute
-  three different suites.
+  three different suites and reported failures that said nothing about the commit.
 - **`Http::fake()` MERGES stubs; the first match wins.** Two settlements in one test both checked
   against the first reference and failed as a `reference_mismatch` that looked like a product defect.
 - **`actingAs` sets the guard in the TEST process.** `assertGuest()` after an HTTP call cannot tell
   «the server refused» from «the harness kept its own state». Assert the status code; prove sessions
   in the browser.
+- **A long test is not always a slow test.** Compare a suspect leg against the same suite run alone
+  before touching the product — and find one failing test that never reaches the layer you suspect.
 
 ## Session — LAUNCH PRICING, plan fit, limits and the signup fit (2026-08-09, late)
 
