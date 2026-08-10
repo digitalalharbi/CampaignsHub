@@ -207,6 +207,62 @@ final class PaymentActivationSecurityTest extends TestCase
         $this->assertNothingGranted();
     }
 
+    /**
+     * The right FIGURE in the wrong CURRENCY settles nothing either.
+     *
+     * This is the case the amount check alone let through, and it is not exotic: subscriptions are
+     * sold in USD (PAY-AUDIT-002) while both live adapters default a stated currency to SAR, so a
+     * payload reading `49.00 SAR` against a `49.00 USD` invoice compared equal on the only field
+     * anybody looked at — and activated the account for roughly a quarter of the price. An amount
+     * without its currency is a number, not money.
+     */
+    public function test_a_verified_event_in_the_wrong_currency_does_not_settle(): void
+    {
+        config(['services.moyasar.secret_key' => 'sk_test', 'services.moyasar.webhook_token' => 'shared-secret']);
+
+        $request = $this->owing();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
+        $payment = SubscriptionPayment::query()->firstOrFail();
+
+        // The exact figure we asked for — denominated in a currency we did not.
+        $this->assertNotSame('SAR', strtoupper((string) $payment->currency));
+
+        $this->postJson('/api/v1/payments/webhook/moyasar', [
+            'id' => 'evt_currency', 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
+            'data' => [
+                'id' => 'pay_1', 'status' => 'paid',
+                'amount' => (int) round((float) $payment->amount * 100), 'currency' => 'SAR',
+                'metadata' => ['reference' => $payment->idempotency_key],
+            ],
+        ])->assertOk()->assertJsonPath('data.verified', true);
+
+        $this->assertSame('failed', $payment->refresh()->status);
+        $this->assertSame(AccountState::ApprovedAwaitingPayment, $request->refresh()->state);
+        $this->assertNothingGranted();
+    }
+
+    /** Case is not a currency: `usd` and `USD` are one currency, and must not read as a mismatch. */
+    public function test_the_currency_check_is_not_defeated_by_case(): void
+    {
+        config(['services.moyasar.secret_key' => 'sk_test', 'services.moyasar.webhook_token' => 'shared-secret']);
+
+        $request = $this->owing();
+        $this->postJson("/api/v1/auth/registration/{$request->getKey()}/checkout", ['commitment_agreed' => true])->assertOk();
+        $payment = SubscriptionPayment::query()->firstOrFail();
+
+        $this->postJson('/api/v1/payments/webhook/moyasar', [
+            'id' => 'evt_case', 'type' => 'payment_paid', 'secret_token' => 'shared-secret',
+            'data' => [
+                'id' => 'pay_1', 'status' => 'paid',
+                'amount' => (int) round((float) $payment->amount * 100),
+                'currency' => strtolower((string) $payment->currency),
+                'metadata' => ['reference' => $payment->idempotency_key],
+            ],
+        ])->assertOk()->assertJsonPath('data.verified', true);
+
+        $this->assertSame('paid', $payment->refresh()->status);
+    }
+
     // ── The provisioner itself ────────────────────────────────────────────────────────────────
 
     /**

@@ -122,7 +122,7 @@ final class ApplySubscriptionPaymentEvent
             return;
         }
 
-        if ($status === 'paid' && ! $this->amountMatches($payment, $result)) {
+        if ($status === 'paid' && ! $this->chargeMatches($payment, $result)) {
             /*
              * A verified event proves the gateway sent it. It does not prove the gateway charged what
              * we asked for — a partial capture, a currency mismatch, or a payload we have misread all
@@ -131,14 +131,19 @@ final class ApplySubscriptionPaymentEvent
              */
             $payment->forceFill([
                 'status' => 'failed',
-                'error' => 'The confirmed amount does not match the charge.',
+                'error' => 'The confirmed charge does not match what was quoted.',
             ])->save();
 
             $this->audit->log(
                 action: 'subscription.payment.amount_mismatch',
                 entityType: SubscriptionPayment::class,
                 entityId: (string) $payment->getKey(),
-                after: ['expected' => (string) $payment->amount, 'received' => $result['amount'] ?? null],
+                after: [
+                    'expected' => (string) $payment->amount,
+                    'received' => $result['amount'] ?? null,
+                    'expected_currency' => (string) $payment->currency,
+                    'received_currency' => $result['currency'] ?? null,
+                ],
             );
 
             return;
@@ -324,21 +329,38 @@ final class ApplySubscriptionPaymentEvent
     }
 
     /**
+     * Does the confirmed charge match the one we quoted — the FIGURE and the CURRENCY?
+     *
      * Compare to the fils, not to the float.
+     *
+     * The currency half was missing, and «49.00» is not a charge: subscriptions are sold in USD
+     * (PAY-AUDIT-002) while both live gateways here default a stated currency to SAR, so a verified
+     * event reading `49.00 SAR` settled a `49.00 USD` invoice and activated the account for about a
+     * quarter of the price. Amount without currency is a number, not money.
      *
      * @param  array<string,mixed>  $result
      */
-    private function amountMatches(SubscriptionPayment $payment, array $result): bool
+    private function chargeMatches(SubscriptionPayment $payment, array $result): bool
     {
         $received = $result['amount'] ?? null;
+        $receivedCurrency = $result['currency'] ?? null;
 
-        // A provider that does not state an amount is taken at its word on the rest; refusing every
-        // such event would break gateways whose confirmation payload simply omits it.
-        if ($received === null) {
-            return true;
+        /*
+         * A provider that does not state a figure is taken at its word on the rest; refusing every
+         * such event would break gateways whose confirmation payload simply omits it. The same
+         * latitude — and only the same — is given to a missing currency.
+         */
+        if ($received !== null && bccomp((string) $payment->amount, (string) $received, 2) !== 0) {
+            return false;
         }
 
-        return bccomp((string) $payment->amount, (string) $received, 2) === 0;
+        if (is_string($receivedCurrency) && $receivedCurrency !== '') {
+            // Upper-cased on both sides so `usd` and `USD` cannot read as two different currencies —
+            // the same normalisation `/admin` applies when a plan's currency is edited.
+            return strtoupper($receivedCurrency) === strtoupper((string) $payment->currency);
+        }
+
+        return true;
     }
 
     private function record(
