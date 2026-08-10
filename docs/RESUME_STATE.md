@@ -12,19 +12,26 @@
 
 ## ⚠️ START HERE — handoff written 2026-08-10 (fifth close of the day)
 
-**HEAD is `0e0397b`. Working tree CLEAN.** Backend **1891 passed**.
+**HEAD is `216f217`. Working tree CLEAN.**
 
-> The three-browser gate has NOT run since `c9f3250`. Both commits since are backend-only and the
-> E2E payment path uses the SANDBOX provider — which signs its webhook body, so none of the new
-> confirmation logic applies to it — but that is a reasoned expectation, not a result.
-> **`PAY-CONFIRM-001` and `PAY-TOKEN-001` are IMPLEMENTED_NOT_VERIFIED until the gate is green.**
+### GATE — **GREEN at `216f217`**, run alone on a tree nobody touched while it ran
+
+```
+PASS  chromium  (exit 0)   298 passed  (7.5m)
+PASS  firefox   (exit 0)   290 passed  (13.5m)
+PASS  webkit    (exit 0)   290 passed  (9.8m)
+REAL_GATE_EXIT=0     0 failed · 0 flaky · retries: 0 (config)
+```
+
+Backend **1891 passed**. Frontend **985 passed** across 132 files. tsc · lint · Pint · production
+build all clean.
 
 ### Done this session
 
 | Ref | What | State |
 |---|---|---|
-| `PAY-CONFIRM-001` | A Moyasar webhook no longer settles money on its own word — the charge is re-read from `GET /v1/payments/{id}` first | tests green, gate pending |
-| `PAY-TOKEN-001` | `subscription_payment_methods` + `RecurringBilling`: a saved token, and the honest reason a renewal cannot be taken unattended | tests green, gate pending |
+| `PAY-CONFIRM-001` | A Moyasar webhook no longer settles money on its own word — the charge is re-read from `GET /v1/payments/{id}` first | **VERIFIED** |
+| `PAY-TOKEN-001` | `subscription_payment_methods` + `RecurringBilling`: a saved token, and the honest reason a renewal cannot be taken unattended | **READY_FOR_CREDENTIALS** — the mechanism is verified; no Moyasar credentials exist to prove a live token round trip |
 
 ### The next step, precisely
 
