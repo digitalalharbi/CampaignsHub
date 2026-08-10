@@ -10,93 +10,117 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-10 (second close of the day)
+## ⚠️ START HERE — handoff written 2026-08-10 (third close of the day)
 
-**HEAD is `4f0edf3`. Working tree CLEAN.** Everything below is committed and verified as stated;
-nothing is half-applied.
+**HEAD is `0e481e0`. Working tree CLEAN.**
 
-### Step 1 of the owner's order is CLOSED — non-external open items = 0
+### GATE — **GREEN at `0e481e0`**, run alone, exit captured unpiped
 
-All four are done, and two of them turned out to be stale documentation rather than missing work.
-Recorded in the matrix as **§19**.
+```
+PASS  chromium  (exit 0)   287 passed  (8.1m)
+PASS  firefox   (exit 0)   279 passed  (16.9m)
+PASS  webkit    (exit 0)   279 passed  (13.3m)
+[gate] all three browsers passed        REAL_GATE_EXIT=0
+```
 
-| item | what it was | closed by |
-|---|---|---|
-| `GATE-WK-001` | real — the gate spawned a second headless browser against its own Vite server | `47c9ef9` (print frontend on :5373) |
-| `AGENCY-PERMS-006` | real — ~19 taxonomy dropdowns printed one sentence for a refusal, an expired session, a deleted list and a dead server alike, beside a Retry that could only be refused again | `7f20c61` (classified at `PanelState`, 5 new tests) |
-| `REPORT-LINKS-13` | **stale** — the summary-vs-detail distinction, the scope picker, saveable scope templates and a real xlsx export are ALL built and covered (85 tests pass together). The `PARTIAL` row predates them | `21e8a13` (supersession row) |
-| the two full live journeys | **half-stale** — both walks existed and ran in the gate, but ended on `toHaveURL(/\/dashboard/)`, which matches `/app/dashboard` and `/agency/dashboard` alike and so proved neither | `581866a` (the portal is now named; 11 passed live on chromium) |
+**Failed=0 · Flaky=0 · Retries=0 (`retries: 0` in the config) · Unexplained skipped=0.**
+Backend **1820 passed** · Frontend **959 passed** · `tsc`, oxlint, Pint clean.
 
-### Step 2 — plans and subscriptions, reviewed end to end
+`72200dc` (2026-08-05) remains the historical verified baseline, is an ancestor of HEAD, and has
+NOT been rewritten. Everything after it is now gate-verified.
 
-The catalogue matches the owner's launch decision exactly (`SubscriptionPlanSeeder`): Starter
-$19/$190 no intro · Growth $49/$490 with $9 for 30 days and a 3-month commitment · Agency $99/$990 ·
-Enterprise `contact_sales` + `is_public: false`. Currency USD throughout. **217 tests pass** across
-Billing, CommercialJourney, MinimumCommitment, PaidRegistration, PaymentActivationSecurity,
-PlanCatalogue, PlanChangeProration, PlanCommercialTerms, PlanLimitEnforcement,
-PlatformPaymentSettings, SubscriptionInvoice, SubscriptionLifecycle, SubscriptionNotification,
-Subscription and GatedRegistration.
+### One defect found and fixed to get here
 
-**One real defect was found and fixed there** — `PAY-VERIFY-001`, `1847122`. The confirmed
-**currency** was never checked. Subscriptions are USD and both live adapters default a stated
-currency to SAR, so a verified webhook reading `49.00 SAR` settled a `49.00 USD` invoice and
-activated the account for roughly a quarter of the price. Proven fail-first by stashing the service
-file alone. `CommercialJourneyTest` was depending on that gap (it hard-coded SAR) and was corrected
-at `4f0edf3`.
+`portal-audit.spec.ts` holds five rail walks. Four budget the clock to the pages they open —
+`test.setTimeout(15_000 + hrefs.length * 8_000)` — and the fifth (the client-portal language walk)
+was left on the default 30s while doing strictly MORE per page: the same cold load of every href,
+plus a language toggle and an `untranslatedChrome` scan of each. It ran out of clock at 32.5s on
+firefox; its lighter sibling walks the identical hrefs in 16.1s. Chromium and webkit pass the same
+test against the same pages. Fixed at `0e481e0` by applying the file's own convention. **Stated
+plainly: this raises a clock budget.** It is not a hang being papered over — but it is a timeout
+change and is recorded as one.
 
-### Step 3 — production readiness: STARTED, first unit landed
+### STILL UNEXPLAINED — do not treat as closed
 
-`PROD-CONFIG-001`, `1475d6e`. `php artisan production:check [--json] [--warnings-as-failures]` —
-typed `fail`/`warn` findings over app debug/key, `APP_URL`/`FRONTEND_URL` (https, never localhost),
-the session cookie (secure, and a domain that actually covers the app's host), Postgres, a
-non-`sync` queue, **both payment gateways** (chosen-but-unconfigured · a secret key with no webhook
-secret · a TEST key in production · a test key mixed with a live one) and mail. Non-zero exit on any
-failure, so a deploy pipeline stops on it. **The report carries the SHAPE of a key, never its
-value** — asserted. 16 tests, each breaking one key and asserting that key is named. Run against
-this install: 0 failing, 1 warning (no mail provider). `.env.example` now names `MOYASAR_*` and
-`STRIPE_*` explicitly, empty, with the frontend/backend split and the test-live matching rule.
+The FIRST gate run of the day had **chromium at 47.3m with 6 failures**; the second and third had
+**287 passed in 8.1m** on the same commit range. A 39-minute swing with no cause established. That
+run also failed `portal-distinctness.spec.ts:118` on firefox (the password step never rendered),
+which has not reproduced since. Both were left recorded rather than attributed to contention. If
+either returns, that is the thread to pull — the failures all stalled on a backend response, so the
+question is which request never resolved.
 
-### Exact next task
+### Exact next task — LOGIN: Email → OTP, under a UI VISUAL LOCK
 
-Continue step 3 in the owner's order. What is genuinely NOT built, checked against the code today —
-do not take the adapter's existence for readiness, and do not mark anything Live without a real
-round trip:
+The owner's brief, and the constraints are the hard part:
 
-1. **Moyasar tokenization + recurring billing.** `MoyasarPaymentProvider` builds real invoices and
-   verifies the real webhook scheme, and `chargeDueRenewals` exists. There is **no tokenization, no
-   saved payment method, and no stored-token handling**, so a renewal cannot actually charge a card
-   without the customer returning to a checkout. This is the single largest gap between here and
-   `READY_FOR_CREDENTIALS` on billing.
-2. **A backend-to-backend fetch of the payment.** The webhook body is verified, deduped by event id,
-   matched on our reference and now checked on amount AND currency — but nothing re-reads the
-   payment from `GET /v1/payments/{id}`. The owner asked for that explicitly. It is defence in depth
-   against a shared-secret scheme that cannot prove the body is unmodified.
-3. **Duplicate-job protection and failed-renewal handling** on the renewal scheduler — review, then
-   close what is missing.
-4. **FX / reporting currency.** Original amount + original currency + FX rate + FX date + FX source,
-   unified to SAR for reporting. **Not implemented.** No hidden fixed rate, and the original value is
-   never lost.
-5. **The integration readiness matrix** across every provider that actually exists. Note that
-   `/admin` payment settings is FURTHER ALONG than the previous handoff said: `PlatformPaymentSettingsController`
-   already reports state, detects test-vs-live (`environmentOf`), describes the webhook URL and its
-   required configuration, gives rotation guidance and performs a real safe `test` call. What is
-   missing is the SAME vocabulary applied uniformly to the ad platforms and the commerce providers,
-   and `production:check` surfaced there.
-6. **The handoff pack.** `PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md` and
-   `INTEGRATION_CREDENTIALS_CHECKLIST.md` still do not exist. `PRODUCTION_HANDOVER.md` does and is
-   older than all of this.
+**The /login interface is visually APPROVED. Do not redesign it.** Take a screenshot first and treat
+it as the visual baseline. Unchanged: `AuthShell`, the two-column split, column widths and heights,
+the form's position, the right-hand marketing panel, the logo, the heading and its position, current
+alignment, fonts, colours, backgrounds, general padding and spacing, the responsive layout,
+light/dark and RTL/LTR. The heading text stays exactly «مرحباً بعودتك / سجّل الدخول للمتابعة إلى
+مساحة عملك.» with its current alignment.
 
-The owner's classification, to be used exactly: `VERIFIED`, `READY_FOR_CREDENTIALS`,
-`BLOCKED_EXTERNAL_CREDENTIALS`, `BLOCKED_OPERATIONAL_EVIDENCE`, `LIVE_VERIFIED` — where
-`LIVE_VERIFIED` requires real credentials, a real auth round trip, account discovery, a first live
-sync or payment, a real webhook, and the result visible in the product. Nothing less is «Live».
+**Replace only the sign-in controls inside the existing space.** Out: the Email/Phone tabs, Google,
+Apple and the old methods. In: an email field (`name@company.com`), a primary button «إرسال رمز
+الدخول», and small helper text «سنرسل رمز تحقق إلى بريدك الإلكتروني.» Below the form «ليس لديك
+حساب؟ إنشاء حساب» stays.
+
+**Do NOT add** Google, Apple, WhatsApp, password, forgot-password, remember-me, or any new card or
+section.
+
+**After «إرسال رمز الدخول»:** no new page and no new design — replace the CONTENT of the same form
+area with the OTP state: «تحقق من بريدك الإلكتروني», «أرسلنا رمز التحقق إلى: user@example.com», six
+single-character inputs, a «تسجيل الدخول» button, and small links «إعادة إرسال الرمز» and «تغيير
+البريد الإلكتروني». Same width, spacing, card boundaries, alignment and typography hierarchy as now.
+Do not enlarge the card, do not add a logo inside the form, no security banner, no new ornament.
+
+**Backend:** a real OTP reusing the EXISTING structure — single-use, expiry, resend cooldown, rate
+limiting, attempt limits, session rotation, fail-closed. With no mail provider configured, classify
+`READY_FOR_CREDENTIALS` and never claim live delivery.
+
+**Then verify visually** at 1440×900, 1366×768 and 390×844: no layout change, no horizontal scroll,
+no unintended change to the marketing side, Arabic alignment unchanged, light/dark and RTL/LTR
+sound. If Email OTP would require a large change to the page design, DO NOT do it that way — keep
+the interface and change only the form elements.
+
+**Ask the owner before building, and do not guess:** the brief removes password sign-in entirely and
+makes email OTP the only door. With no mail provider configured — the current honest state — nobody
+could sign in at all, including the platform admin and the four demo logins the whole E2E suite
+depends on (`e2e/helpers.ts::signIn` drives `login-password`). Either a fallback stays, or a large
+part of the gate is rewritten with this unit. That question was put to the owner and **has not been
+answered**; it was not started for that reason and because the session hit its context limit, not
+because of any difficulty in the work.
+
+### Then continue the production-readiness order
+
+1. **Moyasar tokenization + recurring billing** — the largest real gap. `chargeDueRenewals` opens a
+   real renewal charge through the verified path, but with no stored token it cannot charge
+   unattended. `withoutOverlapping` already gives duplicate-job protection; past-due → grace →
+   suspension and post-commitment cancellation already exist.
+2. **A backend-to-backend re-fetch** of the payment from the gateway. The webhook is verified,
+   deduped by event id, matched on our reference and checked on amount AND currency (`1847122`) —
+   but never re-read from `GET /v1/payments/{id}`.
+3. **FX / reporting currency** — original amount + original currency + FX rate/date/source, unified
+   to SAR. Not implemented. No hidden fixed rate; never lose the original value.
+4. **Integration readiness** uniformly across ad platforms and commerce. `/admin` payment settings is
+   further along than earlier handoffs said: it already reports state, detects test-vs-live,
+   describes the webhook URL, gives rotation guidance and makes a real safe test call.
+5. **`config('app.frontend_url')` does not exist** — eight call sites read it and silently fall back
+   to `APP_URL`, including the Moyasar **payment callback**, the registration approval link, the
+   invoice share link and subscription notifications. The OAuth redirects and all mail correctly read
+   `brand.frontend_url`. In a split api/app deployment every one of those sends the customer to the
+   API host. Found by grep, NOT yet fixed. One helper, not a second config key.
+
+### The handoff pack now exists
+
+`PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md`, `INTEGRATION_CREDENTIALS_CHECKLIST.md` (`e3246c4`).
+Every URL, env var and scheduled command in them was read out of the route files, config and
+`routes/console.php`. Nothing anywhere is `LIVE_VERIFIED`; no credential has existed on this machine.
 
 ### Matrix debt to reconcile, NOT to rebuild
 
-`REPORT-OBJECTIVE-001…005` each appear two or three times. The EARLIER rows say `NOT_STARTED` or
-`PARTIAL`; the LATER rows say `VERIFIED` and cite commits and tests. The later rows are authoritative.
-Reconcile the duplicates with a supersession note — do not reopen those units. `REPORT-LINKS-13` and
-`AGENCY-PERMS-006` were reconciled this way in §19 and are settled.
+`REPORT-OBJECTIVE-001…005` each appear two or three times; the LATER rows are authoritative.
+`REPORT-LINKS-13` and `AGENCY-PERMS-006` were reconciled this way in §19 and are settled.
 
 ---
 
