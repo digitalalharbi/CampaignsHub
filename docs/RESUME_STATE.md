@@ -10,9 +10,52 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-10 (seventh close of the day)
+## ⚠️ START HERE — handoff written 2026-08-11
 
-**HEAD is `79158a2`. Working tree CLEAN.**
+**HEAD is `c0d44cd`. Working tree CLEAN.** Two units landed on top of the green gate at `4d96f68`:
+
+| Ref | What | State |
+|---|---|---|
+| `AUTH-PHONE-002` | The mobile number panel in **personal** Account security — the screen that puts the proof back after `AUTH-PHONE-001` | **VERIFIED** (`d3a54b9` — 14 unit tests + `account-settings` E2E on chromium) |
+| `PAY-TOKEN-002` | A renewal with a card on file is **taken**, not asked for — `SubscriptionCheckout::open()` forks onto the saved token instead of opening a hosted invoice | **READY_FOR_CREDENTIALS** (`c0d44cd` — 7 new tests; no Moyasar credentials exist to prove a live round trip) |
+
+### What those two units settled, so nobody re-opens them
+
+- **The panel is personal, not workspace.** `/me/phone` is self-only; the number decides how THIS
+  person signs in. It sits on `/‹portal›/account/security`, beside sessions and 2FA.
+- **A channel is offered only if the server says it is configured.** WhatsApp with
+  `channels.whatsapp: false` is drawn, labelled «awaiting credentials», and not selectable. With
+  NEITHER channel configured the warning is shown BEFORE the send button and both stay selectable —
+  disabling every option would leave a radio group with no answer and lock the dev/E2E path behind
+  credentials that are by definition absent.
+- **One route or the other, never both.** A renewal that debited the saved card AND opened a hosted
+  invoice would look normal until the customer's statement arrived with two lines on it. The fork is
+  narrow: `purpose === 'subscription'` only. Registration, plan change and reactivation keep the
+  hosted page — somebody is at the screen, and for a reactivation the card on file is usually the one
+  that just failed.
+- **A refused unattended charge is recorded and stops.** No hosted page as a second attempt: from
+  there a decline and a timeout are indistinguishable, and offering a page to pay for money that may
+  already be gone is the risk being avoided. Past due + grace is the customer's path.
+
+### The next unit, and what is actually wrong
+
+**FX / reporting currency is a REAL GAP, not a polish item.** `daily_metrics` already carries
+`original_currency`, `project_currency`, `original_amount`, `converted_amount` and `exchange_rate` —
+and **nothing populates any of them**. `AccountMetricsSyncer::ingest()` builds every
+`NormalizedMetric` with `value` alone, so a USD ad account's spend is summed into a SAR report as
+though it were riyals. The columns exist; the conversion does not. What is needed: the original
+amount and its currency carried from the provider, a dated rate with a named source, and no hidden
+fixed rate anywhere.
+
+Then, in order: integration readiness across the providers (Salla/Zid end to end first — the owner
+gave them explicit priority), unified pipeline/funnel, production environment validation, `/admin`
+integration readiness, and the three handoff documents.
+
+---
+
+## Previous close — 2026-08-10 (seventh of the day)
+
+**HEAD was `79158a2`. Working tree CLEAN.**
 
 ### GATE — **GREEN**, one invocation, frozen tree
 
