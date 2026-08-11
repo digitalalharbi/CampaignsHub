@@ -1,5 +1,32 @@
 # CampaignsHub — Open Gaps
 
+> # ⛔ SUPERSEDED — do not read the snapshot below as the current state.
+>
+> **Reconciled 2026-08-11.** Everything under this banner is a **frozen snapshot from
+> 2026-07-29**, taken at HEAD `fc90666`. It is kept because the reasoning in it is still worth
+> reading; every status in it is two weeks stale, and a developer who acted on it would rebuild
+> working code.
+>
+> The current state lives in **`docs/RESUME_STATE.md`** (under START HERE) and
+> **`docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`**. Where they disagree with this file, they are right.
+>
+> What became of the seven items listed below:
+>
+> | # | Then | Now |
+> |---|---|---|
+> | 1 | `SITE-CMS-002` — three public surfaces hard-coded | **Shipped.** The public pages render published CMS content |
+> | 2 | `XBROWSER-GATE` — Chromium only, so 22 rows `IMPLEMENTED_NOT_VERIFIED` | **Closed.** The gate runs Chromium, Firefox and WebKit as three isolated invocations; the matrix carries **no** `IMPLEMENTED_NOT_VERIFIED` row |
+> | 3 | Ad platforms awaiting credentials | **Unchanged, and correct.** All six are `BLOCKED_EXTERNAL_CREDENTIALS`. This is the one item on the list that is still open, and it is external |
+> | 4 | Report scheduling had no HTTP API | **Shipped.** API, UI and the `reports:dispatch-scheduled` schedule |
+> | 5 | Objective ranking exercised only the conversion group | **Closed** by the objective taxonomy work (`REPORT-OBJECTIVE-002…005`) |
+> | 6 | A master-context document referenced but absent | **Still absent, deliberately.** Governance is the contract + the matrix + `RESUME_STATE.md`. Do not invent it |
+> | 7 | Eleven named PARTIAL / NOT_STARTED requirements | **All closed.** The matrix's own summary reads no `PARTIAL`, no `NOT_STARTED` and no `IMPLEMENTED_NOT_VERIFIED` outside superseded historical sections |
+>
+> The principle at the bottom of this file — a test failure is never dismissed as transient without a
+> logged cause and a reproduction attempt — is still in force and is not part of the snapshot.
+
+---
+
 > **HANDOFF SNAPSHOT — 2026-07-29 (context-window emergency close).**
 > Branch `feat/taxonomy-ux` · HEAD `fc90666` · working tree CLEAN · no WIP.
 > Backend 422 passed (2467 assertions) · Frontend 215 passed · tsc/build clean ·
