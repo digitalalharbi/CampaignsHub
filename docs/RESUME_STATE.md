@@ -10,7 +10,83 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (eleventh of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (twelfth of the day)
+
+**Working tree CLEAN.** `IDENTITY-ACCOUNTS-001` still **NOT VERIFIED**. Full Gate NOT run.
+No product code was changed this session — the cause is now identified but not yet fixed.
+
+### The mechanism is found: sign-out is not atomic against the app's own in-flight requests
+
+Timeline instrumentation on every `/api/*` request and response around a sign-out, four runs on
+chromium, logging whether each response re-issues the session cookie. Three runs came out clean, one
+reproduced. The difference is visible in the timeline.
+
+**Every response carries `setsSession=true`.** Laravel re-issues the session cookie on each request,
+which is normal — and it is what makes the race possible.
+
+A clean run (run 1) — note the requests already in flight when the logout is sent:
+
+```
+1150  MARK dashboard-loaded
+1154  →REQ  POST /auth/logout
+1159  ←RES  200 /auth/memberships   setsSession=true     ← in flight, lands mid-logout
+1201  ←RES  200 /auth/memberships   setsSession=true     ← again
+1283  →REQ  GET  /projects /notifications /creatives/pulse /client-workspaces /saved-views
+1285  ←RES  200 /auth/logout        setsSession=true
+1321… ←RES  401 …everything after   → clean
+```
+
+The reproducing run (run 4): after the sign-out, `/auth/me` answers **200 advertiser@**, and the
+dashboard requests that follow answer **200 / 403 — not 401**. The whole application is still signed
+in. The session was not merely re-read; it was never left invalidated.
+
+### What that rules in and out
+
+- **E / C — an in-flight authenticated request writing the session around the logout: THE
+  MECHANISM.** The SPA fires `/auth/memberships` repeatedly plus a burst of dashboard queries
+  concurrently with the sign-out, and each response re-issues a session cookie. When one lands after
+  the logout's own `Set-Cookie`, the browser adopts the older, still-authenticated cookie.
+- **A, B, C(remember): already eliminated** by the previous close's cookie fingerprints — one session
+  cookie, one scope, no recaller.
+- **The server's `logout()` is correct** and was proven so directly over HTTP. **Do not change it** —
+  the defect is that nothing stops the app from re-issuing a session after it.
+
+### The fix is NOT in AuthController, and must not be a sleep
+
+The honest options, in the order they should be considered:
+
+1. **Stop the app issuing authenticated requests once a sign-out has begun.** `signOutCompletely()`
+   already clears the auth store and the query cache — but only AFTER `await logout()` returns, by
+   which time the burst is already in flight. Cancelling in-flight queries and marking the client
+   «signing out» BEFORE the request goes is the change that removes the race at its source.
+2. **Make a late response unable to resurrect a session** — e.g. the server not re-issuing a session
+   cookie on a request whose session has since been invalidated. This is the deeper fix and needs
+   care: it touches every request, not just this flow.
+
+Option 1 is the smaller, more contained change and addresses the actual sequence observed. Neither
+has been implemented, and **neither should be attempted without re-running the timeline probe to
+confirm the burst is gone** — the probe is small and is described above well enough to rebuild.
+
+### Corrections carried forward
+
+Three earlier conclusions of mine were wrong and are recorded as such: it is not the gate leg, not
+the browser, and not `page.request`. It is a race between the sign-out and the SPA's own concurrent
+requests, and chromium reproduces it more often because it schedules that burst differently.
+
+### Still separate, still open
+
+The leg asymmetry (`access-recovery`, `registration-onboarding`, `homepage-journeys`,
+`request-intake`) remains unexplained and must not be folded into this thread.
+
+Only after both: one Full Gate on a frozen tree, `REAL_GATE_EXIT=0`, Failed/Flaky/Retries/Skipped all
+0 — then `IDENTITY-ACCOUNTS-001` = VERIFIED and non-external open items = 0.
+
+No timeout raised, no retry added, no sleep introduced, no Full Gate run. All three probe specs were
+temporary and are deleted; their numbers are in these handoffs.
+
+---
+
+## Previous close — 2026-08-11 (eleventh of the day)
 
 **Working tree CLEAN.** `IDENTITY-ACCOUNTS-001` still **NOT VERIFIED**. Full Gate NOT run.
 
