@@ -10,7 +10,87 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (fifteenth of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (sixteenth of the day)
+
+**Working tree CLEAN. No product code changed this session.**
+
+The owner asked for a full finish-and-deliver run ending in a push to
+`https://github.com/digitalalharbi/CampaignsHub` on `main`. **I did not push, and the reason is the
+owner's own delivery condition**, which requires `REAL_GATE_EXIT=0`, `Failed=0`, `Flaky=0` and
+non-external open items = 0. None of those is true yet. Publishing a public repository is not
+reversible in effect, so it must not run ahead of the gate it is conditioned on.
+
+What I did complete is the one bounded prerequisite that had to happen before any push.
+
+### F — SECRET AUDIT: **PASS**
+
+| Check | Result |
+|---|---|
+| Tracked `.env` / key / cert files | **only `backend/.env.example` and `frontend/.env.example`** — no real `.env`, no `.pem`, `.key`, `.p12`, `id_rsa`, service-account json |
+| `.env.example` contents | variable names with empty or placeholder values; the only literals are public brand URLs (`campaignshub.io`, `localhost`, `127.0.0.1`) and driver names. **No secret.** |
+| Tracked `vendor/`, `node_modules/`, `test-results/`, `playwright-report/` | **0 files** |
+| Git HISTORY, all branches, for added `.env` / `.pem` / `.key` / `id_rsa` | **none** |
+| Tracked file count | 1740 |
+
+**No history rewrite is needed.** The repository is safe to publish on this axis.
+
+### The one thing to know before pushing: there is NO git remote configured
+
+`git remote -v` is empty. The push sequence, when the gate finally goes green:
+
+```
+git remote add origin https://github.com/digitalalharbi/CampaignsHub.git
+git branch -M main
+git push -u origin main
+git fetch origin && git rev-parse HEAD origin/main   # the two SHAs must match
+git tag handoff-<date> && git push origin handoff-<date>
+```
+
+Tag `handoff-…`, **not** `v1.0.0` — no integration is `LIVE_VERIFIED`.
+
+### What is still open, in the order it must be closed
+
+**1. The session race (`LOGIN-OTP-LOGOUT-001`) — the only non-external product defect left.**
+
+The Redis harness derivation is correct and proven step by step (real HTTP login, jar snapshotted
+BEFORE logout, session id obtained by `Crypt::decrypt($raw, false)` + `CookieValuePrefix::remove()`,
+key derived from `config('cache.prefix')`). It is blocked on ONE thing:
+
+> The derived key is not in Redis — checked on `database.redis.cache.database = 1` and db 0, under
+> both `mediabuying-cache-` and the leftover `campaignshub-e2e-…` prefix. Laravel's own
+> `Cache::has($sessionId)` from the CLI is false, while `/auth/me` with that cookie returns 200.
+
+**First action next session:** the `php artisan serve --port=8000` process has been running for eight
+days and is serving with whatever env and cached config it started with. Kill it, `config:clear`,
+restart it, and record `cache.prefix`, `database.redis.cache.database` and `SESSION_DRIVER` **as the
+server itself reports them**. Then re-run the harness. Do not proceed past the prerequisite.
+
+Outcome A (`/auth/me` = 200 with the pre-logout jar) → build the scoped server-side revocation.
+Outcome B (401) → the rewrite hypothesis is dead; go back to measuring what re-authenticates.
+
+**2. The gate leg asymmetry** — separate, unexplained, and not to be folded into (1).
+
+**3. Then** the full verification list and the push.
+
+### Settled — do not re-litigate
+
+- `AuthController::logout()` is correct over HTTP (`/auth/me` 200 → logout 200 → `/auth/me` 401).
+- The client sign-out barrier (`ACCESS-EXIT-002`) is correct, kept, and insufficient alone (2/5).
+- Five of my own conclusions have been overturned by measurement: not the gate leg, not the browser,
+  not `page.request`, not the client barrier, and not the first two harness attempts. **Write the
+  sixth only after the harness passes its own prerequisite.**
+- Nothing is `LIVE_VERIFIED`. No credential exists for any of the eleven providers.
+
+### Delivery docs status
+
+`PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md`, `INTEGRATION_CREDENTIALS_CHECKLIST.md` and
+`DEMO_ACCOUNTS.md` were all corrected earlier today and are current. A consolidated
+`HANDOFF_MANIFEST.md` is **not yet written** — it is the last documentation item before the push, and
+everything it needs to contain already exists across those four files plus this one.
+
+---
+
+## Previous close — 2026-08-11 (fifteenth of the day)
 
 **Working tree CLEAN. No product code changed this session.** `IDENTITY-ACCOUNTS-001` still
 **NOT VERIFIED**. Full Gate NOT run. **No revocation/tombstone was built** — the harness that would
