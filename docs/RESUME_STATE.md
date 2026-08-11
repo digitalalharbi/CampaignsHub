@@ -10,7 +10,80 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (sixth of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (seventh of the day)
+
+**Working tree CLEAN at `aa7aaf7`.** Backend **2013 passed** · Pint clean.
+
+| Ref | What | State |
+|---|---|---|
+| `DEMO-RESEED-001` | `db:seed` twice on the same database no longer re-keys a creative its metrics point at | **FIXED and proven** (`aa7aaf7` — 4 tests, fail-first) |
+| `IDENTITY-ACCOUNTS-001` | The `@campaignshub.io` accounts | **NOT VERIFIED** — the gate has not gone green since it landed |
+
+### THE GATE HAS FAILED FOUR TIMES IN A ROW. Do not call this tree verified.
+
+| run | chromium | firefox | webkit | failing spec(s) |
+|---|---|---|---|---|
+| 1 | PASS 299 | PASS 291 | **FAIL** 290 | `access-recovery:115` |
+| 2 | PASS 299 | **FAIL** 290 | PASS 291 | `registration-onboarding:152` |
+| 3 | PASS 299 | **FAIL** | **FAIL** 290 | `homepage-journeys:217`, `request-intake:60`, `login-otp-journey` |
+
+`REAL_GATE_EXIT=1` every time. **Six distinct specs, none repeating.** Each one that was re-run in
+isolation passed on all three browsers (`access-recovery` 12·12·12, `registration-onboarding`
+11·11·11) — which the owner has correctly said is not enough to declare anything.
+
+**The pattern is the finding, and it is not random.** Chromium is the FIRST project the gate runs and
+it has passed 299/299 in every single run. Every failure has been in the second or third leg. That is
+not what machine load alone looks like — load would hit the first leg too.
+
+One failure this run is worth more than the others, because it is not shaped like a timeout:
+
+```
+login-otp-journey — 'signing out ends the session, and a new code opens another'
+  expect(await whoAmI(page), 'the session outlived the sign-out').toBeNull()
+  Received: "advertiser@campaignshub.io"
+```
+
+A logout that left the server session alive. The address is one of the renamed accounts, so **this
+one may genuinely belong to `IDENTITY-ACCOUNTS-001`** rather than to the flake pattern — it is the
+first lead to pull, not the last.
+
+### The next session's job, in order
+
+1. **Do not re-run the gate hoping for green.** Four runs is enough evidence that something is wrong.
+2. **Start with the logout failure.** `login-otp-journey.spec.ts:128` signs in by OTP as
+   `advertiser@campaignshub.io`, POSTs `/auth/logout` with an XSRF token read from the cookie jar,
+   and expects no session. Determine whether the rename changed which user that address resolves to
+   (two seeders now touch it — `DemoAccountsSeeder` creates it as the company owner, and the OTP
+   journey signs in as it), or whether the raw `page.request.post` is racing the cookie.
+3. **Then explain the leg asymmetry.** Why does the first project never fail and the later two always?
+   Candidates worth eliminating in this order: browser processes from the previous leg not reaped;
+   the per-leg database reset leaving the app's config/route cache warm from the previous leg; the
+   dev servers being restarted per leg while the OS still holds the old port.
+4. Only after both are answered may `IDENTITY-ACCOUNTS-001` be called VERIFIED and non-external open
+   items returned to 0.
+
+**No timeout was raised and no retry was added.** Tuning either would have turned this into a green
+gate that proves nothing.
+
+### `DEMO-RESEED-001` — fixed, and the fix is one deleted line
+
+`DemoCreativesSeeder` passed `id` in an `updateOrCreate` UPDATE payload. `php artisan db:seed` runs
+seeders inside `Model::unguarded()`, so the guard that normally drops a non-fillable `id` was off and
+a second run genuinely re-keyed an existing creative — while thirty days of `creative_daily_metrics`
+still referenced the old key. Postgres refused, correctly. `HasUuidKey` already mints the uuid on
+create, so the line was never needed.
+
+Proven: `migrate:fresh --seed` → exit 0, `db:seed` → exit 0, `db:seed` again → exit 0.
+90 creatives · 2943 metrics · **0 orphans · 0 duplicates**. No truncate, no disabled constraint, no
+deleted rows, tenant and project scoping asserted.
+
+**The first version of that test passed against the broken seeder** — called plainly, the
+mass-assignment guard silently drops `id` and the defect is unreachable. A seeder test that does not
+run inside `Model::unguarded()` is not testing what `db:seed` does.
+
+---
+
+## Previous close — 2026-08-11 (sixth of the day)
 
 **Working tree CLEAN.** Last CODE commit `383137f`; anything after it is documentation only.
 
