@@ -54,6 +54,8 @@ const STORE: CommerceSummary = {
   orders: 25, revenue: 5000, aov: 200, roas: 10, cac: 50,
   attributed_orders: 15, attributed_revenue: 3000, unattributed_orders: 10,
   stores: 1, store_last_synced_at: null,
+  // COMMERCE-FX-001 — the currency the figures above are in, and the orders missing from them.
+  reporting_currency: 'SAR', orders_with_money_withheld: 0, money_withheld_currencies: [],
 }
 
 function summary(commerce: CommerceSummary | null) {

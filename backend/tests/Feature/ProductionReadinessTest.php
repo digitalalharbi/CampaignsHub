@@ -153,6 +153,33 @@ final class ProductionReadinessTest extends TestCase
         $this->assertContains('mail.default', array_column($report['findings'], 'key'));
     }
 
+    /**
+     * FX-FEED-001 — an absent exchange-rate source warns and does not block.
+     *
+     * The same reasoning as mail: without one, money in another currency is WITHHELD and reported as
+     * withheld, never guessed — so the product tells the truth without it. What the warning buys is
+     * an operator learning it in the pipeline rather than from a client asking why a total is short.
+     */
+    public function test_a_missing_exchange_rate_source_warns_and_does_not_block(): void
+    {
+        $this->productionConfig(['fx.rates.driver' => null]);
+
+        $report = (new ProductionReadiness)->run();
+
+        $this->assertTrue($report['ready']);
+        $this->assertContains('fx.rates.driver', array_column($report['findings'], 'key'));
+    }
+
+    /** With a source named, the warning goes away — the check is about the decision, not the data. */
+    public function test_a_configured_exchange_rate_source_clears_the_warning(): void
+    {
+        $this->productionConfig(['fx.rates.driver' => 'App\\Some\\RateSource']);
+
+        $report = (new ProductionReadiness)->run();
+
+        $this->assertNotContains('fx.rates.driver', array_column($report['findings'], 'key'));
+    }
+
     /** A development install is not held to production's rules, and must not be. */
     public function test_local_development_is_not_judged_against_production(): void
     {

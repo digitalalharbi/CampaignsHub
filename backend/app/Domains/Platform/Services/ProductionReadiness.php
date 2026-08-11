@@ -54,6 +54,7 @@ final class ProductionReadiness
         $this->checkInfrastructure($production);
         $this->checkPayments($production);
         $this->checkMail();
+        $this->checkExchangeRates();
 
         $failures = count(array_filter($this->findings, fn (array $f) => $f['level'] === 'fail'));
 
@@ -204,6 +205,30 @@ final class ProductionReadiness
         if (in_array(Config::get('mail.default'), ['log', 'array'], true)) {
             $this->warn('mail.default', 'No mail provider is configured, so nothing is delivered. The product already reports this honestly and never records a message as sent.', 'Supply SMTP or API credentials when they exist — READY_FOR_CREDENTIALS until then.');
         }
+    }
+
+    /**
+     * FX-FEED-001 — the exchange-rate supply.
+     *
+     * A WARNING and not a failure, for the same reason mail is: the product already tells the truth
+     * without it. A figure in a currency with no dated rate is withheld and counted, on the funnel,
+     * on the dashboard and on the client's own link — nothing is invented and no total quietly
+     * shortens. But a deployment taking real traffic with no rate source will withhold real figures,
+     * and that is worth an operator seeing in the pipeline rather than in a client's report.
+     */
+    private function checkExchangeRates(): void
+    {
+        $driver = Config::get('fx.rates.driver');
+
+        if (is_string($driver) && $driver !== '') {
+            return;
+        }
+
+        $this->warn(
+            'fx.rates.driver',
+            'No exchange-rate source is configured. Money in a currency other than a client’s reporting currency is WITHHELD rather than converted — the figures are reported as withheld, never guessed.',
+            'Set FX_RATE_DRIVER to a source class, or record rates by hand at /admin/settings/currency-rates — READY_FOR_CONFIGURATION until then.',
+        );
     }
 
     /** Both gateways prefix their test credentials; anything else is treated as live. */
