@@ -10,7 +10,77 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (ninth of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (tenth of the day)
+
+**Working tree CLEAN.** `IDENTITY-ACCOUNTS-001` is still **NOT VERIFIED**. The Full Gate was NOT run.
+
+### Measured, on all three browsers, around a real sign-out
+
+Probe: sign in through the UI, log out through an in-page `fetch` (the browser's own network stack,
+no navigation, so state is readable immediately), then read the jar and `/auth/me` through BOTH
+Playwright's `page.request` and an in-page `fetch`, before navigation and after.
+
+| | chromium | firefox | webkit |
+|---|---|---|---|
+| `/auth/me` before logout | 200 advertiser@ | 200 advertiser@ | 200 advertiser@ |
+| logout status | **200** | **200** | **200** |
+| `/auth/me` after logout — `page.request` | **200 advertiser@** | 401 null | 401 null |
+| `/auth/me` after logout — in-page `fetch` | **200 advertiser@** | 401 null | 401 null |
+| `/auth/me` after navigating to `/login` | **200 advertiser@** | 401 null | 401 null |
+
+Jar after logout on chromium: one `XSRF-TOKEN` and one `mediabuying-session`, `domain=localhost`,
+`path=/`, and their `expires` **advanced** — so the logout's `Set-Cookie` was accepted.
+
+### What this eliminates, by measurement rather than by argument
+
+- **C — `page.request` uses a different or stale jar: ELIMINATED.** Both stacks agree, on every
+  browser. The failing assertion was not an artefact of which client made the request.
+- **A — the logout `Set-Cookie` never reaches the jar: ELIMINATED.** The cookie was re-set; its
+  expiry moved.
+- **B — `/login` mints an authenticated session: ELIMINATED for this failure.** Chromium is already
+  authenticated *before* any navigation.
+- **The leg-asymmetry theory is WRONG for this failure.** Run alone, as the first and only project:
+  firefox → 401 (correct), chromium → 200 (wrong). It is the BROWSER, not the position in the gate.
+
+### What is left, and the one measurement that will settle it
+
+On chromium the server answers `/auth/me` with the user after a logout it answered 200 to, with a
+session cookie it has just re-set. That means **the request the server sees is resolving to a session
+that is still authenticated** — the logout invalidated one session and chromium is presenting
+another, or presenting more than one.
+
+The next measurement is the `Cookie` header the SERVER actually receives, per browser, for the
+logout and for the `/auth/me` immediately after it. Log it server-side (a temporary middleware that
+records cookie NAMES and count only — never values) and compare chromium against firefox. Candidates
+it will separate:
+
+- chromium sending two `mediabuying-session` cookies (different `domain`/`path` scope — the app is
+  served from Vite on `:5173` and proxied to the API on `:8000`, so a cookie set by the proxied
+  response and one set by a direct response can coexist and are indistinguishable in
+  `page.context().cookies()` output at the same name);
+- cookie ORDER deciding which one Laravel decrypts first;
+- something re-authenticating from a remember-token.
+
+**Do not weaken the assertion.** «Sign out ends the session» is the claim a customer depends on, and
+on firefox and webkit the product already satisfies it exactly.
+
+### Then, still queued
+
+The leg asymmetry as a SEPARATE question — the earlier gate failures on `access-recovery`,
+`registration-onboarding`, `homepage-journeys` and `request-intake` are still unexplained, and this
+probe has now shown that at least one of the three failing browsers behaves differently for a real
+reason. Measure PIDs, ports, process reuse, session/DB reset, caches, temp profiles between legs
+before attributing anything to load.
+
+Only after both: one Full Gate on a frozen tree, `REAL_GATE_EXIT=0`, Failed/Flaky/Retries/Skipped 0
+— then `IDENTITY-ACCOUNTS-001` = VERIFIED and non-external open items = 0.
+
+No timeout raised, no retry added, no sleep introduced, no Full Gate re-run. The probe spec was
+temporary and is deleted; its numbers are the table above.
+
+---
+
+## Previous close — 2026-08-11 (ninth of the day)
 
 **Working tree CLEAN.** `IDENTITY-ACCOUNTS-001` is still **NOT VERIFIED**. The Full Gate was NOT run
 — the cause is not closed, and running it would only produce another red result nobody learns from.
