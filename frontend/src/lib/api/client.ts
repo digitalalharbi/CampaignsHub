@@ -40,12 +40,21 @@ api.interceptors.request.use((config) => {
  *
  * Signing out used to clear the auth store and the query cache only AFTER `/auth/logout` returned.
  * By then the dashboard had already fired its own burst — `/auth/memberships`, `/projects`,
- * `/notifications`, `/client-workspaces`, `/dashboard/saved-views`, `/creatives/pulse` — and every
- * Laravel response re-issues the session cookie. A response that landed after the logout's own
- * `Set-Cookie` put the older, still-authenticated cookie back in the jar, and the customer was
- * signed in again: `/auth/me` answered 200 with their address after a logout that answered 200.
+ * `/notifications`, `/client-workspaces`, `/dashboard/saved-views`, `/creatives/pulse` — and each of
+ * those requests had loaded the authenticated session on its way in. Laravel writes the session back
+ * when a request finishes, under the id it was loaded with, so one landing after the logout put the
+ * payload the logout had just deleted straight back into the store. The cookie in the browser then
+ * worked again: `/auth/me` answered 200 with the customer's address after a logout that answered 200.
  *
  * The timeline is in the handoff for 2026-08-11. It reproduced roughly one run in four on chromium.
+ * The mechanism was confirmed byte for byte against the running server — restore the deleted
+ * payload by hand and the pre-logout cookie jar is signed in again (`ACCESS-EXIT-003`).
+ *
+ * ## This is necessary and it is NOT sufficient
+ *
+ * A request that left the browser before the click cannot be recalled from here, so the server also
+ * records the signed-out session id outside the session and refuses it however it comes back
+ * (`RejectRevokedSessions`). Keep both: this one keeps the traffic down, that one makes it certain.
  *
  * ## Why the barrier lives HERE and not in each caller
  *

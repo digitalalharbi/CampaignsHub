@@ -9,6 +9,7 @@ use App\Domains\Identity\Resources\UserResource;
 use App\Domains\Identity\Services\PasswordResetService;
 use App\Domains\Identity\Services\SignInMethodResolver;
 use App\Domains\Identity\Support\AccountSuspension;
+use App\Domains\Identity\Support\SessionRevocations;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Services\PortalResolver;
 use App\Http\Controllers\Controller;
@@ -137,8 +138,23 @@ final class AuthController extends Controller
         );
     }
 
-    public function logout(Request $request): JsonResponse
+    /**
+     * Sign out — and record that this session id is finished (ACCESS-EXIT-003).
+     *
+     * The three lines below were never wrong: the session really is destroyed, measured over HTTP
+     * against Redis (`EXISTS` 1 → 0, `TTL` -2). What they cannot do is bind a request that loaded
+     * this session BEFORE the sign-out, and that request writes the authenticated payload back under
+     * the same id when it finishes — restoring the exact bytes was proven to make the same cookie
+     * answer 200 again.
+     *
+     * So the destruction is paired with a marker that lives outside the session, where a late write
+     * cannot reach it. Recorded FIRST, before `invalidate()` mints a new id, because after that call
+     * `$request->session()->getId()` names the fresh session and not the one being ended.
+     */
+    public function logout(Request $request, SessionRevocations $revocations): JsonResponse
     {
+        $revocations->revoke($request->session()->getId());
+
         Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();

@@ -6,6 +6,7 @@ namespace App\Domains\Identity\Middleware;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Identity\Support\AccountSuspension;
+use App\Domains\Identity\Support\SessionRevocations;
 use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
@@ -20,7 +21,10 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class EnsureAccountActive
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(
+        private readonly AuditLogger $audit,
+        private readonly SessionRevocations $revocations,
+    ) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -46,8 +50,17 @@ final class EnsureAccountActive
             $this->audit->log('auth.blocked_suspended', 'user', (string) $user->id,
                 after: ['reason' => $disabled ? 'user_disabled' : 'workspace_suspended']);
 
-            // Revoke the current session immediately (stateful requests) so it cannot be reused.
+            /*
+             * Revoke the current session immediately (stateful requests) so it cannot be reused.
+             *
+             * The marker is recorded BEFORE `invalidate()`, for the same reason as in
+             * `AuthController::logout()`: destroying the session is not enough on its own, because a
+             * request that loaded it before this refusal writes the authenticated payload back under
+             * the same id when it finishes (ACCESS-EXIT-003). A suspended account is precisely the
+             * case where "signed out, mostly" is not an acceptable answer.
+             */
             if ($request->hasSession()) {
+                $this->revocations->revoke($request->session()->getId());
                 Auth::guard('web')->logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();

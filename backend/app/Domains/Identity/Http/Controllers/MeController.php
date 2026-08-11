@@ -6,6 +6,7 @@ namespace App\Domains\Identity\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Identity\Resources\UserResource;
+use App\Domains\Identity\Support\SessionRevocations;
 use App\Models\User;
 use App\Rules\PhoneNumberRule;
 use App\Support\PhoneNumber;
@@ -23,7 +24,10 @@ use Illuminate\Validation\ValidationException;
  */
 final class MeController
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(
+        private readonly AuditLogger $audit,
+        private readonly SessionRevocations $revocations,
+    ) {}
 
     /** GET /api/me — the current user with profile + menu-header fields. */
     public function show(Request $request): JsonResponse
@@ -105,6 +109,10 @@ final class MeController
             $user->setRememberToken(Str::random(60));
             $user->save();
             if ($request->hasSession()) {
+                // Same as `logoutOtherSessions()`: the retired id is revoked, not just replaced.
+                // `regenerate()` does not destroy the old session, so without this the previous id
+                // would keep working for its full lifetime — after a password change, of all moments.
+                $this->revocations->revoke($request->session()->getId());
                 $request->session()->regenerate();
             }
         }
@@ -155,6 +163,10 @@ final class MeController
         $user->setRememberToken(Str::random(60));
         $user->save();
         if ($request->hasSession()) {
+            // The id being retired is revoked, not merely replaced (ACCESS-EXIT-003) — otherwise a
+            // request still in flight can write the old authenticated payload back under it, and
+            // "revoke my other sessions" would leave this one's previous id working.
+            $this->revocations->revoke($request->session()->getId());
             $request->session()->regenerate();
         }
 

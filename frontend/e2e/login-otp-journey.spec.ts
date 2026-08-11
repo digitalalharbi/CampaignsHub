@@ -144,16 +144,23 @@ test.describe('the email code opens a real session', () => {
    * `whoAmI` still asks the SERVER afterwards, through the same browser context, because a redirect
    * to `/login` would pass for a page that merely navigated.
    *
-   * ## STILL FAILING, and the remaining question is no longer this test's shape
+   * ## What was actually wrong — closed 2026-08-11 (`ACCESS-EXIT-003`)
    *
-   * Instrumented on chromium 2026-08-11: the UI sign-out issues exactly one `/auth/logout` and it
-   * returns **200**. The server was separately proven to end the session on a 200 (curl, same cookie
-   * jar: `/auth/me` 200 → logout 200 → `/auth/me` 401). Yet `whoAmI` here still names the user, on
-   * chromium and firefox — and NOT on webkit, which passes.
+   * This test was right and the product was wrong, in a way that took several overturned hypotheses
+   * to see. Instrumentation showed the UI sign-out issuing exactly one `/auth/logout`, returning
+   * **200**, with the server separately proven to destroy the session on that 200 — and `whoAmI`
+   * still naming the user afterwards on chromium and firefox, but not on webkit.
    *
-   * So the logout is accepted, the server drops the session, and something in the browser context
-   * still presents an authenticated one to `page.request`. That is the open question; it is not
-   * «the test forged a request» any more, and it is not «the server does not log out».
+   * The session was not surviving the sign-out. It was being **put back**. A request that loaded the
+   * authenticated session before the click writes that payload to the store when it finishes, under
+   * the same id, after `logout` deleted it. Measured byte for byte against the running server:
+   * restore the 287 bytes under the deleted key and the same cookie jar answers 200 again.
+   *
+   * Both halves of the fix are needed and neither is a workaround. The client refuses to send new
+   * authenticated requests once sign-out begins (`ACCESS-EXIT-002`), which removes most of the
+   * window; the server records the signed-out session id in a marker that lives outside the session,
+   * so a request already in flight cannot hand the credential back (`ACCESS-EXIT-003`). The browser
+   * asymmetry was timing, not behaviour — webkit simply had fewer requests in flight at the click.
    */
   test('signing out ends the session, and a new code opens another', async ({ page }) => {
     await page.goto('/login')

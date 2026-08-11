@@ -6,6 +6,7 @@ use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
+use App\Domains\Identity\Middleware\RejectRevokedSessions;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
@@ -137,8 +138,16 @@ return Application::configure(basePath: dirname(__DIR__))
             SetLocale::class,
         ]);
 
-        // Suspended/disabled accounts are denied on EVERY authenticated API request (guests pass through).
+        /*
+         * Appended, so both run INSIDE Sanctum's stateful pipeline — after `StartSession` has
+         * resolved the session from the cookie, and before any route acts on it.
+         *
+         * `RejectRevokedSessions` first: a session somebody signed out must be refused before
+         * anything else asks what its account may do (ACCESS-EXIT-003). Suspended/disabled accounts
+         * are then denied on EVERY authenticated API request. Guests pass through both.
+         */
         $middleware->api(append: [
+            RejectRevokedSessions::class,
             EnsureAccountActive::class,
         ]);
 

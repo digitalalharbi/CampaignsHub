@@ -53,15 +53,22 @@ export async function signOutCompletely(queryClient?: QueryClient, destination =
   /*
    * ACCESS-EXIT-002 — the barrier goes up FIRST, before a single byte of the logout is sent.
    *
-   * The order here is the whole fix. This function used to log out and then tidy up, so the burst
-   * the dashboard had already fired — memberships, projects, notifications, client workspaces, saved
-   * views, creative pulse — was still in flight while the session was being destroyed. Every Laravel
-   * response re-issues the session cookie, so one landing after the logout's own `Set-Cookie` put
-   * the older authenticated cookie back and signed the customer straight back in.
+   * The order here is half the fix. This function used to log out and then tidy up, so the burst the
+   * dashboard had already fired — memberships, projects, notifications, client workspaces, saved
+   * views, creative pulse — was still in flight while the session was being destroyed. Each of those
+   * requests loaded the authenticated session before the click, and writes it BACK to the session
+   * store when it finishes: the sign-out deletes the session and a late request puts the same bytes
+   * under the same id, so the cookie in the browser is a working credential again. Measured directly
+   * — restore the payload by hand and the same cookie jar answers 200 (`ACCESS-EXIT-003`).
    *
    * Raising the barrier first means no FURTHER authenticated request is sent; cancelling the queries
    * immediately after means the ones already in flight are abandoned rather than left to resolve
    * into a cache that is about to be thrown away. Neither waits on the network.
+   *
+   * It is the other half, though, and it was measured to be insufficient alone. A request that left
+   * the browser before the click cannot be recalled from here, so the server also records the
+   * signed-out session id and refuses it whatever writes it back (`ACCESS-EXIT-003`). Neither half
+   * makes the other redundant: this one keeps the traffic down, that one makes the outcome certain.
    */
   beginSignOut()
 
