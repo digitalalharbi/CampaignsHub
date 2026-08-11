@@ -666,6 +666,16 @@ export function DashboardPage() {
             </p>
           )}
 
+          {/* COMMERCE-TZ-001 — an order whose store states no timezone may belong to the day either
+              side of where it is counted, and the reader is told rather than left to assume. */}
+          {(commerce.orders_with_assumed_timezone ?? 0) > 0 && (
+            <p data-testid="dashboard-store-assumed-tz" className="mt-2 text-[13px] text-warning">
+              {ar
+                ? `${num(commerce.orders_with_assumed_timezone ?? 0)} طلبًا لم يذكر متجرها المنطقة الزمنية، فاعتُبرت UTC.`
+                : `${num(commerce.orders_with_assumed_timezone ?? 0)} order(s) come from a store that states no timezone, so UTC was assumed.`}
+            </p>
+          )}
+
           {/* The revenue above is SHORT by these orders, and a short total must never look whole. */}
           {(commerce.orders_with_money_withheld ?? 0) > 0 && (
             <p data-testid="dashboard-store-withheld" className="mt-2 text-[13px] text-warning">

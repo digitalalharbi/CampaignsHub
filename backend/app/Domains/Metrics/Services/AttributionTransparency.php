@@ -90,6 +90,7 @@ final class AttributionTransparency
     public function __construct(
         private readonly ProjectOrders $projectOrders,
         private readonly ProjectStores $projectStores,
+        private readonly ReportingTimezone $timezones,
     ) {}
 
     /**
@@ -98,13 +99,21 @@ final class AttributionTransparency
      */
     public function build(string $tenantId, string $projectId, Carbon $from, Carbon $to, array $providers = []): array
     {
-        $from = $from->copy()->startOfDay();
-        $to = $to->copy()->endOfDay();
+        /*
+         * COMMERCE-TZ-001 — the same window the funnel uses, measured on the same clock.
+         *
+         * This report and the funnel are read side by side and are expected to agree. Two services
+         * each doing their own `startOfDay()` in the server's zone agreed only by coincidence, and
+         * would have stopped agreeing the moment one of them was localised and the other was not.
+         */
+        $window = $this->timezones->window($projectId, $from, $to);
+        $from = $window['from'];
+        $to = $window['to'];
 
         $loaded = $this->projectOrders->forWindow($tenantId, $projectId, $from, $to);
         $hasStore = $this->projectStores->forProject($tenantId, $projectId)->isNotEmpty();
 
-        $platformRows = $this->platformRows($projectId, $from, $to, $providers);
+        $platformRows = $this->platformRows($projectId, $window['from_date'], $window['to_date'], $providers);
         $storeByPlatform = $hasStore ? $this->storeOrdersByPlatform($loaded['orders']) : [];
 
         $platforms = [];
@@ -133,11 +142,12 @@ final class AttributionTransparency
         $platforms = AdPlatforms::sortRows($platforms, 'provider');
 
         return [
-            'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            // The client's own dates — see ReportingTimezone::window().
+            'period' => ['from' => $window['from_date'], 'to' => $window['to_date'], 'timezone' => $window['timezone']],
             'platform_reported' => $this->platformReported($platforms),
             'store_confirmed' => $this->storeConfirmed($hasStore, $loaded),
             'dedup' => $this->dedup($hasStore, $platforms, $loaded),
-            'models' => $this->models($projectId, $from, $to),
+            'models' => $this->models($projectId, $window['from_date'], $window['to_date']),
             'unattributed' => $this->unattributed($hasStore, $loaded['orders']),
         ];
     }
@@ -314,11 +324,11 @@ final class AttributionTransparency
      *
      * @return list<array<string,mixed>>
      */
-    private function models(string $projectId, Carbon $from, Carbon $to): array
+    private function models(string $projectId, string $fromDate, string $toDate): array
     {
         $campaignIds = DailyMetric::withoutGlobalScopes()
             ->where('project_id', $projectId)
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->whereBetween('metric_date', [$fromDate, $toDate])
             ->whereNotNull('unified_campaign_id')
             ->distinct()
             ->pluck('unified_campaign_id')
@@ -395,11 +405,11 @@ final class AttributionTransparency
      * @param  list<string>  $providers
      * @return array<string,array{orders:float,revenue:float,currency:?string,windows:array<string,int>}>
      */
-    private function platformRows(string $projectId, Carbon $from, Carbon $to, array $providers): array
+    private function platformRows(string $projectId, string $fromDate, string $toDate, array $providers): array
     {
         $rows = DailyMetric::withoutGlobalScopes()
             ->where('project_id', $projectId)
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->whereBetween('metric_date', [$fromDate, $toDate])
             ->whereIn('metric_key', [self::ORDERS_KEY, self::REVENUE_KEY])
             ->when($providers !== [], fn ($q) => $q->whereIn('provider', $providers))
             ->groupBy('provider', 'metric_key', 'attribution_window', 'project_currency')

@@ -141,6 +141,10 @@ final class MetricsController extends Controller
             'reporting_currency' => $funnel['totals']['reporting_currency'],
             'orders_with_money_withheld' => $funnel['coverage']['orders_with_money_withheld'],
             'money_withheld_currencies' => $funnel['coverage']['money_withheld_currencies'],
+            // COMMERCE-TZ-001 — which clock this window was measured on, and how many orders had
+            // their zone assumed rather than stated. An assumption nobody can see is the defect.
+            'reporting_timezone' => $funnel['totals']['reporting_timezone'],
+            'orders_with_assumed_timezone' => $funnel['coverage']['orders_with_assumed_timezone'],
             'attributed_orders' => $funnel['totals']['attributed_orders'],
             'attributed_revenue' => $funnel['totals']['attributed_revenue'],
             'unattributed_orders' => $funnel['totals']['unattributed_orders'],

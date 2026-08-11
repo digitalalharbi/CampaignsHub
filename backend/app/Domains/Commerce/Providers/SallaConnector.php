@@ -291,11 +291,30 @@ final class SallaConnector extends ApiCommerceConnector
         return strtolower((string) ($status ?: 'unknown'));
     }
 
-    /** Salla wraps dates as `{ date: "2026-08-05 10:00:00.000000", timezone: "Asia/Riyadh" }`. */
-    private function date(mixed $value): ?string
+    /**
+     * Salla wraps dates as `{ date: "2026-08-05 10:00:00.000000", timezone: "Asia/Riyadh" }`.
+     *
+     * ## The wrapper is passed through INTACT — COMMERCE-TZ-001
+     *
+     * This used to return the string and drop the zone, so `Carbon::parse()` downstream read a
+     * merchant's wall clock in the application's own timezone: a sale made at 01:30 in Riyadh was
+     * stored as 01:30 UTC, three hours adrift as an instant and wrong on every screen rendering a
+     * time for anybody outside Riyadh.
+     *
+     * The zone belongs to the ROW, not to the store's current setting. A merchant who changed their
+     * shop's timezone last month still has orders that were placed under the old one, and this
+     * wrapper is the only thing that remembers which. {@see StoreTime} therefore takes the whole
+     * object and prefers this zone over anything configured elsewhere.
+     *
+     * @return array{date: string, timezone: ?string}|string|null
+     */
+    private function date(mixed $value): array|string|null
     {
         if (is_array($value)) {
-            return isset($value['date']) ? (string) $value['date'] : null;
+            $date = isset($value['date']) ? trim((string) $value['date']) : '';
+            $zone = isset($value['timezone']) ? trim((string) $value['timezone']) : '';
+
+            return $date === '' ? null : ['date' => $date, 'timezone' => $zone === '' ? null : $zone];
         }
 
         return is_string($value) && $value !== '' ? $value : null;

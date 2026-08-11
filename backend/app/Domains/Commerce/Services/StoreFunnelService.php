@@ -10,6 +10,7 @@ use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Models\CommerceOrderItem;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -74,6 +75,7 @@ final class StoreFunnelService
         private readonly ProjectStores $projectStores,
         private readonly ProjectOrders $projectOrders,
         private readonly CommerceCurrency $currency,
+        private readonly ReportingTimezone $timezones,
     ) {}
 
     /**
@@ -93,8 +95,20 @@ final class StoreFunnelService
          * Normalising here rather than at each caller is the point: the service owns what its window
          * means, so a fifth caller cannot get it subtly wrong in a sixth way.
          */
-        $from = $from->copy()->startOfDay();
-        $to = $to->copy()->endOfDay();
+        /*
+         * COMMERCE-TZ-001 — and those whole days belong to the CLIENT's clock, not the server's.
+         *
+         * `startOfDay()` on a Carbon built in the application's timezone asks a Riyadh client about a
+         * day that begins at three in the morning: their «yesterday» holds three hours of the day
+         * before and misses three of its own. Nobody reads that as a timezone problem — they read a
+         * total that does not match what they counted, and they are right.
+         *
+         * The merchant's own day is a separate fact and is not overwritten by this: every order
+         * carries `placed_on`, the date its shop sold it on, resolved at import.
+         */
+        $window = $this->timezones->window($projectId, $from, $to);
+        $from = $window['from'];
+        $to = $window['to'];
 
         /*
          * The stores of THIS PROJECT, not of the tenant (UNIFIED-001).
@@ -122,7 +136,7 @@ final class StoreFunnelService
         $orders = $loaded['orders'];
 
         $store = $this->storeMeasurements($tenantId, $projectId, $orders, $stores, $from, $to);
-        $ads = $this->adMeasurements($projectId, $from, $to);
+        $ads = $this->adMeasurements($projectId, $window['from_date'], $window['to_date']);
 
         $stages = [];
 
@@ -132,11 +146,20 @@ final class StoreFunnelService
 
         $coverage = $this->coverage($stores, $pendingStores, $orders, $loaded);
         $coverage['reporting_currency'] = $store['reporting_currency'];
+        $coverage['reporting_timezone'] = $window['timezone'];
+        // An assumption nobody can see is the defect COMMERCE-TZ-001 closes, so it is counted here.
+        $coverage['orders_with_assumed_timezone'] = $store['assumed_timezone_orders'];
         $coverage['orders_with_money_withheld'] = $store['money_withheld_orders'];
         $coverage['money_withheld_currencies'] = $store['money_withheld_currencies'];
 
         return [
-            'window' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            'window' => [
+                // The CLIENT's dates, not the UTC dates the instants happen to fall on.
+                'from' => $window['from_date'],
+                'to' => $window['to_date'],
+                // Two people reading «5 August» in two timezones are reading two different days.
+                'timezone' => $window['timezone'],
+            ],
             'stages' => $stages,
             'steps' => $this->steps($stages),
             'totals' => [
@@ -144,6 +167,7 @@ final class StoreFunnelService
                 // FX-001 converted the spend at ingest, COMMERCE-FX-001 the revenue at import — which
                 // is what makes dividing one by the other for ROAS a legitimate operation at all.
                 'reporting_currency' => $store['reporting_currency'],
+                'reporting_timezone' => $window['timezone'],
                 'spend' => $ads['spend'],
                 'revenue' => $store['revenue'],
                 'gross_revenue' => $store['gross_revenue'],
@@ -157,7 +181,7 @@ final class StoreFunnelService
             ],
             'derived' => $this->derived($ads, $store),
             'comparisons' => [
-                'platforms' => $this->byPlatform($projectId, $orders, $from, $to),
+                'platforms' => $this->byPlatform($projectId, $orders, $window['from_date'], $window['to_date']),
                 'campaigns' => $this->byCampaign($orders),
                 'products' => $this->byProduct($orders),
             ],
@@ -212,6 +236,9 @@ final class StoreFunnelService
              * that is short says so instead of just being short.
              */
             'reporting_currency' => $this->currency->reportingCurrencyFor($projectId),
+            'assumed_timezone_orders' => $orders->filter(
+                static fn ($o) => $o->time_source === 'assumed_utc'
+            )->count(),
             'gross_revenue' => round((float) $live->sum(fn (CommerceOrder $o) => (float) $o->total), 2),
             'revenue' => round((float) $live->sum(fn (CommerceOrder $o) => $o->netRevenue() ?? 0.0), 2),
             'refunded' => round((float) $orders->sum(fn (CommerceOrder $o) => (float) $o->refunded_total), 2),
@@ -242,11 +269,11 @@ final class StoreFunnelService
      *
      * @return array<string,float>
      */
-    private function adMeasurements(string $projectId, Carbon $from, Carbon $to): array
+    private function adMeasurements(string $projectId, string $fromDate, string $toDate): array
     {
         $rows = DailyMetric::withoutGlobalScopes()
             ->where('project_id', $projectId)
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->whereBetween('metric_date', [$fromDate, $toDate])
             ->selectRaw('metric_key, SUM(value) AS total')
             ->groupBy('metric_key')
             ->pluck('total', 'metric_key');
@@ -452,12 +479,12 @@ final class StoreFunnelService
      * @param  Collection<int,CommerceOrder>  $orders
      * @return list<array<string,mixed>>
      */
-    private function byPlatform(string $projectId, Collection $orders, Carbon $from, Carbon $to): array
+    private function byPlatform(string $projectId, Collection $orders, string $fromDate, string $toDate): array
     {
         $spendByProvider = DailyMetric::withoutGlobalScopes()
             ->where('project_id', $projectId)
             ->where('metric_key', 'spend')
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->whereBetween('metric_date', [$fromDate, $toDate])
             ->selectRaw('provider, SUM(value) AS total')
             ->groupBy('provider')
             ->pluck('total', 'provider');

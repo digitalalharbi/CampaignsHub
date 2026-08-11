@@ -375,8 +375,27 @@ export function LiveSharedReport({
                   : `${payload.store_funnel.coverage.orders_with_money_withheld} order(s) in ${payload.store_funnel.coverage.money_withheld_currencies.join(', ')} have no dated exchange rate and are NOT included in the revenue above.`}
               </p>
             )}
+            {/*
+              * COMMERCE-TZ-001 — the client link says which clock its days were measured on. The
+              * reader has no second view of their own account to check a boundary against.
+              */}
+            {(payload.store_funnel.coverage.orders_with_assumed_timezone ?? 0) > 0 && (
+              <p data-testid="shared-assumed-timezone" className="mt-2 text-[11px] text-warning">
+                {ar
+                  ? `${payload.store_funnel.coverage.orders_with_assumed_timezone} طلبًا لم يذكر متجرها المنطقة الزمنية، فاعتُبرت UTC.`
+                  : `${payload.store_funnel.coverage.orders_with_assumed_timezone} order(s) come from a store that states no timezone, so UTC was assumed.`}
+              </p>
+            )}
             <p className="mt-2 text-[11px] text-text-muted">
               {ar ? 'الطلبات في الفترة' : 'Orders in the period'}:{' '}
+              {payload.store_funnel.coverage.reporting_timezone && (
+                <>
+                  <span data-testid="shared-reporting-timezone" className="tnum" dir="ltr">
+                    {payload.store_funnel.coverage.reporting_timezone}
+                  </span>
+                  {' · '}
+                </>
+              )}
               <span className="tnum">{payload.store_funnel.coverage.orders_in_window}</span>
               {payload.store_funnel.coverage.store_last_synced_at && (
                 <> · {ar ? 'آخر مزامنة للمتجر' : 'Store last synced'}:{' '}

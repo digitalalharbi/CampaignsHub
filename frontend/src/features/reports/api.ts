@@ -165,6 +165,8 @@ export interface StoreFunnelPayload {
      * account, so a total that is quietly short is one they cannot possibly check.
      */
     reporting_currency: string
+    reporting_timezone?: string
+    orders_with_assumed_timezone?: number
     orders_with_money_withheld: number
     money_withheld_currencies: string[]
   }

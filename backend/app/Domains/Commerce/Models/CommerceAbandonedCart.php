@@ -24,6 +24,8 @@ final class CommerceAbandonedCart extends Model
     protected $fillable = [
         'tenant_id', 'project_id', 'external_account_id', 'commerce_customer_id', 'provider',
         'external_id', 'abandoned_at', 'currency', 'total', 'items_count', 'customer_email',
+        // COMMERCE-TZ-001 — see CommerceOrder; a cart is a moment on a merchant's clock too.
+        'abandoned_at_timezone', 'abandoned_on', 'time_source',
         'checkout_url', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
         'click_id', 'click_id_provider', 'landing_url', 'referrer_url', 'is_demo', 'last_synced_at',
         // COMMERCE-FX-001 — `total` is in the reporting currency; what the shopper saw is beside it.
@@ -32,6 +34,7 @@ final class CommerceAbandonedCart extends Model
 
     protected $casts = [
         'abandoned_at' => 'datetime',
+        'abandoned_on' => 'date',
         'total' => 'decimal:6',
         'original_total' => 'decimal:6',
         'exchange_rate' => 'decimal:12',

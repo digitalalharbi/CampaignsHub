@@ -93,6 +93,8 @@ interface FunnelPayload {
      */
     orders_with_money_withheld: number
     money_withheld_currencies: string[]
+    reporting_timezone?: string
+    orders_with_assumed_timezone?: number
   }
 }
 
@@ -284,6 +286,24 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
         <span className="tnum">{coverage.stores}</span> {ar ? 'متجر' : 'store(s)'} ·{' '}
         <span className="tnum">{coverage.orders_in_window}</span> {ar ? 'طلبًا في الفترة' : 'orders in the period'} ·{' '}
         {ar ? 'كل المبالغ بـ' : 'All amounts in'} <span className="tnum">{cur}</span>
+        {/*
+          COMMERCE-TZ-001 — «5 August» is a different sixty thousand seconds in every timezone, so
+          the window names the clock it was measured on rather than leaving a reader to assume theirs.
+        */}
+        {coverage.reporting_timezone && (
+          <>
+            {' · '}
+            {ar ? 'الأيام محسوبة بتوقيت' : 'Days measured in'}{' '}
+            <span data-testid="funnel-reporting-timezone" className="tnum" dir="ltr">{coverage.reporting_timezone}</span>
+          </>
+        )}
+        {(coverage.orders_with_assumed_timezone ?? 0) > 0 && (
+          <span data-testid="funnel-assumed-timezone" className="block text-warning">
+            {ar
+              ? `${coverage.orders_with_assumed_timezone} طلبًا لم يذكر متجرها المنطقة الزمنية، فاعتُبرت UTC — قد يقع أيٌّ منها في اليوم السابق أو التالي.`
+              : `${coverage.orders_with_assumed_timezone} order(s) come from a store that states no timezone, so UTC was assumed — any of them may belong to the day before or after.`}
+          </span>
+        )}
         {/*
           COMMERCE-FX-001 — a total short by an unconvertible order looks exactly like a complete one,
           so the shortfall is stated. Silence here would be a claim that the revenue above is whole.

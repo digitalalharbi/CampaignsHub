@@ -199,6 +199,46 @@ describe('StoreFunnelTab', () => {
     expect(warning.textContent).toMatch(/لم تُحتسب/)
   })
 
+  /**
+   * COMMERCE-TZ-001 — the window names the clock it was measured on.
+   *
+   * «5 August» is a different sixty thousand seconds in every timezone. A report that does not say
+   * which one it used leaves the reader to assume theirs, and a boundary order to look like an error.
+   */
+  it('names the timezone its days were measured in', async () => {
+    vi.mocked(getData).mockResolvedValue(payload({
+      coverage: {
+        stores: 1, stores_without_cart_data: [], store_last_synced_at: null,
+        orders_in_window: 25, orders_without_attribution: 10,
+        reporting_currency: 'SAR', orders_with_money_withheld: 0, money_withheld_currencies: [],
+        reporting_timezone: 'Asia/Riyadh', orders_with_assumed_timezone: 0,
+      },
+    }))
+
+    renderWithProviders(<StoreFunnelTab projectId="p1" range={RANGE} />, { locale: 'ar' })
+
+    expect((await screen.findByTestId('funnel-reporting-timezone')).textContent).toMatch(/Asia\/Riyadh/)
+    expect(screen.queryByTestId('funnel-assumed-timezone')).toBeNull()
+  })
+
+  /** And when a store never stated its zone, the assumption is on the page rather than in the code. */
+  it('warns when an order had its timezone assumed', async () => {
+    vi.mocked(getData).mockResolvedValue(payload({
+      coverage: {
+        stores: 1, stores_without_cart_data: [], store_last_synced_at: null,
+        orders_in_window: 25, orders_without_attribution: 10,
+        reporting_currency: 'SAR', orders_with_money_withheld: 0, money_withheld_currencies: [],
+        reporting_timezone: 'Asia/Riyadh', orders_with_assumed_timezone: 3,
+      },
+    }))
+
+    renderWithProviders(<StoreFunnelTab projectId="p1" range={RANGE} />, { locale: 'ar' })
+
+    const warning = await screen.findByTestId('funnel-assumed-timezone')
+    expect(warning.textContent).toMatch(/3/)
+    expect(warning.textContent).toMatch(/UTC/)
+  })
+
   /** Every amount is labelled with the currency the SERVER reports, not a hard-coded riyal. */
   it('states the reporting currency the payload names', async () => {
     vi.mocked(getData).mockResolvedValue(payload({

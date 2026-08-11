@@ -64,6 +64,13 @@ export interface CommerceSummary {
   reporting_currency: string
   orders_with_money_withheld: number
   money_withheld_currencies: string[]
+  /**
+   * COMMERCE-TZ-001 — the clock this window was measured on, and how many orders had their zone
+   * ASSUMED rather than stated by the store. A day is a different sixty thousand seconds in every
+   * timezone, so the report says which one it used.
+   */
+  reporting_timezone?: string
+  orders_with_assumed_timezone?: number
   attributed_orders: number
   attributed_revenue: number | null
   unattributed_orders: number

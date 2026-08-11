@@ -56,6 +56,8 @@ const STORE: CommerceSummary = {
   stores: 1, store_last_synced_at: null,
   // COMMERCE-FX-001 — the currency the figures above are in, and the orders missing from them.
   reporting_currency: 'SAR', orders_with_money_withheld: 0, money_withheld_currencies: [],
+  // COMMERCE-TZ-001 — the clock the window was measured on, and any order whose zone was assumed.
+  reporting_timezone: 'Asia/Riyadh', orders_with_assumed_timezone: 0,
 }
 
 function summary(commerce: CommerceSummary | null) {
@@ -145,6 +147,33 @@ describe('the dashboard store strip', () => {
     // row is absent whenever nothing is narrowed, which on a freshly opened dashboard is always.
     await screen.findByTestId('dashboard-intro')
     expect(screen.queryByTestId('dashboard-store')).toBeNull()
+  })
+
+  /**
+   * COMMERCE-TZ-001 — an assumed timezone is stated on the dashboard too.
+   *
+   * An order from a store that never said which clock it runs on may belong to the day either side
+   * of where it is counted. That is a small error and an invisible one, which is the combination
+   * worth naming.
+   */
+  it('says when an order had its timezone assumed', async () => {
+    vi.mocked(useSummary).mockReturnValue(summary({ ...STORE, orders_with_assumed_timezone: 4 }) as never)
+
+    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+
+    const note = await screen.findByTestId('dashboard-store-assumed-tz')
+    expect(note.textContent).toMatch(/4/)
+    expect(note.textContent).toMatch(/UTC/)
+  })
+
+  /** With every store stating its zone, there is nothing to warn about. */
+  it('shows no timezone warning when every store stated its zone', async () => {
+    vi.mocked(useSummary).mockReturnValue(summary(STORE) as never)
+
+    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+
+    await screen.findByTestId('dashboard-store')
+    expect(screen.queryByTestId('dashboard-store-assumed-tz')).toBeNull()
   })
 
   /**

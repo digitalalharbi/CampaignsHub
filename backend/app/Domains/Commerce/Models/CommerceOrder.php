@@ -33,6 +33,9 @@ final class CommerceOrder extends Model
     protected $fillable = [
         'tenant_id', 'project_id', 'external_account_id', 'commerce_customer_id', 'provider',
         'external_id', 'reference', 'status', 'payment_status', 'placed_at', 'currency', 'subtotal',
+        // COMMERCE-TZ-001 — the zone the instant was resolved in, the merchant's own date, and
+        // which link of the chain answered. `placed_on` is what a merchant-day total groups by.
+        'placed_at_timezone', 'placed_on', 'time_source',
         'shipping_total', 'tax_total', 'discount_total', 'total', 'refunded_total', 'refunded_at',
         'cancelled_at', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
         'click_id', 'click_id_provider', 'landing_url', 'referrer_url', 'external_campaign_id',
@@ -48,6 +51,7 @@ final class CommerceOrder extends Model
 
     protected $casts = [
         'placed_at' => 'datetime',
+        'placed_on' => 'date',
         'refunded_at' => 'datetime',
         'cancelled_at' => 'datetime',
         'attributed_at' => 'datetime',

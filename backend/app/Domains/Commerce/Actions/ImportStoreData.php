@@ -12,12 +12,12 @@ use App\Domains\Commerce\Models\CommerceOrderItem;
 use App\Domains\Commerce\Models\CommerceProduct;
 use App\Domains\Commerce\Services\CommerceCurrency;
 use App\Domains\Commerce\Services\OrderAttributionResolver;
+use App\Domains\Commerce\Services\StoreTime;
 use App\Domains\Commerce\ValueObjects\Attribution;
 use App\Domains\Commerce\ValueObjects\MoneyConversion;
 use App\Domains\Integrations\Models\ExternalAccount;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Throwable;
 
 /**
  * COMMERCE-001 — the one place a store's answers become rows.
@@ -53,6 +53,7 @@ final class ImportStoreData
     public function __construct(
         private readonly OrderAttributionResolver $attribution,
         private readonly CommerceCurrency $currency,
+        private readonly StoreTime $time,
     ) {}
 
     /**
@@ -149,7 +150,15 @@ final class ImportStoreData
                     ? $row['attribution']
                     : Attribution::read();
 
-                $placedAt = $this->time($row['placed_at'] ?? null);
+                /*
+                 * COMMERCE-TZ-001 — the instant, the merchant's own date, and which clock said so.
+                 *
+                 * Resolved here rather than by each connector so Salla's `{date, timezone}` wrapper
+                 * and Zid's string land on the same three columns, and so the zone chain — payload,
+                 * store, client, assumed — is written down once.
+                 */
+                $placed = $this->time->resolve($row['placed_at'] ?? null, $store->timezone, $projectId);
+                $placedAt = $placed?->instant;
 
                 /*
                  * One rate for the whole order, taken as of the day it was PLACED (COMMERCE-FX-001).
@@ -170,7 +179,7 @@ final class ImportStoreData
                         'reference' => $row['reference'] ?? null,
                         'status' => (string) ($row['status'] ?? 'unknown'),
                         'payment_status' => $row['payment_status'] ?? null,
-                        'placed_at' => $placedAt,
+                        ...($placed?->columns('placed_at', 'placed_on') ?? ['placed_at' => null, 'placed_at_timezone' => null, 'placed_on' => null, 'time_source' => null]),
                         ...$money->columns(),
                         'subtotal' => $money->convert($row['subtotal'] ?? null),
                         'shipping_total' => $money->convert($row['shipping_total'] ?? null),
@@ -184,8 +193,10 @@ final class ImportStoreData
                         'original_discount_total' => $money->original($row['discount_total'] ?? null),
                         'original_total' => $money->original($row['total'] ?? null),
                         'original_refunded_total' => $money->original($row['refunded_total'] ?? null),
-                        'refunded_at' => $this->time($row['refunded_at'] ?? null),
-                        'cancelled_at' => $this->time($row['cancelled_at'] ?? null),
+                        // Same chain as `placed_at`: a refund and a cancellation are moments too,
+                        // and a wall clock read in the server's zone is wrong for both.
+                        'refunded_at' => $this->time->resolve($row['refunded_at'] ?? null, $store->timezone, $projectId)?->instant,
+                        'cancelled_at' => $this->time->resolve($row['cancelled_at'] ?? null, $store->timezone, $projectId)?->instant,
                         ...$attribution->toColumns(),
                         'is_demo' => false,
                         'last_synced_at' => Carbon::now(),
@@ -229,7 +240,8 @@ final class ImportStoreData
                     ? $row['attribution']
                     : Attribution::read();
 
-                $abandonedAt = $this->time($row['abandoned_at'] ?? null);
+                $abandoned = $this->time->resolve($row['abandoned_at'] ?? null, $store->timezone, $projectId);
+                $abandonedAt = $abandoned?->instant;
                 $money = $this->currency->for($projectId, $row['currency'] ?? $store->currency, $abandonedAt);
 
                 CommerceAbandonedCart::withoutGlobalScopes()->updateOrCreate(
@@ -238,7 +250,7 @@ final class ImportStoreData
                         'tenant_id' => $store->tenant_id,
                         'project_id' => $projectId,
                         'provider' => $store->provider,
-                        'abandoned_at' => $abandonedAt,
+                        ...($abandoned?->columns('abandoned_at', 'abandoned_on') ?? ['abandoned_at' => null, 'abandoned_at_timezone' => null, 'abandoned_on' => null, 'time_source' => null]),
                         ...$money->columns(),
                         'total' => $money->convert($row['total'] ?? null),
                         'original_total' => $money->original($row['total'] ?? null),
@@ -290,7 +302,7 @@ final class ImportStoreData
                  */
                 'total_spent' => $row['total_spent'] ?? null,
                 'currency' => $row['currency'] ?? $store->currency,
-                'first_seen_at' => $this->time($row['first_seen_at'] ?? null),
+                'first_seen_at' => $this->time->resolve($row['first_seen_at'] ?? null, $store->timezone, $projectId)?->instant,
                 'is_demo' => false,
                 'last_synced_at' => Carbon::now(),
                 /*
@@ -352,23 +364,5 @@ final class ImportStoreData
         }
 
         return $written;
-    }
-
-    private function time(mixed $value): ?Carbon
-    {
-        if ($value instanceof Carbon) {
-            return $value;
-        }
-
-        if (! is_string($value) || trim($value) === '') {
-            return null;
-        }
-
-        try {
-            return Carbon::parse($value);
-        } catch (Throwable) {
-            // A date we cannot read is not worth failing an order over; the raw payload keeps it.
-            return null;
-        }
     }
 }

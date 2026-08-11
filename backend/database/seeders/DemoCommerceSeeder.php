@@ -251,7 +251,12 @@ final class DemoCommerceSeeder extends Seeder
                         'reference' => 'SL-'.(100_000 + $n),
                         'status' => $cancelled ? 'cancelled' : ($d > self::DAYS - 4 ? 'processing' : 'completed'),
                         'payment_status' => $cancelled ? 'refunded' : 'paid',
+                        // COMMERCE-TZ-001 — demo rows carry the same provenance a real import writes,
+                        // so a demo funnel does not read as «every order's zone was assumed».
                         'placed_at' => $date->copy()->addHours(9 + ($n % 12)),
+                        'placed_at_timezone' => 'Asia/Riyadh',
+                        'placed_on' => $date->copy()->addHours(9 + ($n % 12))->setTimezone('Asia/Riyadh')->toDateString(),
+                        'time_source' => 'store',
                         'currency' => self::CURRENCY,
                         'subtotal' => $total,
                         'shipping_total' => 25.0,
@@ -428,6 +433,9 @@ final class DemoCommerceSeeder extends Seeder
                         'project_id' => $project->id,
                         'provider' => 'salla',
                         'abandoned_at' => $date->copy()->addHours(11 + $k),
+                        'abandoned_at_timezone' => 'Asia/Riyadh',
+                        'abandoned_on' => $date->copy()->addHours(11 + $k)->setTimezone('Asia/Riyadh')->toDateString(),
+                        'time_source' => 'store',
                         'currency' => self::CURRENCY,
                         'total' => 380.0 + ($k * 60),
                         // The identity conversion, written for the reason the orders above state.
