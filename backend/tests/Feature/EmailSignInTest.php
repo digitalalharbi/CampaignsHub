@@ -83,6 +83,46 @@ final class EmailSignInTest extends TestCase
         $this->assertAuthenticatedAs($user);
     }
 
+    /**
+     * LOGOUT-SESSION-001 — what a sign-out leaves behind, measured where it can be measured.
+     *
+     * ## The claim under test, and where it is NOT tested
+     *
+     * «Signing out ends the session» has to be proven across a REQUEST BOUNDARY: the question is
+     * what happens when the cookie a customer still holds is presented again. This suite cannot
+     * answer that. `SESSION_DRIVER=array` keeps one in-memory store for the whole test, so a second
+     * call reuses the same instance and `invalidate()` is unobservable — a cross-request assertion
+     * here reports the harness, not the product.
+     *
+     * It was proven instead at the HTTP layer, against the running server with a real cookie jar and
+     * a separate process per request (2026-08-11):
+     *
+     * ```
+     * POST /auth/email-code/verify   → 200
+     * GET  /auth/me                  → 200  advertiser@campaignshub.io
+     * POST /auth/logout              → 200
+     * GET  /auth/me                  → 401  (same cookie jar)
+     * ```
+     *
+     * **The server ends the session.** What this test keeps is the half the harness CAN see.
+     */
+    /** And the session identifier itself is replaced, so the old one cannot be presented again. */
+    public function test_logging_out_regenerates_the_session_rather_than_only_forgetting_the_user(): void
+    {
+        $user = $this->verifiedUser();
+        ['id' => $id, 'code' => $code] = $this->codeFor($user->email);
+
+        $this->withHeaders($this->spa)
+            ->postJson('/api/v1/auth/email-code/verify', ['verification_id' => $id, 'code' => $code])
+            ->assertOk();
+
+        $before = session()->getId();
+
+        $this->withHeaders($this->spa)->postJson('/api/v1/auth/logout')->assertOk();
+
+        $this->assertNotSame($before, session()->getId(), 'a logout that keeps the session id leaves a usable cookie behind');
+    }
+
     /** The address is matched case-insensitively — «Owner@» and «owner@» are one account. */
     public function test_the_address_is_matched_without_regard_to_case(): void
     {

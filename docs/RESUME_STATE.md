@@ -10,7 +10,75 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (seventh of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (eighth of the day)
+
+**Working tree CLEAN.** `IDENTITY-ACCOUNTS-001` is still **NOT VERIFIED** — the gate has not been
+re-run, deliberately, because the instruction was to close the cause first.
+
+### The logout question is ANSWERED: the server is not defective
+
+Measured at the HTTP layer against the running server, real cookie jar, a separate process per
+request — not through the test harness, and not through the UI:
+
+```
+POST /api/v1/auth/email-code/verify   → 200
+GET  /api/v1/auth/me                  → 200   advertiser@campaignshub.io
+POST /api/v1/auth/logout              → 200
+GET  /api/v1/auth/me                  → 401   (same cookie jar, same curl session)
+```
+
+`AuthController::logout()` does `Auth::guard('web')->logout()` + `session()->invalidate()` +
+`regenerateToken()`, and the next request with the cookie the customer still holds is refused.
+**Signing out ends the session.** `EmailSignInTest` keeps the half a feature test can honestly
+observe — that the session id is regenerated — and its docblock records the HTTP evidence above for
+the half it cannot.
+
+Two measurement traps found on the way, both worth not falling into again:
+
+1. **A backend feature test cannot prove this.** `SESSION_DRIVER=array` keeps ONE in-memory store for
+   the whole test, so a second call reuses the same instance and `invalidate()` is invisible. A
+   cross-request assertion there reports the harness, not the product. My first version of that test
+   «failed» and looked like a real defect for exactly this reason.
+2. **`assertGuest()` is not the question either.** It reads the auth state left in the PHP process by
+   the request that just ran. A customer never sees that; they see what the NEXT request does.
+
+### So the E2E failure is in the measurement, and the specific flaw is identifiable
+
+`login-otp-journey.spec.ts:128` does:
+
+```js
+await page.request.post('/api/v1/auth/logout', { headers: { 'X-XSRF-TOKEN': …cookie… } })
+expect(await whoAmI(page), 'the session outlived the sign-out').toBeNull()
+```
+
+**The status of that POST is never asserted.** `page.request` does share the browser context's
+cookie jar, so the jar is right — but if the request is refused (419 on a stale `XSRF-TOKEN`, which
+is read out of the cookie jar and can lag a regeneration), then the session correctly survives and
+the test reports «the session outlived the sign-out». The message accuses the product of a security
+defect when the truth is that the sign-out was never accepted.
+
+That is a real test defect and fixing it is not hiding anything — it makes the failure legible.
+**It has NOT been changed yet**, because changing it is the first act of the next unit and the
+instruction was to close the cause before touching anything else.
+
+### The next session, in order
+
+1. **Assert the logout response.** `expect(res.ok()).toBeTruthy()` before asserting the session is
+   gone — or better, drive the sign-out through the UI the customer uses, so the CSRF token is the
+   one the app itself would send. Then re-run `login-otp-journey` in the Chromium → Firefox → WebKit
+   sequence (`npm run gate -- e2e/login-otp-journey.spec.ts`), not in isolation.
+2. **Only then** the leg asymmetry: chromium is the first project and has passed 299/299 in every
+   run, while every failure has landed in the second or third leg. Candidates to eliminate, in
+   order: unreaped browser processes between legs; the per-leg reset leaving config/route cache warm;
+   ports still held from the previous leg. Instrument only enough to prove what leaks.
+3. **Then** one Full Gate on a frozen tree. `REAL_GATE_EXIT=0`, Failed/Flaky/Retries/Skipped = 0.
+4. **Then** `IDENTITY-ACCOUNTS-001` = VERIFIED and non-external open items back to 0.
+
+No timeout was raised, no retry added, no gate re-run.
+
+---
+
+## Previous close — 2026-08-11 (seventh of the day)
 
 **Working tree CLEAN at `aa7aaf7`.** Backend **2013 passed** · Pint clean.
 
