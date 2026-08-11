@@ -28,12 +28,31 @@ return new class extends Migration
         });
     }
 
+    /**
+     * Deliberately nothing. A widening is not reversible, and pretending otherwise is worse.
+     *
+     * This used to narrow the three columns back to 255, and on any database that had actually
+     * stored a long URL Postgres refused it outright:
+     *
+     * ```
+     * SQLSTATE[22001]: value too long for type character varying(255)
+     * ```
+     *
+     * Found by rolling the whole migration set back on a seeded database (2026-08-11) — the demo
+     * thumbnails are data URIs, so every one of them is longer than 255.
+     *
+     * The only ways to make that statement succeed are to truncate the values or to null them, and
+     * both discard a customer's data to satisfy a schema change nobody asked for. So this reverses
+     * what it can: the previous release runs against a 2048 column exactly as it ran against a 255
+     * one — the column is wider than its code will ever write — and the rollback completes instead
+     * of aborting half way through a batch, which is the state an operator least wants to be in
+     * during an incident.
+     *
+     * `DEPLOYMENT_CHECKLIST.md` §8 says not to roll production migrations back at all; this is what
+     * happens if somebody does anyway.
+     */
     public function down(): void
     {
-        Schema::table('external_creatives', function (Blueprint $table): void {
-            $table->string('thumbnail_url', 255)->nullable()->change();
-            $table->string('preview_url', 255)->nullable()->change();
-            $table->string('destination_url', 255)->nullable()->change();
-        });
+        // Intentionally empty — see the docblock.
     }
 };

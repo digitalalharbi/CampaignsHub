@@ -187,6 +187,36 @@ final class DemoCreativesReseedTest extends TestCase
         );
     }
 
+    /**
+     * DEMO-RESEED-002 — the creatives seeder runs AFTER everything that writes campaign metrics.
+     *
+     * It selects its campaigns by asking which ones have daily metrics, so a seeder that writes
+     * those metrics later leaves campaigns behind on a FIRST run. `DemoClientPortalSeeder` did
+     * exactly that, and `migrate:fresh --seed` produced 78 creatives where two consecutive seeds
+     * produced 90 — no duplicates, no orphans, just a smaller demo world from the command the
+     * installation guide actually gives.
+     *
+     * This asserts the ORDER, because the order is the fix. The heavy demo chain is skipped in the
+     * `testing` environment on purpose — it would bloat every test database — so it cannot be run
+     * here and observed; what can be checked is that nothing has moved the call back above the
+     * seeder whose metrics it depends on.
+     */
+    public function test_the_creatives_seeder_is_registered_after_the_seeders_that_write_its_metrics(): void
+    {
+        $source = (string) file_get_contents(database_path('seeders/DatabaseSeeder.php'));
+
+        $creatives = strpos($source, 'DemoCreativesSeeder::class');
+        $this->assertIsInt($creatives, 'DemoCreativesSeeder must be registered in DatabaseSeeder');
+
+        foreach (['DemoClientPortalSeeder::class', 'DemoCreativeAnalysisSeeder::class'] as $earlier) {
+            $this->assertLessThan(
+                $creatives,
+                strpos($source, $earlier),
+                "{$earlier} writes metrics the creatives seeder selects on — it must run before it",
+            );
+        }
+    }
+
     /** Every row still belongs to the tenant and project it was seeded for. */
     public function test_a_reseed_does_not_leak_across_the_tenant_or_project(): void
     {

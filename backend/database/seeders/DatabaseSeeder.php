@@ -80,7 +80,6 @@ class DatabaseSeeder extends Seeder
             $this->call([
                 DemoAnalyticsSeeder::class,
                 DemoReportsSeeder::class,
-                DemoCreativesSeeder::class,
                 // DEMO-001: the credential → connection → ad account → external campaign chain the
                 // analytics demo was missing, so the integration surfaces have real rows to show.
                 DemoIntegrationsSeeder::class,
@@ -111,6 +110,21 @@ class DatabaseSeeder extends Seeder
             // §15.16 — the ten creative cases the analysis surfaces have to be reviewable against.
             // AFTER the portal seeder, because it hangs its creatives off that project's campaigns.
             $this->call(DemoCreativeAnalysisSeeder::class);
+            /*
+             * DEMO-RESEED-002 — the ranked creative list, seeded LAST among the campaign work.
+             *
+             * It used to sit up with the analytics and report seeders, and it finds its campaigns by
+             * asking which ones have daily metrics. `DemoClientPortalSeeder` writes daily metrics for
+             * the client's own campaigns and runs after it, so on a FIRST seed three campaigns had
+             * none yet and were skipped — 78 creatives instead of 90. Running `db:seed` a second time
+             * found them and quietly filled the gap, which is why the shortfall survived: the demo
+             * databases that were looked at had all been seeded twice.
+             *
+             * Nothing was duplicated and nothing was orphaned either way. What was wrong is that
+             * `migrate:fresh --seed` — the command the installation guide gives — produced a smaller
+             * demo world than the same seeders run twice, and no one reading either would know.
+             */
+            $this->call(DemoCreativesSeeder::class);
             // DEMO-COMMERCE — the merchant's ledger. AFTER `DemoIntegrationsSeeder`, because an order
             // can only carry a `utm_campaign` that names a real campaign once those exist; without
             // them every order would seed as unattributed and the store half of the funnel, and
