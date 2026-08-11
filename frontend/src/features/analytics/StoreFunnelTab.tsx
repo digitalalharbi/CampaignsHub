@@ -48,6 +48,14 @@ interface FunnelPayload {
   stages: Stage[]
   steps: Step[]
   totals: {
+    /**
+     * COMMERCE-FX-001 — the currency EVERY figure on this page is stated in.
+     *
+     * Store money is converted at import and ad spend at ingest, both into this currency, which is
+     * what makes dividing one by the other for ROAS legitimate. The page used to print «SAR» beside
+     * every number regardless; a client reporting in another currency was told riyals.
+     */
+    reporting_currency: string
     spend: number
     revenue: number
     gross_revenue: number
@@ -78,6 +86,13 @@ interface FunnelPayload {
     store_last_synced_at: string | null
     orders_in_window: number
     orders_without_attribution: number
+    reporting_currency: string
+    /**
+     * Orders whose conversion could not be vouched for, and are therefore MISSING from every total
+     * above. A short total looks exactly like a complete one, so it is counted and said out loud.
+     */
+    orders_with_money_withheld: number
+    money_withheld_currencies: string[]
   }
 }
 
@@ -125,6 +140,9 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
   }
 
   const { stages, steps, totals, derived, comparisons, coverage } = q.data
+  // One currency for the whole page, named by the server. Falling back to SAR keeps an older payload
+  // rendering, but nothing on this page decides a currency for itself any more.
+  const cur = totals.reporting_currency || 'SAR'
   const stepFrom = new Map(steps.map((s) => [s.to, s]))
   const widest = Math.max(...stages.map((s) => s.value ?? 0), 1)
 
@@ -157,7 +175,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
                   <span className="tnum text-lg font-extrabold text-text-primary">
                     {stage.value === null
                       ? <span data-testid={`funnel-unmeasured-${stage.key}`} className="text-sm font-semibold text-text-muted">{ar ? 'لا يُقاس' : 'Not measured'}</span>
-                      : stage.key === 'revenue' ? money(stage.value, 'SAR') : num(stage.value)}
+                      : stage.key === 'revenue' ? money(stage.value, cur) : num(stage.value)}
                   </span>
                 </div>
 
@@ -205,11 +223,11 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Metric label={ar ? 'العائد على الإنفاق' : 'ROAS'} value={derived.roas === null ? null : `${derived.roas}x`} hint={ar ? 'على الإيراد الصافي بعد الاسترداد' : 'On net revenue, after refunds'} />
         <Metric label={ar ? 'ROAS المُسند' : 'Attributed ROAS'} value={derived.attributed_roas === null ? null : `${derived.attributed_roas}x`} hint={ar ? 'الطلبات التي أمكن ربطها بحملة فقط' : 'Only orders traceable to a campaign'} />
-        <Metric label={ar ? 'متوسط قيمة الطلب' : 'AOV'} value={derived.aov === null ? null : money(derived.aov, 'SAR')} />
-        <Metric label={ar ? 'تكلفة الطلب' : 'CPA'} value={derived.cpa === null ? null : money(derived.cpa, 'SAR')} hint={ar ? 'الإنفاق ÷ الطلبات' : 'Spend ÷ orders'} />
+        <Metric label={ar ? 'متوسط قيمة الطلب' : 'AOV'} value={derived.aov === null ? null : money(derived.aov, cur)} />
+        <Metric label={ar ? 'تكلفة الطلب' : 'CPA'} value={derived.cpa === null ? null : money(derived.cpa, cur)} hint={ar ? 'الإنفاق ÷ الطلبات' : 'Spend ÷ orders'} />
         <Metric
           label={ar ? 'تكلفة اكتساب العميل' : 'CAC'}
-          value={derived.cac === null ? null : money(derived.cac, 'SAR')}
+          value={derived.cac === null ? null : money(derived.cac, cur)}
           hint={ar ? 'الإنفاق ÷ العملاء الجدد — وليس كل الطلبات' : 'Spend ÷ NEW customers — not all orders'}
         />
         <Metric label={ar ? 'من النقرة إلى الطلب' : 'Click → order'} value={rate(derived.conversion_rate)} />
@@ -219,7 +237,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
         <dl data-testid="funnel-attribution" className="grid gap-3 text-sm sm:grid-cols-3">
           <Fact label={ar ? 'طلبات مُسندة لحملة' : 'Orders traced to a campaign'} value={num(totals.attributed_orders)} />
           <Fact label={ar ? 'طلبات بلا إسناد' : 'Orders with no attribution'} value={num(coverage.orders_without_attribution)} tone="warning" />
-          <Fact label={ar ? 'إيراد مُسند' : 'Attributed revenue'} value={money(totals.attributed_revenue, 'SAR')} />
+          <Fact label={ar ? 'إيراد مُسند' : 'Attributed revenue'} value={money(totals.attributed_revenue, cur)} />
         </dl>
         <p className="mt-2 text-[11px] text-text-muted">
           {ar
@@ -232,7 +250,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
         <Panel title={ar ? 'المقارنة بين المنصات' : 'Across platforms'}>
           <Table
             head={[ar ? 'المنصة' : 'Platform', ar ? 'الإنفاق' : 'Spend', ar ? 'الطلبات' : 'Orders', ar ? 'الإيراد' : 'Revenue', 'ROAS']}
-            rows={comparisons.platforms.map((p) => [p.platform, money(p.spend, 'SAR'), num(p.orders), money(p.revenue, 'SAR'), p.roas === null ? '—' : `${p.roas}x`])}
+            rows={comparisons.platforms.map((p) => [p.platform, money(p.spend, cur), num(p.orders), money(p.revenue, cur), p.roas === null ? '—' : `${p.roas}x`])}
           />
         </Panel>
       )}
@@ -244,7 +262,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
             rows={comparisons.campaigns.map((c) => [
               c.external_campaign_id.slice(0, 8),
               num(c.orders),
-              money(c.revenue, 'SAR'),
+              money(c.revenue, cur),
               ar ? (METHOD_AR[c.attribution_method ?? 'none'] ?? c.attribution_method) : c.attribution_method,
             ])}
           />
@@ -255,7 +273,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
         <Panel title={ar ? 'المنتجات الأكثر مبيعًا' : 'Best sellers'}>
           <Table
             head={[ar ? 'المنتج' : 'Product', ar ? 'الكمية' : 'Quantity', ar ? 'الإيراد' : 'Revenue']}
-            rows={comparisons.products.map((p) => [p.name, num(p.quantity), money(p.revenue, 'SAR')])}
+            rows={comparisons.products.map((p) => [p.name, num(p.quantity), money(p.revenue, cur)])}
           />
         </Panel>
       )}
@@ -264,7 +282,19 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
       <p data-testid="funnel-coverage" className="rounded-xl bg-surface-hover px-4 py-3 text-[11px] text-text-secondary">
         {ar ? 'التغطية' : 'Coverage'}:{' '}
         <span className="tnum">{coverage.stores}</span> {ar ? 'متجر' : 'store(s)'} ·{' '}
-        <span className="tnum">{coverage.orders_in_window}</span> {ar ? 'طلبًا في الفترة' : 'orders in the period'}
+        <span className="tnum">{coverage.orders_in_window}</span> {ar ? 'طلبًا في الفترة' : 'orders in the period'} ·{' '}
+        {ar ? 'كل المبالغ بـ' : 'All amounts in'} <span className="tnum">{cur}</span>
+        {/*
+          COMMERCE-FX-001 — a total short by an unconvertible order looks exactly like a complete one,
+          so the shortfall is stated. Silence here would be a claim that the revenue above is whole.
+        */}
+        {coverage.orders_with_money_withheld > 0 && (
+          <span data-testid="funnel-money-withheld" className="block text-warning">
+            {ar
+              ? `${coverage.orders_with_money_withheld} طلبًا بعملة (${coverage.money_withheld_currencies.join('، ')}) لا يوجد لها سعر صرف مؤرّخ، فلم تُحتسب ضمن الإيراد أعلاه. المبالغ الأصلية محفوظة وتُحتسب فور توفّر السعر.`
+              : `${coverage.orders_with_money_withheld} order(s) in ${coverage.money_withheld_currencies.join(', ')} have no dated exchange rate, so they are NOT included in the revenue above. The original amounts are kept and will count as soon as a rate exists.`}
+          </span>
+        )}
         {coverage.stores_without_cart_data.length > 0 && (
           <span className="block text-warning">
             {ar

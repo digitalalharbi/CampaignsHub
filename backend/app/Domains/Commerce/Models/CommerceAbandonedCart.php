@@ -26,11 +26,16 @@ final class CommerceAbandonedCart extends Model
         'external_id', 'abandoned_at', 'currency', 'total', 'items_count', 'customer_email',
         'checkout_url', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
         'click_id', 'click_id_provider', 'landing_url', 'referrer_url', 'is_demo', 'last_synced_at',
+        // COMMERCE-FX-001 — `total` is in the reporting currency; what the shopper saw is beside it.
+        'original_currency', 'original_total', 'exchange_rate', 'rate_date', 'rate_source',
     ];
 
     protected $casts = [
         'abandoned_at' => 'datetime',
         'total' => 'decimal:6',
+        'original_total' => 'decimal:6',
+        'exchange_rate' => 'decimal:12',
+        'rate_date' => 'date',
         'items_count' => 'integer',
         'is_demo' => 'boolean',
         'last_synced_at' => 'datetime',

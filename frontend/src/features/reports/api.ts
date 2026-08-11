@@ -153,7 +153,21 @@ export interface StoreFunnelPayload {
   }>
   totals: { orders: number; revenue: number | null; attributed_orders: number }
   derived: { roas: number | null; aov: number | null; cpa: number | null }
-  coverage: { stores: number; orders_in_window: number; store_last_synced_at: string | null }
+  coverage: {
+    stores: number
+    orders_in_window: number
+    store_last_synced_at: string | null
+    /**
+     * COMMERCE-FX-001 — orders whose money could not be converted into the reporting currency, and
+     * are therefore absent from the revenue on this link.
+     *
+     * It matters more here than on the operator's own page: a client has no other view of their
+     * account, so a total that is quietly short is one they cannot possibly check.
+     */
+    reporting_currency: string
+    orders_with_money_withheld: number
+    money_withheld_currencies: string[]
+  }
 }
 
 export interface LivePayload {

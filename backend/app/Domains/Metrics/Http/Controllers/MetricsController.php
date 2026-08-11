@@ -136,6 +136,11 @@ final class MetricsController extends Controller
             'unfiltered_note_en' => 'Store figures cover the whole shop and are not narrowed by the platform or objective filter — some orders arrive with no attribution.',
             'orders' => $funnel['totals']['orders'],
             'revenue' => $funnel['totals']['revenue'],
+            // COMMERCE-FX-001 — the currency the money below is stated in, and how many orders are
+            // missing from it. The dashboard strip printed «SAR» from a constant either way.
+            'reporting_currency' => $funnel['totals']['reporting_currency'],
+            'orders_with_money_withheld' => $funnel['coverage']['orders_with_money_withheld'],
+            'money_withheld_currencies' => $funnel['coverage']['money_withheld_currencies'],
             'attributed_orders' => $funnel['totals']['attributed_orders'],
             'attributed_revenue' => $funnel['totals']['attributed_revenue'],
             'unattributed_orders' => $funnel['totals']['unattributed_orders'],

@@ -44,6 +44,7 @@ function payload(over: Record<string, unknown> = {}) {
       { from: 'clicks', to: 'orders', conversion_rate: 5, drop_off: 95, spans_unmeasured_stages: true },
     ],
     totals: {
+      reporting_currency: 'SAR',
       spend: 1000, revenue: 5000, gross_revenue: 5200, refunded: 200, cancelled_orders: 1,
       orders: 25, new_customers: 10, attributed_orders: 15, attributed_revenue: 3000,
       unattributed_orders: 10,
@@ -53,6 +54,7 @@ function payload(over: Record<string, unknown> = {}) {
     coverage: {
       stores: 1, stores_without_cart_data: [], store_last_synced_at: null,
       orders_in_window: 25, orders_without_attribution: 10,
+      reporting_currency: 'SAR', orders_with_money_withheld: 0, money_withheld_currencies: [],
     },
     ...over,
   }
@@ -149,6 +151,7 @@ describe('StoreFunnelTab', () => {
         stores: 2,
         stores_without_cart_data: [{ id: 'z1', name: 'متجر زد', provider: 'zid' }],
         store_last_synced_at: null, orders_in_window: 30, orders_without_attribution: 0,
+        reporting_currency: 'SAR', orders_with_money_withheld: 0, money_withheld_currencies: [],
       },
     }))
 
@@ -161,12 +164,56 @@ describe('StoreFunnelTab', () => {
   /** With no store connected, the section says why the order stages are empty. */
   it('says there is no store rather than showing an empty funnel', async () => {
     vi.mocked(getData).mockResolvedValue(payload({
-      coverage: { stores: 0, stores_without_cart_data: [], store_last_synced_at: null, orders_in_window: 0, orders_without_attribution: 0 },
+      coverage: {
+        stores: 0, stores_without_cart_data: [], store_last_synced_at: null,
+        orders_in_window: 0, orders_without_attribution: 0,
+        reporting_currency: 'SAR', orders_with_money_withheld: 0, money_withheld_currencies: [],
+      },
     }))
 
     renderWithProviders(<StoreFunnelTab projectId="p1" range={RANGE} />, { locale: 'ar' })
 
     expect(await screen.findByTestId('funnel-no-store')).toBeInTheDocument()
+  })
+
+  /**
+   * COMMERCE-FX-001 — a revenue figure that is missing an order says so.
+   *
+   * An order in a currency with no dated rate is withheld rather than added unconverted, so the
+   * total above is genuinely short. Printing it silently would be the page claiming a complete
+   * number, which is the one thing this whole unit exists to stop.
+   */
+  it('warns that the revenue is short when an order could not be converted', async () => {
+    vi.mocked(getData).mockResolvedValue(payload({
+      coverage: {
+        stores: 1, stores_without_cart_data: [], store_last_synced_at: null,
+        orders_in_window: 25, orders_without_attribution: 10,
+        reporting_currency: 'SAR', orders_with_money_withheld: 2, money_withheld_currencies: ['KWD'],
+      },
+    }))
+
+    renderWithProviders(<StoreFunnelTab projectId="p1" range={RANGE} />, { locale: 'ar' })
+
+    const warning = await screen.findByTestId('funnel-money-withheld')
+    expect(warning.textContent).toMatch(/KWD/)
+    expect(warning.textContent).toMatch(/لم تُحتسب/)
+  })
+
+  /** Every amount is labelled with the currency the SERVER reports, not a hard-coded riyal. */
+  it('states the reporting currency the payload names', async () => {
+    vi.mocked(getData).mockResolvedValue(payload({
+      totals: {
+        reporting_currency: 'AED',
+        spend: 1000, revenue: 5000, gross_revenue: 5200, refunded: 200, cancelled_orders: 1,
+        orders: 25, new_customers: 10, attributed_orders: 15, attributed_revenue: 3000,
+        unattributed_orders: 10,
+      },
+    }))
+
+    renderWithProviders(<StoreFunnelTab projectId="p1" range={RANGE} />, { locale: 'ar' })
+
+    expect((await screen.findByTestId('funnel-coverage')).textContent).toMatch(/AED/)
+    expect(screen.getByTestId('funnel-attribution').textContent).not.toMatch(/SAR|ر\.س/)
   })
 
   /** CAC and CPA are different questions, and the card says which is which. */

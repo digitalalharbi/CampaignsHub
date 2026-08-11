@@ -26,6 +26,14 @@ final class CommerceCustomer extends Model
         'tenant_id', 'project_id', 'external_account_id', 'provider', 'external_id', 'name', 'email',
         'phone', 'city', 'country', 'orders_count', 'total_spent', 'first_seen_at', 'is_demo',
         'last_synced_at',
+        /*
+         * COMMERCE-FX-001 — the currency `total_spent` is in.
+         *
+         * A lifetime figure the platform computed over every order the customer ever placed, so it is
+         * kept as the platform stated it rather than converted at one dated rate that could only
+         * apply to part of it. Carrying the currency is what stops it being read as riyals by default.
+         */
+        'currency',
     ];
 
     protected $casts = [

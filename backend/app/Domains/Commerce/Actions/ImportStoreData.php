@@ -10,8 +10,10 @@ use App\Domains\Commerce\Models\CommerceCustomer;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Models\CommerceOrderItem;
 use App\Domains\Commerce\Models\CommerceProduct;
+use App\Domains\Commerce\Services\CommerceCurrency;
 use App\Domains\Commerce\Services\OrderAttributionResolver;
 use App\Domains\Commerce\ValueObjects\Attribution;
+use App\Domains\Commerce\ValueObjects\MoneyConversion;
 use App\Domains\Integrations\Models\ExternalAccount;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -37,10 +39,21 @@ use Throwable;
  * An order imported before its campaign was discovered would be permanently unattributed if the
  * resolution were a one-off. Re-running it costs one in-memory comparison per order and is what makes
  * the structure sweep and the order sweep converge instead of racing.
+ *
+ * ## Money is converted HERE, once (COMMERCE-FX-001)
+ *
+ * The amount columns hold the project's reporting currency and the provider's own figures sit beside
+ * them in `original_*`. Every reader — the funnel, the dashboard's store block, the attribution
+ * report, the best-seller table, the public report links — sums the amount columns and is therefore
+ * correct without knowing this happened, which is the same guarantee FX-001 gave the ad screens. A
+ * rate that cannot be vouched for withholds the converted figure rather than inventing one.
  */
 final class ImportStoreData
 {
-    public function __construct(private readonly OrderAttributionResolver $attribution) {}
+    public function __construct(
+        private readonly OrderAttributionResolver $attribution,
+        private readonly CommerceCurrency $currency,
+    ) {}
 
     /**
      * @param  list<array<string,mixed>>  $rows
@@ -130,9 +143,22 @@ final class ImportStoreData
                     ? $this->customer($store, $projectId, $row['customer'])
                     : null;
 
-                $attribution = $row['attribution'] instanceof Attribution
+                // `?? null` because a row without the key at all is a legitimate shape — the ternary
+                // already handles «no attribution», and reading the missing key threw instead.
+                $attribution = ($row['attribution'] ?? null) instanceof Attribution
                     ? $row['attribution']
                     : Attribution::read();
+
+                $placedAt = $this->time($row['placed_at'] ?? null);
+
+                /*
+                 * One rate for the whole order, taken as of the day it was PLACED (COMMERCE-FX-001).
+                 *
+                 * Not the day of the sweep: a ninety-day window is re-read constantly, and pricing
+                 * January's revenue at August's rate would make last month's report change every time
+                 * anybody opened it.
+                 */
+                $money = $this->currency->for($projectId, $row['currency'] ?? $store->currency, $placedAt);
 
                 $order = CommerceOrder::withoutGlobalScopes()->updateOrCreate(
                     ['external_account_id' => $store->getKey(), 'external_id' => $externalId],
@@ -144,14 +170,20 @@ final class ImportStoreData
                         'reference' => $row['reference'] ?? null,
                         'status' => (string) ($row['status'] ?? 'unknown'),
                         'payment_status' => $row['payment_status'] ?? null,
-                        'placed_at' => $this->time($row['placed_at'] ?? null),
-                        'currency' => $row['currency'] ?? $store->currency,
-                        'subtotal' => $row['subtotal'] ?? null,
-                        'shipping_total' => $row['shipping_total'] ?? null,
-                        'tax_total' => $row['tax_total'] ?? null,
-                        'discount_total' => $row['discount_total'] ?? null,
-                        'total' => $row['total'] ?? null,
-                        'refunded_total' => $row['refunded_total'] ?? null,
+                        'placed_at' => $placedAt,
+                        ...$money->columns(),
+                        'subtotal' => $money->convert($row['subtotal'] ?? null),
+                        'shipping_total' => $money->convert($row['shipping_total'] ?? null),
+                        'tax_total' => $money->convert($row['tax_total'] ?? null),
+                        'discount_total' => $money->convert($row['discount_total'] ?? null),
+                        'total' => $money->convert($row['total'] ?? null),
+                        'refunded_total' => $money->convert($row['refunded_total'] ?? null),
+                        'original_subtotal' => $money->original($row['subtotal'] ?? null),
+                        'original_shipping_total' => $money->original($row['shipping_total'] ?? null),
+                        'original_tax_total' => $money->original($row['tax_total'] ?? null),
+                        'original_discount_total' => $money->original($row['discount_total'] ?? null),
+                        'original_total' => $money->original($row['total'] ?? null),
+                        'original_refunded_total' => $money->original($row['refunded_total'] ?? null),
                         'refunded_at' => $this->time($row['refunded_at'] ?? null),
                         'cancelled_at' => $this->time($row['cancelled_at'] ?? null),
                         ...$attribution->toColumns(),
@@ -160,7 +192,7 @@ final class ImportStoreData
                     ],
                 );
 
-                $counts['items'] += $this->items($store, $order, $row['items'] ?? []);
+                $counts['items'] += $this->items($store, $order, $row['items'] ?? [], $money);
 
                 $this->attribution->apply($order, $campaigns);
 
@@ -191,9 +223,14 @@ final class ImportStoreData
                     continue;
                 }
 
-                $attribution = $row['attribution'] instanceof Attribution
+                // `?? null` because a row without the key at all is a legitimate shape — the ternary
+                // already handles «no attribution», and reading the missing key threw instead.
+                $attribution = ($row['attribution'] ?? null) instanceof Attribution
                     ? $row['attribution']
                     : Attribution::read();
+
+                $abandonedAt = $this->time($row['abandoned_at'] ?? null);
+                $money = $this->currency->for($projectId, $row['currency'] ?? $store->currency, $abandonedAt);
 
                 CommerceAbandonedCart::withoutGlobalScopes()->updateOrCreate(
                     ['external_account_id' => $store->getKey(), 'external_id' => $externalId],
@@ -201,9 +238,10 @@ final class ImportStoreData
                         'tenant_id' => $store->tenant_id,
                         'project_id' => $projectId,
                         'provider' => $store->provider,
-                        'abandoned_at' => $this->time($row['abandoned_at'] ?? null),
-                        'currency' => $row['currency'] ?? $store->currency,
-                        'total' => $row['total'] ?? null,
+                        'abandoned_at' => $abandonedAt,
+                        ...$money->columns(),
+                        'total' => $money->convert($row['total'] ?? null),
+                        'original_total' => $money->original($row['total'] ?? null),
                         'items_count' => $row['items_count'] ?? null,
                         'customer_email' => $row['customer_email'] ?? null,
                         'checkout_url' => $row['checkout_url'] ?? null,
@@ -241,7 +279,17 @@ final class ImportStoreData
                 'city' => $row['city'] ?? null,
                 'country' => $row['country'] ?? null,
                 'orders_count' => $row['orders_count'] ?? null,
+                /*
+                 * A lifetime total the platform computed, kept in the currency the platform computed
+                 * it in and LABELLED with it (COMMERCE-FX-001).
+                 *
+                 * Not converted, because it spans every order the customer ever placed — including
+                 * ones outside any window this product has rates for — so a single dated rate would
+                 * be a guess dressed as a figure. It is never summed across shops; the currency is
+                 * carried so it can never be read as a bare number either.
+                 */
                 'total_spent' => $row['total_spent'] ?? null,
+                'currency' => $row['currency'] ?? $store->currency,
                 'first_seen_at' => $this->time($row['first_seen_at'] ?? null),
                 'is_demo' => false,
                 'last_synced_at' => Carbon::now(),
@@ -255,9 +303,15 @@ final class ImportStoreData
     }
 
     /**
+     * Order lines, converted at their ORDER's rate — never at one of their own.
+     *
+     * A line is part of a sale, not a sale of its own: resolving a second rate for it would let the
+     * lines and the total they belong to disagree, and the best-seller table would stop adding up to
+     * the revenue printed above it.
+     *
      * @return int items written
      */
-    private function items(ExternalAccount $store, CommerceOrder $order, mixed $items): int
+    private function items(ExternalAccount $store, CommerceOrder $order, mixed $items, MoneyConversion $money): int
     {
         if (! is_array($items)) {
             return 0;
@@ -285,9 +339,12 @@ final class ImportStoreData
                     'product_external_id' => $item['product_external_id'] ?? null,
                     'sku' => $item['sku'] ?? null,
                     'name' => (string) ($item['name'] ?? $item['external_id']),
+                    // A count of things, not money: never converted.
                     'quantity' => $item['quantity'] ?? 1,
-                    'unit_price' => $item['unit_price'] ?? null,
-                    'total' => $item['total'] ?? null,
+                    'unit_price' => $money->convert($item['unit_price'] ?? null),
+                    'total' => $money->convert($item['total'] ?? null),
+                    'original_unit_price' => $money->original($item['unit_price'] ?? null),
+                    'original_total' => $money->original($item['total'] ?? null),
                 ],
             );
 

@@ -198,8 +198,17 @@ final class AttributionTransparency
             'basis_ar' => 'دفتر التاجر نفسه: صف واحد لكل بيعة، لكل منها رقم طلب.',
             'basis_en' => "The merchant's own ledger: one row per sale, each with an order id.",
             'orders' => $live->count(),
-            'revenue' => round((float) $live->sum(fn (CommerceOrder $o) => $o->netRevenue()), 2),
+            'revenue' => round((float) $live->sum(fn (CommerceOrder $o) => $o->netRevenue() ?? 0.0), 2),
+            /*
+             * The REPORTING currency, which since COMMERCE-FX-001 is what every order row is stated
+             * in — so reading it off the first order is now a fact rather than the guess it used to
+             * be. Before the conversion existed this line named one shop's currency and applied it to
+             * a sum that could contain several.
+             */
             'currency' => $live->first()?->currency,
+            // Orders whose conversion could not be vouched for, and are therefore missing from the
+            // revenue above. Stated here so «مؤكَّد من المتجر» is never quietly incomplete.
+            'orders_with_money_withheld' => $live->filter(fn (CommerceOrder $o) => $o->moneyWithheld())->count(),
             'cancelled_orders' => $loaded['orders']->count() - $live->count(),
             'attributed_orders' => $live->whereNotNull('external_campaign_id')->count(),
             'duplicates_collapsed' => $loaded['duplicates_collapsed'],
@@ -372,7 +381,7 @@ final class AttributionTransparency
         return [
             'available' => true,
             'orders' => $none->count(),
-            'revenue' => round((float) $none->sum(fn (CommerceOrder $o) => $o->netRevenue()), 2),
+            'revenue' => round((float) $none->sum(fn (CommerceOrder $o) => $o->netRevenue() ?? 0.0), 2),
             'share' => $live->count() > 0 ? round($none->count() / $live->count(), 4) : null,
             'by_method' => $byMethod,
             'note_ar' => 'الطلبات غير المسندة تبقى ضمن إجمالي المتجر ولا تُوزَّع على أي حملة.',
@@ -458,7 +467,7 @@ final class AttributionTransparency
             $provider = AdPlatforms::canonical((string) $raw);
             $out[$provider] ??= ['orders' => 0, 'revenue' => 0.0];
             $out[$provider]['orders']++;
-            $out[$provider]['revenue'] += $order->netRevenue();
+            $out[$provider]['revenue'] += $order->netRevenue() ?? 0.0;
         }
 
         return $out;

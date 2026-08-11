@@ -54,6 +54,16 @@ export interface CommerceSummary {
   unfiltered_note_en: string
   orders: number
   revenue: number | null
+  /**
+   * COMMERCE-FX-001 — the currency these figures are in, and the orders missing from them.
+   *
+   * Store money is converted into the project's reporting currency at import; an order whose rate
+   * could not be vouched for is withheld rather than added unconverted, so the revenue can be short
+   * and the strip has to be able to say so.
+   */
+  reporting_currency: string
+  orders_with_money_withheld: number
+  money_withheld_currencies: string[]
   attributed_orders: number
   attributed_revenue: number | null
   unattributed_orders: number

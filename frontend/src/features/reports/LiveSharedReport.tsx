@@ -364,6 +364,17 @@ export function LiveSharedReport({
                 </li>
               ))}
             </ol>
+            {/*
+              * COMMERCE-FX-001 — if an order could not be converted, the revenue above is short and
+              * the client is told so. They have no second view of their own account to check against.
+              */}
+            {payload.store_funnel.coverage.orders_with_money_withheld > 0 && (
+              <p data-testid="shared-money-withheld" className="mt-2 text-[11px] text-warning">
+                {ar
+                  ? `${payload.store_funnel.coverage.orders_with_money_withheld} طلبًا بعملة (${payload.store_funnel.coverage.money_withheld_currencies.join('، ')}) لا يوجد لها سعر صرف مؤرّخ، فلم تُحتسب ضمن الإيرادات أعلاه.`
+                  : `${payload.store_funnel.coverage.orders_with_money_withheld} order(s) in ${payload.store_funnel.coverage.money_withheld_currencies.join(', ')} have no dated exchange rate and are NOT included in the revenue above.`}
+              </p>
+            )}
             <p className="mt-2 text-[11px] text-text-muted">
               {ar ? 'الطلبات في الفترة' : 'Orders in the period'}:{' '}
               <span className="tnum">{payload.store_funnel.coverage.orders_in_window}</span>

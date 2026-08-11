@@ -634,9 +634,10 @@ export function DashboardPage() {
 
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { key: 'revenue', label: t.storeRevenue, value: commerce.revenue == null ? '—' : money(commerce.revenue) },
+              // COMMERCE-FX-001 — the currency the SERVER says these are in, not a constant.
+              { key: 'revenue', label: t.storeRevenue, value: commerce.revenue == null ? '—' : money(commerce.revenue, commerce.reporting_currency || 'SAR') },
               { key: 'orders', label: t.orders, value: num(commerce.orders) },
-              { key: 'aov', label: t.aov, value: commerce.aov == null ? '—' : money(commerce.aov) },
+              { key: 'aov', label: t.aov, value: commerce.aov == null ? '—' : money(commerce.aov, commerce.reporting_currency || 'SAR') },
               { key: 'roas', label: t.roas, value: commerce.roas == null ? '—' : ratio(commerce.roas, '×') },
             ].map((k) => (
               <div key={k.key} data-testid={`store-kpi-${k.key}`} className="rounded-xl border border-border bg-surface-secondary px-3 py-2">
@@ -662,6 +663,15 @@ export function DashboardPage() {
               {ar
                 ? `${num(commerce.unattributed_orders)} من ${num(commerce.orders)} طلبًا وصلت بلا إسناد لأي حملة.`
                 : `${num(commerce.unattributed_orders)} of ${num(commerce.orders)} orders arrived with no campaign attribution.`}
+            </p>
+          )}
+
+          {/* The revenue above is SHORT by these orders, and a short total must never look whole. */}
+          {(commerce.orders_with_money_withheld ?? 0) > 0 && (
+            <p data-testid="dashboard-store-withheld" className="mt-2 text-[13px] text-warning">
+              {ar
+                ? `${num(commerce.orders_with_money_withheld)} طلبًا بعملة (${commerce.money_withheld_currencies.join('، ')}) لا يوجد لها سعر صرف مؤرّخ، فلم تُحتسب ضمن الإيرادات.`
+                : `${num(commerce.orders_with_money_withheld)} order(s) in ${commerce.money_withheld_currencies.join(', ')} have no dated exchange rate and are not included in the revenue.`}
             </p>
           )}
         </div>

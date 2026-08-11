@@ -37,6 +37,13 @@ final class CommerceOrder extends Model
         'cancelled_at', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
         'click_id', 'click_id_provider', 'landing_url', 'referrer_url', 'external_campaign_id',
         'unified_campaign_id', 'attribution_method', 'attributed_at', 'is_demo', 'last_synced_at',
+        /*
+         * COMMERCE-FX-001 — the amount columns are in `currency`, the project's reporting currency.
+         * What the merchant charged, and in what, is kept beside them and never overwritten.
+         */
+        'original_currency', 'original_subtotal', 'original_shipping_total', 'original_tax_total',
+        'original_discount_total', 'original_total', 'original_refunded_total',
+        'exchange_rate', 'rate_date', 'rate_source',
     ];
 
     protected $casts = [
@@ -50,18 +57,49 @@ final class CommerceOrder extends Model
         'discount_total' => 'decimal:6',
         'total' => 'decimal:6',
         'refunded_total' => 'decimal:6',
+        'original_subtotal' => 'decimal:6',
+        'original_shipping_total' => 'decimal:6',
+        'original_tax_total' => 'decimal:6',
+        'original_discount_total' => 'decimal:6',
+        'original_total' => 'decimal:6',
+        'original_refunded_total' => 'decimal:6',
+        'exchange_rate' => 'decimal:12',
+        'rate_date' => 'date',
         'is_demo' => 'boolean',
         'last_synced_at' => 'datetime',
     ];
 
-    /** What the merchant actually kept: the order total less anything refunded. */
-    public function netRevenue(): float
+    /**
+     * What the merchant actually kept, in the project's reporting currency — or NOTHING KNOWABLE.
+     *
+     * Null, not 0, when the conversion was withheld (COMMERCE-FX-001). The return type is nullable so
+     * that every caller has to decide what to do about it: the previous `float` would have turned a
+     * withheld order into «this sale earned nothing», which is the single most misleading figure this
+     * product can print. Callers coalesce to 0 for the SUM and count the withheld orders separately,
+     * so a short total is stated rather than merely being short.
+     */
+    public function netRevenue(): ?float
     {
         if ($this->cancelled_at !== null) {
             return 0.0;
         }
 
+        if ($this->moneyWithheld()) {
+            return null;
+        }
+
         return max(0.0, (float) $this->total - (float) $this->refunded_total);
+    }
+
+    /**
+     * The provider stated a total and no trustworthy rate existed for the day it was placed.
+     *
+     * Distinguished from an order the provider never priced at all — which is a gap in the payload,
+     * not in our rates — by the original amount that survives beside the withheld one.
+     */
+    public function moneyWithheld(): bool
+    {
+        return $this->total === null && $this->original_total !== null;
     }
 
     /** @return HasMany<CommerceOrderItem, $this> */

@@ -259,6 +259,24 @@ final class DemoCommerceSeeder extends Seeder
                         'discount_total' => 0.0,
                         'total' => $total,
                         'refunded_total' => $refunded,
+                        /*
+                         * COMMERCE-FX-001 — a demo shop sells in the reporting currency, and the
+                         * identity conversion is WRITTEN rather than left blank.
+                         *
+                         * A monetary row with no currency provenance is indistinguishable from one
+                         * whose conversion was withheld, so leaving these null would make the funnel's
+                         * coverage block report the demo store as a problem on every install.
+                         */
+                        'original_currency' => self::CURRENCY,
+                        'original_subtotal' => $total,
+                        'original_shipping_total' => 25.0,
+                        'original_tax_total' => round($total * 0.15, 2),
+                        'original_discount_total' => 0.0,
+                        'original_total' => $total,
+                        'original_refunded_total' => $refunded,
+                        'exchange_rate' => 1,
+                        'rate_date' => $date->toDateString(),
+                        'rate_source' => 'identity',
                         'refunded_at' => $refunded > 0 ? $date->copy()->addDays(3) : null,
                         'cancelled_at' => $cancelled ? $date->copy()->addHours(20) : null,
                         ...$attribution['columns'],
@@ -282,6 +300,8 @@ final class DemoCommerceSeeder extends Seeder
                         'quantity' => $quantity,
                         'unit_price' => $product->price,
                         'total' => $total,
+                        'original_unit_price' => $product->price,
+                        'original_total' => $total,
                     ],
                 );
             }
@@ -375,6 +395,7 @@ final class DemoCommerceSeeder extends Seeder
                     'email' => "customer{$i}@demo-store.example",
                     'city' => ['الرياض', 'جدة', 'الدمام'][$i % 3],
                     'country' => 'SA',
+                    'currency' => self::CURRENCY,
                     'first_seen_at' => Carbon::today()->subDays(self::DAYS - $i * 3),
                     'is_demo' => true,
                     'last_synced_at' => Carbon::now()->subHours(2),
@@ -409,6 +430,12 @@ final class DemoCommerceSeeder extends Seeder
                         'abandoned_at' => $date->copy()->addHours(11 + $k),
                         'currency' => self::CURRENCY,
                         'total' => 380.0 + ($k * 60),
+                        // The identity conversion, written for the reason the orders above state.
+                        'original_currency' => self::CURRENCY,
+                        'original_total' => 380.0 + ($k * 60),
+                        'exchange_rate' => 1,
+                        'rate_date' => $date->toDateString(),
+                        'rate_source' => 'identity',
                         'items_count' => 1 + ($k % 3),
                         'is_demo' => true,
                         'last_synced_at' => Carbon::now()->subHours(2),

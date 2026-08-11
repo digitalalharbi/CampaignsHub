@@ -73,6 +73,7 @@ final class StoreFunnelService
     public function __construct(
         private readonly ProjectStores $projectStores,
         private readonly ProjectOrders $projectOrders,
+        private readonly CommerceCurrency $currency,
     ) {}
 
     /**
@@ -129,11 +130,20 @@ final class StoreFunnelService
             $stages[] = $this->stage($stage, $store, $ads, $stores);
         }
 
+        $coverage = $this->coverage($stores, $pendingStores, $orders, $loaded);
+        $coverage['reporting_currency'] = $store['reporting_currency'];
+        $coverage['orders_with_money_withheld'] = $store['money_withheld_orders'];
+        $coverage['money_withheld_currencies'] = $store['money_withheld_currencies'];
+
         return [
             'window' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'stages' => $stages,
             'steps' => $this->steps($stages),
             'totals' => [
+                // Ads and store money are both in the reporting currency by the time they get here —
+                // FX-001 converted the spend at ingest, COMMERCE-FX-001 the revenue at import — which
+                // is what makes dividing one by the other for ROAS a legitimate operation at all.
+                'reporting_currency' => $store['reporting_currency'],
                 'spend' => $ads['spend'],
                 'revenue' => $store['revenue'],
                 'gross_revenue' => $store['gross_revenue'],
@@ -151,7 +161,7 @@ final class StoreFunnelService
                 'campaigns' => $this->byCampaign($orders),
                 'products' => $this->byProduct($orders),
             ],
-            'coverage' => $this->coverage($stores, $pendingStores, $orders, $loaded),
+            'coverage' => $coverage,
         ];
     }
 
@@ -193,13 +203,35 @@ final class StoreFunnelService
             'add_to_cart' => $live->count() + $abandoned,
             'abandoned_carts' => $abandoned,
             'carts_complete' => $stores->every(fn (ExternalAccount $s) => $s->provider !== 'zid'),
+            /*
+             * Every figure below is in the project's REPORTING currency (COMMERCE-FX-001).
+             *
+             * The conversion happened at import, so these sums are of one currency by construction
+             * rather than by each reader remembering to check. What they cannot do is include an
+             * order whose rate could not be vouched for — those are withheld, and counted, so a total
+             * that is short says so instead of just being short.
+             */
+            'reporting_currency' => $this->currency->reportingCurrencyFor($projectId),
             'gross_revenue' => round((float) $live->sum(fn (CommerceOrder $o) => (float) $o->total), 2),
-            'revenue' => round((float) $live->sum(fn (CommerceOrder $o) => $o->netRevenue()), 2),
+            'revenue' => round((float) $live->sum(fn (CommerceOrder $o) => $o->netRevenue() ?? 0.0), 2),
             'refunded' => round((float) $orders->sum(fn (CommerceOrder $o) => (float) $o->refunded_total), 2),
+            /*
+             * Counted over the LIVE orders, because the count exists to explain a short revenue and
+             * revenue only counts live ones. A cancelled order contributes nothing either way, so
+             * including it would report a shortfall that is not there.
+             */
+            'money_withheld_orders' => $live->filter(fn (CommerceOrder $o) => $o->moneyWithheld())->count(),
+            'money_withheld_currencies' => $live
+                ->filter(fn (CommerceOrder $o) => $o->moneyWithheld())
+                ->pluck('original_currency')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all(),
             'new_customers' => $newCustomers,
             'attributed_orders' => $live->whereNotNull('external_campaign_id')->count(),
             'attributed_revenue' => round(
-                (float) $live->whereNotNull('external_campaign_id')->sum(fn (CommerceOrder $o) => $o->netRevenue()),
+                (float) $live->whereNotNull('external_campaign_id')->sum(fn (CommerceOrder $o) => $o->netRevenue() ?? 0.0),
                 2,
             ),
         ];
@@ -451,7 +483,9 @@ final class StoreFunnelService
             }
 
             $rows[$key]['orders']++;
-            $rows[$key]['revenue'] += $order->netRevenue();
+            // A withheld conversion adds nothing to a platform's revenue — the order is still counted,
+            // and the withheld total is reported once, in coverage, rather than per platform row.
+            $rows[$key]['revenue'] += $order->netRevenue() ?? 0.0;
         }
 
         $rows = array_map(static function (array $row): array {
@@ -478,7 +512,7 @@ final class StoreFunnelService
                 'external_campaign_id' => (string) $group->first()->external_campaign_id,
                 'unified_campaign_id' => $group->first()->unified_campaign_id,
                 'orders' => $group->count(),
-                'revenue' => round((float) $group->sum(fn (CommerceOrder $o) => $o->netRevenue()), 2),
+                'revenue' => round((float) $group->sum(fn (CommerceOrder $o) => $o->netRevenue() ?? 0.0), 2),
                 'attribution_method' => $group->first()->attribution_method,
             ])
             ->sortByDesc('revenue')
