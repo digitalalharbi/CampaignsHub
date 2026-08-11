@@ -49,9 +49,37 @@ Rules the code enforces, and which the credential setup must respect:
 - Moyasar publishes **no card fingerprint**, so `paymentMethodFingerprint()` returns null rather than
   brand+last4 — thousands of cards share those, and using them would block innocent customers.
 
-**Not built, and required before renewals can charge unattended:** tokenization and a saved payment
-method. `chargeDueRenewals` opens a real renewal charge through the same verified path, but with no
-stored token the customer must return to a checkout to complete it.
+#### Automatic renewal — a MERCHANT-ENABLEMENT question, not a credential (`PAY-TOKEN-003`)
+
+Updated 2026-08-11. The saved-card path is now built end to end: a verified, gateway-re-read payment
+that carries a reusable token files the card (`subscription_payment_methods`, token encrypted and
+hidden from serialisation), and the next renewal is DEBITED instead of being sent as an invoice.
+
+There is **no environment variable for this**, and nothing to ask for beyond the keys above. Whether
+it engages depends on whether Moyasar issues a reusable token with the payments this merchant account
+settles:
+
+- **It does** → the card is filed on first payment and renewals are taken unattended.
+- **It does not** → every renewal arrives as an invoice the customer visits and pays. That is a
+  working way to be paid; what makes it worth knowing is the shape of the failure when they miss one
+  — the account goes past due and then suspended, which reads like dunning working correctly.
+
+`/admin/settings` reports which state this install is in, as two separate numbers: whether the
+gateway CAN charge a saved card, and how many cards actually exist. On a fresh install that is
+ready-and-zero, which is the honest reading.
+
+**What to verify on the first sandbox payment:** that the settled payment's `source` carries a
+`token`, and that `subscription_payment_methods` gains a row. Until a real payload has been seen, the
+capture half is `READY_FOR_CREDENTIALS` — the refusal half (no token → no card → no charge) is
+verified. There is deliberately **no endpoint that adds a card**: a token arrives only from a payment
+the gateway settled.
+
+#### Test and live keys, in both directions
+
+`production:check` fails a **test** key in production (customers charged nothing while the product
+reports them paid) **and** a **live** key outside production (`PAY-ENV-001`) — a laptop, staging box
+or CI run holding `sk_live_…` charges real cards against a database thrown away nightly, and copying
+a working production `.env` is how most staging environments start.
 
 ### Stripe — supported by the same port
 
@@ -134,6 +162,18 @@ of rules drift into each other.
 list, so the run reads `partial` and the UI says «لا توفّرها المنصة». That is deliberate: an empty
 list and «the platform does not offer this» are different facts, and only one of them is true.
 
+**Set the client's timezone before the first sync** (`COMMERCE-TZ-001`, added 2026-08-11). Every
+store timestamp is anchored through an explicit chain — the payload's own zone, then the store's,
+then the **client workspace's**, then UTC as a recorded assumption:
+
+- **Salla** states the zone on each date (`{date, timezone}`) and on the store, so it needs nothing.
+- **Zid** publishes no timezone in the shape this connector reads. Without a timezone on the client
+  workspace, its orders fall to `assumed_utc` — they are KEPT and counted, and every surface says how
+  many had their zone assumed, but any of them may sit on the day either side of where it is shown.
+
+Report windows are measured on the CLIENT's clock while each order keeps `placed_on`, the calendar
+date its own merchant sold it on. Both facts are stored; neither overwrites the other.
+
 ---
 
 ## 4. Identity, mail and analytics
@@ -155,6 +195,37 @@ that is enforced by tests, not by convention.
 GA4 appears in no config and has no adapter. It is not «awaiting credentials»; it does not exist.
 
 ---
+
+## 4b. Exchange rates — a CONFIGURATION decision, not a credential (`FX-FEED-001`)
+
+Added 2026-08-11. This one does not belong with the credentials above, and putting it there would ask
+the wrong question of the wrong person.
+
+| | |
+|---|---|
+| State | `READY_FOR_CONFIGURATION` |
+| Env | `FX_RATE_DRIVER` — **unset, deliberately** |
+| Console | `/admin/settings/currency-rates` |
+| Command | `fx:rates` (daily 02:30; writes nothing and exits 0 when unconfigured) |
+
+**No publisher is chosen in this repository, on purpose.** Which source a deployment trusts for
+exchange rates is a commercial decision with a contract behind it; a default here would make it
+silently, and every converted figure in the product would carry a provenance nobody picked.
+
+Until one is chosen, money in a currency other than a client's reporting currency is **withheld** —
+reported as withheld on the funnel, the dashboard and the client's own link, never guessed and never
+counted as zero. The product tells the truth without a rate source; what it cannot do is convert.
+
+Two ways to satisfy it, and both are legitimate:
+
+1. Point `FX_RATE_DRIVER` at a class implementing `CurrencyRateSource`, once somebody has chosen and
+   contracted with a publisher.
+2. Record rates by hand at `/admin/settings/currency-rates`. They are stored as `manual:<email>` and
+   audited, because an operator is a real source and a conversion has to lead back to a person.
+
+The console lists the pairs the absence has ALREADY cost, worst first, derived from the figures
+actually withheld in both pipelines — so a currency nobody thought to list appears the moment it
+costs somebody a number.
 
 ## 5. What to do with a credential once you have it
 

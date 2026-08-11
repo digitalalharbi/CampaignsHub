@@ -52,26 +52,35 @@ shareable client links with fail-closed scope ceilings, the notification and ema
 plan entitlements enforced server-side, subscriptions and billing, `/admin` platform operations, the
 public site, consent and legal documents, and the PWA.
 
-Backend **1820 tests**. Frontend **959 tests**. Playwright across Chromium, Firefox and WebKit.
+Backend **2009 tests**. Frontend **1017 tests**. Playwright across Chromium, Firefox and WebKit
+(299 · 291 · 291), 0 failed, 0 flaky, retries 0. Counts as of 2026-08-11.
 
 ### Not built — say so rather than discovering it
 
-- **Payment tokenization and saved payment methods.** The gateway adapter opens real invoices and
-  verifies real webhooks, and the renewal sweep opens a real renewal charge through that same
-  verified path — but there is no stored token, so a renewal cannot charge unattended. The customer
-  must return to a checkout. **This is the largest single gap between here and a self-running
-  subscription business.**
-- **A backend-to-backend re-fetch of a payment.** The webhook is verified, deduplicated by event id,
-  matched on our own reference and checked on amount and currency. It is not re-read from the
-  gateway's own API. Worth adding, because Moyasar's scheme is a shared secret rather than a
-  signature and cannot prove the body is unmodified.
-- **FX / reporting currency.** Subscriptions are USD and advertising reporting is SAR, but original
-  amount + original currency + FX rate + FX date + FX source is not implemented. Do not add a hidden
-  fixed rate, and never lose the original value.
+> **Corrected 2026-08-11.** Four items that stood here have since shipped, and a developer reading
+> the old list would have rebuilt working code. They are recorded below under «shipped since» with
+> the reference to look up, because knowing something exists is as load-bearing as knowing it does not.
+
 - **GA4.** Not integrated at all — it is absent, not awaiting credentials.
 - **The alerts management page.** The engine and the API are complete; the operator screen is not.
 - **The influencer/UGC module** is behind `FEATURE_INFLUENCERS_UGC=false`. The models, controllers
   and tests remain; what is withdrawn is the offer.
+- **Passkeys.** Deliberately not started; explicitly optional.
+- **A platform→objective mapper for Google Ads specifically.** Every other provider maps
+  (`PlatformObjectiveMap`, six providers). Google's campaign resource does not expose a marketing
+  objective in the API this connector reads — it reports `advertisingChannelType`, which is where an
+  ad runs and not what it is for — so Google campaigns arrive unclassified with the platform's raw
+  word recorded for a person to correct (`REPORT-OBJECTIVE-002-E`). **Do not map channel type onto
+  an objective**: SEARCH serves lead campaigns and shopping campaigns alike.
+
+### Shipped since this document was first written — do not rebuild
+
+| Was listed as missing | Now | Reference |
+|---|---|---|
+| Payment tokenization and saved payment methods | Built end to end. A verified, gateway-re-read payment carrying a reusable token files the card (encrypted, hidden from serialisation) and the next renewal is debited rather than invoiced. Whether Moyasar issues that token for a given merchant account is the remaining unknown, and needs a key to answer | `PAY-TOKEN-001…003` |
+| A backend-to-backend re-fetch of a payment | Built. Moyasar's `paid` webhook is re-read from `GET /v1/payments/{id}` before anything settles, and an unreachable gateway settles nothing rather than falling back to the body | `PAY-CONFIRM-001` |
+| FX / reporting currency | Built for both pipelines. Original amount + original currency + dated rate + source on every monetary row; no rate means the figure is WITHHELD and reported as withheld, never guessed and never zero. No vendor is chosen in this repository — that is a configuration decision, not a credential | `FX-001`, `COMMERCE-FX-001`, `FX-FEED-001` |
+| — (not previously known) | Store timestamps are true instants; report windows are measured on the client's clock; each order keeps the calendar date its own merchant sold it on | `COMMERCE-TZ-001` |
 
 ## 3. Money — read this before touching anything in `Domains/Subscriptions` or `Domains/Billing`
 

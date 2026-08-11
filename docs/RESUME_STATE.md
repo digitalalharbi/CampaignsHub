@@ -10,7 +10,106 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (fourth of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (fifth of the day)
+
+**Working tree CLEAN.** Last CODE commit `1f9efed`; anything after it is documentation only.
+
+| Ref | What | State |
+|---|---|---|
+| `REPORT-OBJECTIVE-002-E` | The platform's own word is recorded even when nothing recognises it, so «the platform is wrong about this» stops reading like «the platform never said» | **VERIFIED** (`1f9efed` — 7 tests added, 4 of them fail-first) |
+
+### GATE — **GREEN** on this exact tree, one invocation
+
+```
+PASS  chromium  (exit 0)   299 passed  (11.2m)
+PASS  firefox   (exit 0)   291 passed  (13.8m)
+PASS  webkit    (exit 0)   291 passed  (16.7m)
+REAL_GATE_EXIT=0     0 failed · 0 flaky · retries: 0 (config) · 0 skipped
+```
+
+Backend **2009 passed** · Frontend **1017 passed** · tsc · lint · Pint · production build — clean.
+`production:check` = **0 failing, 2 warnings** (mail provider, FX rate driver).
+
+---
+
+### Read this before trusting the previous handoff
+
+The fourth handoff named `REPORT-OBJECTIVE-002` as «the ONE remaining non-external open item — no
+platform→canonical objective mapper exists». **That was wrong.** The mapper has existed since
+`bdbb228`: `PlatformObjectiveMap` covers all six providers including both sides of Meta's 2022
+rename, `CampaignObjectiveResolver::sync()` is called from `ImportExternalCampaigns` and
+`CampaignLinker`, and `PlatformObjectiveDerivationTest` covered it.
+
+The claim came from a matrix row whose «remainder» note was stale, repeated without checking for
+callers. Both stale rows are now reconciled and point at the authoritative ones. The lesson is the
+one this file keeps relearning: **a status sentence is not evidence — grep for the call site.**
+
+### The real defect that verification found
+
+`provenance()` promises `platform_value` is «kept whatever happens afterwards — so the platform is
+wrong about this is distinguishable from the platform never said». `sync()` returned before writing
+it whenever nothing mapped, which is exactly the case the column was added for.
+
+**Every Google Ads campaign lands there by design.** The connector reports `advertisingChannelType`,
+deliberately unmapped because a channel is where an ad runs and not what it is for — SEARCH serves
+lead campaigns and shopping campaigns alike. So an operator asked to classify one saw a blank where
+the platform's own word should be, with nothing to correct FROM, and no way to tell it from a
+campaign the platform never described or a sync that had not run.
+
+Fixed, with the guard that matters: the classification does NOT move, `objective_source` stays
+`unset`, and a test asserts that a recorded raw value never makes a campaign count as sales. A
+recorded word must never be mistaken for a classification, or unclassified Google spend reaches a
+sales CPA.
+
+**Do not map Google's channel type onto an objective.** It is the one shortcut that looks like a fix
+and silently merges lead campaigns with shopping campaigns.
+
+### Non-external open items: **0**
+
+The final review of `REQUIREMENTS_TRACEABILITY_MATRIX.md` finds no `NOT_STARTED`, no `PARTIAL` and no
+`IMPLEMENTED_NOT_VERIFIED` rows. The only two remaining matches are the summary lines that say
+«— none». Everything still outstanding carries one of the three permitted states:
+
+| Item | State | Why |
+|---|---|---|
+| Salla · Zid · Moyasar · the six ad platforms | `READY_FOR_CREDENTIALS` / `BLOCKED_EXTERNAL_CREDENTIALS` | No install holds credentials. Every provider response the tests exercise is faked, which proves the parsing and says nothing about their API. |
+| Moyasar card-on-file (`PAY-TOKEN-003`) | `READY_FOR_CREDENTIALS` | The refusal is proven; that Moyasar's live payload puts the token where the adapter reads it needs a key to answer. |
+| FX rate feed (`FX-FEED-001`) | `READY_FOR_CONFIGURATION` | The engine is verified. No vendor is chosen here, deliberately — it is a commercial decision, not a credential. |
+| Mail provider | `READY_FOR_CREDENTIALS` | The product never records a message as sent without one. |
+| `PORTAL-AUTH-001` | `BLOCKED_OPERATIONAL_EVIDENCE` | Retiring the legacy OTP engine waits on `/admin/cutover` reading zero against real traffic. Nothing left to build. |
+| GA4 · the alerts management page · influencer module (`FEATURE_INFLUENCERS_UGC=false`) · passkeys | not started, and recorded as such | Out of the delivered scope. Passkeys are explicitly optional. |
+
+### The three handoff documents were STALE, not missing — now corrected
+
+The previous handoff said they were «not started». All three existed and all three were wrong in ways
+that would have cost a reader real work:
+
+- `PRODUCTION_HANDOFF.md` listed **payment tokenization, the backend-to-backend payment re-fetch and
+  FX/reporting currency as «not built»** — all three shipped months of work ago. A developer
+  following that list would have rebuilt working code. Replaced with a «shipped since — do not
+  rebuild» table, and the test counts corrected to 2009 / 1017.
+- `DEPLOYMENT_CHECKLIST.md` claimed **«there is no destructive migration in the history»**. Two
+  migrations rewrite existing rows (`COMMERCE-FX-001` re-denominates store money, `COMMERCE-TZ-001`
+  re-anchors every stored wall clock). Both are reversible and both were exercised up → down → up,
+  but an operator upgrading a populated database must know. Now named, with the backup advice.
+- `INTEGRATION_CREDENTIALS_CHECKLIST.md` still said tokenization was «not built». It now carries the
+  card-on-file question as **merchant enablement**, the FX feed as a **configuration decision** in
+  its own section apart from the credentials, and the instruction to set a client's timezone before
+  connecting a **Zid** store — Zid publishes none, so without it that store's orders fall back to an
+  assumed UTC.
+
+### If you pick this up next
+
+There is no non-external work queued. The honest next steps all need somebody outside this
+repository: obtain credentials and take each integration from `READY_FOR_CREDENTIALS` to
+`LIVE_VERIFIED`, choose an exchange-rate publisher, or run `/admin/cutover` against real traffic.
+
+**Nothing here is `LIVE_VERIFIED`, for any provider, including the payment gateway.** That is a
+statement about credentials, not about completeness.
+
+---
+
+## Previous close — 2026-08-11 (fourth of the day)
 
 **Working tree CLEAN.** Last CODE commit `19b0527`, which is the tree the gate below ran on
 (anything after it is documentation only).

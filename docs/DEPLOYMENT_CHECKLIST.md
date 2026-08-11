@@ -30,8 +30,18 @@ Start from `backend/.env.example` — it is complete and carries **no secrets**.
 - [ ] `DB_CONNECTION=pgsql`, `QUEUE_CONNECTION=redis`, `CACHE_STORE=redis`.
 - [ ] `SUBSCRIPTION_PROVIDER=moyasar` — **never `sandbox` in production.**
 - [ ] Gateway keys are a matched pair (both live), and the webhook secret is present.
+- [ ] Live keys are in **production only**. `production:check` also fails a live secret in any other
+      environment (`PAY-ENV-001`) — copying a working production `.env` to staging is how a box whose
+      database is wiped nightly ends up charging real cards.
+- [ ] Each client workspace that will connect a **Zid** store has its `timezone` set. Zid publishes
+      none, so without it that store's orders fall back to an assumed UTC — kept and counted, and
+      flagged as assumed on every surface, but placed on a day that may be off by the real offset
+      (`COMMERCE-TZ-001`).
 - [ ] **`php artisan production:check` exits 0.** It fails on every one of the above and reports the
-      *shape* of a key, never its value.
+      *shape* of a key, never its value. Expect **two warnings** on a first deploy — no mail provider
+      and no `FX_RATE_DRIVER`. Both are honest unfinished integrations, not failures: the product
+      never records a message as sent without the first, and withholds rather than guesses money
+      without the second. Neither blocks the deploy; both should be on somebody's list.
 
 ## 3. Install
 
@@ -103,8 +113,20 @@ php artisan up
 release's code against the new database — which is how a migration that passed produces failures
 nobody can reproduce.
 
-Migrations are additive and ordered by filename; there is no destructive migration in the history.
-Re-running `migrate` on an up-to-date database is a no-op.
+Migrations are ordered by filename and re-running `migrate` on an up-to-date database is a no-op.
+**Two of them REWRITE existing rows** — they are reversible, but "additive" would be the wrong word
+and an operator upgrading a populated database should know which:
+
+| Migration | What it rewrites | Why it is safe |
+|---|---|---|
+| `2026_08_12_120000_a_store_selling_in_dollars_is_not_holding_riyals` | Store money into the reporting currency (`COMMERCE-FX-001`). Rows already in that currency are stamped at par; rows in any other currency have their converted amount set NULL until a dated rate exists | The provider's own figures are copied into `original_*` FIRST, so nothing is lost. `down()` restores the amounts from them |
+| `2026_08_13_120000_a_merchants_day_is_not_a_utc_day` | `placed_at` / `abandoned_at`, re-anchoring each stored wall clock in the store's real timezone (`COMMERCE-TZ-001`) | The stored value IS the merchant's wall clock, so re-anchoring recovers the instant that was thrown away — exact, not estimated. `down()` puts the wall clocks back |
+
+Both were exercised up → down → up against a fully migrated database before release.
+
+**Take a backup before upgrading past either of them** (§9). That is ordinary practice for any
+release; it matters more for these two because a restore, not a rollback, is the fastest way back if
+something about your data surprises them.
 
 ## 8. Rollback
 
