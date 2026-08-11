@@ -72,6 +72,21 @@ final class CampaignObjectiveResolver
         $rawValues = [];
 
         foreach ($externals as $external) {
+            $raw = strtoupper(trim((string) $external->objective));
+
+            /*
+             * REPORT-OBJECTIVE-002b — every stated value is collected, mapped or not.
+             *
+             * It used to be collected only when it mapped, so the one case the column exists for —
+             * the platform said something we do not understand — recorded nothing. Every Google Ads
+             * campaign lands there by design (the connector reports `advertisingChannelType`, which
+             * is deliberately unmapped because a channel is where an ad runs, not what it is for),
+             * and an operator asked to classify one was shown a blank with nothing to correct FROM.
+             */
+            if ($raw !== '') {
+                $rawValues[] = $raw;
+            }
+
             $objective = $this->map->resolve((string) $external->provider, $external->objective);
 
             if ($objective === null) {
@@ -79,17 +94,27 @@ final class CampaignObjectiveResolver
             }
 
             $resolved[$objective->value] = $objective;
-            $rawValues[] = strtoupper((string) $external->objective);
         }
+
+        $rawValue = $rawValues === [] ? null : implode(' · ', array_unique($rawValues));
 
         // Nothing recognised, or the linked campaigns disagree — either way there is no answer to
         // adopt, and inventing one is the failure this whole unit is about.
         if (count($resolved) !== 1) {
+            /*
+             * The classification does NOT move — and the platform's own word is written down anyway,
+             * because «wrong about this» and «never said» are different problems for the person who
+             * has to settle it. `objective_source` stays `unset`, so nothing downstream can read a
+             * recorded raw value as a classification and let this spend reach a sales CPA.
+             */
+            if ($rawValue !== null && $campaign->objective_platform_value !== $rawValue) {
+                $campaign->forceFill(['objective_platform_value' => $rawValue])->save();
+            }
+
             return false;
         }
 
         $objective = reset($resolved);
-        $rawValue = implode(' · ', array_unique($rawValues));
 
         if ($campaign->objective === $objective->value && $campaign->objective_source === 'platform') {
             // Still record the raw value if it arrived after the classification did.
@@ -151,14 +176,24 @@ final class CampaignObjectiveResolver
             'corrected_by' => $campaign->objective_corrected_by,
             'corrected_at' => $campaign->objective_corrected_at?->toIso8601String(),
             'reviewed' => $source === 'manual',
-            'note_ar' => match ($source) {
-                'manual' => 'صُحّح يدويًا بعد المراجعة.',
-                'platform' => 'مأخوذ من المنصة تلقائيًا.',
+            /*
+             * The unclassified note NAMES what the platform said when it said anything.
+             *
+             * «لم يُصنَّف بعد» over a campaign whose platform clearly reported `SEARCH` reads as a
+             * sync that has not run. Printing the value turns it into a question somebody can
+             * answer, and it is the difference between an operator correcting one campaign and an
+             * operator wondering whether the integration is broken.
+             */
+            'note_ar' => match (true) {
+                $source === 'manual' => 'صُحّح يدويًا بعد المراجعة.',
+                $source === 'platform' => 'مأخوذ من المنصة تلقائيًا.',
+                $campaign->objective_platform_value !== null => 'المنصة تقول «'.$campaign->objective_platform_value.'» ولا نعرف ما يقابله — لم يُصنَّف بعد، ولا يدخل إنفاقه في تكلفة الطلب.',
                 default => 'لم يُصنَّف بعد — لا يدخل إنفاقه في تكلفة الطلب.',
             },
-            'note_en' => match ($source) {
-                'manual' => 'Corrected by a person after review.',
-                'platform' => 'Taken from the platform automatically.',
+            'note_en' => match (true) {
+                $source === 'manual' => 'Corrected by a person after review.',
+                $source === 'platform' => 'Taken from the platform automatically.',
+                $campaign->objective_platform_value !== null => 'The platform says «'.$campaign->objective_platform_value.'», which nothing here recognises — not classified yet, and its spend is kept out of the cost per order.',
                 default => 'Not classified yet — its spend is kept out of the cost per order.',
             },
         ];
