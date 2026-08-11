@@ -10,7 +10,144 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11
+## ⚠️ START HERE — handoff written 2026-08-11 (second of the day)
+
+**Working tree CLEAN.** Last CODE commit `c2c7270`, which is the tree the gate below ran on
+(anything after it is documentation only). Two units landed on top of the green gate at `7130f20`:
+
+| Ref | What | State |
+|---|---|---|
+| `COMMERCE-FX-001` | Store money is converted into the reporting currency at import, and a rate nobody can vouch for is refused rather than guessed — the rule `FX-001` set for ad money, applied to Salla/Zid | **VERIFIED** (`e331eca` — 15 tests) |
+| `FX-FEED-001` | The rate **engine** and the rate **supply** are stated as two different things; a source abstraction, a scheduled importer that invents nothing, and hand entry from `/admin` | **VERIFIED** as far as it can be — the supply itself is `READY_FOR_CONFIGURATION` (`ac63eee` — 14 backend + 5 frontend tests) |
+
+### GATE — **GREEN** on this exact tree, one invocation
+
+```
+PASS  chromium  (exit 0)   299 passed  (8.3m)
+PASS  firefox   (exit 0)   291 passed  (14.7m)
+PASS  webkit    (exit 0)   291 passed  (11.7m)
+REAL_GATE_EXIT=0     0 failed · 0 flaky · retries: 0 (config)
+```
+
+Backend **1960 passed** · Frontend **1006 passed** · tsc · lint · Pint · production build — all clean.
+
+---
+
+### COMMERCE-FX-001 — what was wrong, and what the fix commits us to
+
+`commerce_orders` has recorded the provider's `currency` per row since COMMERCE-001, and **every
+reader added `total` across rows without ever looking at it** — the funnel's revenue, `netRevenue()`,
+the best-seller table's `SUM(total)`, the attribution report's store-confirmed figure. A merchant
+selling in dollars through one shop and riyals through another had both added together.
+
+**Measured, not recalled.** Reproducing the old row shape — two shops, $1,000 and 1,000 SAR — makes
+the funnel report a revenue of **2000** where the truth at 3.75 is **4750**.
+
+Worse here than it was for ads: a store total is the figure a client recognises. It is compared
+against the merchant's own dashboard, so a wrong one is disputed rather than believed.
+
+Four decisions that must not be quietly undone:
+
+1. **Converted once, at import.** The amount columns hold the REPORTING currency and the provider's
+   own figures sit beside them in `original_*`. Six read paths are correct without one of them being
+   edited, and a seventh added next month is right by default. A scheme that added parallel converted
+   columns would have made a new reader wrong by default, in the silent direction.
+2. **Fail-closed writes NULL** — not `0` (a sale that earned nothing) and not the unconverted figure
+   (the defect itself). `SUM` skips nulls, so the funnel's coverage block, the dashboard's store strip
+   and the **client link** all state how many orders are missing from the revenue and in which
+   currency. The client link matters most: the reader has no second view of their own account.
+3. **`netRevenue()` became `?float`.** Every caller now has to decide what to do about a withheld
+   order rather than quietly adding `0.0`.
+4. **Not everything is money that looks like it.** `commerce_products.price` (a shelf price) and
+   `commerce_customers.total_spent` (a lifetime figure spanning orders outside any window we hold
+   rates for) are NOT converted; they are never summed across shops. `commerce_customers` gained a
+   `currency` column so a lifetime total is never a bare number.
+
+Existing rows were backfilled honestly: already-in-reporting-currency rows are stamped `identity` at
+rate 1; rows in any other currency are **withheld** until the next sweep, because their stored amount
+was never converted and leaving it would preserve the defect.
+
+### FX-FEED-001 — the two states that were one silence
+
+The FX **engine** is verified (FX-001, COMMERCE-FX-001). The rate **supply** did not exist:
+`currency_rates` was written by nothing but a demo seeder, so an operator could not even enter a rate
+by hand.
+
+**No publisher is chosen in this repository, deliberately.** Which source a deployment trusts is a
+commercial decision with a contract behind it; a default here would make it silently, and every figure
+in the product would carry a provenance nobody picked. `FX_RATE_DRIVER` is unset and
+`CurrencyRateSource` has no implementation.
+
+- Three states, never collapsed: `awaiting_configuration` · `driver_not_configured` · `ready`. A
+  working engine must not read as broken because nobody bought a subscription.
+- `fx:rates` runs daily, writes **nothing** when unconfigured, and exits 0 — an unconfigured install
+  is not failing, and a nightly non-zero exit trains an operator to ignore their own alerts. A failed
+  FETCH does exit non-zero.
+- The pairs it asks for are **derived from the figures already withheld**, in both pipelines, so a
+  currency nobody thought to list surfaces the moment it costs somebody a number.
+- `/admin/settings/currency-rates` shows the state, what its absence has already cost (worst pair
+  first), and lets an operator enter a rate — stored as `manual:<email>` and audited, because an
+  operator is a real source and a conversion must lead back to a person.
+
+`production:check` names it too (`c2c7270`) — a WARNING, not a failure, on the same reasoning as the
+mail provider: the product tells the truth without it. What the line buys is an operator learning it
+in the deploy pipeline rather than from a client asking why a total is short.
+
+**State for the handoff document: FX engine = VERIFIED. FX rate feed = READY_FOR_CONFIGURATION.**
+Choosing the publisher is the operator's decision; nothing in the code is waiting on it.
+
+### Salla + Zid — the readiness review, and what it found
+
+Reviewed against the owner's checklist. **No non-external gap was found beyond the currency one
+above, which is now closed.** Evidence, item by item:
+
+| Item | Where | State |
+|---|---|---|
+| OAuth start/callback | `StoreOAuthController` — single-use state, tenant/user/workspace read from the state and never from the query string | code-complete |
+| Store discovery | the first real round trip; a token that names no store is NOT called connected | code-complete |
+| Project/client binding | `StoreSyncer::projectIdFor()` decides once and never re-files; `ProjectStores` reads the link back from the data | code-complete |
+| Initial + incremental sync | `commerce:sync` hourly at :20, fourteen days back, upserted on `(external_account_id, external_id)` | code-complete |
+| Webhooks + signatures | `IntegrationWebhookController` — signature verified before anything is recorded, unverified bodies stored nowhere, `x-salla-signature` per the catalogue | code-complete |
+| Idempotency | `WebhookIngest` inserts first and lets the unique index make a redelivery a no-op; a duplicate answers 2xx | code-complete |
+| Pagination | Salla `pagination.totalPages`, Zid count-based, both with a hard page cap | code-complete |
+| Token refresh | `integrations:refresh-tokens` runs over **every** `provider_connections` row, commerce included — the command name says «ad platform» and its scope does not | code-complete (**do not** "fix" the name into a filter) |
+| Retry/backoff | `PlatformHttp` — one policy, `Retry-After` honoured, capped | code-complete |
+| Disconnect/reconnect | `ProviderConnectionController::revoke()` disables every binding across all projects and audits | code-complete |
+| Last sync / errors | `IntegrationSyncRun` per sweep; `partial` is a real outcome and Zid's missing cart endpoint is a refusal, not an empty success | code-complete |
+| Tenant isolation | global scopes throughout; the webhook derives its tenant from `external_accounts` and never from the payload | code-complete |
+| UTM / click ids | `Attribution` + `OrderAttributionResolver`, with the raw signals kept beside the resolution | code-complete |
+| Currency | **COMMERCE-FX-001** (above) | closed this session |
+| Attribution provenance | `AttributionTransparency` — store-confirmed vs platform-reported, never summed | code-complete |
+
+**Nothing here is Live.** No install holds Salla or Zid credentials, every response the tests exercise
+is faked, and that proves the parsing and says nothing about their API. State:
+`READY_FOR_CREDENTIALS`. Entering credentials is expected to be sufficient to start
+OAuth → discovery → binding → initial sync → incremental sync → webhooks → unified pipeline.
+
+**One thing a future session should look at, and it is NOT a defect yet:** timezone. Salla wraps
+dates as `{date, timezone}` and the connector keeps only the wall-clock string, so `placed_at` is
+stored as the merchant's local time labelled UTC. Day-bucketing therefore matches the merchant's own
+calendar day (which is what a client compares against), but a rendered TIME is off by the store's
+offset, and a reader in another timezone sees late-evening orders on the next day. Fixing the parse
+alone would make our day-buckets disagree with the merchant's dashboard — the real fix is parsing the
+instant correctly AND evaluating report windows in the client's timezone (`client_workspaces.timezone`
+already exists). That is a unit, not a patch.
+
+### Next, in the owner's order
+
+1. **Moyasar sandbox end-to-end** — the remaining half of `PAY-TOKEN-002`. Needs credentials.
+2. Integration readiness for the ad platforms (Snapchat, TikTok, Meta, Google Ads, X, LinkedIn) — the
+   adapters have tests; what is unproven is a live round trip.
+3. Unified pipeline / funnel verification, production environment validation, `/admin` integration
+   readiness.
+4. The three handoff documents: `PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md`,
+   `INTEGRATION_CREDENTIALS_CHECKLIST.md` — the FX rate feed belongs in the credentials checklist as
+   a **configuration** decision, not a credential.
+5. Passkeys — explicitly optional, deliberately not started.
+
+---
+
+## Previous close — 2026-08-11 (first of the day)
 
 **Working tree CLEAN.** Last CODE commit `7130f20`, which is the tree the gate below ran on
 (anything after it is documentation only). Three units landed on top of the green gate at `4d96f68`:
