@@ -12,7 +12,11 @@
 
 ## ⚠️ START HERE — DELIVERY CLOSE, 2026-08-11 (eighteenth of the day)
 
-**Working tree CLEAN at `d03ad38`.** Non-external open items: **0**. The full gate is **GREEN on all
+**Working tree CLEAN.** Every check below ran on **`d03ad38`**; the commits after it are
+documentation only — no code, no test, no configuration. The final commit is the one the tag
+`handoff-2026-08-11` points at, which is deliberately how it is named here: a SHA written into the
+file that the commit itself changes is wrong the moment it is written. Non-external open
+items: **0**. The full gate is **GREEN on all
 three browsers** for the first time in this series, and the sign-out defect that had survived six
 overturned hypotheses is closed with a measurement behind it.
 
@@ -134,7 +138,7 @@ and forcing it anyway would rewrite what that working copy has checked out. Publ
 as `origin/main` gives the same result on GitHub without touching the other worktree. `local HEAD ==
 origin/main` still holds after the push above.
 
-The tag **`handoff-2026-08-11`** exists locally, on `d03ad38`, and is unpushed. Deliberately not
+The tag **`handoff-2026-08-11`** marks the final commit, exists locally, and is unpushed. Deliberately not
 `v1.0.0`: no provider is `LIVE_VERIFIED`.
 
 ### 6. External blockers — the complete list, and nothing else is open
