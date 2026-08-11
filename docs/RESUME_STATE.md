@@ -10,7 +10,70 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (eighth of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (ninth of the day)
+
+**Working tree CLEAN.** `IDENTITY-ACCOUNTS-001` is still **NOT VERIFIED**. The Full Gate was NOT run
+— the cause is not closed, and running it would only produce another red result nobody learns from.
+
+### What is now settled, with evidence
+
+| Claim | Verdict | How it was measured |
+|---|---|---|
+| The server ends the session on sign-out | **TRUE** | curl, one cookie jar, a process per request: `/auth/me` 200 → `/auth/logout` 200 → `/auth/me` **401** |
+| The old test forged its own logout and never checked it | **TRUE, and fixed** | it POSTed with a hand-read `X-XSRF-TOKEN` and asserted nothing about the response |
+| The UI sign-out is refused (419/403) | **FALSE** | instrumented on chromium: exactly one `/auth/logout`, status **200** |
+| The session survives anyway in the browser context | **TRUE on chromium + firefox, FALSE on webkit** | the fixed test, run in the gate's own Chromium → Firefox → WebKit sequence |
+
+### The test defect is closed
+
+`login-otp-journey` now signs out through **the button a customer presses** — open the user menu,
+click «Sign out» — so the application sends its own CSRF token exactly as it does in production. A
+forged request can only ever test the forgery. It also asserts the session exists BEFORE signing out,
+so «nothing to sign out of» can no longer masquerade as «the session outlived the sign-out».
+
+That was worth doing on its own: the old assertion accused the product of a security defect whenever
+its own request was refused, and it was the loudest recurring failure in the gate.
+
+### The remaining question, stated precisely
+
+**The logout is accepted (200), the server drops the session, and `page.request.get('/auth/me')` from
+the same browser context still names the user — on chromium and firefox, but not webkit.**
+
+That is not «the test forged a request» and not «the server does not log out». Both are eliminated.
+What is left is something in the browser context still presenting an authenticated session after a
+`window.location.assign('/login')` that followed an accepted logout.
+
+Where to look next, in order — and **measure, do not assume**:
+
+1. `signOutCompletely()` awaits `logout()` and then calls `window.location.assign(destination)`. Put a
+   probe on the cookie jar immediately before and after that navigation: does the `Set-Cookie` from
+   the logout response actually reach `page.context().cookies()`, and does the `/login` document
+   request then mint a session that `page.request` reuses?
+2. Compare what `page.request.get()` sends against what the page itself sends for the same URL — same
+   context, but the two go through different stacks in Playwright, and webkit disagreeing with the
+   other two is exactly the shape of a cookie-jar propagation difference rather than a product bug.
+3. Only if 1 and 2 exonerate the harness does this become a product defect — and then it is about
+   what the `/login` document request does with a just-invalidated session, not about `logout()`.
+
+**Do not «fix» this by asserting something weaker.** The claim under test — signing out ends the
+session — is the right claim, and it is the one a customer depends on.
+
+### Then, still queued and untouched
+
+The leg asymmetry (chromium first and always green; failures in the second and third legs) has NOT
+been investigated. It must not be attributed to load without measurement: browser/child PIDs before
+and after each leg, whether every Playwright process is reaped, port ownership, Vite/API process
+reuse, session/database reset, config/route cache, storageState, queue workers, temp profiles.
+
+Only after both are closed: one Full Gate on a frozen tree, `REAL_GATE_EXIT=0`, Failed/Flaky/
+Retries/Skipped all 0 — and only then `IDENTITY-ACCOUNTS-001` = VERIFIED and non-external open
+items = 0.
+
+No timeout was raised, no retry added, no sleep introduced, and no Full Gate re-run.
+
+---
+
+## Previous close — 2026-08-11 (eighth of the day)
 
 **Working tree CLEAN.** `IDENTITY-ACCOUNTS-001` is still **NOT VERIFIED** — the gate has not been
 re-run, deliberately, because the instruction was to close the cause first.

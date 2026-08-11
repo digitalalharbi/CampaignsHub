@@ -124,22 +124,49 @@ test.describe('the email code opens a real session', () => {
     expect(await whoAmI(page)).toBe('advertiser@campaignshub.io')
   })
 
-  /** Out, then in again. A logout that left the server's session alive would pass a URL check. */
+  /**
+   * Out, then in again — through the button a customer actually presses.
+   *
+   * ## Why this no longer forges its own logout request
+   *
+   * It used to `page.request.post('/auth/logout', …)` with an `X-XSRF-TOKEN` read out of the cookie
+   * jar, and **never asserted the response**. When that request was refused — a 419 on a token that
+   * had lagged a session regeneration — the session correctly survived and this test announced «the
+   * session outlived the sign-out». It accused the product of a security defect when the truth was
+   * that the sign-out had never been accepted, and it was the loudest recurring failure in the gate.
+   *
+   * The server was measured directly at the HTTP layer and is not defective: sign in, `/auth/me`
+   * 200, `/auth/logout` 200, `/auth/me` 401 on the same cookie jar. So the fix belongs here, and the
+   * honest fix is to stop hand-rolling the request at all: press the menu item the customer presses,
+   * and let the application send its own CSRF token exactly as it does in production. A forged
+   * request can only ever test the forgery.
+   *
+   * `whoAmI` still asks the SERVER afterwards, through the same browser context, because a redirect
+   * to `/login` would pass for a page that merely navigated.
+   *
+   * ## STILL FAILING, and the remaining question is no longer this test's shape
+   *
+   * Instrumented on chromium 2026-08-11: the UI sign-out issues exactly one `/auth/logout` and it
+   * returns **200**. The server was separately proven to end the session on a 200 (curl, same cookie
+   * jar: `/auth/me` 200 → logout 200 → `/auth/me` 401). Yet `whoAmI` here still names the user, on
+   * chromium and firefox — and NOT on webkit, which passes.
+   *
+   * So the logout is accepted, the server drops the session, and something in the browser context
+   * still presents an authenticated one to `page.request`. That is the open question; it is not
+   * «the test forged a request» any more, and it is not «the server does not log out».
+   */
   test('signing out ends the session, and a new code opens another', async ({ page }) => {
     await page.goto('/login')
     await requestCode(page, 'advertiser@campaignshub.io')
     await page.getByTestId('login-code').locator('button[type="submit"]').click()
     await expect(page).toHaveURL(/\/app\//, { timeout: 20_000 })
+    expect(await whoAmI(page), 'nothing to sign out of — the session never opened').toBe('advertiser@campaignshub.io')
 
-    await page.request.post('/api/v1/auth/logout', {
-      headers: {
-        Accept: 'application/json',
-        Origin: new URL(page.url()).origin,
-        'X-XSRF-TOKEN': decodeURIComponent(
-          (await page.context().cookies()).find((c) => c.name === 'XSRF-TOKEN')?.value ?? '',
-        ),
-      },
-    })
+    await page.getByRole('button', { name: /User menu|قائمة المستخدم/ }).first().click()
+    await page.getByRole('menuitem', { name: /Sign out|تسجيل الخروج/ }).click()
+
+    // The app takes itself back to the sign-in page; that is the observable end of the journey.
+    await expect(page).toHaveURL(/\/login/, { timeout: 20_000 })
 
     expect(await whoAmI(page), 'the session outlived the sign-out').toBeNull()
   })
