@@ -10,7 +10,129 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (second of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (third of the day)
+
+**Working tree CLEAN.** Last CODE commit `ba0089d`, which is the tree the gate below ran on
+(anything after it is documentation only). One unit landed on top of the green gate at `c2c7270`:
+
+| Ref | What | State |
+|---|---|---|
+| `PAY-TOKEN-003` | The card a settled payment leaves behind is filed — so the unattended renewal `PAY-TOKEN-002` already knew how to take finally has something to take from | **READY_FOR_CREDENTIALS** (`ba0089d` — 18 backend + 9 frontend tests) |
+| `PAY-ENV-001` | A LIVE gateway key outside production is refused, and a gateway that cannot renew unattended says so | **VERIFIED** (same commit — 4 tests) |
+
+### GATE — **GREEN** on this exact tree, one invocation
+
+```
+PASS  chromium  (exit 0)   299 passed  (7.9m)
+PASS  firefox   (exit 0)   291 passed  (11.9m)
+PASS  webkit    (exit 0)   291 passed  (9.9m)
+REAL_GATE_EXIT=0     0 failed · 0 flaky · retries: 0 (config)
+```
+
+Backend **1986 passed** · Frontend **1013 passed** · tsc · lint · Pint · production build — all clean.
+`production:check` = **0 failing, 2 warnings** (mail provider, FX rate driver — both honest
+`READY_FOR_*` states, unchanged from the previous close).
+
+---
+
+### PAY-TOKEN-003 — what was wrong
+
+`RecurringBilling::remember()` existed, was tested, encrypted its token and picked a default. **It had
+no caller anywhere in the application** — only its own test file. So `subscription_payment_methods`
+was empty in every real deployment, `methodFor()` always answered null, and the fork in
+`SubscriptionCheckout::open()` that debits a saved card could not fire for anybody. Every renewal, for
+every customer, was a hosted invoice somebody had to remember to visit.
+
+The failure is quiet in the worst way. The customer agrees to automatic renewal before they pay
+(SUB-CONSENT-001), nothing charges them, the period lapses, `markPastDue` fires on schedule and the
+account is suspended after grace. **From the outside that looks exactly like dunning working
+correctly.**
+
+Decisions that must not be quietly undone:
+
+1. **A provider that cannot charge a token does not store one.** Stripe, the sandbox and the null
+   provider all return null from `savedPaymentMethodFrom()`, matching the
+   `supportsUnattendedCharge() === false` they already answer. A card on file that the gateway will
+   never debit tells the customer they are set up for automatic payment — the one thing they most
+   need to know is untrue.
+2. **There is no endpoint that ADDS a card.** A token arrives one way only: from a payment the
+   gateway settled, through the verified webhook, after the backend-to-backend re-read
+   (PAY-CONFIRM-001). An endpoint that accepted a token from a browser would accept one from anybody
+   who could reach it, and the next thing that happens to a stored token is a charge.
+3. **The audit trail records «visa ···· 4242», never the credential.** An audit log is read by
+   support staff and exported to whoever asks. Asserted by test, along with the encryption at rest.
+4. **Storing a card must never roll back a settlement.** The money has moved and the account is
+   provisioned; a failure to file the card is recorded (`subscription_payment_method.not_saved`) and
+   swallowed, and the renewal falls back to the attended invoice.
+5. **The brand is kept as the gateway writes it** — `visa`, not `Visa`. Title-casing renders «mada»,
+   a brand deliberately lowercase, as something its own owner does not call it.
+
+**Why READY_FOR_CREDENTIALS and not VERIFIED.** What is proven is the REFUSAL — no token, no card,
+no charge — and the whole path from a settled event to a debited renewal. What is NOT proven is that
+Moyasar's live payload puts the token where the adapter reads it: no key exists in this repository to
+have seen a real one. The first sandbox payment against real credentials proves the other half.
+
+### PAY-ENV-001 — the direction nobody was watching
+
+`production:check` failed a TEST key in production, where the symptom is nobody being charged. A LIVE
+key OUTSIDE production had nothing watching it at all — a laptop, a staging box or a CI run holding
+`sk_live_…` charges real cards against a database that is thrown away nightly. It is also the easier
+mistake to make, because copying a working production `.env` is how most staging environments start.
+Now a failure wherever `APP_ENV` is not `production`.
+
+Beside it, a WARNING (not a failure) when the chosen gateway cannot charge a saved card at all — the
+same reasoning as mail: an attended renewal is a real way to be paid, and what is worth saying is the
+shape of the failure when a customer misses the invoice.
+
+### Moyasar readiness — the full checklist, item by item
+
+Reviewed against the owner's list. **No non-external gap was found beyond the saved-card one above,
+which is now closed.**
+
+| Item | Where | State |
+|---|---|---|
+| Test/live separation | `production:check` both directions (PAY-ENV-001); `/admin` reads the environment from the KEY, never a toggle that could disagree with it | closed this session |
+| Publishable / secret configuration | The publishable key is reported present/absent and **never sent to the browser** — checkout is hosted, so the bundle never needs it. The secret key is server-only, and `production:check` asserts no finding carries a secret VALUE | code-complete |
+| Callback | `return_url` → `/signup/status`. There is deliberately no endpoint a browser can call to declare itself paid | code-complete |
+| Webhook + secret verification | `hash_equals` on `secret_token`, constant-time; an unverified body reaches nothing and is still RECORDED, because a burst of them is what an attack looks like | code-complete |
+| Server-side verification | status · amount · currency · reference, all four, re-read from `GET /v1/payments/{id}` because Moyasar's token travels inside the body it authenticates (PAY-CONFIRM-001) | code-complete |
+| Idempotency | `SubscriptionPayment.idempotency_key` derived from what the charge IS, never from when — enforced by a unique index | code-complete |
+| Duplicate webhooks | `payment_webhook_events.event_id` unique; a settled payment is not re-settled even under a new event id | code-complete |
+| Failed / declined | `renewalFailed` → past due with grace → suspension; a refused unattended charge is recorded and NOT retried behind a hosted page | code-complete |
+| Payment audit trail | Every transition, plus `event_contradicted`, `reference_mismatch`, `unconfirmed`, `amount_mismatch`, `payment_method.saved`/`.detached` | code-complete |
+| Saved token / tokenization | **PAY-TOKEN-003** (above) | closed this session |
+| Renewal scheduler | `subscriptions:lifecycle` daily at 01:00, `withoutOverlapping` | code-complete |
+| Duplicate-job protection | The period is part of the idempotency key, so two sweeps in one period charge once — asserted | code-complete |
+| Cancellation / commitment | SUB-COMMIT-001: the request stands, the DATE moves to the end of the commitment | code-complete |
+| `/admin` readiness | Providers, environment, webhook URL, rotation steps, mail, **and now recurring** (`ready` + `saved_methods`, deliberately two numbers) | closed this session |
+| `.env.example` | Complete, no real secret, and now states plainly that automatic renewal has no environment variable — it depends on whether Moyasar issues tokens for this merchant account | closed this session |
+| `production:check` | 0 failing, 2 warnings | code-complete |
+
+**Nothing here is Live.** No install holds Moyasar credentials; every gateway response the tests
+exercise is faked, which proves the parsing and says nothing about their API. State:
+`READY_FOR_CREDENTIALS`.
+
+### Next, in the owner's order
+
+1. **The Salla timezone / report-window unit** — written down at the previous close and NOT started.
+   Salla wraps dates as `{date, timezone}` and the connector keeps only the wall-clock string, so
+   `placed_at` is stored as merchant-local time labelled UTC. Day-buckets therefore match the
+   merchant's own calendar (which is what a client compares against) while a rendered TIME is off by
+   the store's offset. **Do not fix the parse alone** — that would make our buckets disagree with the
+   merchant's dashboard. The unit is: parse the instant correctly AND evaluate report windows in the
+   client's timezone (`client_workspaces.timezone` already exists).
+2. Integration readiness for the ad platforms (Snapchat, TikTok, Meta, Google Ads, X, LinkedIn) — the
+   adapters have tests; what is unproven is a live round trip.
+3. Unified pipeline / funnel verification, production environment validation.
+4. The three handoff documents: `PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md`,
+   `INTEGRATION_CREDENTIALS_CHECKLIST.md` — the FX rate feed belongs in the credentials checklist as
+   a **configuration** decision, not a credential; Moyasar's card-on-file belongs there as a
+   **merchant-enablement** question, not a key.
+5. Passkeys — explicitly optional, deliberately not started.
+
+---
+
+## Previous close — 2026-08-11 (second of the day)
 
 **Working tree CLEAN.** Last CODE commit `c2c7270`, which is the tree the gate below ran on
 (anything after it is documentation only). Two units landed on top of the green gate at `7130f20`:
