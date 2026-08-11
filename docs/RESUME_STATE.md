@@ -10,7 +10,72 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (thirteenth of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (fourteenth of the day)
+
+**Working tree CLEAN.** `IDENTITY-ACCOUNTS-001` still **NOT VERIFIED**. Full Gate NOT run.
+**No revocation system was built** — the premise it would rest on is not yet proven, and building
+it first would be exactly the mistake this thread has already made four times.
+
+### I tried the deterministic reproduction and my harness was wrong. Read this before repeating it.
+
+The plan was right: sign in over real HTTP with real Redis sessions, capture the session payload as
+«request A has loaded it», log out, write the payload back under the old key as «request A saves
+late», then ask `/auth/me` with the ORIGINAL cookie.
+
+What I actually ran had two defects, and its `401` therefore proves **nothing**:
+
+1. **The pre-logout cookie was never preserved.** `cp cj2.txt cj2_orig.txt` ran AFTER the logout had
+   already rewritten the jar, so «request C» presented the NEW cookie, not the revoked one. A 401
+   there is the correct answer to a different question.
+2. **The Redis key was found by scanning for any value containing `login_web_`**, not derived from my
+   own session id. The dev Redis holds sessions from earlier probes, so the key I captured and
+   restored may well have belonged to another session entirely.
+
+One observation from it IS worth keeping and re-checking properly: after a 200 logout,
+`EXISTS <captured key>` returned **1**. If that key really was the logged-out session, then the old
+Redis entry survives `invalidate()` and the whole premise changes shape. I cannot claim it did,
+because of defect 2.
+
+### The corrected harness, for whoever runs it next
+
+- Sessions are **cache-based in Redis**: `Illuminate\Session\CacheBasedSessionHandler`, key =
+  `<cache prefix><session id>`. On this machine the running dev server's prefix is
+  `campaignshub-e2e-mediabuying-cache-`. Do not guess it — read
+  `config('cache.prefix')` and the Redis options prefix.
+- **Derive the session id from your own cookie**, by decrypting the `mediabuying-session` cookie with
+  the app key, rather than scanning Redis for a plausible payload. Every step after that depends on
+  having the right key.
+- **Snapshot the cookie jar BEFORE the logout** and replay «request C» with that copy.
+- Then, in order: capture payload → logout (assert 200) → assert whether the old key still exists →
+  restore the payload under the old key → `/auth/me` with the PRE-logout cookie.
+- A 200 at the end proves resurrection and justifies the revocation work. A 401 proves the premise
+  false and sends the investigation back to what else lets a signed-out browser stay authenticated.
+
+Use latches, not sleeps, if this is later moved into a test harness — but this shell-level version is
+already deterministic and needs neither.
+
+### What is settled and must not be re-litigated
+
+- The server's `logout()` is correct over HTTP: `/auth/me` 200 → logout 200 → `/auth/me` 401.
+  **Do not modify `AuthController`.**
+- The client sign-out barrier (`ACCESS-EXIT-002`) is in, correct, and **insufficient on its own** —
+  2/5 runs still reproduced. Keep it.
+- Not the gate leg. Not the browser. Not `page.request`. Four wrong conclusions, all recorded.
+
+### Still separate, still open
+
+The leg asymmetry (`access-recovery`, `registration-onboarding`, `homepage-journeys`,
+`request-intake`). Do not fold it into this thread.
+
+Only after both: one Full Gate on a frozen tree, `REAL_GATE_EXIT=0`, Failed/Flaky/Retries/Skipped all
+0 — then `IDENTITY-ACCOUNTS-001` = VERIFIED and non-external open items = 0.
+
+No timeout raised, no retry added, no sleep introduced, no Full Gate run, no product code changed
+this session.
+
+---
+
+## Previous close — 2026-08-11 (thirteenth of the day)
 
 **Working tree CLEAN.** `IDENTITY-ACCOUNTS-001` still **NOT VERIFIED**. Full Gate NOT run.
 
