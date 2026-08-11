@@ -33,6 +33,81 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+/*
+ * ACCESS-EXIT-002 — the sign-out barrier.
+ *
+ * ## The race this closes, measured rather than imagined
+ *
+ * Signing out used to clear the auth store and the query cache only AFTER `/auth/logout` returned.
+ * By then the dashboard had already fired its own burst — `/auth/memberships`, `/projects`,
+ * `/notifications`, `/client-workspaces`, `/dashboard/saved-views`, `/creatives/pulse` — and every
+ * Laravel response re-issues the session cookie. A response that landed after the logout's own
+ * `Set-Cookie` put the older, still-authenticated cookie back in the jar, and the customer was
+ * signed in again: `/auth/me` answered 200 with their address after a logout that answered 200.
+ *
+ * The timeline is in the handoff for 2026-08-11. It reproduced roughly one run in four on chromium.
+ *
+ * ## Why the barrier lives HERE and not in each caller
+ *
+ * There are dozens of call sites and more arrive every week. A rule that depends on every component
+ * remembering to check a flag is a rule that holds until the next feature. This interceptor is the
+ * one place every authenticated request passes through, so «once a sign-out has begun, no further
+ * authenticated request is sent» is true by construction.
+ *
+ * ## What is deliberately still allowed
+ *
+ * `/auth/logout` itself, and the CSRF prime it needs. Blocking those would block the sign-out.
+ * Nothing else goes out — a refused request rejects immediately rather than being queued, because a
+ * queue would simply move the race to the other side of the navigation.
+ */
+let signingOut = false
+
+/** Everything the barrier must let through — the sign-out's own traffic, and nothing else. */
+const SIGN_OUT_ALLOWED = ['/auth/logout']
+
+/**
+ * Raise the barrier. Called BEFORE `/auth/logout` is sent, never after.
+ *
+ * Irreversible on purpose: a sign-out ends with a hard navigation that rebuilds every module, so
+ * there is no state to restore and nothing legitimate that needs the flag lowered again. `reset` is
+ * exported for tests only.
+ */
+export function beginSignOut(): void {
+  signingOut = true
+}
+
+/** True once a sign-out has begun. Read by tests and by the query layer. */
+export function isSigningOut(): boolean {
+  return signingOut
+}
+
+/** Tests only — the browser never lowers this, because a real sign-out ends in a full page load. */
+export function resetSignOutBarrier(): void {
+  signingOut = false
+}
+
+api.interceptors.request.use((config) => {
+  if (!signingOut) return config
+
+  const url = config.url ?? ''
+  if (SIGN_OUT_ALLOWED.some((allowed) => url.startsWith(allowed))) return config
+
+  /*
+   * Rejected, not cancelled-and-retried. The caller sees a normal failure and the query layer
+   * discards it; what matters is that the request never reaches the server, so it can never come
+   * back carrying a session cookie.
+   */
+  return Promise.reject(new SignedOutError(url))
+})
+
+/** The rejection the barrier raises, named so a caller can tell it from a network failure. */
+export class SignedOutError extends Error {
+  constructor(url: string) {
+    super(`Request to ${url} was not sent: a sign-out is in progress.`)
+    this.name = 'SignedOutError'
+  }
+}
+
 /** `/portal/clients/<slug>/...` — the URL segment that names an isolated client space. */
 export const CLIENT_SPACE_PREFIX = '/portal/clients/'
 

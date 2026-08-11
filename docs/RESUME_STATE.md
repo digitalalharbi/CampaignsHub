@@ -10,7 +10,84 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (twelfth of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (thirteenth of the day)
+
+**Working tree CLEAN.** `IDENTITY-ACCOUNTS-001` still **NOT VERIFIED**. Full Gate NOT run.
+
+### The client-side barrier is IN, and it is NOT sufficient. Measured.
+
+`ACCESS-EXIT-002` — `beginSignOut()` in `src/lib/api/client.ts` raises a barrier in the one
+interceptor every authenticated request passes through, and `signOutCompletely()` now raises it and
+cancels every in-flight query **before** `/auth/logout` is sent, instead of tidying up after it
+returns. That ordering was the fix the previous close proposed.
+
+**It did not close the race.** Five runs of the production sign-out on chromium, driving the real
+menu item:
+
+```
+run 1  /auth/me after sign-out → 200 advertiser@   RACE REPRODUCED
+run 2  → 401   clean
+run 3  → 401   clean
+run 4  → 200 advertiser@        RACE REPRODUCED
+run 5  → 401   clean
+```
+
+Two in five. The barrier is kept — a sign-out that lets new authenticated requests start is wrong
+regardless, `tsc` and 167 unit tests pass with it, and it removes one whole class of the problem. But
+it is **not** the fix, and this handoff does not pretend otherwise.
+
+### Why it was not enough, and what to measure next
+
+The probe's «requests after the barrier» list still shows the dashboard burst — `/projects`,
+`/notifications`, `/creatives/pulse`, `/client-workspaces`, `/dashboard/saved-views` and the whole
+`/projects/<id>/metrics/*` family. Two possibilities, and they need separating before anything else
+is written:
+
+1. **Those requests start before `beginSignOut()` actually runs.** The probe's marker is set when the
+   menu is clicked; the barrier goes up inside the click handler. Anything dispatched in that gap is
+   in flight legitimately and `cancelQueries()` cannot un-send it. **Instrument from INSIDE the app**
+   — log at `beginSignOut()` and in the interceptor — to get the true ordering rather than inferring
+   it from the browser's view.
+2. **The barrier is not seen by those callers.** The probe also recorded Vite fetching
+   `/src/lib/api/client.ts` at that moment, which is worth ruling out: if any caller reaches the
+   server through a different module instance or a bare `fetch`, the flag never applies to it. Grep
+   for `fetch(` and any second axios instance.
+
+Whichever it is, an in-flight authenticated response still re-issues the session cookie and can put
+the old, valid cookie back after the logout has rotated it.
+
+### The instruction's step 7 is now UNLOCKED, with the evidence it asked for
+
+«If the race persists despite the client barrier, do not add a workaround — move to the server-side
+defensive option, having proven the need first.» The need is proven: 2/5 with the barrier in place.
+
+The server-side shape, when somebody picks it up: a response must not re-issue a session cookie for a
+session that has since been invalidated. That touches every request in the product, so it needs its
+own unit, its own tests, and care — it is not a one-line change and must not be attempted at the end
+of a session.
+
+**Do not change `AuthController::logout()`.** It was proven correct directly over HTTP and is not
+where this lives.
+
+### Corrections carried forward
+
+Four of my conclusions have now been wrong and are recorded as such: not the gate leg, not the
+browser, not `page.request`, and now — not fixable by the client barrier alone.
+
+### Still separate, still open
+
+The leg asymmetry (`access-recovery`, `registration-onboarding`, `homepage-journeys`,
+`request-intake`) remains unexplained. Do not fold it into this thread.
+
+Only after both: one Full Gate on a frozen tree, `REAL_GATE_EXIT=0`, Failed/Flaky/Retries/Skipped all
+0 — then `IDENTITY-ACCOUNTS-001` = VERIFIED and non-external open items = 0.
+
+No timeout raised, no retry added, no sleep introduced, no Full Gate run. Probe specs were temporary
+and are deleted; their numbers are above.
+
+---
+
+## Previous close — 2026-08-11 (twelfth of the day)
 
 **Working tree CLEAN.** `IDENTITY-ACCOUNTS-001` still **NOT VERIFIED**. Full Gate NOT run.
 No product code was changed this session — the cause is now identified but not yet fixed.

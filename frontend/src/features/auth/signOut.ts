@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { logout } from './api'
+import { beginSignOut } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
 
 /**
@@ -49,6 +50,27 @@ const OWNED_PREFIXES = ['chub:draft:', 'ch-requests-', 'chub:']
  * longer a second door for callers on the portal side to send them to.
  */
 export async function signOutCompletely(queryClient?: QueryClient, destination = '/login'): Promise<void> {
+  /*
+   * ACCESS-EXIT-002 — the barrier goes up FIRST, before a single byte of the logout is sent.
+   *
+   * The order here is the whole fix. This function used to log out and then tidy up, so the burst
+   * the dashboard had already fired — memberships, projects, notifications, client workspaces, saved
+   * views, creative pulse — was still in flight while the session was being destroyed. Every Laravel
+   * response re-issues the session cookie, so one landing after the logout's own `Set-Cookie` put
+   * the older authenticated cookie back and signed the customer straight back in.
+   *
+   * Raising the barrier first means no FURTHER authenticated request is sent; cancelling the queries
+   * immediately after means the ones already in flight are abandoned rather than left to resolve
+   * into a cache that is about to be thrown away. Neither waits on the network.
+   */
+  beginSignOut()
+
+  try {
+    // Stops polling and refetch timers dead, and aborts what is already out. `cancelQueries` with no
+    // filter reaches every observer, which is what «no authenticated request survives this» requires.
+    await queryClient?.cancelQueries()
+  } catch { /* nothing in flight, or no client passed */ }
+
   // Best-effort: see the note above on why a failure here must not stop the rest.
   try {
     await logout()
