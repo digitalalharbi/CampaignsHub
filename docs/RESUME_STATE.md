@@ -10,7 +10,84 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (tenth of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (eleventh of the day)
+
+**Working tree CLEAN.** `IDENTITY-ACCOUNTS-001` still **NOT VERIFIED**. Full Gate NOT run.
+
+### I was wrong yesterday: this is NOT a per-browser behaviour. It is a RACE.
+
+The previous close said «it is the browser, not the leg» and treated chromium-fails / firefox-passes
+as deterministic. **Three identical runs of the same probe, same browser, same command:**
+
+```
+run 1   logout 200 → /auth/me  401   (correct)
+run 2   logout 200 → /auth/me  200 advertiser@   (wrong)
+run 3   logout 200 → /auth/me  401   (correct)
+```
+
+Chromium reproduces it *often*, not *always*. Firefox and webkit have not been seen to reproduce it —
+that is a difference in likelihood, not in behaviour, and I should not have written it as the latter.
+
+### What the cookie fingerprints rule out
+
+Full description of every cookie either side of the sign-out, values replaced by a SHA-256 prefix:
+
+```
+before  XSRF-TOKEN          localhost / Lax httpOnly=false fp=1751ae04ea
+        mediabuying-session localhost / Lax httpOnly=true  fp=64f1a109eb
+after   XSRF-TOKEN          localhost / Lax httpOnly=false fp=84fea58f38
+        mediabuying-session localhost / Lax httpOnly=true  fp=16665edcb7
+```
+
+- **A — a second cookie of the same name: NO.** Exactly two cookies, one session cookie,
+  `domain=localhost`, `path=/`. Same on every run.
+- **B — a different session because of domain/path/host: NO.** One scope only. The Vite proxy does
+  not produce a second jar entry.
+- **C — a remember/recaller credential: NO.** No `remember_web_*` cookie exists at any point. The
+  session cookie's fingerprint CHANGES across the logout, so the rotation happened.
+- **The client stacks agree.** Within a run, `page.request` and an in-page `fetch` return the SAME
+  answer — both 401, or both 200. The variance is in what the SERVER answers, not in which client asks.
+
+### So the open question is now precise
+
+The server rotates the session cookie, answers the logout 200, and then — sometimes — still resolves
+the NEXT request to an authenticated session. Both clients see it; no second credential exists.
+
+`SESSION_DRIVER=redis`. The next measurement is server-side and should log, for `POST /auth/logout`
+and the `GET /auth/me` immediately after it (names and fingerprints only, never values):
+
+- the session id the request arrived with, and whether that key existed in Redis at that moment;
+- the session id after `StartSession`;
+- the authenticated user id, and `Auth::viaRemember()`;
+- for the logout specifically: the id before and after `invalidate()`, and whether the old Redis key
+  is gone by the time the response is written.
+
+That distinguishes «the old session was never destroyed» from «the new session was written with the
+auth key still in it» from «a write ordering problem between `Auth::logout()` and the session save».
+
+### Standing corrections to earlier handoffs
+
+1. The «leg asymmetry» theory was wrong for this failure (measured: chromium fails alone, as the
+   first and only project).
+2. The «it is the browser» conclusion that replaced it was **also** wrong. It is intermittent.
+3. What has survived every measurement: the server ends the session correctly on the *majority* of
+   attempts, and the E2E assertion is right to demand it every time.
+
+### Untouched and still separate
+
+The leg asymmetry as its own question — `access-recovery`, `registration-onboarding`,
+`homepage-journeys`, `request-intake` failures across gate legs remain unexplained and must not be
+folded into this thread.
+
+Only after both are closed: one Full Gate on a frozen tree, `REAL_GATE_EXIT=0`, Failed/Flaky/
+Retries/Skipped all 0 — then `IDENTITY-ACCOUNTS-001` = VERIFIED and non-external open items = 0.
+
+No timeout raised, no retry added, no sleep introduced, no Full Gate run. Both probe specs were
+temporary and are deleted; their numbers are above.
+
+---
+
+## Previous close — 2026-08-11 (tenth of the day)
 
 **Working tree CLEAN.** `IDENTITY-ACCOUNTS-001` is still **NOT VERIFIED**. The Full Gate was NOT run.
 
