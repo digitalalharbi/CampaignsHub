@@ -10,7 +10,7 @@ cd frontend && npm run dev                                               # :5173
 
 ## Journeys (built surfaces)
 - **Visitor**: open `/welcome` → Features → Pricing → "Get started" → `/login`.
-- **Agency**: sign in `owner@demo-agency.local` / `password` → dashboard (health/ready) → Leads
+- **Agency**: sign in `agency@campaignshub.io` / `password` → dashboard (health/ready) → Leads
   (create + convert) → Integrations (Sandbox connect/sync; platforms show Awaiting Credentials) →
   Design system (`/design`).
 - **CRM**: create a lead, then Convert → it becomes a company + contact + opportunity.

@@ -50,7 +50,7 @@ test('after login, the user lands on the originally requested page, not the dash
   // The ADVERTISER account, because `/app/reports` is the advertiser portal's page (LOGIN-002).
   // Signing in as the agency owner here tested "land on the requested page" with an account that
   // does not hold that portal — which passed only while /app had no guard.
-  await signIn(page, 'owner@demo-company.local', 'password')
+  await signIn(page, 'advertiser@campaignshub.io', 'password')
 
   await expect(page).toHaveURL(/\/app\/reports$/)
   await expect(page).not.toHaveURL(/\/login/)

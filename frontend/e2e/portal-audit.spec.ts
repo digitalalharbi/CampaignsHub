@@ -177,7 +177,7 @@ test.describe('the client portal', () => {
   /**
    * The portal its own customer could not open (REVIEW-001c).
    *
-   * `client@demo-portal.local` signed in, the server answered `portal: "portal"` and routed them to
+   * `client@campaignshub.io` signed in, the server answered `portal: "portal"` and routed them to
    * `/portal` — where every endpoint returned 401, because the portal was gated on the OTP cookie
    * ALONE. The identity resolver was consulted only to narrow a session the cookie had already
    * opened, so the engine that "wins" could never be the one that let you in. Nothing in a status

@@ -51,12 +51,12 @@ test.describe('the email code opens a real session', () => {
    */
   test('an advertiser signs in with a code and lands in /app with a live session', async ({ page }) => {
     await page.goto('/login')
-    await requestCode(page, 'owner@demo-company.local')
+    await requestCode(page, 'advertiser@campaignshub.io')
 
     await page.getByTestId('login-code').locator('button[type="submit"]').click()
 
     await expect(page).toHaveURL(/\/app\//, { timeout: 20_000 })
-    expect(await whoAmI(page), 'the URL changed but no session was opened').toBe('owner@demo-company.local')
+    expect(await whoAmI(page), 'the URL changed but no session was opened').toBe('advertiser@campaignshub.io')
 
     // …and a real page inside that portal renders for this session.
     await page.goto('/app/dashboard')
@@ -65,22 +65,22 @@ test.describe('the email code opens a real session', () => {
 
   test('an agency operator signs in with a code and lands in /agency', async ({ page }) => {
     await page.goto('/login')
-    await requestCode(page, 'owner@demo-agency.local')
+    await requestCode(page, 'agency@campaignshub.io')
 
     await page.getByTestId('login-code').locator('button[type="submit"]').click()
 
     await expect(page).toHaveURL(/\/(agency|switch)/, { timeout: 20_000 })
-    expect(await whoAmI(page)).toBe('owner@demo-agency.local')
+    expect(await whoAmI(page)).toBe('agency@campaignshub.io')
   })
 
   test('the platform owner signs in with a code and lands in /admin', async ({ page }) => {
     await page.goto('/login')
-    await requestCode(page, 'admin@demo-campaignshub.local')
+    await requestCode(page, 'admin@campaignshub.io')
 
     await page.getByTestId('login-code').locator('button[type="submit"]').click()
 
     await expect(page).toHaveURL(/\/admin/, { timeout: 20_000 })
-    expect(await whoAmI(page)).toBe('admin@demo-campaignshub.local')
+    expect(await whoAmI(page)).toBe('admin@campaignshub.io')
   })
 
   /**
@@ -102,7 +102,7 @@ test.describe('the email code opens a real session', () => {
   /** The URL grants nothing: an advertiser session cannot walk into the agency console. */
   test('an app session cannot reach /agency or /admin by typing the address', async ({ page }) => {
     await page.goto('/login')
-    await requestCode(page, 'owner@demo-company.local')
+    await requestCode(page, 'advertiser@campaignshub.io')
     await page.getByTestId('login-code').locator('button[type="submit"]').click()
     await expect(page).toHaveURL(/\/app\//, { timeout: 20_000 })
 
@@ -121,13 +121,13 @@ test.describe('the email code opens a real session', () => {
     await expect(page.getByText(/لوحة المنصة|Platform overview/)).toHaveCount(0)
 
     // The session survived being refused — a refusal is not a sign-out.
-    expect(await whoAmI(page)).toBe('owner@demo-company.local')
+    expect(await whoAmI(page)).toBe('advertiser@campaignshub.io')
   })
 
   /** Out, then in again. A logout that left the server's session alive would pass a URL check. */
   test('signing out ends the session, and a new code opens another', async ({ page }) => {
     await page.goto('/login')
-    await requestCode(page, 'owner@demo-company.local')
+    await requestCode(page, 'advertiser@campaignshub.io')
     await page.getByTestId('login-code').locator('button[type="submit"]').click()
     await expect(page).toHaveURL(/\/app\//, { timeout: 20_000 })
 

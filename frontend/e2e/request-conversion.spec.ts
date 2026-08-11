@@ -19,7 +19,7 @@ test('convert a request → client appears in portfolio and command center', asy
 
   // 2) Owner logs in and opens the request.
   await page.goto('/login')
-  await signIn(page, 'owner@demo-agency.local', 'password')
+  await signIn(page, 'agency@campaignshub.io', 'password')
   await expect(page).not.toHaveURL(/\/login/)
 
   await page.goto('/app/requests')

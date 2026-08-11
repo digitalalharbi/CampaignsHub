@@ -35,7 +35,7 @@ Open http://localhost:5173.
 ## Demo credentials (seeded)
 | Role | Email | Password |
 |---|---|---|
-| Owner | `owner@demo-agency.local` | `password` |
+| Owner | `agency@campaignshub.io` | `password` |
 | Analyst | `analyst@demo-agency.local` | `password` |
 | Viewer | `viewer@demo-agency.local` | `password` |
 

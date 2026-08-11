@@ -19,7 +19,7 @@ use Tests\TestCase;
 /**
  * ONE client's portal, filled — and only that one (DEMO-PORTAL-001).
  *
- * `client@demo-portal.local` could sign in and then found eight empty sections. An empty list and a
+ * `client@campaignshub.io` could sign in and then found eight empty sections. An empty list and a
  * broken query are indistinguishable from the outside, so a portal in that state cannot be reviewed
  * or demonstrated, and every acceptance test written against it passes vacuously.
  *

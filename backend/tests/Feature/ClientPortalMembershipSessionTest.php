@@ -14,7 +14,7 @@ use Tests\TestCase;
 /**
  * The client portal opens for the account the product sends there (REVIEW-001c).
  *
- * The defect was complete and invisible to every status check. `client@demo-portal.local` signs in,
+ * The defect was complete and invisible to every status check. `client@campaignshub.io` signs in,
  * the server answers `portal: "portal"` and routes them to `/portal` — and every endpoint under
  * `/client/*` answered 401, because the portal was gated on the ONE-TIME-CODE cookie alone.
  * `ClientPortalIdentity` was already consulted and already preferred the membership, but only to
@@ -46,7 +46,7 @@ final class ClientPortalMembershipSessionTest extends TestCase
 
     private function customer(): User
     {
-        return User::query()->where('email', 'client@demo-portal.local')->firstOrFail();
+        return User::query()->where('email', 'client@campaignshub.io')->firstOrFail();
     }
 
     public function test_a_client_portal_membership_opens_the_portal_with_no_one_time_code(): void
@@ -98,7 +98,7 @@ final class ClientPortalMembershipSessionTest extends TestCase
      */
     public function test_a_session_without_a_client_portal_membership_is_still_refused(): void
     {
-        foreach (['owner@demo-company.local', 'owner@demo-agency.local', 'admin@demo-campaignshub.local'] as $email) {
+        foreach (['advertiser@campaignshub.io', 'agency@campaignshub.io', 'admin@campaignshub.io'] as $email) {
             $user = User::query()->where('email', $email)->firstOrFail();
 
             $this->actingAs($user)

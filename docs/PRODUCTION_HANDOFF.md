@@ -149,8 +149,8 @@ REAL_GATE_EXIT=$?
 ```
 
 Demo logins (local, testing and demo only — hard-gated off in production):
-`admin@demo-campaignshub.local` · `owner@demo-company.local` · `owner@demo-agency.local` ·
-`client@demo-portal.local`, password `password`.
+`admin@campaignshub.io` · `advertiser@campaignshub.io` · `agency@campaignshub.io` ·
+`client@campaignshub.io`, password `password`.
 
 ## 6. Conventions worth knowing before you change something
 

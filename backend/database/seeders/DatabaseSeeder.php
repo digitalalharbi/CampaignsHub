@@ -33,9 +33,17 @@ class DatabaseSeeder extends Seeder
         //     so `metric_definitions` was empty everywhere and no surface could explain a number.
         $this->call(MetricDefinitionSeeder::class);
 
-        // 2) Platform super-admin (idempotent).
+        /*
+         * 2) Platform super-admin (idempotent).
+         *
+         * The address moved to the official `campaignshub.io` domain (IDENTITY-ACCOUNTS-001). It is
+         * ADDITIVE on purpose: an install provisioned under the previous address keeps that account,
+         * because renaming somebody's sign-in address underneath them locks them out of the console
+         * that would let them fix it. A legacy owner therefore still works, and a fresh install gets
+         * the official one — `is_platform_admin` is what grants the console, not the address.
+         */
         $platform = User::firstOrCreate(
-            ['email' => 'platform@mediabuying.local'],
+            ['email' => 'platform@campaignshub.io'],
             [
                 'name' => 'Platform Admin',
                 'password' => Hash::make('password'),

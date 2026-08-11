@@ -28,7 +28,7 @@ function typeEmail(value: string) {
 }
 
 /** Ask for a code as an ordinary platform account, and wait for the step to arrive. */
-async function reachCodeStep(identifier = 'owner@demo-agency.local', start: unknown = DELIVERED) {
+async function reachCodeStep(identifier = 'agency@campaignshub.io', start: unknown = DELIVERED) {
   mockedMethod.mockResolvedValue({ method: 'password', channel: 'email' })
   mockedEmailStart.mockResolvedValue(start as never)
   typeEmail(identifier)
@@ -108,7 +108,7 @@ describe('LoginPage — the sign-in card', () => {
     vi.mocked(login).mockResolvedValue({ id: '1', name: 'X', email: 'x@y.z' } as never)
     renderWithProviders(<LoginPage />, { route: '/login?portal=admin', locale: 'en' })
 
-    typeEmail('owner@demo-agency.local')
+    typeEmail('agency@campaignshub.io')
     fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'secret123' } })
     fireEvent.click(screen.getByRole('button', { name: /Sign in/i }))
 
@@ -173,11 +173,11 @@ describe('LoginPage — the code route', () => {
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 
-    await reachCodeStep('owner@demo-agency.local')
+    await reachCodeStep('agency@campaignshub.io')
 
-    expect(mockedEmailStart).toHaveBeenCalledWith('owner@demo-agency.local')
+    expect(mockedEmailStart).toHaveBeenCalledWith('agency@campaignshub.io')
     expect(screen.getByTestId('login-otp')).toBeInTheDocument()
-    expect(screen.getByTestId('login-code-destination')).toHaveTextContent('owner@demo-agency.local')
+    expect(screen.getByTestId('login-code-destination')).toHaveTextContent('agency@campaignshub.io')
   })
 
   /** A code has to go somewhere. Asked for with an empty field, this says so instead of failing. */
@@ -222,7 +222,7 @@ describe('LoginPage — the code route', () => {
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 
-    await reachCodeStep('owner@demo-agency.local', {
+    await reachCodeStep('agency@campaignshub.io', {
       verification_id: 'v1', delivery_status: 'awaiting_provider_credentials', resend_after: 60, dev_code: null,
     })
 
@@ -271,7 +271,7 @@ describe('LoginPage — the code route', () => {
     vi.mocked(emailCodeVerify).mockResolvedValue({ id: '1', name: 'X', email: 'x@y.z' } as never)
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 
-    await reachCodeStep('owner@demo-agency.local')
+    await reachCodeStep('agency@campaignshub.io')
     fireEvent.change(screen.getByTestId('login-otp-0'), { target: { value: '424242' } })
 
     await waitFor(() => expect(emailCodeVerify).toHaveBeenCalledWith('v1', '424242', false))

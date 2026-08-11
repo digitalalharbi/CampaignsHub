@@ -17,7 +17,7 @@ test('change display name → persists and reflects in the shell; then reset', a
   // prefix with, and guessing one sent an agency operator to the advertiser portal's copy of their
   // own profile after login (LOGIN-002).
   await expect(page).toHaveURL(/\/login\?redirect=%2Faccount%2Fprofile/)
-  await signIn(page, 'owner@demo-agency.local', 'password')
+  await signIn(page, 'agency@campaignshub.io', 'password')
   await expect(page).toHaveURL(/\/account\/profile$/)
 
   const nameField = page.getByLabel(/اسم العرض|Display name/)
@@ -38,7 +38,7 @@ test('change display name → persists and reflects in the shell; then reset', a
 
   // The unified menu opens from the topbar avatar and shows the full email.
   await page.locator('header button[aria-haspopup="menu"]').click()
-  await expect(page.getByText('owner@demo-agency.local').first()).toBeVisible()
+  await expect(page.getByText('agency@campaignshub.io').first()).toBeVisible()
   await page.keyboard.press('Escape')
 
   // Reset the shared demo owner's name so the fixture is left clean.
@@ -74,7 +74,7 @@ test('prove the mobile number from Account security, then withdraw it', async ({
    * survives the sign-in gate.
    */
   await expect(page).toHaveURL(/\/login\?redirect=%2Faccount%2Fsecurity/)
-  await signIn(page, 'owner@demo-agency.local', 'password')
+  await signIn(page, 'agency@campaignshub.io', 'password')
   await expect(page).toHaveURL(/\/account\/security$/)
 
   const panel = page.getByTestId('phone-credential')

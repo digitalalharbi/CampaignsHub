@@ -33,7 +33,7 @@ use Ramsey\Uuid\Uuid;
 /**
  * ONE client's portal, filled — the eight sections `/portal` actually reads (DEMO-PORTAL-001).
  *
- * `client@demo-portal.local` could sign in, and then every section it landed on was empty: zero
+ * `client@campaignshub.io` could sign in, and then every section it landed on was empty: zero
  * requests, zero quotes, zero invoices, zero messages, zero files, zero reports. A portal that opens
  * onto eight empty states cannot be reviewed, demonstrated, or usefully tested — an empty list and a
  * broken query look identical from the outside, which is precisely the confusion the contract's
@@ -58,7 +58,7 @@ final class DemoClientPortalSeeder extends Seeder
     /** The one client space this seeder fills, and the account that reaches it. */
     public const WORKSPACE_SLUG = 'demo-managed';
 
-    public const CONTACT_EMAIL = 'client@demo-portal.local';
+    public const CONTACT_EMAIL = 'client@campaignshub.io';
 
     /** Reserved keys — `demo:remove` deletes by these, so they must never match a real document. */
     public const REQUEST_PREFIX = 'REQ-DEMO-P';

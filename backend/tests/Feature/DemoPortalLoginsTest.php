@@ -29,11 +29,11 @@ final class DemoPortalLoginsTest extends TestCase
 
     /** @var array<string, string> */
     private const ACCOUNTS = [
-        'admin@demo-campaignshub.local' => 'admin',
-        'owner@demo-company.local' => 'app',
-        'owner@demo-agency.local' => 'agency',
+        'admin@campaignshub.io' => 'admin',
+        'advertiser@campaignshub.io' => 'app',
+        'agency@campaignshub.io' => 'agency',
         'layla@creators.demo' => 'influencers',
-        'client@demo-portal.local' => 'portal',
+        'client@campaignshub.io' => 'portal',
     ];
 
     private array $spaHeaders = ['Origin' => 'http://localhost:5173'];
@@ -121,8 +121,8 @@ final class DemoPortalLoginsTest extends TestCase
         // engine, so a password sign-in for it is not a thing that exists to refuse.
         $portals = [Portal::App->value, Portal::Agency->value, Portal::Influencers->value];
         $accounts = [
-            'owner@demo-company.local' => 'app',
-            'owner@demo-agency.local' => 'agency',
+            'advertiser@campaignshub.io' => 'app',
+            'agency@campaignshub.io' => 'agency',
             'layla@creators.demo' => 'influencers',
         ];
 
@@ -180,7 +180,7 @@ final class DemoPortalLoginsTest extends TestCase
      */
     public function test_the_portal_customer_is_confined_to_their_own_client_space(): void
     {
-        $membership = User::where('email', 'client@demo-portal.local')->firstOrFail()
+        $membership = User::where('email', 'client@campaignshub.io')->firstOrFail()
             ->memberships()->firstOrFail();
 
         $this->assertSame(Portal::ClientPortal, $membership->portal);
@@ -227,7 +227,7 @@ final class DemoPortalLoginsTest extends TestCase
      */
     public function test_the_demo_seeder_refuses_to_run_in_production(): void
     {
-        $before = User::where('email', 'admin@demo-campaignshub.local')->firstOrFail()->updated_at;
+        $before = User::where('email', 'admin@campaignshub.io')->firstOrFail()->updated_at;
 
         // Called directly rather than through `$this->seed()`, which asks for confirmation before
         // running anything in production — the very guard that would hide whether the SEEDER refuses.
@@ -237,7 +237,7 @@ final class DemoPortalLoginsTest extends TestCase
 
         $this->assertEquals(
             $before,
-            User::where('email', 'admin@demo-campaignshub.local')->firstOrFail()->updated_at,
+            User::where('email', 'admin@campaignshub.io')->firstOrFail()->updated_at,
             'the seeder touched an account in production',
         );
     }

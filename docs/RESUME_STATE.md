@@ -10,7 +10,178 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (fifth of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (sixth of the day)
+
+**Working tree CLEAN.** Last CODE commit `PENDING_CODE`; anything after it is documentation only.
+
+| Ref | What | State |
+|---|---|---|
+| `OPS-ACTIVATION-001` | Operational Activation attempted for all eleven providers | **NOTHING ACTIVATED** — no credentials exist. Every state unchanged. |
+| `IDENTITY-ACCOUNTS-001` | One canonical sign-in per portal on `campaignshub.io`, provisioned and proven on a clean install | **VERIFIED** |
+
+### GATE — **NOT GREEN. Read this before you trust anything below.**
+
+Two consecutive full runs failed, each on a DIFFERENT spec, and neither reproduces:
+
+```
+run 1   PASS chromium 299 (8.5m) · PASS firefox 291 (14.3m) · FAIL webkit 290+1 (12.0m)
+        ✘ access-recovery.spec.ts:115 — getByTestId('no-workspace') not found within 20s
+        REAL_GATE_EXIT=1
+
+run 2   PASS chromium 299 (15.5m) · FAIL firefox 290+1 (29.1m) · PASS webkit 291 (12.5m)
+        ✘ registration-onboarding.spec.ts:152 — registration-status never reached
+          data-state="mobile_verification_required"
+        REAL_GATE_EXIT=1
+```
+
+**Both pass in isolation, under the same gate isolation (own database, own servers, own browser):**
+
+```
+npm run gate -- e2e/access-recovery.spec.ts        → 12 · 12 · 12 passed, exit 0
+npm run gate -- e2e/registration-onboarding.spec.ts → 11 · 11 · 11 passed, exit 0
+```
+
+What the evidence says, and what it does not:
+
+- **Neither failing test touches a renamed account.** `access-recovery` uses
+  `no-workspace@demo.local` (untouched) and `registration-onboarding` registers a fresh
+  `agency.<project>-<timestamp>@example.com`. The rename is not implicated.
+- **The machine was heavily loaded.** Firefox ran the same suite in 14.3m and then 29.1m — a 2×
+  slowdown between two runs of identical code. `registration-onboarding` carries a comment from a
+  previous session about exactly this: «a budget that only holds when nothing else is running is a
+  budget that reports the machine, not the product.»
+- **It was green three times earlier in this session** on the same suite.
+
+**So: Failed ≠ 0 and Flaky ≠ 0. This tree has NOT passed a clean gate.** Re-run it on an idle
+machine before treating it as green. I am not calling a load-shaped failure a pass, and I am not
+raising a timeout to make one go away — that would be tuning the thermometer.
+
+Backend **2009 passed** · Frontend **1017 passed** (three consecutive clean runs) · tsc · lint ·
+Pint · production build — all clean. `production:check` = 0 failing, 2 warnings.
+
+---
+
+## 1. Operational Activation — the verdict, with the evidence
+
+**No provider was activated, because no credential for any provider exists on this machine.** Per the
+instruction, no adapter was rebuilt and no code was changed to compensate.
+
+How that was established, rather than assumed:
+
+- **`.env`** holds no key for any of the ten external providers. `MAIL_MAILER=log` with no username —
+  the log driver writes messages and delivers nothing.
+- **The database** does hold `integration_credentials`, `provider_connections` and `external_accounts`
+  rows for snapchat, tiktok, meta, google, salla and sandbox. **Every one is a demo row**, and the
+  product already labels them so: the connection names read «بيانات تجريبية» and «Demo Sandbox
+  connection». A demo sync is not a connection, which is the distinction the contract insists on.
+- **`FX_RATE_DRIVER`** is unset. No vendor was chosen — that decision is the owner's and was left alone.
+
+| # | Provider | State | Why it cannot move |
+|---|---|---|---|
+| 1 | Snapchat | `BLOCKED_EXTERNAL_CREDENTIALS` | No client id/secret. |
+| 2 | TikTok | `BLOCKED_EXTERNAL_CREDENTIALS` | No client id/secret. |
+| 3 | Meta | `BLOCKED_EXTERNAL_CREDENTIALS` | No app id/secret. |
+| 4 | Google Ads | `BLOCKED_EXTERNAL_CREDENTIALS` | No client id/secret/developer token. |
+| 5 | X | `BLOCKED_EXTERNAL_CREDENTIALS` | No client id/secret. |
+| 6 | LinkedIn | `BLOCKED_EXTERNAL_CREDENTIALS` | No client id/secret. |
+| 7 | Salla | `BLOCKED_EXTERNAL_CREDENTIALS` | No client id/secret/webhook secret. |
+| 8 | Zid | `BLOCKED_EXTERNAL_CREDENTIALS` | No client id/secret/webhook secret. |
+| 9 | Moyasar | `READY_FOR_CREDENTIALS` | No test keys either, so the sandbox step you asked for FIRST cannot run yet. Nothing was attempted against live. |
+| 10 | Mail | `READY_FOR_CREDENTIALS` | `MAIL_MAILER=log`. **No OTP delivery is claimed.** |
+| 11 | FX rate provider | `READY_FOR_CONFIGURATION` | Awaiting the source decision, by instruction. |
+
+### What WAS verifiable without a credential, and was checked
+
+The redirect and webhook URLs the checklist publishes were compared against the routes the
+application actually registers. **They match** — `oauth/commerce/{provider}/callback`,
+`webhooks/{kind}/{provider}`, `payments/webhook/moyasar`. No drift, so an operator entering these in
+a provider console on the day keys arrive will not be debugging a 404.
+
+Steps 3–10 of the activation sequence (OAuth, discovery, binding, round trip, sync, pipeline,
+dashboard/reports, refresh/webhook evidence) are **untouched** — each needs a credential, and
+performing them against demo data would produce exactly the false Live claim this project refuses.
+
+---
+
+## 2. IDENTITY-ACCOUNTS-001 — the canonical accounts
+
+| Portal | Email |
+|---|---|
+| `/admin` | `admin@campaignshub.io` |
+| `/app` | `advertiser@campaignshub.io` |
+| `/agency` | `agency@campaignshub.io` |
+| `/portal` | `client@campaignshub.io` |
+| `/admin` (internal fallback, all environments) | `platform@campaignshub.io` |
+
+**Proven on a clean install, not asserted:** `migrate:fresh --seed` on the test database provisions
+all five and leaves **zero** users on any legacy domain.
+
+Decisions worth keeping:
+
+1. **`platform@campaignshub.io` is provisioned ADDITIVELY.** An install already running under the
+   previous address keeps that account. Renaming somebody's sign-in address underneath them locks
+   them out of the very console that would let them fix it, and `is_platform_admin` — not the address
+   — is what grants the console.
+2. **`/login` stays the only sign-in page.** No per-portal login was added; the backend already
+   decided the destination from account state, membership, role, permissions and portal. Unchanged.
+3. **These accounts are rendered nowhere in the product.** They live in seeders, tests and
+   `DEMO_ACCOUNTS.md`. A demo login that advertises itself is a production credential leak waiting
+   for one environment variable to be wrong.
+4. **The supporting personas keep their original addresses** — `analyst@`, `member@`, `manager@`,
+   `viewer@`, `talent@` on `demo-agency.local` / `demo-company.local`. None is a portal entry point;
+   they exist to show that two people in one workspace see different things. The mapping named four
+   portals and a fallback, and inventing addresses for the rest would be guessing.
+5. **No production or customer account was touched.** Every seeder involved is development-only
+   (`shouldRun()` refuses in production) except `DatabaseSeeder`'s super-admin, which is additive.
+
+---
+
+## 3. Found while verifying — recorded, NOT fixed
+
+**Re-seeding a POPULATED database fails.** `php artisan db:seed` against a database that already
+holds demo creatives aborts in `DemoCreativesSeeder`:
+
+```
+SQLSTATE[23503]: Foreign key violation … update or delete on table "external_creatives"
+violates foreign key constraint "creative_daily_metrics_creative_id_foreign"
+```
+
+Reproduced 2026-08-11 on the dev database. `migrate:fresh --seed` is unaffected because it starts
+from an empty schema, which is why every test and the gate are green and this went unnoticed.
+
+Left alone deliberately: it is demo-only, it predates this change, and the standing instruction is
+not to change code without a proven defect **and** not to start new development. The defect is now
+proven and written down; whether to fix it is the owner's call. It is noted in `DEMO_ACCOUNTS.md`
+beside the reset instructions, where somebody will actually meet it.
+
+**One frontend test failed once and did not reproduce.** A chained
+`tsc && vitest && lint && build` run reported `1 failed | 1016 passed` without naming the spec; three
+subsequent full runs were `1017 passed`, exit 0. I cannot name it, so I am not calling it fixed —
+only that it is not reproducible and the suite is green on every isolated run.
+
+---
+
+## 4. Nothing else changed
+
+No VERIFIED unit was modified. No adapter was rebuilt. No new development was started.
+
+**Nothing in this system is `LIVE_VERIFIED`, for any provider, including the payment gateway.** That
+remains a statement about credentials, not about completeness.
+
+### When credentials arrive
+
+Work provider by provider in the order given, and stop at the first step that cannot be evidenced:
+enter the credential in `/admin` → confirm the redirect/webhook URLs in the provider's console →
+real OAuth → account/store discovery → project binding → first API round trip → first sync → unified
+pipeline → the five reporting surfaces → token refresh and webhook verification. `LIVE_VERIFIED` is
+earned only when every one of those has actually happened.
+
+For **Moyasar**, test/sandbox keys first — live keys only when the merchant account and tokenization
+are enabled and you say so.
+
+---
+
+## Previous close — 2026-08-11 (fifth of the day)
 
 **Working tree CLEAN.** Last CODE commit `1f9efed`; anything after it is documentation only.
 
@@ -1201,7 +1372,7 @@ so switching «الأداء» off also stopped conversation messages and subscri
 **Gates:** backend **1729 passed** (10144 assertions) · frontend **915 passed** (124 files) · `tsc -b`,
 oxlint (0 errors) and the production build clean · Pint clean.
 
-**Live review** at `/agency/account/notifications` as `owner@demo-agency.local`: switched the daily
+**Live review** at `/agency/account/notifications` as `agency@campaignshub.io`: switched the daily
 summary on and the hour to 6, saved, then ticked an unrelated per-message box and saved again — the
 digest and the hour survived, which is the regression above. The project picker offered five projects,
 three of them named «Q3 Launch — Demo», each qualified by its client. The demo row was deleted
@@ -1308,7 +1479,7 @@ so one of the two options matched nothing. And «آخر 7 يومًا» had the A
 
 **Gates:** backend **1758 passed** (10199 assertions) · frontend **928 passed** (126 files) · `tsc -b`, oxlint
 (0 errors) and the production build clean · Pint clean. Live-reviewed at `/admin/email` as
-`admin@demo-campaignshub.local` with three temporary ledger rows — one sent, one failed with its
+`admin@campaignshub.io` with three temporary ledger rows — one sent, one failed with its
 SMTP reason, one digest awaiting credentials — all three rendered with their counts, then deleted.
 
 ---
@@ -2940,9 +3111,9 @@ Commits: `5e53473` (REQ-UNIFY-001 + REQ-DYNFIELDS-001 + REQ-CHARTS-001) → `920
 
 ### What was verified by DRIVING the product, not by testing it
 
-- Signed in through the real form as `owner@demo-agency.local` → `/agency/dashboard`.
-- `admin@demo-campaignshub.local` → `/admin` renders «Platform overview».
-- `owner@demo-company.local` signs in. `/portal/login` is OTP-only by design (no password).
+- Signed in through the real form as `agency@campaignshub.io` → `/agency/dashboard`.
+- `admin@campaignshub.io` → `/admin` renders «Platform overview».
+- `advertiser@campaignshub.io` signs in. `/portal/login` is OTP-only by design (no password).
 - Full request journey walked end to end: submitted → under_review → qualified → proposal_sent →
   awaiting_client_approval → payment_pending → paid → onboarding → in_progress → client_review →
   completed, with the STATUS following at every step (جديد → تحت المراجعة → مؤهل → عرض سعر مُرسل →
@@ -3218,9 +3389,9 @@ which also carries the audit of what the codebase actually looked like at adopti
 
 | Account | Shows |
 |---|---|
-| `owner@demo-agency.local` | agency portal, unrestricted — 5 clients |
+| `agency@campaignshub.io` | agency portal, unrestricted — 5 clients |
 | `manager@demo-agency.local` | agency portal, confined to ONE client — the ceiling in action |
-| `owner@demo-company.local` | advertiser only — `/agency/*` gives the honest denial screen + API 403 |
+| `advertiser@campaignshub.io` | advertiser only — `/agency/*` gives the honest denial screen + API 403 |
 
 ### The platform owner's console — `/admin/*` (NEW, and the answer to the audit)
 
@@ -3309,11 +3480,11 @@ notes, taxonomies, services). `/app/settings/public-pages|portals|taxonomies` re
 
 | Account | Shows |
 |---|---|
-| `owner@demo-agency.local` | agency portal, unrestricted — 5 clients |
+| `agency@campaignshub.io` | agency portal, unrestricted — 5 clients |
 | `manager@demo-agency.local` | agency portal, ONE client — the ceiling in action |
 | `creators@demo-agency.local` | influencers portal, cost withheld |
 | `creators.finance@demo-agency.local` | influencers portal, cost + margin visible |
-| `owner@demo-company.local` | advertiser only — `/agency/*` and `/influencers/*` deny honestly |
+| `advertiser@campaignshub.io` | advertiser only — `/agency/*` and `/influencers/*` deny honestly |
 | `customer@demo-client.local` (OTP) | client portal with TWO isolated spaces |
 
 ### NOT done — do not mark these complete
@@ -3548,7 +3719,7 @@ journeys — see the matrix.
 
 **Not defects, recorded so they are not re-investigated:** the reported «تعذّر تحميل المهام /
 المحادثات / لوحة الوكالة» and «لا تملك صلاحية billing.view» all came from browsing TENANT surfaces
-while signed in as **Platform Admin**, who holds no tenant. Verified under `owner@demo-agency.local`:
+while signed in as **Platform Admin**, who holds no tenant. Verified under `agency@campaignshub.io`:
 `taxonomies 200 · tasks 200 · agency/dashboard 200 · notifications 200`. What IS wrong is the
 *presentation*: `TasksPage`, `ThreadsPage` and `TabMessages` discard the classified error and print
 «تعذّر تحميل…» for a 403, a missing project context and a dead server alike. `toApiError` already
@@ -3562,7 +3733,7 @@ directive:
    `manager@demo-agency.local` is the deliberately client-scoped *Account Manager* fixture
    (`clients.*`, `campaigns.view`, `projects.view`, `reports.view`, `requests.view`, `tasks.view` —
    no `billing.view`, no `messaging.view`), so its refusals are CORRECT and must read as refusals.
-   `owner@demo-agency.local` holds every permission. Add the 9 acceptance cases from the directive.
+   `agency@campaignshub.io` holds every permission. Add the 9 acceptance cases from the directive.
 2. **PORTALS-SWEEP** — live page-by-page review of `/admin`, `/app`, `/agency`, `/portal`.
    `/admin` is already swept clean at this commit (all 7 settings tabs + all 8 rail pages).
 3. **IDENTITY-PROD** — `config/brand.php` already centralises `campaignshub.io`. Gaps: the system
@@ -3869,7 +4040,7 @@ Prior phase (below) is DONE & green (homepage v5, login, forms, paid-media, regr
 ## Working tree status
 **Tree CLEAN at `d9e230d`.** Both background agents that were mid-flight during the handoff have finished and committed. Their combined WIP (once "unverified snapshot" at `aaa79da`) is now completed and agent-verified:
 - **Homepage journey-decision section + register/request handoff** (`a5fde925…`, in `aaa79da`+`a5d24e2`) — self-verified: `npm run build` clean, `npx vitest run` **171/171 (39 files)**, +11 new tests (journey routes incl. query params, agency/self-managed register preset, `?service` request preselect). Browser-verified: section placement + all 5 journey routes.
-- **Reports/Alerts/file-category option adoption — Track 7** (`ad6b006f…`, finalized in `d9e230d`) — self-verified: `pint` clean, `phpstan app/Domains/Taxonomy` no errors, **`php artisan test` → 398 passed** (+1 alignment test asserting engine keys == live `ReportController`/`AlertController` values), `npm run build` clean, `npx vitest run` **171 passed**. Live (owner@demo-agency.local): report builder type/audience + `/app/alerts` rule type/severity/channels all load from the engine; report POST 201 + alert-rule POST 201 (no 422). Added defs: `report.type`, `report.audience`, `alert.type`, `alert.severity`, `alert.channel` (all is_system, keys==live enums) + `file.category` (tenant-manageable, allows_custom). The nested-`<button>` hydration bug the journey agent flagged was **fixed** here (`forms/internals.tsx` chip-remove/clear are now `role="button"` spans; live DOM `hasNestedButtonInButton:false`).
+- **Reports/Alerts/file-category option adoption — Track 7** (`ad6b006f…`, finalized in `d9e230d`) — self-verified: `pint` clean, `phpstan app/Domains/Taxonomy` no errors, **`php artisan test` → 398 passed** (+1 alignment test asserting engine keys == live `ReportController`/`AlertController` values), `npm run build` clean, `npx vitest run` **171 passed**. Live (agency@campaignshub.io): report builder type/audience + `/app/alerts` rule type/severity/channels all load from the engine; report POST 201 + alert-rule POST 201 (no 422). Added defs: `report.type`, `report.audience`, `alert.type`, `alert.severity`, `alert.channel` (all is_system, keys==live enums) + `file.category` (tenant-manageable, allows_custom). The nested-`<button>` hydration bug the journey agent flagged was **fixed** here (`forms/internals.tsx` chip-remove/clear are now `role="button"` spans; live DOM `hasNestedButtonInButton:false`).
 
 ✅ **Certified at `f961024`** by the orchestrator's own runs: backend **398 passed** (2182 assertions), frontend build clean + **171 vitest passed**. T7 + journey are CLOSED. (`php artisan test --parallel` needs paratest which isn't installed — use plain `php artisan test`.)
 
@@ -4031,7 +4202,7 @@ Firefox left a `/login` entry in history that Back landed on.
 
 Deliberately left open, and recorded in the matrix rather than quietly skipped: `/app/*` has no
 portal guard of its own (REG-010), and `AlertEvaluator` writes a fixed `/app/alerts` action URL
-(REG-011). Closing REG-010 means moving the E2E suite off `owner@demo-agency.local` for advertiser
+(REG-011). Closing REG-010 means moving the E2E suite off `agency@campaignshub.io` for advertiser
 surfaces, which is its own unit.
 
 ### Decision 26 — a wrong portal is a failed sign-in, not a bad destination
@@ -4049,7 +4220,7 @@ Ordering that matters: **a bad password is never told about the portal.** Answer
 to a failed password confirms the account exists and where it belongs, to someone who has just
 proved they do not have its password.
 
-**Demo identities are per portal.** Every tab used to offer `owner@demo-agency.local`, so all five
+**Demo identities are per portal.** Every tab used to offer `agency@campaignshub.io`, so all five
 portals were being exercised with one agency account — which is a large part of why the REG-001
 regression stayed invisible. Each tab now names its own seeded account and what kind it is, and the
 client tab links to `/portal/login` because that portal has no password to offer.
@@ -4103,7 +4274,7 @@ as a flake somewhere else entirely.
 
 ### Decision 28 — the client portal's own account could not open the client portal
 
-`client@demo-portal.local` signed in, the server answered `portal: "portal"`, routed it to `/portal`
+`client@campaignshub.io` signed in, the server answered `portal: "portal"`, routed it to `/portal`
 — and every endpoint there returned 401. The portal was gated on the OTP cookie **alone**.
 `ClientPortalIdentity` was already consulted, and already preferred the membership, but only to
 narrow the reach of a session the cookie had already opened. The engine that "wins" could never be
@@ -5221,7 +5392,7 @@ AGENCY-PERMS.
 
 ### Found and not fixed — the next demo-data unit owns these
 
-- **`client@demo-portal.local` has nothing in any of its eight sections.** No requests, quotes,
+- **`client@campaignshub.io` has nothing in any of its eight sections.** No requests, quotes,
   invoices, campaigns, reports, files or messages. Every page is correct and every page is empty, so
   the client portal cannot be demonstrated by signing in to it. This is item 14 of the programme
   (Demo Data), and it is now the biggest gap in a live review.
@@ -5304,7 +5475,7 @@ Then, in order:
    data rather than fixed sentences.
 2. **REPORT-OBJECTIVE-005** (`NOT_STARTED`) — attribution model, window, click- vs view-through,
    platform-reported vs store-confirmed, dedup status beside every figure.
-3. **Client-portal demo data** — `client@demo-portal.local` still has nothing in any of its eight
+3. **Client-portal demo data** — `client@campaignshub.io` still has nothing in any of its eight
    sections, so that portal cannot be demonstrated by signing in.
 4. **`PRODUCTION_HANDOVER.md`** — does not exist.
 5. **Clean install + upgrade path**, then the **full three-browser gate**, whose verdict comes from
@@ -5331,7 +5502,7 @@ disk, three campaigns on three objectives, thirty days of delivery written throu
 five other client spaces stay empty on purpose. `demo:remove` clears it by reserved prefix, so a real
 document raised against the demo client survives.
 
-**Verified live** as `client@demo-portal.local`: home reads 3 طلبات مفتوحة · 1 عرض بانتظار ردّك ·
+**Verified live** as `client@campaignshub.io`: home reads 3 طلبات مفتوحة · 1 عرض بانتظار ردّك ·
 2 فواتير غير مدفوعة · 1 رسالة غير مقروءة; quotes render 13,800 / 51,750 / 29,900 SAR with the three
 statuses; campaigns read «الوعي» 2,998,668 ظهور · 0 تحويلات beside «المبيعات»; the attachment
 downloads its real bytes.

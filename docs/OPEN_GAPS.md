@@ -119,7 +119,7 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 - **Severity:** Low
 - **Status:** OPEN (accepted, non-blocking)
 - **Detail:** The login demo-credentials card is gated by `import.meta.env.DEV`, so it **never renders** in
-  production. However its component definition + the demo strings (`owner@demo-agency.local` / `password`)
+  production. However its component definition + the demo strings (`agency@campaignshub.io` / `password`)
   remain in the built JS as inert dead code (rollup keeps the same-module function). Values are non-secret
   public demo data, so this is cosmetic, not a leak.
 - **Next action (optional):** move `DemoCredentials` to its own module and dynamic-import only in dev to strip

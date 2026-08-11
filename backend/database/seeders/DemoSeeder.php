@@ -87,7 +87,7 @@ final class DemoSeeder extends Seeder
         );
 
         $ownerUser = User::firstOrCreate(
-            ['email' => 'owner@demo-agency.local'],
+            ['email' => 'agency@campaignshub.io'],
             ['name' => 'Demo Owner', 'password' => Hash::make('password'), 'email_verified_at' => now()],
         );
         $ownerUser->assignRole($owner);

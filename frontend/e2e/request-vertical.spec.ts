@@ -21,7 +21,7 @@ test('external submit → owner dashboard → assign/status/internal-note → tr
 
   // 2) Owner logs in.
   await page.goto('/login')
-  await signIn(page, 'owner@demo-agency.local', 'password')
+  await signIn(page, 'agency@campaignshub.io', 'password')
   await expect(page).not.toHaveURL(/\/login/)
 
   // 3) The request appears in the internal dashboard.

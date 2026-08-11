@@ -948,7 +948,7 @@ final class ClientPortalController
     /**
      * The OTHER engine: a signed-in user who holds a `ClientPortal` membership (REVIEW-001c).
      *
-     * The defect this closes was visible and total. `client@demo-portal.local` signs in, the server
+     * The defect this closes was visible and total. `client@campaignshub.io` signs in, the server
      * answers `portal: "portal"` and sends them to `/portal` — and every endpoint there answered 401,
      * because the portal was gated on the OTP cookie ALONE. `ClientPortalIdentity` was already
      * consulted, but only to narrow the scope of a session a token had already opened, so the engine

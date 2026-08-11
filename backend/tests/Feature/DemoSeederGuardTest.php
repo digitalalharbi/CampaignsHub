@@ -24,11 +24,11 @@ final class DemoSeederGuardTest extends TestCase
 
         $this->artisan('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true])->assertSuccessful();
 
-        foreach (['owner@demo-agency.local', 'analyst@demo-agency.local', 'viewer@demo-agency.local'] as $email) {
+        foreach (['agency@campaignshub.io', 'analyst@demo-agency.local', 'viewer@demo-agency.local'] as $email) {
             $this->assertDatabaseMissing('users', ['email' => $email]);
         }
         // Structural seeding still happened.
-        $this->assertDatabaseHas('users', ['email' => 'platform@mediabuying.local']);
+        $this->assertDatabaseHas('users', ['email' => 'platform@campaignshub.io']);
         $this->assertTrue(Permission::where('key', 'campaigns.view')->exists());
     }
 
@@ -38,7 +38,7 @@ final class DemoSeederGuardTest extends TestCase
 
         $this->artisan('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true])->assertSuccessful();
 
-        $this->assertDatabaseHas('users', ['email' => 'owner@demo-agency.local']);
+        $this->assertDatabaseHas('users', ['email' => 'agency@campaignshub.io']);
         $this->assertDatabaseHas('users', ['email' => 'viewer@demo-agency.local']);
     }
 

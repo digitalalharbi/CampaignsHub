@@ -7,19 +7,19 @@ import { AUTH } from './helpers'
  * dependency before the test project.
  */
 const ROLES = [
-  { email: 'owner@demo-agency.local', file: AUTH.owner },
+  { email: 'agency@campaignshub.io', file: AUTH.owner },
   { email: 'analyst@demo-agency.local', file: AUTH.analyst },
   { email: 'viewer@demo-agency.local', file: AUTH.viewer },
   // A real advertiser, for the advertiser portal's own surfaces.
-  { email: 'owner@demo-company.local', file: AUTH.advertiser },
+  { email: 'advertiser@campaignshub.io', file: AUTH.advertiser },
   // The platform owner. Without it, `/admin` had no signed-in session to audit with. The influencer
   // operator is deliberately absent: that portal is withdrawn (INFL-OFF-001), so its demo login is
   // no longer seeded and signing in as it would authenticate nothing.
-  { email: 'admin@demo-campaignshub.local', file: AUTH.admin },
+  { email: 'admin@campaignshub.io', file: AUTH.admin },
   // The client portal's own customer (REVIEW-001c). Until the membership engine could OPEN the
   // portal — rather than only narrow a session the OTP cookie had already opened — this account
   // signed in, was told its portal was `/portal`, and met 401 on every page there.
-  { email: 'client@demo-portal.local', file: AUTH.client },
+  { email: 'client@campaignshub.io', file: AUTH.client },
 ]
 
 for (const role of ROLES) {

@@ -17,7 +17,7 @@ reporting, alerts, and external client requests from one place. Arabic-first (RT
 8. `OPEN_EXTERNAL_DEPENDENCIES.md` — the only pending items (all external credentials).
 
 ## Demo credentials (seeded)
-`owner@demo-agency.local` / `analyst@demo-agency.local` / `viewer@demo-agency.local` — password `password`.
+`agency@campaignshub.io` / `analyst@demo-agency.local` / `viewer@demo-agency.local` — password `password`.
 
 ## Honest status
 Email / WhatsApp / SMS / Google OAuth / ad-platform sync are **Awaiting Credentials** — the system runs and all

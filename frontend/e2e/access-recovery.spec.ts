@@ -159,7 +159,7 @@ test.describe('signing out from a refusal', () => {
   test.use({ storageState: { cookies: [], origins: [] } })
 
   test('ends the session and clears what this app stored', async ({ page }) => {
-    await signInAs(page, 'owner@demo-agency.local')
+    await signInAs(page, 'agency@campaignshub.io')
     await page.goto('/app/dashboard')
     await expect(page.getByTestId('access-recovery')).toBeVisible({ timeout: 20000 })
 

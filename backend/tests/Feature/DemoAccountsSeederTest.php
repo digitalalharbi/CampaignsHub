@@ -37,7 +37,7 @@ final class DemoAccountsSeederTest extends TestCase
     public function test_the_demo_agency_owner_lands_in_the_agency_portal(): void
     {
         $tenant = Tenant::where('slug', 'demo-agency')->firstOrFail();
-        $owner = User::where('email', 'owner@demo-agency.local')->firstOrFail();
+        $owner = User::where('email', 'agency@campaignshub.io')->firstOrFail();
 
         $this->assertTrue($owner->memberships()->where('tenant_id', $tenant->id)->exists());
         $this->assertNotNull($owner->email_verified_at);
@@ -80,7 +80,7 @@ final class DemoAccountsSeederTest extends TestCase
         $this->assertNotContains('requests', $nav);
 
         // Two verified company logins.
-        foreach (['owner@demo-company.local', 'member@demo-company.local'] as $email) {
+        foreach (['advertiser@campaignshub.io', 'member@demo-company.local'] as $email) {
             $user = User::where('email', $email)->firstOrFail();
             $this->assertTrue($user->memberships()->where('tenant_id', $tenant->id)->exists());
             $this->assertNotNull($user->email_verified_at);

@@ -117,7 +117,7 @@ final class DemoAccountsSeeder extends Seeder
         );
         $analystRole->givePermissionTo('campaigns.view', 'projects.view', 'projects.view.all', 'integrations.view', 'reports.view');
 
-        $this->ensureUser('owner@demo-agency.local', 'Demo Owner', $tenant, $ownerRole);
+        $this->ensureUser('agency@campaignshub.io', 'Demo Owner', $tenant, $ownerRole);
 
         /*
          * ACCESS-EXIT-001 — an account that belongs to NOTHING, on purpose.
@@ -182,7 +182,7 @@ final class DemoAccountsSeeder extends Seeder
         );
         $memberRole->givePermissionTo('campaigns.view', 'projects.view', 'analytics.view', 'reports.view', 'connections.view', 'subscriptions.view');
 
-        $this->ensureUser('owner@demo-company.local', 'Company Owner', $tenant, $ownerRole);
+        $this->ensureUser('advertiser@campaignshub.io', 'Company Owner', $tenant, $ownerRole);
         $this->ensureUser('member@demo-company.local', 'Company Member', $tenant, $memberRole);
 
         // Assign the Growth plan through the real SubscriptionService (idempotent: one row per tenant).
@@ -249,7 +249,7 @@ final class DemoAccountsSeeder extends Seeder
         );
         $context->setTenantId((string) $tenant->id);
 
-        $owner = User::where('email', 'owner@demo-agency.local')->first();
+        $owner = User::where('email', 'agency@campaignshub.io')->first();
 
         $ws = ClientWorkspace::firstOrCreate(
             ['tenant_id' => $tenant->id, 'slug' => 'demo-client'],
@@ -527,9 +527,9 @@ final class DemoAccountsSeeder extends Seeder
         $devToken = App::environment('production') ? '—' : self::CLIENT_PORTAL_DEV_TOKEN;
 
         $this->command->info('DEMO ACCOUNTS — three experiences (password = "'.self::PASSWORD.'"):');
-        $this->command->info('experience=operations_console | url=/app | email=owner@demo-agency.local | password=password | role=owner | workspace=personal(agency) | plan=trial');
+        $this->command->info('experience=operations_console | url=/app | email=agency@campaignshub.io | password=password | role=owner | workspace=personal(agency) | plan=trial');
         $this->command->info('experience=operations_console | url=/app | email=analyst@demo-agency.local | password=password | role=analyst | workspace=personal(agency) | plan=trial');
-        $this->command->info('experience=saas_workspace | url=/app | email=owner@demo-company.local | password=password | role=owner | workspace=company(self_serve_company) | plan=growth');
+        $this->command->info('experience=saas_workspace | url=/app | email=advertiser@campaignshub.io | password=password | role=owner | workspace=company(self_serve_company) | plan=growth');
         $this->command->info('experience=saas_workspace | url=/app | email=member@demo-company.local | password=password | role=member | workspace=company(self_serve_company) | plan=growth');
         $this->command->info('experience=client_portal | url=/client | email='.self::CLIENT_CONTACT_EMAIL.' | phone='.self::CLIENT_CONTACT_PHONE.' | auth=OTP(dev_code in non-prod) or X-Client-Token='.$devToken.' | role=client_contact | workspace=client(Demo Client) | plan=n/a');
     }

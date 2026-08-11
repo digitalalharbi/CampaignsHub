@@ -1,16 +1,47 @@
 # Demo Accounts & Data
 
-Seeded by `DatabaseSeeder` in **local/testing only** (never production). All demo data is labelled
-`Demo` / `Sandbox` / `Simulated`.
+Seeded in **local/testing only** — `DemoPortalLoginsSeeder::shouldRun()` refuses in production, so a
+deployed install has no account whose password is published in a seeder. All demo data is labelled
+`Demo` / `Sandbox` / `Simulated`, and a demo connection is never reported as a live one.
 
-## Logins (password: `password`)
-| Role | Email | Notes |
+## The canonical accounts — one per portal (`IDENTITY-ACCOUNTS-001`)
+
+Password: `password`. **Development only.**
+
+| Portal | Email | What it is |
 |---|---|---|
-| Platform super-admin | `platform@mediabuying.local` | cross-tenant, `is_platform_admin` |
-| Demo agency owner | `owner@demo-agency.local` | Tenant Owner, all permissions |
+| `/admin` | `admin@campaignshub.io` | Platform Admin — the owner's console, belongs to no tenant (ADR 0002) |
+| `/app` | `advertiser@campaignshub.io` | Advertiser — a self-serve company workspace |
+| `/agency` | `agency@campaignshub.io` | Agency — tenant owner, all permissions, carries the demo world |
+| `/portal` | `client@campaignshub.io` | Client portal — the customer's own view |
 
-> Emails use the seed's original local domain; the brand is CampaignsHub. Rename in a later pass if
-> desired — logins are data, not brand surfaces.
+Internal fallback, provisioned in **every** environment by `DatabaseSeeder`:
+
+| Portal | Email | What it is |
+|---|---|---|
+| `/admin` | `platform@campaignshub.io` | The super-admin an installer provisions. Not a demo account. |
+
+### One sign-in page, always
+
+There is no per-portal login. Everybody signs in at **`/login`**, and the BACKEND decides where they
+land from their account state, membership, role, permissions and portal — never the address they
+typed. An account that spans two portals would make that decision ambiguous, which is why there is
+exactly one canonical account per portal.
+
+### Not shown in the product
+
+These addresses and their password appear in seeders, tests and this document. **They are never
+rendered in the application's own interface** — no demo-credential panel on `/login`, no hint text,
+nothing a visitor can read. A demo login that advertises itself is a production credential leak
+waiting for one environment variable to be wrong.
+
+### The other demo personas keep their own addresses
+
+`analyst@demo-agency.local`, `member@demo-company.local`, `manager@demo-agency.local`,
+`viewer@demo-agency.local` and `talent@demo-agency.local` are supporting cast — they exist to prove
+that permissions differ between people in one workspace, and none of them is a portal entry point.
+They were deliberately left on their original addresses: the canonical set above is what a person
+signs in with, and renaming the rest would churn a hundred call sites to no end.
 
 ## Seeded data (Demo Agency tenant)
 - **CRM leads** (5): Acme Co, Nova Retail, Zahra Store, Falcon Media, Bright Foods (varied
@@ -24,4 +55,12 @@ Seeded by `DatabaseSeeder` in **local/testing only** (never production). All dem
 - **Advertising connectors**: Sandbox (connected) + 6 platform stubs (awaiting_credentials).
 
 ## Reset
-`php artisan migrate:fresh --seed` rebuilds everything.
+
+`php artisan migrate:fresh --seed` rebuilds everything, and is the supported way to reset.
+
+> **Known defect — re-seeding a POPULATED database fails.** `php artisan db:seed` against a database
+> that already holds demo creatives aborts in `DemoCreativesSeeder` with
+> `SQLSTATE[23503] … violates foreign key constraint "creative_daily_metrics_creative_id_foreign"`.
+> Reproduced 2026-08-11. `migrate:fresh --seed` is unaffected because it starts from an empty
+> schema. Recorded rather than fixed: it is demo-only, it predates this change, and nobody has asked
+> for it.

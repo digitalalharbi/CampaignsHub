@@ -175,7 +175,7 @@ final class PlatformOverviewTest extends TestCase
     /** …and only the platform owner may read any of it. */
     public function test_a_tenant_owner_cannot_read_the_platform_console(): void
     {
-        $user = User::query()->where('email', 'owner@demo-agency.local')->firstOrFail();
+        $user = User::query()->where('email', 'agency@campaignshub.io')->firstOrFail();
 
         $this->actingAs($user)->getJson('/api/v1/admin/overview', $this->spaHeaders)->assertForbidden();
     }

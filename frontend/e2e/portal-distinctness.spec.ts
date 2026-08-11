@@ -117,7 +117,7 @@ test.describe('the portals are different products', () => {
 
   test('an agency sees its clients, and its rail is not the advertiser rail', async ({ page }) => {
     await page.goto('/login')
-    await signIn(page, 'owner@demo-agency.local', 'password')
+    await signIn(page, 'agency@campaignshub.io', 'password')
 
     await expect(page).toHaveURL(/\/agency/, { timeout: 20000 })
     await expect(page.getByTestId('agency-shell')).toBeVisible({ timeout: 20000 })
@@ -181,7 +181,7 @@ test.describe('the portals are different products', () => {
    */
   test('a pre-move /app link redirects into the agency portal', async ({ page }) => {
     await page.goto('/login')
-    await signIn(page, 'owner@demo-agency.local', 'password')
+    await signIn(page, 'agency@campaignshub.io', 'password')
     await expect(page).toHaveURL(/\/agency/, { timeout: 20000 })
 
     await page.goto('/app/clients')
@@ -239,7 +239,7 @@ test.describe('signing in', () => {
    */
   test('an address naming a portal grants no access to it', async ({ page }) => {
     await page.goto('/admin/login')
-    await signIn(page, 'owner@demo-company.local')
+    await signIn(page, 'advertiser@campaignshub.io')
 
     await expect(page).toHaveURL(/\/app\//, { timeout: 20000 })
     await expect(page.getByText(/لوحة المنصة|Platform overview/)).toHaveCount(0)
@@ -273,7 +273,7 @@ test.describe('signing in', () => {
   /** And the advertiser portal now refuses an agency operator the same way every other one does. */
   test('the advertiser portal refuses an agency operator', async ({ page }) => {
     await page.goto('/login')
-    await signIn(page, 'owner@demo-agency.local', 'password')
+    await signIn(page, 'agency@campaignshub.io', 'password')
     await expect(page).toHaveURL(/\/agency/, { timeout: 20000 })
 
     await page.goto('/app/dashboard')

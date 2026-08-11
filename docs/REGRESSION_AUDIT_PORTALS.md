@@ -23,7 +23,7 @@ Two real defects WERE found and fixed while auditing, both predating this pass:
 
 ## 2. The real problem is not a regression — it is a layer that was never built
 
-**The platform owner has nowhere to go.** `platform@mediabuying.local` has
+**The platform owner has nowhere to go.** `platform@campaignshub.io` has
 `is_platform_admin = true`, `tenant_id = null` and no membership, so:
 
 ```

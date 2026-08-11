@@ -7,9 +7,9 @@ Preview: **http://localhost:5173** · Dev status: **http://localhost:5173/dev/st
 
 | # | Experience | URL | Login | Auth | Role | Workspace | Plan | Pages |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Operations Console (internal) | `/login` → `/dashboard` | owner@demo-agency.local | password | owner | personal (agency) | trial | Dashboard, Requests, Clients, Projects, Campaigns, Analytics, Reports, Integrations, Alerts, Messages, Finance, Team, Settings(+Branding) |
+| 1 | Operations Console (internal) | `/login` → `/dashboard` | agency@campaignshub.io | password | owner | personal (agency) | trial | Dashboard, Requests, Clients, Projects, Campaigns, Analytics, Reports, Integrations, Alerts, Messages, Finance, Team, Settings(+Branding) |
 | 2 | Operations Console (analyst) | `/login` → `/dashboard` | analyst@demo-agency.local | password | analyst | personal (agency) | trial | Dashboard, Projects, Campaigns, Analytics, Reports (read-oriented) |
-| 3 | SaaS Workspace (company owner) | `/login` → `/dashboard` | owner@demo-company.local | password | owner | company (self_serve_company) | growth | Dashboard, Projects, Campaigns, Analytics, Reports, Integrations, Alerts, Subscription, Team, Settings |
+| 3 | SaaS Workspace (company owner) | `/login` → `/dashboard` | advertiser@campaignshub.io | password | owner | company (self_serve_company) | growth | Dashboard, Projects, Campaigns, Analytics, Reports, Integrations, Alerts, Subscription, Team, Settings |
 | 4 | SaaS Workspace (team member) | `/login` → `/dashboard` | member@demo-company.local | password | member | company | growth | same SaaS menu (read subset) |
 | 5 | Client Service Portal | `/client/login` → `/client` | customer@demo-client.local / +966500000009 | OTP dev code (non-prod) or header `X-Client-Token: demo-client-portal-token` | client contact | client (Demo Client) | — | Home, Requests, Invoices, Messages, Files, Campaigns, Reports, Profile |
 | 6 | Public Website | `/` | — | public | — | — | — | Homepage, `/login`, `/register`, `/requests/new`, `/requests/track` |

@@ -40,7 +40,7 @@ final class DemoReportsSeeder extends Seeder
 
             return;
         }
-        $owner = User::where('email', 'owner@demo-agency.local')->first();
+        $owner = User::where('email', 'agency@campaignshub.io')->first();
         $generator = app(ReportGenerator::class);
 
         $completed = [

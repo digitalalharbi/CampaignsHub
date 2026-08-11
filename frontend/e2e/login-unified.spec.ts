@@ -66,7 +66,7 @@ test.describe('the old doors', () => {
     await page.goto('/agency/login?redirect=%2Fagency%2Fclients')
     await expect(page).toHaveURL(/\/login\?redirect=%2Fagency%2Fclients/)
 
-    await signIn(page, 'owner@demo-agency.local')
+    await signIn(page, 'agency@campaignshub.io')
     await expect(page).toHaveURL(/\/agency\/clients/, { timeout: 20000 })
   })
 })
@@ -80,13 +80,13 @@ test.describe('the old doors', () => {
 test.describe('the server picks the portal, not the URL', () => {
   test('an advertiser lands in /app', async ({ page }) => {
     await page.goto('/admin/login')
-    await signIn(page, 'owner@demo-company.local')
+    await signIn(page, 'advertiser@campaignshub.io')
     await expect(page).toHaveURL(/\/app\//, { timeout: 20000 })
   })
 
   test('an agency operator lands in /agency', async ({ page }) => {
     await page.goto('/admin/login')
-    await signIn(page, 'owner@demo-agency.local')
+    await signIn(page, 'agency@campaignshub.io')
     await expect(page).toHaveURL(/\/agency/, { timeout: 20000 })
   })
 })

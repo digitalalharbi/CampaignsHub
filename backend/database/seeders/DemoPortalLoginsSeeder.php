@@ -25,14 +25,15 @@ use Illuminate\Support\Facades\Hash;
  * looking at the agency console. A demo set that cannot demonstrate the difference between the
  * portals is worse than none, because it makes them look identical when they are not.
  *
- * The other two accounts already exist and are left alone — `owner@demo-agency.local` and
- * `owner@demo-company.local` are owned by `DemoAccountsSeeder` and carry a whole demo world with them.
+ * The other two accounts already exist and are left alone — `agency@campaignshub.io` and
+ * `advertiser@campaignshub.io` are owned by `DemoAccountsSeeder` and carry a whole demo world with them.
  * This seeder adds what was missing:
  *
- *   - `admin@demo-campaignshub.local` — the platform owner's console. ADDED rather than renaming
- *     `platform@mediabuying.local`, because renaming a provisioning account breaks every existing
- *     install that signs in with it.
- *   - `client@demo-portal.local` — the client portal. See the note on that method: the portal's own
+ *   - `admin@campaignshub.io` — the platform owner's console, and the one an operator signs in with.
+ *     Separate from `platform@campaignshub.io`, which `DatabaseSeeder` provisions in EVERY
+ *     environment: this one is development-only and its password is published, so the two must not
+ *     be the same account.
+ *   - `client@campaignshub.io` — the client portal. See the note on that method: the portal's own
  *     engine is still OTP, and this account does not pretend otherwise.
  *
  * DEVELOPMENT ONLY. `shouldRun()` refuses in production, so a deployed install has no account whose
@@ -72,7 +73,7 @@ final class DemoPortalLoginsSeeder extends Seeder
     /** The platform owner's console — belongs to no tenant, by design (ADR 0002). */
     private function platformOwner(): void
     {
-        $user = User::firstOrNew(['email' => 'admin@demo-campaignshub.local']);
+        $user = User::firstOrNew(['email' => 'admin@campaignshub.io']);
 
         $user->forceFill([
             'name' => 'Platform Admin (demo)',
@@ -108,7 +109,7 @@ final class DemoPortalLoginsSeeder extends Seeder
 
         app(TenantContext::class)->setTenantId((string) $tenant->getKey());
 
-        $user = User::firstOrNew(['email' => 'client@demo-portal.local']);
+        $user = User::firstOrNew(['email' => 'client@campaignshub.io']);
         $user->forceFill([
             'name' => 'Demo Client',
             'password' => Hash::make(self::PASSWORD),
@@ -249,9 +250,9 @@ final class DemoPortalLoginsSeeder extends Seeder
 
     private function report(): void
     {
-        $this->command?->info('portal=/admin       | email=admin@demo-campaignshub.local | password=password');
-        $this->command?->info('portal=/app         | email=owner@demo-company.local      | password=password');
-        $this->command?->info('portal=/agency      | email=owner@demo-agency.local       | password=password');
+        $this->command?->info('portal=/admin       | email=admin@campaignshub.io | password=password');
+        $this->command?->info('portal=/app         | email=advertiser@campaignshub.io      | password=password');
+        $this->command?->info('portal=/agency      | email=agency@campaignshub.io       | password=password');
 
         // Only announced while the portal is being offered (INFL-OFF-001). Printing a login for a
         // closed portal is how a demo script sends somebody to a door that will refuse them.
@@ -260,6 +261,6 @@ final class DemoPortalLoginsSeeder extends Seeder
             $this->command?->info('portal=/influencers | email=layla@creators.demo           | password=password (the CREATOR side — her own agreements only)');
         }
 
-        $this->command?->info('portal=/portal      | email=client@demo-portal.local      | password=password');
+        $this->command?->info('portal=/portal      | email=client@campaignshub.io      | password=password');
     }
 }
