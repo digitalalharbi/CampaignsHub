@@ -10,7 +10,76 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (fourteenth of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (fifteenth of the day)
+
+**Working tree CLEAN. No product code changed this session.** `IDENTITY-ACCOUNTS-001` still
+**NOT VERIFIED**. Full Gate NOT run. **No revocation/tombstone was built** — the harness that would
+justify it is still blocked, and the result is neither A nor B yet.
+
+### The harness derivation is now CORRECT. It is blocked on the environment, not the method.
+
+Everything the previous close said was wrong with it has been fixed, and each step verified:
+
+| Step | Result |
+|---|---|
+| Sign in over real HTTP, `SESSION_DRIVER=redis` | `login=200`, `/auth/me` = **200 advertiser@** |
+| Snapshot the cookie jar **before** logout | done — `h_jar_pre` taken immediately after login |
+| Decrypt `mediabuying-session` the way Laravel does | `Crypt::decrypt($raw, false)` → `CookieValuePrefix::remove()` → **session id, 40 chars**. No guessing, no scanning. |
+| Derive the Redis key from `config('cache.prefix') + session id` | **KEY NOT FOUND** |
+
+The blocker, stated exactly: the derived key does not exist in Redis, checked on the cache
+connection's own database (`database.redis.cache.database = 1`) and on db 0, under both
+`mediabuying-cache-` and the `campaignshub-e2e-…` prefix left over from gate runs. Laravel's own
+`Cache::has($sessionId)` from the CLI also returns **false** — while `/auth/me` with that same cookie
+returns 200.
+
+### Why, and the one thing to do first next time
+
+**The API on :8000 has been running for eight days.** It is serving with whatever environment and
+cached config it was started with, which is not necessarily the `.env` the CLI reads now. A CLI that
+cannot see the session its own server just wrote is the signature of exactly that.
+
+So the next session's FIRST action is not more probing:
+
+1. Stop the long-running `php artisan serve --port=8000` (PID was 66528, up since 11 Aug).
+2. Start it fresh with `config:clear` and a known environment, and note `cache.prefix`,
+   `database.redis.cache.database` and `SESSION_DRIVER` as the server itself reports them.
+3. Re-run the harness. Step 4's prerequisite — key exists, payload carries the auth state, the user
+   matches — must PASS before anything else. The instruction is explicit that a failing prerequisite
+   means fix the harness, not continue, and that is why this session stopped here.
+
+Then, unchanged from the plan: capture payload → logout (assert 200) → **check whether the old key
+still exists and its TTL** → rewrite the payload under the old key → `/auth/me` with the
+**pre-logout** jar.
+
+- **200 → outcome A.** Stale-session resurrection proven; design the server-side revocation as its
+  own unit, fail-first.
+- **401 → outcome B.** The rewrite hypothesis does not explain the defect; do not build a tombstone,
+  and go back to finding what actually re-authenticates the browser.
+
+### What is settled, and must not be re-litigated
+
+- `logout()` is correct over HTTP: `/auth/me` 200 → logout 200 → `/auth/me` 401. **Do not touch
+  `AuthController`.**
+- The client sign-out barrier (`ACCESS-EXIT-002`) is correct, kept, and **insufficient alone** (2/5).
+- Not the gate leg. Not the browser. Not `page.request`. Not the client barrier. Five conclusions of
+  mine have now been overturned by measurement; the sixth should not be written until the harness
+  passes its own prerequisite.
+
+### Still separate, still open
+
+The leg asymmetry (`access-recovery`, `registration-onboarding`, `homepage-journeys`,
+`request-intake`). Do not fold it into this thread.
+
+Only after both: one Full Gate on a frozen tree, `REAL_GATE_EXIT=0`, Failed/Flaky/Retries/Skipped all
+0 — then `IDENTITY-ACCOUNTS-001` = VERIFIED and non-external open items = 0.
+
+No sleep, no retry, no timeout change, no Redis scan, no `SESSION_DRIVER=array`, no browser E2E used
+for this part.
+
+---
+
+## Previous close — 2026-08-11 (fourteenth of the day)
 
 **Working tree CLEAN.** `IDENTITY-ACCOUNTS-001` still **NOT VERIFIED**. Full Gate NOT run.
 **No revocation system was built** — the premise it would rest on is not yet proven, and building
