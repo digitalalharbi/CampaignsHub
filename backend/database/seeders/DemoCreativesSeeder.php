@@ -49,10 +49,31 @@ final class DemoCreativesSeeder extends Seeder
 
             foreach (self::TEMPLATES as $i => [$format, $spendDay, $ctr, $convDay, $revX, $viewRate]) {
                 $extId = "demo-cr-{$campaign->id}-{$i}";
+
+                /*
+                 * DEMO-RESEED-001 — the primary key is NOT part of what an update writes.
+                 *
+                 * `id` used to sit in this payload. On a first run that is harmless: the row is
+                 * created and keeps the key it was handed. On a SECOND run the row already exists,
+                 * so this is an UPDATE — and because `php artisan db:seed` runs the whole seeder
+                 * inside `Model::unguarded()`, the guard that normally drops a non-fillable `id`
+                 * is off and the key is genuinely rewritten:
+                 *
+                 *   update "external_creatives" set "id" = <new uuid> where "id" = <old uuid>
+                 *
+                 * Thirty days of `creative_daily_metrics` still point at the old key, so Postgres
+                 * refuses and the whole command dies. The foreign key is not the problem — it is the
+                 * only reason this was ever noticed. Without it the metrics would have survived
+                 * pointing at a key nobody owns: present in the table, invisible to every join.
+                 *
+                 * `ExternalCreative` uses `HasUuidKey`, which mints the uuid in a `creating` hook,
+                 * so the explicit `id` was never needed for the create either. Removing it is the
+                 * entire fix: no truncate, no disabled constraint, and every existing relationship
+                 * left exactly where it was.
+                 */
                 $creative = ExternalCreative::withoutGlobalScopes()->updateOrCreate(
                     ['project_id' => $campaign->project_id, 'provider' => $provider, 'external_creative_id' => $extId],
                     [
-                        'id' => (string) Str::uuid(),
                         'tenant_id' => $campaign->tenant_id,
                         'campaign_id' => $campaign->id,
                         'name' => "Creative {$i} — {$format}",

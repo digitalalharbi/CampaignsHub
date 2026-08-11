@@ -58,9 +58,9 @@ signs in with, and renaming the rest would churn a hundred call sites to no end.
 
 `php artisan migrate:fresh --seed` rebuilds everything, and is the supported way to reset.
 
-> **Known defect — re-seeding a POPULATED database fails.** `php artisan db:seed` against a database
-> that already holds demo creatives aborts in `DemoCreativesSeeder` with
-> `SQLSTATE[23503] … violates foreign key constraint "creative_daily_metrics_creative_id_foreign"`.
-> Reproduced 2026-08-11. `migrate:fresh --seed` is unaffected because it starts from an empty
-> schema. Recorded rather than fixed: it is demo-only, it predates this change, and nobody has asked
-> for it.
+`php artisan db:seed` on a database that already holds a demo world is safe too, and is asserted by
+`DemoCreativesReseedTest` (`DEMO-RESEED-001`). It used to abort on a foreign key: the creatives
+seeder passed `id` in its update payload, and because `db:seed` runs everything inside
+`Model::unguarded()`, a second run genuinely re-keyed an existing creative while thirty days of its
+metrics still pointed at the old key. `migrate:fresh --seed` never met it, because from an empty
+schema every creative is a create.
