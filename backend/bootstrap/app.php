@@ -10,6 +10,7 @@ use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
+use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
 use App\Domains\Notifications\Console\RenderMailPreviews;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
@@ -79,6 +80,9 @@ return Application::configure(basePath: dirname(__DIR__))
         PruneRawPayloadsCommand::class,
         // COMMERCE-001 — the store sweep: products, customers, orders and abandoned carts.
         SyncStoresCommand::class,
+        // FX-FEED-001 — the exchange rates the conversions need. Registered even though no source
+        // ships configured: the day an operator sets one, the schedule already exists.
+        ImportCurrencyRatesCommand::class,
         // PROD-001 — a backup that either happens or says it did not, plus its verification half.
         BackupCommand::class,
     ])

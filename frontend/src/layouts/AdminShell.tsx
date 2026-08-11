@@ -14,6 +14,7 @@ import {
   Plug,
   Sun,
   Mail,
+  Coins,
   X,
 } from 'lucide-react'
 import { AccountMenu } from '@/features/account/UserMenu'
@@ -74,6 +75,14 @@ const adminNav = [
 /** Rare and technical. Reachable, but not competing with the daily queue. */
 const adminAdvancedNav = [
   { to: '/admin/settings/integrations/payments', ar: 'وسائل الدفع', en: 'Payment methods', icon: CreditCard },
+  /*
+   * FX-FEED-001 — the rate supply.
+   *
+   * Advanced rather than daily: once a source is configured it runs on a schedule and nobody opens
+   * this again. It is the page an operator needs on exactly two occasions — choosing a publisher, and
+   * the day a client's report shows figures withheld for want of a rate.
+   */
+  { to: '/admin/settings/currency-rates', ar: 'أسعار الصرف', en: 'Exchange rates', icon: Coins },
   { to: '/admin/cutover', ar: 'انتقال بوابة العملاء', en: 'Portal cutover', icon: ShieldAlert },
 ] as const
 

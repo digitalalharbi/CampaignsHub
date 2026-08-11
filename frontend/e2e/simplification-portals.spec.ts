@@ -97,9 +97,15 @@ test.describe('the platform console separates daily work from rare tools', () =>
     await expect(advanced).toContainText(/وسائل الدفع|Payment methods/)
   })
 
-  /** Separated is not hidden: both still open. */
+  /** Separated is not hidden: they still open. */
   test('the advanced destinations still open', async ({ page }) => {
-    for (const path of ['/admin/cutover', '/admin/settings/integrations/payments']) {
+    for (const path of [
+      '/admin/cutover',
+      '/admin/settings/integrations/payments',
+      // FX-FEED-001 — the rate supply. Advanced because once a source is configured nobody opens it
+      // again, and it must still render on an install where no source has ever been configured.
+      '/admin/settings/currency-rates',
+    ]) {
       await page.goto(path)
       await expect(page.locator('main'), `${path} rendered nothing`).toBeVisible({ timeout: 20000 })
       await expect(page.locator('main'), `${path} is a not-found page`)

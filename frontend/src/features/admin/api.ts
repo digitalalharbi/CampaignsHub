@@ -716,3 +716,58 @@ export function fetchEmailPreviews(): Promise<{ keys: string[]; locales: string[
 export function fetchEmailPreview(key: string, locale: string): Promise<{ key: string; locale: string; html: string }> {
   return getData(`/admin/email/previews/${key}?locale=${locale}`)
 }
+
+/*
+ * FX-FEED-001 — where exchange rates come from.
+ *
+ * The ENGINE is verified: money is converted into the project's reporting currency at ingest, at a
+ * dated rate, from a named source, and a rate nobody can vouch for withholds the figure rather than
+ * guessing one. The FEED is the other half, and on a fresh install it does not exist — no publisher
+ * is chosen in this repository, because which one a deployment trusts is a commercial decision.
+ *
+ * `unmet_pairs` is what makes that decision concrete: every conversion already withheld, worst first.
+ */
+export interface CurrencyRateFeedState {
+  /** `awaiting_configuration` · `driver_not_configured` · `ready` */
+  state: string
+  driver: string | null
+  label: string | null
+  stale_after_days: number
+  last_rate_date: string | null
+  rates: number
+}
+
+export interface UnmetRatePair {
+  base: string
+  quote: string
+  withheld: number
+  earliest: string | null
+  latest: string | null
+  sources: string[]
+}
+
+export interface StoredRate {
+  base: string
+  quote: string
+  rate: number
+  rate_date: string
+  source: string
+}
+
+export function fetchCurrencyRates(): Promise<{
+  feed: CurrencyRateFeedState
+  unmet_pairs: UnmetRatePair[]
+  rates: StoredRate[]
+}> {
+  return getData('/admin/fx/rates')
+}
+
+/** Hand entry is a first-class path: an operator is a real source, and the rate records who they are. */
+export function recordCurrencyRate(body: {
+  base: string
+  quote: string
+  rate: number
+  rate_date: string
+}): Promise<StoredRate> {
+  return postData('/admin/fx/rates', body)
+}

@@ -80,6 +80,7 @@ import { PlatformOverviewPage } from '@/features/admin/PlatformOverviewPage'
 import { TenantsPage } from '@/features/admin/TenantsPage'
 import { RegistrationsPage } from '@/features/admin/RegistrationsPage'
 import { PaymentSettingsPage } from '@/features/admin/PaymentSettingsPage'
+import { CurrencyRatesPage } from '@/features/admin/CurrencyRatesPage'
 import { ProviderSettingsPage } from '@/features/admin/ProviderSettingsPage'
 import { SystemSettingsPage } from '@/features/admin/SystemSettingsPage'
 import { PlatformLegalPage } from '@/features/admin/PlatformLegalPage'
@@ -432,6 +433,13 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'settings/integrations', element: <ProviderSettingsPage /> },
             // LEGAL-001 — the operator's own legal identity, as printed on the public policies.
             { path: 'settings/platform', element: <PlatformLegalPage /> },
+            /*
+             * FX-FEED-001 — where exchange rates come from.
+             *
+             * On the platform console because one USD→SAR quote converts every tenant's spend on the
+             * same day: a tenant able to set it could move their own reported ROAS by editing a number.
+             */
+            { path: 'settings/currency-rates', element: <CurrencyRatesPage /> },
             // REVIEW-001 — per-provider platform-review readiness, eight distinct checklists.
             { path: 'integrations/review', element: <ProviderReviewPage /> },
             { path: 'cutover', element: <CutoverPage /> },

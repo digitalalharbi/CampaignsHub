@@ -133,3 +133,16 @@ Schedule::command('commerce:sync')->hourlyAt(20)->withoutOverlapping();
 // Retain raw platform payloads for ninety days — long enough to settle a dispute about a figure,
 // short enough that the audit trail does not become the largest table in the database.
 Schedule::command('integrations:prune-raw')->dailyAt('03:30');
+
+/*
+ * FX-FEED-001 — the exchange rates the conversions need (FX-001, COMMERCE-FX-001).
+ *
+ * Scheduled even though no deployment in this repository has a rate source configured, and that is
+ * deliberate: the day an operator sets FX_RATE_DRIVER, rates start arriving without anybody having to
+ * remember to add a cron line. Until then the command reports that nothing is configured and writes
+ * NOTHING — it must never invent a rate to fill the gap it is reporting.
+ *
+ * Early, before the ad and store sweeps of the working day, so a figure ingested this morning finds
+ * today's rate already on file rather than being withheld until tomorrow.
+ */
+Schedule::command('fx:rates')->dailyAt('02:30')->withoutOverlapping();

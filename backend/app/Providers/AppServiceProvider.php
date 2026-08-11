@@ -11,6 +11,8 @@ use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Models\Opportunity;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Metrics\Contracts\CurrencyRateSource;
+use App\Domains\Metrics\Rates\CurrencyRateFeed;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
@@ -72,6 +74,28 @@ class AppServiceProvider extends ServiceProvider
                 includeSandbox: ! $this->app->environment('production'),
             ),
         );
+
+        /*
+         * FX-FEED-001 — the published rate source, if this deployment has chosen one.
+         *
+         * Resolved from `config('fx.rates.driver')` and NULL by default, because no publisher is
+         * chosen in this repository: which source a deployment trusts is a commercial decision, and
+         * a default here would make it silently on the operator's behalf. A class that is named but
+         * cannot be resolved binds as null too — a misconfigured driver must read as «the feed is not
+         * usable», which is what the /admin surface says, rather than crash every request that
+         * touches money.
+         */
+        $this->app->scoped(CurrencyRateFeed::class, function (): CurrencyRateFeed {
+            $driver = config('fx.rates.driver');
+            $source = null;
+
+            if (is_string($driver) && $driver !== '' && class_exists($driver)) {
+                $resolved = $this->app->make($driver);
+                $source = $resolved instanceof CurrencyRateSource ? $resolved : null;
+            }
+
+            return new CurrencyRateFeed($source);
+        });
     }
 
     public function boot(): void

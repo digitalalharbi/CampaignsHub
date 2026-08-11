@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Domains\Integrations\Review\ReviewChecklistController;
 use App\Domains\Legal\Http\Controllers\LegalInboxController;
 use App\Domains\Legal\Http\Controllers\PlatformSettingsController;
+use App\Domains\Metrics\Http\Controllers\PlatformCurrencyRateController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
@@ -135,6 +136,22 @@ Route::middleware(['auth:sanctum', 'platform'])
             Route::delete('/{provider}/credentials/{key}', [PlatformProviderSettingsController::class, 'forget'])
                 ->name('credentials.forget');
         });
+
+        /*
+         * FX-FEED-001 — where exchange rates come from.
+         *
+         * On the platform console rather than in a tenant's settings, because one USD→SAR quote
+         * converts every tenant's spend on the same day: a tenant able to set it could move their own
+         * reported ROAS by editing a number.
+         *
+         * The POST is the hand-entry path, and it is a real one — a treasury desk publishes rates on
+         * paper long before anybody buys an API. It is throttled because it writes a figure that
+         * every conversion afterwards depends on, and audited because that figure must stay
+         * attributable to a person.
+         */
+        Route::get('/fx/rates', [PlatformCurrencyRateController::class, 'index'])->name('fx.rates.index');
+        Route::post('/fx/rates', [PlatformCurrencyRateController::class, 'store'])
+            ->middleware('throttle:30,1')->name('fx.rates.store');
 
         // ADMIN-003 — read surfaces. The permission catalogue is code (PermissionSeeder), the
         // integration view counts what tenants have connected, and the status check is the SAME one
