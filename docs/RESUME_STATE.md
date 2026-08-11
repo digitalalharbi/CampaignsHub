@@ -10,6 +10,161 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## ⚠️ START HERE — DELIVERY CLOSE, 2026-08-11 (eighteenth of the day)
+
+**Working tree CLEAN at `d03ad38`.** Non-external open items: **0**. The full gate is **GREEN on all
+three browsers** for the first time in this series, and the sign-out defect that had survived six
+overturned hypotheses is closed with a measurement behind it.
+
+**One thing is not done, and it is the push.** GitHub refused it — not the content, a token scope.
+See §5.
+
+---
+
+### 1. ACCESS-EXIT-003 — the sign-out defect, finally measured
+
+`logout` was never wrong. It destroys the session; that was proven against Redis
+(`EXISTS` 1 → 0, `TTL` -2). The session was being **put back**: Laravel writes the session when a
+request finishes, under the id it was loaded with, so a dashboard request that left the browser
+before the click restores the payload after the delete, and the cookie is a working credential again.
+
+The decisive measurement, byte for byte, no sleeps, no retries, no scan, no `SESSION_DRIVER=array`,
+no browser:
+
+```
+login=200 · me=200 · key EXISTS=1 (287 bytes)
+logout=200 · key EXISTS=0 TTL=-2
+me with the pre-logout jar           → 401     ← control: the cookie alone authenticates nothing
+restore the 287 bytes under the key  → OK
+me with the pre-logout jar           → 200     ← signed in again          ** OUTCOME A **
+```
+
+The same harness after the fix answers **401**.
+
+**The fix** (`b637203`): `SessionRevocations` records a SHA-256 of the signed-out session id in the
+cache — never the id, in the key or the value — for one session lifetime plus five minutes;
+`RejectRevokedSessions` is appended to the API group so it runs inside Sanctum's stateful pipeline
+after `StartSession`, answers 401, and destroys the resurrected payload on the way out.
+
+Scoped to one session id: **no global sign-out, no request serialisation, no lock on dashboard
+traffic.** Nothing in it knows which user a session belonged to, so another device is untouched by
+construction — asserted, not assumed. Recorded at the other two places an authenticated id is
+retired: a suspended account's refusal, and «sign out my other devices» (where `regenerate()` leaves
+the old session alive by design).
+
+The client barrier `ACCESS-EXIT-002` **stays**. It keeps most of these requests from being sent; it
+cannot recall one already in flight, which is what the server side closes. Both code comments that
+named the overturned cookie-re-issue hypothesis are corrected.
+
+`StaleSessionResurrectionTest` — 8 tests, fail-first (the two resurrection cases returned 200 where
+401 is required). **The in-process harness needs two things or it measures itself**: reset
+`auth`+`session` between requests (Laravel's `Store::loadSession()` merges INTO memory, so the
+previous request's `login_web_*` survives), and `withCredentials()` (a JSON feature-test request
+sends no cookies without it). Both are documented in the test.
+
+### 2. Gate — GREEN, and the leg asymmetry explained
+
+```
+chromium 299 passed (8.4m) · firefox 291 passed (14.6m) · webkit 291 passed (11.6m)
+REAL_GATE_EXIT=0     Failed 0 · Flaky 0 · Retries 0 · Skipped 0
+```
+
+The 8-test difference is not asymmetry to investigate: `auth-visual.spec.ts` and the homepage visual
+describe are chromium-only in source, with the reason stated (cross-browser pixel diffs are noisy).
+The historical «which leg fails» pattern was the session race, which is timing-dependent — webkit
+simply had fewer requests in flight at the click.
+
+### 3. DEMO-RESEED-002 — one command must build the whole demo world
+
+`DemoCreativesSeeder` selects campaigns by asking which have daily metrics, and ran BEFORE
+`DemoClientPortalSeeder`, which writes them. So `migrate:fresh --seed` produced 78 creatives /
+2,583 metric rows where two consecutive seeds produced 90 / 2,943 — nothing duplicated, nothing
+orphaned, which is exactly why it lasted. Moved after them (`584bbc3`); one fresh seed now gives
+90 / 2,943 and a second leaves it there.
+
+Found by rolling every migration back and up, which also found a `down()` that could not run:
+narrowing `thumbnail_url` to 255 raises `SQLSTATE[22001]` against demo thumbnails that are data
+URIs. **A widening is not reversible** — truncating or nulling discards data to satisfy a schema
+change nobody asked for — so it now reverses what it can, nothing, and says so.
+
+### 4. Verification, all on the frozen tree at `d03ad38`
+
+| | |
+|---|---|
+| Backend | **2023 passed** (11,246 assertions), exit 0 |
+| Frontend | **1017 passed** / 134 files · tsc 0 · oxlint 0 errors · production build 0 |
+| Pint | passed |
+| `production:check` | **0 failing, 2 warnings** — mail, FX. Both external |
+| Migrations | `migrate:fresh --seed` → `rollback` (all) → `migrate` → `db:seed` → `db:seed`, every step exit 0 |
+| Data after the double seed | 90 creatives · 2,943 metric rows · **0 orphans · 0 duplicates** · 13 users · all 5 canonical accounts · 0 legacy-domain rows |
+| Gate | `REAL_GATE_EXIT=0`, three browsers, above |
+| Secret audit | **PASS** — 1,744 tracked files; only `.env.example` × 2; no `.env`/key/cert ever added in ANY branch's history; 0 tracked `vendor`/`node_modules`/traces; the single `sk_live_…` match is the literal `sk_live_SUPERSECRETVALUE` in `ProductionReadinessTest` |
+
+### 5. THE PUSH — blocked on a token scope, and nothing else
+
+`origin` is configured: `https://github.com/digitalalharbi/CampaignsHub.git`. The remote repository
+is **empty** (`isEmpty: true`, PUBLIC), so there is nothing to overwrite and no force is needed.
+
+```
+! [remote rejected] feat/taxonomy-ux -> main
+  (refusing to allow an OAuth App to create or update workflow `.github/workflows/ci.yml`
+   without `workflow` scope)
+```
+
+The `gh` token holds `gist, read:org, repo` — **not `workflow`** — and the repository tracks one
+workflow file. There is no SSH key on this machine, so that route is closed too.
+
+**Deleting or renaming `.github/workflows/ci.yml` would make the push succeed and is not on.** It
+would ship a delivery whose CI quietly went missing to get past a permission check.
+
+The owner runs one command, and then the push is a single line:
+
+```bash
+gh auth refresh -h github.com -s workflow          # interactive; only the owner can approve it
+cd /Users/mohammedalharbimacbook/Developer/CampaignsHub-UI
+git push -u origin feat/taxonomy-ux:main
+git push origin handoff-2026-08-11
+git fetch origin && git rev-parse HEAD origin/main   # the two SHAs must match exactly
+```
+
+**Why `feat/taxonomy-ux:main` and not `git branch -M main`.** A local branch called `main` already
+exists at `37aa464` — the older MediaBuying-era lineage — and it is **checked out in another
+worktree**, `/Users/mohammedalharbimacbook/Desktop/MediaBying System`. Git refuses to force-move it,
+and forcing it anyway would rewrite what that working copy has checked out. Publishing this branch
+as `origin/main` gives the same result on GitHub without touching the other worktree. `local HEAD ==
+origin/main` still holds after the push above.
+
+The tag **`handoff-2026-08-11`** exists locally, on `d03ad38`, and is unpushed. Deliberately not
+`v1.0.0`: no provider is `LIVE_VERIFIED`.
+
+### 6. External blockers — the complete list, and nothing else is open
+
+No credential exists on this machine for any of the eleven providers, so nothing was activated and
+no code was changed to compensate.
+
+| State | Providers |
+|---|---|
+| `BLOCKED_EXTERNAL_CREDENTIALS` | Meta · Google Ads · TikTok · Snapchat · X · LinkedIn · Salla · Zid · Google sign-in · Apple sign-in · SMS/WhatsApp |
+| `READY_FOR_CREDENTIALS` | Moyasar (sandbox keys FIRST) · Mail |
+| `READY_FOR_CONFIGURATION` | FX rate source — a commercial decision, deliberately unset |
+| Not integrated at all | GA4 — absent, not awaiting anything |
+
+**Nothing is `LIVE_VERIFIED`, and nothing may be marked so from this machine.**
+
+### 7. Settled — do not re-litigate
+
+- `AuthController::logout()` was correct all along. What it lacked was the revocation beside it.
+- Overturned by measurement, in order: the gate leg · the browser · `page.request` · the client
+  barrier alone · two harness attempts · the stale dev server. **Six.** The seventh conclusion is
+  the one that survived a byte-for-byte test, which is the standard to hold anything to here.
+- `HANDOFF_MANIFEST.md` is written and is the first page a new developer reads.
+- `docs/OPEN_GAPS.md` is a 2026-07-29 snapshot and is now banner-marked SUPERSEDED, with each of its
+  seven items reconciled. Six closed; the one still open is external.
+
+---
+
+## Previous close — 2026-08-11 (seventeenth of the day)
+
 ## ⚠️ START HERE — handoff written 2026-08-11 (seventeenth of the day)
 
 **Working tree CLEAN. No product code changed.** The harness blocker is SOLVED and two branches of
