@@ -12,7 +12,7 @@
 
 ## ⚠️ START HERE — handoff written 2026-08-11 (sixth of the day)
 
-**Working tree CLEAN.** Last CODE commit `PENDING_CODE`; anything after it is documentation only.
+**Working tree CLEAN.** Last CODE commit `383137f`; anything after it is documentation only.
 
 | Ref | What | State |
 |---|---|---|
