@@ -10,7 +10,84 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (sixteenth of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (seventeenth of the day)
+
+**Working tree CLEAN. No product code changed.** The harness blocker is SOLVED and two branches of
+the investigation are now closed by measurement. The decisive A/B step is one command away.
+
+### 1. The stale-server hypothesis was WRONG (my sixth overturned conclusion)
+
+The previous close blamed an eight-day-old `artisan serve`. I killed PID 66528, ran `config:clear`,
+restarted, signed in again — and `Cache::has($sessionId)` was **still false**. The server's age was
+never the problem.
+
+### 2. The real reason every earlier Redis lookup failed — the key has THREE parts
+
+```
+<database.redis.options.prefix><cache.prefix><session id>
+        mediabuying-database-  mediabuying-cache-  <40 chars>
+```
+
+and it lives on **db 0**, NOT the configured `database.redis.cache.database = 1`.
+
+Verified: `redis-cli -n 0 EXISTS mediabuying-database-mediabuying-cache-<sid>` → **1**, TTL 7163.
+`-n 1` → 0. That is why `Cache::has()` (which goes through the `cache` connection → db 1) answered
+false while the session was plainly alive. **The harness prerequisite is now satisfiable.**
+
+Getting the session id itself is settled and needs no rediscovery:
+`CookieValuePrefix::remove(Crypt::decrypt(urldecode($cookie), false))`.
+
+### 3. After `logout = 200` the old Redis key is **DELETED**
+
+```
+pre-logout   EXISTS=1
+logout       200
+post-logout  EXISTS=0   TTL=-2
+```
+
+So **«the old session was never destroyed» is eliminated.** `invalidate()` does remove it. Any
+resurrection would have to come from something WRITING the authenticated payload back, not from a
+survivor.
+
+### 4. The one step left, and the trap in it
+
+Restore the captured payload under the old key, then call `/auth/me` with the **pre-logout** jar.
+
+The trap I hit and did not finish: the value under that key is **double-encoded**. The Redis cache
+store holds `serialize($value)` where `$value` is itself the session's serialized payload, so a
+single `unserialize()` returns a string, not the session array — my prerequisite assertion
+(`has_login_key`) reported false for that reason alone, NOT because the payload was wrong (it was 310
+bytes and present). Unwrap twice, or simply copy the raw bytes back with
+`Redis::connection('default')->setex($key, $ttl, $rawValue)` and do not inspect them at all — a
+byte-for-byte restore is what «request A saves late» actually does.
+
+Then: `/auth/me` with the pre-logout jar.
+**200 → outcome A**, resurrection proven; build the scoped server-side revocation, fail-first.
+**401 → outcome B**, the rewrite hypothesis is dead; go back to measuring what re-authenticates.
+
+### Settled — do not re-litigate
+
+- `AuthController::logout()` is correct over HTTP and deletes the Redis session. **Do not touch it.**
+- The client sign-out barrier (`ACCESS-EXIT-002`) is correct, kept, insufficient alone (2/5).
+- Overturned by measurement, in order: the gate leg · the browser · `page.request` · the client
+  barrier · the first two harness attempts · the stale-server hypothesis. **Six.** Write the seventh
+  only with a measurement behind it.
+- Nothing is `LIVE_VERIFIED`; no credential exists for any of the eleven providers.
+
+### Delivery state (owner's finish-and-push request)
+
+- **Secret audit: PASS** (previous close). Only `.env.example` files tracked, no secrets in history,
+  no `vendor/`/`node_modules/`/traces. Safe to publish on that axis.
+- **No push performed, and none should be** until `REAL_GATE_EXIT=0`, Failed/Flaky/Retries/Skipped 0
+  and non-external open items = 0 — the owner's own condition. No remote is configured; the exact
+  sequence and the `handoff-<date>` tag rule are in the previous close.
+- `HANDOFF_MANIFEST.md` is the last doc to write; its content already exists across
+  `PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md`, `INTEGRATION_CREDENTIALS_CHECKLIST.md`,
+  `DEMO_ACCOUNTS.md` and this file.
+
+---
+
+## Previous close — 2026-08-11 (sixteenth of the day)
 
 **Working tree CLEAN. No product code changed this session.**
 
