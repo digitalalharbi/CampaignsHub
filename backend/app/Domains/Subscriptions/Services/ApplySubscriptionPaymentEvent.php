@@ -11,6 +11,7 @@ use App\Domains\Billing\Models\PaymentWebhookEvent;
 use App\Domains\Billing\Providers\PaymentProvider;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
+use App\Domains\Subscriptions\Models\SubscriptionPaymentMethod;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Support\Carbon;
@@ -45,6 +46,7 @@ final class ApplySubscriptionPaymentEvent
         private readonly SubscriptionInvoicing $invoices,
         private readonly TenantContext $tenants,
         private readonly AuditLogger $audit,
+        private readonly RecurringBilling $recurring,
     ) {}
 
     /**
@@ -189,7 +191,22 @@ final class ApplySubscriptionPaymentEvent
             return;
         }
 
-        DB::transaction(function () use ($payment, $result, $status, $fingerprint): void {
+        /*
+         * PAY-TOKEN-003 — the card this settled charge leaves behind.
+         *
+         * Read from the SAME verified event that is about to settle money, and only when it settles:
+         * a failed or pending charge proves nothing about a card being reusable, and storing one from
+         * it would hand the renewal sweep a token the gateway never confirmed.
+         *
+         * Most events yield null — no provider here but Moyasar publishes a token at all, and a
+         * Moyasar payment made without a reusable source publishes none either. Null costs the
+         * customer nothing: their renewal stays the attended invoice it is today.
+         */
+        $card = $status === 'paid'
+            ? $adapter->savedPaymentMethodFrom((array) ($result['payload'] ?? []))
+            : null;
+
+        DB::transaction(function () use ($payment, $result, $status, $fingerprint, $card): void {
             $payment->forceFill([
                 'status' => $status,
                 'provider_payment_id' => $result['payment_id'] ?? $payment->provider_payment_id,
@@ -205,7 +222,7 @@ final class ApplySubscriptionPaymentEvent
             );
 
             match ($status) {
-                'paid' => $this->settle($payment->refresh(), $fingerprint),
+                'paid' => $this->settle($payment->refresh(), $fingerprint, $card),
                 'refunded', 'disputed' => $this->reverse($payment->refresh()),
                 'failed' => $this->failed($payment->refresh()),
                 default => null,
@@ -232,8 +249,10 @@ final class ApplySubscriptionPaymentEvent
      *
      * This is the single call site of `paymentConfirmed()` in the entire application. Everything the
      * contract says about activation happening only from a verified webhook reduces to that fact.
+     *
+     * @param  array{token: string, customer_id?: ?string, brand?: ?string, last4?: ?string, exp_month?: ?int, exp_year?: ?int}|null  $card
      */
-    private function settle(SubscriptionPayment $payment, ?string $fingerprint): void
+    private function settle(SubscriptionPayment $payment, ?string $fingerprint, ?array $card = null): void
     {
         if ($payment->registration_request_id !== null) {
             $request = RegistrationRequest::query()->find($payment->registration_request_id);
@@ -294,6 +313,13 @@ final class ApplySubscriptionPaymentEvent
                 $isTrial
                     ? $this->lifecycle->beginTrial($advanced->tenant, $advanced, $payment)
                     : $this->lifecycle->beginSubscription($advanced->tenant, $advanced, $payment);
+
+                /*
+                 * The card is remembered AFTER provisioning, because the tenant it belongs to did not
+                 * exist a moment ago. This is the first payment a customer ever makes, and the one
+                 * whose card matters most: it is the card their renewal will be taken from.
+                 */
+                $this->rememberCard((string) $advanced->tenant->getKey(), $payment, $card);
             }
 
             return;
@@ -302,6 +328,10 @@ final class ApplySubscriptionPaymentEvent
         if ($payment->subscription_id === null) {
             return;
         }
+
+        // A renewal, a conversion or an upgrade — the tenant has been on the payment since the charge
+        // was opened, so there is nothing to wait for.
+        $this->rememberCard($payment->tenant_id === null ? null : (string) $payment->tenant_id, $payment, $card);
 
         /*
          * A plan change is not a renewal, and must not be treated as one.
@@ -317,6 +347,61 @@ final class ApplySubscriptionPaymentEvent
         }
 
         $this->lifecycle->renewalPaid($payment);
+    }
+
+    /**
+     * Put the card on file, so the next renewal does not have to be asked for (PAY-TOKEN-003).
+     *
+     * ## Why this is allowed to happen without asking again
+     *
+     * The customer agreed to automatic renewal before this charge was opened — that is what
+     * SUB-CONSENT-001's disclosure gate is, and the checkbox the Pay button waits on covers the
+     * renewal date and the commitment explicitly. Keeping the token the gateway issued is how that
+     * agreement is honoured; a product that promised automatic renewal and then emailed an invoice
+     * every month would be the thing that broke it. A customer who changes their mind detaches the
+     * card from their own billing page, and the renewal goes back to a hosted invoice.
+     *
+     * ## Never at the cost of the payment
+     *
+     * Storing a card is bookkeeping; the money has already moved and the account is already
+     * provisioned. So a failure here is recorded and swallowed rather than allowed to roll back the
+     * settlement around it — a customer whose card could not be filed still bought what they paid
+     * for, and their renewal simply falls back to the attended invoice.
+     *
+     * @param  array{token: string, customer_id?: ?string, brand?: ?string, last4?: ?string, exp_month?: ?int, exp_year?: ?int}|null  $card
+     */
+    private function rememberCard(?string $tenantId, SubscriptionPayment $payment, ?array $card): void
+    {
+        if ($card === null || $tenantId === null || ($card['token'] ?? '') === '') {
+            return;
+        }
+
+        try {
+            $method = $this->recurring->remember($tenantId, (string) $payment->provider, $card);
+
+            /*
+             * The LABEL is audited, never the token.
+             *
+             * An audit trail is read by support staff and exported to whoever asks for it, and a
+             * bearer credential for somebody's card does not belong in either. «Visa ···· 4242» is
+             * enough to answer every question this row exists to answer.
+             */
+            $this->audit->log(
+                action: 'subscription.payment_method.saved',
+                entityType: SubscriptionPaymentMethod::class,
+                entityId: (string) $method->getKey(),
+                after: ['provider' => (string) $payment->provider, 'card' => $method->label()],
+                reason: 'The gateway issued a reusable token with a settled payment, so renewals can be taken without asking again.',
+            );
+        } catch (\Throwable $e) {
+            $this->audit->log(
+                action: 'subscription.payment_method.not_saved',
+                entityType: SubscriptionPayment::class,
+                entityId: (string) $payment->getKey(),
+                after: ['provider' => (string) $payment->provider],
+                reason: 'The payment settled, but the card could not be stored: '.$e->getMessage(),
+            );
+        }
     }
 
     private function reverse(SubscriptionPayment $payment): void

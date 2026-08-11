@@ -97,6 +97,35 @@ interface PaymentProvider
     public function chargeStoredMethod(string $token, array $payload): array;
 
     /**
+     * The reusable card a settled payment left behind, or null when the gateway published none
+     * (PAY-TOKEN-003).
+     *
+     * ## The half of unattended billing that was missing
+     *
+     * `chargeStoredMethod()` takes a token. Nothing in this application ever produced one: the port
+     * could spend a card on file and had no way to acquire one, so `subscription_payment_methods`
+     * stayed empty in every install, `RecurringBilling::methodFor()` always answered null, and every
+     * renewal fell to the hosted invoice a customer has to remember to visit. This is the method that
+     * closes the loop, and it is deliberately on the ADAPTER: what a gateway publishes about a card,
+     * where it publishes it, and whether it publishes anything at all are facts about that gateway.
+     *
+     * ## Null is the safe answer and the common one
+     *
+     * A provider that does not tokenise, an event for a payment made with no reusable source, a
+     * merchant account without card-on-file enabled — all of them return null, and null costs the
+     * customer nothing: their next renewal is an attended invoice, exactly as it is today. Returning
+     * a fabricated token would be worse than useless, because the first thing that happens to it is a
+     * charge against somebody's card.
+     *
+     * Only the `token` is load-bearing. Brand, last four and expiry are labels a person reads to tell
+     * one card from another; none of them authorises anything and each may be absent.
+     *
+     * @param  array<string,mixed>  $payload  the verified event body
+     * @return array{token: string, customer_id?: ?string, brand?: ?string, last4?: ?string, exp_month?: ?int, exp_year?: ?int}|null
+     */
+    public function savedPaymentMethodFrom(array $payload): ?array;
+
+    /**
      * A stable identifier for the PAYMENT METHOD a verified event used, or null when the provider
      * does not publish one (PAY-004).
      *

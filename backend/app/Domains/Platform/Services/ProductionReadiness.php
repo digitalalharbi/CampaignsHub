@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Platform\Services;
 
+use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use Illuminate\Support\Facades\Config;
 
 /**
@@ -53,6 +54,7 @@ final class ProductionReadiness
         $this->checkSession($production);
         $this->checkInfrastructure($production);
         $this->checkPayments($production);
+        $this->checkRecurringBilling($production);
         $this->checkMail();
         $this->checkExchangeRates();
 
@@ -186,6 +188,23 @@ final class ProductionReadiness
                 $this->fail("services.{$gateway}.{$secretKey}", "«{$gateway}» is using a TEST secret key in production — real customers would be charged nothing while the product reports them as paid.", 'Replace it with the live key.');
             }
 
+            /*
+             * And the other direction, which had nothing watching it at all.
+             *
+             * A LIVE key outside production is a developer's laptop, a staging box or a CI run
+             * charging real cards — real money, from whoever's card is nearest, against an install
+             * whose database is thrown away nightly. It is the more expensive half of «test/live
+             * separation» and the easier one to do by accident, because copying a working `.env` from
+             * production is how most people set up a staging environment.
+             */
+            if (! $production && ! $this->isTestKey($secret)) {
+                $this->fail(
+                    "services.{$gateway}.{$secretKey}",
+                    "«{$gateway}» is holding a LIVE secret key in the «".Config::get('app.env').'» environment — anything that opens a checkout here takes real money from a real card.',
+                    'Use the test key outside production, and keep the live key in the production environment only.',
+                );
+            }
+
             if ($production && is_string($publishable) && $this->isTestKey($publishable)) {
                 $this->fail("services.{$gateway}.{$publishableKey}", "«{$gateway}» is using a TEST publishable key in production.", 'Replace it with the live publishable key.');
             }
@@ -198,6 +217,41 @@ final class ProductionReadiness
                 $this->fail("services.{$gateway}", "«{$gateway}» mixes a test key with a live one — the browser and the server would be talking to two different gateways.", 'Use a matched pair: both test, or both live.');
             }
         }
+    }
+
+    /**
+     * PAY-TOKEN-003 — can this install take a renewal by itself?
+     *
+     * A WARNING, because an attended renewal is a real, working way to be paid: the customer gets an
+     * invoice and pays it. What makes it worth saying out loud is the shape of the failure when they
+     * do not — the period lapses, the account goes past due and then suspended, and from the inside
+     * that looks like dunning working correctly rather than like a bill nobody was ever able to pay
+     * automatically.
+     *
+     * Config-derived like everything else here: it asks the adapter what it CAN do, not the database
+     * how many cards exist. Whether a particular customer has a card on file is a different question,
+     * and `RecurringBilling::modeFor()` is what answers it, per subscription, on their own billing
+     * page.
+     */
+    private function checkRecurringBilling(bool $production): void
+    {
+        if (! $production) {
+            return;
+        }
+
+        $provider = (string) Config::get('subscriptions.default');
+        $adapter = app(SubscriptionProviderRegistry::class)->for($provider);
+
+        // An unconfigured gateway is already a failure above; saying it twice buries the first.
+        if (! $adapter->isConfigured() || $adapter->supportsUnattendedCharge()) {
+            return;
+        }
+
+        $this->warn(
+            'subscriptions.recurring',
+            "«{$provider}» cannot charge a saved card, so every renewal is an invoice the customer has to visit and pay. One they miss ends in a past-due account rather than a failed charge.",
+            'Use a gateway with unattended charging wired, or make sure somebody is chasing renewals.',
+        );
     }
 
     private function checkMail(): void

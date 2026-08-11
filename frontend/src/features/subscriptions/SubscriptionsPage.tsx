@@ -5,8 +5,8 @@ import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { toApiError } from '@/lib/api/client'
 import {
-  cancelPlanChange, getCurrent, getPlans, quotePlanChange, requestPlanChange,
-  type CurrentSubscription, type SubscriptionPlan, type UsageMetric,
+  cancelPlanChange, detachPaymentMethod, getCurrent, getPlans, quotePlanChange, requestPlanChange,
+  type CurrentSubscription, type RenewalMode, type SubscriptionPlan, type UsageMetric,
 } from './api'
 import { PolicyNote } from '@/features/legal/PolicyFooter'
 
@@ -45,6 +45,14 @@ const COPY = {
     withdraw: 'سحب الطلب',
     awaiting_credentials: 'بوابة الدفع غير مهيّأة بعد، لذلك لم يُفتح أي طلب دفع فعلي ولم يتغيّر شيء.',
     pay_now: 'إتمام الدفع',
+    renewal_title: 'التجديد القادم',
+    renewal_ready: 'يُخصم التجديد تلقائياً من البطاقة المحفوظة.',
+    renewal_no_card: 'لا توجد بطاقة محفوظة، لذلك ستصلك فاتورة التجديد لتسديدها بنفسك.',
+    renewal_no_gateway: 'لا توجد بوابة دفع مهيّأة، لذلك لا يمكن خصم التجديد تلقائياً.',
+    renewal_unsupported: 'بوابة الدفع الحالية لا تدعم الخصم التلقائي، لذلك ستصلك فاتورة التجديد لتسديدها بنفسك.',
+    remove_card: 'إزالة البطاقة',
+    removing_card: 'جارٍ الإزالة…',
+    remove_card_note: 'إزالة البطاقة لا تُلغي الاشتراك؛ ستصلك فاتورة التجديد لتسديدها بنفسك.',
   },
   en: {
     title: 'Subscriptions', subtitle: 'See the tenant’s current plan and usage against limits, and change plan.',
@@ -79,6 +87,14 @@ const COPY = {
     withdraw: 'Withdraw',
     awaiting_credentials: 'No payment gateway is configured, so no real payment was opened and nothing has changed.',
     pay_now: 'Complete the payment',
+    renewal_title: 'Next renewal',
+    renewal_ready: 'The renewal is taken automatically from the card on file.',
+    renewal_no_card: 'There is no card on file, so the renewal will be sent to you as an invoice to pay.',
+    renewal_no_gateway: 'No payment gateway is configured, so renewals cannot be taken automatically.',
+    renewal_unsupported: 'The current gateway does not take automatic payments, so the renewal will be sent to you as an invoice.',
+    remove_card: 'Remove card',
+    removing_card: 'Removing…',
+    remove_card_note: 'Removing the card does not cancel your subscription; the renewal will be sent to you as an invoice.',
   },
 }
 type Copy = (typeof COPY)['ar']
@@ -165,6 +181,12 @@ export function SubscriptionsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['subscriptions', 'current'] }),
   })
 
+  /** Taking the card off file. Refetches, because the renewal mode above changes with it. */
+  const detachM = useMutation({
+    mutationFn: detachPaymentMethod,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['subscriptions', 'current'] }),
+  })
+
   if (!canView) {
     return (
       <div className="mx-auto w-full max-w-5xl p-4 md:p-6">
@@ -196,6 +218,16 @@ export function SubscriptionsPage() {
       ) : (
         <>
           <CurrentPlanCard current={current} c={c} />
+
+          {current.renewal && (
+            <RenewalCard
+              renewal={current.renewal}
+              c={c}
+              canManage={canManage}
+              busy={detachM.isPending}
+              onRemove={() => detachM.mutate()}
+            />
+          )}
 
           {/* A change that is agreed but not in force. Never merged into the current plan above. */}
           {current.subscription?.scheduled_change && (
@@ -241,6 +273,57 @@ export function SubscriptionsPage() {
             />
           )}
         </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * How the next payment will be taken — PAY-TOKEN-003.
+ *
+ * The customer agreed to automatic renewal before they paid, and until now nothing on this page told
+ * them whether the product could actually perform one. Without a card the renewal is an invoice
+ * somebody has to remember to visit, and the first sign of a missed one is a past-due notice. The
+ * reason is named rather than summarised, because `no_saved_method` is theirs to fix while
+ * `no_gateway` and `provider_unsupported` belong to whoever runs the install.
+ */
+function RenewalCard({
+  renewal, c, canManage, busy, onRemove,
+}: {
+  renewal: RenewalMode; c: Copy; canManage: boolean; busy: boolean; onRemove: () => void
+}) {
+  const message = renewal.unattended
+    ? c.renewal_ready
+    : renewal.reason === 'no_gateway'
+      ? c.renewal_no_gateway
+      : renewal.reason === 'provider_unsupported'
+        ? c.renewal_unsupported
+        : c.renewal_no_card
+
+  return (
+    <div data-testid="renewal-mode" data-reason={renewal.reason} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-5">
+      <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+        <CreditCard size={14} /> {c.renewal_title}
+      </span>
+      <p className="text-sm text-text-secondary">{message}</p>
+      {renewal.card && (
+        <span data-testid="renewal-card" className="tnum text-sm font-semibold text-text-primary" dir="ltr">{renewal.card}</span>
+      )}
+      {renewal.card && canManage && (
+        <div className="flex flex-col gap-1">
+          <button
+            type="button"
+            data-testid="remove-card"
+            onClick={onRemove}
+            disabled={busy}
+            className="self-start rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-surface-secondary disabled:opacity-60"
+          >
+            {busy ? c.removing_card : c.remove_card}
+          </button>
+          {/* Said before they click, not after: «remove card» and «cancel my subscription» are easy
+              to confuse, and only one of them is what this button does. */}
+          <p className="text-xs text-text-tertiary">{c.remove_card_note}</p>
+        </div>
       )}
     </div>
   )

@@ -97,6 +97,19 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     Route::post('subscriptions/change', [SubscriptionController::class, 'change'])->name('subscriptions.change');
 
     /*
+     * Taking the card off file (PAY-TOKEN-003).
+     *
+     * There is deliberately no endpoint that ADDS one. A card arrives one way only — the gateway
+     * issues a token with a payment it settled, and the verified webhook files it — because an
+     * endpoint that accepted a token from a browser would accept one from anybody who could reach it,
+     * and the next thing that happens to a stored token is a charge.
+     *
+     * Removing is the customer's own decision and needs no gateway round trip, so it lives here.
+     */
+    Route::delete('subscriptions/payment-method', [SubscriptionController::class, 'detachPaymentMethod'])
+        ->name('subscriptions.payment-method.detach');
+
+    /*
      * Changing plan MID-TERM, with the money worked out (PAY-002).
      *
      * `quote` is separate from the commit on purpose: the numbers are the decision, and a customer

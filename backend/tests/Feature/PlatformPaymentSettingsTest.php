@@ -216,4 +216,38 @@ final class PlatformPaymentSettingsTest extends TestCase
         config(['mail.default' => 'smtp', 'mail.mailers.smtp.host' => '', 'mail.mailers.smtp.username' => '']);
         $this->assertSame('awaiting_credentials', $this->settings()['mail']['state']);
     }
+
+    // ── Whether renewals take themselves — PAY-TOKEN-003 ─────────────────────────────────────
+
+    /**
+     * Two facts, deliberately not collapsed into one.
+     *
+     * `ready` says the GATEWAY could charge a saved card. `saved_methods` says how many customers
+     * actually have one — and it is the second number that tells an operator whether the capability
+     * is doing anything at all. «Ready» beside a count of zero is the true state of a fresh install:
+     * nothing is renewing itself yet, and a single boolean would have hidden that either way round.
+     */
+    public function test_the_page_says_whether_renewals_can_be_taken_and_how_many_cards_exist(): void
+    {
+        config(['services.moyasar.secret_key' => 'sk_test_x', 'services.moyasar.webhook_token' => 'tok']);
+        config(['subscriptions.default' => 'moyasar']);
+
+        $recurring = $this->settings()['recurring'];
+
+        $this->assertTrue($recurring['ready']);
+        $this->assertSame('moyasar', $recurring['provider']);
+        $this->assertSame(0, $recurring['saved_methods'], 'no customer has a card yet, and the page must say so');
+    }
+
+    /** With no gateway, the reason names the gateway rather than blaming a customer. */
+    public function test_the_page_names_the_gateway_when_no_renewal_can_be_taken(): void
+    {
+        config(['services.moyasar.secret_key' => null, 'services.moyasar.webhook_token' => null]);
+        config(['subscriptions.default' => 'moyasar']);
+
+        $recurring = $this->settings()['recurring'];
+
+        $this->assertFalse($recurring['ready']);
+        $this->assertSame('no_gateway', $recurring['reason']);
+    }
 }

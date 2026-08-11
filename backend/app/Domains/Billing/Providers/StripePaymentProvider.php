@@ -176,6 +176,26 @@ final class StripePaymentProvider implements PaymentProvider
     }
 
     /**
+     * No card is put on file from a Stripe event here (PAY-TOKEN-003).
+     *
+     * Not because the payload lacks one — a Stripe charge names its `payment_method` plainly — but
+     * because storing a card this adapter has already said it cannot charge (`supportsUnattendedCharge`
+     * is false above) would fill a customer's billing page with a saved card that never takes a
+     * renewal. That reads as «you are set up for automatic payment» to the one person who most needs
+     * to know they are not.
+     *
+     * The two belong together: whichever session wires off-session charging for Stripe wires this at
+     * the same time, and until then both answer honestly.
+     *
+     * @param  array<string,mixed>  $payload
+     * @return array{token: string, customer_id?: ?string, brand?: ?string, last4?: ?string, exp_month?: ?int, exp_year?: ?int}|null
+     */
+    public function savedPaymentMethodFrom(array $payload): ?array
+    {
+        return null;
+    }
+
+    /**
      * Stripe's card fingerprint is stable across customers, which is exactly what "one trial per
      * payment method" needs (PAY-004).
      *

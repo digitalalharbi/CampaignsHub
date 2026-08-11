@@ -10,10 +10,11 @@ vi.mock('./api', async (importOriginal) => {
     ...actual,
     getPlans: vi.fn(), getCurrent: vi.fn(),
     quotePlanChange: vi.fn(), requestPlanChange: vi.fn(), cancelPlanChange: vi.fn(),
+    detachPaymentMethod: vi.fn(),
   }
 })
 
-import { getCurrent, getPlans, quotePlanChange, requestPlanChange } from './api'
+import { detachPaymentMethod, getCurrent, getPlans, quotePlanChange, requestPlanChange } from './api'
 
 const plans: SubscriptionPlan[] = [
   { code: 'starter', name: 'Starter', price_monthly: '0', currency: 'USD', features: { ai_assist: false }, limits: { projects: 3 } },
@@ -29,6 +30,8 @@ const current: CurrentSubscription = {
     projects: { limit: 25, used: 4, remaining: 21 },
     reports_per_month: { limit: null, used: 8, remaining: null },
   },
+  // PAY-TOKEN-003 — the default fixture is the state every install starts in: nobody has a card.
+  renewal: { unattended: false, reason: 'no_saved_method', card: null },
 }
 
 describe('SubscriptionsPage', () => {
@@ -184,5 +187,89 @@ describe('SubscriptionsPage — mid-term plan change', () => {
     expect(banner).toHaveAttribute('data-awaiting-payment', 'false')
     expect(banner).toHaveTextContent('2026-08-01')
     expect(screen.getByTestId('withdraw-plan-change')).toBeInTheDocument()
+  })
+
+  /*
+   * PAY-TOKEN-003 — how the next payment will be taken.
+   *
+   * The customer agreed to automatic renewal before they paid. Until this block existed, nothing on
+   * the page told them whether the product could actually perform one — and it could not, for
+   * anybody, because no code path ever put a card on file. The first sign was a past-due notice.
+   */
+
+  it('says the renewal will arrive as an invoice when there is no card on file', async () => {
+    signInWith(['subscriptions.view'])
+    renderWithProviders(<SubscriptionsPage />, { locale: 'en' })
+
+    const block = await screen.findByTestId('renewal-mode')
+    expect(block).toHaveAttribute('data-reason', 'no_saved_method')
+    expect(block.textContent).toMatch(/invoice to pay/i)
+    expect(screen.queryByTestId('remove-card')).not.toBeInTheDocument()
+  })
+
+  it('names the card and says the renewal is taken from it', async () => {
+    vi.mocked(getCurrent).mockResolvedValue({
+      ...current,
+      renewal: { unattended: true, reason: 'ready', card: 'visa ···· 4242' },
+    })
+    signInWith(['subscriptions.view', 'subscriptions.manage'])
+    renderWithProviders(<SubscriptionsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('renewal-card')).toHaveTextContent('visa ···· 4242')
+    expect(screen.getByTestId('renewal-mode').textContent).toMatch(/taken automatically/i)
+  })
+
+  /**
+   * The gateway's absence is not blamed on the customer.
+   *
+   * `no_gateway` belongs to whoever runs the install; telling a customer to add a card they cannot
+   * add would send them to look for a button that does not exist.
+   */
+  it('blames the install, not the customer, when no gateway is configured', async () => {
+    vi.mocked(getCurrent).mockResolvedValue({
+      ...current,
+      renewal: { unattended: false, reason: 'no_gateway', card: null },
+    })
+    signInWith(['subscriptions.view'])
+    renderWithProviders(<SubscriptionsPage />, { locale: 'en' })
+
+    expect((await screen.findByTestId('renewal-mode')).textContent).toMatch(/no payment gateway is configured/i)
+  })
+
+  /** Removing a card is a billing change, so it needs the same permission a plan change does. */
+  it('offers no remove-card action without subscriptions.manage', async () => {
+    vi.mocked(getCurrent).mockResolvedValue({
+      ...current,
+      renewal: { unattended: true, reason: 'ready', card: 'visa ···· 4242' },
+    })
+    signInWith(['subscriptions.view'])
+    renderWithProviders(<SubscriptionsPage />, { locale: 'en' })
+
+    await screen.findByTestId('renewal-card')
+    expect(screen.queryByTestId('remove-card')).not.toBeInTheDocument()
+  })
+
+  /**
+   * And when it is offered, the page says what it does NOT do before the click.
+   *
+   * «Remove card» and «cancel my subscription» are easy to confuse, and only one of them is what
+   * this button does.
+   */
+  it('removes the card and warns that the subscription continues', async () => {
+    vi.mocked(getCurrent).mockResolvedValue({
+      ...current,
+      renewal: { unattended: true, reason: 'ready', card: 'visa ···· 4242' },
+    })
+    vi.mocked(detachPaymentMethod).mockResolvedValue({
+      renewal: { unattended: false, reason: 'no_saved_method', card: null },
+    })
+    signInWith(['subscriptions.view', 'subscriptions.manage'])
+    renderWithProviders(<SubscriptionsPage />, { locale: 'en' })
+
+    expect((await screen.findByTestId('renewal-mode')).textContent).toMatch(/does not cancel your subscription/i)
+
+    fireEvent.click(screen.getByTestId('remove-card'))
+
+    await waitFor(() => expect(detachPaymentMethod).toHaveBeenCalled())
   })
 })

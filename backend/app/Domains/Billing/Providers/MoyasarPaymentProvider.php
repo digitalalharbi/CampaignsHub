@@ -265,6 +265,90 @@ final class MoyasarPaymentProvider implements PaymentProvider
     }
 
     /**
+     * The token Moyasar attached to this payment, if it attached one (PAY-TOKEN-003).
+     *
+     * ## Gated on an explicit token, never on a guess
+     *
+     * A reusable source is something the gateway states or does not. This reads the one field that
+     * carries it and returns null the moment it is absent — which is what an account without
+     * card-on-file enabled, and every payment made with a bare card, will produce. The alternative
+     * shape — deriving something token-shaped from the masked number — would hand
+     * `chargeStoredMethod()` a value that fails at the vault and reads downstream as a declined card.
+     *
+     * The labels beside it are cosmetic and each may be absent: `company` is the brand, the masked
+     * number gives the last four, `month`/`year` the expiry. Getting a label wrong costs a person a
+     * moment of confusion; getting the token wrong costs them a failed renewal, which is why the two
+     * are treated differently.
+     *
+     * **READY_FOR_CREDENTIALS, and this is the reason.** The field names below are Moyasar's
+     * published payment shape, but no key exists in this repository to have seen a real one — so what
+     * is verified here is the refusal (no token, no saved card, no charge) rather than the capture.
+     * The first sandbox payment against real credentials is what proves the other half.
+     *
+     * @param  array<string,mixed>  $payload
+     * @return array{token: string, customer_id?: ?string, brand?: ?string, last4?: ?string, exp_month?: ?int, exp_year?: ?int}|null
+     */
+    public function savedPaymentMethodFrom(array $payload): ?array
+    {
+        // Accepts the webhook envelope and a bare payment object alike: the same event is read from
+        // `data` on the way in from a webhook and from the root when it came from `fetchPayment`.
+        $data = is_array($payload['data'] ?? null) ? $payload['data'] : $payload;
+        $source = is_array($data['source'] ?? null) ? $data['source'] : [];
+
+        $token = trim((string) ($source['token'] ?? ''));
+
+        if ($token === '') {
+            return null;
+        }
+
+        $number = (string) ($source['number'] ?? '');
+        $last4 = mb_substr(preg_replace('/\D/', '', $number) ?? '', -4);
+
+        return [
+            'token' => $token,
+            // Moyasar's card-on-file is the token itself; there is no separate customer object to
+            // hold, and inventing an id would attach the card to a customer that does not exist.
+            'customer_id' => null,
+            'brand' => $this->label($source['company'] ?? null),
+            'last4' => mb_strlen($last4) === 4 ? $last4 : null,
+            'exp_month' => $this->month($source['month'] ?? null),
+            'exp_year' => $this->year($source['year'] ?? null),
+        ];
+    }
+
+    private function label(mixed $value): ?string
+    {
+        $text = is_string($value) ? trim($value) : '';
+
+        return $text === '' ? null : $text;
+    }
+
+    private function month(mixed $value): ?int
+    {
+        $month = is_numeric($value) ? (int) $value : 0;
+
+        return $month >= 1 && $month <= 12 ? $month : null;
+    }
+
+    /**
+     * Two-digit years are Moyasar's shorthand, not a card from 25 AD.
+     *
+     * Left alone, a `25` is stored as an expiry that passed two millennia ago and
+     * `SubscriptionPaymentMethod::isExpired()` — correctly, on the data it was given — refuses a
+     * perfectly live card on the customer's first renewal.
+     */
+    private function year(mixed $value): ?int
+    {
+        $year = is_numeric($value) ? (int) $value : 0;
+
+        if ($year >= 1 && $year <= 99) {
+            $year += 2000;
+        }
+
+        return $year >= 2000 && $year <= 2099 ? $year : null;
+    }
+
+    /**
      * Moyasar publishes no card fingerprint (PAY-004).
      *
      * The most identifying thing on the payload is the brand and the last four digits, and that is NOT

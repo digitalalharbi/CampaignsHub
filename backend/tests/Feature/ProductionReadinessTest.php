@@ -180,6 +180,65 @@ final class ProductionReadinessTest extends TestCase
         $this->assertNotContains('fx.rates.driver', array_column($report['findings'], 'key'));
     }
 
+    /**
+     * PAY-ENV-001 — a LIVE key outside production is a failure, and the more expensive one.
+     *
+     * The check above catches a test key in production, where the symptom is nobody being charged.
+     * This is the other direction: a laptop, a staging box or a CI run holding the live key charges
+     * REAL cards against a database that is thrown away nightly. It is also the easier mistake to
+     * make, because copying a working `.env` from production is how most staging environments start.
+     */
+    public function test_a_live_secret_key_outside_production_is_a_failure(): void
+    {
+        $this->productionConfig(['app.env' => 'staging']);
+
+        $this->assertContains('services.moyasar.secret_key', $this->failedKeys());
+    }
+
+    /** The test key in a development environment is exactly right, and must not be nagged about. */
+    public function test_a_test_key_outside_production_is_correct(): void
+    {
+        $this->productionConfig([
+            'app.env' => 'local',
+            'services.moyasar.secret_key' => 'sk_test_abc',
+            'services.moyasar.publishable_key' => 'pk_test_abc',
+        ]);
+
+        $this->assertNotContains('services.moyasar.secret_key', $this->failedKeys());
+    }
+
+    /**
+     * PAY-TOKEN-003 — a gateway that cannot charge a saved card warns, and does not block.
+     *
+     * An attended renewal is a real way to be paid; what makes it worth saying is the shape of the
+     * failure when a customer misses the invoice — the account goes past due and then suspended,
+     * which reads like dunning working rather than like a bill nobody could pay automatically.
+     */
+    public function test_a_gateway_that_cannot_renew_unattended_warns_and_does_not_block(): void
+    {
+        $this->productionConfig([
+            'subscriptions.default' => 'stripe',
+            'services.stripe.secret_key' => 'sk_live_abc',
+            'services.stripe.publishable_key' => 'pk_live_abc',
+            'services.stripe.webhook_secret' => 'whsec_abc',
+        ]);
+
+        $report = (new ProductionReadiness)->run();
+
+        $this->assertTrue($report['ready']);
+        $this->assertContains('subscriptions.recurring', array_column($report['findings'], 'key'));
+    }
+
+    /** Moyasar can, so there is nothing to say. */
+    public function test_a_gateway_with_unattended_charging_raises_no_warning(): void
+    {
+        $this->productionConfig();
+
+        $report = (new ProductionReadiness)->run();
+
+        $this->assertNotContains('subscriptions.recurring', array_column($report['findings'], 'key'));
+    }
+
     /** A development install is not held to production's rules, and must not be. */
     public function test_local_development_is_not_judged_against_production(): void
     {

@@ -7,6 +7,7 @@ namespace App\Domains\Platform\Http\Controllers;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
 use App\Domains\Subscriptions\Notifications\MailTransportState;
+use App\Domains\Subscriptions\Services\RecurringBilling;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use App\Support\Frontend;
@@ -31,6 +32,7 @@ final class PlatformPaymentSettingsController extends Controller
     public function __construct(
         private readonly SubscriptionProviderRegistry $providers,
         private readonly AuditLogger $audit,
+        private readonly RecurringBilling $recurring,
     ) {}
 
     /**
@@ -47,6 +49,16 @@ final class PlatformPaymentSettingsController extends Controller
                 $this->describeMoyasar(),
                 $this->describeStripe(),
             ],
+            /*
+             * Whether renewals can be taken without the customer — PAY-TOKEN-003.
+             *
+             * Two facts, kept apart on purpose. `ready` is about the GATEWAY: this install could
+             * charge a saved card. `saved_methods` is how many customers actually have one, and it is
+             * the number that says whether the capability is doing anything. An operator reading
+             * «ready» beside a count of zero learns the true state — nothing is renewing itself yet —
+             * which a single boolean would have hidden either way round.
+             */
+            'recurring' => $this->recurring->readiness(),
             // The notification transport belongs on this page too: a payment system that cannot tell
             // anybody a charge failed is only half configured, and an operator checking one will want
             // the other.

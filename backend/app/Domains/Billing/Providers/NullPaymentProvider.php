@@ -65,6 +65,16 @@ final class NullPaymentProvider implements PaymentProvider
         return ['status' => 'awaiting_credentials', 'provider_payment_id' => null, 'error' => null];
     }
 
+    /**
+     * @param  array<string,mixed>  $payload
+     * @return array{token: string, customer_id?: ?string, brand?: ?string, last4?: ?string, exp_month?: ?int, exp_year?: ?int}|null
+     */
+    public function savedPaymentMethodFrom(array $payload): ?array
+    {
+        // No gateway, no card, nothing to keep.
+        return null;
+    }
+
     /** @param  array<string,mixed>  $payload */
     public function paymentMethodFingerprint(array $payload): ?string
     {

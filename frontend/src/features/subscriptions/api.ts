@@ -66,15 +66,38 @@ export interface SubscriptionSummary {
   scheduled_change?: ScheduledPlanChange | null
 }
 
+/**
+ * How the NEXT payment will be taken — PAY-TOKEN-003.
+ *
+ * `reason` is one of four, and which one matters: `no_saved_method` is the customer's to fix, while
+ * `no_gateway` and `provider_unsupported` belong to whoever runs the install. `card` is a label
+ * («visa ···· 4242») and never a token — the credential is encrypted server-side and does not leave it.
+ */
+export interface RenewalMode {
+  unattended: boolean
+  reason: 'ready' | 'no_saved_method' | 'no_gateway' | 'provider_unsupported' | string
+  card: string | null
+}
+
 export interface CurrentSubscription {
   subscription: SubscriptionSummary | null
   plan: SubscriptionPlan | null
   /** true when the tenant has no explicit subscription and defaulted to the most permissive plan. */
   is_default_plan: boolean
   usage: Record<string, UsageMetric>
+  /** Null when there is no subscription to renew. */
+  renewal?: RenewalMode | null
 }
 
 export const getCurrent = () => getData<CurrentSubscription>('/subscriptions/current')
+
+/**
+ * Take the card off file. Cancels nothing — the subscription and any commitment both stand, and the
+ * next renewal simply arrives as an invoice to pay. There is deliberately no matching «add card»:
+ * a card arrives one way only, from a payment the gateway settled.
+ */
+export const detachPaymentMethod = () =>
+  deleteData<{ renewal: RenewalMode }>('/subscriptions/payment-method')
 
 export type BillingInterval = 'monthly' | 'annual'
 

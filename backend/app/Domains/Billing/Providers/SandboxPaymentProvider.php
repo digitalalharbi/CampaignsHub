@@ -176,6 +176,22 @@ final class SandboxPaymentProvider implements PaymentProvider
     }
 
     /**
+     * No card on file, for the same reason there is no unattended charge (PAY-TOKEN-003).
+     *
+     * The sandbox could mint a plausible token and store it. It would then sit on a customer's
+     * billing page as «Visa ···· 4242, renewals are taken automatically» while `chargeStoredMethod()`
+     * two lines above answers `unsupported` — a claim the same class refuses in the next method. A
+     * sandbox install renews through the checkout somebody walks through, and says so.
+     *
+     * @param  array<string,mixed>  $payload
+     * @return array{token: string, customer_id?: ?string, brand?: ?string, last4?: ?string, exp_month?: ?int, exp_year?: ?int}|null
+     */
+    public function savedPaymentMethodFrom(array $payload): ?array
+    {
+        return null;
+    }
+
+    /**
      * No fingerprint, deliberately.
      *
      * There is no payment method here to identify, and returning a made-up one would either block

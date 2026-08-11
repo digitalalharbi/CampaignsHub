@@ -38,6 +38,8 @@ const settings = (over: Partial<PaymentSettings> = {}): PaymentSettings => ({
     },
   ],
   mail: { state: 'awaiting_credentials', driver: 'smtp' },
+  // PAY-TOKEN-003 — whether renewals take themselves, and how many cards exist to take them from.
+  recurring: { ready: false, provider: 'moyasar', reason: 'no_gateway', saved_methods: 0 },
   ...over,
 })
 
@@ -128,6 +130,37 @@ describe('PaymentSettingsPage', () => {
     // The gateway's own words: a generic failure hides whether the key is wrong or the account is
     // closed, which are different fixes.
     expect(await screen.findByTestId('payment-test-result-moyasar')).toHaveTextContent(/401/)
+  })
+
+  /**
+   * PAY-TOKEN-003 — «the gateway can» and «anybody has a card» are two facts, and both are shown.
+   *
+   * A fresh install is ready-and-zero. Showing only the badge would read as «renewals are handled»;
+   * showing only the count would read as a gateway problem. Together they say the true thing:
+   * nothing is renewing itself yet, and it is not the gateway's fault.
+   */
+  it('says whether renewals can be taken and how many cards exist', async () => {
+    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings({
+      recurring: { ready: true, provider: 'moyasar', reason: 'ready', saved_methods: 0 },
+    }))
+
+    renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
+
+    const block = await screen.findByTestId('payment-recurring-state')
+    expect(block).toHaveAttribute('data-ready', 'true')
+    expect(block.textContent).toMatch(/card on file/i)
+    expect(screen.getByTestId('payment-recurring-cards').textContent).toMatch(/0/)
+  })
+
+  /** With no gateway, the page says so rather than leaving an operator to infer it from a zero. */
+  it('names the gateway when no renewal can be taken automatically', async () => {
+    vi.mocked(fetchPaymentSettings).mockResolvedValue(settings())
+
+    renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
+
+    const block = await screen.findByTestId('payment-recurring-state')
+    expect(block).toHaveAttribute('data-reason', 'no_gateway')
+    expect(block.textContent).toMatch(/invoice the customer pays themselves/i)
   })
 
   /** A notification channel that reaches nobody is reported, because half a payment system is that. */

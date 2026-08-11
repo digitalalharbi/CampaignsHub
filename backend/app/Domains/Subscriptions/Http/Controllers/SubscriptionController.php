@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Subscriptions\Http\Controllers;
 
+use App\Domains\Audit\AuditLogger;
+use App\Domains\Subscriptions\Models\Subscription;
+use App\Domains\Subscriptions\Models\SubscriptionPaymentMethod;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
+use App\Domains\Subscriptions\Services\RecurringBilling;
 use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -26,6 +30,8 @@ final class SubscriptionController extends Controller
     public function __construct(
         private readonly SubscriptionService $subscriptions,
         private readonly TenantContext $context,
+        private readonly RecurringBilling $recurring,
+        private readonly AuditLogger $audit,
     ) {}
 
     /** GET /subscriptions/plans — the active plan catalogue (any authenticated tenant user). */
@@ -94,7 +100,82 @@ final class SubscriptionController extends Controller
             'plan' => $plan === null ? null : $this->planShape($plan),
             'is_default_plan' => $subscription === null, // no subscription → defaulted to the most permissive plan
             'usage' => $this->subscriptions->usageSummary($tenant, self::METERED),
+            /*
+             * How the NEXT payment will be taken — PAY-TOKEN-003.
+             *
+             * The customer agreed to automatic renewal before they paid, and until now nothing told
+             * them whether the product was actually able to honour that. Without a card on file the
+             * renewal is an invoice somebody has to remember to visit, and the first sign of it is a
+             * past-due notice. Saying so here, beside the renewal date, is the difference between a
+             * customer choosing to pay and a customer being surprised.
+             */
+            'renewal' => $subscription === null ? null : $this->renewalShape($subscription),
         ], 'Current subscription.');
+    }
+
+    /**
+     * DELETE /subscriptions/payment-method — take the card off file.
+     *
+     * `subscriptions.manage`, the same permission a plan change needs: this changes how the account
+     * will be billed. What it does NOT do is cancel anything — the subscription and the commitment
+     * both stand, and the next renewal simply arrives as an invoice to pay. The response says so,
+     * because «remove card» and «stop charging me» are easy to confuse and only one of them is what
+     * this endpoint does.
+     */
+    public function detachPaymentMethod(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('subscriptions.manage'), 403);
+
+        $tenant = $this->tenant();
+        $subscription = $this->subscriptions->subscriptionFor($tenant);
+
+        abort_if($subscription === null, 404, 'This workspace has no subscription.');
+
+        $method = $this->recurring->methodFor($subscription);
+
+        if ($method === null) {
+            return ApiResponse::success(['renewal' => $this->renewalShape($subscription)], 'There is no card on file.');
+        }
+
+        $label = $method->label();
+        $this->recurring->forget($method);
+
+        $this->audit->log(
+            action: 'subscription.payment_method.detached',
+            entityType: SubscriptionPaymentMethod::class,
+            entityId: (string) $method->getKey(),
+            after: ['card' => $label],
+            userId: $request->user()?->id,
+            reason: 'The customer removed the card; renewals fall back to an invoice they pay themselves.',
+        );
+
+        return ApiResponse::success(
+            ['renewal' => $this->renewalShape($subscription->refresh())],
+            'The card was removed. Your subscription continues, and the next renewal will be sent to you as an invoice.',
+        );
+    }
+
+    /**
+     * The renewal, described in terms of what will happen rather than what is configured.
+     *
+     * `reason` is deliberately one of `RecurringBilling`'s four — `ready`, `no_saved_method`,
+     * `no_gateway`, `provider_unsupported` — because the last two belong to whoever runs the install
+     * and the third to the customer, and an interface that collapsed them would ask the wrong person
+     * to fix it.
+     *
+     * @return array{unattended: bool, reason: string, card: ?string}
+     */
+    private function renewalShape(Subscription $subscription): array
+    {
+        $mode = $this->recurring->modeFor($subscription);
+
+        return [
+            'unattended' => $mode['unattended'],
+            'reason' => $mode['reason'],
+            // The label and nothing else. The token is encrypted, hidden from serialisation, and has
+            // no business leaving the server under any circumstances.
+            'card' => $mode['method'],
+        ];
     }
 
     /**

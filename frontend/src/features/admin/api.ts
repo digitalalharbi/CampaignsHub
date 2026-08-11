@@ -515,6 +515,14 @@ export interface PaymentSettings {
   providers: PaymentProviderSetting[]
   /** A payment system that cannot tell anybody a charge failed is only half configured. */
   mail: { state: string; driver: string }
+  /**
+   * Whether renewals take themselves — PAY-TOKEN-003.
+   *
+   * `ready` is about the GATEWAY; `saved_methods` is how many customers actually have a card. Kept
+   * apart because «ready» beside a count of zero is the true state of a fresh install, and one
+   * boolean would have hidden it either way round.
+   */
+  recurring: { ready: boolean; provider: string; reason: string; saved_methods: number }
 }
 
 export function fetchPaymentSettings(): Promise<PaymentSettings> {

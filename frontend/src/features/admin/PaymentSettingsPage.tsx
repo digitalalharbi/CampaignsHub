@@ -38,6 +38,11 @@ const COPY = {
     mailSandbox: 'مزوّد محلي (Sandbox) — الرسائل تُكتب ولا تصل إلى أحد.',
     mailAwaiting: 'لا يوجد مزوّد بريد — لن تصل أي إشعارات.',
     mailLive: 'مزوّد بريد مفعّل.',
+    recurringTitle: 'التجديد التلقائي',
+    recurringReady: 'البوابة الحالية تستطيع خصم التجديد من بطاقة محفوظة.',
+    recurringNoGateway: 'لا توجد بوابة دفع مهيّأة، لذلك كل تجديد يصل كفاتورة يسدّدها العميل بنفسه.',
+    recurringUnsupported: 'البوابة الحالية لا تدعم الخصم التلقائي، لذلك كل تجديد يصل كفاتورة يسدّدها العميل بنفسه.',
+    recurringCards: 'البطاقات المحفوظة',
     noWrite: 'لا يمكن تغيير أي مفتاح من هذه الصفحة.',
   },
   en: {
@@ -55,6 +60,11 @@ const COPY = {
     mailSandbox: 'A local provider (sandbox) — messages are written and reach nobody.',
     mailAwaiting: 'No mail provider — no notification will reach anyone.',
     mailLive: 'A mail provider is configured.',
+    recurringTitle: 'Automatic renewal',
+    recurringReady: 'The current gateway can take a renewal from a card on file.',
+    recurringNoGateway: 'No payment gateway is configured, so every renewal arrives as an invoice the customer pays themselves.',
+    recurringUnsupported: 'The current gateway does not take automatic payments, so every renewal arrives as an invoice the customer pays themselves.',
+    recurringCards: 'Cards on file',
     noWrite: 'No key can be changed from this page.',
   },
 } as const
@@ -74,6 +84,7 @@ export function PaymentSettingsPage() {
   }
 
   const mail = settings.data.mail
+  const recurring = settings.data.recurring
 
   return (
     <div data-testid="admin-payment-settings" className="flex flex-col gap-5">
@@ -97,6 +108,31 @@ export function PaymentSettingsPage() {
         <p className="mt-1 text-sm text-text-secondary">
           {mail.state === 'live' ? c.mailLive : mail.state === 'sandbox' ? c.mailSandbox : c.mailAwaiting}
           <span className="ms-1.5 text-xs text-text-muted" dir="ltr">({mail.driver})</span>
+        </p>
+      </section>
+
+      {/*
+        Whether renewals take themselves — PAY-TOKEN-003.
+
+        Both numbers, deliberately. «Ready» says the gateway could charge a saved card; the count
+        says how many customers have one. On a fresh install that is ready-and-zero, which is the
+        honest state: nothing is renewing itself yet, and a single badge would have implied
+        otherwise.
+      */}
+      <section
+        data-testid="payment-recurring-state"
+        data-ready={recurring.ready}
+        data-reason={recurring.reason}
+        className="rounded-2xl border border-border bg-surface p-4"
+      >
+        <p className="text-sm font-bold text-text-primary">{c.recurringTitle}</p>
+        <p className="mt-1 text-sm text-text-secondary">
+          {recurring.ready
+            ? c.recurringReady
+            : recurring.reason === 'provider_unsupported' ? c.recurringUnsupported : c.recurringNoGateway}
+        </p>
+        <p data-testid="payment-recurring-cards" className="mt-1 text-xs text-text-muted">
+          {c.recurringCards}: <span className="tnum font-semibold" dir="ltr">{recurring.saved_methods}</span>
         </p>
       </section>
 

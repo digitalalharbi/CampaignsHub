@@ -407,6 +407,18 @@ final class ConfiguredFakePaymentProvider implements PaymentProvider
     }
 
     /**
+     * No card is kept, matching the line above: a double that cannot charge a token has no business
+     * filing one.
+     *
+     * @param  array<string,mixed>  $payload
+     * @return array{token: string, customer_id?: ?string, brand?: ?string, last4?: ?string, exp_month?: ?int, exp_year?: ?int}|null
+     */
+    public function savedPaymentMethodFrom(array $payload): ?array
+    {
+        return null;
+    }
+
+    /**
      * @param  array<string,mixed>  $payload
      * @return array{status: string, provider_payment_id?: string|null, error?: string|null}
      */
