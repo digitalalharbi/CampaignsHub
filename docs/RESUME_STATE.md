@@ -10,7 +10,113 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
-## ⚠️ START HERE — handoff written 2026-08-11 (third of the day)
+## ⚠️ START HERE — handoff written 2026-08-11 (fourth of the day)
+
+**Working tree CLEAN.** Last CODE commit `19b0527`, which is the tree the gate below ran on
+(anything after it is documentation only).
+
+| Ref | What | State |
+|---|---|---|
+| `COMMERCE-TZ-001` | A merchant's day is not a UTC day — the instant is true, the report window is the client's, and every order keeps the calendar date its own shop sold it on | **VERIFIED** (`19b0527` — 16 backend fail-first + 4 frontend tests) |
+
+### GATE — **GREEN** on this exact tree, one invocation
+
+```
+PASS  chromium  (exit 0)   299 passed  (8.6m)
+PASS  firefox   (exit 0)   291 passed  (14.8m)
+PASS  webkit    (exit 0)   291 passed  (14.1m)
+REAL_GATE_EXIT=0     0 failed · 0 flaky · retries: 0 (config) · 0 skipped
+```
+
+Backend **2002 passed** · Frontend **1017 passed** · tsc · lint · Pint · production build — clean.
+`production:check` = **0 failing, 2 warnings** (mail provider, FX rate driver — both honest
+`READY_FOR_*` states, unchanged).
+
+**Clean install / upgrade validated on the test database:** `migrate:fresh` from empty, then a full
+`migrate:rollback` (125 `down()`) and `migrate` again (125 `up()`), all exit 0. The COMMERCE-TZ-001
+migration's `up()` also ran against the populated dev database, backfill included.
+
+---
+
+### COMMERCE-TZ-001 — the defect, and the trap inside the fix
+
+`SallaConnector::date()` was handed `{ date: "2026-08-05 01:30:00", timezone: "Asia/Riyadh" }` and
+kept only the string. `Carbon::parse()` then read that wall clock in the application's timezone, so
+`placed_at` held **01:30 UTC** for a sale made at 01:30 in Riyadh — three hours adrift as an instant,
+and wrong on every screen rendering a TIME for anybody outside the shop's zone.
+
+It survived review because it was wrong CONSISTENTLY. Windows were built the same way
+(`startOfDay()` on a UTC Carbon), so a query for «5 August» matched exactly the rows a merchant
+would call 5 August. Two errors cancelling.
+
+**Do not ever fix the parse on its own.** Correct the instant to `2026-08-04T22:30:00Z` while the
+window still runs 00:00–23:59 UTC and that sale leaves the merchant's 5 August: their own dashboard
+says one number, the client's report says another, and nothing in either explains it. That scenario
+is pinned as `test_fixing_the_instant_alone_would_drop_a_sale_out_of_the_merchants_day`.
+
+Decisions that must not be quietly undone:
+
+1. **The zone chain is explicit and recorded** — the payload's own zone, then the store's, then the
+   client workspace's, then UTC as a *stated assumption* (`time_source`). An order whose zone nobody
+   states is KEPT: losing a real sale is the worse error, and the assumption is counted on the
+   funnel, the dashboard and the client link rather than hidden.
+2. **A string carrying its own offset is trusted outright.** Applying a zone on top of an absolute
+   instant is how a timezone fix becomes a bigger bug in the opposite direction.
+3. **Zones are named, never reduced to minutes.** `Europe/London` differs in January and July; a
+   fixed offset is an hour wrong for half of every year, and which half depends on when the code runs.
+4. **`placed_on` is settled at ingest.** Re-deriving a merchant's day from an instant at read time
+   would make «which day did this sell on» a property of whoever is looking.
+5. **`ReportingTimezone::window()` returns UTC instants AND the client's own dates.** Eloquent binds
+   a `DateTimeInterface` through `Y-m-d H:i:s` and **drops the offset** — a Carbon reading 00:00 in
+   Riyadh silently asks Postgres for 00:00 UTC, and the first three hours of the client's day leave
+   every result. This cost a debugging cycle; the comment on the method exists so it costs nobody
+   another. `from_date`/`to_date` are for DATE columns (`metric_date`) and for display.
+6. **Salla and Zid were reviewed separately.** Salla wraps its dates in an object that states its own
+   zone; Zid sends a string that may or may not carry an offset, and its store profile publishes no
+   timezone in the shape the connector reads — which is exactly why the workspace fallback and the
+   recorded assumption exist.
+
+The migration corrects existing rows rather than leaving two meanings in one column: the stored value
+IS the merchant's wall clock, so re-anchoring it in the store's zone recovers the instant that was
+thrown away. Nothing is estimated, and `down()` puts the wall clocks back.
+
+### The documentation sweep — what it found and what it changed
+
+`/dev/status` parses `REQUIREMENTS_TRACEABILITY_MATRIX.md` and counts by status, so a stale status is
+not cosmetic: it reports open work that shipped, or hides an external block inside a non-external
+label. Six rows were reconciled against the later rows that already recorded them delivered
+(`REPORT-OBJECTIVE-001/003/004`, `REPORT-LINKS-13`, `AGENCY-PERMS-006`, and the Unit 7 header that
+still claimed §14.5–14.10 was `NOT_STARTED` long after Units 12 and 14 landed). `INTG-001` moved from
+`PARTIAL` to `BLOCKED_EXTERNAL_CREDENTIALS`, which is what its own note already said.
+
+**Nothing was marked VERIFIED that was not already delivered and tested elsewhere in the file.**
+
+### The ONE remaining non-external open item
+
+`REPORT-OBJECTIVE-002` — **no platform→canonical objective mapper exists.** Nothing maps
+`external_campaigns.objective` onto the `CampaignObjective` taxonomy, so `objective_source` is
+`unset` on every imported campaign and a real objective has to be set by hand before the
+objective-aware reporting applies to it.
+
+It fails SAFE, which is why it is not urgent: an unrecognised objective is treated as
+not-a-sales-campaign, so it understates CPA rather than inflating it. It needs no credential — the
+six adapters already discover the platform's own objective string. **This is the next unit.**
+
+### Everything else open, and why
+
+| Item | State | Why it cannot close here |
+|---|---|---|
+| `PORTAL-AUTH-001` | `BLOCKED_OPERATIONAL_EVIDENCE` | Retiring the OTP engine waits on `/admin/cutover` reading zero on all three conditions. Not code. |
+| Salla · Zid · Moyasar · the six ad platforms | `READY_FOR_CREDENTIALS` | No install holds credentials; every provider response the tests exercise is faked, which proves the parsing and says nothing about their API. |
+| FX rate feed | `READY_FOR_CONFIGURATION` | The engine is verified; no vendor is chosen in this repository, deliberately. Choosing one is the operator's commercial decision. |
+| Mail provider | `READY_FOR_CREDENTIALS` | The product never records a message as sent without one. |
+| Moyasar card-on-file (`PAY-TOKEN-003`) | `READY_FOR_CREDENTIALS` | The refusal is proven; that Moyasar's live payload puts the token where the adapter reads it is not, and cannot be without a key. |
+| The three handoff documents | not started | `PRODUCTION_HANDOFF.md`, `DEPLOYMENT_CHECKLIST.md`, `INTEGRATION_CREDENTIALS_CHECKLIST.md`. The FX feed belongs there as a **configuration** decision and Moyasar's card-on-file as a **merchant-enablement** question — neither is a credential. |
+| Passkeys | not started | Explicitly optional. |
+
+---
+
+## Previous close — 2026-08-11 (third of the day)
 
 **Working tree CLEAN.** Last CODE commit `ba0089d`, which is the tree the gate below ran on
 (anything after it is documentation only). One unit landed on top of the green gate at `c2c7270`:
