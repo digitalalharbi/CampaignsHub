@@ -29,7 +29,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          # 8.4, not 8.3. The lock file resolves symfony/* v8.1, which requires php >= 8.4.1, so
+          # `composer install` could not succeed here and this workflow had never once passed.
+          php-version: '8.4'
           extensions: pdo_pgsql, redis, intl, bcmath
           coverage: none
       - run: composer install --no-interaction --prefer-dist
