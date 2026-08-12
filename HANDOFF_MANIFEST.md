@@ -180,6 +180,24 @@ none of them has is a credential, and a credential is not something code can sup
 Also blocked on credentials: Google sign-in, Apple sign-in, SMS/WhatsApp. **GA4 is not integrated at
 all** — absent, not awaiting anything.
 
+### The three compliance URLs every review asks for
+
+| What | URL |
+|---|---|
+| Privacy Policy | `{FRONTEND_URL}/privacy` |
+| Terms of Service | `{FRONTEND_URL}/terms` |
+| User Data Deletion | `{FRONTEND_URL}/data-deletion` |
+| Data Deletion Callback (Meta only) | `POST {APP_URL}/api/v1/webhooks/data-deletion/meta` |
+
+All three pages are public, bilingual and need no session. `/data-deletion` is a real flow, not a
+notice: a request is opened, a code proves the address, and **an unverified destructive request can
+never be completed** — the operator inbox refuses it. Completing one revokes the workspace's provider
+connections. The callback verifies the platform's signature and **refuses with 503 when that
+provider has no credentials configured**, rather than answering with a confirmation it cannot stand
+behind (`LEGAL-DELETE-001`).
+
+`/admin` → integration readiness reports all four, derived from the configured URLs, ready to copy.
+
 ### URLs to register, byte for byte
 
 | What | URL |

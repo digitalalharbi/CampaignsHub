@@ -20,6 +20,17 @@ describe('the surfaces that never ask who you are', () => {
     expect(isSessionlessSurface('/reports/print/some-token')).toBe(true)
   })
 
+  /**
+   * LEGAL-DELETE-001 — the deletion page reads no session either.
+   *
+   * The person using it has usually lost access already, or never had an account. Asking who they
+   * are can only be answered 401, on the page that exists for exactly that situation.
+   */
+  it('covers the public data-deletion flow', () => {
+    expect(isSessionlessSurface('/data-deletion')).toBe(true)
+    expect(isSessionlessSurface('/data-deletion?reference=ABC123')).toBe(true)
+  })
+
   it('leaves every surface that legitimately wants to know', () => {
     for (const path of ['/', '/login', '/welcome', '/register', '/app/dashboard', '/agency/clients', '/admin', '/portal/requests', '/reports', '/signup/status']) {
       expect(isSessionlessSurface(path), `${path} must still restore its session`).toBe(false)

@@ -189,6 +189,14 @@ final class LegalIntakeTest extends TestCase
             'type' => 'delete_account', 'name' => 'نورة', 'email' => 'n@example.test',
             'status' => 'in_review', 'tenant_id' => $tenant->id,
         ]);
+        /*
+         * LEGAL-DELETE-001 — a destructive request is only completable once its address is proven.
+         *
+         * These tests are about what happens AFTER that, so the fixture carries the proof.
+         * `forceFill`, because `verified_at` is deliberately NOT mass-assignable: it is evidence the
+         * system recorded, not an attribute a caller may hand in.
+         */
+        $record->forceFill(['verified_at' => now()])->save();
 
         $res = $this->actingAs($this->platformOwner(), 'sanctum')
             ->patchJson("/api/v1/admin/legal/data-requests/{$record->id}", ['status' => 'completed'])
@@ -210,6 +218,14 @@ final class LegalIntakeTest extends TestCase
             'type' => 'delete_account', 'name' => 'نورة', 'email' => 'n@example.test',
             'status' => 'in_review', 'tenant_id' => $tenant->id,
         ]);
+        /*
+         * LEGAL-DELETE-001 — a destructive request is only completable once its address is proven.
+         *
+         * These tests are about what happens AFTER that, so the fixture carries the proof.
+         * `forceFill`, because `verified_at` is deliberately NOT mass-assignable: it is evidence the
+         * system recorded, not an attribute a caller may hand in.
+         */
+        $record->forceFill(['verified_at' => now()])->save();
 
         $this->actingAs($this->platformOwner(), 'sanctum')
             ->patchJson("/api/v1/admin/legal/data-requests/{$record->id}", ['status' => 'completed'])
@@ -237,6 +253,7 @@ final class LegalIntakeTest extends TestCase
             'type' => 'delete_account', 'name' => 'ن', 'email' => 'n@example.test',
             'status' => 'pending', 'tenant_id' => $tenant->id, 'blockers' => null,
         ]);
+        $record->forceFill(['verified_at' => now()])->save();
 
         // …then an invoice appears.
         $this->issueInvoice($tenant->id);

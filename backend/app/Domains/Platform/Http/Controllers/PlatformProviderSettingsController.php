@@ -11,6 +11,7 @@ use App\Domains\Integrations\Configuration\ProviderProbe;
 use App\Domains\Integrations\Models\ProviderConfiguration;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -59,6 +60,17 @@ final class PlatformProviderSettingsController extends Controller
 
         return ApiResponse::success([
             'providers' => $providers,
+            /*
+             * LEGAL-DELETE-001 — the compliance URLs every platform review asks for, ready to copy.
+             *
+             * They are DERIVED from the configured URLs rather than typed into a settings page,
+             * because a hand-entered copy of a URL the application already serves is a copy that goes
+             * stale the day the domain changes — and the failure mode is a rejected app review with
+             * no obvious cause. `callback_required` is per provider and honest: Meta is the only one
+             * of the six that asks for a machine-readable callback, and saying so stops an operator
+             * hunting for a field the others do not have.
+             */
+            'compliance_urls' => $this->complianceUrls(),
             // The one number an operator actually opens this page for.
             'summary' => [
                 'total' => count($providers),
@@ -69,6 +81,28 @@ final class PlatformProviderSettingsController extends Controller
                 )),
             ],
         ], 'Integration providers.');
+    }
+
+    /**
+     * The three public URLs a platform review needs, plus the callback for the one that requires it.
+     *
+     * @return array<string, mixed>
+     */
+    private function complianceUrls(): array
+    {
+        $api = rtrim((string) config('app.url'), '/');
+
+        return [
+            // FRONTEND-URL-001 — one reader for the SPA's origin, never a second config path.
+            'privacy_policy' => Frontend::url('/privacy'),
+            'terms_of_service' => Frontend::url('/terms'),
+            'user_data_deletion' => Frontend::url('/data-deletion'),
+            'data_deletion_callback' => [
+                // Only Meta asks for one today. The endpoint exists for any provider that adds the
+                // requirement; what is per-provider is whether a console has a field for it.
+                'meta' => $api.'/api/v1/webhooks/data-deletion/meta',
+            ],
+        ];
     }
 
     /** GET /admin/settings/integrations/providers/{provider} */

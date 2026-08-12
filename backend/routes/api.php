@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Legal\Http\Controllers\DataDeletionController;
 use App\Domains\Legal\Http\Controllers\PublicIntakeController;
 use App\Domains\Legal\Http\Controllers\PublicLegalController;
 use App\Domains\Reports\Http\Controllers\PublicReportController;
@@ -53,6 +54,31 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         ->middleware('throttle:5,1')->name('support.tickets');
     Route::post('/data-requests', [PublicIntakeController::class, 'dataRequest'])
         ->middleware('throttle:5,1')->name('data-requests');
+
+    /*
+     * LEGAL-DELETE-001 — the deletion flow behind https://campaignshub.io/data-deletion.
+     *
+     * Public by necessity: somebody asking to be deleted has usually already lost access, or never
+     * had an account and appears only inside a client's data. Requiring a sign-in would put a wall
+     * in front of the one right that has to work when everything else has failed.
+     *
+     * `verify` and `status` carry the OTP-check throttle rather than the gentler intake one — they
+     * take a code and a reference, and both are guessable at volume if nothing counts the attempts.
+     */
+    Route::post('/data-deletion', [DataDeletionController::class, 'submit'])
+        ->middleware('throttle:5,1')->name('data-deletion.submit');
+    Route::post('/data-deletion/verify', [DataDeletionController::class, 'verify'])
+        ->middleware('throttle:otp-check')->name('data-deletion.verify');
+    Route::post('/data-deletion/status', [DataDeletionController::class, 'status'])
+        ->middleware('throttle:otp-check')->name('data-deletion.status');
+
+    /*
+     * The machine-readable callback a platform posts to. CSRF is excluded for it in bootstrap/app.php
+     * for the same reason the webhooks are: a provider's server has no CSRF token and never will,
+     * and this endpoint verifies an HMAC over the signed request before it writes anything.
+     */
+    Route::post('/webhooks/data-deletion/{provider}', [DataDeletionController::class, 'callback'])
+        ->middleware('throttle:60,1')->name('data-deletion.callback');
 
     // Public, token-gated, expiring report download (the shareable secure link).
     Route::get('/reports/download/{token}', ReportDownloadController::class)->name('reports.download');

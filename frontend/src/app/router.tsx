@@ -30,6 +30,7 @@ import { ProjectTeamPage } from '@/features/projects/ProjectTeamPage'
 import { SystemStatusPage } from '@/features/system/SystemStatusPage'
 import { PublicHomePage } from '@/features/marketing/PublicHomePage'
 import { PublicInfoPage } from '@/features/marketing/PublicInfoPage'
+import { DataDeletionPage } from '@/features/marketing/DataDeletionPage'
 import { PublicServicesPage } from '@/features/marketing/PublicServicesPage'
 import { RequestIntakePage } from '@/features/requests/RequestIntakePage'
 import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
@@ -158,6 +159,15 @@ export const router = createBrowserRouter(withErrorBoundary([
   ].map((slug) => ({ path: `/${slug}`, element: <PublicInfoPage /> })),
 
   // Public services catalogue, read from the taxonomy engine (never a bundled array).
+  /*
+   * LEGAL-DELETE-001 — the deletion URL every ad-platform review asks for.
+   *
+   * A page of its own rather than another `PublicInfoPage` slug, because this one is a FLOW: ask,
+   * prove the address, look the request up. Public and sessionless by necessity — somebody asking to
+   * be deleted has usually already lost access, or never had an account at all.
+   */
+  { path: '/data-deletion', element: <DataDeletionPage /> },
+
   { path: '/services', element: <PublicServicesPage /> },
   { path: '/services/:category', element: <PublicServicesPage /> },
   // ADR 0002: the request-tracking portal lives at /portal/*. It still runs its own OTP cookie
