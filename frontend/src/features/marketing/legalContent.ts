@@ -59,12 +59,6 @@ const ar: LegalDoc[] = [
         ],
       },
       {
-        heading: 'مدة الاحتفاظ والحذف',
-        body: [
-          'نحتفظ ببيانات مساحة العمل ما دام الحساب نشطًا. عند طلب الحذف نزيل بيانات المساحة خلال مدة معقولة، مع الإبقاء على الحد الأدنى الذي تفرضه المتطلبات المحاسبية للفواتير الصادرة.',
-        ],
-      },
-      {
         heading: 'الربط بالمنصات والمتاجر',
         bullets: [
           'عند ربط حساب إعلاني (Meta أو Google Ads أو TikTok أو Snapchat أو X أو LinkedIn) نحفظ رمز الوصول ورمز التجديد مشفَّرَين، ونستخدمهما لقراءة أداء حساباتك فقط.',
@@ -94,10 +88,14 @@ const ar: LegalDoc[] = [
         ],
       },
       {
-        heading: 'الاحتفاظ والحذف الفعلي',
+        heading: 'مدة الاحتفاظ والحذف',
+        body: [
+          'نحتفظ ببيانات مساحة العمل ما دام الحساب نشطًا. وعند طلب الحذف نزيل بيانات المساحة خلال مدة معقولة، مع الإبقاء على الحد الأدنى الذي تفرضه المتطلبات المحاسبية للفواتير الصادرة.',
+        ],
         bullets: [
-          'اطلب الحذف من صفحة حذف البيانات: تفتح طلبًا برقم مرجعي، ونرسل رمزًا إلى بريدك للتأكد أنك صاحب العنوان قبل تنفيذ أي حذف.',
+          'اطلب الحذف من صفحة حذف البيانات (‎/data-deletion‎): تفتح طلبًا برقم مرجعي، ونرسل رمزًا إلى بريدك للتأكد أنك صاحب العنوان قبل تنفيذ أي حذف.',
           'الطلب غير الموثَّق لا يُنفَّذ إطلاقًا، ولا يستطيع المشغّل إتمامه.',
+          'عند تنفيذ الحذف تُبطَل الرموز المخزَّنة لحساباتك المرتبطة وتتوقف المزامنة، تمامًا كما لو فككت الربط بنفسك.',
           'قد يتعذّر الحذف مؤقتًا لأسباب نذكرها لك صراحةً — كفاتورة مفتوحة يفرض النظام المحاسبي الاحتفاظ بها.',
         ],
       },
@@ -134,11 +132,17 @@ const ar: LegalDoc[] = [
         ],
       },
       {
-        heading: 'الفوترة والضريبة',
+        heading: 'اشتراكك في CampaignsHub',
         bullets: [
-          'تُصدر الفواتير بالريال السعودي ما لم يُتفق على غير ذلك.',
-          'تُحتسب ضريبة القيمة المضافة حسب المعالجة الضريبية المحددة في العرض أو الفاتورة.',
-          'تُعد الفاتورة مستحقة في تاريخ الاستحقاق المذكور فيها.',
+          'يُحصَّل الاشتراك بالدولار الأمريكي (USD) حصرًا: Starter وGrowth وAgency، بأسعارها ودفعاتها.',
+          'يوضَّح السعر ومدة الالتزام قبل الدفع، ولا يبدأ أي تحصيل قبل موافقتك عليهما صراحةً.',
+          'أرقام البطاقات لا تمر بنا؛ يتولاها مزوّد الدفع.',
+        ],
+      },
+      {
+        heading: 'فواتيرك أنت لعملائك',
+        body: [
+          'هذه فوترة الوكالة لعميلها داخل النظام، وهي منفصلة تمامًا عن اشتراكك في CampaignsHub. تحتفظ كل فاتورة بعملتها الخاصة — الريال السعودي أو غيره حسب اتفاقك مع عميلك — ولا تتبع عملة الاشتراك. وتُحتسب ضريبة القيمة المضافة حسب المعالجة الضريبية المحددة في العرض أو الفاتورة، وتُعد الفاتورة مستحقة في تاريخ الاستحقاق المذكور فيها.',
         ],
       },
       {
@@ -401,12 +405,6 @@ const en: LegalDoc[] = [
         ],
       },
       {
-        heading: 'Retention and deletion',
-        body: [
-          'We keep workspace data while the account is active. On a deletion request we remove it within a reasonable period, keeping only the minimum that accounting rules require for issued invoices.',
-        ],
-      },
-      {
         heading: 'Connected platforms and stores',
         bullets: [
           'When you connect an advertising account (Meta, Google Ads, TikTok, Snapchat, X or LinkedIn) we store its access and refresh tokens encrypted, and use them only to read your own accounts’ performance.',
@@ -436,10 +434,14 @@ const en: LegalDoc[] = [
         ],
       },
       {
-        heading: 'Retention and actually deleting it',
+        heading: 'Retention and deletion',
+        body: [
+          'We keep workspace data for as long as the account is active. When deletion is requested we remove the workspace’s data within a reasonable period, keeping only the minimum that accounting rules require us to retain for invoices already issued.',
+        ],
         bullets: [
-          'Ask from the data deletion page: it opens a request with a reference, and we send a code to your email to confirm the address is yours before anything is deleted.',
+          'Ask from the data deletion page (/data-deletion): it opens a request with a reference, and we send a code to your email to confirm the address is yours before anything is deleted.',
           'An unverified request is never carried out, and an operator cannot complete one.',
+          'When a deletion is carried out, the stored tokens for your connected accounts are revoked and syncing stops — exactly as if you had disconnected them yourself.',
           'Deletion can be held up for reasons we state plainly — an open invoice accounting rules require us to keep, for instance.',
         ],
       },
@@ -476,11 +478,17 @@ const en: LegalDoc[] = [
         ],
       },
       {
-        heading: 'Billing and tax',
+        heading: 'Your CampaignsHub subscription',
         bullets: [
-          'Invoices are issued in SAR unless agreed otherwise.',
-          'VAT follows the tax treatment stated on the quote or invoice.',
-          'An invoice is payable on the due date shown on it.',
+          'Subscriptions are billed in US dollars (USD) only — Starter, Growth and Agency, their prices and their payments.',
+          'The price and any commitment period are stated before payment, and nothing is charged until you have explicitly agreed to both.',
+          'Card numbers never pass through us; the payment provider handles them.',
+        ],
+      },
+      {
+        heading: 'Invoices you issue to your own clients',
+        body: [
+          'This is an agency invoicing its client inside the product, and it is entirely separate from your CampaignsHub subscription. Each invoice keeps its own currency — SAR or another, as agreed with your client — and does not follow the subscription currency. VAT follows the tax treatment stated on the quote or invoice, and an invoice is payable on the due date shown on it.',
         ],
       },
       {
