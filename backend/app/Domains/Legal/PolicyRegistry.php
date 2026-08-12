@@ -35,17 +35,29 @@ final class PolicyRegistry
      * @var array<string, array{version: string, effective: string, binding: bool}>
      */
     private const DOCUMENTS = [
-        'terms' => ['version' => '1.0', 'effective' => '2026-08-07', 'binding' => true],
         /*
-         * 1.1 — LEGAL-DELETE-001. The text now describes what the system actually does with OAuth
-         * tokens, Salla/Zid store data, subscription payment metadata, shared report links, sessions
-         * and cookies, and it points at `/data-deletion` rather than an inbox.
+         * 1.1 — the currency split. The billing section said «invoices are issued in SAR unless
+         * agreed otherwise», which is true of an agency's invoices to ITS client and false of the
+         * CampaignsHub subscription, which is USD only. One sentence covering two different things
+         * is the shape a dispute is built on, so they are now two sections that name themselves.
+         */
+        'terms' => ['version' => '1.1', 'effective' => '2026-08-12', 'binding' => true],
+        /*
+         * 1.2 — LEGAL-DELETE-001, then the retention edit. The text describes what the system actually
+         * does with OAuth tokens, Salla/Zid store data, subscription payment metadata, shared report
+         * links, sessions and cookies, and points at `/data-deletion` rather than an inbox. 1.1 left
+         * two retention sections side by side — the original and the new one — which read as
+         * unedited on a page strangers read; 1.2 folds them into one.
+         *
+         * A new version rather than a correction to 1.1, even though 1.1 was published hours earlier
+         * and plausibly nobody accepted it. «Plausibly nobody» is not a thing this registry is
+         * willing to assert on a customer's behalf.
          *
          * A NEW version rather than an edit, because an acceptance record points at a version: editing
          * 1.0 in place would leave everybody who accepted it claiming to have agreed to text they
          * never saw. That is the one operation this registry exists to prevent.
          */
-        'privacy' => ['version' => '1.1', 'effective' => '2026-08-12', 'binding' => true],
+        'privacy' => ['version' => '1.2', 'effective' => '2026-08-12', 'binding' => true],
         'data-processing' => ['version' => '1.0', 'effective' => '2026-08-07', 'binding' => false],
         'cookies' => ['version' => '1.0', 'effective' => '2026-08-07', 'binding' => false],
         'security' => ['version' => '1.0', 'effective' => '2026-08-07', 'binding' => false],

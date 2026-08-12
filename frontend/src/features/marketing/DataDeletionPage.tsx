@@ -4,6 +4,7 @@ import { api, ensureCsrfCookie } from '@/lib/api/client'
 import { Button } from '@/components/ui/Button'
 import { useUi } from '@/stores/ui'
 import { CONTACT_EMAIL } from './legalContent'
+import { PublicPageShell } from './PublicPageShell'
 
 /**
  * `/data-deletion` — the URL every ad-platform review asks for, and a flow rather than a page of text.
@@ -19,6 +20,13 @@ import { CONTACT_EMAIL } from './legalContent'
  * a form» from «somebody who can read that inbox asked for this», and only the second one justifies
  * destroying anything. A request that is never verified is never actioned — the server enforces that,
  * this page just makes it legible.
+ *
+ * ## The same frame as every other public page
+ *
+ * `PublicPageShell` — the logo, the language and theme switches, back-to-home and the footer. It
+ * shipped without any of that: a reviewer opening the URL cold met an unbranded form with nothing
+ * saying whose site it was, and an Arabic reader had no way to switch. Reused rather than rebuilt,
+ * because a second hand-built header is a second header to keep in step.
  *
  * ## Public, and it has to stay that way
  *
@@ -91,8 +99,9 @@ export function DataDeletionPage() {
   const destructive = type === 'delete_account' || type === 'delete_data'
 
   return (
-    <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-6 sm:py-16" data-testid="data-deletion">
-      <h1 className="text-2xl font-semibold sm:text-3xl">
+    <PublicPageShell title={t('حذف بيانات المستخدم', 'User Data Deletion')}>
+      <div className="mx-auto w-full max-w-2xl" data-testid="data-deletion">
+      <h1 className="font-heading text-[28px] font-extrabold leading-tight sm:text-[34px]">
         {t('حذف بياناتك', 'Delete your data')}
       </h1>
 
@@ -326,6 +335,7 @@ export function DataDeletionPage() {
           </Button>
         </form>
       </section>
-    </main>
+      </div>
+    </PublicPageShell>
   )
 }
