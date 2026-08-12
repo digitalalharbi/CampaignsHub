@@ -1,0 +1,673 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Parameter \#3 \$portal of method App\\Domains\\Accounts\\Services\\AccountEntitlements\:\:allows\(\) expects App\\Domains\\Tenancy\\Enums\\Portal\|null, string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/Accounts/Middleware/EnsureEntitlement.php
+
+		-
+			message: '#^Call to function property_exists\(\) with \$this\(App\\Domains\\Accounts\\Models\\RegistrationRequest\) and ''phoneColumns'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domains/Accounts/Models/RegistrationRequest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$email\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/Agency/Http/Controllers/AgencyTeamController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/Agency/Http/Controllers/AgencyTeamController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:hasPermission\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Domains/Agency/Http/Controllers/AgencyTeamController.php
+
+		-
+			message: '#^Access to an undefined property App\\Domains\\Billing\\Models\\Payment\:\:\$total\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/Billing/Http/Controllers/FinanceCenterController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/Billing/Http/Controllers/FinanceCenterController.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: app/Domains/Billing/Http/Controllers/FinanceCenterController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domains\\Billing\\Models\\Invoice\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Domains/Billing/Http/Controllers/FinanceCenterController.php
+
+		-
+			message: '#^Parameter \#1 \$rows of method App\\Domains\\Billing\\Http\\Controllers\\FinanceCenterController\:\:bucket\(\) expects Illuminate\\Support\\Collection\<int, object\>, Illuminate\\Database\\Eloquent\\Collection\<int, App\\Domains\\Billing\\Models\\Invoice\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/Billing/Http/Controllers/FinanceCenterController.php
+
+		-
+			message: '#^Parameter \#1 \$rows of method App\\Domains\\Billing\\Http\\Controllers\\FinanceCenterController\:\:bucket\(\) expects Illuminate\\Support\\Collection\<int, object\>, Illuminate\\Database\\Eloquent\\Collection\<int, App\\Domains\\Billing\\Models\\Payment\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/Billing/Http/Controllers/FinanceCenterController.php
+
+		-
+			message: '#^Parameter \#1 \$rows of method App\\Domains\\Billing\\Http\\Controllers\\FinanceCenterController\:\:bucket\(\) expects Illuminate\\Support\\Collection\<int, object\>, Illuminate\\Database\\Eloquent\\Collection\<int, App\\Domains\\Billing\\Models\\Quote\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/Billing/Http/Controllers/FinanceCenterController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>total" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Billing/Http/Controllers/FinanceCenterController.php
+
+		-
+			message: '#^Call to function property_exists\(\) with \$this\(App\\Domains\\CRM\\Models\\Contact\) and ''phoneColumns'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domains/CRM/Models/Contact.php
+
+		-
+			message: '#^Call to function property_exists\(\) with \$this\(App\\Domains\\CRM\\Models\\Lead\) and ''phoneColumns'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domains/CRM/Models/Lead.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Support\\Collection\<int, App\\Domains\\Campaigns\\Models\\ExternalCreative\>\:\:modelKeys\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Domains/Campaigns/Http/Controllers/CreativeAnalysisController.php
+
+		-
+			message: '#^Method App\\Domains\\Campaigns\\Http\\Controllers\\CreativeAnalysisController\:\:peerAverages\(\) should return array\<string, float\|null\>\|null but returns array\<string, float\|int\<1, max\>\|string\|null\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/Campaigns/Http/Controllers/CreativeAnalysisController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Domains/Campaigns/Http/Controllers/RelatedEntitiesController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/Campaigns/Http/Controllers/RelatedEntitiesController.php
+
+		-
+			message: '#^Parameter \#2 \$campaignId of method App\\Domains\\Campaigns\\Http\\Controllers\\RelatedEntitiesController\:\:countReferencing\(\) expects string, int given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Domains/Campaigns/Http/Controllers/RelatedEntitiesController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Domains/Campaigns/Services/CampaignObjectiveResolver.php
+
+		-
+			message: '#^Offset ''__count'' on array\{ctr\?\: non\-empty\-list\<float\>, cpc\?\: non\-empty\-list\<float\>, cpm\?\: non\-empty\-list\<float\>, cpa\?\: non\-empty\-list\<float\>, roas\?\: non\-empty\-list\<float\>, conversion_rate\?\: non\-empty\-list\<float\>, view_rate\?\: non\-empty\-list\<float\>, completion_rate\?\: non\-empty\-list\<float\>, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Domains/Campaigns/Services/CreativeInsights.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>last_error" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Commerce/Providers/ApiCommerceConnector.php
+
+		-
+			message: '#^Access to an undefined property App\\Domains\\Commerce\\Models\\CommerceOrderItem\:\:\$revenue\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/Commerce/Services/StoreFunnelService.php
+
+		-
+			message: '#^Method App\\Domains\\Identity\\Http\\Controllers\\OnboardingController\:\:portal\(\) never returns App\\Domains\\Tenancy\\Enums\\Portal so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/Domains/Identity/Http/Controllers/OnboardingController.php
+
+		-
+			message: '#^Method App\\Domains\\Identity\\Http\\Controllers\\OnboardingController\:\:portal\(\) should return App\\Domains\\Tenancy\\Enums\\Portal\|null but returns string\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/Identity/Http/Controllers/OnboardingController.php
+
+		-
+			message: '#^Call to function property_exists\(\) with \$this\(App\\Domains\\Identity\\Models\\PortalIdentityConflict\) and ''phoneColumns'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domains/Identity/Models/PortalIdentityConflict.php
+
+		-
+			message: '#^Method App\\Domains\\Identity\\Resources\\UserResource\:\:activePortal\(\) never returns App\\Domains\\Tenancy\\Enums\\Portal so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/Domains/Identity/Resources/UserResource.php
+
+		-
+			message: '#^Method App\\Domains\\Identity\\Resources\\UserResource\:\:activePortal\(\) should return App\\Domains\\Tenancy\\Enums\\Portal\|null but returns string\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/Identity/Resources/UserResource.php
+
+		-
+			message: '#^Method App\\Domains\\Identity\\Resources\\UserResource\:\:activePortal\(\) should return App\\Domains\\Tenancy\\Enums\\Portal\|null but returns string\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/Identity/Resources/UserResource.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type mixed\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 3
+			path: app/Domains/Influencers/Http/Controllers/AttributionController.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type mixed\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 4
+			path: app/Domains/Influencers/Http/Controllers/NominationController.php
+
+		-
+			message: '#^Call to function property_exists\(\) with \$this\(App\\Domains\\Influencers\\Models\\Influencer\) and ''phoneColumns'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domains/Influencers/Models/Influencer.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>enabled" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Integrations/Configuration/ProviderConfigurationService.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>environment" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Integrations/Configuration/ProviderConfigurationService.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 2
+			path: app/Domains/Integrations/OAuth/OAuthTokens.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>key" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Integrations/OAuth/PlatformCredentials.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Domains/Integrations/OAuth/PlatformOAuth.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>last_error" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Integrations/Providers/ApiAdvertisingConnector.php
+
+		-
+			message: '#^Method App\\Domains\\Integrations\\Providers\\LinkedInConnector\:\:fetchAds\(\) should return list\<array\{external_id\: string, ad_set_external_id\: string\|null, campaign_external_id\: string\|null, name\: string, status\: string, review_status\?\: string\|null, destination_url\?\: string\|null, creative\?\: array\{external_id\: string, name\?\: string\|null, format\?\: string\|null, thumbnail_url\?\: string\|null, preview_url\?\: string\|null\}, \.\.\.\}\> but returns list\<array\{external_id\: string, campaign_external_id\?\: string, name\: non\-falsy\-string, status\: string, review_status\?\: ''approved''\|''pending''\|''rejected'', raw\: array\<mixed\>\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/Integrations/Providers/LinkedInConnector.php
+
+		-
+			message: '#^Method App\\Domains\\Integrations\\Providers\\SnapchatConnector\:\:fetchAds\(\) should return list\<array\{external_id\: string, ad_set_external_id\: string\|null, campaign_external_id\: string\|null, name\: string, status\: string, review_status\?\: string\|null, destination_url\?\: string\|null, creative\?\: array\{external_id\: string, name\?\: string\|null, format\?\: string\|null, thumbnail_url\?\: string\|null, preview_url\?\: string\|null\}, \.\.\.\}\> but returns list\<array\{external_id\: string, ad_set_external_id\?\: string, name\: string, status\: string, review_status\?\: string, creative\?\: array\<string, mixed\>, raw\: non\-empty\-array\<string, mixed\>\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/Integrations/Providers/SnapchatConnector.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between mixed and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Domains/Integrations/Providers/XConnector.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>status" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Integrations/Review/ReviewChecklistService.php
+
+		-
+			message: '#^PHPDoc tag @param for parameter \$request with type Illuminate\\Http\\Client\\Request is incompatible with native type Illuminate\\Http\\Client\\PendingRequest\|null\.$#'
+			identifier: parameter.phpDocType
+			count: 1
+			path: app/Domains/Integrations/Support/PlatformHttp.php
+
+		-
+			message: '#^Parameter \$when of method Illuminate\\Http\\Client\\PendingRequest\<false\>\:\:retry\(\) expects \(callable\(Throwable, Illuminate\\Http\\Client\\PendingRequest, string\|null\)\: bool\)\|null, Closure\(Exception, Illuminate\\Http\\Client\\PendingRequest\|null\=\)\: bool given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/Integrations/Support/PlatformHttp.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>records" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Domains/Integrations/Sync/AccountStructureSyncer.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>tenant_id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Integrations/Webhooks/WebhookIngest.php
+
+		-
+			message: '#^Method App\\Domains\\Metrics\\Http\\Controllers\\SavedDashboardViewController\:\:find\(\) should return App\\Domains\\Metrics\\Models\\SavedDashboardView but returns Illuminate\\Database\\Eloquent\\Model\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/Metrics/Http/Controllers/SavedDashboardViewController.php
+
+		-
+			message: '#^Parameter \#1 \$accountId of job class App\\Domains\\Metrics\\Jobs\\SyncAccountMetricsJob constructor expects string in App\\Domains\\Metrics\\Jobs\\SyncAccountMetricsJob\:\:dispatch\(\), int given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/Metrics/Http/Controllers/SyncRunController.php
+
+		-
+			message: '#^Parameter \$externalAccountId of class App\\Domains\\Metrics\\DTO\\NormalizedMetric constructor expects string, int given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/Metrics/Services/InsightRowNormaliser.php
+
+		-
+			message: '#^Parameter \$externalCampaignId of class App\\Domains\\Metrics\\DTO\\NormalizedMetric constructor expects string, int given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/Metrics/Services/InsightRowNormaliser.php
+
+		-
+			message: '#^Parameter \#1 \$preferenceRows of method App\\Domains\\Notifications\\Console\\SendAlerts\:\:arranged\(\) expects Illuminate\\Support\\Collection\<int, object\>, Illuminate\\Support\\Collection\<int, stdClass\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/Notifications/Console/SendAlerts.php
+
+		-
+			message: '#^Method App\\Domains\\Notifications\\Http\\Controllers\\TeamNotificationsController\:\:projectNames\(\) should return array\<string, string\> but returns array\<int, string\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/Notifications/Http/Controllers/TeamNotificationsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>\(Expression\)" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Notifications/Services/NotificationChoices.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<\(int\|string\)\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Domains/Notifications/Support/MessageCatalogue.php
+
+		-
+			message: '#^Access to an undefined property App\\Domains\\Integrations\\Models\\ProviderConnection\:\:\$c\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/Platform/Http/Controllers/PlatformAccessController.php
+
+		-
+			message: '#^Method App\\Domains\\Platform\\Http\\Controllers\\PlatformEmailController\:\:digests\(\) should return Illuminate\\Support\\Collection\<int, array\<string, mixed\>\> but returns Illuminate\\Support\\Collection\<int, array\{id\: string, source\: string, at\: string, kind\: string, template\: string, recipient\: mixed, tenant_name\: mixed, locale\: null, \.\.\.\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/Platform/Http/Controllers/PlatformEmailController.php
+
+		-
+			message: '#^Method App\\Domains\\Platform\\Http\\Controllers\\PlatformEmailController\:\:transactional\(\) should return Illuminate\\Support\\Collection\<int, array\<string, mixed\>\> but returns Illuminate\\Support\\Collection\<int, array\{id\: string, source\: string, at\: string, kind\: string, template\: string, recipient\: string, tenant_name\: mixed, locale\: string, \.\.\.\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/Platform/Http/Controllers/PlatformEmailController.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Domains/Platform/Http/Controllers/PlatformGrantController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$email\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/Platform/Http/Controllers/PlatformTenantController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/Platform/Http/Controllers/PlatformTenantController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Domains/Platform/Http/Controllers/PlatformTenantController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domains\\Tenancy\\Models\\Membership\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Domains/Platform/Http/Controllers/PlatformTenantController.php
+
+		-
+			message: '#^Method App\\Domains\\Reports\\Services\\LiveReportService\:\:iso\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: app/Domains/Reports/Services/LiveReportService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$campaign_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/Reports/Services/SharedCreativeView.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{creative_id\: string, provider\: string, metrics\: array\<string, mixed\>\|null, source\: ''platform_reported''\}, Closure\(App\\Domains\\Campaigns\\Models\\ExternalCreative\)\: array\{creative_id\: string, provider\: string, metrics\: array\<string, mixed\>\|null, source\: ''platform_reported''\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/Reports/Services/SharedCreativeView.php
+
+		-
+			message: '#^Parameter \#1 \$creative of method App\\Domains\\Campaigns\\Services\\CreativePresenter\:\:detail\(\) expects App\\Domains\\Campaigns\\Models\\ExternalCreative, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/Reports/Services/SharedCreativeView.php
+
+		-
+			message: '#^Parameter \#1 \$creative of method App\\Domains\\Reports\\Services\\SharedCreativeView\:\:byCampaign\(\) expects App\\Domains\\Campaigns\\Models\\ExternalCreative, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/Reports/Services/SharedCreativeView.php
+
+		-
+			message: '#^Parameter \#2 \$creative of method App\\Domains\\Reports\\Services\\SharedCreativeView\:\:byPlatform\(\) expects App\\Domains\\Campaigns\\Models\\ExternalCreative, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/Reports/Services/SharedCreativeView.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>colors" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Requests/Http/Controllers/ClientPortalController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>fonts" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Requests/Http/Controllers/ClientPortalController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>white_label" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Requests/Http/Controllers/ClientPortalController.php
+
+		-
+			message: '#^PHPDoc tag @param for parameter \$query contains generic type Illuminate\\Contracts\\Database\\Eloquent\\Builder\<App\\Domains\\Requests\\Models\\ExternalRequest\> but interface Illuminate\\Contracts\\Database\\Eloquent\\Builder is not generic\.$#'
+			identifier: generics.notGeneric
+			count: 2
+			path: app/Domains/Requests/Http/Controllers/Internal/RequestsController.php
+
+		-
+			message: '#^Method App\\Domains\\Requests\\Journey\\StageStatusMap\:\:statusFor\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/Domains/Requests/Journey/StageStatusMap.php
+
+		-
+			message: '#^Call to function property_exists\(\) with \$this\(App\\Domains\\Requests\\Models\\ClientPortalToken\) and ''phoneColumns'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domains/Requests/Models/ClientPortalToken.php
+
+		-
+			message: '#^Call to function property_exists\(\) with \$this\(App\\Domains\\Requests\\Models\\ExternalRequest\) and ''phoneColumns'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domains/Requests/Models/ExternalRequest.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>draft" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Settings/Http/Controllers/PublicPageSettingsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>published" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Settings/Http/Controllers/PublicPageSettingsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>version" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Domains/Settings/Http/Controllers/PublicPageSettingsController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Query\\Builder\<App\\Models\\User\>\:\:with\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: app/Domains/Settings/Http/Controllers/TeamController.php
+
+		-
+			message: '#^Method App\\Domains\\Settings\\Http\\Controllers\\TeamController\:\:inTenant\(\) should return Illuminate\\Database\\Query\\Builder\<App\\Models\\User\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Models\\User\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/Settings/Http/Controllers/TeamController.php
+
+		-
+			message: '#^PHPDoc tag @return contains generic type Illuminate\\Database\\Query\\Builder\<App\\Models\\User\> but class Illuminate\\Database\\Query\\Builder is not generic\.$#'
+			identifier: generics.notGeneric
+			count: 1
+			path: app/Domains/Settings/Http/Controllers/TeamController.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type mixed\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Subscriptions/Http/Controllers/SubscriptionController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>code" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Subscriptions/Notifications/SubscriptionNotifier.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Subscriptions/Notifications/SubscriptionNotifier.php
+
+		-
+			message: '#^Access to an undefined property App\\Domains\\Tenancy\\Models\\Tenant\:\:\$billing_email\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/Subscriptions/Services/SubscriptionInvoicing.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>billing_email" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Subscriptions/Services/SubscriptionInvoicing.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>email" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Subscriptions/Services/SubscriptionInvoicing.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Subscriptions/Services/SubscriptionInvoicing.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>tenant_name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Subscriptions/Services/SubscriptionInvoicing.php
+
+		-
+			message: '#^Method App\\Domains\\Tenancy\\Context\\MembershipContext\:\:portal\(\) never returns App\\Domains\\Tenancy\\Enums\\Portal so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/Domains/Tenancy/Context/MembershipContext.php
+
+		-
+			message: '#^Method App\\Domains\\Tenancy\\Context\\MembershipContext\:\:portal\(\) should return App\\Domains\\Tenancy\\Enums\\Portal\|null but returns string\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/Tenancy/Context/MembershipContext.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/Tenancy/Http/Controllers/MembershipController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$slug\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/Tenancy/Http/Controllers/MembershipController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Domains/Tenancy/Http/Controllers/MembershipController.php
+
+		-
+			message: '#^Cannot call method landingPath\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Domains/Tenancy/Http/Controllers/MembershipController.php
+
+		-
+			message: '#^Cannot call method path\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Domains/Tenancy/Http/Controllers/MembershipController.php
+
+		-
+			message: '#^Cannot call method isEnabled\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Domains/Tenancy/Services/PortalResolver.php
+
+		-
+			message: '#^Cannot call method landingPath\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Domains/Tenancy/Services/PortalResolver.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$tenant\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/User.php
+
+		-
+			message: '#^Call to function property_exists\(\) with \$this\(App\\Models\\User\) and ''phoneColumns'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Models/User.php
+
+		-
+			message: '#^Method Database\\Seeders\\DemoClientPortalSeeder\:\:quotes\(\) should return array\<string, App\\Domains\\Billing\\Models\\Quote\> but returns array\<int, App\\Domains\\Billing\\Models\\Quote\>\.$#'
+			identifier: return.type
+			count: 1
+			path: database/seeders/DemoClientPortalSeeder.php
+
+		-
+			message: '#^Method Database\\Seeders\\DemoClientPortalSeeder\:\:requests\(\) should return array\<string, App\\Domains\\Requests\\Models\\ExternalRequest\> but returns array\<int, App\\Domains\\Requests\\Models\\ExternalRequest\>\.$#'
+			identifier: return.type
+			count: 1
+			path: database/seeders/DemoClientPortalSeeder.php
+
+		-
+			message: '#^Offset ''1''\|''2''\|''4'' does not exist on array\<string, App\\Domains\\Requests\\Models\\ExternalRequest\>\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: database/seeders/DemoClientPortalSeeder.php
+
+		-
+			message: '#^Offset ''1001''\|''1002''\|''1003'' does not exist on array\<string, App\\Domains\\Billing\\Models\\Quote\>\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: database/seeders/DemoClientPortalSeeder.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between ''team'' and ''team'' will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 1
+			path: database/seeders/DemoClientPortalSeeder.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between 1\|2\|3\|4 and ''1'' will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: database/seeders/DemoClientPortalSeeder.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between 3\|60 and 1 will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: database/seeders/DemoCreativeAnalysisSeeder.php
+
+		-
+			message: '#^Parameter \#1 \$tenantId of method App\\Domains\\Tenancy\\Context\\TenantContext\:\:setTenantId\(\) expects string\|null, int given\.$#'
+			identifier: argument.type
+			count: 1
+			path: database/seeders/DemoIntegrationsSeeder.php
+
+		-
+			message: '#^Parameter \#1 \$tenantId of method Database\\Seeders\\DemoIntegrationsSeeder\:\:seedStructure\(\) expects string, int given\.$#'
+			identifier: argument.type
+			count: 1
+			path: database/seeders/DemoIntegrationsSeeder.php
+
+		-
+			message: '#^Parameter \#2 \$projectId of method Database\\Seeders\\DemoIntegrationsSeeder\:\:seedStructure\(\) expects string, int given\.$#'
+			identifier: argument.type
+			count: 1
+			path: database/seeders/DemoIntegrationsSeeder.php
+
+		-
+			message: '#^Parameter \#3 \$seed of method Database\\Seeders\\DemoIntegrationsSeeder\:\:platformId\(\) expects string, int given\.$#'
+			identifier: argument.type
+			count: 2
+			path: database/seeders/DemoIntegrationsSeeder.php
