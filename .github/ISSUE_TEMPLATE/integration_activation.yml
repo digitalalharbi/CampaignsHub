@@ -1,0 +1,101 @@
+name: Integration activation
+description: A credential has arrived for a provider, and it is time to take it live.
+title: "[Activation] "
+labels: ["integration", "activation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never paste a credential here.** Not a key, not a token, not a webhook secret, not a
+        screenshot containing one. This issue tracks the *activation*; the values go into the
+        server's environment and nowhere else. See `docs/CHANGE_MANAGEMENT.md` §6.
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - Moyasar (payments)
+        - Stripe (payments)
+        - Meta Ads
+        - Google Ads
+        - TikTok Ads
+        - Snapchat Ads
+        - X Ads
+        - LinkedIn Ads
+        - Salla (commerce)
+        - Zid (commerce)
+        - Mail delivery (SMTP / Postmark / Resend)
+        - FX rate source
+        - Google sign-in
+        - Apple sign-in
+        - SMS / WhatsApp
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Which environment
+      options:
+        - Sandbox / test keys first
+        - Production, live keys
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: have
+    attributes:
+      label: What is in hand
+      description: Tick what EXISTS. Do not write the values.
+      options:
+        - label: Client id / app id / publishable key
+        - label: Client secret / secret key
+        - label: Webhook secret or token
+        - label: Developer token or account id (Google Ads, Snapchat)
+        - label: A merchant or advertiser account the credential belongs to
+        - label: Access to the provider's console, to register URLs
+
+  - type: textarea
+    id: urls
+    attributes:
+      label: Redirect and webhook URLs registered with the provider
+      description: |
+        Copy them from `docs/INTEGRATION_CREDENTIALS_CHECKLIST.md` byte for byte. Several providers
+        refuse a redirect that does not match exactly.
+      placeholder: |
+        redirect: https://…/api/v1/oauth/ads/meta/callback
+        webhook:  https://…/api/v1/webhooks/ads/meta
+
+  - type: checkboxes
+    id: sequence
+    attributes:
+      label: The activation sequence — tick each only when it has actually happened
+      description: |
+        `LIVE_VERIFIED` requires every one of these. Stop at the first that cannot be evidenced and
+        say so; a partly-activated provider is honest, a wrongly-marked one is not.
+      options:
+        - label: Credential entered in the environment (not in the repository)
+        - label: Redirect and webhook URLs confirmed in the provider's console
+        - label: A real OAuth round trip completed
+        - label: Account or store discovery returned real accounts
+        - label: Bound to a project
+        - label: First API round trip
+        - label: First sync, with real rows
+        - label: The unified pipeline shows it
+        - label: Visible on dashboard, analytics, reports and a client link
+        - label: Token refresh and a real webhook both observed
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: |
+        What proves each ticked step — a sync id, a webhook delivery id, a screenshot with the
+        figures. Redact anything secret.
+
+  - type: textarea
+    id: blockers
+    attributes:
+      label: What is blocking the remaining steps
+      placeholder: "Merchant account not yet enabled for tokenisation"

@@ -1,0 +1,81 @@
+name: Improvement
+description: Something works, and should work better or do more.
+title: "[Improvement] "
+labels: ["improvement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the outcome you want. The implementation is a decision for the change itself,
+        and naming one here tends to close off the better option before anybody looks.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is the problem this solves
+      description: Who runs into it, how often, and what it costs them today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What should be true afterwards
+      description: Written so that somebody else could tell whether it happened.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      options:
+        - /admin — platform owner
+        - /app — advertiser
+        - /agency — agency
+        - /portal — client
+        - Shared report links
+        - Public site
+        - Backend / API only
+        - Email and notifications
+        - Reporting and analytics
+        - Billing and subscriptions
+        - Integrations
+        - Tooling, CI or documentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: How it is handled today
+      description: The workaround, if there is one. «Nothing» is a valid answer and a useful one.
+
+  - type: dropdown
+    id: value
+    attributes:
+      label: How much does it matter
+      options:
+        - Blocking real work
+        - Costs time every week
+        - Worth doing when convenient
+        - Nice to have
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Does it touch any of these?
+      options:
+        - label: Money, pricing or billing
+        - label: Permissions or tenant isolation
+        - label: An external provider
+        - label: A database migration
+        - label: Something a client sees on a shared report
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Examples, screenshots, a competitor doing it well, a prior discussion.

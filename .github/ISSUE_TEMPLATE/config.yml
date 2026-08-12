@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: How a change reaches production
+    url: https://github.com/digitalalharbi/CampaignsHub/blob/main/docs/CHANGE_MANAGEMENT.md
+    about: Issue → branch → PR → CI → review → merge → deploy, and the emergency path.
+  - name: What a provider needs before it can go live
+    url: https://github.com/digitalalharbi/CampaignsHub/blob/main/docs/INTEGRATION_CREDENTIALS_CHECKLIST.md
+    about: Every provider, its variables, its URLs and its honest state. Never paste a credential into an issue.
+  - name: Running and deploying CampaignsHub
+    url: https://github.com/digitalalharbi/CampaignsHub/blob/main/HANDOFF_MANIFEST.md
+    about: Architecture, the four portals, setup, workers, migrations and the production checklist.
