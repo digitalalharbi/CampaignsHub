@@ -23,8 +23,8 @@ const AR_DISCLAIMER =
 const EN_DISCLAIMER =
   'This page describes how the system actually behaves and is not legal advice. Have your counsel review it before relying on it commercially.'
 
-const AR_UPDATED = 'آخر تحديث: 30 يوليو 2026'
-const EN_UPDATED = 'Last updated: 30 July 2026'
+const AR_UPDATED = 'آخر تحديث: 12 أغسطس 2026'
+const EN_UPDATED = 'Last updated: 12 August 2026'
 
 const ar: LegalDoc[] = [
   {
@@ -65,11 +65,48 @@ const ar: LegalDoc[] = [
         ],
       },
       {
+        heading: 'الربط بالمنصات والمتاجر',
+        bullets: [
+          'عند ربط حساب إعلاني (Meta أو Google Ads أو TikTok أو Snapchat أو X أو LinkedIn) نحفظ رمز الوصول ورمز التجديد مشفَّرَين، ونستخدمهما لقراءة أداء حساباتك فقط.',
+          'عند ربط متجر (سلة أو زد) نقرأ الطلبات والسلات المتروكة والمنتجات والعملاء بالقدر الذي يظهر في تقاريرك، مع الاحتفاظ بالمنطقة الزمنية للمتجر حتى يبقى يوم التاجر يومه.',
+          'لا نكتب ولا ننشر ولا نغيّر أي شيء في حساباتك الإعلانية أو متجرك — الوصول للقراءة فقط.',
+          'فك الربط من داخل النظام يوقف المزامنة فورًا ويُبطل الرموز المخزَّنة. ويحدث الشيء نفسه تلقائيًا عند تنفيذ طلب حذف موثَّق.',
+        ],
+      },
+      {
+        heading: 'بيانات الاشتراك والدفع',
+        bullets: [
+          'اشتراكك في CampaignsHub يُحصَّل بالدولار الأمريكي عبر مزوّد دفع. أرقام البطاقات لا تمر بنا ولا تُخزَّن لدينا إطلاقًا — لا رقم بطاقة ولا CVC.',
+          'ما نحتفظ به هو بيانات وصفية: معرّف العملية لدى المزوّد، والمبلغ والعملة، والحالة، وتاريخها، وعند إتاحة المزوّد لذلك وسمًا للبطاقة مثل «visa ···· 4242» لتمييز وسيلة الدفع.',
+          'فواتيرك للعملاء تحتفظ بعملتها الخاصة ولا تتبع عملة الاشتراك.',
+        ],
+      },
+      {
+        heading: 'روابط التقارير المشتركة',
+        body: [
+          'الروابط التي ترسلها لعميلك تُفتح بدون تسجيل دخول، لذلك يستطيع الاطّلاع عليها كل من يملك الرابط. ما تعرضه محدود بما سمحت به عند إنشائه، وكل رابط قابل للإلغاء من داخل النظام في أي وقت. نسجّل عمليات الفتح لأغراض التدقيق ولا نستخدمها لأي غرض آخر.',
+        ],
+      },
+      {
+        heading: 'الجلسات وملفات الارتباط',
+        body: [
+          'نستخدم ملف ارتباط للجلسة وملفًا آخر لحماية النماذج من التزوير (CSRF). لا نستخدم ملفات تتبّع إعلانية، والتفاصيل في صفحة ملفات الارتباط. تسجيل الخروج يُبطل الجلسة مباشرة، ولا تعود قابلة للاستخدام حتى لو وصل طلب متأخر بعدها.',
+        ],
+      },
+      {
+        heading: 'الاحتفاظ والحذف الفعلي',
+        bullets: [
+          'اطلب الحذف من صفحة حذف البيانات: تفتح طلبًا برقم مرجعي، ونرسل رمزًا إلى بريدك للتأكد أنك صاحب العنوان قبل تنفيذ أي حذف.',
+          'الطلب غير الموثَّق لا يُنفَّذ إطلاقًا، ولا يستطيع المشغّل إتمامه.',
+          'قد يتعذّر الحذف مؤقتًا لأسباب نذكرها لك صراحةً — كفاتورة مفتوحة يفرض النظام المحاسبي الاحتفاظ بها.',
+        ],
+      },
+      {
         heading: 'حقوقك',
         bullets: [
           'الاطلاع على بياناتك وتصحيحها من داخل النظام.',
           'تصدير تقاريرك وبياناتك بصيغ PDF أو XLSX أو CSV.',
-          'طلب حذف الحساب وبياناته عبر البريد أدناه.',
+          'طلب حذف الحساب أو بيانات محددة من صفحة حذف البيانات (‎/data-deletion‎)، مع رقم مرجعي تتابع به الطلب.',
         ],
       },
       { heading: 'التواصل', body: [`لأي استفسار يخص الخصوصية أو طلبات الحذف: ${CONTACT_EMAIL}`] },
@@ -370,11 +407,48 @@ const en: LegalDoc[] = [
         ],
       },
       {
+        heading: 'Connected platforms and stores',
+        bullets: [
+          'When you connect an advertising account (Meta, Google Ads, TikTok, Snapchat, X or LinkedIn) we store its access and refresh tokens encrypted, and use them only to read your own accounts’ performance.',
+          'When you connect a store (Salla or Zid) we read orders, abandoned carts, products and customers to the extent your reports show them, keeping the store’s timezone so a merchant’s day stays their own day.',
+          'We never write, publish or change anything in your advertising accounts or your store. The access is read-only.',
+          'Disconnecting inside the product stops the sync immediately and revokes the stored tokens. The same happens automatically when a verified deletion request is carried out.',
+        ],
+      },
+      {
+        heading: 'Subscription and payment data',
+        bullets: [
+          'Your CampaignsHub subscription is charged in US dollars through a payment provider. Card numbers never pass through us and are never stored here — no PAN, no CVC.',
+          'What we keep is metadata: the provider’s payment id, the amount and currency, the status, its dates, and — where the provider publishes one — a card label such as “visa ···· 4242” to tell payment methods apart.',
+          'Invoices you issue to your own clients keep their own currency and do not follow the subscription currency.',
+        ],
+      },
+      {
+        heading: 'Shared report links',
+        body: [
+          'A link you send a client opens without signing in, so anyone holding it can read it. What it shows is limited to what you allowed when you created it, and every link can be revoked from inside the product at any time. Opens are recorded for audit and used for nothing else.',
+        ],
+      },
+      {
+        heading: 'Sessions and cookies',
+        body: [
+          'We use a session cookie and a CSRF cookie that protects forms from being submitted by another site. We use no advertising or tracking cookies; the cookies page has the detail. Signing out invalidates the session immediately, and it cannot be used again even if a request that started earlier arrives afterwards.',
+        ],
+      },
+      {
+        heading: 'Retention and actually deleting it',
+        bullets: [
+          'Ask from the data deletion page: it opens a request with a reference, and we send a code to your email to confirm the address is yours before anything is deleted.',
+          'An unverified request is never carried out, and an operator cannot complete one.',
+          'Deletion can be held up for reasons we state plainly — an open invoice accounting rules require us to keep, for instance.',
+        ],
+      },
+      {
         heading: 'Your rights',
         bullets: [
           'View and correct your data inside the product.',
           'Export your reports and data as PDF, XLSX or CSV.',
-          'Request deletion of your account and its data by email.',
+          'Ask for your account or specific data to be deleted from the data deletion page (/data-deletion), with a reference you can follow.',
         ],
       },
       { heading: 'Contact', body: [`Privacy questions and deletion requests: ${CONTACT_EMAIL}`] },

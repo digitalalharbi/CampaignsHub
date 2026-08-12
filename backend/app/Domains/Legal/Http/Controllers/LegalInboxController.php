@@ -8,7 +8,9 @@ use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Legal\Models\ContactMessage;
 use App\Domains\Legal\Models\DataRequest;
 use App\Domains\Legal\Models\SupportTicket;
+use App\Domains\Legal\Services\ConnectionRevocations;
 use App\Domains\Legal\Services\DeletionBlockers;
+use App\Domains\Legal\Services\DeletionVerification;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -29,7 +31,11 @@ use Illuminate\Validation\Rule;
  */
 final class LegalInboxController extends Controller
 {
-    public function __construct(private readonly DeletionBlockers $blockers) {}
+    public function __construct(
+        private readonly DeletionBlockers $blockers,
+        private readonly DeletionVerification $verification,
+        private readonly ConnectionRevocations $revocations,
+    ) {}
 
     public function contactMessages(Request $request): JsonResponse
     {
@@ -126,6 +132,23 @@ final class LegalInboxController extends Controller
 
         $status = $data['status'];
 
+        /*
+         * LEGAL-DELETE-001 — an unverified destructive request cannot be completed. Fail closed.
+         *
+         * The blocker check below asks whether it is SAFE to delete; this asks the question that has
+         * to come first — whether the person who asked is the person whose data it is. Nobody proved
+         * that for a request still sitting in `verifying`, and an operator working through a queue
+         * has no way to tell by looking. So the refusal is the system's, not their judgement's.
+         */
+        if ($status === 'completed' && ! $this->verification->isActionable($dataRequest)) {
+            return ApiResponse::error(
+                'This deletion has not been verified by the requester, so it cannot be completed.',
+                null,
+                ['status' => $dataRequest->status, 'verification_required' => true],
+                422,
+            );
+        }
+
         if ($status === 'completed' && $dataRequest->isDestructive()) {
             $blockers = $this->blockers->forTenant($dataRequest->tenant_id ? (string) $dataRequest->tenant_id : null);
 
@@ -158,13 +181,25 @@ final class LegalInboxController extends Controller
             'blockers' => $status === 'blocked' ? $dataRequest->blockers : null,
         ])->save();
 
+        /*
+         * Completing a deletion revokes the workspace's provider connections.
+         *
+         * Deleting our copy while a live OAuth token still points at their advertising account is
+         * half a deletion — the access we were granted outlives the data it was granted for. Revoking
+         * goes through the same path a person's own Disconnect uses, so there is one behaviour and
+         * one audit action rather than a second, quieter one.
+         */
+        $revoked = $status === 'completed' && $dataRequest->isDestructive()
+            ? $this->revocations->revokeForTenant($dataRequest->tenant_id ? (string) $dataRequest->tenant_id : null)
+            : 0;
+
         AuditLog::create([
             'tenant_id' => $dataRequest->tenant_id,
             'user_id' => $request->user()?->id,
             'action' => 'legal.data_request.'.$status,
             'entity_type' => DataRequest::class,
             'entity_id' => (string) $dataRequest->getKey(),
-            'after' => ['status' => $status, 'type' => $dataRequest->type],
+            'after' => ['status' => $status, 'type' => $dataRequest->type, 'connections_revoked' => $revoked],
             'ip_address' => $request->ip(),
             'user_agent' => substr((string) $request->userAgent(), 0, 500),
         ]);

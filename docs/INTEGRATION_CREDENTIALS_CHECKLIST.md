@@ -227,6 +227,28 @@ The console lists the pairs the absence has ALREADY cost, worst first, derived f
 actually withheld in both pipelines — so a currency nobody thought to list appears the moment it
 costs somebody a number.
 
+## 4c. The compliance URLs every platform review asks for (`LEGAL-DELETE-001`)
+
+Before any of the six advertising platforms will approve an app, its console asks for these. They are
+public, bilingual, need no session and never redirect to `/login`.
+
+| Field in the provider console | URL |
+|---|---|
+| Privacy Policy URL | `{FRONTEND_URL}/privacy` |
+| Terms of Service URL | `{FRONTEND_URL}/terms` |
+| User Data Deletion URL | `{FRONTEND_URL}/data-deletion` |
+| Data Deletion Callback URL — **Meta only** | `POST {APP_URL}/api/v1/webhooks/data-deletion/meta` |
+
+Read them from `/admin` → integration readiness rather than typing them: they are derived from the
+configured URLs, so a copy cannot go stale the day the domain changes — and a stale one is a rejected
+review with no obvious cause.
+
+**The callback is not a formality.** It verifies Meta's `signed_request` against the app secret with
+a constant-time HMAC comparison, and **answers 503 while that secret is absent** rather than opening
+a deletion for anyone who finds the URL. A signed request opens one verified request, idempotently,
+and answers `{url, confirmation_code}` in the shape Meta expects. Only Meta asks for a callback
+today; the endpoint exists for any provider that adds the requirement.
+
 ## 5. What to do with a credential once you have it
 
 1. Put it in the environment. Never in the repository.

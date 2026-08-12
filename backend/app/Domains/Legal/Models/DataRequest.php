@@ -29,12 +29,15 @@ final class DataRequest extends Model
     protected $fillable = [
         'reference', 'type', 'name', 'email', 'phone', 'details', 'status', 'blockers',
         'operator_note', 'reviewed_by', 'reviewed_at', 'completed_at',
-        'user_id', 'tenant_id', 'ip', 'user_agent', 'locale',
+        'user_id', 'tenant_id', 'ip', 'user_agent', 'locale', 'source', 'source_provider',
     ];
 
     protected $casts = [
         'blockers' => 'array',
         'reviewed_at' => 'datetime',
+        'verification_sent_at' => 'datetime',
+        'verification_expires_at' => 'datetime',
+        'verified_at' => 'datetime',
         'completed_at' => 'datetime',
     ];
 

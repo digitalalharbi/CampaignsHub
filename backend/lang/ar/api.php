@@ -36,5 +36,9 @@ return [
     'contact_received' => 'شكرًا لك — وصلتنا رسالتك وسنرد عبر البريد الإلكتروني.',
     'support_ticket_created' => 'أُنشئت تذكرتك. احتفظ بالرقم المرجعي لمتابعتها.',
     'data_request_received' => 'سُجّل طلبك وسيُراجَع.',
+    'data_request_verification_failed' => 'تعذّر التحقق من الرمز. تأكد من الرقم المرجعي والبريد والرمز، أو اطلب رمزًا جديدًا.',
+    'data_request_verified' => 'تم التحقق من طلبك وأصبح قيد المراجعة.',
+    'data_request_not_found' => 'لا يوجد طلب بهذا الرقم المرجعي والبريد.',
+    'data_deletion_callback_unconfigured' => 'لم تُضبط بيانات اعتماد هذه المنصة بعد، فلا يمكن التحقق من التوقيع.',
     'policies_not_accepted' => 'يجب الموافقة على: :documents',
 ];

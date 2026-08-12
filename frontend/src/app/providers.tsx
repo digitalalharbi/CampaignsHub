@@ -54,11 +54,16 @@ const queryClient = new QueryClient({
  * by construction. All three are matched, because an auth dependency on any one of them is an auth
  * dependency on a client's report.
  *
+ * `/data-deletion` joins them for the same reason (LEGAL-DELETE-001): somebody asking to have their
+ * data deleted has usually already lost access, or never had an account and appears only inside a
+ * client's data. Probing `/auth/me` there can only ever be answered 401, on the one page that has to
+ * work when everything else about the account has failed.
+ *
  * Deliberately NOT «every route outside RequireAuth». A public page such as `/` legitimately wants
  * to know who you are, so it can offer «back to your dashboard» to somebody already signed in. This
  * list is the surfaces where the answer is not merely unnecessary but meaningless.
  */
-const SESSIONLESS_PREFIXES = ['/r/', '/reports/share/', '/reports/print/']
+const SESSIONLESS_PREFIXES = ['/r/', '/reports/share/', '/reports/print/', '/data-deletion']
 
 export function isSessionlessSurface(pathname: string): boolean {
   return SESSIONLESS_PREFIXES.some((prefix) => pathname.startsWith(prefix))

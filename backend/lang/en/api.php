@@ -23,5 +23,9 @@ return [
     'contact_received' => 'Thank you — your message has been received and we will reply by email.',
     'support_ticket_created' => 'Your ticket has been created. Keep the reference to follow it up.',
     'data_request_received' => 'Your request has been recorded and will be reviewed.',
+    'data_request_verification_failed' => 'That code could not be verified. Check the reference, the email and the code, or ask for a new code.',
+    'data_request_verified' => 'Your request is verified and is now in review.',
+    'data_request_not_found' => 'No request matches that reference and email.',
+    'data_deletion_callback_unconfigured' => 'This platform has no credentials configured, so its signature cannot be verified.',
     'policies_not_accepted' => 'You must accept: :documents',
 ];

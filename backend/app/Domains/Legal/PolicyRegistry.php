@@ -36,7 +36,16 @@ final class PolicyRegistry
      */
     private const DOCUMENTS = [
         'terms' => ['version' => '1.0', 'effective' => '2026-08-07', 'binding' => true],
-        'privacy' => ['version' => '1.0', 'effective' => '2026-08-07', 'binding' => true],
+        /*
+         * 1.1 — LEGAL-DELETE-001. The text now describes what the system actually does with OAuth
+         * tokens, Salla/Zid store data, subscription payment metadata, shared report links, sessions
+         * and cookies, and it points at `/data-deletion` rather than an inbox.
+         *
+         * A NEW version rather than an edit, because an acceptance record points at a version: editing
+         * 1.0 in place would leave everybody who accepted it claiming to have agreed to text they
+         * never saw. That is the one operation this registry exists to prevent.
+         */
+        'privacy' => ['version' => '1.1', 'effective' => '2026-08-12', 'binding' => true],
         'data-processing' => ['version' => '1.0', 'effective' => '2026-08-07', 'binding' => false],
         'cookies' => ['version' => '1.0', 'effective' => '2026-08-07', 'binding' => false],
         'security' => ['version' => '1.0', 'effective' => '2026-08-07', 'binding' => false],

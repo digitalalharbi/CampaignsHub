@@ -85,6 +85,17 @@ From `docs/INTEGRATION_CREDENTIALS_CHECKLIST.md`, byte for byte:
 - [ ] Commerce redirects → `{APP_URL}/api/v1/oauth/commerce/{provider}/callback`
 - [ ] Commerce webhooks → `{APP_URL}/api/v1/webhooks/commerce/{provider}`
 
+## 5b. The compliance URLs, before any platform review
+
+- [ ] `{FRONTEND_URL}/privacy`, `/terms` and `/data-deletion` all answer 200 over **https**, with no
+      session and no redirect to `/login`, in both Arabic and English.
+- [ ] `/data-deletion` opens a request, returns a reference, and asks for the emailed code. With no
+      mail provider it says the code could not be sent — that is the honest state, not a failure.
+- [ ] Meta only: register `POST {APP_URL}/api/v1/webhooks/data-deletion/meta` as the Data Deletion
+      Request Callback. It answers **503 until `META_ADS_APP_SECRET` is set**, which is deliberate —
+      there is nothing to verify a signature against, and a callback that trusts an unsigned body is
+      a public «delete this account» endpoint.
+
 ## 6. Smoke tests, in this order
 
 1. [ ] `GET {APP_URL}/api/v1/health` answers 200.
