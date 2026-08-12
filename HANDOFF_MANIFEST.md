@@ -262,11 +262,13 @@ issue → branch → implementation + tests → PR → CI green → review → m
 conversations resolved before merge. The owner keeps an emergency override; using it is recorded
 afterwards.
 
-**Claude Code is a contributor here, not a side channel.** Write `@claude …` in an issue or a pull
-request comment and the `.github/workflows/claude.yml` action reads the repository, works on a
-`claude/<issue>-<slug>` branch and opens a pull request — reviewed like anyone else's. It cannot
-push to `main`, it holds exactly one secret (`ANTHROPIC_API_KEY`, in GitHub Actions secrets), and it
-receives no provider or deployment credential.
+**Claude Code is a contributor here, not a side channel — and this is verified, not aspirational.**
+Write `@claude …` in an issue or a pull request comment and the `.github/workflows/claude.yml` action
+reads the repository, works on a `claude/<issue>-<slug>` branch and opens a pull request — reviewed
+like anyone else's. PR #5 went the whole way on 2026-08-12: mention → branch → commit → push → PR →
+both required checks green → squash-merged through the protected branch. It cannot push to `main`,
+it holds exactly one secret (`ANTHROPIC_API_KEY`, in GitHub Actions secrets), and it receives no
+provider or deployment credential.
 
 The full workflow, the emergency path, the secrets strategy and who needs which GitHub permission:
 [`docs/CHANGE_MANAGEMENT.md`](docs/CHANGE_MANAGEMENT.md). A developer building features needs
