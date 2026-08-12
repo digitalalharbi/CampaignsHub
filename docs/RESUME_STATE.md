@@ -26,6 +26,10 @@ Every step of that has now happened for real: PR #5 was opened by Claude from an
 both required checks, and was squash-merged through the protected branch. **No commit has ever
 reached `main` outside a pull request.**
 
+- **The `@claude` Action is `PAUSED_BY_OWNER` (2026-08-12).** It works and is deliberately not used,
+  to avoid spending API credits. Nothing is deleted — App, secret and workflow all stay. Development
+  happens in a Claude Code conversation and still reaches `main` only through branch → PR → CI →
+  merge, with `git fetch origin` first and again after every merge.
 - Claude GitHub App: **installed** on this repository.
 - `ANTHROPIC_API_KEY`: **present** in Actions secrets. It is not, and must never be, in a file here.
 - `.github/workflows/claude.yml`: active, separate from `ci.yml`, least privilege, never on a fork.

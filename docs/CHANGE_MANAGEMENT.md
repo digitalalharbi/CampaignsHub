@@ -48,6 +48,16 @@ right now. That answer decides whether §5 applies.
 
 ## 3. Handing a change to Claude
 
+> **PAUSED_BY_OWNER — 2026-08-12.** The `@claude` automation below is proven and switched off, to
+> avoid spending Anthropic API credits. Do not mention `@claude` in an issue or a PR until the owner
+> says otherwise. The App, the secret and `.github/workflows/claude.yml` all stay in place — this is
+> a decision about use, not a rollback.
+>
+> In the meantime the same work happens in a Claude Code conversation: fetch `origin/main`, branch,
+> implement, test, push, open a PR, let CI run, merge through the protected path. Every rule in this
+> document applies unchanged; only the trigger is different.
+
+
 In an issue or a pull request comment, address it:
 
 ```

@@ -26,6 +26,19 @@ Then read, in this order — they are the project's own record and they outrank 
 Work from what those say. If a document contradicts the code, the code is the fact and the document
 is a defect worth fixing.
 
+## The Claude GitHub Action is PAUSED_BY_OWNER
+
+`.github/workflows/claude.yml` works — it was proven end to end on PR #5 — and it is **not to be
+used**. The owner paused it to avoid spending Anthropic API credits. Do not write `@claude` in an
+issue or a pull request, and do not trigger a run any other way.
+
+Nothing is removed: the GitHub App stays installed, `ANTHROPIC_API_KEY` stays in Actions secrets, and
+the workflow file stays exactly as it is. This is a decision about USE, not a rollback, and it is
+reversed by the owner saying so.
+
+Development happens in a Claude Code conversation instead. The cycle below is unchanged — the work is
+authored in the conversation and still reaches `main` only through a branch, a pull request and CI.
+
 ## How work reaches main
 
 Every change — human or agent — takes the same path:
@@ -34,7 +47,11 @@ Every change — human or agent — takes the same path:
 issue / change request → branch → implementation → tests → PR → CI green → review → merge
 ```
 
-- Branch naming for agent work: `claude/<issue-number>-<short-slug>`.
+- Branch naming for agent work: `claude/<issue-number>-<short-slug>`, or a plain
+  `fix/…` · `feat/…` · `chore/…` when the change did not start from an issue.
+- **`git fetch origin` first, always**, and branch from the freshest `origin/main`. A local checkout
+  that disagrees with GitHub is stale, not authoritative.
+- After every merge, fetch again and take that as the state for the next piece of work.
 - **No direct push to `main`.** The branch is protected. An emergency override is possible for the
   owner and must be documented afterwards in `docs/CHANGE_MANAGEMENT.md` §Emergency.
 - A PR fills in the template honestly: root cause, scope, tests, security, tenant isolation,
