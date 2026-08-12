@@ -82,7 +82,8 @@ Details, and the supporting demo personas: [`docs/DEMO_ACCOUNTS.md`](docs/DEMO_A
 ## 5. Running it locally
 
 ```bash
-createdb mediabuying
+createdb mediabuying          # development
+createdb mediabuying_test     # the test suite's own database
 
 cd backend
 cp .env.example .env && php artisan key:generate
@@ -108,6 +109,12 @@ cd frontend && npm run lint                        # oxlint
 cd frontend && npm run build                       # production bundle
 cd frontend && npm run gate                        # Playwright: chromium, firefox, webkit
 ```
+
+Three databases, and only one of them is your job. `mediabuying` is development. **`mediabuying_test`
+is what `php artisan test` uses** (`backend/phpunit.xml` names it) and nothing creates it, so create
+it once by hand. `mediabuying_e2e` is the gate's, and `php artisan e2e:prepare` creates and resets it
+on every run — a gate that silently fell back to the development database is the failure that
+command exists to prevent.
 
 The gate runs each browser as its own isolated invocation with its own database reset,
 `retries: 0`, `workers: 1`. **Capture its exit code on its own line, never through a pipe** —

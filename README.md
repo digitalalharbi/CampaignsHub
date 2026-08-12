@@ -44,7 +44,8 @@ locally.
 ## Quick start (local, without Docker)
 
 ```bash
-createdb mediabuying
+createdb mediabuying          # development
+createdb mediabuying_test     # the suite's own database — phpunit.xml points at it
 
 cd backend
 cp .env.example .env
@@ -68,6 +69,10 @@ cd backend  && php artisan test && vendor/bin/pint
 cd frontend && npm run typecheck && npm test && npm run lint && npm run build
 cd frontend && npm run gate       # Playwright, one isolated run per browser
 ```
+
+`php artisan test` runs against **`mediabuying_test`** (see `backend/phpunit.xml`) and does not create
+it — hence the second `createdb` above. The gate's database, `mediabuying_e2e`, IS created and reset
+for you by `php artisan e2e:prepare` on every run, so there is nothing to do for that one.
 
 ## Health
 
