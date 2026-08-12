@@ -7,8 +7,45 @@
 
 ---
 
-## Current branch
-`feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
+## Where the truth is
+`origin/main` on `https://github.com/digitalalharbi/CampaignsHub`. A local branch or worktree is a
+working copy, never a source of truth — `git fetch origin` first, always.
+
+## ⚠️ START HERE — GITHUB-MANAGED, 2026-08-12
+
+**`origin/main` is the system of record, and the Claude Code workflow is VERIFIED end to end.**
+`https://github.com/digitalalharbi/CampaignsHub` · branch `main`, protected.
+
+### The workflow, proven rather than described
+
+```
+Issue → @claude → branch → commit → push → PR → CI (backend + frontend) → merge → main
+```
+
+Every step of that has now happened for real: PR #5 was opened by Claude from an issue mention, ran
+both required checks, and was squash-merged through the protected branch. **No commit has ever
+reached `main` outside a pull request.**
+
+- Claude GitHub App: **installed** on this repository.
+- `ANTHROPIC_API_KEY`: **present** in Actions secrets. It is not, and must never be, in a file here.
+- `.github/workflows/claude.yml`: active, separate from `ci.yml`, least privilege, never on a fork.
+- `main` ruleset: no force push, no deletion, PR required, `backend` + `frontend` checks required and
+  strict, review conversations resolved. Admin bypass retained for owner emergency recovery only.
+- Required approving reviews is **0**, because GitHub does not let anyone approve their own PR and a
+  solo owner would otherwise be locked out. **Raise it to 1 the day a second person joins.**
+
+Read `docs/CHANGE_MANAGEMENT.md` before starting any change. A developer building features needs
+**Write**, not Admin.
+
+### Open, and deliberately separate
+
+- **#2 STATIC-DEBT-001** — 128 baselined Larastan errors. The baseline makes a NEW error fail the
+  build; deleting entries as they are fixed is the way out.
+- **#3 SEC-DEPS-001** — six advisories against `league/commonmark`, a transitive dependency.
+
+Neither belongs to any other unit. Do not fold them into one.
+
+---
 
 ## ⚠️ START HERE — PUBLISHED, 2026-08-12
 
