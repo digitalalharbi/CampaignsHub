@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { api } from '@/lib/api/client'
+import { api, ensureCsrfCookie } from '@/lib/api/client'
 import { Button } from '@/components/ui/Button'
 import { useUi } from '@/stores/ui'
 import { CONTACT_EMAIL } from './legalContent'
@@ -68,6 +68,16 @@ export function DataDeletionPage() {
     setBusy(true)
     setError(null)
     try {
+      /*
+       * Prime the CSRF cookie first, because this page is deliberately sessionless.
+       *
+       * Everywhere else in the app the token arrives as a side effect of the `/auth/me` probe on
+       * load. This page is in `SESSIONLESS_PREFIXES` — it must not ask who you are — so nothing sets
+       * it, and the first POST came back 419. Found by the three-browser E2E, not by the unit tests,
+       * which mock the client and so cannot see a cookie that was never set.
+       */
+      await ensureCsrfCookie()
+
       const { data } = await api.post(path, body)
       onOk(data.data as T)
     } catch (e: unknown) {

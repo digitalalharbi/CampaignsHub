@@ -5,7 +5,9 @@ import { DataDeletionPage } from './DataDeletionPage'
 import { api } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 
-vi.mock('@/lib/api/client', () => ({ api: { post: vi.fn() } }))
+// `ensureCsrfCookie` is part of the mock because the page is sessionless and primes the token
+// itself — a mock that omitted it would fail for a reason that has nothing to do with the page.
+vi.mock('@/lib/api/client', () => ({ api: { post: vi.fn() }, ensureCsrfCookie: vi.fn() }))
 
 const post = vi.mocked(api.post)
 
