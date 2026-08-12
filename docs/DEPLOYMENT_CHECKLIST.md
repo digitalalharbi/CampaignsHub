@@ -28,7 +28,10 @@ Start from `backend/.env.example` — it is complete and carries **no secrets**.
       `SESSION_SECURE_COOKIE=true`, `SESSION_SAME_SITE=lax`. `none` would let any site send the
       cookie; `strict` breaks return-from-payment.
 - [ ] `DB_CONNECTION=pgsql`, `QUEUE_CONNECTION=redis`, `CACHE_STORE=redis`.
-- [ ] `SUBSCRIPTION_PROVIDER=moyasar` — **never `sandbox` in production.**
+- [ ] `SUBSCRIPTION_PROVIDER=moyasar` — **never `sandbox` in production.** The example file ships
+      `sandbox`, because it carries no keys and a fresh clone has to pass `production:check` before
+      anybody has credentials. Changing it here is therefore a step, not a check — and
+      `production:check` fails a production install that skipped it.
 - [ ] Gateway keys are a matched pair (both live), and the webhook secret is present.
 - [ ] Live keys are in **production only**. `production:check` also fails a live secret in any other
       environment (`PAY-ENV-001`) — copying a working production `.env` to staging is how a box whose

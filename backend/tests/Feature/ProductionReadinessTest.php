@@ -130,6 +130,32 @@ final class ProductionReadinessTest extends TestCase
         $this->assertContains('subscriptions.default', $this->failedKeys());
     }
 
+    /**
+     * `.env.example` must not name a gateway it has no keys for.
+     *
+     * Found by cloning the published repository and following the installation guide: copy the
+     * example, generate a key, migrate, seed — then run the first command the guide gives, and
+     * `production:check` answers «moyasar is the chosen gateway and has no secret key, so no checkout
+     * can open» and tells the reader to supply live credentials. The install was perfect; the default
+     * was wrong. A file that ships with no keys in it, and never will, has to name the gateway that
+     * needs none.
+     *
+     * This asserts the file rather than the config, because the config is read from `.env` and the
+     * defect lived in the template nobody's environment reflects. The opposite mistake — this
+     * default reaching production — is pinned by
+     * {@see test_the_sandbox_gateway_cannot_be_the_production_gateway()}.
+     */
+    public function test_the_env_example_ships_a_gateway_that_needs_no_credentials(): void
+    {
+        $example = (string) file_get_contents(base_path('.env.example'));
+
+        $this->assertMatchesRegularExpression(
+            '/^SUBSCRIPTION_PROVIDER=sandbox$/m',
+            $example,
+            'the template a developer copies must produce a passing production:check on a fresh clone',
+        );
+    }
+
     public function test_a_synchronous_queue_is_refused_in_production(): void
     {
         $this->productionConfig(['queue.default' => 'sync']);
