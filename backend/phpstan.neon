@@ -1,5 +1,16 @@
 includes:
     - vendor/larastan/larastan/extension.neon
+    # STATIC-DEBT-001 — 128 pre-existing errors, recorded rather than hidden.
+    #
+    # CI pinned PHP 8.3 against a lock file needing 8.4.1, so `composer install` failed and this
+    # step had never once run. When it finally did, it found 128 errors that predate every rule in
+    # docs/CHANGE_MANAGEMENT.md.
+    #
+    # Baselining makes the gate REAL today: any NEW error fails the build, which is the property
+    # that stops the number growing. The baseline is committed and readable — the debt is visible
+    # in the diff of any change that touches a listed file, not buried in a suppression flag.
+    # Deleting entries as they are fixed is the intended way to use it.
+    - phpstan-baseline.neon
 
 parameters:
     level: 5

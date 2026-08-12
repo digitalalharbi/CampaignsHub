@@ -1,148 +1,88 @@
-# CampaignsHub — permanent session-start protocol
+# CampaignsHub — session bootstrap
 
-> **مُلزِم — عند بدء أي جلسة جديدة، نفّذ هذا قبل أي شيء آخر:**
->
-> 1. اقرأ `docs/RESUME_STATE.md`.
-> 2. اقرأ `docs/MASTER_REQUIREMENTS.md`.
-> 3. اقرأ `docs/IMPLEMENTATION_MATRIX.md`.
-> 4. اقرأ `docs/OPEN_GAPS.md`.
-> 5. افحص `git status` و`git log --oneline -10` و`git worktree list`.
-> 6. تحقق من الخدمات والمعاينة (frontend 5173 · backend 8000 · postgres 5432) وأعد تشغيلها عند الحاجة.
-> 7. استأنف من **Exact next task** في `docs/RESUME_STATE.md` دون إعادة أي مرحلة مكتملة.
-> 8. لا تسأل المستخدم ولا ترسل تحديثات مرحلية — نفّذ الحلقة: متطلب → كود → اختبار → مراجعة حية → Commit → تحديث المصفوفة → التالي.
->
-> **قواعد دائمة:** جميع التعليمات تراكمية؛ أحدث تصحيح صريح يلغي الجزء المتعارض فقط ولا يُسقط بقية المتطلبات.
-> نجاح الاختبارات وحده **ليس** دليل اكتمال، والتوثيق **ليس** بديلًا عن الكود. لا تدّعِ اكتمال أي مهمة غير مختبرة.
-> استأنف دائمًا من أول Requirement غير `VERIFIED` حسب ترتيب المصفوفة.
->
-> **Governance files (authoritative):** `docs/MASTER_EXECUTION_CONTRACT.md` ·
-> `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` · `docs/RESUME_STATE.md` · `docs/OPEN_GAPS.md` ·
-> `docs/PROGRESS.md`. Active branch: `feat/taxonomy-ux`.
-> Note: `docs/CampaignsHub_Master_Context_and_Instructions.md` is referenced by the user's standing
-> instructions but is **not present in this repository** — do not fabricate its contents.
+**`origin/main` on `https://github.com/digitalalharbi/CampaignsHub` is the single source of truth.**
+Not a local branch, not a worktree, not anything said in an earlier conversation. Where memory and
+Git disagree, Git is right and memory is stale.
 
----
+## Start of every session
 
-# MediaBuying Platform — Engineering Guide (CLAUDE.md)
-
-> منصة SaaS متعددة العملاء لإدارة وأتمتة رحلة الميديا باينج بالكامل.
-> Multi-tenant SaaS to run the full media-buying lifecycle: lead → client → proposal →
-> onboarding → media plan → content → launch → tracking → attribution → optimization →
-> reporting → billing.
-
-This file is the source of truth for how the codebase is structured and how work must be done.
-Read it before writing any code. It **overrides** default assumptions.
-
----
-
-## 1. Architecture (non-negotiable)
-
-- **Backend**: Laravel 12, **API-only**. PHP 8.3+ (dev machine runs 8.4). REST under `/api/v1`.
-- **Frontend**: React + TypeScript + Vite, **decoupled** SPA. No Blade, no Inertia in the app.
-- **Database**: PostgreSQL 16. UUIDs for API-exposed entities, `NUMERIC` money, `TIMESTAMPTZ`, `JSONB` for raw payloads.
-- **Cache/Queue**: Redis + Laravel Queues + Horizon.
-- **Style**: Modular Monolith + Domain-Driven Design. Split into `app/Domains/*`.
-
-### Layering rules
-1. Controllers are thin — they delegate, they do not contain business logic.
-2. Validation lives in Form Requests.
-3. Use cases live in **Actions**; complex orchestration in **Services**.
-4. Data crosses layers as **DTOs**; rule-bearing values as **Value Objects**.
-5. JSON output goes through **API Resources** — never return Eloquent models directly.
-6. External SDKs are hidden behind **Contracts (interfaces) + Adapters**. Controllers never call an SDK.
-7. Multi-step writes run inside DB transactions; queue side effects with `afterCommit`.
-
-### Domain folder shape
+```bash
+git fetch origin
+git log --oneline -10 origin/main
+git status
 ```
-app/Domains/<Domain>/
-  Actions/ Contracts/ DTOs/ Enums/ Events/ Exceptions/
-  Jobs/ Listeners/ Models/ Policies/ Queries/ Repositories/
-  Resources/ Services/ ValueObjects/
+
+Then read, in this order — they are the project's own record and they outrank any recollection:
+
+- @docs/RESUME_STATE.md — the live state, under **START HERE**
+- @docs/REQUIREMENTS_TRACEABILITY_MATRIX.md — every requirement, its status, its commit, its tests
+- @docs/MASTER_EXECUTION_CONTRACT.md — the standing contract for how work is accepted
+- @HANDOFF_MANIFEST.md — the map: architecture, portals, setup, integration readiness
+- @docs/PRODUCTION_HANDOFF.md — what exists, what does not, and the money rules
+- @docs/INTEGRATION_CREDENTIALS_CHECKLIST.md — every provider, its variables, its URLs, its state
+- @docs/CHANGE_MANAGEMENT.md — how a change gets from an issue to production
+- @docs/ENGINEERING_GUIDE.md — architecture, tenancy, security, frontend and the definition of done
+
+Work from what those say. If a document contradicts the code, the code is the fact and the document
+is a defect worth fixing.
+
+## How work reaches main
+
+Every change — human or agent — takes the same path:
+
 ```
-Domains: Identity, Tenancy, CRM, Clients, Onboarding, Proposals, Contracts, Campaigns,
-MediaPlanning, Content, Approvals, Advertising, Integrations, Tracking, Attribution,
-Ecommerce, Analytics, Optimization, Automation, Tasks, Notifications, Reports, Billing,
-AI, MCP, Audit.
-
----
-
-## 2. API contract
-
-Every response uses the envelope:
-```json
-{ "success": true, "message": "...", "data": {}, "meta": {}, "errors": null }
+issue / change request → branch → implementation → tests → PR → CI green → review → merge
 ```
-Errors: `success:false`, `data:null`, `errors:{field:[...]}`, `meta.request_id` present.
-Use correct status codes (200/201/202/204/400/401/403/404/409/422/429/500/503).
-Standardize pagination, filtering, sorting, search, allowed includes. Every request carries a
-`request_id` (and honors an `Idempotency-Key` on unsafe writes where declared).
 
----
+- Branch naming for agent work: `claude/<issue-number>-<short-slug>`.
+- **No direct push to `main`.** The branch is protected. An emergency override is possible for the
+  owner and must be documented afterwards in `docs/CHANGE_MANAGEMENT.md` §Emergency.
+- A PR fills in the template honestly: root cause, scope, tests, security, tenant isolation,
+  migrations, integrations, deployment, rollback, evidence.
+- After a merge that changes a requirement's status, update `docs/RESUME_STATE.md` and
+  `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` in the same PR.
 
-## 3. Multi-tenancy (safety-critical)
+## Status vocabulary — use it exactly
 
-- Every operational row has `tenant_id`.
-- **Never trust a tenant id coming from the frontend.** Resolve tenant from the authenticated
-  token/session (or domain), set it on a request-scoped context, and apply it via a global scope.
-- All important unique constraints include `tenant_id`. Cache keys, storage paths, and broadcast
-  channels are tenant-scoped. Tenant-isolation tests are mandatory and must stay green.
+| Status | Meaning |
+|---|---|
+| `VERIFIED` | Built, tested and proven here, with the evidence named |
+| `IMPLEMENTED_NOT_VERIFIED` | Written, not yet proven. Not done |
+| `READY_FOR_CREDENTIALS` | Complete. Supply the credential and it runs |
+| `READY_FOR_CONFIGURATION` | Complete. Awaiting a decision, not a credential |
+| `BLOCKED_EXTERNAL_CREDENTIALS` | Waiting on a credential only the operator can obtain |
+| `BLOCKED_OPERATIONAL_EVIDENCE` | Code ready; missing evidence from a real environment |
+| `LIVE_VERIFIED` | Real credentials **and** a real auth round trip **and** account discovery **and** a first live sync or payment **and** a real webhook **and** the result visible in the product |
 
-## 4. Security & authz
-- Sanctum by default (SPA cookie auth + PATs). Passport only if real external OAuth2 is needed.
-- Authorization enforced server-side via Policies/Gates — never by hiding buttons in React.
-- AI/automation may **never** launch a campaign, change budget, or pause an ad without an
-  explicit, permissioned, audited human approval.
+**Never write `LIVE_VERIFIED` without that external evidence.** Nothing in this system holds it
+today, for any provider, including the payment gateway — that is a statement about credentials, not
+about completeness.
 
-## 5. Integrations
-- One `Connector` interface per capability (advertising, ecommerce, payments, AI).
-- When credentials/permissions are missing: build the full connector + OAuth flow + settings pages
-  + a Sandbox/Fake connector + contract tests, and expose state `Awaiting Credentials`.
-- Never fake a successful external call. Never commit secrets. `.env.example` only.
+## Standing rules
 
-## 6. Frontend rules
-- Design tokens only (see `docs/design-tokens.md`); no ad-hoc colors.
-- Every page/component supports: loading, skeleton, empty, error, no-permission, stale, syncing.
-- RTL for Arabic, LTR for English. Latin digits for numbers/dates/ids. Dark mode complete.
-- Data-bearing UI shows Data Source + Last Updated. No fabricated data.
+- **Do not redo VERIFIED work** without a defect proven first. Prove it fail-first, then fix it.
+- Passing tests are not proof of completeness; documentation is not a substitute for code. Do not
+  report a task complete that has not been run.
+- Honest states everywhere: nothing is recorded as sent, connected or paid without a real verified
+  provider response.
+- Never commit a secret. Never put a credential in the repository. `.env.example` carries variable
+  names and safe placeholders only.
+- Development-only affordances (dev OTP codes, portal dev tokens, `/dev/status`) stay hard-gated off
+  in production.
 
----
+## Stack, in one line
 
-## 7. Definition of Done (quality gates)
-No task/phase is "done" until, for the touched code:
-- `composer test` green, `pint --test` clean, Larastan (PHPStan) clean, migrations reversible.
-- Frontend: `tsc --noEmit` clean, ESLint clean, Vitest green.
-- No secrets in git, no critical TODOs, no dead buttons, no fake integrations, no console errors.
-- Evidence captured (command output / screenshot).
+Laravel 12 · PHP 8.4 · PostgreSQL 16 · Redis · Sanctum SPA cookie auth · DDD under `app/Domains/*`
+— and React 19 · TypeScript strict · Vite · TanStack Query · Tailwind v4, Arabic-first RTL with a
+complete English mirror. Four portals behind one `/login`. Details: @HANDOFF_MANIFEST.md.
 
-## 8. Environment
-- Local: PostgreSQL 16 + Redis 8 (Homebrew), PHP 8.4, Node 24. Docker files exist but Docker is
-  not installed on this machine — Docker-based steps are authored, not locally verified.
+## Running and verifying
 
-## 9. Progress
-See `docs/PROGRESS.md` for the phase log and what is verified vs. pending.
+```bash
+cd backend  && php artisan test && vendor/bin/pint
+cd frontend && npm run typecheck && npm test && npm run lint && npm run build
+cd frontend && npm run gate > gate.log 2>&1; REAL_GATE_EXIT=$?
+```
 
----
-
-# CampaignsHub — session bootstrap (READ FIRST, every new session)
-
-On starting ANY new session in this repo, do this BEFORE anything else, then resume automatically:
-1. Read `docs/RESUME_STATE.md` (authoritative handoff: branch, HEAD, WIP, Exact Next Task, commands).
-2. Read `docs/MASTER_REQUIREMENTS.md`, `docs/IMPLEMENTATION_MATRIX.md`, `docs/OPEN_GAPS.md`.
-3. Run `git status`, `git log --oneline -8`, `git worktree list`.
-4. Bring up / check services: `bash scripts/dev-up.sh` then `bash scripts/dev-status.sh` (preview http://localhost:5173, backend http://127.0.0.1:8000, /dev/status).
-5. Resume from **Exact Next Task** in RESUME_STATE. Do NOT redo completed/committed work. Do NOT ask the user. Do NOT send interim/progress updates.
-
-## Hard rules
-- The delivered release is FROZEN: tag `v1.1.0-expanded-final` (`e9b99f2`) + `~/Desktop/CampaignsHub-*-Delivery.zip` are UNTOUCHABLE. Active dev is on branch `feat/taxonomy-ux`.
-- **HEAD `a5d24e2` (WIP aaa79da..a5d24e2) holds an UNVERIFIED agent WIP snapshot** — verify (frontend `npm run build && npx vitest run`; backend `php artisan test`; re-seed taxonomy) and commit a clean commit BEFORE building on it. Never claim untested work complete.
-- Taxonomy engine option keys for enum-backed fields MUST equal the LIVE backend enum values (source of truth). Never reintroduce aspirational keys. Used options are DEACTIVATED/merged, never deleted. No data loss.
-- Honest states: nothing logged sent/connected/paid without a real verified provider (Email/WhatsApp/SMS/Payment/Ad-platforms/Drive = Awaiting Credentials).
-- Dev-only secrets (OTP dev_code, portal dev token, /dev/status) are hard-gated off in production.
-
-## Stack
-Backend: Laravel 12 (PHP 8.4), PostgreSQL, Redis, Sanctum SPA cookie auth, DDD `app/Domains/*`. Frontend: React 19 + TS + Vite, TanStack Query, react-router, zustand. Arabic-first RTL, Latin digits. Demo logins in `docs/delivery/DEMO_ACCESS.md` (password `password`).
-
-## Run / test
-- Env: `bash scripts/dev-up.sh` (backend workers=4 + queue:work reports,default + scheduler + Vite). `.env` local `E2E_RELAX_RATE_LIMITS=true` (local only; prod/staging/testing throttle).
-- Backend tests: `cd backend && php artisan test`. Frontend unit: `cd frontend && npx vitest run`. E2E: `cd frontend && CI=1 npx playwright test`.
-- Reset dev DB: `cd backend && php artisan migrate:fresh --seed --force`.
+`REAL_GATE_EXIT` must be captured on its own line. Piping the gate into `tail` gives you `tail`'s
+exit code, which is always 0, and that has produced a false green in this repository before.

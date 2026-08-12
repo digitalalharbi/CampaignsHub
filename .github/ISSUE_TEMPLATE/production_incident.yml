@@ -1,0 +1,89 @@
+name: Production incident
+description: Customers are affected right now.
+title: "[Incident] "
+labels: ["incident", "urgent"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Open this while it is still happening. Fill in the top three fields and submit — the rest
+        can be added as you learn it. A complete report written an hour later is worth less than a
+        partial one written now.
+
+        The hotfix path is `docs/CHANGE_MANAGEMENT.md` §5. It is faster, and it still ends in a test.
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Who is affected, and how
+      placeholder: "Every agency user; the dashboard is 500-ing. Client links still load."
+    validations:
+      required: true
+
+  - type: input
+    id: started
+    attributes:
+      label: When did it start
+      placeholder: "~14:05 Riyadh, right after the deploy"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Everything is down
+        - One portal is down
+        - One feature is broken
+        - Wrong data is being shown
+        - Money is affected — charges, invoices or activations
+        - An integration stopped syncing
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptoms
+    attributes:
+      label: What is being seen
+      description: Exact messages, status codes, the endpoint. Redact tokens and customer data.
+      render: shell
+
+  - type: input
+    id: deploy
+    attributes:
+      label: Last deploy or change before it started
+      placeholder: "PR #42, merged 13:58"
+
+  - type: checkboxes
+    id: money
+    attributes:
+      label: Money and data
+      options:
+        - label: Customers may have been charged incorrectly
+        - label: An account activated without a confirmed payment, or failed to activate after one
+        - label: One workspace may have seen another's data
+        - label: A client-facing report or share link is showing wrong figures
+
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: What has been done so far
+      placeholder: "Rolled back to the previous release · queue workers restarted · nothing yet"
+
+  - type: textarea
+    id: rootcause
+    attributes:
+      label: Root cause, once known
+      description: |
+        The mechanism, not the symptom. «The dashboard broke» is a symptom; «the window Carbon was
+        bound without its offset, so the first three hours of the client's day left every result» is
+        a cause. Fill this in before the issue is closed.
+
+  - type: textarea
+    id: followup
+    attributes:
+      label: Follow-up
+      description: |
+        The test that would have caught it, and where it lives. An incident closed without one is
+        the same incident scheduled again.

@@ -245,7 +245,34 @@ Each of these exists because its opposite shipped once and was found.
 - **A merchant's day is not a UTC day.** Store timestamps are true instants; report windows are
   measured on the client's clock; every order keeps the calendar date its own merchant sold it on.
 
-## 11. Where to look next
+## 11. How this project is run from now on
+
+**GitHub is the permanent system of record.** `origin/main` on
+`https://github.com/digitalalharbi/CampaignsHub` is the only source of truth — not a local branch,
+not a worktree, not anything said in a conversation. A change that is not on `main` did not happen.
+
+Every change takes one path, and the preferred way to start one is a GitHub issue:
+
+```
+issue → branch → implementation + tests → PR → CI green → review → merge → deploy → smoke test
+      → update RESUME_STATE and the traceability matrix
+```
+
+`main` is protected: no force push, no deletion, pull request required, CI required, review
+conversations resolved before merge. The owner keeps an emergency override; using it is recorded
+afterwards.
+
+**Claude Code is a contributor here, not a side channel.** Write `@claude …` in an issue or a pull
+request comment and the `.github/workflows/claude.yml` action reads the repository, works on a
+`claude/<issue>-<slug>` branch and opens a pull request — reviewed like anyone else's. It cannot
+push to `main`, it holds exactly one secret (`ANTHROPIC_API_KEY`, in GitHub Actions secrets), and it
+receives no provider or deployment credential.
+
+The full workflow, the emergency path, the secrets strategy and who needs which GitHub permission:
+[`docs/CHANGE_MANAGEMENT.md`](docs/CHANGE_MANAGEMENT.md). A developer building features needs
+**Write**, not Admin.
+
+## 12. Where to look next
 
 | Question | Document |
 |---|---|
@@ -255,11 +282,13 @@ Each of these exists because its opposite shipped once and was found.
 | Every requirement, with the commit and the tests | [`docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`](docs/REQUIREMENTS_TRACEABILITY_MATRIX.md) |
 | Sign-ins for local and demo | [`docs/DEMO_ACCOUNTS.md`](docs/DEMO_ACCOUNTS.md) |
 | The live handoff and the exact next task | [`docs/RESUME_STATE.md`](docs/RESUME_STATE.md) |
+| How a change reaches production | [`docs/CHANGE_MANAGEMENT.md`](docs/CHANGE_MANAGEMENT.md) |
+| Architecture, tenancy, security, definition of done | [`docs/ENGINEERING_GUIDE.md`](docs/ENGINEERING_GUIDE.md) |
 | Why a thing is the way it is | [`docs/adr/`](docs/adr/) and [`docs/DECISIONS.md`](docs/DECISIONS.md) |
 | The engineering rules the code was written under | [`CLAUDE.md`](CLAUDE.md) |
 | What is deliberately incomplete | [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md) |
 
-## 12. Delivery state
+## 13. Delivery state
 
 Verification evidence for this handoff — the exact HEAD, the gate result per browser, the test
 totals, and the list of external blockers — is recorded under **START HERE** in

@@ -9,6 +9,7 @@ use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Sandbox\SandboxAdvertisingConnector;
 use App\Domains\Integrations\ValueObjects\HealthResult;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -21,9 +22,23 @@ use Tests\TestCase;
  * leaking into production code — it IS the production rule: a platform is configured or it is not,
  * and configuration is the only place that answer can honestly live. Without the container this
  * suite asserted the contract against connectors that could not read their own configuration.
+ *
+ * ## And it needs a MIGRATED database, which is why `RefreshDatabase` is here
+ *
+ * `status()` and `healthCheck()` resolve credentials through `PlatformCredentials`, which reads
+ * `provider_configurations` — because an operator may configure a provider in `/admin` instead of
+ * the environment, and that answer lives in a table. So this is not a database-free unit test and
+ * pretending otherwise only worked by accident: it passed on any machine whose `mediabuying_test`
+ * had been migrated once by some other suite, and failed on a database that had never been.
+ *
+ * CI found it on the first run that got far enough to try — 14 failures, all
+ * «relation "provider_configurations" does not exist» — and a new contributor cloning the
+ * repository would have met exactly the same thing.
  */
 final class ConnectorContractTest extends TestCase
 {
+    use RefreshDatabase;
+
     /** @return array<string, array{0: AdvertisingConnector}> */
     public static function connectors(): array
     {

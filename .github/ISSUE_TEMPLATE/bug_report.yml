@@ -1,0 +1,105 @@
+name: Bug report
+description: Something in CampaignsHub behaves incorrectly.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report what you saw, not what you think caused it — a diagnosis in the title tends to
+        become the only one anybody considers. You do not need to explain the project.
+
+  - type: dropdown
+    id: portal
+    attributes:
+      label: Where
+      description: Which portal or surface?
+      options:
+        - /admin — platform owner
+        - /app — advertiser
+        - /agency — agency
+        - /portal — client
+        - /r/{token} — a shared client report link
+        - Public site (marketing, legal)
+        - API only
+        - Email / notification
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: URL or endpoint
+      placeholder: /agency/projects/…/creatives?tab=groups
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened
+      description: Paste the exact message, in the language it appeared in. A screenshot helps.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Sign in as …
+        2. Open …
+        3. …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Customers affected right now
+        - Wrong data shown, no outage
+        - Broken but avoidable
+        - Cosmetic
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: sensitive
+    attributes:
+      label: Does this touch anything load-bearing?
+      description: Tick what applies. Any tick means the fix needs a test that pins it.
+      options:
+        - label: Money — an amount, a currency, a plan, an invoice or a payment
+        - label: Tenant isolation — one workspace seeing another's data
+        - label: Permissions — somebody reaching something they should not
+        - label: A live external integration
+        - label: A figure on a client-facing report or share link
+
+  - type: input
+    id: when
+    attributes:
+      label: When did it start
+      placeholder: "Since the 2026-08-12 deploy / first noticed today ~14:30 Riyadh"
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Browser, device, account
+      placeholder: "Safari 18 on iPhone · agency owner account · Arabic interface"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Errors from the console, the network tab or the server log
+      description: Redact anything secret. Never paste a token, a cookie or a customer's personal data.
+      render: shell
