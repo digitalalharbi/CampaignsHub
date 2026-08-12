@@ -1,6 +1,6 @@
 # Installation Guide — CampaignsHub
 
-Local, from a clean checkout. Requirements: PHP 8.4 (+ext pgsql), Composer, Node 20+, PostgreSQL 14+.
+Local, from a clean checkout. Requirements: PHP 8.4 (+ext pgsql), Composer, Node 20+, PostgreSQL 16.
 
 ## 1. Backend
 ```bash
