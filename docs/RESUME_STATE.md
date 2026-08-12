@@ -10,6 +10,64 @@
 ## Current branch
 `feat/taxonomy-ux` — repo `/Users/mohammedalharbimacbook/Developer/CampaignsHub-UI`
 
+## ⚠️ START HERE — PUBLISHED, 2026-08-12
+
+**The repository is on GitHub and a clean clone of it builds, migrates, seeds and tests.**
+`https://github.com/digitalalharbi/CampaignsHub` · branch `main` · tag `handoff-2026-08-12`.
+Working tree CLEAN. Non-external open items: **0**.
+
+### What the publication itself found — two defects nothing else could have
+
+Both were found by cloning the published repository into an empty directory and following the
+installation guide using **nothing** from the machine it was built on. Neither is reachable from a
+working checkout, which is exactly why the clone was worth doing.
+
+- **CLONE-INSTALL-001** — `.env.example` named `moyasar` as the subscription gateway. It carries no
+  keys and never will, so the first command the guide gives answered «moyasar is the chosen gateway
+  and has no secret key» and told a developer with a perfect install to obtain live credentials. It
+  now ships `sandbox`, which is a real adapter needing no credentials; `production:check` still fails
+  a production install left on it, pinned by a test that already existed, and a new test pins the
+  template itself.
+- **CLONE-INSTALL-002** — `php artisan test` runs against `mediabuying_test`, and **nothing creates
+  it**: not the suite, not a bootstrap, not a command. The guide said `createdb mediabuying` and three
+  lines later `php artisan test`, which on a fresh machine cannot connect. Both READMEs now create it
+  and say which of the three databases is the reader's job (`mediabuying_e2e` is not — `e2e:prepare`
+  makes and resets it every run).
+
+### Verification of the published tree
+
+```
+backend  2024 passed (11,247 assertions)   frontend 1017 passed / 134 files
+tsc 0 · oxlint 0 errors · build 0 · pint passed · production:check 0 failing, 2 warnings
+chromium 299 · firefox 291 · webkit 291    REAL_GATE_EXIT=0
+Failed 0 · Flaky 0 · Retries 0 · Skipped 0
+```
+
+**From the clean clone only** — `composer install` from the lockfile, `npm ci` from the lockfile,
+`.env` from the example, `migrate` (126), `db:seed`, `production:check` 0 failing, backend 2023
+passed, tsc 0, `npm run build` 0, vitest 1017 passed, and the seeded world identical to the
+original: 90 creatives, 2,943 metric rows, 0 orphans, all five canonical accounts.
+
+Secret audit **PASS**: only two `.env.example` tracked, `APP_KEY=` empty, no `.env`/key/cert blob at
+any path in any ref's history, no secret-named variable carrying a value. 1,746 tracked files;
+`vendor/`, `node_modules/`, `dist/`, traces and private storage are excluded and stay excluded.
+
+### Still true, and still the only thing standing between this and production
+
+**Nothing is `LIVE_VERIFIED`.** No credential exists here for any of the eleven providers, so nothing
+was activated and no adapter was changed to compensate. Meta · Google Ads · TikTok · Snapchat · X ·
+LinkedIn · Salla · Zid · Google sign-in · Apple sign-in · SMS/WhatsApp are
+`BLOCKED_EXTERNAL_CREDENTIALS`; Moyasar and Mail are `READY_FOR_CREDENTIALS`; FX is
+`READY_FOR_CONFIGURATION` (a commercial decision, deliberately unset); GA4 is not integrated at all.
+The tag is `handoff-2026-08-12` and not `v1.0.0` for exactly that reason.
+
+`main` on GitHub carries the real 742-commit lineage, not a squashed snapshot. The local branch is
+still `feat/taxonomy-ux` and publishes as `origin/main`: a different, older `main` at `37aa464` is
+checked out in the `Desktop/MediaBying System` worktree, and force-moving it would rewrite what that
+working copy has.
+
+---
+
 ## ⚠️ START HERE — DELIVERY CLOSE, 2026-08-11 (eighteenth of the day)
 
 **Working tree CLEAN.** Every check below ran on **`d03ad38`**; the commits after it are
