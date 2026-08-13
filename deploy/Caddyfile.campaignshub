@@ -1,0 +1,11 @@
+campaignshub.io {
+    reverse_proxy campaignshub-frontend:5173
+}
+
+www.campaignshub.io {
+    redir https://campaignshub.io{uri} permanent
+}
+
+api.campaignshub.io {
+    reverse_proxy campaignshub-backend:8000
+}
