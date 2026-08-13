@@ -32,7 +32,7 @@ jobs:
           # 8.4, not 8.3. The lock file resolves symfony/* v8.1, which requires php >= 8.4.1, so
           # `composer install` could not succeed here and this workflow had never once passed.
           php-version: '8.4'
-          extensions: pdo_pgsql, redis, intl, bcmath
+          extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, pcntl
           coverage: none
       - run: composer install --no-interaction --prefer-dist
       - run: cp .env.example .env && php artisan key:generate
