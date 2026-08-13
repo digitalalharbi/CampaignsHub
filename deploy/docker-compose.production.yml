@@ -1,0 +1,98 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: campaignshub
+      POSTGRES_USER: campaignshub
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - campaignshub_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campaignshub -d campaignshub"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  backend:
+    container_name: campaignshub-backend
+    build:
+      context: ..
+      dockerfile: deploy/backend.production.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./backend.production.env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+      - web_proxy
+
+  queue:
+    build:
+      context: ..
+      dockerfile: deploy/backend.production.Dockerfile
+    restart: unless-stopped
+    command: php artisan horizon
+    env_file:
+      - ./backend.production.env
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - internal
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: deploy/backend.production.Dockerfile
+    restart: unless-stopped
+    command: php artisan schedule:work
+    env_file:
+      - ./backend.production.env
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - internal
+
+  frontend:
+    container_name: campaignshub-frontend
+    build:
+      context: ..
+      dockerfile: deploy/frontend.production.Dockerfile
+      args:
+        VITE_API_URL: https://api.campaignshub.io/api/v1
+        VITE_BRAND_NAME: CampaignsHub
+        VITE_BRAND_DOMAIN: campaignshub.io
+        VITE_INFLUENCERS_UGC: "false"
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - web_proxy
+
+networks:
+  internal:
+  web_proxy:
+    external: true
+
+volumes:
+  campaignshub_pgdata:
