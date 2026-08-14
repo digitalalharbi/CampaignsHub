@@ -45,7 +45,7 @@ export function NotificationCenter() {
       <button
         aria-label={t('nc_title')}
         onClick={() => setOpen((v) => !v)}
-        className="relative flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover"
+        className="relative flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:h-9 sm:w-9"
       >
         <Bell size={18} />
         {unread > 0 && (

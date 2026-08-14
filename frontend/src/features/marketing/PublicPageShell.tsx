@@ -1,8 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
-import { Megaphone } from 'lucide-react'
 import { HOME_COPY, type Locale } from './homeCopy'
-import { Button } from '@/components/ui/Button'
+import { PublicHeader } from './PublicHeader'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -31,7 +29,7 @@ export function PublicPageShell({
   title: string
   children: ReactNode
 }) {
-  const { locale, theme, toggleLocale, toggleTheme } = useUi()
+  const { locale } = useUi()
   const c = HOME_COPY[locale as Locale]
 
   useEffect(() => {
@@ -45,19 +43,10 @@ export function PublicPageShell({
 
   return (
     <div className="min-h-screen bg-background text-text-primary" dir={c.dir}>
-      <header className="sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-4xl items-center gap-4 px-4 sm:px-6">
-          <Link to="/" className="flex shrink-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={18} /></span>
-            <span className="font-heading text-lg font-extrabold tracking-tight">CampaignsHub</span>
-          </Link>
-          <div className="ms-auto flex items-center gap-1.5">
-            <button onClick={toggleLocale} aria-label="Toggle language" className="flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover">{locale === 'ar' ? 'EN' : 'ع'}</button>
-            <button onClick={toggleTheme} aria-label="Toggle theme" className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">{theme === 'light' ? '🌙' : '☀️'}</button>
-            <Link to="/"><Button variant="secondary" size="sm">{locale === 'ar' ? 'العودة للرئيسية' : 'Back to home'}</Button></Link>
-          </div>
-        </div>
-      </header>
+      <PublicHeader
+        width="max-w-4xl"
+        primaryAction={{ to: '/', label: locale === 'ar' ? 'العودة للرئيسية' : 'Back to home', variant: 'secondary' }}
+      />
 
       <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">{children}</main>
 
