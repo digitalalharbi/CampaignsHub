@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Notifications\Providers\MessageProvider;
+use App\Domains\Notifications\Providers\LaravelMailProvider;
 use App\Domains\Notifications\Providers\NullEmailProvider;
 use App\Domains\Notifications\Providers\NullSmsProvider;
 use App\Domains\Notifications\Providers\NullWhatsAppProvider;
@@ -53,6 +54,18 @@ final class ProviderAdaptersTest extends TestCase
         $result = $provider->send('someone@example.test', ['body' => 'x']);
         $this->assertSame('sent', $result['status']);
         $this->assertSame('fake-ack-123', $result['provider_message_id']);
+    }
+
+    public function test_laravel_mail_provider_is_configured_when_smtp_credentials_exist(): void
+    {
+        config()->set('mail.default', 'smtp');
+        config()->set('mail.mailers.smtp.host', 'smtp.hostinger.com');
+        config()->set('mail.mailers.smtp.username', 'info@campaignshub.io');
+        config()->set('providers.channels.email', LaravelMailProvider::class);
+
+        $provider = app(ProviderRegistry::class)->for('email');
+
+        $this->assertTrue($provider->isConfigured());
     }
 }
 

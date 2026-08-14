@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Notifications\Providers\NullEmailProvider;
+use App\Domains\Notifications\Providers\LaravelMailProvider;
 use App\Domains\Notifications\Providers\NullSmsProvider;
 use App\Domains\Notifications\Providers\NullWhatsAppProvider;
 
@@ -17,7 +18,7 @@ return [
     | provider by binding a configured class here; nothing else changes.
     */
     'channels' => [
-        'email' => NullEmailProvider::class,
+        'email' => env('NOTIFICATION_EMAIL_PROVIDER', NullEmailProvider::class),
         'whatsapp' => NullWhatsAppProvider::class,
         'sms' => NullSmsProvider::class,
     ],
