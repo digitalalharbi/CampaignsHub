@@ -11,6 +11,58 @@
 `origin/main` on `https://github.com/digitalalharbi/CampaignsHub`. A local branch or worktree is a
 working copy, never a source of truth — `git fetch origin` first, always.
 
+## ⚠️ START HERE — THE MOBILE PASS, 2026-08-14
+
+**One public header, a measured audit that runs every time, and two rate limiters that were keyed by
+the wrong thing.** PR #16, `f5e1fa0`.
+
+### MOBILE-002 — the header row was built three times
+
+`PublicHomePage`, `PublicServicesPage` and `PublicPageShell` each hand-built the same row, so one row
+had three independent width budgets. MKT-UGC-001 had already fixed exactly this defect in ONE of them
+— the wordmark stands down below 480px — inside `PublicHomePage.tsx`, where the other two could never
+inherit it. So when MOBILE-001 grew the shared controls to a 44px touch target, the two copies that
+never got the fix overflowed:
+
+```
+/privacy · /terms · /data-deletion at 375×667 → the document overflows by 8px
+  div.ms-auto flex items-center gap-1.5 [-8..164]
+```
+
+**The defect was the duplication, not the eight pixels.** `PublicHeader` owns the row now. The phone
+also gains seven destinations it did not have: the homepage section nav and «Log in» / «Track my
+requests» / «Request a service» were `hidden lg/md/sm:block` with nothing behind them, and they
+collapse into a menu instead of ceasing to exist.
+
+`frontend/e2e/responsive-audit.spec.ts` measures this on every run — 7 public routes and 4 portals at
+375/390/430/768 — so the next component that ships a fixed width fails there and not in somebody's
+hand. It is what caught the 8px regression.
+
+### SIGNUP-THROTTLE-001 and LEGAL-THROTTLE-001 — throttles keyed by the address
+
+`/auth/registration/{registration}/resend` carried a literal `throttle:6,1`; `/data-deletion` and
+`/data-requests` carried `throttle:5,1`. A literal throttle is keyed by the authenticated user or, for
+a guest, the IP — and **every caller of all three is a guest by definition**. So the allowance was
+shared by everyone behind one address: an office, a campus, a hotel, any carrier doing CGNAT.
+
+`/data-deletion` is the URL handed to Meta, TikTok, Snapchat and Google as this platform's deletion
+contact. Both are now keyed by the application/subject, with the address kept only as an abuse
+ceiling, and in production the per-subject figure is **stricter** than what it replaced.
+
+Both presented as broken product — the sign-up walk failed at «no dev code was issued», the deletion
+page at a missing verify step — and both page snapshots showed the surface intact with «Too many
+requests» above it, which is what ruled the pages out.
+
+### Still open, and NOT done
+
+`#2` static-analysis debt and `#3` commonmark advisories remain open and separate. **SEC-DEPS-001 was
+not touched in this unit** — it is its own branch and its own PR, deliberately.
+
+Inline cross-reference links inside portal content are deliberately not forced to 44px: WCAG 2.5.8
+exempts a link in a sentence, and a data table where every reference is a 44px block is a worse page.
+
+---
+
 ## ⚠️ START HERE — LIVE ON campaignshub.io, 2026-08-13
 
 **The product is deployed and the two production-blocking defects are fixed and verified against the
