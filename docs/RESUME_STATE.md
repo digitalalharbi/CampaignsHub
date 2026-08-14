@@ -11,6 +11,56 @@
 `origin/main` on `https://github.com/digitalalharbi/CampaignsHub`. A local branch or worktree is a
 working copy, never a source of truth — `git fetch origin` first, always.
 
+## ⚠️ START HERE — LIVE ON campaignshub.io, 2026-08-13
+
+**The product is deployed and the two production-blocking defects are fixed and verified against the
+live site.** `origin/main` deploys to the VPS automatically (`.github/workflows/deploy-production.yml`
+→ `scripts/deploy-production.sh`).
+
+### PROD-PROVISION-001 — production was migrated and never given the data it sells
+
+Observed on campaignshub.io, not inferred:
+
+```
+BEFORE  GET /api/v1/plans                              -> {"plans": []}
+        GET /api/v1/public/catalog/paid-media-services -> {"categories": [], "services": []}
+AFTER   plans: 3 (starter, growth, agency)  ·  categories: 10  ·  services: 94
+```
+
+The homepage services section was empty, `/services` said «لا توجد خدمة مطابقة», and sign-up died at
+plan selection with «تعذّر». **No screen was broken** — each faithfully rendered an empty catalogue,
+which is why staring at the frontend would never have found it.
+
+The deploy ran `migrate --force` and nothing else, because the checklist says never to seed a
+production database. That is right about DEMO data and had quietly been applied to REFERENCE data
+too. `php artisan platform:provision` runs exactly the five reference seeders — permissions, request
+catalogue, subscription plans, paid-media taxonomy, metric definitions — cannot reach a demo seeder,
+creates no tenant and no user, and is idempotent, so it now runs on every deploy.
+
+### Repository reconciliation — complete, additive, nothing lost
+
+`origin/main` compared file-by-file against the long-lived local checkout:
+
+- **GitHub-only: 15 files, all preserved** — the developer's deployment work (`deploy/*.Dockerfile`,
+  `docker-compose.production.yml`, `Caddyfile.campaignshub`, `backend.production.env.example`,
+  `scripts/deploy-production.sh`, `.github/workflows/deploy-production.yml`) and Laravel's storage
+  keepers. Nothing was deleted, replaced or reverted.
+- **Required local-only files: 0.** The only local-only candidate after excluding generated and
+  private artifacts was `frontend/.claude/launch.json`, which is editor state.
+- **Excluded, correctly**: `backend/.env`, `storage/app/private/**` (E2E report PDFs), runtime logs,
+  framework caches, `node_modules`, `vendor`, `dist`, `.DS_Store`, `__pycache__`.
+- **Deletions across every PR in this series: 0.**
+
+### Still open, and NOT done
+
+**Mobile polish is not addressed.** The pages are responsive and free of horizontal scroll at 375 —
+measured — but «make it feel like an app» is a design pass across every portal, and it has not been
+started. Do not read anything in this file as claiming it was.
+
+`#2` static-analysis debt and `#3` commonmark advisories remain open and separate.
+
+---
+
 ## ⚠️ START HERE — GITHUB-MANAGED, 2026-08-12
 
 **`origin/main` is the system of record, and the Claude Code workflow is VERIFIED end to end.**
