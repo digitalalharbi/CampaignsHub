@@ -53,7 +53,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     Route::post('/support/tickets', [PublicIntakeController::class, 'support'])
         ->middleware('throttle:5,1')->name('support.tickets');
     Route::post('/data-requests', [PublicIntakeController::class, 'dataRequest'])
-        ->middleware('throttle:5,1')->name('data-requests');
+        ->middleware('throttle:data-subject-request')->name('data-requests');
 
     /*
      * LEGAL-DELETE-001 — the deletion flow behind https://campaignshub.io/data-deletion.
@@ -64,9 +64,13 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
      *
      * `verify` and `status` carry the OTP-check throttle rather than the gentler intake one — they
      * take a code and a reference, and both are guessable at volume if nothing counts the attempts.
+     *
+     * `submit` is limited by the SUBJECT of the request, not by the address it arrives from
+     * (LEGAL-THROTTLE-001) — a literal per-IP throttle rationed a legal right by whoever else happened
+     * to share the router.
      */
     Route::post('/data-deletion', [DataDeletionController::class, 'submit'])
-        ->middleware('throttle:5,1')->name('data-deletion.submit');
+        ->middleware('throttle:data-subject-request')->name('data-deletion.submit');
     Route::post('/data-deletion/verify', [DataDeletionController::class, 'verify'])
         ->middleware('throttle:otp-check')->name('data-deletion.verify');
     Route::post('/data-deletion/status', [DataDeletionController::class, 'status'])

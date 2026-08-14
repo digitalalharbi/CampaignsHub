@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import * as LucideIcons from 'lucide-react'
-import { ArrowLeft, ArrowRight, Megaphone, RotateCcw, Search } from 'lucide-react'
+import { ArrowLeft, ArrowRight, RotateCcw, Search } from 'lucide-react'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { CONTACT_EMAIL } from './legalContent'
+import { PublicHeader } from './PublicHeader'
 import { usePaidMediaCatalog } from '@/features/paid-media/publicCatalog'
 import { Button } from '@/components/ui/Button'
 import { EmptyState, Skeleton } from '@/components/ui/States'
@@ -32,7 +33,7 @@ function CategoryIcon({ name, size = 16 }: { name?: string | null; size?: number
 }
 
 export function PublicServicesPage() {
-  const { locale, theme, toggleLocale, toggleTheme } = useUi()
+  const { locale } = useUi()
   const c = HOME_COPY[locale as Locale]
   const ar = locale === 'ar'
   const { category: categoryKey } = useParams()
@@ -73,19 +74,7 @@ export function PublicServicesPage() {
 
   return (
     <div className="min-h-screen bg-background text-text-primary" dir={c.dir}>
-      <header className="sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-4 sm:px-6">
-          <Link to="/" className="flex shrink-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={18} /></span>
-            <span className="font-heading text-lg font-extrabold tracking-tight">CampaignsHub</span>
-          </Link>
-          <div className="ms-auto flex items-center gap-1.5">
-            <button onClick={toggleLocale} aria-label="Toggle language" className="flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover">{locale === 'ar' ? 'EN' : 'ع'}</button>
-            <button onClick={toggleTheme} aria-label="Toggle theme" className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">{theme === 'light' ? '🌙' : '☀️'}</button>
-            <Link to="/requests/new"><Button size="sm">{c.nav.request}</Button></Link>
-          </div>
-        </div>
-      </header>
+      <PublicHeader primaryAction={{ to: '/requests/new', label: c.nav.request }} />
 
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <nav aria-label="breadcrumb" className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-text-muted">
@@ -179,7 +168,7 @@ export function PublicServicesPage() {
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
                     placeholder={ar ? 'ابحث في الخدمات…' : 'Search services…'}
-                    className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 sm:w-72"
+                    className="h-11 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-base outline-none focus:border-brand-500 sm:h-10 sm:w-72 sm:text-sm"
                   />
                 </label>
               </div>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, ensureCsrfCookie } from '@/lib/api/client'
 import { Button } from '@/components/ui/Button'
+import { controlClass } from '@/components/ui/Field'
 import { useUi } from '@/stores/ui'
 import { CONTACT_EMAIL } from './legalContent'
 import { PublicPageShell } from './PublicPageShell'
@@ -141,7 +142,7 @@ export function DataDeletionPage() {
           <label className="grid gap-1 text-sm">
             {t('نوع الطلب', 'Request type')}
             <select
-              className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2"
+              className={controlClass}
               data-testid="data-deletion-type"
               value={type}
               onChange={(e) => setType(e.target.value)}
@@ -160,7 +161,7 @@ export function DataDeletionPage() {
           <label className="grid gap-1 text-sm">
             {t('الاسم', 'Name')}
             <input
-              className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2"
+              className={controlClass}
               data-testid="data-deletion-name" required minLength={2}
               value={name} onChange={(e) => setName(e.target.value)}
             />
@@ -169,7 +170,7 @@ export function DataDeletionPage() {
           <label className="grid gap-1 text-sm">
             {t('البريد الإلكتروني', 'Email address')}
             <input
-              className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2"
+              className={controlClass}
               type="email" dir="ltr" required data-testid="data-deletion-email"
               value={email} onChange={(e) => setEmail(e.target.value)}
             />
@@ -184,7 +185,7 @@ export function DataDeletionPage() {
           <label className="grid gap-1 text-sm">
             {t('المنصة (اختياري)', 'Platform (optional)')}
             <input
-              className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2"
+              className={controlClass}
               data-testid="data-deletion-provider" placeholder={t('مثال: Meta أو Salla', 'e.g. Meta or Salla')}
               value={provider} onChange={(e) => setProvider(e.target.value)}
             />
@@ -193,7 +194,7 @@ export function DataDeletionPage() {
           <label className="grid gap-1 text-sm">
             {t('مساحة العمل أو المشروع (اختياري)', 'Workspace or project (optional)')}
             <input
-              className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2"
+              className={controlClass}
               data-testid="data-deletion-workspace"
               value={workspace} onChange={(e) => setWorkspace(e.target.value)}
             />
@@ -202,7 +203,7 @@ export function DataDeletionPage() {
           <label className="grid gap-1 text-sm">
             {t('تفاصيل (اختياري)', 'Details (optional)')}
             <textarea
-              className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2"
+              className={controlClass}
               rows={4} data-testid="data-deletion-details"
               value={details} onChange={(e) => setDetails(e.target.value)}
             />
@@ -261,7 +262,7 @@ export function DataDeletionPage() {
             <label className="grid gap-1 text-sm">
               {t('الرمز', 'Code')}
               <input
-                className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2"
+                className={controlClass}
                 dir="ltr" inputMode="numeric" required data-testid="data-deletion-code"
                 value={code} onChange={(e) => setCode(e.target.value)}
               />
@@ -317,7 +318,7 @@ export function DataDeletionPage() {
           <label className="grid gap-1 text-sm">
             {t('الرقم المرجعي', 'Reference')}
             <input
-              className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2"
+              className={controlClass}
               dir="ltr" required data-testid="data-deletion-lookup-reference"
               value={reference} onChange={(e) => setReference(e.target.value)}
             />
@@ -325,7 +326,7 @@ export function DataDeletionPage() {
           <label className="grid gap-1 text-sm">
             {t('البريد الإلكتروني', 'Email address')}
             <input
-              className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2"
+              className={controlClass}
               type="email" dir="ltr" required data-testid="data-deletion-lookup-email"
               value={email} onChange={(e) => setEmail(e.target.value)}
             />

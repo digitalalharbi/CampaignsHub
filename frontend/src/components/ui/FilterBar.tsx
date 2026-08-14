@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react'
 import { Modal } from './Modal'
+import { TOUCH_CONTROL, TOUCH_TARGET } from './touch'
 
 /**
  * The filters, on the page — UX-FILTERS-001.
@@ -56,7 +57,7 @@ export type AppliedFilter = {
 }
 
 const CONTROL =
-  'inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-surface px-2.5 text-sm ' +
+  `inline-flex ${TOUCH_CONTROL} items-center gap-1.5 rounded-xl border border-border bg-surface px-2.5 text-sm ` +
   'font-semibold text-text-primary transition-colors hover:bg-surface-hover ' +
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40'
 
@@ -144,7 +145,7 @@ export function FilterBar({
                 type="button"
                 onClick={f.onRemove}
                 aria-label={`${t('remove', ar)} ${f.axis}: ${f.label}`}
-                className="rounded-full p-0.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"
+                className={`rounded-full p-0.5 text-text-muted hover:bg-surface-hover hover:text-text-primary ${TOUCH_TARGET}`}
               >
                 <X size={12} aria-hidden />
               </button>
@@ -427,7 +428,7 @@ export function FilterChips({
         role="group"
         aria-label={label}
         data-testid={testid}
-        className="inline-flex h-9 items-center rounded-xl border border-border bg-surface-secondary p-0.5"
+        className="inline-flex h-12 items-center rounded-xl border border-border bg-surface-secondary p-0.5 sm:h-9"
       >
         {options.map((o) => (
           <button
@@ -435,7 +436,7 @@ export function FilterChips({
             type="button"
             aria-pressed={value === o.value}
             onClick={() => onChange(o.value)}
-            className={`h-8 rounded-lg px-2.5 text-sm font-semibold transition-colors ${
+            className={`h-11 rounded-lg px-2.5 text-sm font-semibold transition-colors sm:h-8 ${
               value === o.value
                 ? 'bg-brand-600 text-white shadow-[var(--shadow-small)]'
                 : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'

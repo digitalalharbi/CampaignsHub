@@ -67,4 +67,27 @@ return [
      * more accounts a minute from one address than any human would. See `AppServiceProvider`.
      */
     'registration_throttle' => (int) env('REGISTRATION_THROTTLE_PER_MINUTE', 6),
+
+    /*
+     * Re-issuing a verification challenge, in PRODUCTION (SIGNUP-THROTTLE-001).
+     *
+     * Two limits, because the risk has two shapes. The first protects the APPLICANT — their phone,
+     * and the SMS credit spent on it — and is the one that matters; three a minute is more than
+     * anybody legitimately needs. The second is an abuse ceiling on the address, so opening
+     * applications in a loop cannot be used to walk around the first.
+     *
+     * Off-production both are far larger: the acceptance suite answers the mobile gate for several
+     * applications a minute from one address. See `AppServiceProvider`.
+     */
+    'resend_throttle_per_application' => (int) env('REGISTRATION_RESEND_PER_APPLICATION', 3),
+    'resend_throttle_per_address' => (int) env('REGISTRATION_RESEND_PER_ADDRESS', 12),
+
+    /*
+     * The off-production allowance, config-driven for the same reason `auth.login_throttle_local` is:
+     * the limiter has to stay REACHABLE by a test. `RegistrationResendThrottleTest` sets these to the
+     * production figures and drives the real endpoint, so what it measures is the live limiter and
+     * its live keying — which is the part the defect was in.
+     */
+    'resend_throttle_per_application_local' => (int) env('REGISTRATION_RESEND_PER_APPLICATION_LOCAL', 60),
+    'resend_throttle_per_address_local' => (int) env('REGISTRATION_RESEND_PER_ADDRESS_LOCAL', 600),
 ];
