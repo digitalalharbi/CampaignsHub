@@ -153,7 +153,7 @@ export function PublicInfoPage() {
             {/* Sibling pages, so a reader never has to go back to the footer to find the next one. */}
             <nav aria-label={doc.title} className="mt-8 flex flex-wrap gap-2 border-t border-border pt-6">
               {others.map((d) => (
-                <Link key={d.slug} to={`/${d.slug}`} className="rounded-lg border border-border px-3 py-1.5 text-[12.5px] font-medium text-text-secondary hover:border-brand-300 hover:text-brand-600">
+                <Link key={d.slug} to={`/${d.slug}`} className="flex min-h-11 items-center rounded-lg border border-border px-3 py-1.5 text-[12.5px] font-medium text-text-secondary hover:border-brand-300 hover:text-brand-600 sm:min-h-0">
                   {d.title}
                 </Link>
               ))}

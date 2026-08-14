@@ -71,7 +71,7 @@ export function PasswordPage() {
             showLabel={t('show_password')} hideLabel={t('hide_password')}
           />
           <label className="flex cursor-pointer items-center gap-2 text-sm text-text-secondary">
-            <input type="checkbox" checked={form.logout_other_devices} onChange={(e) => set('logout_other_devices')(e.target.checked)} className="h-4 w-4 rounded border-border accent-brand-600" />
+            <input type="checkbox" checked={form.logout_other_devices} onChange={(e) => set('logout_other_devices')(e.target.checked)} className="h-4 w-4 shrink-0 rounded border-border accent-brand-600" />
             {t('logout_other_devices')}
           </label>
         </FormSection>

@@ -80,8 +80,8 @@ export function PublicServicesPage() {
             <span className="font-heading text-lg font-extrabold tracking-tight">CampaignsHub</span>
           </Link>
           <div className="ms-auto flex items-center gap-1.5">
-            <button onClick={toggleLocale} aria-label="Toggle language" className="flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover">{locale === 'ar' ? 'EN' : 'ع'}</button>
-            <button onClick={toggleTheme} aria-label="Toggle theme" className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">{theme === 'light' ? '🌙' : '☀️'}</button>
+            <button onClick={toggleLocale} aria-label="Toggle language" className="flex h-11 min-w-11 items-center justify-center rounded-lg px-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover sm:h-9 sm:min-w-9">{locale === 'ar' ? 'EN' : 'ع'}</button>
+            <button onClick={toggleTheme} aria-label="Toggle theme" className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:h-9 sm:w-9">{theme === 'light' ? '🌙' : '☀️'}</button>
             <Link to="/requests/new"><Button size="sm">{c.nav.request}</Button></Link>
           </div>
         </div>
@@ -179,7 +179,7 @@ export function PublicServicesPage() {
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
                     placeholder={ar ? 'ابحث في الخدمات…' : 'Search services…'}
-                    className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 sm:w-72"
+                    className="h-11 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-base outline-none focus:border-brand-500 sm:h-10 sm:w-72 sm:text-sm"
                   />
                 </label>
               </div>

@@ -141,8 +141,8 @@ export function PublicHomePage() {
             <a href="#integrations" className="hover:text-text-primary">{c.nav.integrations}</a>
           </nav>
           <div className="ms-auto flex items-center gap-1.5">
-            <button onClick={toggleLocale} aria-label="Toggle language" className="flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover">{locale === 'ar' ? 'EN' : 'ع'}</button>
-            <button onClick={toggleTheme} aria-label="Toggle theme" className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button>
+            <button onClick={toggleLocale} aria-label="Toggle language" className="flex h-11 min-w-11 items-center justify-center rounded-lg px-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover sm:h-9 sm:min-w-9">{locale === 'ar' ? 'EN' : 'ع'}</button>
+            <button onClick={toggleTheme} aria-label="Toggle theme" className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:h-9 sm:w-9">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button>
             {authed ? (
               <Link to="/app/dashboard"><Button size="sm" className="whitespace-nowrap">{c.nav.dashboard}</Button></Link>
             ) : (
