@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Domains\Notifications\Providers\NullEmailProvider;
-use App\Domains\Notifications\Providers\LaravelMailProvider;
 use App\Domains\Notifications\Providers\NullSmsProvider;
 use App\Domains\Notifications\Providers\NullWhatsAppProvider;
 

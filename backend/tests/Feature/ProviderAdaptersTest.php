@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Domains\Notifications\Providers\MessageProvider;
 use App\Domains\Notifications\Providers\LaravelMailProvider;
+use App\Domains\Notifications\Providers\MessageProvider;
 use App\Domains\Notifications\Providers\NullEmailProvider;
 use App\Domains\Notifications\Providers\NullSmsProvider;
 use App\Domains\Notifications\Providers\NullWhatsAppProvider;
