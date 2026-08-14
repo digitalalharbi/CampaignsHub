@@ -17,7 +17,7 @@ return [
     | provider by binding a configured class here; nothing else changes.
     */
     'channels' => [
-        'email' => NullEmailProvider::class,
+        'email' => env('NOTIFICATION_EMAIL_PROVIDER', NullEmailProvider::class),
         'whatsapp' => NullWhatsAppProvider::class,
         'sms' => NullSmsProvider::class,
     ],
