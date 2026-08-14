@@ -46,8 +46,13 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
             ->middleware('throttle:60,1');
         Route::post('/{registration}/verify-mobile', [RegistrationController::class, 'verifyMobile'])
             ->name('verify-mobile')->middleware('throttle:otp-check');
+        /*
+         * Keyed by the APPLICATION, not by the address it is asked from — SIGNUP-THROTTLE-001.
+         * A literal `throttle:6,1` here made six resends a minute a budget shared by everybody behind
+         * one IP, which on any office or carrier NAT is a stranger's problem, not the applicant's.
+         */
         Route::post('/{registration}/resend', [RegistrationController::class, 'resend'])->name('resend')
-            ->middleware('throttle:6,1');
+            ->middleware('throttle:registration-resend');
     });
 
     /*

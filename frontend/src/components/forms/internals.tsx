@@ -5,6 +5,7 @@ import { controlClass } from '@/components/ui/Field'
 import { failureKind } from '@/components/ui/QueryFailure'
 import { toApiError } from '@/lib/api/client'
 import type { FormsCopy, Option } from './types'
+import { TOUCH_TARGET } from '@/components/ui/touch'
 
 /** Trigger styling shared by every select-style control — mirrors the app's input control exactly. */
 export const triggerClass = `${controlClass} flex items-center gap-2 text-start`
@@ -212,7 +213,7 @@ export function Chip({
             }
           }}
           aria-label={removeLabel}
-          className="inline-flex cursor-pointer rounded-full p-0.5 text-text-muted hover:bg-surface-secondary hover:text-text-primary"
+          className={`inline-flex cursor-pointer rounded-full p-0.5 text-text-muted hover:bg-surface-secondary hover:text-text-primary ${TOUCH_TARGET}`}
         >
           <X size={12} aria-hidden />
         </span>
@@ -239,7 +240,7 @@ export function ClearButton({ onClear, label }: { onClear: () => void; label: st
         }
       }}
       aria-label={label}
-      className="inline-flex cursor-pointer rounded-full p-0.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"
+      className={`inline-flex cursor-pointer rounded-full p-0.5 text-text-muted hover:bg-surface-hover hover:text-text-primary ${TOUCH_TARGET}`}
     >
       <X size={15} aria-hidden />
     </span>

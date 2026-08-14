@@ -13,6 +13,7 @@ import {
   type PaidServiceCategory,
 } from '@/features/paid-media/publicCatalog'
 import type { HomeCopy, Locale } from './homeCopy'
+import { TOUCH_TARGET } from '@/components/ui/touch'
 
 /** Build the intake URL that carries every selected service key (comma-separated, each encoded). */
 export function buildRequestUrl(keys: string[]): string {
@@ -295,7 +296,7 @@ export function PaidServicesPanel({ locale, copy }: { locale: Locale; copy: Home
             {selectedServices.map((s) => (
               <span key={s.key} className="inline-flex items-center gap-1 rounded-full bg-brand-primary-soft py-1 ps-3 pe-1.5 text-[13px] font-medium text-brand-700">
                 {label(s, locale)}
-                <button type="button" onClick={() => toggle(s.key)} aria-label={`${copy.clearAll} ${label(s, locale)}`} className="rounded-full p-0.5 hover:bg-brand-600/20">
+                <button type="button" onClick={() => toggle(s.key)} aria-label={`${copy.clearAll} ${label(s, locale)}`} className={`rounded-full p-0.5 hover:bg-brand-600/20 ${TOUCH_TARGET}`}>
                   <X size={13} />
                 </button>
               </span>

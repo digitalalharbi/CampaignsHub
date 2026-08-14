@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Console\Commands\ProvisionPlatformCommand;
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Commerce\Console\SyncStoresCommand;
@@ -86,6 +87,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ImportCurrencyRatesCommand::class,
         // PROD-001 — a backup that either happens or says it did not, plus its verification half.
         BackupCommand::class,
+        // PROD-PROVISION-001 — the reference data a production install cannot work without, and
+        // which a deploy that only migrates never brings.
+        ProvisionPlatformCommand::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.

@@ -121,7 +121,7 @@ export function AppShell() {
           <button
             onClick={() => setSidebarOpen(true)}
             aria-label="Open menu"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover md:hidden"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:h-9 sm:w-9 md:hidden"
           >
             <Menu size={19} />
           </button>
@@ -138,14 +138,14 @@ export function AppShell() {
             <button
               onClick={toggleLocale}
               aria-label="Toggle language"
-              className="flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover"
+              className="flex h-11 min-w-11 items-center justify-center rounded-lg px-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover sm:h-9 sm:min-w-9"
             >
               {locale === 'ar' ? 'EN' : 'ع'}
             </button>
             <button
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover"
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:h-9 sm:w-9"
             >
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
