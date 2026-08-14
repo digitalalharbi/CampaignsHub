@@ -48,12 +48,20 @@ function linkHrefs(): (string | null)[] {
   return screen.getAllByRole('link').map((l) => l.getAttribute('href'))
 }
 
-/** Reveal the inline paid-media services by clicking the services option (locale-agnostic — it is the
- *  only control carrying `aria-expanded`). */
+/**
+ * Open the paid-media services selector, by its OWN identifier.
+ *
+ * This used to take «the first button on the page carrying `aria-expanded`», which was true of
+ * exactly one control when it was written and is an incidental property, not an identity. The header
+ * gained a menu button below `lg` (MOBILE-002) — also correctly `aria-expanded`, and earlier in the
+ * document — so the helper started opening the navigation menu and every test that depended on it
+ * failed looking for a services tab that had never been asked for.
+ *
+ * The claim these tests make is unchanged. Only the way the control is found is, and it is found by
+ * the test id the component already ships.
+ */
 function revealServices(): void {
-  const btn = screen.getAllByRole('button').find((b) => b.hasAttribute('aria-expanded'))
-  if (!btn) throw new Error('services reveal option not found')
-  fireEvent.click(btn)
+  fireEvent.click(screen.getByTestId('hero-path-services'))
 }
 
 /**

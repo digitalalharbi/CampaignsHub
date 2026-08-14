@@ -3,12 +3,13 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Activity, ArrowLeft, ArrowRight, BarChart3, Bell, CheckCircle2, FileText, LayoutDashboard, LogIn,
-  Megaphone, Moon, ShieldCheck, Sparkles, Sun, Target, UserCircle, Wallet,
+  Megaphone, ShieldCheck, Sparkles, Target, UserCircle, Wallet,
 } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { HeroSection } from './HeroSection'
 import { journeyTo } from './journeys'
+import { PublicHeader } from './PublicHeader'
 import { usePaidMediaCatalog } from '@/features/paid-media/publicCatalog'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/stores/auth'
@@ -58,7 +59,7 @@ const BENEFIT_ICONS = [Activity, BarChart3, Target, Bell]
  * Authenticated visitors get a dashboard action instead of the sign-up CTA.
  */
 export function PublicHomePage() {
-  const { locale, theme, toggleLocale, toggleTheme } = useUi()
+  const { locale } = useUi()
   const { status } = useAuth()
   const c = HOME_COPY[locale as Locale]
   // HOME-013: differentiated public experience per portal (?portal=influencer|client); paid-media is default.
@@ -116,46 +117,32 @@ export function PublicHomePage() {
 
   return (
     <div className="min-h-screen bg-background text-text-primary" dir={c.dir}>
-      {/* Header — external actions only: log in · create account · request a service · track my requests. */}
-      <header className="sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center gap-2 px-4 sm:gap-4 sm:px-6">
-          {/*
-            * The wordmark stands down on a narrow phone (MKT-UGC-001, found in live review).
-            *
-            * At 375px the row asked for 423px — logo 163, the two toggles 76, and «Create account»
-            * 128 — so the whole PAGE scrolled sideways by 31px on every phone visit, on every section,
-            * not just the header. Nothing here was droppable: the language and theme toggles are how
-            * an Arabic-first product is read at all, and the primary CTA is what the page is for.
-            *
-            * So the wordmark yields below 480px and the mark keeps the brand, which is the one part of
-            * this row that says the same thing in a third of the width.
-            */}
-          <Link to="/" className="flex shrink-0 items-center gap-2 sm:gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={18} /></span>
-            <span className="font-heading text-base font-extrabold tracking-tight max-[479px]:hidden sm:text-lg">CampaignsHub</span>
-          </Link>
-          <nav className="ms-6 hidden items-center gap-5 text-sm font-medium text-text-secondary lg:flex">
-            <a href="#features" className="hover:text-text-primary">{c.nav.features}</a>
-            <a href="#how" className="hover:text-text-primary">{c.nav.how}</a>
-            <a href="#services" className="hover:text-text-primary">{c.nav.services}</a>
-            <a href="#integrations" className="hover:text-text-primary">{c.nav.integrations}</a>
-          </nav>
-          <div className="ms-auto flex items-center gap-1.5">
-            <button onClick={toggleLocale} aria-label="Toggle language" className="flex h-11 min-w-11 items-center justify-center rounded-lg px-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover sm:h-9 sm:min-w-9">{locale === 'ar' ? 'EN' : 'ع'}</button>
-            <button onClick={toggleTheme} aria-label="Toggle theme" className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:h-9 sm:w-9">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button>
-            {authed ? (
-              <Link to="/app/dashboard"><Button size="sm" className="whitespace-nowrap">{c.nav.dashboard}</Button></Link>
-            ) : (
-              <>
-                <Link to="/login" className="hidden lg:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.clientLogin}</Button></Link>
-                <Link to={cta('hero', 'secondary_cta', { label: c.nav.request, to: '/requests/new' }).to} className="hidden md:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{cta('hero', 'secondary_cta', { label: c.nav.request, to: '/requests/new' }).label}</Button></Link>
-                <Link to="/login" className="hidden sm:block"><Button variant="ghost" size="sm" className="whitespace-nowrap">{c.nav.login}</Button></Link>
-                <Link to={cta('hero', 'primary_cta', { label: c.nav.start, to: '/register' }).to}><Button size="sm" className="whitespace-nowrap">{cta('hero', 'primary_cta', { label: c.nav.start, to: '/register' }).label}</Button></Link>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      {/*
+        * Header — external actions only: log in · create account · request a service · track my requests.
+        *
+        * The row itself belongs to `PublicHeader` (MOBILE-002); this page supplies its contents. What
+        * used to be four `hidden sm/md/lg:block` links is now `secondaryActions`, so below `lg` they
+        * collapse into the menu instead of ceasing to exist on a phone — which is what «no feature or
+        * information removed to fit the screen» has to mean.
+        */}
+      <PublicHeader
+        nav={[
+          { href: '#features', label: c.nav.features },
+          { href: '#how', label: c.nav.how },
+          { href: '#services', label: c.nav.services },
+          { href: '#integrations', label: c.nav.integrations },
+        ]}
+        secondaryActions={authed ? [] : [
+          { to: '/login', label: c.nav.clientLogin },
+          cta('hero', 'secondary_cta', { label: c.nav.request, to: '/requests/new' }),
+          { to: '/login', label: c.nav.login },
+        ]}
+        primaryAction={
+          authed
+            ? { to: '/app/dashboard', label: c.nav.dashboard }
+            : cta('hero', 'primary_cta', { label: c.nav.start, to: '/register' })
+        }
+      />
 
       {/* Hero — see HeroSection: the dark product panel + the interactive start card + the journey strip. */}
       {portalPreview ? (

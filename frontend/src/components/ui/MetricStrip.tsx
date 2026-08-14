@@ -1,6 +1,7 @@
 import { useId, useState } from 'react'
 import { Area, AreaChart, ResponsiveContainer } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Info, Minus } from 'lucide-react'
+import { TOUCH_TARGET } from './touch'
 
 /**
  * The metrics that matter first, and the honest absence of the rest — UX-METRICS-001.
@@ -100,7 +101,7 @@ export function InfoHint({ text, label }: { text: string; label: string }) {
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onClick={() => setOpen((o) => !o)}
-        className="rounded-full p-0.5 text-text-muted hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+        className={`rounded-full p-0.5 text-text-muted hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 ${TOUCH_TARGET}`}
       >
         <Info size={13} aria-hidden />
       </button>

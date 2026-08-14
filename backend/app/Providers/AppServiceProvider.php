@@ -166,6 +166,79 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute($perMinute)->by((string) $request->ip());
         });
 
+        /*
+         * Re-issuing a verification challenge — SIGNUP-THROTTLE-001.
+         *
+         * `/{registration}/resend` carried a literal `throttle:6,1`, and a literal throttle is keyed
+         * by the authenticated user or, failing that, by the IP. Every caller of this endpoint is a
+         * guest by definition — an applicant has no account yet — so the allowance was six resends a
+         * minute SHARED BY EVERYONE BEHIND ONE ADDRESS. An office, a campus, a hotel or any carrier
+         * doing CGNAT is one address, and the second colleague to sign up was refused a code they had
+         * asked for once.
+         *
+         * The risk this control exists for belongs to the APPLICATION — do not spam this applicant's
+         * phone, do not burn SMS credit on them — and the key never mentioned it. So it is keyed by
+         * the application now, and in production the per-applicant number is STRICTER than the six it
+         * replaces, because one applicant has no legitimate reason to need more. The address keeps a
+         * ceiling of its own so opening applications in a loop is not a way around the first limit.
+         *
+         * Same defect, same shape, as APP-100 on `/register` above — whose comment calls that «the
+         * last public endpoint still throttled inline». It was not; this one is.
+         *
+         * @return list<Limit>
+         */
+        RateLimiter::for('registration-resend', function (Request $request): array {
+            $production = $this->app->environment('production');
+
+            $perApplication = $production
+                ? (int) config('accounts.resend_throttle_per_application', 3)
+                : (int) config('accounts.resend_throttle_per_application_local', 60);
+            $perAddress = $production
+                ? (int) config('accounts.resend_throttle_per_address', 12)
+                : (int) config('accounts.resend_throttle_per_address_local', 600);
+
+            // The RAW route value: this runs after model binding, and a model is not a cache key.
+            $application = (string) ($request->route()?->originalParameter('registration') ?? 'unknown');
+
+            return [
+                Limit::perMinute($perApplication)->by('registration-resend:application:'.$application),
+                Limit::perMinute($perAddress)->by('registration-resend:address:'.$request->ip()),
+            ];
+        });
+
+        /*
+         * Data-subject requests — LEGAL-THROTTLE-001, the same defect on the flow it matters most on.
+         *
+         * `/data-deletion` and `/data-requests` each carried a literal `throttle:5,1`,
+         * keyed by IP for the same reason as above: these endpoints exist FOR people with no account.
+         * `/data-deletion` is the URL this platform hands to Meta, TikTok, Snapchat and Google as its
+         * deletion contact — it is opened by a reviewer, and it is the one right that has to work
+         * when the customer has already lost access to everything else. Five a minute per address
+         * refused an agency filing for several clients, a household, and two reviewers at one desk.
+         *
+         * Keyed by the SUBJECT of the request, with the address kept as an abuse ceiling so a loop
+         * over invented addresses cannot use this as a mailer.
+         *
+         * @return list<Limit>
+         */
+        RateLimiter::for('data-subject-request', function (Request $request): array {
+            $production = $this->app->environment('production');
+
+            $perSubject = $production
+                ? (int) config('security.data_request_throttle_per_subject', 3)
+                : (int) config('security.data_request_throttle_per_subject_local', 60);
+            $perAddress = $production
+                ? (int) config('security.data_request_throttle_per_address', 12)
+                : (int) config('security.data_request_throttle_per_address_local', 600);
+
+            $subject = mb_strtolower(trim((string) $request->input('email', '')));
+
+            return [
+                Limit::perMinute($perSubject)->by('data-subject-request:subject:'.$subject),
+                Limit::perMinute($perAddress)->by('data-subject-request:address:'.$request->ip()),
+            ];
+        });
+
         // Public request intake — strict in production, relaxed for local/CI so repeated E2E runs don't 429.
         RateLimiter::for('requests-intake', function (Request $request): Limit {
             $perMinute = $this->app->environment('production')
