@@ -23,6 +23,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 use Throwable;
 
 /**
@@ -99,8 +100,27 @@ final class AdPlatformOAuthController extends Controller
             );
         }
 
+        /*
+         * OAUTH-WS-001 — the workspace this connection will be filed under must be OURS.
+         *
+         * This was `['sometimes','nullable','uuid']`: a check on the shape of a string and nothing
+         * else. The value went straight into the state, and on the callback it was stamped onto the
+         * `ProviderConnection` and onto every discovered `ExternalAccount` — none of which ever asked
+         * whether the workspace belonged to this tenant, or existed at all. An operator of tenant A
+         * could post tenant B's client-workspace id and file a real, live platform credential under
+         * another company's client.
+         *
+         * `ClientWorkspace` is `BelongsToTenant`, but a global scope defends queries, and this code
+         * ran no query — it moved a string from a request body to a column. So the check goes where
+         * the string arrives, using the rule `TaskController`, `ProjectController` and
+         * `AICredentialController` already use for this same field. `deleted_at` is included because
+         * the table is soft-deleted, and a live credential filed against a client the agency has
+         * already removed is a connection no surface will ever show.
+         */
         $validated = $request->validate([
-            'client_workspace_id' => ['sometimes', 'nullable', 'uuid'],
+            'client_workspace_id' => ['sometimes', 'nullable', 'uuid', Rule::exists('client_workspaces', 'id')
+                ->where('tenant_id', $tenant->tenantId())
+                ->whereNull('deleted_at')],
         ]);
 
         $state = AuthorizationState::issue(
@@ -139,7 +159,14 @@ final class AdPlatformOAuthController extends Controller
             return $this->back($creds->platform, 'invalid_state', 'This authorisation link has expired or was already used.');
         }
 
-        $code = (string) $request->query('code', '');
+        /*
+         * TIKTOK-AUTH-001 — which query parameter carries the exchangeable code is the provider's
+         * decision, not ours. TikTok's redirect carries `code` AND `auth_code` with different values
+         * and only the second can be exchanged; everyone else uses `code`. The knowledge lives beside
+         * the other TikTok bends in `PlatformOAuth` rather than as a branch in this controller.
+         */
+        $parameter = $this->oauth->callbackCodeParameter($creds);
+        $code = (string) $request->query($parameter, '');
 
         if ($code === '') {
             return $this->back($creds->platform, 'failed', 'The platform returned no authorisation code.');
