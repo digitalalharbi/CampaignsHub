@@ -17,7 +17,7 @@ final class ExternalAccount extends Model
 
     protected $fillable = [
         'tenant_id', 'client_workspace_id', 'provider_connection_id', 'provider', 'account_type',
-        'external_id', 'parent_external_id', 'name', 'currency', 'timezone', 'status', 'metadata',
+        'external_id', 'parent_external_id', 'parent_name', 'name', 'currency', 'timezone', 'status', 'metadata',
         'discovered_at', 'access_lost_at', 'last_synced_at', 'last_structure_synced_at',
     ];
 

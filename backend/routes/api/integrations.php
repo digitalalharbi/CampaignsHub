@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Integrations\Http\Controllers\AdPlatformOAuthController;
+use App\Domains\Integrations\Http\Controllers\ConnectionWizardController;
 use App\Domains\Integrations\Http\Controllers\IntegrationController;
 use App\Domains\Integrations\Http\Controllers\IntegrationWebhookController;
 use App\Domains\Integrations\Http\Controllers\PlatformOverviewController;
@@ -64,6 +65,16 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
 
     Route::get('connections', [ProviderConnectionController::class, 'index'])->name('connections.index');
     Route::post('connections/{connection}/revoke', [ProviderConnectionController::class, 'revoke'])->name('connections.revoke');
+
+    /*
+     * ORCH-100 — the connection wizard's reads: the hierarchy an authorisation discovered, a page of
+     * its accounts, and what the plan has left. All three are tenant-scoped and none of them changes
+     * anything: discovery is inventory until somebody confirms a selection.
+     */
+    Route::get('connections/resumable', [ConnectionWizardController::class, 'resumable'])->name('connections.resumable');
+    Route::get('connections/{connection}/hierarchy', [ConnectionWizardController::class, 'hierarchy'])->name('connections.hierarchy');
+    Route::get('connections/{connection}/accounts', [ConnectionWizardController::class, 'accounts'])->name('connections.accounts');
+    Route::get('plan-usage', [ConnectionWizardController::class, 'planUsage'])->name('plan-usage');
 });
 
 // Per-project integrations (ResolveProject enforces project isolation).
