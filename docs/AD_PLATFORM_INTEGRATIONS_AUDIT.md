@@ -254,3 +254,93 @@ which need not be everything the app asked for.
 **Not claimed:** no TikTok credential exists on this install and no live round trip has been made.
 TikTok remains `BLOCKED_EXTERNAL_CREDENTIALS`, and the two defects above are the reason the first
 real attempt would have failed — they are fixed ahead of that attempt, not verified by one.
+
+## §9 — Phase 2, second provider: Meta (2026-08-16)
+
+Audited against the current *Ad Account Insights*, *Ads Action Stats* and *Platform Versioning*
+references, and against Meta's own Graph/Marketing API versions table. Two defects, both proven
+fail-first. One of them is Meta's; the other is the whole metrics pipeline's, and Meta is where it
+became provable.
+
+### META-ATTRIB-001 — the attribution window was never asked for, never known, and reported as checked
+
+`daily_metrics.attribution_window` exists so that two numbers measured over different windows are
+never added together without a word to the reader. `NormalizedMetric` defaults it to the string
+`'default'`; **nothing in the application ever passed anything else** — `grep -rn "attributionWindow:"
+app/` returned zero results — so every row from every provider carried the same literal.
+
+Three things read that column, and all three were reading a constant:
+
+- `MetricsController::normalization` groups on it and returns `attribution_windows` to the
+  «أساس الأرقام» panel;
+- the panel warns «أكثر من نافذة إسناد في الفترة نفسها» when it receives more than one;
+- `AttributionTransparency::platformRows()` groups per provider on it.
+
+A grouping over a column with one value returns one bucket, always. So the warning could not fire,
+and the single row it displayed instead read as a clean bill of health: **a panel built to catch a
+comparability defect reporting a uniformity it had never verified.**
+
+What makes this concrete rather than theoretical is Meta's own wording. On the Ad Account Insights
+reference, `action_attribution_windows` has «القيمة الافتراضية: default», and then:
+«يشير الخيار `default` إلى `["7d_click","1d_view"]`». The default is not «unset» or «neutral» — it is
+a **specific window**: seven days after a click, one day after a view. Snapchat, TikTok, Google, X
+and LinkedIn each have their own, different, unstated defaults. Storing the same word for all six
+stated that they agreed.
+
+The fix has two halves:
+
+- `MetaConnector` **asks** for `["7d_click","1d_view"]` — Meta's own default, stated rather than
+  inherited — and every row it maps carries `attribution_window: 7d_click,1d_view`. The value is
+  deliberately Meta's default and not something shorter or longer: a different window would be a
+  reporting policy nobody here has chosen, applied retroactively to every client's history. This
+  changes what we KNOW about the numbers, not what the numbers are.
+- `InsightRowNormaliser` reads that key off the row — exactly as it already reads the row's
+  `currency` — and passes it to `NormalizedMetric` instead of letting the constructor default stand.
+
+Sent as **JSON**, like the `time_range` beside it: Graph reads `list<enum>` parameters as JSON, and a
+PHP array would be serialised into `action_attribution_windows[0]=…`, which Graph does not parse. It
+would have been ignored, and an ignored parameter is indistinguishable from one never sent.
+
+A connector that names no window still gets `default`, and that stays the truthful word — «this
+provider's own unstated default», not «the same window as everybody else». Because that is now a
+DIFFERENT string from Meta's, the mixed-window warning can finally fire. **No frontend change was
+needed**: the panel was already written to warn on more than one window; the backend had simply never
+given it a second value.
+
+### META-VERSION-001 — pinned to a Marketing API version that expired eleven months ago
+
+The Marketing API keeps its **own** version table, separate from the Graph API's. On it:
+
+| Marketing API | Released | Expires |
+|---|---|---|
+| v21.0 | 2 Oct 2024 | **9 Sep 2025** |
+| v22.0 | 21 Jan 2025 | 19 Feb 2026 |
+| v23.0 | 29 May 2025 | 9 Jun 2026 |
+| v24.0 | 8 Oct 2025 | 6 Oct 2026 |
+| v25.0 | 18 Feb 2026 | — (current stable) |
+
+All three Meta URLs — `authorize_url`, `token_url`, `api_base` — were pinned to **v21.0**, which
+expired on 9 September 2025.
+
+This never surfaced as a failure, and could not have. Meta's platform versioning guide states that
+once a version is no longer usable, calls to it **default to the next-oldest usable version**. There
+is no error, no header and no log line: the figures kept arriving, from a version nobody chose.
+
+All three are moved to **v25.0**. The test asserts the version as a NUMBER with a floor, not as a
+literal string, so a later upgrade passes and only a downgrade — or standing still until v25.0 is
+itself retired — fails.
+
+### What the Meta audit CONFIRMED rather than changed
+
+- **`me/adaccounts` is the right discovery call**, made with the customer's own token. No ad account
+  id, Business Manager id or pixel id is a system credential — the same rule as SNAP-ORG-001.
+- **The system credential set is exactly `client_id` + `client_secret`.** Nothing customer-owned
+  leaks into platform configuration.
+- **`paging.next` is followed to the end**, cursor URL entire, with a ceiling — unchanged and correct.
+- **No PKCE.** Meta's authorization-code flow publishes no code challenge or verifier.
+- **The action-type priority list stays a priority list, never a sum** (META-001). Nothing in this
+  audit disturbed it.
+
+**Not claimed:** no Meta credential exists on this install and no live round trip has been made. Meta
+remains `BLOCKED_EXTERNAL_CREDENTIALS`. **Nothing here is `LIVE_VERIFIED`** — an expired version and
+an unstated window are both fixed ahead of the first real connection, not verified by one.

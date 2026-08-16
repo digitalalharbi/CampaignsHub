@@ -676,7 +676,7 @@ final class AdPlatformConnectorTest extends TestCase
             ]),
             'graph.facebook.com/*' => Http::response([
                 'data' => [['id' => 'c1', 'name' => 'First page', 'status' => 'ACTIVE']],
-                'paging' => ['next' => 'https://graph.facebook.com/v21.0/act_1/campaigns?after=CURSOR2'],
+                'paging' => ['next' => 'https://graph.facebook.com/v25.0/act_1/campaigns?after=CURSOR2'],
             ]),
         ]);
 
