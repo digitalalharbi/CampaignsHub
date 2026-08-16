@@ -12,6 +12,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Jobs\SyncAccountStructureJob;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
@@ -518,7 +519,7 @@ final class AdPlatformStructureSyncTest extends TestCase
             connectionName: $provider,
         );
 
-        return ExternalAccount::withoutGlobalScopes()->create([
+        $account = ExternalAccount::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id,
             'provider_connection_id' => $connection->getKey(),
             'provider' => $provider,
@@ -526,6 +527,28 @@ final class AdPlatformStructureSyncTest extends TestCase
             'external_id' => "act_{$provider}",
             'name' => ucfirst($provider),
             'status' => 'active',
+            'discovered_at' => Carbon::now(),
         ]);
+
+        /*
+         * ORCH-100 — the account is ASSIGNED to this project.
+         *
+         * These tests are about the mapping chain (campaigns → ad sets → ads → creatives), and the
+         * fixture could previously leave the assignment out because `projectIdFor()` invented one by
+         * taking the tenant's oldest project. It no longer does, so a realistic fixture has to
+         * include the deliberate act that a real account goes through before it syncs at all.
+         */
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $account->id,
+            'provider' => $provider,
+            'purpose' => 'advertising',
+            'is_active' => true,
+            'campaign_management_enabled' => true,
+        ]);
+
+        return $account;
     }
 }

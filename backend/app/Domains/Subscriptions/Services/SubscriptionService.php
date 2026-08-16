@@ -223,6 +223,24 @@ final class SubscriptionService
                 + DB::table('workspace_invitations')->where('tenant_id', $id)
                     ->whereNull('accepted_at')->where('expires_at', '>', now())->count(),
 
+            /*
+             * ORCH-100 — «Connected Ad Accounts» means ASSIGNED, and counts each account once.
+             *
+             * There was no count here at all, so the cap the plans are sold on was unenforceable.
+             * The temptation is to count `external_accounts`, and that would be wrong in the most
+             * expensive possible way: the first live Snapchat consent DISCOVERED 309 accounts, and
+             * consent to see an inventory is not a decision to connect it. Billing 309 for a
+             * catalogue the customer has not chosen from would be charging them for our own data
+             * model.
+             *
+             * Counted on DISTINCT `external_account_id` so one account deliberately serving two
+             * projects is one connected advertiser, not two — the customer connected one account.
+             *
+             * Detached (`is_active = false`) bindings are history and hold nothing.
+             */
+            'ad_accounts' => DB::table('project_integration_bindings')->where('tenant_id', $id)
+                ->where('is_active', true)->distinct()->count('external_account_id'),
+
             // A revoked connection is a connection somebody deliberately gave up; it must not go on
             // costing them a slot.
             'connections' => DB::table('provider_connections')->where('tenant_id', $id)

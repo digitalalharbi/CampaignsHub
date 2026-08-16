@@ -14,8 +14,8 @@ use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\ValueObjects\SyncResult;
-use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
 use Throwable;
 
@@ -47,6 +47,7 @@ final class AccountStructureSyncer
         private readonly AdvertisingConnectorRegistry $registry,
         private readonly ImportExternalCampaigns $importCampaigns,
         private readonly ImportExternalStructure $importStructure,
+        private readonly AccountAssignment $assignment,
     ) {}
 
     /** @param array<string,mixed> $meta */
@@ -91,8 +92,22 @@ final class AccountStructureSyncer
             );
         }
 
+        /*
+         * PROJECT-INTEGRATION-ASSIGNMENT-001 — an unassigned account is not a failure, and it is
+         * certainly not a licence to pick a project.
+         *
+         * `awaiting_assignment` is its own status because the operator's next move is different from
+         * every other outcome here: nothing is broken, nothing needs retrying, somebody needs to say
+         * which project this account feeds. Reporting it as `failed` sent them looking for a fault
+         * that does not exist.
+         */
         if ($projectId === null) {
-            return $this->finish($run, 'failed', 0, 'This workspace has no project to file the discovered structure under.');
+            return $this->finish(
+                $run,
+                'awaiting_assignment',
+                0,
+                'This account is not assigned to a project yet. Assign it to a project, then sync.',
+            );
         }
 
         $problems = [];
@@ -198,26 +213,38 @@ final class AccountStructureSyncer
     }
 
     /**
-     * Where an account's structure is filed.
+     * Where an account's structure is filed — the project somebody ASSIGNED it to.
      *
-     * The project its campaigns already live in, so a re-sync never re-files anything. Only a first
-     * discovery falls back to the workspace's own project, and an account with nowhere to file is
-     * refused rather than filed somewhere arbitrary.
+     * PROJECT-INTEGRATION-ASSIGNMENT-001. This used to read:
+     *
+     * ```php
+     * Project::withoutGlobalScopes()->where('tenant_id', …)->orderBy('created_at')->value('id')
+     * ```
+     *
+     * — the tenant's OLDEST project, picked because it was created first. A discovered account's
+     * campaigns were therefore filed into a project nobody had chosen, and because the next sync
+     * found a campaign already there, the arbitrary choice became permanent. With the live Snapchat
+     * connection's 309 discovered accounts, one sweep would have put all 309 into one project.
+     *
+     * The binding table has recorded the deliberate act all along; nothing in this path read it.
+     * Now `AccountAssignment` is the single answer, so the sweep, this syncer and the bind endpoint
+     * cannot disagree about what «assigned» means.
+     *
+     * An existing campaign still wins, so a re-sync never re-files work already placed — but it is
+     * no longer a way IN, only a way to stay put.
      */
     private function projectIdFor(ExternalAccount $account): ?string
     {
-        $existing = ExternalCampaign::withoutGlobalScopes()
-            ->where('external_account_id', $account->getKey())
-            ->value('project_id');
+        $assigned = $this->assignment->projectIdFor($account);
 
-        if ($existing !== null) {
-            return $existing;
+        if ($assigned !== null) {
+            return $assigned;
         }
 
-        return Project::withoutGlobalScopes()
-            ->where('tenant_id', $account->tenant_id)
-            ->when($account->client_workspace_id, fn ($q, $ws) => $q->orderByRaw('CASE WHEN client_workspace_id = ? THEN 0 ELSE 1 END', [$ws]))
-            ->orderBy('created_at')
-            ->value('id');
+        // Placed by an earlier assignment that has since been detached: keep it where it is rather
+        // than orphaning campaigns that are already on somebody's surfaces.
+        return ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $account->getKey())
+            ->value('project_id');
     }
 }

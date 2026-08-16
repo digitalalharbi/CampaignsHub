@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Console;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -61,6 +62,14 @@ final class SyncAdPlatformsCommand extends Command
             ->where('account_type', 'ad_account')
             ->where('status', 'active')
             ->orderBy('id')
+            // PROJECT-INTEGRATION-ASSIGNMENT-001 — assigned accounts only.
+            //
+            // Discovery alone puts a row here, and the first live Snapchat consent catalogued 309 of
+            // them. A sweep that does not ask which of those somebody actually attached to a project
+            // pulls all 309 every run: data nobody requested, against the provider's rate limit,
+            // filed into a project nobody chose. Consent to SEE an account is not instruction to
+            // sync it.
+            ->tap(fn ($q) => app(AccountAssignment::class)->scopeToAssigned($q))
             // Chunked because a platform-wide sweep on a busy install is thousands of accounts, and
             // loading them all to dispatch a job each is a memory profile that only fails in
             // production.
