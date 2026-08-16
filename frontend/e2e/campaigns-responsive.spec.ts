@@ -44,13 +44,18 @@ for (const vp of VIEWPORTS) {
     })
     expect(result.overflow, `overflow=${result.overflow}px; offenders:\n${result.offenders.join('\n')}`).toBeLessThanOrEqual(1)
 
-    // The project switcher stays reachable at every width: directly on desktop, and via the mobile
-    // menu drawer on small screens.
+    /*
+     * The project switcher stays reachable at every width. The CLAIM is unchanged; the door moved.
+     *
+     * It used to be the menu drawer, opened by a hamburger. MOBILE-APP-001 replaced the phone's
+     * navigation with a bottom bar and dropped that hamburger below `sm`, which would have left the
+     * switcher with no way in at all — so it now sits at the top of the More sheet, above the
+     * sections, because choosing the project comes before choosing the section.
+     */
     const isMobile = vp.width < 768
     if (isMobile) {
-      // The desktop rail is hidden on mobile; the switcher is reached via the menu drawer.
-      await page.getByRole('button', { name: 'Open menu' }).click()
-      await expect(page.getByRole('dialog').locator('select')).toBeVisible()
+      await page.getByTestId('mobile-more-toggle').click()
+      await expect(page.getByTestId('mobile-more-sheet').locator('select')).toBeVisible()
     } else {
       await expect(page.locator('aside select').first()).toBeVisible()
     }

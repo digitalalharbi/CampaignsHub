@@ -11,6 +11,48 @@
 `origin/main` on `https://github.com/digitalalharbi/CampaignsHub`. A local branch or worktree is a
 working copy, never a source of truth — `git fetch origin` first, always.
 
+## ⚠️ START HERE — THE PORTAL FRAME AND THE PHONE, 2026-08-16
+
+**The four portal shells were four copies of one layout, and the copy had a bug in it.**
+
+### SHELL-001 — the dead space under the footer
+
+`<main>` was `flex-1` with block-flow children. On any page shorter than the viewport it stretched,
+the footer sat immediately under the short content, and everything below was empty — hundreds of
+pixels, growing with the window, worst on a large monitor. `AppShell`, `AgencyShell`, `AdminShell`
+and `InfluencerShell` each carried a byte-identical copy of that markup.
+
+`PortalFrame` owns the geometry now: `min-h-[100dvh]`, and a `<main>` that is a flex COLUMN whose
+content box takes the slack, so the footer is genuinely last. Short page → footer on the bottom
+edge. Long page → footer after the content, as before.
+
+What is asserted is the property, not a screenshot: **the distance from the footer's bottom edge to
+the bottom of the document**, at 1280/1366/1440/1536/1920/2560 across all four portals.
+
+The first attempt at the fix reintroduced the defect — the tab-bar clearance was an inline style,
+which cannot carry a media query, so 64px of empty page appeared under every DESKTOP footer. The
+guard written for the original caught it. That is what the guard is for.
+
+### MOBILE-APP-001 — an app shell, not a shrunk rail
+
+Every portal shipped one navigation: a desktop rail, hidden below `md`, reachable on a phone only
+through a hamburger that opened the same rail. `MobileTabBar` gives each portal four destinations
+always on screen plus a More sheet holding everything else.
+
+**The sheet is DERIVED from the rail** (`mobileTabs.ts`), not written beside it — a hand-kept list
+is correct the day it is written and silently wrong the first time somebody adds a section.
+`mobileTabs.test.ts` asserts bar ∪ sheet == rail, exactly.
+
+Bars: `/app` الرئيسية·الحملات·التحليلات·المشاريع · `/agency` الرئيسية·العملاء·الحملات·الطلبات ·
+`/admin` نظرة عامة·طلبات التسجيل·المستأجرون·الاشتراكات · `/portal` الرئيسية·الطلبات·الحملات·التقارير.
+
+### Still open, and NOT done
+
+`#2` static-analysis debt and `#3` commonmark advisories remain open and separate. **SEC-DEPS-001 was
+not touched in this unit either.**
+
+---
+
 ## ⚠️ START HERE — THE MOBILE PASS, 2026-08-14
 
 **One public header, a measured audit that runs every time, and two rate limiters that were keyed by

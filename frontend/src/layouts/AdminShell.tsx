@@ -20,7 +20,8 @@ import {
 import { AccountMenu } from '@/features/account/UserMenu'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { useUi } from '@/stores/ui'
-import { PortalFooter } from '@/features/legal/PolicyFooter'
+import { PortalFrame } from './PortalFrame'
+import type { MobileMoreGroup, MobileTab } from './MobileTabBar'
 
 /**
  * The platform owner's shell (ADR 0002, ADMIN-001).
@@ -85,6 +86,35 @@ const adminAdvancedNav = [
   { to: '/admin/settings/currency-rates', ar: 'أسعار الصرف', en: 'Exchange rates', icon: Coins },
   { to: '/admin/cutover', ar: 'انتقال بوابة العملاء', en: 'Portal cutover', icon: ShieldAlert },
 ] as const
+
+/**
+ * The four the platform owner opens this console for (MOBILE-APP-001).
+ *
+ * Registrations is the queue somebody works through every morning, Tenants is who exists, Billing is
+ * whether they are paying. Email, audit, integration providers, system settings and the advanced
+ * tools are in More — reached on a phone when something needs checking, not several times an hour.
+ */
+const ADMIN_TABS: MobileTab[] = [
+  { to: '/admin', ar: 'نظرة عامة', en: 'Overview', icon: adminNav[0].icon, end: true },
+  { to: '/admin/registrations', ar: 'طلبات التسجيل', en: 'Registrations', icon: adminNav[1].icon },
+  { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: adminNav[2].icon },
+  { to: '/admin/billing', ar: 'الاشتراكات', en: 'Billing', icon: adminNav[3].icon },
+]
+
+/**
+ * Everything else, derived from the two rails rather than restated.
+ *
+ * Admin's navigation is two flat arrays, not the grouped shape the other portals use, so the sheet
+ * is built from those arrays directly — same principle as `moreGroupsFrom`: add an entry to
+ * `adminNav` and it reaches a phone with no second edit.
+ */
+const ADMIN_MORE: MobileMoreGroup[] = [
+  {
+    key: 'console', ar: 'الإدارة', en: 'Console',
+    items: adminNav.filter((i) => !ADMIN_TABS.some((t) => t.to === i.to)).map((i) => ({ ...i })),
+  },
+  { key: 'advanced', ar: 'متقدم', en: 'Advanced', items: adminAdvancedNav.map((i) => ({ ...i })) },
+]
 
 type NavEntry = (typeof adminNav)[number] | (typeof adminAdvancedNav)[number]
 
@@ -173,64 +203,65 @@ export function AdminShell() {
   const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
     useUi()
   const ar = locale === 'ar'
-  const railWidth = sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'
 
   return (
-    <div data-testid="admin-shell" className="flex min-h-screen bg-background text-text-primary">
-      <aside
-        className={`sticky top-0 hidden h-screen shrink-0 flex-col gap-6 overflow-y-auto border-e border-border bg-surface p-3.5 transition-[width] duration-200 md:flex ${railWidth}`}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <PlatformIdentity collapsed={sidebarCollapsed} />
-          {!sidebarCollapsed && (
+    <PortalFrame
+      testId="admin-shell"
+      railWidth={sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'}
+      tabs={ADMIN_TABS}
+      moreGroups={ADMIN_MORE}
+      moreHeader={<AccountMenu variant="sidebar" />}
+      drawerOpen={sidebarOpen}
+      onDrawerClose={() => setSidebarOpen(false)}
+      rail={
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <PlatformIdentity collapsed={sidebarCollapsed} />
+            {!sidebarCollapsed && (
+              <button
+                onClick={toggleSidebarCollapsed}
+                aria-label={ar ? 'طي القائمة' : 'Collapse sidebar'}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+              >
+                <PanelLeft size={17} />
+              </button>
+            )}
+          </div>
+          {sidebarCollapsed && (
             <button
               onClick={toggleSidebarCollapsed}
-              aria-label={ar ? 'طي القائمة' : 'Collapse sidebar'}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+              aria-label={ar ? 'توسيع القائمة' : 'Expand sidebar'}
+              className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
             >
-              <PanelLeft size={17} />
+              <PanelLeft size={17} className="rotate-180" />
             </button>
           )}
-        </div>
-        {sidebarCollapsed && (
-          <button
-            onClick={toggleSidebarCollapsed}
-            aria-label={ar ? 'توسيع القائمة' : 'Expand sidebar'}
-            className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
-          >
-            <PanelLeft size={17} className="rotate-180" />
-          </button>
-        )}
-        <NavItems ar={ar} collapsed={sidebarCollapsed} />
-        <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} />
-      </aside>
-
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={() => setSidebarOpen(false)} />
-          <aside className="absolute inset-y-0 start-0 flex h-full w-[280px] max-w-[82vw] flex-col gap-6 overflow-y-auto border-e border-border bg-surface p-3.5 shadow-[var(--shadow-large)]">
-            <div className="flex items-center justify-between gap-2">
-              <PlatformIdentity />
-              <button
-                onClick={() => setSidebarOpen(false)}
-                aria-label={ar ? 'إغلاق' : 'Close'}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <NavItems ar={ar} onNavigate={() => setSidebarOpen(false)} />
-            <AccountMenu variant="sidebar" />
-          </aside>
-        </div>
-      )}
-
-      <div className="flex min-w-0 flex-1 flex-col">
+          <NavItems ar={ar} collapsed={sidebarCollapsed} />
+          <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} />
+        </>
+      }
+      drawer={
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <PlatformIdentity />
+            <button
+              onClick={() => setSidebarOpen(false)}
+              aria-label={ar ? 'إغلاق' : 'Close'}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <NavItems ar={ar} onNavigate={() => setSidebarOpen(false)} />
+          <AccountMenu variant="sidebar" />
+        </>
+      }
+      header={
         <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-border bg-surface/85 px-4 py-2.5 backdrop-blur-md sm:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
             aria-label={ar ? 'فتح القائمة' : 'Open menu'}
-            className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:h-9 sm:w-9 md:hidden"
+            className="hidden h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:flex sm:h-9 sm:w-9 md:hidden"
           >
             <Menu size={19} />
           </button>
@@ -254,12 +285,9 @@ export function AdminShell() {
             <div className="ms-1"><AccountMenu variant="topbar" /></div>
           </div>
         </header>
-
-        <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-12 pt-4 sm:px-5 lg:px-6">
-          <Outlet />
-          <PortalFooter />
-        </main>
-      </div>
-    </div>
+      }
+    >
+      <Outlet />
+    </PortalFrame>
   )
 }

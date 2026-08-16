@@ -1,6 +1,8 @@
 import { Outlet } from 'react-router-dom'
-import { PortalFooter } from '@/features/legal/PolicyFooter'
 import {
+  BarChart3,
+  FolderKanban,
+  LayoutDashboard,
   Megaphone,
   Menu,
   Moon,
@@ -16,8 +18,26 @@ import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { SidebarNav } from './SidebarNav'
 import { appNavGroups } from './appNav'
+import { PortalFrame } from './PortalFrame'
+import type { MobileTab } from './MobileTabBar'
+import { moreGroupsFrom } from './mobileTabs'
 
 // `ent` = the account-entitlement nav key; an item shows only when it's in the workspace's entitled nav.
+
+/**
+ * The four an advertiser opens this portal for (MOBILE-APP-001).
+ *
+ * «كل حملاتك الإعلانية المدفوعة في مكان واحد» is the promise, so the bar is: where things stand, the
+ * campaigns themselves, the numbers behind them, and the projects they belong to. Content, reports,
+ * alerts, tasks, files, integrations, subscription and settings are all one tap away in More — none
+ * of them is gone, and none of them is something you reach for several times an hour on a phone.
+ */
+const APP_TABS: MobileTab[] = [
+  { to: '/app/dashboard', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard },
+  { to: '/app/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
+  { to: '/app/analytics', ar: 'التحليلات', en: 'Analytics', icon: BarChart3 },
+  { to: '/app/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban },
+]
 
 /**
  * Navigation lives in `appNav.ts` — the same sixteen sections the flat rail had, grouped by the
@@ -58,70 +78,85 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
 export function AppShell() {
   const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
     useUi()
+  const nav = useAuth((s) => s.user?.account?.nav)
 
-  const railWidth = sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'
+  // The same entitlement filter the rail applies, so the phone offers the same set — never more.
+  const moreGroups = moreGroupsFrom(appNavGroups, APP_TABS, (leaf) => !nav || leaf.ent === undefined || nav.includes(leaf.ent))
 
   return (
-    <div className="flex min-h-screen bg-background text-text-primary">
-      {/* Desktop rail. */}
-      <aside
-        className={`sticky top-0 hidden h-screen shrink-0 flex-col gap-6 overflow-y-auto border-e border-border bg-surface p-3.5 transition-[width] duration-200 md:flex ${railWidth}`}
-      >
-        <div className="flex items-center justify-between">
-          <Brand collapsed={sidebarCollapsed} />
-          {!sidebarCollapsed && (
+    <PortalFrame
+      railWidth={sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'}
+      tabs={APP_TABS}
+      moreGroups={moreGroups}
+      /*
+        * The project switcher lives HERE on a phone, not only in the drawer (MOBILE-APP-001).
+        *
+        * The bottom bar carries destinations; the switcher is context, and every destination is read
+        * through it. Removing the hamburger below `sm` — correct for an app shell — left it with no
+        * door at all on a real phone, which is a feature removed to make navigation fit. It is the
+        * first thing in the sheet because choosing the project comes before choosing the section.
+        */
+      moreHeader={<div className="grid gap-3"><ProjectSwitcher /><AccountMenu variant="sidebar" /></div>}
+      drawerOpen={sidebarOpen}
+      onDrawerClose={() => setSidebarOpen(false)}
+      rail={
+        <>
+          <div className="flex items-center justify-between">
+            <Brand collapsed={sidebarCollapsed} />
+            {!sidebarCollapsed && (
+              <button
+                onClick={toggleSidebarCollapsed}
+                aria-label="Collapse sidebar"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+              >
+                <PanelLeft size={17} />
+              </button>
+            )}
+          </div>
+          {sidebarCollapsed ? (
             <button
               onClick={toggleSidebarCollapsed}
-              aria-label="Collapse sidebar"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+              aria-label="Expand sidebar"
+              className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
             >
-              <PanelLeft size={17} />
+              <PanelLeft size={17} className="rotate-180" />
             </button>
-          )}
-        </div>
-        {sidebarCollapsed ? (
-          <button
-            onClick={toggleSidebarCollapsed}
-            aria-label="Expand sidebar"
-            className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
-          >
-            <PanelLeft size={17} className="rotate-180" />
-          </button>
-        ) : (
-          <ProjectSwitcher />
-        )}
-        <NavItems collapsed={sidebarCollapsed} />
-        <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} />
-      </aside>
-
-      {/* Mobile drawer. */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={() => setSidebarOpen(false)} />
-          <aside className="absolute inset-y-0 start-0 flex h-full w-[280px] max-w-[82vw] flex-col gap-6 overflow-y-auto border-e border-border bg-surface p-3.5 shadow-[var(--shadow-large)]">
-            <div className="flex items-center justify-between">
-              <Brand />
-              <button
-                onClick={() => setSidebarOpen(false)}
-                aria-label="Close"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover"
-              >
-                <X size={18} />
-              </button>
-            </div>
+          ) : (
             <ProjectSwitcher />
-            <NavItems onNavigate={() => setSidebarOpen(false)} />
-            <AccountMenu variant="sidebar" />
-          </aside>
-        </div>
-      )}
-
-      <div className="flex min-w-0 flex-1 flex-col">
+          )}
+          <NavItems collapsed={sidebarCollapsed} />
+          <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} />
+        </>
+      }
+      drawer={
+        <>
+          <div className="flex items-center justify-between">
+            <Brand />
+            <button
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Close"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <ProjectSwitcher />
+          <NavItems onNavigate={() => setSidebarOpen(false)} />
+          <AccountMenu variant="sidebar" />
+        </>
+      }
+      header={
         <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-border bg-surface/85 px-4 py-2.5 backdrop-blur-md sm:px-6">
+          {/*
+            * The hamburger is a DESKTOP-tablet control now (`md:hidden` still, but `hidden` below
+            * `sm`): on a phone the bottom bar is the navigation, and two ways to open the same rail
+            * is the clutter this pass exists to remove. Between `sm` and `md` — a small tablet, no
+            * rail and no tab bar — it is still the only way in, so it stays there.
+            */}
           <button
             onClick={() => setSidebarOpen(true)}
             aria-label="Open menu"
-            className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:h-9 sm:w-9 md:hidden"
+            className="hidden h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:flex sm:h-9 sm:w-9 md:hidden"
           >
             <Menu size={19} />
           </button>
@@ -152,12 +187,9 @@ export function AppShell() {
             <div className="ms-1"><AccountMenu variant="topbar" /></div>
           </div>
         </header>
-
-        <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-12 pt-4 sm:px-5 lg:px-6">
-          <Outlet />
-          <PortalFooter />
-        </main>
-      </div>
-    </div>
+      }
+    >
+      <Outlet />
+    </PortalFrame>
   )
 }
