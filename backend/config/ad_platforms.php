@@ -176,8 +176,22 @@ return [
             'scopes' => ['r_ads', 'r_ads_reporting', 'r_basicprofile'],
             'client_id' => env('LINKEDIN_ADS_CLIENT_ID'),
             'client_secret' => env('LINKEDIN_ADS_CLIENT_SECRET'),
-            // LinkedIn pins every REST call to a monthly version; an unpinned call is rejected.
-            'version' => env('LINKEDIN_ADS_VERSION', '202411'),
+            /*
+             * LinkedIn pins every REST call to a monthly version; an unpinned call is rejected.
+             *
+             * LINKEDIN-VERSION-001 — this defaulted to **202411** (November 2024). LinkedIn's
+             * versioning page names **202607** as the latest and states that versions are supported
+             * for a MINIMUM of one year; every page of the marketing documentation currently carries
+             * the banner «The Marketing Version 202507 (Marketing July 2025) has been sunset».
+             *
+             * So the pin was eight months older than a version LinkedIn has already retired — and
+             * because the header is mandatory rather than advisory, every LinkedIn call this platform
+             * made was against a version that no longer exists.
+             *
+             * `LinkedInPagingAndVersionTest` asserts the floor as a NUMBER, so a later monthly bump
+             * passes and only standing still fails.
+             */
+            'version' => env('LINKEDIN_ADS_VERSION', '202607'),
         ],
     ],
 ];

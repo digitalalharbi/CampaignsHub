@@ -235,7 +235,7 @@ parameters:
 			path: app/Domains/Integrations/Providers/ApiAdvertisingConnector.php
 
 		-
-			message: '#^Method App\\Domains\\Integrations\\Providers\\LinkedInConnector\:\:fetchAds\(\) should return list\<array\{external_id\: string, ad_set_external_id\: string\|null, campaign_external_id\: string\|null, name\: string, status\: string, review_status\?\: string\|null, destination_url\?\: string\|null, creative\?\: array\{external_id\: string, name\?\: string\|null, format\?\: string\|null, thumbnail_url\?\: string\|null, preview_url\?\: string\|null\}, \.\.\.\}\> but returns list\<array\{external_id\: string, campaign_external_id\?\: string, name\: non\-falsy\-string, status\: string, review_status\?\: ''approved''\|''pending''\|''rejected'', raw\: array\<mixed\>\}\>\.$#'
+			message: '#^Method App\\Domains\\Integrations\\Providers\\LinkedInConnector\:\:fetchAds\(\) should return list\<array\{external_id\: string, ad_set_external_id\: string\|null, campaign_external_id\: string\|null, name\: string, status\: string, review_status\?\: string\|null, destination_url\?\: string\|null, creative\?\: array\{external_id\: string, name\?\: string\|null, format\?\: string\|null, thumbnail_url\?\: string\|null, preview_url\?\: string\|null\}, \.\.\.\}\> but returns list\<array\{external_id\: string, campaign_external_id\?\: string, name\: non\-falsy\-string, status\: string, review_status\?\: ''approved''\|''pending''\|''rejected'', raw\: array\<string, mixed\>\}\>\.$#'
 			identifier: return.type
 			count: 1
 			path: app/Domains/Integrations/Providers/LinkedInConnector.php
