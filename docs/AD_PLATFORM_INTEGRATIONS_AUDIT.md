@@ -344,3 +344,101 @@ itself retired — fails.
 **Not claimed:** no Meta credential exists on this install and no live round trip has been made. Meta
 remains `BLOCKED_EXTERNAL_CREDENTIALS`. **Nothing here is `LIVE_VERIFIED`** — an expired version and
 an unstated window are both fixed ahead of the first real connection, not verified by one.
+
+## §10 — Phase 2, third provider: Google Ads (2026-08-16)
+
+Audited against the current sunset table, *Listing accessible customers*, *Get the account hierarchy*,
+the `customer_client` field reference and *API call structure*. Three defects, all proven fail-first
+(8 of 9 new tests failed before the fix). The first of them means the other two had never yet had a
+chance to matter.
+
+### GADS-VERSION-001 — v18 is not merely old, it is gone
+
+`api_base` was `https://googleads.googleapis.com/v18`. Google's sunset table lists the **released**
+versions as:
+
+| Google Ads API | Released | Sunset |
+|---|---|---|
+| v21 | 6 Aug 2025 | Aug 2026 (tentative) |
+| v22 | 15 Oct 2025 | Oct 2026 (tentative) |
+| v23 | 28 Jan 2026 | Feb 2027 |
+| v24 | 22 Apr 2026 | May 2027 |
+| **v25** | **22 Jul 2026** | **Aug 2027** |
+
+v18 is on none of them. And Google does not degrade quietly the way Meta does (META-VERSION-001): its
+own definition is that a sunset version can no longer be used and requests to it **fail** on or after
+the sunset date. **Every Google Ads call this platform made was refused, for every customer, always.**
+
+Moved to **v25**, guarded by a numeric floor rather than a literal so an upgrade passes and only
+standing still fails.
+
+### GADS-HIERARCHY-001 — `listAccessibleCustomers` is not a list of ad accounts
+
+The connector treated every resource name it returned as an ad account. Google's page says what it
+actually returns: the accounts **the authenticated user can act on directly**. That includes MANAGER
+accounts, and excludes the customers underneath them. Its worked example is exactly the agency shape
+this product serves — a user with admin rights on manager M1 and account C3 can reach M1, C1, C2 and
+C3, but the call returns **only M1 and C3**.
+
+So for any agency working through an MCC we recorded the MANAGER as an ad account, and the accounts
+that hold the campaigns and the spend were never discovered at all. A manager holds no campaigns, so
+the single "account" we did create would sync cleanly and report nothing — forever. That reads as a
+quiet month, not as a broken integration, which is the hardest kind of failure to notice.
+
+The documented answer is `customer_client`, queried under each accessible customer. It returns every
+direct and indirect client of a manager, plus the entry point itself at `level = 0`, and carries
+`descriptive_name`, `currency_code`, `time_zone`, `status`, `level` and `manager`. That last flag is
+what separates an advertiser from a folder.
+
+Three things fall out of using it:
+
+- the manager is skipped and its clients are discovered;
+- name, currency, timezone and status now come from the platform instead of being `null` or a blanket
+  `active` — a client Google reports as `CANCELED` is no longer badged live;
+- the extra per-customer `SELECT customer.descriptive_name` round trip is gone, because the hierarchy
+  already carries the name.
+
+Accounts are keyed by id, so one reachable through two entry points — an operator with rights on both
+the MCC and one of its clients — is discovered once rather than twice with its spend doubled.
+
+### GADS-MCC-001 — the manager account id was a SYSTEM credential
+
+`login_customer_id` sat in the platform's own `/admin` configuration and was sent as
+`login-customer-id` on **every call, for every tenant**. Google documents it as the customer id of the
+manager account through which the caller reaches **that particular client account** — so it belongs
+to each customer's hierarchy, not to this platform. One value in one system row was wrong for every
+tenant but at most one.
+
+It was also written into `parent_external_id` on every discovered account, making one operator's MCC
+id the recorded parent of every client's accounts on every surface that shows a hierarchy.
+
+This is SNAP-ORG-001 again: same shape, same layer, same cause.
+
+The header is now asked of the connector (`ApiAdvertisingConnector::loginCustomerId()`, null for every
+other provider) rather than read from credentials. While walking a hierarchy it is the entry point
+being walked; for a per-customer GAQL query it is the parent recorded for that account at discovery.
+An account held directly sends **no** header, which is correct — Google then defaults it to the
+operating customer.
+
+The `/admin` field is removed as well, and that matters as much as the header. A field on that form is
+an instruction: leaving it after the value stopped being read would invite an operator to paste one
+customer's manager id into a platform-wide setting and believe they had configured something.
+`GOOGLE_ADS_LOGIN_CUSTOMER_ID` is deliberately not read anywhere — an environment variable that is
+silently ignored is worse than one that is absent.
+
+### What the Google Ads audit CONFIRMED rather than changed
+
+- **The developer token IS a system credential.** It identifies this application to Google, is
+  approved separately from the OAuth client, and every call is refused without it. It stays required.
+- **`customers:listAccessibleCustomers` is still the right entry point** — and Google states it
+  ignores any `login-customer-id` supplied, so the old system value never affected it either way.
+- **`searchStream` returns a JSON ARRAY of chunks**, and reading `$body['results']` finds nothing;
+  `stream()` flattens it. Unchanged and correct.
+- **The PURCHASE-category second query stays** (GADS-001). Google publishes no purchase metric, and
+  `metrics.conversions` counts whatever the account counts.
+- **Customer ids are sent without dashes.** Unchanged.
+- **No PKCE**, and the refresh token is issued only on first consent with `access_type=offline` plus
+  `prompt=consent` — both already handled.
+
+**Not claimed:** no Google Ads credential exists on this install and no live round trip has been made.
+Google Ads remains `BLOCKED_EXTERNAL_CREDENTIALS`. **Nothing here is `LIVE_VERIFIED`.**

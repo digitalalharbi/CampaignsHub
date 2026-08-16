@@ -15,7 +15,7 @@ Legend: ⏳ awaiting credentials · 🧪 sandbox available · ✅ live (none yet
 | Snapchat Marketing API | ⏳ 🧪 | `SNAPCHAT_CLIENT_ID`, `SNAPCHAT_CLIENT_SECRET`, `SNAPCHAT_REDIRECT_URI` |
 | X Ads API | ⏳ 🧪 | `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_SECRET` (+ dev account approval) |
 | LinkedIn Marketing API | ⏳ 🧪 | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_REDIRECT_URI` |
-| Google Ads API | ⏳ 🧪 | `GOOGLE_ADS_DEVELOPER_TOKEN`, OAuth client id/secret, `GOOGLE_ADS_LOGIN_CUSTOMER_ID` |
+| Google Ads API | ⏳ 🧪 | `GOOGLE_ADS_DEVELOPER_TOKEN`, OAuth client id/secret — **no manager (MCC) account id** (GADS-MCC-001: it is the customer's, discovered from their own hierarchy) |
 
 Sandbox connector (`sandbox`) needs no credentials and is available in non-production only.
 

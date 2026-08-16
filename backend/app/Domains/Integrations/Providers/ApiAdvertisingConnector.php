@@ -318,11 +318,17 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
             // TikTok authenticates with its own header and no scheme.
             'tiktok' => $request->withHeaders(['Access-Token' => $tokens->accessToken]),
 
-            // Google Ads needs the developer token on every call, and the manager account when the
-            // authorised identity reaches its customers through one.
+            /*
+             * Google Ads needs the developer token on every call — that one IS ours, it identifies
+             * this application to Google and is approved separately from the OAuth client.
+             *
+             * `login-customer-id` is not (GADS-MCC-001). It names the manager account through which
+             * the caller reaches the client account being queried, so it varies per customer and is
+             * asked of the connector rather than read from platform configuration.
+             */
             'google' => $request->withToken($tokens->accessToken)->withHeaders(array_filter([
                 'developer-token' => $creds->get('developer_token'),
-                'login-customer-id' => $creds->get('login_customer_id'),
+                'login-customer-id' => $this->loginCustomerId(),
             ], static fn ($v) => $v !== null)),
 
             // LinkedIn rejects an unpinned REST call outright.
@@ -333,6 +339,17 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
 
             default => $request->withToken($tokens->accessToken),
         };
+    }
+
+    /**
+     * The manager account the CURRENT call is being made through, when the provider needs one.
+     *
+     * Null everywhere except Google Ads, which overrides it. It is a method rather than a credential
+     * because the answer depends on which customer is being queried — see GADS-MCC-001.
+     */
+    protected function loginCustomerId(): ?string
+    {
+        return null;
     }
 
     /** `{api_base}/{path}` without caring who wrote the slash. */
