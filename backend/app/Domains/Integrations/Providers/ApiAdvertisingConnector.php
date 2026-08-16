@@ -214,6 +214,22 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
         return $this->fetchAdAccounts($this->tokens());
     }
 
+    /**
+     * What THIS token can reach — the operation an OAuth callback performs before anything is saved.
+     *
+     * Separate from `listAdAccounts()` because the two ask different questions. That one reads a
+     * stored connection and answers «what does this workspace already have»; this one takes a token
+     * that has just come back from the provider and answers «what did this person actually authorise
+     * us to see», which is the only honest basis for the account-selection step.
+     *
+     * It is also the seam the tenancy tests drive: two tokens, two answers, proven rather than
+     * assumed (SNAP-ORG-001).
+     */
+    public function discoverAdAccounts(OAuthTokens $tokens): array
+    {
+        return $this->fetchAdAccounts($tokens);
+    }
+
     public function syncCampaigns(string $adAccountId): SyncResult
     {
         $refusal = $this->refusal();

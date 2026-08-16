@@ -144,8 +144,21 @@ final class ProviderConfigurationService
             return ProviderSetupState::ConfigurationError;
         }
 
-        return $row?->last_test_status === 'passed' && $row->environment === 'production'
-            ? ProviderSetupState::ProductionReady
+        /*
+         * The verdict no longer consults `environment` — ENV-FAKE-001.
+         *
+         * It used to require `environment === 'production'`, which was the only thing that column
+         * ever decided. It changes no authorize URL, no token URL and no API base for any of the
+         * eight providers, because none of them has a separate sandbox host wired here. So the
+         * Sandbox/Production control was decoration whose single effect was gating an overclaim —
+         * and with that overclaim gone (PROBE-CLAIM-001) it had no behaviour left at all.
+         *
+         * The column is kept and still written: production rows hold a value, and dropping it would
+         * be a migration nobody needs. It simply stops deciding anything, and the interface stops
+         * offering a switch that does nothing.
+         */
+        return $row?->last_test_status === 'passed'
+            ? ProviderSetupState::CredentialsVerified
             : ProviderSetupState::ReadyToConnect;
     }
 

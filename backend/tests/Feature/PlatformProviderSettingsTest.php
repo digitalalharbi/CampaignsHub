@@ -87,8 +87,20 @@ final class PlatformProviderSettingsTest extends TestCase
         $this->assertContains('developer_token', array_column($google['fields'], 'key'));
         $this->assertTrue(collect($google['fields'])->firstWhere('key', 'developer_token')['required']);
 
+        /*
+         * Snapchat asks for the PLATFORM'S app and nothing else — SNAP-ORG-001.
+         *
+         * This used to assert that `organization_id` was a required system credential, which is the
+         * defect rather than the requirement: one organisation id in one system row pointed every
+         * tenant's token at the operator's organisation. Organisations and their ad accounts come
+         * from `GET /me/organizations?with_ad_accounts=true`, scoped to whoever authorised.
+         */
         $snapchat = collect($response->json('data.providers'))->firstWhere('key', 'snapchat');
-        $this->assertTrue(collect($snapchat['fields'])->firstWhere('key', 'organization_id')['required']);
+        $this->assertSame(
+            ['client_id', 'client_secret'],
+            array_column($snapchat['fields'], 'key'),
+            'nothing belonging to a customer may be asked for as a platform credential',
+        );
 
         // X is the only one of the eight whose authorisation is refused outright without PKCE.
         $x = collect($response->json('data.providers'))->firstWhere('key', 'x');
@@ -237,7 +249,7 @@ final class PlatformProviderSettingsTest extends TestCase
         $this->assertSame(ProviderSetupState::ReadyToConnect, $settings->state('google'));
 
         $settings->recordTest('google', true, 'ok');
-        $this->assertSame(ProviderSetupState::ProductionReady, $settings->state('google'));
+        $this->assertSame(ProviderSetupState::CredentialsVerified, $settings->state('google'));
 
         // A known-broken configuration outranks a complete one. It is not "ready and also failing".
         $settings->recordTest('google', false, 'refused');
@@ -256,7 +268,7 @@ final class PlatformProviderSettingsTest extends TestCase
         $settings = app(ProviderConfigurationService::class);
         $settings->save('meta', ['client_id' => 'a', 'client_secret' => 'b'], environment: 'production');
         $settings->recordTest('meta', true, 'ok');
-        $this->assertSame(ProviderSetupState::ProductionReady, $settings->state('meta'));
+        $this->assertSame(ProviderSetupState::CredentialsVerified, $settings->state('meta'));
 
         $settings->save('meta', ['client_secret' => 'rotated']);
 

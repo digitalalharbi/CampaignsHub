@@ -147,7 +147,14 @@ describe('ProviderSettingsPage', () => {
     expect(screen.getByTestId('provider-test-run-google')).toBeDisabled()
   })
 
-  /** «جاهز للربط» is not «جاهز للإنتاج». A complete form is not evidence. */
+  /**
+   * A complete form, a verified app and a live integration are three different things.
+   *
+   * `ready_to_connect` means somebody filled the form in. `production_ready` — the stored value —
+   * means the provider answered a real round trip and recognised our app. Neither may be described
+   * as production ready: that word promised approvals, consent and account access no probe can
+   * establish (PROBE-CLAIM-001), so the label now says exactly what was proven.
+   */
   it('separates a complete configuration from a proven one', async () => {
     vi.mocked(fetchIntegrationProviders).mockResolvedValue(listing([
       provider({ key: 'meta', state: 'ready_to_connect', missing: [], connectable: true }),
@@ -160,7 +167,9 @@ describe('ProviderSettingsPage', () => {
     renderWithProviders(<ProviderSettingsPage />)
 
     expect(await screen.findByTestId('provider-state-meta')).toHaveTextContent('Ready to connect')
-    expect(screen.getByTestId('provider-state-tiktok')).toHaveTextContent('Production ready')
+    expect(screen.getByTestId('provider-state-tiktok')).toHaveTextContent('App verified — ready for customers to connect')
+    // The overclaim is gone from the interface, not merely reworded around.
+    expect(screen.getByTestId('provider-state-tiktok')).not.toHaveTextContent(/^Production ready$/)
   })
 
   it('shows the provider\'s own refusal on a failed configuration', async () => {

@@ -116,3 +116,55 @@ A platform may only be marked done when **all** of these are true — a passing 
 - **Blocked on access:** six sets of platform credentials, each behind that platform's own approval
   process. Nothing in this repository can shorten those approvals.
 - **Not claimed:** no platform is described as connected, synced or live anywhere in the product.
+
+---
+
+## 7. SNAP-ORG-001 / SNAP-TOKEN-001 / PROBE-CLAIM-001 — corrections, 2026-08-16
+
+**This section supersedes anything above it that disagrees with it.** §2's table describes the state
+before the six read-only adapters were written; the adapters exist. What follows was re-verified
+against the providers' CURRENT published documentation, not against this file and not against the
+code's own comments.
+
+### SNAP-ORG-001 — a system-level organisation id could not be right for more than one customer
+
+`SnapchatConnector::fetchAdAccounts()` read `organization_id` from the platform's `/admin`
+configuration and requested `organizations/{that id}/adaccounts`.
+
+CampaignsHub is multi-tenant. Every customer authorises with their own Business Manager member and
+receives their own token, carrying access to their own organisation. One organisation id in one
+system row pointed **every** customer's token at the operator's organisation — so a tenant saw
+accounts that were not theirs, or, far more often, none at all, because their token has no access
+there and the call is refused. It was a tenancy defect wearing a configuration field's clothes.
+
+**Verified from the current documentation:** `GET /v1/me/organizations?with_ad_accounts=true` returns
+the organisations the authenticated member can reach, each with its ad accounts nested and the
+member's role on them. The endpoint existed all along; the field stood in for a call nobody made.
+
+The field is removed from the catalogue. `SnapchatOrganisationDiscoveryTest` proves two tenants with
+two tokens discover two different organisations and never each other's, and that an organisation id
+already stored in production is preserved rather than destroyed.
+
+### SNAP-TOKEN-001 — the stated token lifetime was half the real one
+
+The interface said «نحو 30 دقيقة». The current authentication documentation states the access token
+expires after **3600 seconds (60 minutes)**. Corrected in both languages. An operator plans refresh
+windows, alert thresholds and support answers around that number.
+
+### PROBE-CLAIM-001 — «جاهز للإنتاج» was claimed from a credentials probe
+
+`ProviderSetupState::ProductionReady` was reached whenever the key set was complete, the environment
+was `production`, and the configuration probe passed. The interface rendered it green, as
+«جاهز للإنتاج».
+
+The probe sends a deliberately impossible authorisation code and reads the refusal. A refusal that
+names the GRANT proves the provider recognised our client id and secret — **and that is all it
+proves.** Not app review, not granted scopes, not a developer token, not anybody's consent, not one
+reachable ad account. Several of these platforms additionally require an external approval that no
+request from this server can detect.
+
+The case is now `CredentialsVerified` — **the stored value `production_ready` is unchanged**, so live
+rows and saved filters keep working — the badge is no longer green, and the label reads
+«تم التحقق من التطبيق — جاهز لبدء الربط». `isLiveVerified()` returns false for every state in the
+enum, because none of them observes a consent, a discovery or a sync. `LIVE_VERIFIED` in `CLAUDE.md`
+terms remains unearned for every provider here.
