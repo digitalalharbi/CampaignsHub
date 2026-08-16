@@ -121,7 +121,18 @@ return [
             'label' => 'Google Ads API',
             'authorize_url' => 'https://accounts.google.com/o/oauth2/v2/auth',
             'token_url' => 'https://oauth2.googleapis.com/token',
-            'api_base' => 'https://googleads.googleapis.com/v18',
+            /*
+             * GADS-VERSION-001 — this was **v18**, which is not merely old: it is gone.
+             *
+             * Google's sunset table lists the released versions as v21 (6 Aug 2025 → Aug 2026),
+             * v22 (15 Oct 2025 → Oct 2026), v23 (28 Jan 2026 → Feb 2027), v24 (22 Apr 2026 →
+             * May 2027) and v25 (22 Jul 2026 → Aug 2027). v18 is on none of them.
+             *
+             * And unlike Meta, Google does not degrade quietly (META-VERSION-001): its own wording is
+             * that a sunset version can no longer be used and requests to it FAIL on or after the
+             * sunset date. Every Google Ads call this platform made was refused, for every customer.
+             */
+            'api_base' => 'https://googleads.googleapis.com/v25',
             'scopes' => ['https://www.googleapis.com/auth/adwords'],
             'client_id' => env('GOOGLE_ADS_CLIENT_ID'),
             'client_secret' => env('GOOGLE_ADS_CLIENT_SECRET'),
@@ -132,7 +143,19 @@ return [
              * nothing but errors.
              */
             'developer_token' => env('GOOGLE_ADS_DEVELOPER_TOKEN'),
-            'login_customer_id' => env('GOOGLE_ADS_LOGIN_CUSTOMER_ID'),
+            /*
+             * GADS-MCC-001 — `login_customer_id` used to sit here, and it is the customer's, not ours.
+             *
+             * Google documents `login-customer-id` as the manager account through which the CALLER
+             * reaches THAT PARTICULAR client account. Held as one platform-wide value it was wrong for
+             * every tenant but at most one, and it was also stamped as `parent_external_id` on every
+             * discovered account — making one operator's MCC id the recorded parent of every client's
+             * accounts. Same defect as SNAP-ORG-001, in the same place, for the same reason.
+             *
+             * It is now read from the customer's OWN hierarchy during discovery and carried per
+             * account. `GOOGLE_ADS_LOGIN_CUSTOMER_ID` is deliberately not read anywhere: an
+             * environment variable that is silently ignored is worse than one that is absent.
+             */
         ],
 
         'x' => [
