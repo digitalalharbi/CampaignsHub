@@ -97,4 +97,11 @@ return [
         ],
     ],
 
+    /*
+     * The public price list and service catalogue, per minute per IP, in PRODUCTION.
+     *
+     * Unchanged from the literal it replaces. Off-production the limiter grants headroom instead —
+     * see `AppServiceProvider`.
+     */
+    'public_catalogue_throttle' => (int) env('PUBLIC_CATALOGUE_THROTTLE_PER_MINUTE', 60),
 ];

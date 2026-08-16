@@ -56,21 +56,36 @@ export function HeroSection({
 
   return (
     <section id="usage" className="border-b border-border bg-surface-secondary">
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-3 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.42fr)] lg:py-5">
+      {/*
+        * MOBILE-HERO-001 — the phone's first screen is the headline and the three doors.
+        *
+        * On one column the grid used to stack: eyebrow, headline, description, support line, four
+        * benefits, the chooser's own title and subtitle, three path cards, an includes list — and only
+        * THEN «إنشاء حساب / تسجيل الدخول / متابعة طلباتي». Roughly 900px of page before the first
+        * decision, so on a 667px phone the three things a visitor came to do were all below the fold,
+        * and two of them were otherwise only in the hamburger.
+        *
+        * The order below fixes that with `order` alone: nothing is removed, nothing is duplicated,
+        * and from `lg` up the explicit column/row placement wins so the desktop layout is unchanged.
+        */}
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.42fr)] lg:py-5">
 
         {/* ── The promise ── */}
-        <div className="order-1 lg:col-start-1 lg:row-start-1">
-          <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3 py-1 text-[12px] font-semibold text-brand-700">
-            {txt('hero', 'eyebrow', c.hero.eyebrow)}
-          </p>
-          <h1 className="mt-2 font-heading text-[24px] font-extrabold leading-[1.14] tracking-tight sm:text-[32px]">
-            {txt('hero', 'title', c.hero.title)}
-          </h1>
-          <p className="mt-2 max-w-3xl text-[14px] leading-relaxed text-text-secondary">{txt('hero', 'desc', c.hero.desc)}</p>
-          <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-text-muted">{c.hero.support}</p>
+        <div className="contents lg:col-start-1 lg:row-start-1 lg:block">
+          <div className="order-1">
+            <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3 py-1 text-[12px] font-semibold text-brand-700">
+              {txt('hero', 'eyebrow', c.hero.eyebrow)}
+            </p>
+            {/* 21px on a phone, and the approved 32px from `sm` up — the wording is untouched. */}
+            <h1 data-testid="hero-heading" className="mt-1.5 font-heading text-[21px] font-extrabold leading-[1.18] tracking-tight sm:mt-2 sm:text-[32px]">
+              {txt('hero', 'title', c.hero.title)}
+            </h1>
+            <p className="mt-1.5 max-w-3xl text-[13.5px] leading-snug text-text-secondary sm:mt-2 sm:text-[14px] sm:leading-relaxed">{txt('hero', 'desc', c.hero.desc)}</p>
+            <p className="mt-1 max-w-3xl text-[12.5px] leading-snug text-text-muted sm:text-[13px] sm:leading-relaxed">{c.hero.support}</p>
+          </div>
 
-          {/* The four approved benefits. */}
-          <ul className="mt-2.5 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+          {/* The four approved benefits — below the decision on a phone, beside the promise on desktop. */}
+          <ul className="order-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:mt-2.5">
             {c.hero.points.map((pt, i) => {
               const Icon = BENEFIT_ICON[i] ?? Check
               return (
@@ -86,7 +101,7 @@ export function HeroSection({
         </div>
 
         {/* ── The decision ── */}
-        <div className="order-2 flex flex-col rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] lg:col-start-2 lg:row-span-2 lg:row-start-1">
+        <div className="order-4 flex flex-col rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] lg:col-start-2 lg:row-start-1">
           <h2 className="font-heading text-[18px] font-extrabold text-text-primary">{c.options.title}</h2>
           <p className="mt-1 text-[12px] leading-snug text-text-secondary">{c.options.subtitle}</p>
 
@@ -131,39 +146,51 @@ export function HeroSection({
             ))}
           </ul>
 
-          {/* Account actions: continue on the chosen path, log in, or track existing requests. */}
-          <div className="mt-3 space-y-2 border-t border-border pt-3">
-            {authed ? (
-              <Link to="/app/dashboard" className="block"><Button className="w-full">{c.nav.dashboard} <Arrow size={15} /></Button></Link>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  <Link to={primaryTo} data-testid="hero-primary-cta"><Button className="w-full"><UserPlus size={15} /> {primaryLabel}</Button></Link>
-                  <Link to={ACCOUNT_ROUTES.login}><Button variant="secondary" className="w-full"><LogIn size={15} /> {c.nav.login}</Button></Link>
-                </div>
-                <Link to={ACCOUNT_ROUTES.trackRequests} data-testid="hero-track-requests" className="block">
+        </div>
+
+        {/*
+          ── The decision, made ──
+
+          Second on a phone, directly under the headline: «إنشاء حساب» full width, then «تسجيل الدخول»
+          and «متابعة طلباتي» side by side — the shape a visitor is asked for. On desktop it sits in
+          the right column immediately below the chooser and joins it seam to seam (`lg:-mt-px`, no
+          top rounding), which is exactly where it rendered before, so nothing there moves.
+        */}
+        <div
+          data-testid="hero-actions"
+          className="order-2 rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] lg:col-start-2 lg:row-start-2 lg:-mt-3 lg:self-start lg:rounded-t-none lg:border-t-0 lg:pt-0 lg:shadow-none"
+        >
+          {authed ? (
+            <Link to="/app/dashboard" className="block"><Button className="w-full">{c.nav.dashboard} <Arrow size={15} /></Button></Link>
+          ) : (
+            <div className="space-y-2">
+              <Link to={primaryTo} data-testid="hero-primary-cta" className="block">
+                <Button size="lg" className="w-full"><UserPlus size={16} /> {primaryLabel}</Button>
+              </Link>
+              <div className="grid grid-cols-2 gap-2">
+                <Link to={ACCOUNT_ROUTES.login} data-testid="hero-login">
+                  <Button variant="secondary" className="w-full"><LogIn size={15} /> {c.nav.login}</Button>
+                </Link>
+                <Link to={ACCOUNT_ROUTES.trackRequests} data-testid="hero-track-requests">
                   <Button variant="secondary" className="w-full"><FileText size={15} /> {c.nav.clientLogin}</Button>
                 </Link>
-                <p className="flex items-start gap-1.5 text-[11px] leading-snug text-text-muted">
-                  <ShieldCheck size={12} className="mt-0.5 shrink-0 text-brand-500" /> {c.options.login.helper}
-                </p>
-              </>
-            )}
-          </div>
-
-          {/* Every journey stays a real link, not only a selection — a visitor who never clicks a path
-              (and any crawler) still finds all four routes. */}
-          {!authed && (
-            <nav aria-label={c.options.title} className="mt-auto flex flex-wrap gap-x-3 gap-y-1 pt-3 text-[10.5px]">
-              {c.start.paths.filter((o) => o.key !== pathKey).map((o) => (
-                <Link key={o.key} to={journeyTo(o.key)} data-testid={`hero-journey-link-${o.key}`} className="text-text-muted hover:text-brand-600 hover:underline">{o.title}</Link>
-              ))}
-            </nav>
+              </div>
+              <p className="flex items-start gap-1.5 text-[11px] leading-snug text-text-muted">
+                <ShieldCheck size={12} className="mt-0.5 shrink-0 text-brand-500" /> {c.options.login.helper}
+              </p>
+              {/* Every journey stays a real link, not only a selection — a visitor who never clicks a
+                  path (and any crawler) still finds all four routes. */}
+              <nav aria-label={c.options.title} className="flex flex-wrap gap-x-3 gap-y-1 pt-1 text-[10.5px]">
+                {c.start.paths.filter((o) => o.key !== pathKey).map((o) => (
+                  <Link key={o.key} to={journeyTo(o.key)} data-testid={`hero-journey-link-${o.key}`} className="text-text-muted hover:text-brand-600 hover:underline">{o.title}</Link>
+                ))}
+              </nav>
+            </div>
           )}
         </div>
 
         {/* ── The proof: the product's own dashboard ── */}
-        <div id="preview" className="order-3 lg:col-start-1 lg:row-start-2">
+        <div id="preview" className="order-5 lg:col-start-1 lg:row-start-2">
           <HeroDashboard c={c} />
         </div>
       </div>

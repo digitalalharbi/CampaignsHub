@@ -11,6 +11,22 @@
 `origin/main` on `https://github.com/digitalalharbi/CampaignsHub`. A local branch or worktree is a
 working copy, never a source of truth — `git fetch origin` first, always.
 
+## ⚠️ START HERE — THE PHONE'S FIRST SCREEN, 2026-08-16
+
+**MOBILE-HERO-001.** The marketing homepage stacked, on one column: eyebrow → headline →
+description → support → four benefits → chooser title → subtitle → three path cards → includes list
+— and only then «إنشاء حساب / تسجيل الدخول / متابعة طلباتي». About 900px before the first decision,
+so on a 667px phone all three doors were below the fold and two were otherwise only in the hamburger.
+
+Fixed by `order` alone: promise text → actions → benefits → chooser → preview. Nothing removed,
+nothing duplicated. The actions block (`hero-actions`) rejoins the chooser card seam-to-seam from
+`lg` up, so **desktop is unchanged**.
+
+`e2e/mobile-first-screen.spec.ts` measures the real box at `scrollY = 0` on 375/390/430 × ar/en ×
+light/dark — geometry and paint, not DOM presence. Fail-first confirmed against `4bd4116`.
+
+---
+
 ## ⚠️ START HERE — THE PORTAL FRAME AND THE PHONE, 2026-08-16
 
 **The four portal shells were four copies of one layout, and the copy had a bug in it.**
