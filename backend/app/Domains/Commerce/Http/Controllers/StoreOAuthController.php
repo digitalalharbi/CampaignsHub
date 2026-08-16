@@ -105,16 +105,25 @@ final class StoreOAuthController extends Controller
                 ->whereNull('deleted_at')],
         ]);
 
+        /*
+         * X-PKCE-001 — neither Salla nor Zid publishes PKCE, so this is null for both today. It is
+         * threaded through anyway because the mechanism belongs to the flow rather than to one
+         * provider: the defect being fixed is a catalogue that DECLARED PKCE where no code produced
+         * it, and a second entry point that could not honour the declaration would recreate it.
+         */
+        $verifier = $this->oauth->codeVerifier($creds);
+
         $state = AuthorizationState::issue(
             tenantId: (string) $tenant->tenantId(),
             provider: $creds->platform,
             userId: $request->user()->getKey(),
             clientWorkspaceId: $validated['client_workspace_id'] ?? null,
+            extra: $verifier === null ? [] : ['code_verifier' => $verifier],
         );
 
         return ApiResponse::success([
             'provider' => $creds->platform,
-            'authorization_url' => $this->oauth->authorizationUrl($creds, $state),
+            'authorization_url' => $this->oauth->authorizationUrl($creds, $state, $verifier),
             'expires_in_minutes' => (int) config('ad_platforms.state_ttl_minutes', 15),
         ], 'Authorization URL issued.');
     }
@@ -149,7 +158,12 @@ final class StoreOAuthController extends Controller
         $tenant->setTenantId($tenantId);
 
         try {
-            $tokens = $this->oauth->exchangeCode($creds, $code);
+            // Out of the RECORD, never the query string — the same rule as the tenant and workspace.
+            $tokens = $this->oauth->exchangeCode(
+                $creds,
+                $code,
+                isset($record['code_verifier']) ? (string) $record['code_verifier'] : null,
+            );
 
             $connection = $this->vault->open(
                 tenantId: $tenantId,
