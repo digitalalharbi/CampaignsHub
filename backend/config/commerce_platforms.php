@@ -44,7 +44,21 @@ return [
             'scopes' => [],
             'client_id' => env('ZID_CLIENT_ID'),
             'client_secret' => env('ZID_CLIENT_SECRET'),
-            'webhook_secret' => env('ZID_WEBHOOK_SECRET'),
+            /*
+             * ZID-WEBHOOK-001 — Zid does not sign. It authenticates with HTTP Basic.
+             *
+             * There was a `webhook_secret` here, and `WebhookSignature` used it to compute an HMAC and
+             * compare it against an `x-zid-signature` header. Zid publishes no signature scheme at
+             * all: its Create Webhook reference states that when a username and password are given at
+             * subscription time, «Zid will include a Basic Authentication header when sending webhook
+             * requests … This allows partners to verify that the webhook request is coming from Zid».
+             *
+             * So the operator was being asked for a signing secret they could never obtain, and every
+             * genuine delivery was refused for want of a header Zid never sends. These two are the
+             * credentials Zid actually accepts — the same pair given when the subscription is created.
+             */
+            'webhook_username' => env('ZID_WEBHOOK_USERNAME'),
+            'webhook_password' => env('ZID_WEBHOOK_PASSWORD'),
         ],
     ],
 ];

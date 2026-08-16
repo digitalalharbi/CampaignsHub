@@ -26,7 +26,7 @@ Env keys to be defined when built (Phase 5).
 
 ## Ecommerce (not yet implemented — interfaces planned, Phase 5)
 - **Salla**: `SALLA_CLIENT_ID`, `SALLA_CLIENT_SECRET`, `SALLA_WEBHOOK_SECRET`.
-- **Zid**: `ZID_CLIENT_ID`, `ZID_CLIENT_SECRET`, `ZID_WEBHOOK_SECRET`.
+- **Zid**: `ZID_CLIENT_ID`, `ZID_CLIENT_SECRET`, `ZID_WEBHOOK_USERNAME`, `ZID_WEBHOOK_PASSWORD` — **no signing secret** (ZID-WEBHOOK-001: Zid authenticates webhooks with HTTP Basic and publishes no signature scheme).
 
 ## Payments (not yet implemented — interface planned, Phase 9)
 - **Tap**: `TAP_SECRET_KEY`, `TAP_PUBLISHABLE_KEY`, `TAP_WEBHOOK_SECRET`.

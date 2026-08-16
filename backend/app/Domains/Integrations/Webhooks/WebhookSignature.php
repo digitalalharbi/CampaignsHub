@@ -27,9 +27,14 @@ use App\Domains\Integrations\Configuration\ProviderConfigurationService;
  * ## Per-provider, because the schemes genuinely differ
  *
  * Meta signs with the APP SECRET and prefixes the digest with `sha256=`. Salla signs with a separate
- * webhook secret and sends a bare hex digest. Zid's scheme is declared but not confirmed by any
- * install here, so its deliveries are verified the same way and the poll stays authoritative — see
- * `WebhookSupport::RequiresConfirmation`.
+ * webhook secret and sends a bare hex digest.
+ *
+ * **Zid does not sign at all** (ZID-WEBHOOK-001). It sends HTTP Basic credentials — the username and
+ * password given when the subscription was created — and publishes no signature scheme of any kind.
+ * This class used to compute an HMAC for it and compare against an `x-zid-signature` header Zid never
+ * sends, so every genuine Zid delivery was refused. The poll stays authoritative regardless
+ * (`WebhookSupport::RequiresConfirmation`), and that is now a decision grounded in what Zid publishes
+ * rather than in not knowing.
  */
 final class WebhookSignature
 {
@@ -44,6 +49,17 @@ final class WebhookSignature
 
         if ($definition->webhooks === WebhookSupport::PollingOnly) {
             return ['verified' => false, 'reason' => 'This provider does not deliver webhooks here.'];
+        }
+
+        /*
+         * ZID-WEBHOOK-001 — Zid does not sign, so there is nothing here to compare a digest against.
+         *
+         * Handled before the secret is looked up, because the credential it needs is a PAIR and not a
+         * signing key: asking for one and computing an HMAC with it is what made every genuine Zid
+         * delivery fail.
+         */
+        if ($provider === 'zid') {
+            return $this->basic($provider, $presented);
         }
 
         $secret = $this->secretFor($provider);
@@ -65,6 +81,50 @@ final class WebhookSignature
         return hash_equals($expected, $offered)
             ? ['verified' => true, 'reason' => null]
             : ['verified' => false, 'reason' => 'The signature did not match.'];
+    }
+
+    /**
+     * ZID-WEBHOOK-001 — HTTP Basic, which is the only authentication Zid publishes for webhooks.
+     *
+     * From Zid's Create Webhook reference: «If username and password are provided when creating a
+     * webhook, Zid will include a Basic Authentication header when sending webhook requests … This
+     * allows partners to verify that the webhook request is coming from Zid.» There is no signature,
+     * no digest, and no header to compute one into — which is why the previous `x-zid-signature` HMAC
+     * refused every real delivery.
+     *
+     * The whole header is compared in one `hash_equals` rather than the username and password
+     * separately. Two comparisons leak which half was wrong through their timing, and a username is
+     * usually the easier half to guess; one comparison over the expected credential answers only the
+     * question we are willing to answer.
+     *
+     * The three rules at the top of this class are unchanged by the different scheme. A missing
+     * credential still REFUSES — an endpoint that cannot verify is not an endpoint that lets things
+     * through — and the comparison is still timing-safe.
+     *
+     * @return array{verified: bool, reason: ?string}
+     */
+    private function basic(string $provider, ?string $presented): array
+    {
+        $values = $this->settings->values($provider);
+        $username = $values['webhook_username'] ?? null;
+        $password = $values['webhook_password'] ?? null;
+
+        if (! is_string($username) || $username === '' || ! is_string($password) || $password === '') {
+            return [
+                'verified' => false,
+                'reason' => 'No webhook username and password are configured for this provider.',
+            ];
+        }
+
+        if ($presented === null || $presented === '') {
+            return ['verified' => false, 'reason' => 'The delivery carried no authorisation header.'];
+        }
+
+        $expected = 'Basic '.base64_encode($username.':'.$password);
+
+        return hash_equals($expected, $presented)
+            ? ['verified' => true, 'reason' => null]
+            : ['verified' => false, 'reason' => 'The credentials did not match.'];
     }
 
     /**
