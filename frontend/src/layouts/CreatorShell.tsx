@@ -31,7 +31,7 @@ export function CreatorShell() {
   const notACreator = profile.isError && (profile.error as { status?: number } | null)?.status === 403
 
   return (
-    <div data-testid="creator-shell" className="flex min-h-screen flex-col bg-background text-text-primary">
+    <div data-testid="creator-shell" className="flex min-h-[100dvh] flex-col bg-background text-text-primary">
       <header className="sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur-md">
         <div className="mx-auto flex w-full max-w-[1080px] items-center gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -72,7 +72,13 @@ export function CreatorShell() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[1080px] flex-1 px-4 pb-14 pt-4 sm:px-6">
+      {/*
+        * SHELL-001 — `main` is the flex column and the content box takes the slack, so the footer
+        * sinks to the bottom edge of a short page instead of stranding a band of dead space beneath
+        * itself. Same fix as `PortalFrame`; this shell has no rail, so it keeps its own markup.
+        */}
+      <main className="flex min-w-0 flex-1 flex-col">
+        <div className="mx-auto w-full min-w-0 max-w-[1080px] flex-1 px-4 pb-14 pt-4 sm:px-6">
         {profile.isPending ? (
           <div className="flex min-h-[40vh] items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-brand-600" aria-label={ar ? 'جارٍ التحميل' : 'Loading'} />
@@ -103,7 +109,8 @@ export function CreatorShell() {
         ) : (
           <Outlet />
         )}
-        <PortalFooter />
+        </div>
+        <div className="px-4 sm:px-6"><div className="mx-auto w-full max-w-[1080px]"><PortalFooter /></div></div>
       </main>
     </div>
   )
