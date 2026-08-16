@@ -22,21 +22,72 @@ use Illuminate\Support\Carbon;
  */
 final class LinkedInConnector extends ApiAdvertisingConnector
 {
+    /**
+     * LINKEDIN-PAGE-001 — how many rows to ask for, because LinkedIn's own default is **ten**.
+     *
+     * Every list this connector read used to stop at that ten: at most ten ad accounts, and within
+     * each of them at most ten campaigns, ten creatives and ten rows of analytics. Nothing errored and
+     * nothing was logged — every total on every surface was simply short by whatever the eleventh
+     * campaign onward did, which reads as a smaller account rather than as a broken integration.
+     *
+     * 100 rather than the 1000 LinkedIn permits: a page is a request that has to succeed, and the
+     * ceiling below already bounds the number of them.
+     */
+    private const PAGE = 100;
+
+    /** A bound on the walk, so a server that never shortens a page cannot cost us a worker. */
+    private const MAX_PAGES = 50;
+
     protected function platform(): string
     {
         return 'linkedin';
     }
 
+    /**
+     * Read a LinkedIn collection to its END.
+     *
+     * LinkedIn pages with `start` and `count`, and publishes the termination rule plainly: «You have
+     * reached the end of the dataset when your response contains fewer elements … than your count
+     * parameter request». That is what this uses, rather than paging until an empty page — which
+     * would spend one extra round trip on every sync of every account, on an API that throttles
+     * per application.
+     *
+     * @param  array<string,mixed>  $query
+     * @return list<array<string,mixed>>
+     */
+    private function readAll(OAuthTokens $tokens, string $path, string $what, array $query): array
+    {
+        $items = [];
+
+        for ($page = 0; $page < self::MAX_PAGES; $page++) {
+            $body = $this->read(
+                $this->api($tokens)->get($this->url($path), [
+                    ...$query,
+                    'start' => $page * self::PAGE,
+                    'count' => self::PAGE,
+                ]),
+                $what,
+            );
+
+            $elements = (array) ($body['elements'] ?? []);
+
+            foreach ($elements as $element) {
+                $items[] = (array) $element;
+            }
+
+            if (count($elements) < self::PAGE) {
+                break;
+            }
+        }
+
+        return $items;
+    }
+
     protected function fetchAdAccounts(OAuthTokens $tokens): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url('adAccounts'), ['q' => 'search']),
-            'ad accounts',
-        );
-
         $accounts = [];
 
-        foreach ((array) ($body['elements'] ?? []) as $a) {
+        foreach ($this->readAll($tokens, 'adAccounts', 'ad accounts', ['q' => 'search']) as $a) {
             if (($a['id'] ?? null) === null) {
                 continue;
             }
@@ -57,14 +108,9 @@ final class LinkedInConnector extends ApiAdvertisingConnector
 
     protected function fetchCampaigns(OAuthTokens $tokens, string $adAccountId): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("adAccounts/{$adAccountId}/adCampaigns"), ['q' => 'search']),
-            'campaigns',
-        );
-
         $campaigns = [];
 
-        foreach ((array) ($body['elements'] ?? []) as $c) {
+        foreach ($this->readAll($tokens, "adAccounts/{$adAccountId}/adCampaigns", 'campaigns', ['q' => 'search']) as $c) {
             if (($c['id'] ?? null) === null) {
                 continue;
             }
@@ -103,14 +149,9 @@ final class LinkedInConnector extends ApiAdvertisingConnector
 
     protected function fetchAds(OAuthTokens $tokens, string $adAccountId): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("adAccounts/{$adAccountId}/creatives"), ['q' => 'criteria']),
-            'creatives',
-        );
-
         $ads = [];
 
-        foreach ((array) ($body['elements'] ?? []) as $c) {
+        foreach ($this->readAll($tokens, "adAccounts/{$adAccountId}/creatives", 'creatives', ['q' => 'criteria']) as $c) {
             $id = $this->idFromUrn($c['id'] ?? null, 'sponsoredCreative');
             $campaignId = $this->idFromUrn($c['campaign'] ?? null, 'sponsoredCampaign');
 
@@ -156,23 +197,26 @@ final class LinkedInConnector extends ApiAdvertisingConnector
 
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url('adAnalytics'), [
-                'q' => 'analytics',
-                'pivot' => 'CAMPAIGN',
-                'timeGranularity' => 'DAILY',
-                'dateRange' => $this->dateRange($from, $to),
-                'accounts' => "List(urn:li:sponsoredAccount:{$adAccountId})",
-                'fields' => 'pivotValues,dateRange,costInLocalCurrency,impressions,clicks,'
-                    .'externalWebsiteConversions,approximateUniqueImpressions,'
-                    .'videoViews,videoCompletions,totalEngagements,landingPageClicks',
-            ]),
-            'daily analytics',
-        );
+        /*
+         * Paged like everything else (LINKEDIN-PAGE-001), and here the truncation was worst: one row
+         * is one campaign on one day, so a month of a handful of campaigns exceeds ten rows
+         * immediately. Reading the first page alone reported a fraction of the spend as though it
+         * were the whole of it.
+         */
+        $reported = $this->readAll($tokens, 'adAnalytics', 'daily analytics', [
+            'q' => 'analytics',
+            'pivot' => 'CAMPAIGN',
+            'timeGranularity' => 'DAILY',
+            'dateRange' => $this->dateRange($from, $to),
+            'accounts' => "List(urn:li:sponsoredAccount:{$adAccountId})",
+            'fields' => 'pivotValues,dateRange,costInLocalCurrency,impressions,clicks,'
+                .'externalWebsiteConversions,approximateUniqueImpressions,'
+                .'videoViews,videoCompletions,totalEngagements,landingPageClicks',
+        ]);
 
         $rows = [];
 
-        foreach ((array) ($body['elements'] ?? []) as $row) {
+        foreach ($reported as $row) {
             $campaignId = $this->campaignIdFrom($row['pivotValues'] ?? null);
             $date = $this->dateFrom($row['dateRange'] ?? null);
 

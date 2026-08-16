@@ -515,3 +515,69 @@ not honour the catalogue's declaration would recreate exactly the defect being f
 **Not claimed:** no X credential exists on this install and no live round trip has been made. X
 remains `BLOCKED_EXTERNAL_CREDENTIALS`. **Nothing here is `LIVE_VERIFIED`** — PKCE is fixed ahead of
 the first real connection, not verified by one.
+
+## §12 — Phase 2, fifth provider: LinkedIn (2026-08-16)
+
+Audited against LinkedIn's current *Marketing API Versioning* page, the *Pagination* concept page and
+the *Ad Accounts* reference. Two defects, both proven fail-first (5 of 8 new tests failed).
+
+### LINKEDIN-PAGE-001 — ten. Every list this connector read stopped at ten
+
+`LinkedInConnector` made four calls — `adAccounts`, `adAccounts/{id}/adCampaigns`,
+`adAccounts/{id}/creatives` and `adAnalytics` — and **not one of them passed `count` or `start`, or
+looked at `paging`**. Each read `$body['elements']` once and returned.
+
+LinkedIn's pagination page gives the default `count` as **10**.
+
+So an agency saw at most ten ad accounts. Within each of those, at most ten campaigns, ten creatives,
+and ten rows of analytics. Nothing errored, nothing was logged, and every total on every surface —
+spend, impressions, the funnel, the client's own shared report — was short by whatever the eleventh
+campaign onward did. A truncated account does not look broken; it looks smaller.
+
+The analytics call is where this was worst. One row is one campaign on one day, so a handful of
+campaigns over a month exceeds ten rows immediately — the first page alone was reported as the whole
+of the spend.
+
+`readAll()` walks `start`/`count` with a page of 100, and terminates on LinkedIn's own documented
+rule: «You have reached the end of the dataset when your response contains fewer elements … than your
+count parameter request». That rather than paging until an empty page, which would spend an extra
+round trip on every sync of every account on an API that throttles per application. A `MAX_PAGES`
+ceiling bounds the walk, exactly as `MetaConnector` already does.
+
+This is the same defect Meta had and fixed, with one difference that matters: Meta's page size was
+500, so it needed a genuinely large account to bite. LinkedIn's is ten, which is a small one.
+
+### LINKEDIN-VERSION-001 — pinned to a version older than one LinkedIn has already retired
+
+`LINKEDIN_ADS_VERSION` defaulted to **202411** (November 2024). From LinkedIn's versioning page:
+
+- the latest version is **202607** (July 2026);
+- versions are supported for a **minimum of one year**;
+- and every page of the marketing documentation currently carries the banner «The Marketing Version
+  **202507** (Marketing July 2025) **has been sunset**».
+
+202411 is eight months older than the version LinkedIn names as already sunset. The header is not
+advisory — this connector's own comment says an unpinned call is rejected outright — so every
+LinkedIn call was made against a version that no longer exists.
+
+Moved to **202607**, asserted as a number with a floor so a later monthly bump passes and only
+standing still fails.
+
+That is the third provider in a row on a dead API version: `v18` for Google Ads, `v21.0` for Meta,
+`202411` here. Only X, of the four checked, was current.
+
+### What the LinkedIn audit CONFIRMED rather than changed
+
+- **`r_ads` and `r_ads_reporting` are the right scopes.** The Ad Accounts reference names `r_ads`
+  (read-only) and `rw_ads` (read/write) as the ad account permissions; this platform reads only.
+- **`adAccounts?q=search` returns the accounts the authorised member can reach** — the customer's own
+  token, no system account id. Same rule as SNAP-ORG-001.
+- **The `LinkedIn-Version` and `X-Restli-Protocol-Version: 2.0.0` headers are both already sent**, and
+  a test now pins the first to the configured value so a silent drift is caught.
+- **LinkedIn has no ad-set level**, so `fetchAdSets` returning `[]` is accurate rather than unfinished.
+- **`purchases` stays absent** (LINKEDIN-001): LinkedIn publishes no purchase metric, and
+  `externalWebsiteConversions` counts every conversion the account defined.
+- **Polling, not webhooks.**
+
+**Not claimed:** no LinkedIn credential exists on this install and no live round trip has been made.
+LinkedIn remains `BLOCKED_EXTERNAL_CREDENTIALS`. **Nothing here is `LIVE_VERIFIED`.**
