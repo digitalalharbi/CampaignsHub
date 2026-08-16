@@ -59,10 +59,17 @@ test('homepage: hero, language/theme, preview, journeys and CTAs into real route
   await page.keyboard.press('Escape')
   await expect(reveal).toHaveAttribute('aria-expanded', 'false')
 
-  // Below the card: returning-user actions point at the client + user logins.
-  const optionsCard = page.locator('div').filter({ has: page.getByRole('heading', { name: 'How do you want to start?' }) }).last()
-  await expect(optionsCard.getByRole('link', { name: /^Log in$/ })).toHaveAttribute('href', '/login')
-  await expect(optionsCard.getByRole('link', { name: /Track my requests/ })).toHaveAttribute('href', '/login')
+  /*
+   * The returning-user actions point at the client + user logins.
+   *
+   * Scoped by the actions block's own id rather than by «the last div containing the chooser's
+   * heading». That was a positional heuristic — true while the buttons happened to live inside the
+   * chooser card — and MOBILE-HERO-001 moved them out of it, above the fold, where a phone can
+   * actually see them. The claim here is about the ROUTES, and it is unchanged.
+   */
+  const actions = page.getByTestId('hero-actions')
+  await expect(actions.getByRole('link', { name: /^Log in$/ })).toHaveAttribute('href', '/login')
+  await expect(actions.getByRole('link', { name: /Track my requests/ })).toHaveAttribute('href', '/login')
 
   // Service-request CTA opens the real /requests/new route.
   await header.getByRole('link', { name: /Request a service/ }).click()
