@@ -7,7 +7,7 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 
 /**
- * Meta Marketing API (Graph v21) — Facebook and Instagram.
+ * Meta Marketing API — Facebook and Instagram.
  *
  * The awkward part is conversions. Meta does not return a `conversions` number; it returns an
  * `actions` array of every action type the campaign produced — page engagement, video views, link
@@ -27,6 +27,28 @@ final class MetaConnector extends ApiAdvertisingConnector
      * A ceiling on paging, so a wrong `paging.next` cannot become an unbounded loop.
      */
     private const MAX_PAGES = 50;
+
+    /**
+     * META-ATTRIB-001 — the window these figures are measured over, ASKED FOR rather than inherited.
+     *
+     * Meta's insights reference gives `action_attribution_windows` a default of `default`, and then
+     * says what that word means: «يشير الخيار default إلى ["7d_click","1d_view"]» — seven days after
+     * a click, one day after a view. So the previous code, which sent nothing, was not measuring
+     * over «no window». It was measuring over THIS window without knowing it, and storing the string
+     * `default` beside every figure as though the window were unknown or neutral.
+     *
+     * Two things follow from naming it. The stored window becomes a fact a reader can act on rather
+     * than a placeholder. And it becomes DIFFERENT from the placeholder the other providers still
+     * carry — which is what lets a mixed-window total be seen as mixed, instead of being flattened
+     * into a single reassuring group by the very panel that exists to catch it.
+     *
+     * The value stays Meta's own default deliberately. A shorter or longer window would be a
+     * reporting policy nobody here has chosen, applied retroactively to every client's history; this
+     * changes what we KNOW about the numbers, not what the numbers are.
+     *
+     * @var list<string>
+     */
+    private const ATTRIBUTION_WINDOWS = ['7d_click', '1d_view'];
 
     /**
      * Canonical metric ← the Meta action types that could carry it, in priority order.
@@ -307,6 +329,13 @@ final class MetaConnector extends ApiAdvertisingConnector
             'fields' => 'campaign_id,date_start,spend,impressions,clicks,reach,actions,action_values,'
                 .'video_play_actions,video_p100_watched_actions',
             'time_range' => json_encode(['since' => $from, 'until' => $to], JSON_THROW_ON_ERROR),
+            /*
+             * JSON, like the `time_range` above it. Graph reads `list<enum>` parameters as JSON, and
+             * a PHP array would be serialised into `action_attribution_windows[0]=…`, which Graph
+             * does not parse — it would be ignored, and an ignored parameter looks exactly like one
+             * that was never sent.
+             */
+            'action_attribution_windows' => json_encode(self::ATTRIBUTION_WINDOWS, JSON_THROW_ON_ERROR),
             'limit' => 500,
         ]);
 
@@ -325,6 +354,9 @@ final class MetaConnector extends ApiAdvertisingConnector
             $mapped = [
                 'campaign_id' => $campaignId,
                 'date' => (string) ($row['date_start'] ?? $from),
+                // What these figures MEAN, carried beside them. Read by `InsightRowNormaliser` in the
+                // same way as a row's currency, and stored on every metric this row becomes.
+                'attribution_window' => implode(',', self::ATTRIBUTION_WINDOWS),
                 'spend' => isset($row['spend']) ? (float) $row['spend'] : null,
                 'impressions' => isset($row['impressions']) ? (float) $row['impressions'] : null,
                 'clicks' => isset($row['clicks']) ? (float) $row['clicks'] : null,

@@ -94,9 +94,24 @@ return [
 
         'meta' => [
             'label' => 'Meta Marketing API',
-            'authorize_url' => 'https://www.facebook.com/v21.0/dialog/oauth',
-            'token_url' => 'https://graph.facebook.com/v21.0/oauth/access_token',
-            'api_base' => 'https://graph.facebook.com/v21.0',
+            /*
+             * META-VERSION-001 — the Marketing API keeps its OWN version table, and on it v21.0
+             * expired on 9 September 2025. This was pinned to v21.0.
+             *
+             * It never showed up as a failure because Meta does not answer an expired version with an
+             * error: the platform versioning guide states that once a version is no longer usable,
+             * calls to it default to the next-oldest usable version. So the figures kept arriving,
+             * from a version nobody chose, and no log anywhere said which.
+             *
+             * v25.0 was released 18 February 2026 and is the current stable — the only one in the
+             * table with no expiration date set. Marketing API expirations for the neighbours, so the
+             * next person can see how much runway this has: v22.0 → 19 Feb 2026, v23.0 → 9 Jun 2026,
+             * v24.0 → 6 Oct 2026. `MetaAttributionWindowTest` asserts the floor rather than the
+             * literal, so an upgrade passes and only standing still eventually fails.
+             */
+            'authorize_url' => 'https://www.facebook.com/v25.0/dialog/oauth',
+            'token_url' => 'https://graph.facebook.com/v25.0/oauth/access_token',
+            'api_base' => 'https://graph.facebook.com/v25.0',
             'scopes' => ['ads_read', 'ads_management', 'business_management'],
             'client_id' => env('META_ADS_APP_ID'),
             'client_secret' => env('META_ADS_APP_SECRET'),
