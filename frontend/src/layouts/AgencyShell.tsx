@@ -107,7 +107,9 @@ export function AgencyShell() {
       railWidth={sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'}
       tabs={AGENCY_TABS}
       moreGroups={moreGroupsFrom(agencyNavGroups, AGENCY_TABS)}
-      moreHeader={<AccountMenu variant="sidebar" />}
+      // The agency's client → project scope, for the same reason (MOBILE-APP-001): every section
+      // below it is read through that choice, and the drawer is no longer the phone's way in.
+      moreHeader={<div className="grid gap-3"><AgencyScopeSwitcher /><AccountMenu variant="sidebar" /></div>}
       drawerOpen={sidebarOpen}
       onDrawerClose={() => setSidebarOpen(false)}
       rail={

@@ -88,7 +88,15 @@ export function AppShell() {
       railWidth={sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'}
       tabs={APP_TABS}
       moreGroups={moreGroups}
-      moreHeader={<AccountMenu variant="sidebar" />}
+      /*
+        * The project switcher lives HERE on a phone, not only in the drawer (MOBILE-APP-001).
+        *
+        * The bottom bar carries destinations; the switcher is context, and every destination is read
+        * through it. Removing the hamburger below `sm` — correct for an app shell — left it with no
+        * door at all on a real phone, which is a feature removed to make navigation fit. It is the
+        * first thing in the sheet because choosing the project comes before choosing the section.
+        */
+      moreHeader={<div className="grid gap-3"><ProjectSwitcher /><AccountMenu variant="sidebar" /></div>}
       drawerOpen={sidebarOpen}
       onDrawerClose={() => setSidebarOpen(false)}
       rail={
