@@ -581,3 +581,90 @@ That is the third provider in a row on a dead API version: `v18` for Google Ads,
 
 **Not claimed:** no LinkedIn credential exists on this install and no live round trip has been made.
 LinkedIn remains `BLOCKED_EXTERNAL_CREDENTIALS`. **Nothing here is `LIVE_VERIFIED`.**
+
+## §13 — Phase 2, sixth and seventh providers: Salla and Zid (2026-08-16)
+
+Audited against Salla's *Webhooks* page (Security Strategies) and Zid's *Authorization* and *Create
+Webhook* references. **Salla needed no change.** Zid had one defect, proven fail-first.
+
+### Salla — audited and left alone, which is the finding
+
+Salla's documented scheme, and ours, line up exactly:
+
+| Salla documents | This platform does |
+|---|---|
+| header `X-Salla-Signature` | `webhookSignatureHeader: 'x-salla-signature'` |
+| a 64-character SHA-256 hash of the request body, using the Secret | `hash_hmac('sha256', $rawBody, $secret)` |
+| bare hex, no prefix | no prefix stripped for Salla |
+| «using a timing-safe equality function, compare» | `hash_equals` |
+| base endpoint `https://api.salla.dev/admin/v2` | the configured `api_base`, character for character |
+
+One difference is worth recording, because it runs the other way. Salla's own Node sample computes the
+HMAC over `JSON.stringify(req.body)` — the re-encoding this class's first rule exists to forbid, since
+re-encoding reorders keys and re-escapes unicode and then fails for deliveries that were perfectly
+valid. **We hash the RAW body, which is more correct than the vendor's published example.** Nothing
+was changed on that basis; it is noted so a future reader who compares the two does not "fix" ours
+towards theirs.
+
+Salla also offers a second strategy, **Token**, selected per subscription and announced in
+`X-Salla-Security-Strategy`. Signature is what Salla assigns by default to every Partner App and to
+any webhook registered without a strategy, and it is what this platform implements. A subscription
+deliberately created with Token would be refused rather than accepted — the fail-closed direction —
+and that is left as it is rather than widened speculatively.
+
+### ZID-WEBHOOK-001 — the signature scheme was invented; Zid authenticates with Basic
+
+`ProviderCatalogue` declared `webhookSignatureHeader: 'x-zid-signature'`. `WebhookSignature` computed
+`hash_hmac('sha256', $rawBody, $secret)` and compared it against that header. The `/admin` form asked
+the operator for a «Webhook secret … used to sign event deliveries».
+
+**Zid publishes no HMAC signature scheme of any kind.** Its Create Webhook reference documents the
+only authentication it offers:
+
+> If username and password are provided when creating a webhook, Zid will include a **Basic
+> Authentication** header when sending webhook requests. … `Authorization: Basic dXNlcjpzZWNyZXQ=` …
+> This allows partners to verify that the webhook request is coming from Zid.
+
+So `x-zid-signature` was a header Zid never sends. Every genuine Zid delivery was refused with «The
+delivery carried no signature», and the operator was being asked to configure a secret for a
+mechanism that does not exist — one they could never obtain, because Zid has nothing to issue.
+
+It fails CLOSED, so this was never a security hole. It is the same shape as X-PKCE-001: a mechanism
+described in detail, in the place a reviewer looks, implemented against a provider that does not have
+it. That is worse than an omission, because the description is what gets checked instead of the
+behaviour.
+
+**The fix.** Zid is verified against the documented credential pair. `webhook_secret` becomes
+`webhook_username` + `webhook_password`, on the form and in configuration, and the catalogue names
+`Authorization` — the header Zid really sends.
+
+The whole header is compared in **one** `hash_equals` rather than the username and password
+separately: two comparisons leak which half was wrong through their timing, and the username is
+usually the easier half to guess.
+
+The three rules at the top of `WebhookSignature` are unchanged by the different scheme. A missing
+credential still refuses; the comparison is still timing-safe; and the raw body is still what Salla's
+HMAC is computed over.
+
+`WebhookSupport::RequiresConfirmation` **stays**, so the poll remains authoritative — but it now
+means something different. It used to encode "we do not know what Zid sends". It now encodes a
+documented fact: Zid's deliveries carry a shared credential and no per-message integrity, so a poll
+is the stronger statement about what actually happened in the store.
+
+### What the Zid audit CONFIRMED rather than changed
+
+- **`https://api.zid.sa/v1` and `https://oauth.zid.sa` are both current.** Zid's Authorization page
+  states «the latest version of our API is v1. Older versions are deprecated and should not be used».
+  No version defect — checked rather than assumed, like X.
+- **The two-credential requirement is already handled and already fails closed.** Zid returns an
+  `access_token` for `Authorization: Bearer` **and** a separate `authorization` value for
+  `X-Manager-Token`; a call carrying only the first is refused by every endpoint. `PlatformOAuth`
+  raises at the exchange when the second is missing, rather than opening a connection that would
+  exchange cleanly and then read nothing (COMMERCE-001).
+- **Webhook idempotency is real.** `WebhookIngest` writes the row before acting on it, behind a unique
+  index on the event id, so a redelivery is a duplicate-key no-op rather than a second order.
+- **No PKCE.** Zid uses the authorization-code grant for confidential clients and publishes no code
+  challenge.
+
+**Not claimed:** no Salla or Zid credential exists on this install and no live round trip has been
+made against either. Both remain `BLOCKED_EXTERNAL_CREDENTIALS`. **Nothing here is `LIVE_VERIFIED`.**

@@ -441,9 +441,19 @@ final class ProviderCatalogue
                 ProviderField::secret('client_secret', 'Client Secret', 'سر العميل',
                     'Same page',
                     'الصفحة نفسها'),
-                ProviderField::secret('webhook_secret', 'Webhook secret', 'سر الـ Webhook',
-                    'The shared secret used to sign event deliveries to the URL below',
-                    'السر المشترك المستخدم لتوقيع الأحداث المُرسلة إلى الرابط أدناه', required: false),
+                /*
+                 * ZID-WEBHOOK-001 — a «Webhook secret … used to sign event deliveries» stood here,
+                 * and Zid signs nothing. It sends `Authorization: Basic base64(username:password)`,
+                 * using the pair given when the webhook subscription is created. Asking for a signing
+                 * secret Zid never issues invites an operator to invent one and believe they have
+                 * secured the endpoint.
+                 */
+                ProviderField::plain('webhook_username', 'Webhook username', 'اسم مستخدم الـ Webhook',
+                    'The username given when the webhook subscription was created; Zid sends it back as HTTP Basic authentication on every delivery',
+                    'اسم المستخدم المُعطى عند إنشاء اشتراك الـ Webhook؛ ترسله زد في كل حدث ضمن مصادقة Basic', required: false),
+                ProviderField::secret('webhook_password', 'Webhook password', 'كلمة مرور الـ Webhook',
+                    'The matching password. Zid publishes no signature scheme — this pair is the only way it identifies itself',
+                    'كلمة المرور المقابلة. لا تنشر زد أي آلية توقيع؛ هذا الزوج هو الطريقة الوحيدة التي تُعرّف بها نفسها', required: false),
             ],
             scopes: [],
             usesPkce: false,
@@ -454,16 +464,17 @@ final class ProviderCatalogue
             tokenNoteAr: 'تُعيد زد قيمتين من تبادل الرمز: `access_token` لترويسة `Authorization: Bearer` '
                 .'ورمز مدير `authorization` لترويسة `X-Manager-Token`. الاستدعاء بالأولى وحدها يُرفض، لذا تُخزَّن القيمتان.',
             webhooks: WebhookSupport::RequiresConfirmation,
-            webhookSignatureHeader: 'x-zid-signature',
+            // Zid identifies itself with HTTP Basic, not a signature (ZID-WEBHOOK-001).
+            webhookSignatureHeader: 'Authorization',
             prerequisites: [
                 'A Zid partners account and an app with the redirect URI below registered.',
                 'The app approved for the order, product and customer scopes it reads.',
-                'The webhook subscription created against the URL below, and its signature header confirmed in the partner dashboard before the events are relied upon.',
+                'The webhook subscription created against the URL below WITH a username and password — Zid sends those back as HTTP Basic authentication, and publishes no signature scheme. Deliveries are refused until the same pair is entered above.',
             ],
             prerequisitesAr: [
                 'حساب في شركاء زد وتطبيق مسجَّل عليه رابط العودة أدناه.',
                 'اعتماد التطبيق للصلاحيات التي يقرأها: الطلبات والمنتجات والعملاء.',
-                'إنشاء اشتراك الـ Webhook على الرابط أدناه، وتأكيد ترويسة توقيعه في لوحة الشركاء قبل الاعتماد على أحداثه.',
+                'إنشاء اشتراك الـ Webhook على الرابط أدناه مع اسم مستخدم وكلمة مرور — تعيدهما زد في كل حدث ضمن مصادقة Basic، ولا تنشر أي آلية توقيع. تُرفض الأحداث حتى يُدخل الزوج نفسه أعلاه.',
             ],
             docsUrl: 'https://docs.zid.sa/',
             rateLimitNote: 'Per-app throttling refused with HTTP 429.',
