@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Jobs;
 
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Services\AccountMetricsSyncer;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Bus\Queueable;
@@ -77,11 +78,30 @@ final class SyncAccountMetricsJob implements ShouldBeUnique, ShouldQueue
         private readonly array $meta = [],
     ) {}
 
-    public function handle(AccountMetricsSyncer $syncer, TenantContext $tenant): void
-    {
+    public function handle(
+        AccountMetricsSyncer $syncer,
+        TenantContext $tenant,
+        AccountAssignment $assignment,
+    ): void {
         $account = ExternalAccount::withoutGlobalScopes()->find($this->accountId);
         if ($account === null) {
             return; // the account was deleted between enqueue and run — nothing to sync, nothing to record
+        }
+
+        /*
+         * ORCH-100 §14 — re-prove the scope, do not trust the payload.
+         *
+         * The sweep decided this account was assigned when it queued the job. Queues are not
+         * instantaneous and retries can be hours late, so by now the customer may have detached the
+         * account or the connection may have been revoked. Checking only at enqueue means detaching
+         * stops the NEXT sweep and does nothing about the jobs already queued — which then fetch a
+         * customer's data after they asked us to stop.
+         *
+         * Returning silently is right here: this is not a failure to record, it is work that is no
+         * longer authorised. A run row would report a problem where there is only a decision.
+         */
+        if (! $assignment->isActivelyAssigned($account)) {
+            return;
         }
 
         $tenant->setTenantId($account->tenant_id);
