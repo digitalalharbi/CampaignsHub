@@ -112,12 +112,16 @@ final class ReviewChecklistService
             ],
 
             /*
-             * Snapchat's organisation id and Zid's manager token are DERIVED because the system can
-             * see whether they are configured — and both are the reason a perfectly valid token
-             * returns nothing, which is precisely the failure a checklist exists to pre-empt.
+             * Zid's manager token is DERIVED because the system can see whether it is configured, and
+             * it is the reason a perfectly valid token returns nothing — precisely the failure a
+             * checklist exists to pre-empt.
+             *
+             * Snapchat's organisation id used to share this branch. It no longer exists as a system
+             * credential (SNAP-ORG-001): one id in one row could only ever name one customer's
+             * organisation, and organisations are now discovered from each customer's own token.
              */
-            'organisation_id', 'manager_token' => (function () use ($definition, $key) {
-                $field = $key === 'organisation_id' ? 'organization_id' : 'manager_token';
+            'manager_token' => (function () use ($definition) {
+                $field = 'manager_token';
                 $missing = in_array($field, $this->configuration->missing($definition->key), true);
 
                 return [

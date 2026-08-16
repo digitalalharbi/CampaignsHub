@@ -61,7 +61,10 @@ final class ProviderReviewChecklistTest extends TestCase
             'google' => 'developer_token_basic',
             'meta' => 'business_verification',
             'tiktok' => 'sandbox_whitelist',
-            'snapchat' => 'organisation_id',
+            // Was `organisation_id` — retired with the field itself (SNAP-ORG-001). A system
+            // credential naming one customer's organisation was never the thing that blocks
+            // Snapchat; the app review is, and it is the one an operator must actually go and get.
+            'snapchat' => 'app_submission',
             'linkedin' => 'advertising_api_product',
             'x' => 'project_tier',
             'salla' => 'oauth_mode_not_easy',

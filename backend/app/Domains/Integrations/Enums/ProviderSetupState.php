@@ -19,15 +19,25 @@ namespace App\Domains\Integrations\Enums;
  * - `awaiting_credentials` — some required values present, others missing. Next: the named missing ones.
  * - `ready_to_connect` — every required value present, no successful round trip yet. Next: press Test.
  * - `configuration_error` — the last real round trip was refused. Next: read the refusal, fix, re-test.
- * - `production_ready` — every required value present, environment is production, and the last round
- *   trip SUCCEEDED. This is the only state that may be described as ready for customers.
+ * - `credentials_verified` — the provider answered a real round trip and RECOGNISED our app. Next:
+ *   a customer starts OAuth.
  *
- * ## `production_ready` is earned by a round trip, never by filling in a form
+ * ## Why there is no «production ready» here — PROBE-CLAIM-001
  *
- * A complete set of keys proves somebody typed four strings. It does not prove the app was approved,
- * the developer token was granted, the redirect URI matches, or the account has any access. Only a
- * successful call does — which is why `ready_to_connect` exists as a separate state rather than being
- * folded into the last one.
+ * There used to be, and it was reached by exactly this evidence: a complete key set, the environment
+ * set to production, and a passing probe. The interface rendered it «جاهز للإنتاج».
+ *
+ * That is an overclaim, and the probe itself says so. It sends a deliberately impossible
+ * authorisation code and reads the refusal; a refusal naming the GRANT proves the provider read our
+ * client id and secret and accepted them. It proves nothing else. It does not prove the scopes were
+ * approved, that the app passed review, that a developer token was granted, that any human has
+ * consented, or that one ad account is reachable. Half the platforms here additionally require an
+ * external approval that no request from this server can detect.
+ *
+ * So the ceiling for probe evidence is `credentials_verified` — «the provider recognised this app» —
+ * and the honest next step is a customer starting OAuth. Anything beyond that is `LIVE_VERIFIED` in
+ * `CLAUDE.md` terms and is earned by a real consent, a real discovery and a real first sync, none of
+ * which this enum can observe.
  */
 enum ProviderSetupState: string
 {
@@ -35,12 +45,31 @@ enum ProviderSetupState: string
     case AwaitingCredentials = 'awaiting_credentials';
     case ReadyToConnect = 'ready_to_connect';
     case ConfigurationError = 'configuration_error';
-    case ProductionReady = 'production_ready';
+    /*
+     * Renamed from `production_ready`, deliberately keeping the STORED value stable.
+     *
+     * The old name is what made the overclaim easy to write; the value is what production rows and
+     * any operator's saved filters already contain. Changing the meaning is the fix — changing the
+     * string underneath live data would be a migration nobody asked for.
+     */
+    case CredentialsVerified = 'production_ready';
 
     /** Whether a workspace may be offered the connect button at all. */
     public function allowsConnecting(): bool
     {
-        return $this === self::ReadyToConnect || $this === self::ProductionReady;
+        return $this === self::ReadyToConnect || $this === self::CredentialsVerified;
+    }
+
+    /**
+     * Whether this state may be presented as an accomplishment rather than a step.
+     *
+     * Nothing here qualifies. Every state in this enum is about the platform's own configuration, and
+     * the furthest it can reach is «a customer may now start OAuth». It is a method rather than a
+     * comment so the interface cannot quietly decide otherwise.
+     */
+    public function isLiveVerified(): bool
+    {
+        return false;
     }
 
     /** @return list<string> */

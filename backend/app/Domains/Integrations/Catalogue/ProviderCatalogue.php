@@ -111,31 +111,33 @@ final class ProviderCatalogue
                 ProviderField::secret('client_secret', 'Client Secret', 'السر السرّي للتطبيق',
                     'Shown once when the OAuth app is created; it cannot be read again',
                     'يُعرض مرة واحدة عند إنشاء التطبيق ولا يمكن قراءته لاحقًا'),
-                ProviderField::plain('organization_id', 'Organization ID', 'معرّف المؤسسة',
-                    'Business Manager → Business Details. Ad accounts hang off the organisation, '
-                        .'so a valid token with no organisation id lists nothing at all',
-                    'مدير الأعمال ← تفاصيل النشاط. الحسابات الإعلانية تتبع المؤسسة، ورمز صحيح بلا معرّف مؤسسة لا يعرض أي حساب'),
             ],
             scopes: ['snapchat-marketing-api'],
             usesPkce: false,
             supportsRefresh: true,
-            tokenNote: 'Access tokens are short-lived (around 30 minutes) and are refreshed with the refresh token.',
-            tokenNoteAr: 'رمز الوصول قصير العمر (نحو 30 دقيقة) ويُجدَّد عبر رمز التجديد.',
+            // 3600 seconds, read from the current authentication documentation rather than from
+            // memory — the previous «around 30 minutes» was half the real figure, and an operator
+            // plans refresh windows, alerting and support answers around it (SNAP-TOKEN-001).
+            tokenNote: 'Access tokens expire after 3600 seconds (60 minutes) and are renewed with the refresh token.',
+            tokenNoteAr: 'ينتهي رمز الوصول بعد 3600 ثانية (60 دقيقة) ويُجدَّد تلقائيًا عبر رمز التجديد.',
             webhooks: WebhookSupport::PollingOnly,
             webhookSignatureHeader: null,
             prerequisites: [
                 'A Snapchat Business Manager organisation that owns the ad accounts.',
                 'An OAuth app created under that organisation, with the redirect URI below registered on it exactly.',
                 'The member who authorises must already have access to the ad accounts — OAuth grants our app their access, never more.',
+                'Nothing about a customer belongs here. Their organisation and ad accounts are discovered from their own token after they connect.',
             ],
             prerequisitesAr: [
                 'مؤسسة في مدير أعمال سناب شات تملك الحسابات الإعلانية.',
                 'تطبيق OAuth مُنشأ داخل هذه المؤسسة، مع تسجيل رابط العودة أدناه عليه حرفيًا.',
                 'العضو الذي يمنح الموافقة يجب أن يملك صلاحية على الحسابات الإعلانية مسبقًا — الموافقة تمنحنا صلاحيته فقط ولا تزيد عليها.',
+                'لا تُدخل هنا أي بيانات تخص عميلًا. تُكتشف مؤسسته وحساباته الإعلانية من رمزه هو بعد أن يربط حسابه.',
             ],
             docsUrl: 'https://developers.snap.com/api/marketing-api/Ads-API/introduction',
             rateLimitNote: 'Throttled with HTTP 429 and a Retry-After header; the shared retry policy honours it.',
-            paginationNote: 'Cursor pagination through `paging.next_link`.',
+            paginationNote: 'Cursor pagination through `paging.next_link`. Organisations and their ad accounts '
+                .'come from `GET /me/organizations?with_ad_accounts=true`, scoped to the authorising member.',
             // Snapchat publishes no change-notification webhook for the objects we read, and this
             // install holds no keys to discover one behind a partner programme. The 30-minute poll is
             // the honest answer; an endpoint we would refuse every call to is worse than none.

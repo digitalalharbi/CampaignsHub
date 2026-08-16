@@ -69,29 +69,64 @@ final class SnapchatConnector extends ApiAdvertisingConnector
         return 'snapchat';
     }
 
+    /**
+     * The organisations THIS token can reach, with their ad accounts — SNAP-ORG-001.
+     *
+     * ## What this replaced, and why it had to
+     *
+     * It read `organization_id` out of the platform's own `/admin` settings and asked for
+     * `organizations/{that one id}/adaccounts`. CampaignsHub is multi-tenant: every customer
+     * authorises with their own Business Manager member, holding access to their own organisation.
+     * One organisation id in one system row pointed every customer's token at the operator's
+     * organisation — so a tenant saw accounts that were not theirs, or, far more often, none at all,
+     * because their token has no access there and Snapchat refuses the call. **A system-level field
+     * cannot be correct for more than one customer at a time**, which made it a tenancy defect rather
+     * than a configuration inconvenience.
+     *
+     * `GET /me/organizations?with_ad_accounts=true` is the documented answer: the organisations the
+     * authenticated member can reach, each with its ad accounts nested and the member's role on them.
+     * The endpoint existed all along; the field was standing in for a call nobody made.
+     *
+     * ## Absent stays absent
+     *
+     * A payload that omits currency or timezone yields NULL, never a default. A guessed currency
+     * silently mis-states every figure derived from it, and this product would rather report that it
+     * does not know than convert with a number nobody supplied.
+     */
     protected function fetchAdAccounts(OAuthTokens $tokens): array
     {
-        $organization = (string) $this->credentials()->get('organization_id');
-
         $accounts = [];
 
-        foreach ($this->readAll($tokens, "organizations/{$organization}/adaccounts", 'adaccounts', 'ad accounts') as $wrapper) {
-            /** @var array<string,mixed> $a */
-            $a = (array) ($wrapper['adaccount'] ?? []);
+        foreach ($this->readAll($tokens, 'me/organizations?with_ad_accounts=true', 'organizations', 'organisations') as $wrapper) {
+            /** @var array<string,mixed> $organization */
+            $organization = (array) ($wrapper['organization'] ?? []);
+            $organizationId = isset($organization['id']) ? (string) $organization['id'] : null;
 
-            if (($a['id'] ?? null) === null) {
+            if ($organizationId === null) {
                 continue;
             }
 
-            $accounts[] = [
-                'external_id' => (string) $a['id'],
-                'name' => (string) ($a['name'] ?? $a['id']),
-                'currency' => isset($a['currency']) ? (string) $a['currency'] : null,
-                'timezone' => isset($a['timezone']) ? (string) $a['timezone'] : null,
-                'status' => strtolower((string) ($a['status'] ?? 'active')),
-                'parent_external_id' => $organization,
-                'raw' => $a,
-            ];
+            /** @var list<array<string,mixed>> $adAccounts */
+            $adAccounts = (array) ($organization['ad_accounts'] ?? []);
+
+            foreach ($adAccounts as $a) {
+                if (($a['id'] ?? null) === null) {
+                    continue;
+                }
+
+                $accounts[] = [
+                    'external_id' => (string) $a['id'],
+                    'name' => (string) ($a['name'] ?? $a['id']),
+                    'currency' => isset($a['currency']) ? (string) $a['currency'] : null,
+                    'timezone' => isset($a['timezone']) ? (string) $a['timezone'] : null,
+                    'status' => strtolower((string) ($a['status'] ?? 'active')),
+                    // The organisation this account genuinely belongs to, read from the response —
+                    // not a constant every tenant would have shared.
+                    'parent_external_id' => $organizationId,
+                    'parent_name' => isset($organization['name']) ? (string) $organization['name'] : null,
+                    'raw' => $a,
+                ];
+            }
         }
 
         return $accounts;

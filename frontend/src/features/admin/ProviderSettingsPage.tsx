@@ -67,7 +67,10 @@ const COPY = {
       awaiting_credentials: 'بانتظار بيانات الاعتماد',
       ready_to_connect: 'جاهز للربط',
       configuration_error: 'خطأ إعداد',
-      production_ready: 'جاهز للإنتاج',
+      // PROBE-CLAIM-001 — the evidence behind this state is «the provider recognised our app»,
+      // and nothing more. «جاهز للإنتاج» promised approvals, consent and account access that no
+      // probe can establish.
+      production_ready: 'تم التحقق من التطبيق — جاهز لبدء الربط',
     } as Record<ProviderSetupState, string>,
   },
   en: {
@@ -97,7 +100,7 @@ const COPY = {
       awaiting_credentials: 'Awaiting credentials',
       ready_to_connect: 'Ready to connect',
       configuration_error: 'Configuration error',
-      production_ready: 'Production ready',
+      production_ready: 'App verified — ready for customers to connect',
     } as Record<ProviderSetupState, string>,
   },
 } as const
@@ -105,15 +108,23 @@ const COPY = {
 type Copy = typeof COPY['en'] | typeof COPY['ar']
 
 /**
- * One tone per state. `ready_to_connect` is deliberately NOT green: it means a complete form and no
- * proof, and a green badge there is how a configuration nobody has tested gets treated as finished.
+ * One tone per state.
+ *
+ * `ready_to_connect` is deliberately NOT green: it means a complete form and no proof, and a green
+ * badge there is how a configuration nobody has tested gets treated as finished.
+ *
+ * `production_ready` — the stored value behind «تم التحقق من التطبيق» — is no longer green either
+ * (PROBE-CLAIM-001). Green reads as «done», and what this state actually holds is a successful
+ * credentials round trip: the provider recognised our client id and secret. It says nothing about
+ * app review, granted scopes, a developer token, anybody's consent, or one reachable ad account.
+ * The honest colour for «you may now let customers start OAuth» is the brand tone, not success.
  */
 const STATE_TONE: Record<ProviderSetupState, string> = {
   not_configured: 'bg-surface-secondary text-text-muted',
   awaiting_credentials: 'bg-[var(--warning-background)] text-[var(--warning-foreground)]',
   ready_to_connect: 'bg-brand-primary-soft text-brand-700',
   configuration_error: 'bg-[var(--danger-background)] text-danger',
-  production_ready: 'bg-[var(--positive-background)] text-[var(--positive-foreground)]',
+  production_ready: 'bg-brand-primary-soft text-brand-700',
 }
 
 export function ProviderSettingsPage() {
@@ -244,7 +255,8 @@ function ProviderDialog({ provider, ar, copy, onClose }: {
 }) {
   const client = useQueryClient()
   const [draft, setDraft] = useState<Record<string, string>>({})
-  const [environment, setEnvironment] = useState(provider.environment)
+  // Held and sent back unchanged: the switch is gone, the stored value is not (ENV-FAKE-001).
+  const [environment] = useState(provider.environment)
   const [reason, setReason] = useState('')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
@@ -366,23 +378,20 @@ function ProviderDialog({ provider, ar, copy, onClose }: {
           <p className="text-[11px] text-text-muted">{copy.secretHint}</p>
         </section>
 
-        <section className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold text-text-primary">{copy.environment}</span>
-          {(['sandbox', 'production'] as const).map((env) => (
-            <button
-              key={env}
-              type="button"
-              data-testid={`provider-env-${provider.key}-${env}`}
-              aria-pressed={environment === env}
-              onClick={() => setEnvironment(env)}
-              className={`rounded-xl border px-3 py-1.5 text-xs font-semibold ${
-                environment === env ? 'border-brand-600 bg-brand-primary-soft text-brand-700' : 'border-border text-text-secondary'
-              }`}
-            >
-              {env === 'sandbox' ? copy.sandbox : copy.production}
-            </button>
-          ))}
-        </section>
+        {/*
+          * The Sandbox/Production switch is gone — ENV-FAKE-001.
+          *
+          * It looked like a deployment decision and was not one. It never changed an authorize URL, a
+          * token URL or an API base: none of the eight providers has a separate sandbox host wired
+          * here, so every request went to the same place whichever side was lit. Its one real effect
+          * was gating the «جاهز للإنتاج» badge, and that overclaim is gone (PROBE-CLAIM-001), which
+          * left a control that did nothing at all while implying the operator had staged the rollout.
+          *
+          * The stored column is untouched — production rows keep their value and no migration is
+          * needed. When a provider that genuinely has a separate sandwich of endpoints is added, the
+          * switch comes back scoped to THAT provider, driven by the catalogue rather than shown to
+          * everybody.
+          */}
 
         {/* What the provider's own quirks mean for this configuration. */}
         <section className="rounded-xl bg-surface-secondary p-3 text-xs text-text-secondary">
