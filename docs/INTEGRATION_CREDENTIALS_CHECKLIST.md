@@ -109,7 +109,7 @@ has ever been made for any of them.**
 | Provider | Env |
 |---|---|
 | Meta Ads | `META_ADS_APP_ID` · `META_ADS_APP_SECRET` |
-| Google Ads | `GOOGLE_ADS_CLIENT_ID` · `GOOGLE_ADS_CLIENT_SECRET` · `GOOGLE_ADS_DEVELOPER_TOKEN` · `GOOGLE_ADS_LOGIN_CUSTOMER_ID` |
+| Google Ads | `GOOGLE_ADS_CLIENT_ID` · `GOOGLE_ADS_CLIENT_SECRET` · `GOOGLE_ADS_DEVELOPER_TOKEN` — **no manager (MCC) account id** (GADS-MCC-001) |
 | TikTok Ads | `TIKTOK_ADS_APP_ID` · `TIKTOK_ADS_APP_SECRET` |
 | Snapchat Ads | `SNAPCHAT_ADS_CLIENT_ID` · `SNAPCHAT_ADS_CLIENT_SECRET` — **no organisation id** (SNAP-ORG-001) |
 | X Ads | `X_ADS_CLIENT_ID` · `X_ADS_CLIENT_SECRET` |

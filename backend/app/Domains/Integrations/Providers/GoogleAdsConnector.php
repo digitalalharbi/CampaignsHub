@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Providers;
 
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Support\PlatformHttp;
 
 /**
- * Google Ads API (v18 REST).
+ * Google Ads API (REST).
  *
  * The only one of the six with a query LANGUAGE rather than endpoints: campaigns and metrics both come
  * from `googleAds:searchStream` with GAQL, and the response is a STREAM — a JSON array of chunks, each
@@ -40,6 +41,25 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector
         return 'google_ads';
     }
 
+    /**
+     * GADS-HIERARCHY-001 — `listAccessibleCustomers` is not a list of ad accounts.
+     *
+     * Google's own page says what it returns: the accounts the authenticated user can act on
+     * DIRECTLY. That includes manager accounts, and excludes the customers underneath them. Its
+     * worked example is exactly the agency shape this product serves — a user with rights on manager
+     * M1 and account C3 can reach M1, C1, C2 and C3, but the call returns **only M1 and C3**.
+     *
+     * This connector treated every returned resource name as an ad account. So for any agency working
+     * through an MCC we recorded the MANAGER as an ad account and never discovered a single one of the
+     * accounts that hold the campaigns and the spend. A manager holds no campaigns, so the one
+     * "account" we did create synced cleanly and reported nothing — which reads as a quiet month, not
+     * as a broken integration, and is the hardest kind of failure to notice.
+     *
+     * So the accessible customers are treated as what they are: ENTRY POINTS. Under each one,
+     * `customer_client` returns every direct and indirect client — plus the entry point itself at
+     * `level = 0` — with the name, currency, timezone, status and whether that client is itself a
+     * manager. That last flag is what separates an account from a folder.
+     */
     protected function fetchAdAccounts(OAuthTokens $tokens): array
     {
         $body = $this->read(
@@ -51,26 +71,83 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector
 
         foreach ((array) ($body['resourceNames'] ?? []) as $resource) {
             // "customers/1234567890" → "1234567890"
-            $id = str_replace('customers/', '', (string) $resource);
+            $entry = $this->plainCustomerId(str_replace('customers/', '', (string) $resource));
 
-            if ($id === '') {
+            if ($entry === '') {
                 continue;
             }
 
-            $accounts[] = [
-                'external_id' => $id,
-                // `listAccessibleCustomers` returns ids and nothing else; the descriptive name needs a
-                // second query per customer, which is done lazily rather than N+1 on every listing.
-                'name' => $this->descriptiveName($tokens, $id) ?? $id,
-                'currency' => null,
-                'timezone' => null,
-                'status' => 'active',
-                'parent_external_id' => $this->credentials()->get('login_customer_id'),
-                'raw' => ['resource_name' => $resource],
-            ];
+            foreach ($this->clientsUnder($tokens, $entry) as $client) {
+                $id = $this->plainCustomerId((string) ($client['id'] ?? ''));
+
+                // A manager is a container, not an advertiser. Recording one as an ad account is the
+                // defect this method exists to fix, so it is skipped even at level 0.
+                if ($id === '' || ($client['manager'] ?? false) === true) {
+                    continue;
+                }
+
+                /*
+                 * Keyed by id so an account reachable through two entry points is discovered ONCE.
+                 * That is a real shape — an operator with rights on both the MCC and one of its
+                 * clients — and duplicating the account would duplicate its spend on every surface.
+                 */
+                $accounts[$id] = [
+                    'external_id' => $id,
+                    'name' => (string) ($client['descriptiveName'] ?? $id),
+                    'currency' => isset($client['currencyCode']) ? (string) $client['currencyCode'] : null,
+                    'timezone' => isset($client['timeZone']) ? (string) $client['timeZone'] : null,
+                    // Reported per client. Calling every discovered row active would put a live badge
+                    // on an account the customer has already closed.
+                    'status' => strtoupper((string) ($client['status'] ?? 'ENABLED')) === 'ENABLED'
+                        ? 'active'
+                        : 'inactive',
+                    /*
+                     * GADS-MCC-001 — the manager this account is genuinely reached THROUGH, read from
+                     * the customer's own hierarchy. A `level` of 0 is the entry point's self link, and
+                     * an account held directly has no manager above it: null, rather than the
+                     * operator's own MCC id, which is what used to be written here for every tenant.
+                     */
+                    'parent_external_id' => ((int) ($client['level'] ?? 0)) > 0 ? $entry : null,
+                    'raw' => $client,
+                ];
+            }
         }
 
-        return $accounts;
+        return array_values($accounts);
+    }
+
+    /**
+     * Every client under one accessible customer, from `customer_client`.
+     *
+     * The query is made THROUGH that entry point, because for a manager the hierarchy is only
+     * readable from the manager itself. `customer_client` rows exist only for managers; a plain
+     * account answers with its own self link, which is exactly the row we want for it anyway.
+     *
+     * Hidden accounts are excluded in the query rather than filtered afterwards: they are hidden in
+     * the customer's own interface, and surfacing them here would show an agency accounts their own
+     * Google Ads screen does not.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function clientsUnder(OAuthTokens $tokens, string $entry): array
+    {
+        $rows = $this->through($entry, fn (): array => $this->stream($tokens, $entry, <<<'GAQL'
+            SELECT customer_client.id, customer_client.descriptive_name, customer_client.currency_code,
+                   customer_client.time_zone, customer_client.manager, customer_client.status,
+                   customer_client.level
+            FROM customer_client
+            WHERE customer_client.hidden = FALSE
+            GAQL));
+
+        $clients = [];
+
+        foreach ($rows as $row) {
+            if (isset($row['customerClient']) && is_array($row['customerClient'])) {
+                $clients[] = $row['customerClient'];
+            }
+        }
+
+        return $clients;
     }
 
     protected function fetchCampaigns(OAuthTokens $tokens, string $adAccountId): array
@@ -346,9 +423,27 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector
     {
         $customer = $this->plainCustomerId($customerId);
 
-        $response = $this->api($tokens)->post($this->url("customers/{$customer}/googleAds:searchStream"), [
-            'query' => trim($query),
-        ]);
+        /*
+         * GADS-MCC-001 — which manager this query goes through.
+         *
+         * Google requires `login-customer-id` to be the manager the caller reaches this client
+         * account through, and refuses with `USER_PERMISSION_DENIED` when it is missing for an
+         * account held that way. Inside `through()` the manager is already fixed — we are walking its
+         * hierarchy. Otherwise it is the parent recorded for this account at discovery: the
+         * CUSTOMER's manager, not the platform operator's.
+         *
+         * Restored in `finally` so one customer's manager can never ride along on the next query.
+         */
+        $outer = $this->loginCustomerId;
+        $this->loginCustomerId = $outer ?? $this->managerOf($customer);
+
+        try {
+            $response = $this->api($tokens)->post($this->url("customers/{$customer}/googleAds:searchStream"), [
+                'query' => trim($query),
+            ]);
+        } finally {
+            $this->loginCustomerId = $outer;
+        }
 
         if (! $response->successful()) {
             throw new \RuntimeException(
@@ -376,18 +471,62 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector
         return $results;
     }
 
-    /** One extra query for the human name of a customer; a failure is not worth failing a listing over. */
-    private function descriptiveName(OAuthTokens $tokens, string $customerId): ?string
+    /**
+     * The manager account the current call is being made through — read by the base class when it
+     * assembles Google's headers.
+     *
+     * Deliberately NOT a credential. See GADS-MCC-001: it is the customer's manager, not ours.
+     */
+    protected function loginCustomerId(): ?string
     {
+        return $this->loginCustomerId;
+    }
+
+    /** Set while a query is deliberately being made through a known manager. */
+    private ?string $loginCustomerId = null;
+
+    /**
+     * Run something with the manager fixed — used while walking one entry point's hierarchy, where
+     * the manager is the entry point itself rather than anything we have discovered yet.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $work
+     * @return T
+     */
+    private function through(string $manager, callable $work): mixed
+    {
+        $outer = $this->loginCustomerId;
+        $this->loginCustomerId = $manager;
+
         try {
-            $rows = $this->stream($tokens, $customerId, 'SELECT customer.descriptive_name FROM customer LIMIT 1');
-        } catch (\Throwable) {
+            return $work();
+        } finally {
+            $this->loginCustomerId = $outer;
+        }
+    }
+
+    /**
+     * The manager we recorded this customer as sitting under, from the discovery that found it.
+     *
+     * Null for an account the authorised identity holds directly — Google then defaults
+     * `login-customer-id` to the operating customer, which is the correct answer for that case.
+     *
+     * `withoutGlobalScopes` because a sync runs on a queue with no tenant context; the query is
+     * already confined to the bound connection, which belongs to exactly one tenant.
+     */
+    private function managerOf(string $customerId): ?string
+    {
+        if ($this->connection === null) {
             return null;
         }
 
-        $name = $rows[0]['customer']['descriptiveName'] ?? null;
+        $parent = ExternalAccount::withoutGlobalScopes()
+            ->where('provider_connection_id', $this->connection->getKey())
+            ->where('external_id', $customerId)
+            ->value('parent_external_id');
 
-        return is_string($name) && $name !== '' ? $name : null;
+        return is_string($parent) && $parent !== '' ? $parent : null;
     }
 
     /** Google shows `123-456-7890` everywhere and accepts only `1234567890`. */

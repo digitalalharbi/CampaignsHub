@@ -256,9 +256,19 @@ final class ProviderCatalogue
                     'Google Ads manager account → Tools → API Center. Approved SEPARATELY from the OAuth '
                         .'client; without it every API call is refused even though sign-in succeeds',
                     'حساب مدير جوجل أدز ← الأدوات ← مركز الـ API. يُعتمد بشكل منفصل عن عميل OAuth؛ وبدونه تُرفض كل استدعاءات الـ API رغم نجاح تسجيل الدخول'),
-                ProviderField::plain('login_customer_id', 'Login customer ID', 'معرّف الحساب المدير',
-                    'The manager (MCC) account id, digits only, used when calling on behalf of a child account',
-                    'معرّف الحساب المدير (MCC) بالأرقام فقط، ويُستخدم عند الاستدعاء نيابة عن حساب تابع', required: false),
+                /*
+                 * GADS-MCC-001 — there was a fourth field here: «معرّف الحساب المدير»
+                 * (`login_customer_id`). It is gone, because it was never ours to hold.
+                 *
+                 * Google documents `login-customer-id` as the manager account through which the caller
+                 * reaches THAT client account, so it belongs to each customer's own hierarchy. It is
+                 * now discovered from `customer_client` and carried per account.
+                 *
+                 * Removing the field matters as much as removing the header. A field on this form is
+                 * an instruction: leaving it after the value stopped being used would invite an
+                 * operator to paste one customer's manager id into a platform-wide setting and believe
+                 * they had configured something for everybody.
+                 */
             ],
             scopes: ['https://www.googleapis.com/auth/adwords'],
             usesPkce: false,
