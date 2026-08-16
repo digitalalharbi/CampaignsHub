@@ -442,3 +442,76 @@ silently ignored is worse than one that is absent.
 
 **Not claimed:** no Google Ads credential exists on this install and no live round trip has been made.
 Google Ads remains `BLOCKED_EXTERNAL_CREDENTIALS`. **Nothing here is `LIVE_VERIFIED`.**
+
+## §11 — Phase 2, fourth provider: X (2026-08-16)
+
+Audited against X's current *OAuth 2.0 Authorization Code Flow with PKCE* reference and the X Ads API
+*Versions* table. One defect, proven fail-first.
+
+### X-PKCE-001 — PKCE was declared mandatory in three places and implemented in none
+
+`ProviderCatalogue` said so, repeatedly and correctly:
+
+- the class header: «X — PKCE is mandatory, so `code_verifier` must survive the whole round trip»;
+- the X definition: `usesPkce: true`;
+- its `tokenNote`: «the authorise call carries a `code_challenge` and the token call must present the
+  matching `code_verifier`».
+
+`grep -rn "code_challenge\|code_verifier" app/Domains/Integrations/` returned **only those three
+comments**. Not one line of code. The only PKCE in this repository was in
+`Identity/Services/OAuthFlow` — the unrelated staff sign-in flow, which implements it correctly and
+was the reason a reader could find PKCE in the codebase and assume it applied here.
+
+And X is not a platform where PKCE is a hardening option. Its own words: «We only provide
+authorization code with PKCE and refresh token as the supported grant types.» It is the **only**
+authorization-code flow X offers. So **every X connection attempt would have been refused at the
+authorise step**, for every customer, always — while the console described the integration as ready
+and the catalogue described the mechanism in detail.
+
+That combination is why this carries its own defect id rather than being filed as missing work.
+Documentation describing a mechanism nobody wrote is worse than no documentation: it is the thing a
+reviewer checks INSTEAD of the code, which is precisely what happened for as long as this stood.
+
+**The fix.** `PlatformOAuth::codeVerifier()` mints a 96-character verifier — the shape
+`Identity/Services/OAuthFlow` already uses, comfortably inside RFC 7636's 43–128 unreserved
+characters — and `codeChallenge()` derives the S256 challenge. Both controllers mint the verifier at
+`start`, carry it in the authorisation state's `extra`, and present it at the exchange.
+
+**Where the verifier lives is the deliberate part.** Not the session: the integrations callback is a
+PUBLIC route, and nothing of the session survives the platform's redirect — which is the entire
+reason `AuthorizationState` exists. Riding in that record gives the verifier the same properties for
+free: single use (`Cache::pull`), short lived, and bound to the tenant, user and provider that minted
+it. It is read from the RECORD and never from the query string, the same rule the tenant and the
+client workspace already follow.
+
+**The catalogue is now what decides.** `usesPkce` was a field nothing read. It now drives the
+behaviour, and a test asserts that the set of providers sending a challenge is exactly the set
+declaring the flag — walked from the catalogue rather than listed — so a provider that adopts PKCE
+later cannot be declared without being implemented. That drift is the defect itself.
+
+**And it fails closed.** A PKCE provider reaching the exchange with no verifier is REFUSED. Exchanging
+anyway would send X a request it is obliged to reject, and the customer would be shown X's refusal as
+though the platform were at fault — an error message naming the wrong culprit, which is the failure
+mode this whole audit exists to remove.
+
+`StoreOAuthController` is threaded identically even though neither Salla nor Zid publishes PKCE
+today. The mechanism belongs to the flow, not to one provider, and a second entry point that could
+not honour the catalogue's declaration would recreate exactly the defect being fixed.
+
+### What the X audit CONFIRMED rather than changed
+
+- **`ads-api.x.com/12` is current.** X's Versions table: 12.0 introduced 27 October 2022, Deprecated
+  **TBD**, End of Life **TBD** — the newest published version, with no sunset announced. Unlike Meta
+  and Google Ads, X has no version defect. Checked rather than assumed, and left alone.
+- **`offline.access` is already in the scopes**, and it is what makes a refresh token exist at all:
+  without it an X access token lasts two hours and cannot be renewed.
+- **The token call uses Basic authentication.** X authenticates the request itself for confidential
+  clients rather than taking the pair in the body; `standardToken()` already does this, and
+  `ProviderProbe` matches it.
+- **Discovery is `GET accounts`**, documented as returning the ad accounts the currently authorised
+  user has access to — the customer's own token, no system account id. Same rule as SNAP-ORG-001.
+- **Polling, not webhooks.** `PollingOnly` is accurate.
+
+**Not claimed:** no X credential exists on this install and no live round trip has been made. X
+remains `BLOCKED_EXTERNAL_CREDENTIALS`. **Nothing here is `LIVE_VERIFIED`** — PKCE is fixed ahead of
+the first real connection, not verified by one.
