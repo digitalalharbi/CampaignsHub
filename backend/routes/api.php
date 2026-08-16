@@ -131,7 +131,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     // Serves ONLY platform-scope, active, is_public `request.paid_service` options (no tenant data, fail-closed).
     // Rate-limited; ETag + Cache-Control set inside the controller.
     Route::get('/public/catalog/paid-media-services', [PublicPaidServiceController::class, 'index'])
-        ->name('public.catalog.paid-media-services')->middleware('throttle:60,1');
+        ->name('public.catalog.paid-media-services')->middleware('throttle:public-catalogue');
 
     // Domain route files are included here as the platform grows.
     require __DIR__.'/api/identity.php';
