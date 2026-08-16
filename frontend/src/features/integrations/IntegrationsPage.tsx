@@ -3,9 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { KeyRound, Loader2, Plug, RefreshCw } from 'lucide-react'
 import {
-  connectConnector, listConnectors, startPlatformOAuth, syncConnector,
-  type Connector, type PlatformState,
+  connectConnector, fetchResumableConnections, listConnectors, startPlatformOAuth, syncConnector,
+  type Connector, type PlatformState, type ResumableConnection,
 } from './api'
+import { ConnectionWizard } from './ConnectionWizard'
 import { listClientWorkspaces } from '@/features/projects/api'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -168,6 +169,20 @@ export function AdPlatformsPanel() {
   /** The six come first and in the products order; everything else keeps its place behind them. */
   const connectors = sortByPlatform(query.data ?? [], (c) => c.key)
 
+  /*
+   * ORCH-100 §39 §41 — where each authorisation has actually got to.
+   *
+   * Derived server-side from the record, so an authorisation left mid-way days ago still knows it is
+   * mid-way. This is what lets the page offer «أكمل اختيار الحسابات» instead of the connect button,
+   * which would have asked for a second consent to an authorisation that never lapsed.
+   */
+  const wizardStates = useQuery({ queryKey: ['resumable-connections'], queryFn: fetchResumableConnections })
+  const wizardByProvider = new Map<string, ResumableConnection>(
+    (wizardStates.data?.connections ?? []).map((w) => [w.connection.provider, w]),
+  )
+  const unfinished = wizardStates.data?.resumable ?? []
+  const [wizardConnectionId, setWizardConnectionId] = useState<string | null>(null)
+
   return (
     <section className="space-y-4" data-testid="ad-platforms-panel">
       <div>
@@ -199,6 +214,28 @@ export function AdPlatformsPanel() {
           >
             {ar ? 'إغلاق' : 'Dismiss'}
           </button>
+        </div>
+      )}
+
+      {unfinished.length > 0 && !wizardConnectionId && (
+        /*
+         * ORCH-100 §39 — somebody authorised and then closed the tab. The token is still valid and
+         * the inventory is still there; asking them to authorise again would be a second consent for
+         * an authorisation that never lapsed.
+         */
+        <div
+          data-testid="unfinished-connection"
+          role="status"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] bg-[var(--warning-background)] px-4 py-3 text-sm text-warning"
+        >
+          <span>
+            {ar
+              ? `لديك ربط غير مكتمل: ${unfinished[0].discovered} حسابًا متاحًا ولم يُربط أي حساب بمشروع بعد.`
+              : `You have an unfinished connection: ${unfinished[0].discovered} accounts available, none connected to a project yet.`}
+          </span>
+          <Button size="sm" onClick={() => setWizardConnectionId(unfinished[0].connection.id)} data-testid="resume-connection">
+            {ar ? 'أكمل اختيار الحسابات' : 'Finish selecting accounts'}
+          </Button>
         </div>
       )}
 
@@ -242,12 +279,19 @@ export function AdPlatformsPanel() {
         </div>
       ) : query.isError ? (
         <ErrorState error={query.error} title={t('error')} onRetry={() => query.refetch()} />
+      ) : wizardConnectionId ? (
+        <ConnectionWizard
+          connectionId={wizardConnectionId}
+          onClose={() => { setWizardConnectionId(null); void wizardStates.refetch(); void query.refetch() }}
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {connectors.map((c) => (
             <ConnectorCard
               key={c.key}
               connector={c}
+              wizard={wizardByProvider.get(c.key) ?? null}
+              onOpenWizard={setWizardConnectionId}
               ar={ar}
               t={t}
               onAuthorize={() => authorizeMutation.mutate(c.key)}
@@ -265,9 +309,18 @@ export function AdPlatformsPanel() {
 }
 
 function ConnectorCard({
-  connector: c, ar, t, onAuthorize, onConnect, onSync, authorizing, connecting, syncing,
+  connector: c, wizard, onOpenWizard, ar, t, onAuthorize, onConnect, onSync, authorizing, connecting, syncing,
 }: {
   connector: Connector
+  /*
+   * ORCH-100 §41 — where this provider's authorisation has actually got to.
+   *
+   * `connected` used to be the end of the story, so an integration that had done nothing but
+   * authorise showed «متصل · آخر مزامنة الآن». For the live Snapchat connection that was 309
+   * discovered accounts, none of them chosen, and a sync button that would have synced nothing.
+   */
+  wizard: ResumableConnection | null
+  onOpenWizard: (connectionId: string) => void
   ar: boolean
   t: (key: TranslationKey) => string
   onAuthorize: () => void
@@ -303,6 +356,20 @@ function ConnectorCard({
           </span>
         ) : state === 'error' ? (
           <span className="text-danger" data-testid={`connector-error-${c.key}`}>{c.connection_error}</span>
+        ) : wizard?.state === 'needs_selection' ? (
+          /* Authorised, with an inventory nobody has chosen from yet. Available and connected are
+           * different numbers and are shown as different numbers. */
+          <span className="tnum" data-testid={`connector-needs-selection-${c.key}`}>
+            {ar
+              ? `تمت المصادقة · ${wizard.discovered} حسابًا متاحًا · لم يُربط أي حساب بمشروع بعد`
+              : `Authorised · ${wizard.discovered} accounts available · none connected to a project yet`}
+          </span>
+        ) : wizard?.state === 'first_sync_pending' ? (
+          <span className="tnum" data-testid={`connector-first-sync-${c.key}`}>
+            {ar
+              ? `${wizard.assigned} حسابًا مربوطًا · بانتظار أول مزامنة`
+              : `${wizard.assigned} connected · first sync pending`}
+          </span>
         ) : state === 'connected' || state === 'syncing' ? (
           <span className="tnum" data-testid={`connector-synced-${c.key}`}>
             {ar ? `${c.accounts ?? 0} حساب إعلاني` : `${c.accounts ?? 0} ad account(s)`}
@@ -324,6 +391,12 @@ function ConnectorCard({
           <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
             <Loader2 size={13} className="animate-spin" /> {ar ? 'المزامنة جارية الآن' : 'A sync is running now'}
           </span>
+        ) : wizard?.state === 'needs_selection' ? (
+          /* The one action this state admits. A sync button here would sync nothing, because no
+           * account has been assigned to a project (ORCH-100 §14). */
+          <Button onClick={() => onOpenWizard(wizard.connection.id)} data-testid={`connector-select-${c.key}`}>
+            <Plug size={14} /> {ar ? 'اختيار الحسابات' : 'Select accounts'}
+          </Button>
         ) : state === 'connected' ? (
           <>
             <Button variant="secondary" loading={syncing} onClick={onSync} data-testid={`connector-sync-${c.key}`}>

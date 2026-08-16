@@ -15,6 +15,7 @@ import { renderWithProviders } from '@/test/utils'
 const rows = vi.hoisted(() => ({ data: [] as Connector[] }))
 const started = vi.hoisted(() => ({ calls: [] as Array<{ provider: string; clientWorkspaceId?: string | null }> }))
 const workspaces = vi.hoisted(() => ({ data: [] as Array<{ id: string; name: string }> }))
+const wizardStates = vi.hoisted(() => ({ connections: [] as unknown[], resumable: [] as unknown[] }))
 
 // The client picker reads the tenant's own client workspaces — the `→ Client` link in the chain.
 vi.mock('@/features/projects/api', async (importOriginal) => ({
@@ -33,6 +34,21 @@ vi.mock('./api', async (importOriginal) => {
     },
     syncConnector: () => Promise.resolve({ success: true, count: 1 }),
     connectConnector: () => Promise.resolve({ key: 'sandbox', status: 'connected' }),
+    fetchResumableConnections: () => Promise.resolve(wizardStates),
+    // The wizard's own reads. Snapchat's shape: organisations, then their accounts.
+    fetchConnectionHierarchy: () => Promise.resolve({
+      connection: { id: 'conn-1', provider: 'snapchat', label: 'Snapchat', label_ar: 'سناب شات', status: 'connected', client_workspace_id: null },
+      has_parent: true,
+      parent_label: { key: 'organization', label: 'Organization', labelAr: 'المؤسسة' },
+      parents: [{ external_id: 'org-1', name: 'Acme Media', account_count: 309 }],
+      discovered_count: 309,
+      assigned_count: 0,
+      wizard: { state: 'needs_selection', discovered: 309, assigned: 0, synced: 0, has_parent: true, resumable: true, next_step: 'parent' },
+    }),
+    fetchDiscoveredAccounts: () => Promise.resolve({
+      accounts: [], meta: { total: 309, per_page: 25, current_page: 1, last_page: 13 },
+    }),
+    fetchPlanUsage: () => Promise.resolve({ ad_accounts: { limit: 5, used: 0, remaining: 5 } }),
   }
 })
 
@@ -236,5 +252,96 @@ describe('IntegrationsPage — which client the accounts belong to', () => {
 
     await vi.waitFor(() => expect(started.calls)
       .toEqual([{ provider: 'meta', clientWorkspaceId: 'ws-beta' }]))
+  })
+})
+
+/**
+ * ORCH-100 §41 — «متصل» was the end of the story, and it should not have been.
+ *
+ * The live Snapchat authorisation discovered 309 ad accounts and connected none of them to a
+ * project. The card said «متصل · آخر مزامنة الآن» and offered a sync button that would have synced
+ * nothing, because a sync runs on assignments and there were none. These hold the sentence that
+ * replaces it.
+ */
+describe('an authorisation with nothing selected yet', () => {
+  afterEach(() => {
+    wizardStates.connections = []
+    wizardStates.resumable = []
+    rows.data = []
+  })
+
+  function needsSelection(provider = 'snapchat', discovered = 309) {
+    const entry = {
+      connection: { id: 'conn-1', provider, label: 'Snapchat', label_ar: 'سناب شات', client_workspace_id: null },
+      state: 'needs_selection' as const,
+      discovered,
+      assigned: 0,
+      synced: 0,
+      has_parent: true,
+      resumable: true,
+      next_step: 'parent' as const,
+    }
+    wizardStates.connections = [entry]
+    wizardStates.resumable = [entry]
+  }
+
+  it('says how many accounts are available and that none is connected', async () => {
+    rows.data = [connector({ key: 'snapchat', state: 'connected', accounts: 309 })]
+    needsSelection()
+
+    renderWithProviders(<IntegrationsPage />, { route: '/app/integrations' })
+
+    const line = await screen.findByTestId('connector-needs-selection-snapchat')
+    expect(line.textContent).toContain('309')
+    // The number that was missing: nothing has been connected to a project.
+    expect(line.textContent).toMatch(/لم يُربط|none connected/)
+  })
+
+  it('offers selecting accounts rather than a sync that would sync nothing', async () => {
+    rows.data = [connector({ key: 'snapchat', state: 'connected', accounts: 309 })]
+    needsSelection()
+
+    renderWithProviders(<IntegrationsPage />, { route: '/app/integrations' })
+
+    expect(await screen.findByTestId('connector-select-snapchat')).toBeTruthy()
+    expect(screen.queryByTestId('connector-sync-snapchat')).toBeNull()
+  })
+
+  it('offers to resume the unfinished connection instead of authorising again', async () => {
+    rows.data = [connector({ key: 'snapchat', state: 'connected', accounts: 309 })]
+    needsSelection()
+
+    renderWithProviders(<IntegrationsPage />, { route: '/app/integrations' })
+
+    const banner = await screen.findByTestId('unfinished-connection')
+    expect(banner.textContent).toContain('309')
+    expect(screen.getByTestId('resume-connection')).toBeTruthy()
+  })
+
+  it('opens the wizard from the card', async () => {
+    rows.data = [connector({ key: 'snapchat', state: 'connected', accounts: 309 })]
+    needsSelection()
+
+    renderWithProviders(<IntegrationsPage />, { route: '/app/integrations' })
+
+    fireEvent.click(await screen.findByTestId('connector-select-snapchat'))
+
+    expect(await screen.findByTestId('connection-wizard')).toBeTruthy()
+  })
+
+  it('a connection with assignments but no sync says the first sync is pending', async () => {
+    rows.data = [connector({ key: 'meta', state: 'connected', accounts: 2 })]
+    wizardStates.connections = [{
+      connection: { id: 'conn-2', provider: 'meta', label: 'Meta', label_ar: 'ميتا', client_workspace_id: null },
+      state: 'first_sync_pending', discovered: 2, assigned: 1, synced: 0,
+      has_parent: false, resumable: false, next_step: 'sync',
+    }]
+
+    renderWithProviders(<IntegrationsPage />, { route: '/app/integrations' })
+
+    const line = await screen.findByTestId('connector-first-sync-meta')
+    expect(line.textContent).toMatch(/بانتظار أول مزامنة|first sync pending/)
+    // Not resumable: this is not an unfinished authorisation, it is an unstarted sync.
+    expect(screen.queryByTestId('unfinished-connection')).toBeNull()
   })
 })

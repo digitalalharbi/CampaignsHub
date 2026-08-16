@@ -255,6 +255,11 @@ final class AdPlatformOAuthController extends Controller
                     'timezone' => $account['timezone'],
                     'status' => $account['status'],
                     'parent_external_id' => $account['parent_external_id'],
+                    // ORCH-100 §3 — the parent's NAME, which the wizard offers people to choose
+                    // between. Snapchat has always returned it beside the organisation id and this
+                    // controller was discarding it; an agency picking among several organisations
+                    // needs «Acme Media», not `0f2c…`.
+                    'parent_name' => $account['parent_name'] ?? null,
                     'metadata' => ['discovered_at' => Carbon::now()->toIso8601String()],
                     /*
                      * DISCOVERY-NOT-SYNC-001 — discovery is a catalogue, not a fetch.
