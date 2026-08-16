@@ -34,6 +34,13 @@ jobs:
           coverage: none
       - run: composer install --no-interaction --prefer-dist
       - run: cp .env.example .env && php artisan key:generate
+      # `ArabicTextLayerTest` drives the real python contract suite behind the PDF text-layer
+      # normaliser. Without pikepdf on the runner it marked itself SKIPPED — so the one test that
+      # proves an Arabic PDF is searchable rather than merely legible was the one test CI never ran,
+      # and a green tick said so anyway. Installing the dependency is the fix; making the test
+      # optional would be deleting the coverage while keeping the reassurance.
+      - name: Python dependency for the PDF text-layer contract
+        run: python3 -m pip install --quiet pikepdf
       - name: Pint (style)
         run: ./vendor/bin/pint --test
       - name: Larastan (static analysis)

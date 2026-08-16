@@ -331,7 +331,17 @@ final class PlatformProviderSettingsTest extends TestCase
 
         // The message must not let anybody read a pass as "the integration works".
         $this->assertStringContainsString('client id and secret only', (string) $response->json('data.message'));
-        $this->assertSame(ProviderSetupState::ReadyToConnect->value, $response->json('data.state'));
+
+        /*
+         * `CredentialsVerified` — the narrow claim, and the whole claim.
+         *
+         * This asserted `ReadyToConnect`, and only because the provider sat on the default `sandbox`:
+         * the old `state()` promoted a pass to `production_ready` ONLY when the environment was set
+         * to production, so the same evidence produced two different verdicts depending on a switch
+         * that changed no request. With that switch gone (ENV-FAKE-001) a pass means one thing
+         * everywhere — the provider recognised our app — and it is named as exactly that.
+         */
+        $this->assertSame(ProviderSetupState::CredentialsVerified->value, $response->json('data.state'));
     }
 
     /** A provider that does not recognise the app is a configuration error, and says which. */
