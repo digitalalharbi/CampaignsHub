@@ -24,6 +24,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 use Throwable;
 
 /**
@@ -89,8 +90,19 @@ final class StoreOAuthController extends Controller
             );
         }
 
+        /*
+         * OAUTH-WS-001 — the same gate as the ad-platform flow, and it matters more here.
+         *
+         * A store connection carries orders, customers and revenue. Accepting a bare uuid meant an
+         * operator of tenant A could file a live Salla or Zid credential — and everything that then
+         * syncs through it — under a client workspace belonging to another company. See the fuller
+         * note in `AdPlatformOAuthController::start`; this is one rule that was missing from two
+         * places, so it is fixed in both rather than left half-closed.
+         */
         $validated = $request->validate([
-            'client_workspace_id' => ['sometimes', 'nullable', 'uuid'],
+            'client_workspace_id' => ['sometimes', 'nullable', 'uuid', Rule::exists('client_workspaces', 'id')
+                ->where('tenant_id', $tenant->tenantId())
+                ->whereNull('deleted_at')],
         ]);
 
         $state = AuthorizationState::issue(
