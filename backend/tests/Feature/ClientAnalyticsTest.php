@@ -109,7 +109,25 @@ final class ClientAnalyticsTest extends TestCase
             ->assertJsonPath('data.currency', 'SAR')
             ->assertJsonPath('data.totals.spend', 500)       // only A's spend, never B's 9999
             ->assertJsonPath('data.roas_is_primary', true);  // sales objective dominates
-        $this->assertStringNotContainsString('9999', $res->getContent());
+        /*
+         * The claim is that client B's spend never reaches client A's analytics — asserted on the
+         * FIGURES and the project list rather than by searching the raw body for «9999».
+         *
+         * That search was a latent flake and failed for real: project ids are uuids, uuids are hex,
+         * and hex contains decimal digits, so a project whose id happened to end `…e3ffdc099991`
+         * matched the string and failed a test whose data was entirely correct. A test that can fail
+         * on the value of a random identifier is not testing isolation.
+         */
+        $projects = collect($res->json('data.projects'));
+        $this->assertSame([$pa->id], $projects->pluck('project_id')->all(), 'only client A\'s project');
+        $this->assertNotContains(9999.0, $projects->pluck('spend')->map(fn ($v) => (float) $v)->all());
+        $this->assertSame(500.0, (float) $res->json('data.totals.spend'));
+
+        // And B's spend is in none of the money totals, wherever they are surfaced.
+        foreach (['data.totals.spend', 'data.platforms.0.spend', 'data.timeseries.0.spend'] as $path) {
+            $this->assertNotSame(9999.0, (float) $res->json($path), "B's spend leaked into {$path}");
+        }
+
         $this->assertEquals(4.0, $res->json('data.totals.roas')); // 2000/500 via shared aggregator
     }
 

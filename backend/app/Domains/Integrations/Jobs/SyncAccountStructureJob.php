@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Jobs;
 
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\Sync\AccountStructureSyncer;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Bus\Queueable;
@@ -59,12 +60,21 @@ final class SyncAccountStructureJob implements ShouldBeUnique, ShouldQueue
         private readonly array $meta = [],
     ) {}
 
-    public function handle(AccountStructureSyncer $syncer, TenantContext $tenant): void
-    {
+    public function handle(
+        AccountStructureSyncer $syncer,
+        TenantContext $tenant,
+        AccountAssignment $assignment,
+    ): void {
         $account = ExternalAccount::withoutGlobalScopes()->find($this->accountId);
 
         if ($account === null) {
             return; // deleted between enqueue and run — nothing to sync, nothing to record
+        }
+
+        // ORCH-100 §14 — the same re-proof as the metrics job: the assignment may have been
+        // withdrawn, or the connection revoked, since this was queued.
+        if (! $assignment->isActivelyAssigned($account)) {
+            return;
         }
 
         $tenant->setTenantId($account->tenant_id);

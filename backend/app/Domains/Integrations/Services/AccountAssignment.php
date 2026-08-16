@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Services;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -100,6 +101,28 @@ final class AccountAssignment
                 ->whereColumn('project_integration_bindings.external_account_id', 'external_accounts.id')
                 ->where('project_integration_bindings.is_active', true),
         );
+    }
+
+    /**
+     * Whether this account is, RIGHT NOW, authorised to be fetched.
+     *
+     * Both the assignment and the connection have to hold. A worker asks this at the moment it runs
+     * rather than trusting the sweep that queued it: queues are not instantaneous, retries can be
+     * hours late, and the customer may have detached the account or revoked the authorisation in
+     * between. Checking only at enqueue means detaching stops the next sweep and does nothing about
+     * the jobs already queued.
+     */
+    public function isActivelyAssigned(ExternalAccount $account): bool
+    {
+        if ($this->projectIdFor($account) === null) {
+            return false;
+        }
+
+        $status = ProviderConnection::withoutGlobalScopes()
+            ->whereKey($account->provider_connection_id)
+            ->value('status');
+
+        return $status === 'connected';
     }
 
     /**
