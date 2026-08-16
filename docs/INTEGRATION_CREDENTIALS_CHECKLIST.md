@@ -149,7 +149,7 @@ handling are complete.
 | Provider | Env | Webhook URL |
 |---|---|---|
 | Salla | `SALLA_CLIENT_ID` · `SALLA_CLIENT_SECRET` · `SALLA_WEBHOOK_SECRET` | `POST {APP_URL}/api/v1/webhooks/commerce/salla` |
-| Zid | `ZID_CLIENT_ID` · `ZID_CLIENT_SECRET` · `ZID_WEBHOOK_SECRET` | `POST {APP_URL}/api/v1/webhooks/commerce/zid` |
+| Zid | `ZID_CLIENT_ID` · `ZID_CLIENT_SECRET` · `ZID_WEBHOOK_USERNAME` · `ZID_WEBHOOK_PASSWORD` — **no signing secret** (ZID-WEBHOOK-001) | `POST {APP_URL}/api/v1/webhooks/commerce/zid` |
 
 **Redirect URL for both:** `GET {APP_URL}/api/v1/oauth/commerce/{provider}/callback`
 
