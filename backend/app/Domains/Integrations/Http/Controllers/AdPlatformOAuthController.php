@@ -123,16 +123,29 @@ final class AdPlatformOAuthController extends Controller
                 ->whereNull('deleted_at')],
         ]);
 
+        /*
+         * X-PKCE-001 — the code verifier, minted here and carried by the state.
+         *
+         * Deliberately NOT the session. This callback is a public route with nothing of the session
+         * left by the time the browser returns, which is the whole reason `AuthorizationState` exists;
+         * putting the verifier there gives it the same properties for free — single use, short lived,
+         * and bound to the tenant, user and provider that started the flow.
+         *
+         * Null for every provider that does not publish PKCE, so nothing changes for the other five.
+         */
+        $verifier = $this->oauth->codeVerifier($creds);
+
         $state = AuthorizationState::issue(
             tenantId: (string) $tenant->tenantId(),
             provider: $creds->platform,
             userId: $request->user()->getKey(),
             clientWorkspaceId: $validated['client_workspace_id'] ?? null,
+            extra: $verifier === null ? [] : ['code_verifier' => $verifier],
         );
 
         return ApiResponse::success([
             'provider' => $creds->platform,
-            'authorization_url' => $this->oauth->authorizationUrl($creds, $state),
+            'authorization_url' => $this->oauth->authorizationUrl($creds, $state, $verifier),
             'expires_in_minutes' => (int) config('ad_platforms.state_ttl_minutes', 15),
         ], 'Authorization URL issued.');
     }
@@ -176,7 +189,13 @@ final class AdPlatformOAuthController extends Controller
         $tenant->setTenantId($tenantId);
 
         try {
-            $tokens = $this->oauth->exchangeCode($creds, $code);
+            // The verifier comes out of the RECORD, never the query string — the same rule as the
+            // tenant and the workspace, and for the same reason: nothing in this request is trusted.
+            $tokens = $this->oauth->exchangeCode(
+                $creds,
+                $code,
+                isset($record['code_verifier']) ? (string) $record['code_verifier'] : null,
+            );
 
             $connection = $this->vault->open(
                 tenantId: $tenantId,

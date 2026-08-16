@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\OAuth;
 
+use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Support\PlatformHttp;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -34,7 +36,29 @@ final class PlatformOAuth
      * `$state` is minted and recorded by the caller; it comes back on the callback and is the only
      * thing tying a returning browser to the request that started the flow.
      */
-    public function authorizationUrl(PlatformCredentials $creds, string $state): string
+    /**
+     * X-PKCE-001 — a fresh code verifier, for the providers that need one.
+     *
+     * Null for everybody else, and driven by the CATALOGUE's `usesPkce` rather than a literal list.
+     * That field used to be a declaration nothing read: the catalogue said X requires PKCE, the header
+     * comment said the verifier «must survive the whole round trip», and no line of code anywhere
+     * produced a challenge. Reading the declaration is what stops the two drifting apart again.
+     *
+     * 96 characters of `[A-Za-z0-9]`, the same shape `Identity/Services/OAuthFlow` already uses for
+     * staff sign-in — comfortably inside RFC 7636's 43–128 unreserved characters.
+     */
+    public function codeVerifier(PlatformCredentials $creds): ?string
+    {
+        return ProviderCatalogue::get($creds->platform)->usesPkce ? Str::random(96) : null;
+    }
+
+    /** The S256 challenge for a verifier: base64url of its raw SHA-256, per RFC 7636. */
+    public function codeChallenge(string $verifier): string
+    {
+        return rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
+    }
+
+    public function authorizationUrl(PlatformCredentials $creds, string $state, ?string $verifier = null): string
     {
         $this->assertConfigured($creds);
 
@@ -60,6 +84,16 @@ final class PlatformOAuth
                 'prompt' => $creds->platform === 'google' ? 'consent' : null,
             ], static fn ($v) => $v !== null),
         };
+
+        /*
+         * The challenge rides on the authorise URL when — and only when — a verifier was minted for
+         * this flow. Sending one to a provider that does not publish PKCE would be an unrequested
+         * change to five working integrations, so it is gated on the verifier and not added by hand.
+         */
+        if ($verifier !== null) {
+            $query['code_challenge'] = $this->codeChallenge($verifier);
+            $query['code_challenge_method'] = 'S256';
+        }
 
         return $creds->authorizeUrl().'?'.http_build_query($query);
     }
@@ -88,7 +122,7 @@ final class PlatformOAuth
     }
 
     /** Exchange the code a platform sent back for tokens. */
-    public function exchangeCode(PlatformCredentials $creds, string $code): OAuthTokens
+    public function exchangeCode(PlatformCredentials $creds, string $code, ?string $verifier = null): OAuthTokens
     {
         $this->assertConfigured($creds);
 
@@ -99,11 +133,30 @@ final class PlatformOAuth
             return $this->tikTokToken($creds, ['auth_code' => $code]);
         }
 
-        return $this->standardToken($creds, [
+        /*
+         * X-PKCE-001 — fail CLOSED when a PKCE provider has no verifier to present.
+         *
+         * The alternative is to exchange anyway, which sends X a request it is obliged to reject, and
+         * the customer is then shown X's refusal as though the PLATFORM were broken. That is the exact
+         * failure mode this audit exists to remove: an error message that names the wrong culprit.
+         *
+         * It should be unreachable — `start` mints the verifier and the state carries it — so reaching
+         * it means a state was minted by code that predates this, or by something that is not `start`.
+         * Both are worth saying out loud rather than laundering into a platform error.
+         */
+        if (ProviderCatalogue::get($creds->platform)->usesPkce && $verifier === null) {
+            throw new RuntimeException(
+                $creds->label().' requires PKCE, and this authorisation carried no code verifier. '
+                    .'Start the connection again.',
+            );
+        }
+
+        return $this->standardToken($creds, array_filter([
             'grant_type' => 'authorization_code',
             'code' => $code,
             'redirect_uri' => $creds->redirectUri(),
-        ]);
+            'code_verifier' => $verifier,
+        ], static fn ($v) => $v !== null));
     }
 
     /**
