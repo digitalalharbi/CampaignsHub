@@ -79,3 +79,122 @@ export async function syncConnector(key: string): Promise<{ success: boolean; co
   await ensureCsrfCookie()
   return postData<{ success: boolean; count: number }>(`/integrations/${key}/sync`)
 }
+
+/*
+ * ORCH-100 — the connection wizard's reads.
+ *
+ * These four are what turns «authorised» into «connected». An authorisation produces an INVENTORY —
+ * the live Snapchat consent produced 309 ad accounts — and none of it feeds a project until somebody
+ * chooses. Everything below is a read; the only write is the confirm, which goes through the
+ * project's own transactional bind endpoint.
+ */
+
+export type WizardState =
+  | 'authorized_no_accounts' | 'needs_selection' | 'first_sync_pending' | 'active' | 'access_revoked'
+
+export interface ConnectionWizard {
+  state: WizardState
+  discovered: number
+  assigned: number
+  synced: number
+  has_parent: boolean
+  resumable: boolean
+  next_step: 'parent' | 'accounts' | 'sync' | 'reconnect' | null
+}
+
+export interface HierarchyParent {
+  external_id: string
+  /** The provider's own name for it. The id is a fallback label, never the primary one. */
+  name: string
+  account_count: number
+}
+
+export interface DiscoveredAccount {
+  id: string
+  external_id: string
+  name: string
+  parent_external_id: string | null
+  parent_name: string | null
+  currency: string | null
+  timezone: string | null
+  status: string
+  assigned_project_id: string | null
+  assigned: boolean
+  /** Null until data has really arrived — discovery is not a sync. */
+  last_synced_at: string | null
+  access_lost_at: string | null
+}
+
+export interface ConnectionHierarchy {
+  connection: {
+    id: string
+    provider: string
+    label: string
+    label_ar: string
+    status: string
+    client_workspace_id: string | null
+  }
+  has_parent: boolean
+  parent_label: { key: string; label: string; labelAr: string } | null
+  parents: HierarchyParent[]
+  discovered_count: number
+  assigned_count: number
+  wizard: ConnectionWizard
+}
+
+export interface PlanUsage {
+  limit: number | null
+  used: number
+  remaining: number | null
+}
+
+export function fetchConnectionHierarchy(connectionId: string): Promise<ConnectionHierarchy> {
+  return getData<ConnectionHierarchy>(`/connections/${connectionId}/hierarchy`)
+}
+
+/** One page of discovered accounts, narrowed by parent and search — never the whole inventory. */
+export function fetchDiscoveredAccounts(
+  connectionId: string,
+  params: { parent?: string | null; q?: string | null; page?: number; perPage?: number } = {},
+): Promise<{ accounts: DiscoveredAccount[]; meta: { total: number; per_page: number; current_page: number; last_page: number } }> {
+  const query = new URLSearchParams()
+  if (params.parent) query.set('parent', params.parent)
+  if (params.q) query.set('q', params.q)
+  if (params.page) query.set('page', String(params.page))
+  query.set('per_page', String(params.perPage ?? 25))
+
+  return getData(`/connections/${connectionId}/accounts?${query.toString()}`)
+}
+
+/** What the plan has left, readable BEFORE anything is bound, for the review step. */
+export function fetchPlanUsage(): Promise<Record<string, PlanUsage>> {
+  return getData<Record<string, PlanUsage>>('/plan-usage')
+}
+
+export interface ResumableConnection extends ConnectionWizard {
+  connection: { id: string; provider: string; label: string; label_ar: string; client_workspace_id: string | null }
+}
+
+export function fetchResumableConnections(): Promise<{
+  connections: ResumableConnection[]
+  resumable: ResumableConnection[]
+}> {
+  return getData('/connections/resumable')
+}
+
+/**
+ * Connect one discovered account to a project.
+ *
+ * The transactional path: the quota is counted under a lock and the workspace fence is applied
+ * server-side, so a refusal here is authoritative rather than advisory.
+ */
+export async function bindAccountToProject(
+  projectId: string,
+  externalAccountId: string,
+): Promise<unknown> {
+  await ensureCsrfCookie()
+  return postData(`/projects/${projectId}/integrations/bindings`, {
+    external_account_id: externalAccountId,
+    purpose: 'advertising',
+  })
+}
