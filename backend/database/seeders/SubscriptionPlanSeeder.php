@@ -47,7 +47,7 @@ final class SubscriptionPlanSeeder extends Seeder
                 'trial_fee' => 0,
                 'trial_days' => 0,
                 'minimum_commitment_months' => 0,
-                'trial_limits' => ['projects' => 3, 'clients' => 1, 'team_members' => 3, 'connections' => 3, 'reports_per_month' => 10],
+                'trial_limits' => ['projects' => 3, 'clients' => 1, 'team_members' => 3, 'connections' => 3, 'ad_accounts' => 3, 'reports_per_month' => 10],
                 'sort_order' => 10,
                 // Campaign tracking and reports are what this plan is sold on, so they are data the
                 // catalogue carries rather than a claim in a paragraph.
@@ -58,7 +58,7 @@ final class SubscriptionPlanSeeder extends Seeder
                     'ai_assist' => false,
                     'white_label' => false,
                 ],
-                'limits' => ['projects' => 3, 'clients' => 1, 'team_members' => 3, 'connections' => 3, 'reports_per_month' => 10],
+                'limits' => ['projects' => 3, 'clients' => 1, 'team_members' => 3, 'connections' => 3, 'ad_accounts' => 3, 'reports_per_month' => 10],
             ],
             [
                 'code' => 'growth',
@@ -89,7 +89,7 @@ final class SubscriptionPlanSeeder extends Seeder
                  */
                 'minimum_commitment_months' => 3,
                 // A trial is a look at the product, not a quarter of free capacity.
-                'trial_limits' => ['projects' => 3, 'clients' => 1, 'team_members' => 3, 'connections' => 3, 'reports_per_month' => 10],
+                'trial_limits' => ['projects' => 3, 'clients' => 1, 'team_members' => 3, 'connections' => 3, 'ad_accounts' => 3, 'reports_per_month' => 10],
                 'sort_order' => 20,
                 // A higher plan includes everything the lower one does. The console renders these as
                 // switches now, and a Growth plan without the campaign tracking «البداية» sells would
@@ -101,7 +101,7 @@ final class SubscriptionPlanSeeder extends Seeder
                     'ai_assist' => true,
                     'white_label' => false,
                 ],
-                'limits' => ['projects' => 25, 'clients' => 5, 'team_members' => 15, 'connections' => 25, 'reports_per_month' => 100],
+                'limits' => ['projects' => 25, 'clients' => 5, 'team_members' => 15, 'connections' => 25, 'ad_accounts' => 25, 'reports_per_month' => 100],
             ],
             [
                 'code' => 'agency',
@@ -122,7 +122,7 @@ final class SubscriptionPlanSeeder extends Seeder
                 'trial_fee' => 0,
                 'trial_days' => 0,
                 'minimum_commitment_months' => 0,
-                'trial_limits' => ['projects' => 5, 'clients' => 2, 'team_members' => 5, 'connections' => 5, 'reports_per_month' => 20],
+                'trial_limits' => ['projects' => 5, 'clients' => 2, 'team_members' => 5, 'connections' => 5, 'ad_accounts' => 5, 'reports_per_month' => 20],
                 'sort_order' => 30,
                 'features' => [
                     'campaign_tracking' => true,
@@ -132,7 +132,7 @@ final class SubscriptionPlanSeeder extends Seeder
                     'white_label' => true,
                 ],
                 // null == unlimited. Scale is the most permissive plan and the no-subscription default.
-                'limits' => ['projects' => null, 'clients' => null, 'team_members' => null, 'connections' => null, 'reports_per_month' => null],
+                'limits' => ['projects' => null, 'clients' => null, 'team_members' => null, 'connections' => null, 'ad_accounts' => null, 'reports_per_month' => null],
             ],
             [
                 'code' => 'enterprise',
@@ -175,7 +175,7 @@ final class SubscriptionPlanSeeder extends Seeder
                     'white_label' => true,
                 ],
                 // Agreed per customer, so nothing is published as a cap.
-                'limits' => ['projects' => null, 'clients' => null, 'team_members' => null, 'connections' => null, 'reports_per_month' => null],
+                'limits' => ['projects' => null, 'clients' => null, 'team_members' => null, 'connections' => null, 'ad_accounts' => null, 'reports_per_month' => null],
             ],
 
         ];

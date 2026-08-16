@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Console;
 use App\Domains\Integrations\Jobs\SyncAccountStructureJob;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Services\AccountAssignment;
 use Illuminate\Console\Command;
 
 /**
@@ -54,6 +55,9 @@ final class SyncAdPlatformStructureCommand extends Command
             ->whereIn('provider_connection_id', $connections)
             ->where('account_type', 'ad_account')
             ->where('status', 'active')
+            // PROJECT-INTEGRATION-ASSIGNMENT-001 — assigned accounts only, exactly as the metrics
+            // sweep. Discovery catalogues; assignment is what asks for the data.
+            ->tap(fn ($q) => app(AccountAssignment::class)->scopeToAssigned($q))
             ->orderBy('id')
             ->chunkById(200, function ($accounts) use (&$queued): void {
                 foreach ($accounts as $account) {

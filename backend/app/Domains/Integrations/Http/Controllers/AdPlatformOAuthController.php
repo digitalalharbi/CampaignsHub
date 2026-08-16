@@ -256,7 +256,21 @@ final class AdPlatformOAuthController extends Controller
                     'status' => $account['status'],
                     'parent_external_id' => $account['parent_external_id'],
                     'metadata' => ['discovered_at' => Carbon::now()->toIso8601String()],
-                    'last_synced_at' => Carbon::now(),
+                    /*
+                     * DISCOVERY-NOT-SYNC-001 — discovery is a catalogue, not a fetch.
+                     *
+                     * This wrote `last_synced_at = now()`, so the moment a customer authorised us the
+                     * product announced «آخر مزامنة: الآن» for accounts whose data it had never asked
+                     * for. After the first live Snapchat consent that was 309 accounts all claiming a
+                     * sync that never happened — and the claim is what made the missing assignment
+                     * step invisible.
+                     *
+                     * `discovered_at` records what actually occurred. `last_synced_at` stays null
+                     * until data really arrives, which is the only thing that may set it.
+                     * `StoreOAuthController` has always got this right; this is the ad path catching up.
+                     */
+                    'discovered_at' => Carbon::now(),
+                    'access_lost_at' => null,
                 ],
             );
         }

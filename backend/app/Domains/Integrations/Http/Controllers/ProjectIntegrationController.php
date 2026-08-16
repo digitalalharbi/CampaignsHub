@@ -11,13 +11,19 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Sandbox\SandboxAdvertisingConnector;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Models\Project;
+use App\Domains\Subscriptions\Exceptions\PlanLimitReached;
+use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -26,7 +32,39 @@ use Illuminate\Validation\Rule;
  */
 final class ProjectIntegrationController extends Controller
 {
-    public function __construct(private readonly ProjectContext $project) {}
+    public function __construct(
+        private readonly ProjectContext $project,
+        private readonly AccountAssignment $assignment,
+        private readonly SubscriptionService $subscriptions,
+    ) {}
+
+    /**
+     * ORCH-100 §J — refuse when the plan's Connected Ad Accounts cap is already met.
+     *
+     * Called INSIDE the quota transaction, after the tenant row is locked, so the count it reads
+     * cannot move underneath it. `withinLimit` is the same entitlement path the project, client and
+     * team caps already use — this adds a metric to it rather than a second opinion about limits.
+     */
+    private function guardQuota(string $tenantId): void
+    {
+        $tenant = Tenant::withoutGlobalScopes()->findOrFail($tenantId);
+
+        if ($this->subscriptions->withinLimit($tenant, 'ad_accounts')) {
+            return;
+        }
+
+        $used = $this->subscriptions->usage($tenant, 'ad_accounts');
+        $limit = $this->subscriptions->effectiveLimit($tenant, 'ad_accounts');
+
+        throw new PlanLimitReached(
+            'ad_accounts',
+            $used,
+            $limit,
+            $limit === null
+                ? 'Your plan does not allow another connected ad account.'
+                : "Your plan allows {$limit} connected ad account(s) and {$used} are already connected.",
+        );
+    }
 
     /** Bindings attached to the current project (project-scoped). */
     public function index(Request $request): JsonResponse
@@ -66,29 +104,86 @@ final class ProjectIntegrationController extends Controller
         /** @var ExternalAccount $account */
         $account = ExternalAccount::findOrFail($validated['external_account_id']);
 
-        // Warn (409) if this account is already bound to a DIFFERENT project — sharing is allowed but
-        // must be deliberate (confirm=true).
-        $sharedElsewhere = ProjectIntegrationBinding::withoutGlobalScope(ProjectScope::class)
+        $project = Project::findOrFail($this->project->projectId());
+
+        /*
+         * ORCH-100 §F — the client workspace fence.
+         *
+         * The tenant check above (in the validation rule) stops another COMPANY's account. It does
+         * nothing about another CLIENT of the same agency, because both are the same tenant — and
+         * mixing one client's advertising account into another client's project is the failure an
+         * agency would never be able to explain.
+         */
+        abort_unless(
+            $this->assignment->mayAssign($account, $project),
+            403,
+            'This account belongs to a different client workspace and cannot be assigned to this project.',
+        );
+
+        /*
+         * ORCH-100 §I — no silent sharing.
+         *
+         * This used to allow the same account to feed a second project on `confirm=true`. There is
+         * no requirement in this product for one advertising account to report into two projects,
+         * and the failure mode if it is wrong is a client seeing another client's spend — so the
+         * safer reading wins: one active assignment per account, and detaching is how you move it.
+         *
+         * The refusal names where it already lives, so the operator can act instead of guessing.
+         */
+        $activeElsewhere = ProjectIntegrationBinding::withoutGlobalScope(ProjectScope::class)
             ->where('external_account_id', $account->id)
-            ->where('project_id', '!=', $this->project->projectId())
-            ->exists();
-        if ($sharedElsewhere && ! $request->boolean('confirm')) {
+            ->where('is_active', true)
+            ->where('project_id', '!=', $project->id)
+            ->first();
+
+        if ($activeElsewhere !== null) {
             return ApiResponse::error(
-                'This account is already bound to another project. Re-send with confirm=true to share it.',
-                meta: ['requires_confirmation' => true],
+                'This account is already connected to another project. Detach it there first.',
+                meta: ['assigned_project_id' => (string) $activeElsewhere->project_id],
                 status: 409,
             );
         }
 
-        $binding = ProjectIntegrationBinding::create([
-            // project_id auto-filled from ProjectContext by BelongsToProject.
-            'external_account_id' => $account->id,
-            'provider' => $account->provider,
-            'purpose' => $validated['purpose'],
-            'is_primary' => (bool) ($validated['is_primary'] ?? false),
-            'campaign_management_enabled' => $validated['purpose'] === 'advertising',
-            'tracking_enabled' => in_array($validated['purpose'], ['tracking', 'conversion_api'], true),
-        ]);
+        /*
+         * ORCH-100 §J/§Y — the quota, counted and enforced inside one transaction.
+         *
+         * A check-then-insert is racy by construction: two confirmations for the last remaining slot
+         * both read «one left» and both write. The row lock serialises them on the tenant, the count
+         * is taken inside the lock, and the partial unique index on active bindings is the backstop
+         * if anything ever reaches an insert twice.
+         */
+        try {
+            $binding = DB::transaction(function () use ($account, $project, $validated) {
+                DB::table('tenants')->where('id', $account->tenant_id)->lockForUpdate()->first();
+
+                $existing = ProjectIntegrationBinding::withoutGlobalScope(ProjectScope::class)
+                    ->where('external_account_id', $account->id)
+                    ->where('project_id', $project->id)
+                    ->where('is_active', true)
+                    ->first();
+
+                // Confirming twice is the same decision, not a second one — and must not cost a slot.
+                if ($existing !== null) {
+                    return $existing;
+                }
+
+                $this->guardQuota($account->tenant_id);
+
+                return ProjectIntegrationBinding::create([
+                    // project_id auto-filled from ProjectContext by BelongsToProject.
+                    'external_account_id' => $account->id,
+                    'client_workspace_id' => $project->client_workspace_id,
+                    'provider' => $account->provider,
+                    'purpose' => $validated['purpose'],
+                    'is_primary' => (bool) ($validated['is_primary'] ?? false),
+                    'is_active' => true,
+                    'campaign_management_enabled' => $validated['purpose'] === 'advertising',
+                    'tracking_enabled' => in_array($validated['purpose'], ['tracking', 'conversion_api'], true),
+                ]);
+            });
+        } catch (PlanLimitReached $e) {
+            return ApiResponse::error($e->getMessage(), meta: $e->meta(), status: 422);
+        }
 
         $audit->log(action: 'integration.bound', entityType: ProjectIntegrationBinding::class, entityId: (string) $binding->id, after: ['project' => $this->project->projectId(), 'account' => $account->external_id, 'purpose' => $binding->purpose]);
 
