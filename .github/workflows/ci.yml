@@ -129,6 +129,11 @@ jobs:
       - name: Browsers
         working-directory: frontend
         run: npx playwright install --with-deps chromium firefox webkit
+      # The report exporter's Arabic text-layer pass (CAMPAIGNSHUB-PDF-TEXTLAYER) shells out to
+      # python3 + pikepdf. It is best-effort and never blocks an export, but leaving it absent here
+      # would mean the gate exercises a different code path than a developer's machine does.
+      - name: Arabic text-layer toolchain
+        run: python3 -m pip install --quiet pikepdf
       - name: Gate — chromium, firefox, webkit
         working-directory: frontend
         env:

@@ -90,6 +90,22 @@ export const E2E_BACKEND_ENV: Record<string, string> = {
    * this was one of the two. So the print browser keeps Chromium and gets its own server instead.
    */
   REPORTS_PRINT_APP_URL: E2E_PRINT_ORIGIN,
+  /*
+   * GATE-CHROMIUM-ENV-001 — the master switch, which the gate silently borrowed from a developer's
+   * untracked `.env` until it was run on a machine that had never had one.
+   *
+   * `REPORTS_CHROMIUM_ENABLED` defaults to FALSE in `config/reports.php`, deliberately, so that
+   * environments without Node or Chromium keep working. The line above set where the print browser
+   * should go and nothing turned the print browser on; on the developer's machine
+   * `backend/.env:88` did, and on a clean runner nothing did. The export then fell to the Dompdf
+   * fallback, `ReportDownloadController` refused it because `renderer_version` did not match, no
+   * download event ever fired, and the spec timed out after 90 seconds on ALL THREE browsers —
+   * which is what identical failures across three engines usually mean.
+   *
+   * Set here rather than in the CI job because the gate has to be self-contained: a gate whose
+   * verdict depends on a file that is not in the repository is not a gate, it is a local habit.
+   */
+  REPORTS_CHROMIUM_ENABLED: 'true',
   // The gate walks the paid-signup journey, which needs a provider it can actually settle against.
   SUBSCRIPTION_PROVIDER: 'sandbox',
 }
