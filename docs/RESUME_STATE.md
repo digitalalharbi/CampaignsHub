@@ -43,6 +43,26 @@ are adopted on **FIRST import only** — never on `unified_campaign_id === null`
 every deliberate unlink on the next sweep and leave the suggestions list permanently empty. One
 visible campaign per PLATFORM campaign; **no cross-platform merge is ever invented**.
 
+### The two surfaces, and which owns what
+
+**INTEGRATIONS** owns sources: authorise, discover, refresh, organisations, available accounts,
+select, add, remove, reconnect, disconnect, plan limits, per-account health.
+
+**A PROJECT** shows the RESULT: what feeds it, and whether that is working. Its screen starts from
+`ProjectIntegrationBinding` — an unassigned account is not filtered out of the list, it is not part
+of the question. `PlatformOverviewController` read `ExternalAccount::query()->get()`, which is
+tenant-scoped, so the project page showed **309 accounts on a page about one**.
+
+### The live Snapchat sync failure — fixed, not yet proven live
+
+«Request cannot be processed due to validation error», 0 metrics, structure fine. The range was
+`T00:00:00.000-00:00` — **UTC midnight for every account** — and Snapchat requires the ad account's
+own day boundary. Also fixed: stats pagination (`limit` 200 + `next_link`) and chunked backfill.
+
+**Do not default a timezone.** An account with none fails with a message naming the fix; defaulting
+to UTC is what broke this and defaulting to Riyadh would be the same mistake wearing a different
+constant.
+
 ### Snapchat readiness — UNCHANGED
 
 OAuth **VERIFIED** · callback **VERIFIED** · discovery 309 **VERIFIED**.
