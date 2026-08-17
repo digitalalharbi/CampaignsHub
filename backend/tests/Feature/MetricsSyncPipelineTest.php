@@ -146,6 +146,9 @@ final class MetricsSyncPipelineTest extends TestCase
             'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id,
             'provider' => 'snapchat', 'account_type' => 'ad_account', 'external_id' => 'act-1',
             'name' => 'Snap acct', 'status' => 'active',
+            // SNAP-WINDOW-001 — Snapchat's DAY range must sit on this account's day boundary, so the
+            // connector needs the timezone discovery recorded rather than a default.
+            'timezone' => 'Asia/Riyadh',
         ]);
 
         // Assigned, because that is what every account this pipeline runs against is (RUNTIME-100 §15).
