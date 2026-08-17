@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Services;
 
 use App\Domains\Integrations\Jobs\SyncAccountStructureJob;
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use Illuminate\Support\Carbon;
 
@@ -60,6 +61,17 @@ final class FirstSync
         $to = Carbon::now()->endOfDay();
 
         foreach ($accountIds as $accountId) {
+            /*
+             * A store's first read is the commerce sweep's, not this one.
+             *
+             * `SyncStoresCommand` owns that pipeline — orders, products, carts — and it has its own
+             * window and its own partial-outcome rules. Queueing an ad-account structure job for a
+             * store would record a failure for work that was never this pipeline's to do.
+             */
+            if (! $this->isAdAccount($accountId)) {
+                continue;
+            }
+
             SyncAccountStructureJob::dispatch($accountId, ['source' => $source, 'first_sync' => true]);
 
             SyncAccountMetricsJob::dispatch(
@@ -86,6 +98,13 @@ final class FirstSync
             $this->assignment->activeAccountIdsForProject($projectId),
             $source,
         );
+    }
+
+    private function isAdAccount(string $accountId): bool
+    {
+        return ExternalAccount::withoutGlobalScopes()
+            ->whereKey($accountId)
+            ->value('account_type') === 'ad_account';
     }
 
     private function backfillDays(): int

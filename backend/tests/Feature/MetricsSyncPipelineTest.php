@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
@@ -64,11 +65,32 @@ final class MetricsSyncPipelineTest extends TestCase
             'connection_name' => $provider, 'scope' => 'project_only', 'status' => 'connected',
         ]);
 
-        return ExternalAccount::create([
+        $account = ExternalAccount::create([
             'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id,
             'provider' => $provider, 'account_type' => 'ad_account', 'external_id' => 'sandbox-act-1',
             'name' => 'Acct', 'status' => 'active',
         ]);
+
+        /*
+         * Assigned, because that is what every account this pipeline runs against is.
+         *
+         * RUNTIME-100 §15 — the syncer now refuses an account nobody attached to a project, before it
+         * looks at credentials at all: there is no instruction to fetch it, so the question of whether
+         * we COULD does not arise. These tests are about the credential and connector rules, so the
+         * fixture has to satisfy the outer one to reach them. Without this they were asserting the
+         * credential refusal against an account the pipeline would never have been given.
+         */
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $account->id,
+            'provider' => $provider,
+            'purpose' => 'advertising',
+            'is_active' => true,
+        ]);
+
+        return $account;
     }
 
     public function test_a_connected_provider_writes_normalized_metrics_and_records_a_run(): void
@@ -124,6 +146,17 @@ final class MetricsSyncPipelineTest extends TestCase
             'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id,
             'provider' => 'snapchat', 'account_type' => 'ad_account', 'external_id' => 'act-1',
             'name' => 'Snap acct', 'status' => 'active',
+        ]);
+
+        // Assigned, because that is what every account this pipeline runs against is (RUNTIME-100 §15).
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $account->id,
+            'provider' => 'snapchat',
+            'purpose' => 'advertising',
+            'is_active' => true,
         ]);
 
         ExternalCampaign::create([

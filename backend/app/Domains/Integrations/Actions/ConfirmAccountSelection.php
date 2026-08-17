@@ -189,7 +189,15 @@ final class ConfirmAccountSelection
             ->whereIn('id', $accountIds)
             ->where('provider_connection_id', $connection->getKey())
             ->where('tenant_id', $connection->tenant_id)
-            ->where('account_type', 'ad_account')
+            /*
+             * COMMERCE-PROJECT-001 — a store is assigned the same way an ad account is.
+             *
+             * Commerce had no assignment concept at all: `StoreSyncer` filed a store's orders into
+             * the tenant's OLDEST project and the next sweep kept them there. Widening this to
+             * `store` is what gives a merchant the same explicit decision, through the same
+             * transaction, the same quota lock and the same client-workspace fence.
+             */
+            ->whereIn('account_type', ['ad_account', 'store'])
             ->get();
 
         if ($accounts->count() !== count($accountIds)) {

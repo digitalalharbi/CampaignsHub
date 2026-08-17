@@ -38,6 +38,38 @@ import { useUi } from '@/stores/ui'
 
 type Step = 'parent' | 'accounts' | 'project' | 'review' | 'done'
 
+/**
+ * An account's state in one phrase — RUNTIME-100 §31.
+ *
+ * Each of these names a different next action, which is the only reason to tell them apart. «مربوط
+ * بمشروع» said all of them at once, so an account whose access had been withdrawn and one syncing
+ * happily read identically.
+ */
+function accountHealthLabel(health: DiscoveredAccount['health'], ar: boolean): string {
+  switch (health) {
+    case 'healthy': return ar ? 'تعمل' : 'Healthy'
+    case 'pending_first_sync': return ar ? 'بانتظار أول مزامنة' : 'First sync pending'
+    case 'delayed': return ar ? 'متأخرة' : 'Delayed'
+    case 'failed': return ar ? 'فشلت آخر محاولة' : 'Last attempt failed'
+    case 'access_lost': return ar ? 'تعذّر الوصول' : 'Access lost'
+    case 'revoked': return ar ? 'الربط ملغى' : 'Connection revoked'
+    // Assigned but the server did not say — an older response, not a state worth inventing a word for.
+    default: return ar ? 'مربوط بمشروع' : 'Connected'
+  }
+}
+
+/** Colour carries the same distinction the words do, so the state survives a glance. */
+function accountHealthTone(health: DiscoveredAccount['health']): string {
+  switch (health) {
+    case 'healthy': return 'text-success'
+    case 'delayed': return 'text-warning'
+    case 'failed':
+    case 'access_lost':
+    case 'revoked': return 'text-danger'
+    default: return 'text-text-muted'
+  }
+}
+
 interface Props {
   connectionId: string
   onClose: () => void
@@ -312,9 +344,15 @@ export function ConnectionWizard({ connectionId, onClose }: Props) {
                             {a.external_id}{a.currency ? ` · ${a.currency}` : ''}{a.timezone ? ` · ${a.timezone}` : ''}
                           </span>
                         </span>
+                        {/*
+                          RUNTIME-100 §31 — an account's own state, where the account is.
+
+                          Only shown once it HAS one: an unassigned account is inventory, and labelling
+                          it would be inventing a fault out of a decision nobody has made yet.
+                        */}
                         {a.assigned && (
-                          <span className="text-xs text-text-muted">
-                            {ar ? 'مربوط بمشروع' : 'Already connected'}
+                          <span className={`shrink-0 text-xs ${accountHealthTone(a.health)}`}>
+                            {accountHealthLabel(a.health, ar)}
                           </span>
                         )}
                       </label>

@@ -736,3 +736,133 @@ fetches it. An identifier shown as a name claims the provider called it that.
 **Not claimed:** none of the above changes the live Snapchat readiness. Selection, assignment and the
 first real scoped sync still require an authenticated production session, and Snapchat remains
 `BLOCKED_OPERATIONAL_EVIDENCE` — **not** `LIVE_VERIFIED`.
+
+---
+
+## §15 — The other copy of the same rule (2026-08-17)
+
+`ASSIGN-PROJECT-001` was fixed in `AccountStructureSyncer`. The metrics side has its own copy of that
+method, and it was not.
+
+```php
+// AccountMetricsSyncer::projectIdFor(), unchanged since before the fix
+return Project::withoutGlobalScopes()
+    ->where('tenant_id', $account->tenant_id)
+    ->orderBy('created_at')
+    ->value('id');
+```
+
+`MetricSyncRun` carries `BelongsToProject`; `SyncRunController` reads runs project-scoped. So a
+metrics run for an account assigned to **client B** — assigned correctly, doing exactly what it was
+told — was filed under **client A's oldest project** for as long as it had no campaigns yet, which is
+precisely the window a FIRST sync runs in. Client A's operator then read sync history naming client
+B's provider, account and row counts, and `DataFreshnessService` computed A's freshness from B's runs.
+
+Two copies of one rule, one of them corrected. That is what let it survive a review of the fix, and
+it is why the answer now comes from `AccountAssignment` — the single place that knows — in both.
+
+The `NOT NULL` on `metric_sync_runs.project_id` was not incidental to this; it was the **reason** for
+the fallback. The column's own comment said so: «an account that feeds nothing yet still needs a
+project to file the run under (the column is NOT NULL and a run with no home would be unreadable)».
+A schema rule was forcing a claim the data could not support. It is nullable now, and an unassigned
+account is refused with its own status — `awaiting_assignment` — before any provider call.
+
+### What one timestamp could not say
+
+`last_synced_at` alone had to stand in for three different facts:
+
+| The truth | What the column showed |
+|---|---|
+| Nobody has ever tried | null |
+| We tried an hour ago and the provider refused | whatever it was before — stale |
+| We succeeded at 03:00, due again at 03:30 | a timestamp that also looks stale when a sweep is late |
+
+Three additive columns now answer one each: `last_sync_attempt_at`, `last_sync_error_category`,
+`next_sync_at`. Nothing is backfilled — null means «never recorded», which is the truth for every row
+that predates them.
+
+Two smaller faults fell out of writing them. The success stamp lived inside `retainRaw()`, a method
+about keeping the provider's raw bodies, so a connector that is not an `ApiAdvertisingConnector`
+synced successfully and its account still read «never synced»; and the stamp was written *before*
+`finish()` decided the status, so a run ending «the provider returned no insight rows» had already
+claimed a sync. A checkpoint belongs to the outcome, and is now written where the outcome is decided.
+
+### Health is per account
+
+`AccountHealth` derives seven states in «most actionable first» order, each naming a different
+person's next move. `DELAYED` is deliberately distinct from `FAILED`: nothing errored, the data is
+merely older than the schedule allows, and reporting a late sweep as an error sends somebody to
+reconnect an authorisation that is working.
+
+A connection SUMMARISES its accounts — «10 مربوطة · 9 سليمة · 1 يحتاج انتباه» — rather than claiming
+one state for all of them. Ten accounts behind one authorisation with one whose access was withdrawn
+used to render as a single green «متصل», and that one account is the only fact on the card anybody
+needed.
+
+### One thing that needed no fix, recorded so nobody adds it
+
+§38 asks for cache invalidation after a successful sync. There is **no read-path cache** to
+invalidate: dashboard, analytics, campaigns, reports and the client portal all query live. The only
+caches in the application are the OAuth state store, the PDF render handoff, the request-label
+lookup and the scheduler heartbeats — none of which carries a figure. Client-side, TanStack Query is
+invalidated at the confirmation. Adding a server cache in order to have something to invalidate would
+be inventing the staleness this section exists to prevent.
+
+---
+
+## §16 — The campaigns page was empty after a real sync (2026-08-17)
+
+`/app/campaigns` lists `unified_campaigns`. Nothing in the sync path had ever created one:
+`unified_campaign_id` was set by hand through the controller, by a request conversion, or by the demo
+seeder — and by nothing else.
+
+So the whole pipeline could work perfectly and the customer would see nothing. `external_campaigns`
+filled correctly. Every metric attached correctly. Analytics added up correctly. The page a person
+opens to look at their campaigns was blank, with no error and nothing to press.
+
+`ImportExternalCampaigns` now adopts each imported platform campaign into a visible one, and two
+details of that are deliberate:
+
+- **Keyed `firstOrCreate` on `(project_id, name)`** — the table's own unique key. Creating one per
+  platform campaign unconditionally dies on a `23505` the moment two ad accounts in one project run a
+  campaign of the same name, and an agency with two Snapchat accounts both running «Ramadan Sale» is
+  not an exotic case. Reusing the row is also the truer reading: inside ONE project, two platform
+  campaigns sharing a name are the same business campaign run in two places, which is what a unified
+  campaign is for. Across projects nothing is shared, because the key includes the project.
+- **Only when the link is absent.** A campaign somebody has renamed, merged or re-classified is never
+  re-adopted or overwritten by a later sweep. Adoption happens once; after that the campaign belongs
+  to the person who edited it.
+
+`objective` and `budget_currency` are `NOT NULL`. The objective falls back to `other` — the
+resolver's own «not classified» value, which objective-based reporting already keeps out of a cost
+per order it cannot honestly attribute — and the currency to the platform's, then the account's, then
+the reporting default. Neither is a guess at what the platform meant; both are the honest floor for a
+column that cannot be empty.
+
+## §17 — The third copy of the ownership rule, and the commerce side (2026-08-17)
+
+`projectIdFor()` existed three times, each ending in a variation of «and otherwise, the tenant's
+oldest project»:
+
+| Where | Fixed in | How it presented |
+|---|---|---|
+| `AccountStructureSyncer` | `fdff1fc` | 309 discovered accounts' campaigns into one project nobody chose |
+| `AccountMetricsSyncer` | this programme | one agency client's sync history visible in another's |
+| `StoreSyncer` | this programme | one client's Salla/Zid revenue in another client's funnel |
+
+Commerce was the worst of the three because it had no assignment concept to fall back *from*.
+`ProjectStores` said so in its own comment: «which project such a store will land in is not knowable
+until the first sweep files it». A store is now assigned through the same `ProjectIntegrationBinding`
+an ad account uses, `SyncStoresCommand` sweeps assigned stores only, and `SyncStoreJob` re-proves its
+scope at run time exactly as the ad-platform workers do.
+
+Both ad-platform syncers also kept an «existing campaign wins» fallback, justified as «a re-sync
+never re-files work already placed». That reasoning is about DISPLAY and was being applied to WRITES:
+it could only fire for an account the worker had already refused, while leaving a second route by
+which data could enter a project nobody assigned it to. Removed. Nothing already filed is moved or
+deleted — it stops receiving new writes, which is what detaching means.
+
+`isActivelyAssigned()` now re-proves the whole chain rather than its first link: the binding, the
+project it names, that project's tenant, the client-workspace fence, and the connection's status. A
+queued job can outlive the project it points at, and a binding row whose project is gone is a
+leftover rather than an authorisation.

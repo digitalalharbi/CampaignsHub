@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Services;
 
-use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Projects\Models\Project;
@@ -32,10 +32,14 @@ use Throwable;
  */
 final class AccountMetricsSyncer
 {
+    /** `integrations:sync` runs every thirty minutes (routes/console.php) — this is that, named. */
+    private const SWEEP_INTERVAL_MINUTES = 30;
+
     public function __construct(
         private readonly AdvertisingConnectorRegistry $registry,
         private readonly UpsertDailyMetrics $upsert,
         private readonly InsightRowNormaliser $normaliser,
+        private readonly AccountAssignment $assignment,
     ) {}
 
     /**
@@ -62,8 +66,26 @@ final class AccountMetricsSyncer
             'meta' => $meta,
         ])->save();
 
+        /*
+         * RUNTIME-100 §15 — an unassigned account is not synced, and its refusal is its own status.
+         *
+         * Not `failed`: nothing broke. Somebody has authorised us to SEE this account and has not
+         * said which project it feeds, and the operator's next move — choose a project — is entirely
+         * different from the next move for a provider error. `AccountStructureSyncer` reports the
+         * same state under the same name.
+         */
+        if ($run->project_id === null) {
+            return $this->finish(
+                $run,
+                'awaiting_assignment',
+                0,
+                'This account is not assigned to a project yet, so nothing was fetched. Assign it to a project first.',
+                $account,
+            );
+        }
+
         if ($connector === null) {
-            return $this->finish($run, 'failed', 0, "No connector is registered for provider '{$account->provider}'.");
+            return $this->finish($run, 'failed', 0, "No connector is registered for provider '{$account->provider}'.", $account);
         }
 
         /*
@@ -78,7 +100,7 @@ final class AccountMetricsSyncer
             $connection = ProviderConnection::withoutGlobalScopes()->find($account->provider_connection_id);
 
             if ($connection === null) {
-                return $this->finish($run, 'failed', 0, 'The ad account has no provider connection to sync through.');
+                return $this->finish($run, 'failed', 0, 'The ad account has no provider connection to sync through.', $account);
             }
 
             $connector = $connector->withConnection($connection);
@@ -91,17 +113,18 @@ final class AccountMetricsSyncer
                 'awaiting_credentials',
                 0,
                 'No credentials for '.$connector->label().' — nothing was fetched. Add credentials to enable this sync.',
+                $account,
             );
         }
 
         try {
             $result = $connector->syncInsights($account->external_id, $from->toDateString(), $to->toDateString());
         } catch (Throwable $e) {
-            return $this->finish($run, 'failed', 0, $e->getMessage());
+            return $this->finish($run, 'failed', 0, $e->getMessage(), $account);
         }
 
         if (! $result->success) {
-            return $this->finish($run, 'failed', 0, $result->message ?? 'The provider reported a failed sync.');
+            return $this->finish($run, 'failed', 0, $result->message ?? 'The provider reported a failed sync.', $account);
         }
 
         [$upserted, $skipped] = $this->ingest($account, $result->records);
@@ -123,8 +146,13 @@ final class AccountMetricsSyncer
             ? "{$skipped} record(s) could not be mapped to a known campaign and were skipped."
             : null;
 
-        return $this->finish($run, $upserted === 0 && $skipped === 0 ? 'partial' : $status, $upserted,
-            $upserted === 0 && $skipped === 0 ? 'The provider returned no insight rows for this window.' : $message);
+        return $this->finish(
+            $run,
+            $upserted === 0 && $skipped === 0 ? 'partial' : $status,
+            $upserted,
+            $upserted === 0 && $skipped === 0 ? 'The provider returned no insight rows for this window.' : $message,
+            $account,
+        );
     }
 
     /**
@@ -205,11 +233,9 @@ final class AccountMetricsSyncer
                 'fetched_at' => Carbon::now(),
             ]);
         }
-
-        $account->forceFill(['last_synced_at' => Carbon::now()])->save();
     }
 
-    private function finish(MetricSyncRun $run, string $status, int $upserted, ?string $error): MetricSyncRun
+    private function finish(MetricSyncRun $run, string $status, int $upserted, ?string $error, ?ExternalAccount $account = null): MetricSyncRun
     {
         $run->forceFill([
             'status' => $status,
@@ -218,29 +244,93 @@ final class AccountMetricsSyncer
             'error' => $error,
         ])->save();
 
+        if ($account !== null) {
+            $this->checkpoint($account, $status);
+        }
+
         return $run;
     }
 
     /**
-     * An account can feed several projects; the run is stamped with the first project it actually feeds.
-     * An account that feeds nothing yet still needs a project to file the run under (the column is NOT
-     * NULL and a run with no home would be unreadable), so it falls back to its client workspace and
-     * finally to the tenant's first project.
+     * Which project this run belongs to — METRICS-RUN-PROJECT-001.
+     *
+     * ## The half of ASSIGN-PROJECT-001 that survived its own fix
+     *
+     * `AccountStructureSyncer` had exactly this method and exactly this bug, and it was fixed. This
+     * copy was not, and it ended:
+     *
+     * ```php
+     * return Project::withoutGlobalScopes()->where('tenant_id', …)->orderBy('created_at')->value('id');
+     * ```
+     *
+     * `MetricSyncRun` carries `BelongsToProject`, and `SyncRunController` lists runs project-scoped.
+     * So a metrics run for an account assigned to client B — doing exactly what it was told — was
+     * filed under client A's oldest project for as long as it had no campaigns yet, which is
+     * precisely the window a FIRST sync runs in. Client A's operator then read sync history naming
+     * client B's provider, account and row counts, and `DataFreshnessService` computed A's freshness
+     * from B's runs.
+     *
+     * Two copies of one rule, one of them corrected. That is what let it survive a review of the fix,
+     * and is why the answer now comes from `AccountAssignment` — the single place that knows.
+     *
+     * There is no second answer, deliberately. An «existing campaign wins» fallback reads as harmless
+     * — it only keeps work where it already is — but it is a second route by which data can enter a
+     * project nobody assigned it to, and it can only fire for an account the worker has already
+     * refused. One rule, one source, and nothing that was filed before is moved or deleted.
      */
     private function projectIdFor(ExternalAccount $account): ?string
     {
-        $fromCampaigns = ExternalCampaign::withoutGlobalScopes()
-            ->where('external_account_id', $account->id)
-            ->value('project_id');
+        return $this->assignment->projectIdFor($account);
+    }
 
-        if ($fromCampaigns !== null) {
-            return $fromCampaigns;
-        }
+    /**
+     * RUNTIME-100 §30 — write the account's checkpoint from the outcome, once, in one place.
+     *
+     * `last_synced_at` used to be set inside `retainRaw()`, which is a method about keeping the
+     * provider's raw bodies. Two consequences, both wrong and both quiet: a connector that is not an
+     * `ApiAdvertisingConnector` synced successfully and the account still read «never synced»; and
+     * the stamp was written BEFORE `finish()` decided the status, so a run that ended «the provider
+     * returned no insight rows» had already claimed a sync.
+     *
+     * A checkpoint belongs to the outcome, so it is written where the outcome is decided.
+     */
+    private function checkpoint(ExternalAccount $account, string $status): void
+    {
+        $succeeded = in_array($status, ['success', 'partial'], true);
 
-        return Project::withoutGlobalScopes()
-            ->where('tenant_id', $account->tenant_id)
-            ->when($account->client_workspace_id, fn ($q, $ws) => $q->orderByRaw('CASE WHEN client_workspace_id = ? THEN 0 ELSE 1 END', [$ws]))
-            ->orderBy('created_at')
-            ->value('id');
+        $account->forceFill([
+            // Every outcome is an attempt, including the refusals. «We tried and it failed» and «we
+            // never tried» were the same absent timestamp until this line existed.
+            'last_sync_attempt_at' => Carbon::now(),
+            'last_synced_at' => $succeeded ? Carbon::now() : $account->last_synced_at,
+            'last_sync_error_category' => $this->errorCategory($status),
+            'next_sync_at' => Carbon::now()->addMinutes(self::SWEEP_INTERVAL_MINUTES),
+        ])->save();
+    }
+
+    /**
+     * WHY it did not work, as a category — because the category is what decides who acts.
+     *
+     * An operator adds credentials; a customer re-authorises; nobody at all acts on a provider having
+     * a bad minute. A free-text message cannot be grouped, counted or routed, and every screen that
+     * wanted to say «1 حساب يحتاج انتباه» had nothing to count.
+     */
+    private function errorCategory(string $status): ?string
+    {
+        return match ($status) {
+            'awaiting_credentials' => 'awaiting_credentials',
+            'awaiting_assignment' => 'awaiting_assignment',
+            'failed' => 'provider_error',
+            /*
+             * `partial` deliberately carries NO category.
+             *
+             * It is the status for two different, ordinary things — a window the provider genuinely
+             * had no rows for, and a window where some rows could not be mapped — and neither is a
+             * fault anybody should be paged about. The run row already says which; marking the
+             * account as needing attention for an account with no spend last Tuesday would fill the
+             * attention count with noise and train people to ignore it.
+             */
+            default => null,
+        };
     }
 }

@@ -370,6 +370,29 @@ function ConnectorCard({
               ? `${wizard.assigned} حسابًا مربوطًا · بانتظار أول مزامنة`
               : `${wizard.assigned} connected · first sync pending`}
           </span>
+        ) : wizard?.health && wizard.health.connected > 0 ? (
+          /*
+           * RUNTIME-100 §31 — a SUMMARY of this connection's accounts, not one badge for all of them.
+           *
+           * Ten accounts behind one authorisation, nine syncing and one whose access was withdrawn,
+           * rendered as a single green «متصل» — and that one account is the only fact on this card
+           * anybody needed. The attention count is stated separately, and only when it is not zero,
+           * so «everything is fine» stays a short sentence.
+           */
+          <span className="tnum" data-testid={`connector-health-${c.key}`}>
+            {ar
+              ? `${wizard.health.connected} مربوطًا · ${wizard.health.healthy} تعمل`
+              : `${wizard.health.connected} connected · ${wizard.health.healthy} healthy`}
+            {wizard.health.needs_attention > 0 && (
+              <span className="text-warning">
+                {ar
+                  ? ` · ${wizard.health.needs_attention} يحتاج انتباه`
+                  : ` · ${wizard.health.needs_attention} need attention`}
+              </span>
+            )}
+            {' · '}
+            {whenSynced(c.data_last_synced_at, ar)}
+          </span>
         ) : state === 'connected' || state === 'syncing' ? (
           <span className="tnum" data-testid={`connector-synced-${c.key}`}>
             {ar ? `${c.accounts ?? 0} حساب إعلاني` : `${c.accounts ?? 0} ad account(s)`}

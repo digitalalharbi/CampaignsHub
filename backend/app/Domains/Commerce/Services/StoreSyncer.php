@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Domains\Commerce\Services;
 
 use App\Domains\Commerce\Actions\ImportStoreData;
-use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Providers\ApiCommerceConnector;
 use App\Domains\Commerce\Registry\CommerceConnectorRegistry;
 use App\Domains\Integrations\Enums\ConnectorStatus;
@@ -13,6 +12,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
@@ -40,6 +40,7 @@ final class StoreSyncer
     public function __construct(
         private readonly CommerceConnectorRegistry $registry,
         private readonly ImportStoreData $import,
+        private readonly AccountAssignment $assignment,
     ) {}
 
     /** @param array<string,mixed> $meta */
@@ -56,6 +57,29 @@ final class StoreSyncer
             'status' => 'running',
             'started_at' => Carbon::now(),
         ])->save();
+
+        /*
+         * COMMERCE-PROJECT-001 — a store nobody assigned is not read either.
+         *
+         * The advertising side was corrected twice for this and commerce was never looked at, because
+         * it had no assignment concept AT ALL. `projectIdFor()` filed a store's orders wherever the
+         * first sweep happened to put them — `ProjectStores` says so in its own comment: «which
+         * project such a store will land in is not knowable until the first sweep files it». For an
+         * agency that means one client's revenue landing in another client's funnel, decided by
+         * creation order, and then made permanent because the next sweep finds orders already there.
+         *
+         * A store is assigned the same way an ad account is, through the same binding, or it is not
+         * read. `awaiting_assignment` rather than `failed`: nothing broke, and the next move is to
+         * choose a project.
+         */
+        if ($projectId === null) {
+            return $this->finish(
+                $run,
+                'awaiting_assignment',
+                0,
+                'This store is not assigned to a project yet, so nothing was fetched. Assign it to a project first.',
+            );
+        }
 
         $connector = $this->registry->get($store->provider);
 
@@ -75,10 +99,6 @@ final class StoreSyncer
 
         if ($connector->status() === ConnectorStatus::AwaitingCredentials) {
             return $this->finish($run, 'awaiting_credentials', 0, 'No credentials for '.$connector->label().' — nothing was fetched.');
-        }
-
-        if ($projectId === null) {
-            return $this->finish($run, 'failed', 0, 'This workspace has no project to file the store data under.');
         }
 
         $problems = [];
@@ -193,25 +213,32 @@ final class StoreSyncer
     }
 
     /**
-     * Where a store's data is filed.
+     * Where a store's data is filed — COMMERCE-PROJECT-001.
      *
-     * The project its orders already live in, so a re-sync never re-files anything; otherwise the
-     * workspace's own project. A store with nowhere to file is refused rather than filed arbitrarily.
+     * ## The third copy of one rule
+     *
+     * `AccountStructureSyncer` had this bug and was fixed. `AccountMetricsSyncer` had its own copy and
+     * was not. This is the third, and it was the worst of the three, because commerce had no
+     * assignment concept at all to fall back FROM:
+     *
+     * ```php
+     * return Project::withoutGlobalScopes()
+     *     ->where('tenant_id', $store->tenant_id)
+     *     ->when($store->client_workspace_id, …)   // a hint, not a decision
+     *     ->orderBy('created_at')
+     *     ->value('id');                            // the tenant's OLDEST project
+     * ```
+     *
+     * So a Salla or Zid store's orders and revenue were filed into whichever project happened to be
+     * created first — and then made permanent, because the next sweep found orders already there and
+     * «correctly» kept filing to the same place. For an agency that is one client's revenue in
+     * another client's funnel, decided by creation order.
+     *
+     * The answer is now the one the customer gave, through the same `ProjectIntegrationBinding` an ad
+     * account uses, and there is no second answer. A store with no assignment is refused, not filed.
      */
     private function projectIdFor(ExternalAccount $store): ?string
     {
-        $existing = CommerceOrder::withoutGlobalScopes()
-            ->where('external_account_id', $store->getKey())
-            ->value('project_id');
-
-        if ($existing !== null) {
-            return $existing;
-        }
-
-        return Project::withoutGlobalScopes()
-            ->where('tenant_id', $store->tenant_id)
-            ->when($store->client_workspace_id, fn ($q, $ws) => $q->orderByRaw('CASE WHEN client_workspace_id = ? THEN 0 ELSE 1 END', [$ws]))
-            ->orderBy('created_at')
-            ->value('id');
+        return $this->assignment->projectIdFor($store);
     }
 }

@@ -6,6 +6,7 @@ namespace App\Domains\Commerce\Jobs;
 
 use App\Domains\Commerce\Services\StoreSyncer;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -54,12 +55,28 @@ final class SyncStoreJob implements ShouldBeUnique, ShouldQueue
         private readonly array $meta = [],
     ) {}
 
-    public function handle(StoreSyncer $syncer, TenantContext $tenant): void
+    public function handle(StoreSyncer $syncer, TenantContext $tenant, AccountAssignment $assignment): void
     {
         $store = ExternalAccount::withoutGlobalScopes()->find($this->storeId);
 
         if ($store === null) {
             return; // deleted between enqueue and run
+        }
+
+        /*
+         * RUNTIME-100 §29 — the worker re-proves its scope, exactly as the ad-platform workers do.
+         *
+         * The sweep decided this store was assigned when it queued the job. Queues are not
+         * instantaneous and retries can be hours late, so by now the merchant may have detached it or
+         * the authorisation may have been revoked. Filtering only at enqueue means detaching stops
+         * the NEXT sweep and does nothing about the jobs already in the queue — which then read a
+         * merchant's orders after they asked us to stop.
+         *
+         * Returning silently is right: this is not a failure to record, it is work that is no longer
+         * authorised.
+         */
+        if (! $assignment->isActivelyAssigned($store)) {
+            return;
         }
 
         $tenant->setTenantId($store->tenant_id);

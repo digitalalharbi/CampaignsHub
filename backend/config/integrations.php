@@ -47,6 +47,19 @@ return [
         'restate_days' => (int) env('INTEGRATIONS_RESTATE_DAYS', 7),
     ],
 
+    'health' => [
+        /*
+         * How old an account's last SUCCESS may be before it is reported as delayed.
+         *
+         * The metrics sweep runs every thirty minutes, so yesterday's success means dozens of sweeps
+         * produced nothing. A worker restart, a deploy, or a provider's quiet hour can each eat a few
+         * of those legitimately, though — and this flag has to mean «something is wrong». A threshold
+         * that fires on ordinary operational noise is one people learn to ignore, which costs more
+         * than not having it.
+         */
+        'stale_after_hours' => (int) env('INTEGRATIONS_STALE_AFTER_HOURS', 48),
+    ],
+
     'locking' => [
         /*
          * How long one account's sync may hold its lock before another attempt may proceed.
