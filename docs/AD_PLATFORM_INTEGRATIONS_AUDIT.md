@@ -903,3 +903,34 @@ of missed sweeps, and older days are final and are not re-fetched on every run.
 **Not claimed:** this is the fix for the error the live sync returned. Whether the live sync then
 succeeds is `BLOCKED_OPERATIONAL_EVIDENCE` until it is run against the real account after deploy.
 Snapchat remains **not** `LIVE_VERIFIED`.
+
+---
+## §19 — The campaigns page was empty after a real sync (2026-08-17)
+
+`/app/campaigns` lists `unified_campaigns`. Nothing in the sync path had ever created one:
+`unified_campaign_id` was set by hand through the controller, by a request conversion, or by the demo
+seeder — and by nothing else.
+
+So the whole pipeline could work perfectly and the customer would see nothing. `external_campaigns`
+filled correctly. Every metric attached correctly. Analytics added up correctly. The page a person
+opens to look at their campaigns was blank, with no error and nothing to press.
+
+`ImportExternalCampaigns` now adopts each imported platform campaign into a visible one, and two
+details of that are deliberate:
+
+- **Keyed `firstOrCreate` on `(project_id, name)`** — the table's own unique key. Creating one per
+  platform campaign unconditionally dies on a `23505` the moment two ad accounts in one project run a
+  campaign of the same name, and an agency with two Snapchat accounts both running «Ramadan Sale» is
+  not an exotic case. Reusing the row is also the truer reading: inside ONE project, two platform
+  campaigns sharing a name are the same business campaign run in two places, which is what a unified
+  campaign is for. Across projects nothing is shared, because the key includes the project.
+- **Only when the link is absent.** A campaign somebody has renamed, merged or re-classified is never
+  re-adopted or overwritten by a later sweep. Adoption happens once; after that the campaign belongs
+  to the person who edited it.
+
+`objective` and `budget_currency` are `NOT NULL`. The objective falls back to `other` — the
+resolver's own «not classified» value, which objective-based reporting already keeps out of a cost
+per order it cannot honestly attribute — and the currency to the platform's, then the account's, then
+the reporting default. Neither is a guess at what the platform meant; both are the honest floor for a
+column that cannot be empty.
+

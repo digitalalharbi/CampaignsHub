@@ -7,13 +7,16 @@ namespace App\Domains\Integrations\Http\Controllers;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Services\AccountHealth;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 /**
  * PROJINT-001 / INTEG-UI-001 — one read model organised around the SIX REAL ad platforms, so the
@@ -54,15 +57,65 @@ final class PlatformOverviewController extends Controller
         'creatives' => ['ar' => 'المحتويات الإعلانية', 'en' => 'Creatives'],
     ];
 
-    public function __construct(private readonly AdvertisingConnectorRegistry $registry) {}
+    public function __construct(
+        private readonly AdvertisingConnectorRegistry $registry,
+        private readonly AccountHealth $health,
+    ) {}
+
+    /**
+     * The external accounts and stores ACTIVELY assigned to the current project.
+     *
+     * Project-scoped through the binding rather than through the account, because the account is
+     * tenant-scoped by design. `ProjectIntegrationBinding` carries `BelongsToProject`, so the
+     * request's project narrows it without this method naming an id at all.
+     *
+     * @return Collection<int, ExternalAccount>
+     */
+    private function assignedAccounts(): Collection
+    {
+        $ids = ProjectIntegrationBinding::query()
+            ->where('is_active', true)
+            ->pluck('external_account_id')
+            ->unique()
+            ->all();
+
+        if ($ids === []) {
+            return collect();
+        }
+
+        return ExternalAccount::withoutGlobalScopes()
+            ->whereIn('id', $ids)
+            ->orderBy('provider')
+            ->orderBy('name')
+            ->get();
+    }
 
     /** GET projects/{project}/integrations/platforms */
     public function index(Request $request): JsonResponse
     {
         abort_unless($request->user()->hasPermission('integrations.view'), 403);
 
-        $connections = ProviderConnection::query()->get()->groupBy('provider');
-        $accounts = ExternalAccount::query()->get()->groupBy('provider');
+        /*
+         * INTEGRATIONS-VS-PROJECTS-IA-001 — this screen shows what was LINKED, never what was found.
+         *
+         * It read `ExternalAccount::query()->get()`. That model carries `BelongsToTenant`, not
+         * `BelongsToProject` — correct for the model, because a discovered account genuinely belongs
+         * to the tenant and to no project until somebody says otherwise — and reading it unqualified
+         * on a PROJECT screen turned the tenant's whole inventory into that project's contents. With
+         * the live Snapchat connection that is 309 accounts on a page about one.
+         *
+         * Integrations is where sources are chosen; a project is the RESULT of those choices. So this
+         * starts from the bindings, and an account nobody assigned is not filtered out of the list —
+         * it is not part of the question this screen answers.
+         */
+        $assigned = $this->assignedAccounts();
+
+        $connections = ProviderConnection::query()
+            ->whereIn('id', $assigned->pluck('provider_connection_id')->unique()->filter()->all())
+            ->get()
+            ->groupBy('provider');
+
+        $accounts = $assigned->groupBy('provider');
         $campaignCounts = ExternalCampaign::query()
             ->select('provider')->selectRaw('COUNT(*) AS c, COUNT(unified_campaign_id) AS linked')
             ->groupBy('provider')->get()->keyBy('provider');
@@ -106,13 +159,28 @@ final class PlatformOverviewController extends Controller
                     'last_successful_sync_at' => optional($c->last_successful_sync_at)->toIso8601String(),
                     'last_error' => $c->last_error,
                 ])->values()->all(),
+                /*
+                 * Everything an operator needs to answer «is this working», and nothing they would
+                 * need in order to CHOOSE — choosing happens in Integrations, where the inventory is.
+                 */
                 'accounts' => $accountRows->map(fn (ExternalAccount $a) => [
-                    'id' => $a->id,
+                    'id' => (string) $a->id,
+                    'provider' => $a->provider,
+                    'account_type' => $a->account_type,
+                    // Name first. An identifier where a name belongs claims the provider called it that.
                     'name' => $a->name,
                     'external_id' => $a->external_id,
+                    'parent_name' => $a->parent_name,
+                    'parent_external_id' => $a->parent_external_id,
                     'currency' => $a->currency,
+                    'timezone' => $a->timezone,
                     'status' => $a->status,
+                    'health' => $this->health->for($a),
                     'last_synced_at' => optional($a->last_synced_at)->toIso8601String(),
+                    'last_sync_attempt_at' => optional($a->last_sync_attempt_at)->toIso8601String(),
+                    'last_sync_error_category' => $a->last_sync_error_category,
+                    'next_sync_at' => optional($a->next_sync_at)->toIso8601String(),
+                    'access_lost_at' => optional($a->access_lost_at)->toIso8601String(),
                     'is_demo' => (bool) ($a->metadata['is_demo'] ?? false),
                 ])->values()->all(),
                 'discovered_campaigns' => (int) ($counts->c ?? 0),
@@ -130,6 +198,31 @@ final class PlatformOverviewController extends Controller
 
         return ApiResponse::success([
             'platforms' => $platforms,
+            /*
+             * A flat list of the project's linked sources, ad accounts and stores together.
+             *
+             * The per-platform grouping above is organised around the six ad platforms; a store is
+             * not one of them and would have nowhere to appear. A project does not care which family
+             * a source belongs to — it cares what feeds it.
+             */
+            'accounts' => $assigned->map(fn (ExternalAccount $a) => [
+                'id' => (string) $a->id,
+                'provider' => $a->provider,
+                'account_type' => $a->account_type,
+                'name' => $a->name,
+                'external_id' => $a->external_id,
+                'parent_name' => $a->parent_name,
+                'parent_external_id' => $a->parent_external_id,
+                'currency' => $a->currency,
+                'timezone' => $a->timezone,
+                'status' => $a->status,
+                'health' => $this->health->for($a),
+                'last_synced_at' => optional($a->last_synced_at)->toIso8601String(),
+                'last_sync_attempt_at' => optional($a->last_sync_attempt_at)->toIso8601String(),
+                'last_sync_error_category' => $a->last_sync_error_category,
+                'next_sync_at' => optional($a->next_sync_at)->toIso8601String(),
+                'access_lost_at' => optional($a->access_lost_at)->toIso8601String(),
+            ])->values()->all(),
             'summary' => [
                 'total' => count(self::PLATFORMS),
                 'with_credentials' => count(array_filter($platforms, fn (array $p) => $p['has_credentials'])),

@@ -36,6 +36,13 @@ than any single caller, so a fourth copy cannot be added quietly. **Do not reint
 including an «existing campaign wins» one: it can only fire for an account the worker has already
 refused, and it is a second route into a project nobody assigned.
 
+### And the campaigns page was empty after a real sync
+
+`/app/campaigns` lists `unified_campaigns`; nothing in the sync path had ever created one. Imports
+are adopted on **FIRST import only** — never on `unified_campaign_id === null`, which would undo
+every deliberate unlink on the next sweep and leave the suggestions list permanently empty. One
+visible campaign per PLATFORM campaign; **no cross-platform merge is ever invented**.
+
 ### Snapchat readiness — UNCHANGED
 
 OAuth **VERIFIED** · callback **VERIFIED** · discovery 309 **VERIFIED**.
