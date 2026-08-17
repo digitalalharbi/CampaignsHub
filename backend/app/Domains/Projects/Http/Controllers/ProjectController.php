@@ -5,15 +5,18 @@ declare(strict_types=1);
 namespace App\Domains\Projects\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\ClientWorkspaces\Services\CanonicalWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Projects\Resources\ProjectResource;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 final class ProjectController extends Controller
 {
@@ -57,19 +60,49 @@ final class ProjectController extends Controller
         return ApiResponse::success(new ProjectResource($model), 'Project retrieved.');
     }
 
-    public function store(Request $request, AuditLogger $audit): JsonResponse
+    /**
+     * PROJECT-CREATE-WORKSPACE-001 — `client_workspace_id` is required of an AGENCY, not of everyone.
+     *
+     * It used to be required of everyone, which made project creation impossible for an advertiser:
+     * a `client_workspaces` row is an agency's client, and somebody running their own campaigns has
+     * none. That is what the connection wizard was working around with `workspaces.data?.[0]?.id` —
+     * an expression that returns nothing for an advertiser and the WRONG client for an agency, and
+     * whose failure reached production as «حدث خطأ غير متوقع.»
+     *
+     * So the field is optional in the payload and resolved in the domain: an advertiser's canonical
+     * container, or — when the answer is genuinely the customer's to give — a validation error
+     * naming the field, which the interface can turn into a question instead of a dead end.
+     */
+    public function store(Request $request, AuditLogger $audit, CanonicalWorkspace $containers): JsonResponse
     {
         abort_unless($request->user()->hasPermission('projects.create'), 403);
 
         $validated = $request->validate([
-            'client_workspace_id' => ['required', 'uuid', Rule::exists('client_workspaces', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
+            'client_workspace_id' => ['sometimes', 'nullable', 'uuid', Rule::exists('client_workspaces', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
             'name' => ['required', 'string', 'max:160'],
             'status' => ['sometimes', Rule::in(self::STATUSES)],
             'account_manager_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
         ]);
 
+        $workspaceId = $validated['client_workspace_id'] ?? null;
+
+        if ($workspaceId === null) {
+            $tenant = Tenant::withoutGlobalScopes()->findOrFail(app(TenantContext::class)->tenantId());
+            $canonical = $containers->ensureFor($tenant);
+
+            // An agency is asked, and told what to answer. Never guessed at — filing a project under
+            // whichever client sorted first is how one client's work reaches another client's portal.
+            if ($canonical === null) {
+                throw ValidationException::withMessages([
+                    'client_workspace_id' => [__('validation.client_workspace_required')],
+                ]);
+            }
+
+            $workspaceId = (string) $canonical->getKey();
+        }
+
         $project = Project::create([
-            'client_workspace_id' => $validated['client_workspace_id'],
+            'client_workspace_id' => $workspaceId,
             'name' => $validated['name'],
             'account_manager_id' => $validated['account_manager_id'] ?? null,
             'status' => $validated['status'] ?? 'draft',

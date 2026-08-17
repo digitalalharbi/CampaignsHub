@@ -104,8 +104,15 @@ export interface ConnectionWizard {
 
 export interface HierarchyParent {
   external_id: string
-  /** The provider's own name for it. The id is a fallback label, never the primary one. */
-  name: string
+  /**
+   * The provider's own name for it, or NULL when the provider never gave us one.
+   *
+   * Null rather than «fall back to the id» — RUNTIME-100 §5. An id rendered as a name claims the
+   * provider called it that; the live Snapchat connection's 309 accounts were catalogued before this
+   * product recorded organisation names, and the id-as-label fallback is exactly why production shows
+   * a column of UUIDs. Saying «الاسم غير متاح» is true, and it points at the refresh that fixes it.
+   */
+  name: string | null
   account_count: number
 }
 
@@ -197,4 +204,46 @@ export async function bindAccountToProject(
     external_account_id: externalAccountId,
     purpose: 'advertising',
   })
+}
+
+/**
+ * Confirm a WHOLE selection — RUNTIME-100 §10.
+ *
+ * The wizard used to call `bindAccountToProject` once per ticked account, which is not one decision
+ * but a sequence of them: a plan with room for eight left somebody who chose ten with eight accounts
+ * connected, two refusals, and nothing to undo — the server had done exactly as asked each time.
+ *
+ * One call, one transaction, all or nothing. The first sync starts on the server once it commits, so
+ * there is nothing further for the interface to trigger.
+ */
+export async function confirmAccountSelection(input: {
+  projectId: string
+  connectionId: string
+  externalAccountIds: string[]
+  primaryExternalAccountId?: string
+}): Promise<{ connected: number }> {
+  await ensureCsrfCookie()
+  return postData(`/projects/${input.projectId}/integrations/bindings/batch`, {
+    connection_id: input.connectionId,
+    external_account_ids: input.externalAccountIds,
+    purpose: 'advertising',
+    primary_external_account_id: input.primaryExternalAccountId ?? null,
+  })
+}
+
+/**
+ * Re-read this connection's catalogue with the token already held — RUNTIME-100 §5.
+ *
+ * No second consent screen. The live Snapchat connection shows organisation UUIDs where names
+ * belong because its 309 accounts were catalogued before the product recorded `parent_name`; the
+ * authorisation never lapsed, so repairing our own omission must not cost the customer a re-auth.
+ */
+export async function refreshDiscoveredAccounts(connectionId: string): Promise<{
+  discovered: number
+  created: number
+  named: number
+  access_lost: number
+}> {
+  await ensureCsrfCookie()
+  return postData(`/connections/${connectionId}/refresh`)
 }

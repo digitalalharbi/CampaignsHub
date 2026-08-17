@@ -72,9 +72,9 @@ final class SyncAccountMetricsJob implements ShouldBeUnique, ShouldQueue
 
     /** @param array<string,mixed> $meta */
     public function __construct(
-        private readonly string $accountId,
-        private readonly string $from,
-        private readonly string $to,
+        public readonly string $accountId,
+        public readonly string $from,
+        public readonly string $to,
         private readonly array $meta = [],
     ) {}
 

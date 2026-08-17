@@ -18,4 +18,12 @@ return [
      */
     'phone_number' => 'Enter a valid mobile number, for example 0501234567 or +966501234567.',
     'phone_taken' => 'That mobile number is already used by another account.',
+
+    // PROJECT-CREATE-WORKSPACE-001 — an agency names the client; the product never picks one for them.
+    'client_workspace_required' => 'Choose the client this project belongs to.',
+
+    // RUNTIME-100 §10 — a wizard left open can outlive what it is showing; say so, and say what to do.
+    'selection_empty' => 'Choose at least one account before confirming.',
+    'selection_stale' => 'Some of the selected accounts are no longer available on this connection. Refresh the list and choose again.',
+    'connection_not_authorized' => 'This connection is no longer authorised. Reconnect it and try again.',
 ];

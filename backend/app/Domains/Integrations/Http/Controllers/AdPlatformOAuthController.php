@@ -12,8 +12,7 @@ use App\Domains\Integrations\OAuth\AuthorizationState;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\PlatformOAuth;
 use App\Domains\Integrations\OAuth\TokenVault;
-use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
-use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Services\AccountDiscovery;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
@@ -22,7 +21,6 @@ use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 use Throwable;
 
@@ -53,7 +51,7 @@ final class AdPlatformOAuthController extends Controller
     public function __construct(
         private readonly PlatformOAuth $oauth,
         private readonly TokenVault $vault,
-        private readonly AdvertisingConnectorRegistry $registry,
+        private readonly AccountDiscovery $discovery,
         private readonly ProviderConfigurationService $settings,
     ) {}
 
@@ -225,64 +223,18 @@ final class AdPlatformOAuthController extends Controller
     /**
      * Pull the authorised identity's ad accounts into `external_accounts`.
      *
-     * Upserted on `(connection, external_id, account_type)` — the table's own unique key — so
-     * re-authorising an existing connection updates the accounts it already knows about instead of
-     * creating a second copy of each one.
+     * RUNTIME-100 §5 — the body of this moved to {@see AccountDiscovery}, unchanged in behaviour and
+     * changed entirely in reach. It was private to this controller, so the only way to refresh a
+     * catalogue was to authorise again: when the live Snapchat connection turned out to be missing
+     * every organisation NAME — 309 accounts catalogued before `parent_name` was recorded at all —
+     * the product's only offer was a second consent screen for an authorisation that never lapsed.
+     *
+     * The same token can answer the same question. Nothing about that needed a new OAuth round trip;
+     * it needed the code not to be locked inside a callback.
      */
     private function discoverAccounts(ProviderConnection $connection): int
     {
-        $connector = $this->registry->get($connection->provider);
-
-        if (! $connector instanceof ApiAdvertisingConnector) {
-            return 0;
-        }
-
-        $accounts = $connector->withConnection($connection)->listAdAccounts();
-
-        foreach ($accounts as $account) {
-            ExternalAccount::withoutGlobalScopes()->updateOrCreate(
-                [
-                    'provider_connection_id' => $connection->getKey(),
-                    'external_id' => $account['external_id'],
-                    'account_type' => 'ad_account',
-                ],
-                [
-                    'tenant_id' => $connection->tenant_id,
-                    'client_workspace_id' => $connection->client_workspace_id,
-                    'provider' => $connection->provider,
-                    'name' => $account['name'],
-                    'currency' => $account['currency'],
-                    'timezone' => $account['timezone'],
-                    'status' => $account['status'],
-                    'parent_external_id' => $account['parent_external_id'],
-                    // ORCH-100 §3 — the parent's NAME, which the wizard offers people to choose
-                    // between. Snapchat has always returned it beside the organisation id and this
-                    // controller was discarding it; an agency picking among several organisations
-                    // needs «Acme Media», not `0f2c…`.
-                    'parent_name' => $account['parent_name'] ?? null,
-                    'metadata' => ['discovered_at' => Carbon::now()->toIso8601String()],
-                    /*
-                     * DISCOVERY-NOT-SYNC-001 — discovery is a catalogue, not a fetch.
-                     *
-                     * This wrote `last_synced_at = now()`, so the moment a customer authorised us the
-                     * product announced «آخر مزامنة: الآن» for accounts whose data it had never asked
-                     * for. After the first live Snapchat consent that was 309 accounts all claiming a
-                     * sync that never happened — and the claim is what made the missing assignment
-                     * step invisible.
-                     *
-                     * `discovered_at` records what actually occurred. `last_synced_at` stays null
-                     * until data really arrives, which is the only thing that may set it.
-                     * `StoreOAuthController` has always got this right; this is the ad path catching up.
-                     */
-                    'discovered_at' => Carbon::now(),
-                    'access_lost_at' => null,
-                ],
-            );
-        }
-
-        $connection->forceFill(['last_health_check_at' => Carbon::now()])->save();
-
-        return count($accounts);
+        return $this->discovery->refresh($connection)['discovered'];
     }
 
     private function credentialsOr404(string $provider): PlatformCredentials

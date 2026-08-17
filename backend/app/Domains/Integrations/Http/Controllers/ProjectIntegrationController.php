@@ -6,10 +6,13 @@ namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Campaigns\Actions\ImportExternalCampaigns;
+use App\Domains\Integrations\Actions\ConfirmAccountSelection;
 use App\Domains\Integrations\Actions\EstablishSandboxConnection;
+use App\Domains\Integrations\Exceptions\AccountAssignedElsewhere;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Sandbox\SandboxAdvertisingConnector;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Projects\Concerns\ProjectScope;
@@ -188,6 +191,70 @@ final class ProjectIntegrationController extends Controller
         $audit->log(action: 'integration.bound', entityType: ProjectIntegrationBinding::class, entityId: (string) $binding->id, after: ['project' => $this->project->projectId(), 'account' => $account->external_id, 'purpose' => $binding->purpose]);
 
         return ApiResponse::success($this->bindingArray($binding->load('externalAccount.connection')), 'Account bound to project.', status: 201);
+    }
+
+    /**
+     * RUNTIME-100 §10 §13 — confirm a whole selection, atomically, and start its first sync.
+     *
+     * The wizard used to call `bind()` once per ticked account, which meant a cap reached half way
+     * through left the customer with a selection they never made. This is the same decision expressed
+     * once: every account is proved inside one transaction, the quota is counted for the batch under
+     * the tenant lock, and the first sync is queued only after the write commits.
+     */
+    public function bindBatch(Request $request, ConfirmAccountSelection $confirm, AuditLogger $audit): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.connect'), 403);
+
+        $validated = $request->validate([
+            'connection_id' => ['required', 'uuid', Rule::exists('provider_connections', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
+            'external_account_ids' => ['required', 'array', 'min:1', 'max:200'],
+            'external_account_ids.*' => ['required', 'uuid'],
+            'purpose' => ['required', Rule::in(['advertising', 'analytics', 'tag_management', 'ecommerce', 'tracking', 'conversion_api', 'reporting'])],
+            'primary_external_account_id' => ['sometimes', 'nullable', 'uuid'],
+        ]);
+
+        $connection = ProviderConnection::withoutGlobalScopes()
+            ->where('id', $validated['connection_id'])
+            ->where('tenant_id', app(TenantContext::class)->tenantId())
+            ->firstOrFail();
+
+        $project = Project::findOrFail($this->project->projectId());
+
+        try {
+            $bindings = $confirm->execute(
+                connection: $connection,
+                project: $project,
+                accountIds: array_values($validated['external_account_ids']),
+                purpose: $validated['purpose'],
+                primaryAccountId: $validated['primary_external_account_id'] ?? null,
+            );
+        } catch (AccountAssignedElsewhere $e) {
+            return ApiResponse::error($e->getMessage(), meta: $e->meta(), status: 409);
+        } catch (PlanLimitReached $e) {
+            return ApiResponse::error($e->getMessage(), meta: $e->meta(), status: 422);
+        }
+
+        $audit->log(
+            action: 'integration.selection.confirmed',
+            entityType: Project::class,
+            entityId: (string) $project->getKey(),
+            after: [
+                'provider' => $connection->provider,
+                'connection' => (string) $connection->getKey(),
+                'accounts' => array_map(
+                    static fn (ProjectIntegrationBinding $b): string => (string) $b->external_account_id,
+                    $bindings,
+                ),
+            ],
+        );
+
+        return ApiResponse::success([
+            'connected' => count($bindings),
+            'bindings' => array_map(
+                fn (ProjectIntegrationBinding $b): array => $this->bindingArray($b->load('externalAccount.connection')),
+                $bindings,
+            ),
+        ], 'Selection confirmed.', status: 201);
     }
 
     /**

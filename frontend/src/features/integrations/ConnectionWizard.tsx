@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, Loader2, Search } from 'lucide-react'
 import {
-  bindAccountToProject, fetchConnectionHierarchy, fetchDiscoveredAccounts, fetchPlanUsage,
-  type DiscoveredAccount,
+  confirmAccountSelection, fetchConnectionHierarchy, fetchDiscoveredAccounts, fetchPlanUsage,
+  refreshDiscoveredAccounts, type DiscoveredAccount,
 } from './api'
 import { createProject, listClientWorkspaces, listProjects } from '@/features/projects/api'
 import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
+import { Refusal } from '@/lib/api/errors'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -78,11 +79,40 @@ export function ConnectionWizard({ connectionId, onClose }: Props) {
   const afterConfirm = (adAccounts?.used ?? 0) + selected.size
   const overLimit = adAccounts?.limit != null && afterConfirm > adAccounts.limit
 
+  /*
+   * PROJECT-CREATE-WORKSPACE-001 — a real project, named by the person creating it.
+   *
+   * What was here instead:
+   *
+   * ```ts
+   * const workspaceId = workspaces.data?.[0]?.id
+   * if (!workspaceId) throw new Error('لا توجد مساحة عميل.')
+   * createProject({ client_workspace_id: workspaceId, name: 'المشروع الأول' })
+   * ```
+   *
+   * Three defects in four lines. `[0]` is nothing for an advertiser — which is what production hit —
+   * and the WRONG client for an agency. «المشروع الأول» is a name the customer never chose, on the
+   * container everything they connect will be filed under. And the thrown `Error` reached the screen
+   * as «حدث خطأ غير متوقع.», because a locally thrown error has no envelope for `toApiError` to read.
+   *
+   * The client workspace is now omitted and RESOLVED server-side; when the answer is genuinely the
+   * customer's — an agency choosing between clients — the server answers 422 naming the field and
+   * this asks, which is why `needsWorkspace` is driven by that response rather than guessed at here.
+   */
+  const [projectName, setProjectName] = useState('')
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null)
+  const [needsWorkspace, setNeedsWorkspace] = useState(false)
+
   const createAndUse = useMutation({
-    mutationFn: async (name: string) => {
-      const workspaceId = workspaces.data?.[0]?.id
-      if (!workspaceId) throw new Error(ar ? 'لا توجد مساحة عميل.' : 'No client workspace.')
-      return createProject({ client_workspace_id: workspaceId, name })
+    mutationFn: async () => {
+      const name = projectName.trim()
+      if (name === '') {
+        throw new Refusal(ar ? 'اكتب اسم المشروع.' : 'Enter a project name.', 'name')
+      }
+      if (needsWorkspace && !workspaceId) {
+        throw new Refusal(ar ? 'اختر العميل.' : 'Choose a client.', 'client_workspace_id')
+      }
+      return createProject({ name, ...(workspaceId ? { client_workspace_id: workspaceId } : {}) })
     },
     onSuccess: async (project) => {
       // Straight back into the same wizard with the connection, the organisation and every account
@@ -92,22 +122,48 @@ export function ConnectionWizard({ connectionId, onClose }: Props) {
       await queryClient.invalidateQueries({ queryKey: ['plan-usage'] })
       setStep('review')
     },
+    onError: (error) => {
+      // The server asking which client is a QUESTION, not a failure. Reveal the choice rather than
+      // showing a validation message about a field the form does not have.
+      if (toApiError(error).errors?.client_workspace_id) setNeedsWorkspace(true)
+    },
   })
 
   const confirm = useMutation({
     mutationFn: async () => {
-      if (!projectId) throw new Error(ar ? 'اختر مشروعًا أولًا.' : 'Choose a project first.')
-      // One call per account. The server counts the quota under a lock, so a refusal part-way is
-      // authoritative and the ones already connected stay connected.
-      for (const accountId of selected) {
-        await bindAccountToProject(projectId, accountId)
+      if (!projectId) {
+        throw new Refusal(ar ? 'اختر مشروعًا أولًا.' : 'Choose a project first.', 'project')
       }
+      /*
+       * RUNTIME-100 §10 — ONE call for the whole selection.
+       *
+       * This was a `for` loop of single binds. Each request was individually correct and the
+       * sequence was not a decision anybody made: ten accounts against a plan with room for eight
+       * left eight connected and two refused, with nothing to undo. The server now applies the
+       * selection in one transaction and starts the first sync once it commits.
+       */
+      return confirmAccountSelection({
+        projectId,
+        connectionId,
+        externalAccountIds: [...selected],
+      })
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['connection-hierarchy', connectionId] })
+      await queryClient.invalidateQueries({ queryKey: ['discovered-accounts', connectionId] })
       await queryClient.invalidateQueries({ queryKey: ['plan-usage'] })
       await queryClient.invalidateQueries({ queryKey: ['connectors'] })
+      await queryClient.invalidateQueries({ queryKey: ['connection-states'] })
       setStep('done')
+    },
+  })
+
+  /* RUNTIME-100 §5 — fix the names with the token we already hold, no second consent. */
+  const refresh = useMutation({
+    mutationFn: () => refreshDiscoveredAccounts(connectionId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['connection-hierarchy', connectionId] })
+      await queryClient.invalidateQueries({ queryKey: ['discovered-accounts', connectionId] })
     },
   })
 
@@ -125,6 +181,9 @@ export function ConnectionWizard({ connectionId, onClose }: Props) {
 
   const h = hierarchy.data
   const providerLabel = ar ? h.connection.label_ar : h.connection.label
+  // Named rather than inferred from the rendering, so the prompt to refresh is a statement about the
+  // DATA — «12 organisations have no name» — and not a side effect of a fallback in the markup.
+  const missingParentNames = h.parents.filter((p) => !p.name).length
 
   return (
     <div data-testid="connection-wizard" className="flex flex-col gap-4">
@@ -142,11 +201,45 @@ export function ConnectionWizard({ connectionId, onClose }: Props) {
 
       {current === 'parent' && (
         <section className="flex flex-col gap-3" data-testid="wizard-step-parent">
-          <p className="text-sm text-text-muted">
-            {ar
-              ? `اختر ${h.parent_label?.labelAr ?? 'المؤسسة'} لعرض حساباتها.`
-              : `Choose an ${h.parent_label?.label ?? 'organization'} to see its accounts.`}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-text-muted">
+              {ar
+                ? `اختر ${h.parent_label?.labelAr ?? 'المؤسسة'} لعرض حساباتها.`
+                : `Choose an ${h.parent_label?.label ?? 'organization'} to see its accounts.`}
+            </p>
+            {/*
+              RUNTIME-100 §5 — the way out of a list of identifiers.
+
+              The live Snapchat connection was catalogued before the product recorded organisation
+              names, so its parents have ids and nothing else. This re-asks the provider with the
+              token already held: no consent screen, because the authorisation never lapsed.
+            */}
+            <Button
+              variant="secondary" size="sm"
+              onClick={() => refresh.mutate()}
+              disabled={refresh.isPending}
+              data-testid="wizard-refresh-accounts"
+            >
+              {refresh.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {ar ? 'تحديث الأسماء من المنصة' : 'Refresh names from the provider'}
+            </Button>
+          </div>
+
+          {missingParentNames > 0 && (
+            <p className="flex items-start gap-2 rounded-lg bg-warning-soft p-3 text-sm text-warning" data-testid="wizard-missing-names">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              {ar
+                ? `${missingParentNames} من المؤسسات وصلت بلا اسم من المنصة. حدّث الأسماء لعرضها.`
+                : `${missingParentNames} organizations arrived without a name. Refresh to fetch them.`}
+            </p>
+          )}
+
+          {refresh.isError && (
+            <p className="text-sm text-danger" data-testid="wizard-refresh-error">
+              {toApiError(refresh.error).message}
+            </p>
+          )}
+
           <ul className="flex flex-col gap-2">
             {h.parents.map((p) => (
               <li key={p.external_id}>
@@ -156,11 +249,17 @@ export function ConnectionWizard({ connectionId, onClose }: Props) {
                   className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-start hover:border-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
                   style={{ minHeight: 44 }}
                 >
-                  <span className="flex flex-col">
-                    <span className="font-medium">{p.name}</span>
-                    <span className="text-xs text-text-muted" dir="ltr">{p.external_id}</span>
+                  <span className="flex min-w-0 flex-col">
+                    {/*
+                      The NAME is the label. An id shown as a name claims the provider called it that;
+                      saying the name is unavailable is both true and a prompt to refresh.
+                    */}
+                    <span className={`truncate font-medium ${p.name ? '' : 'text-text-muted'}`}>
+                      {p.name ?? (ar ? 'الاسم غير متاح' : 'Name unavailable')}
+                    </span>
+                    <span className="truncate text-xs text-text-muted" dir="ltr">{p.external_id}</span>
                   </span>
-                  <span className="text-sm text-text-muted">
+                  <span className="shrink-0 text-sm text-text-muted">
                     {ar ? `${p.account_count} حساب` : `${p.account_count} accounts`}
                   </span>
                 </button>
@@ -254,28 +353,8 @@ export function ConnectionWizard({ connectionId, onClose }: Props) {
       )}
 
       {current === 'project' && (
-        <section className="flex flex-col gap-3" data-testid="wizard-step-project">
-          {(projects.data ?? []).length === 0 ? (
-            /* Zero projects is not a dead end — it is the next step, named (ORCH-100 §5). */
-            <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
-              <p className="text-sm">
-                {ar
-                  ? 'لا توجد مشاريع بعد. أنشئ مشروعًا لمتابعة الربط — لن تحتاج إلى إعادة المصادقة.'
-                  : 'No projects yet. Create one to continue — you will not need to authorise again.'}
-              </p>
-              <Button
-                onClick={() => createAndUse.mutate(ar ? 'المشروع الأول' : 'First project')}
-                disabled={createAndUse.isPending}
-                data-testid="wizard-create-project"
-              >
-                {createAndUse.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                {ar ? 'إنشاء مشروع ومتابعة الربط' : 'Create a project and continue'}
-              </Button>
-              {createAndUse.isError && (
-                <p className="text-sm text-danger">{toApiError(createAndUse.error).message}</p>
-              )}
-            </div>
-          ) : (
+        <section className="flex flex-col gap-4" data-testid="wizard-step-project">
+          {(projects.data ?? []).length > 0 && (
             <ul className="flex flex-col gap-2">
               {(projects.data ?? []).map((p) => (
                 <li key={p.id}>
@@ -292,6 +371,80 @@ export function ConnectionWizard({ connectionId, onClose }: Props) {
               ))}
             </ul>
           )}
+
+          {/*
+            A real create form, always available — not only when the list is empty.
+            Somebody connecting a new client's accounts usually wants a new project for them, and
+            making that reachable only from a zero state is how people end up filing a second client
+            into the first client's project.
+          */}
+          <form
+            className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4"
+            onSubmit={(e) => { e.preventDefault(); createAndUse.mutate() }}
+            /*
+             * `noValidate`, and every field checked in the mutation instead.
+             *
+             * Native constraint validation shows the BROWSER'S bubble, in the browser's language and
+             * the browser's wording — which on an Arabic-first product means an English «Please fill
+             * out this field» over an RTL form. The refusals below are ours, translated, and appear
+             * in the same place as every other error this form can produce.
+             */
+            noValidate
+            data-testid="wizard-create-project-form"
+          >
+            <p className="text-sm text-text-muted">
+              {(projects.data ?? []).length === 0
+                ? (ar
+                  ? 'لا توجد مشاريع بعد. أنشئ مشروعًا لمتابعة الربط — لن تحتاج إلى إعادة المصادقة.'
+                  : 'No projects yet. Create one to continue — you will not need to authorise again.')
+                : (ar ? 'أو أنشئ مشروعًا جديدًا لهذه الحسابات.' : 'Or create a new project for these accounts.')}
+            </p>
+
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">{ar ? 'اسم المشروع' : 'Project name'}</span>
+              <input
+                type="text"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                placeholder={ar ? 'مثال: حملات الربع الثالث' : 'For example: Q3 campaigns'}
+                aria-label={ar ? 'اسم المشروع' : 'Project name'}
+                className="rounded-lg border border-border bg-bg px-3 py-2"
+                style={{ minHeight: 44 }}
+                data-testid="wizard-project-name"
+              />
+            </label>
+
+            {/* Asked only when the server says the choice is the customer's (an agency's client). */}
+            {needsWorkspace && (
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">{ar ? 'العميل' : 'Client'}</span>
+                <select
+                  value={workspaceId ?? ''}
+                  onChange={(e) => setWorkspaceId(e.target.value || null)}
+                  aria-label={ar ? 'العميل' : 'Client'}
+                  className="rounded-lg border border-border bg-bg px-3 py-2"
+                  style={{ minHeight: 44 }}
+                  data-testid="wizard-project-workspace"
+                >
+                  <option value="">{ar ? 'اختر العميل…' : 'Choose a client…'}</option>
+                  {(workspaces.data ?? []).map((w) => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <Button type="submit" disabled={createAndUse.isPending} data-testid="wizard-create-project">
+              {createAndUse.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {ar ? 'إنشاء مشروع ومتابعة الربط' : 'Create a project and continue'}
+            </Button>
+
+            {createAndUse.isError && (
+              <p className="text-sm text-danger" data-testid="wizard-create-project-error">
+                {toApiError(createAndUse.error).message}
+              </p>
+            )}
+          </form>
         </section>
       )}
 

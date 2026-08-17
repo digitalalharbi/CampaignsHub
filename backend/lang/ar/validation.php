@@ -190,6 +190,26 @@ return [
     'phone_number' => 'أدخل رقم جوال صحيح، مثل 0501234567 أو ‎+966501234567.',
     'phone_taken' => 'هذا الرقم مستخدم في حساب آخر بالفعل.',
 
+    /*
+     * PROJECT-CREATE-WORKSPACE-001 — the agency is asked which client, and told so.
+     *
+     * The alternative the product used to take was to answer for them by picking whichever client
+     * came back first, which is how one client's project ends up in another client's portal. A
+     * question is the correct outcome here, so the message has to read as one.
+     */
+    'client_workspace_required' => 'اختر مساحة العميل التي ينتمي إليها هذا المشروع.',
+
+    /*
+     * RUNTIME-100 §10 — a selection can go stale between rendering and confirming.
+     *
+     * The wizard may have been open for an hour. An account can be detached, a connection revoked, or
+     * a page of results can simply no longer describe what the provider returns. Saying so is more
+     * useful than a bare «غير صحيح», because the action is to reload the list rather than to retype.
+     */
+    'selection_empty' => 'اختر حسابًا واحدًا على الأقل قبل التأكيد.',
+    'selection_stale' => 'بعض الحسابات المختارة لم تعد متاحة في هذا الربط. حدّث القائمة ثم أعد الاختيار.',
+    'connection_not_authorized' => 'هذا الربط لم يعد مُصرّحًا به. أعد الربط ثم حاول مرة أخرى.',
+
     'attributes' => [
         'address' => 'العنوان',
         'amount' => 'المبلغ',
