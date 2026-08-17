@@ -238,8 +238,25 @@ final class SubscriptionService
              *
              * Detached (`is_active = false`) bindings are history and hold nothing.
              */
-            'ad_accounts' => DB::table('project_integration_bindings')->where('tenant_id', $id)
-                ->where('is_active', true)->distinct()->count('external_account_id'),
+            /*
+             * AD accounts, and only ad accounts — COMMERCE-QUOTA-001.
+             *
+             * Counting every active binding was correct while bindings could only ever name an ad
+             * account. Commerce now uses the same table, so an unqualified count would charge a
+             * merchant an ADVERTISING slot for connecting their Salla store — a cap they are sold on
+             * the six ad platforms, silently consumed by a shop.
+             *
+             * The join is what makes «connected ad accounts» mean what the plan says. Stores are
+             * governed by the caps that actually exist — projects, client workspaces, subscription
+             * state — and no store quota is invented here that the product does not sell.
+             */
+            'ad_accounts' => DB::table('project_integration_bindings')
+                ->join('external_accounts', 'external_accounts.id', '=', 'project_integration_bindings.external_account_id')
+                ->where('project_integration_bindings.tenant_id', $id)
+                ->where('project_integration_bindings.is_active', true)
+                ->where('external_accounts.account_type', 'ad_account')
+                ->distinct()
+                ->count('project_integration_bindings.external_account_id'),
 
             // A revoked connection is a connection somebody deliberately gave up; it must not go on
             // costing them a slot.

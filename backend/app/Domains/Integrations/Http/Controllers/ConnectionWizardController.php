@@ -12,6 +12,7 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\Services\AccountDiscovery;
+use App\Domains\Integrations\Services\AccountHealth;
 use App\Domains\Integrations\Services\ConnectionWizardState;
 use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -53,6 +54,7 @@ final class ConnectionWizardController extends Controller
         private readonly SubscriptionService $subscriptions,
         private readonly TenantContext $tenant,
         private readonly ConnectionWizardState $state,
+        private readonly AccountHealth $health,
     ) {}
 
     /**
@@ -220,6 +222,17 @@ final class ConnectionWizardController extends Controller
                 // Never synced is a real state and reads as one — not as a zero.
                 'last_synced_at' => $a->last_synced_at?->toIso8601String(),
                 'access_lost_at' => $a->access_lost_at?->toIso8601String(),
+                /*
+                 * RUNTIME-100 §30 §31 — the three facts one timestamp could not carry.
+                 *
+                 * «Tried and failed», «never tried» and «succeeded, due again at 03:30» all rendered
+                 * as the same absent or stale date, so a broken integration and a new one looked
+                 * identical on every screen.
+                 */
+                'health' => $this->health->for($a),
+                'last_sync_attempt_at' => $a->last_sync_attempt_at?->toIso8601String(),
+                'last_sync_error_category' => $a->last_sync_error_category,
+                'next_sync_at' => $a->next_sync_at?->toIso8601String(),
             ])->values(),
             'meta' => [
                 'total' => $page->total(),

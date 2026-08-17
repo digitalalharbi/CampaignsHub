@@ -92,6 +92,15 @@ export async function syncConnector(key: string): Promise<{ success: boolean; co
 export type WizardState =
   | 'authorized_no_accounts' | 'needs_selection' | 'first_sync_pending' | 'active' | 'access_revoked'
 
+/** RUNTIME-100 §31 — what one connection's accounts add up to, as counts rather than one badge. */
+export interface ConnectionHealthSummary {
+  connected: number
+  healthy: number
+  pending_first_sync: number
+  needs_attention: number
+  states: Record<string, number>
+}
+
 export interface ConnectionWizard {
   state: WizardState
   discovered: number
@@ -100,6 +109,8 @@ export interface ConnectionWizard {
   has_parent: boolean
   resumable: boolean
   next_step: 'parent' | 'accounts' | 'sync' | 'reconnect' | null
+  /** What this connection's accounts add up to, so the card can stop claiming one state for all of them. */
+  health?: ConnectionHealthSummary
 }
 
 export interface HierarchyParent {
@@ -124,6 +135,20 @@ export interface DiscoveredAccount {
   parent_name: string | null
   currency: string | null
   timezone: string | null
+  /**
+   * How this ACCOUNT is doing — RUNTIME-100 §31.
+   *
+   * Per account rather than per provider, because ten accounts behind one authorisation with one
+   * whose access was withdrawn used to render as a single green «متصل», and that one account is the
+   * only fact on the card anybody needed.
+   */
+  health?: 'not_connected' | 'revoked' | 'access_lost' | 'failed' | 'pending_first_sync' | 'delayed' | 'healthy'
+  /** We TRIED. Distinct from `last_synced_at`, which is only written when data really arrives. */
+  last_sync_attempt_at?: string | null
+  /** Why it did not work, as a category — the thing that decides who has to act. */
+  last_sync_error_category?: string | null
+  /** When we will ask again, so «it is old» can be answered with «and it refreshes at 03:30». */
+  next_sync_at?: string | null
   status: string
   assigned_project_id: string | null
   assigned: boolean

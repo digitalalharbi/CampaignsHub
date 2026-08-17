@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Integrations\Enums\ConnectorStatus;
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
@@ -1067,6 +1068,29 @@ final class AdPlatformConnectorTest extends TestCase
 
     private function bound(string $platform): ApiAdvertisingConnector
     {
-        return app(AdvertisingConnectorRegistry::class)->get($platform)->withConnection($this->connection($platform));
+        $connection = $this->connection($platform);
+
+        /*
+         * A discovered account with a TIMEZONE — SNAP-WINDOW-001.
+         *
+         * Snapchat's DAY stats require the range to sit on the ad account's own day boundary, so the
+         * connector reads the timezone discovery recorded and refuses rather than defaulting when
+         * there is none. These tests are about metric MAPPING, so the fixture has to satisfy the
+         * window rule standing in front of it — the same way a credentials rule has to be satisfied
+         * before a mapping test can reach the mapping.
+         */
+        ExternalAccount::withoutGlobalScopes()->firstOrCreate([
+            'provider_connection_id' => $connection->getKey(),
+            'external_id' => 'act-1',
+            'account_type' => 'ad_account',
+        ], [
+            'tenant_id' => $this->tenant->id,
+            'provider' => $platform,
+            'name' => 'act-1',
+            'status' => 'active',
+            'timezone' => 'Asia/Riyadh',
+        ]);
+
+        return app(AdvertisingConnectorRegistry::class)->get($platform)->withConnection($connection);
     }
 }

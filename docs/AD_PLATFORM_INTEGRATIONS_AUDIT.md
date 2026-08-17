@@ -736,3 +736,170 @@ fetches it. An identifier shown as a name claims the provider called it that.
 **Not claimed:** none of the above changes the live Snapchat readiness. Selection, assignment and the
 first real scoped sync still require an authenticated production session, and Snapchat remains
 `BLOCKED_OPERATIONAL_EVIDENCE` — **not** `LIVE_VERIFIED`.
+
+---
+
+## §15 — The other copy of the same rule (2026-08-17)
+
+`ASSIGN-PROJECT-001` was fixed in `AccountStructureSyncer`. The metrics side has its own copy of that
+method, and it was not.
+
+```php
+// AccountMetricsSyncer::projectIdFor(), unchanged since before the fix
+return Project::withoutGlobalScopes()
+    ->where('tenant_id', $account->tenant_id)
+    ->orderBy('created_at')
+    ->value('id');
+```
+
+`MetricSyncRun` carries `BelongsToProject`; `SyncRunController` reads runs project-scoped. So a
+metrics run for an account assigned to **client B** — assigned correctly, doing exactly what it was
+told — was filed under **client A's oldest project** for as long as it had no campaigns yet, which is
+precisely the window a FIRST sync runs in. Client A's operator then read sync history naming client
+B's provider, account and row counts, and `DataFreshnessService` computed A's freshness from B's runs.
+
+Two copies of one rule, one of them corrected. That is what let it survive a review of the fix, and
+it is why the answer now comes from `AccountAssignment` — the single place that knows — in both.
+
+The `NOT NULL` on `metric_sync_runs.project_id` was not incidental to this; it was the **reason** for
+the fallback. The column's own comment said so: «an account that feeds nothing yet still needs a
+project to file the run under (the column is NOT NULL and a run with no home would be unreadable)».
+A schema rule was forcing a claim the data could not support. It is nullable now, and an unassigned
+account is refused with its own status — `awaiting_assignment` — before any provider call.
+
+### What one timestamp could not say
+
+`last_synced_at` alone had to stand in for three different facts:
+
+| The truth | What the column showed |
+|---|---|
+| Nobody has ever tried | null |
+| We tried an hour ago and the provider refused | whatever it was before — stale |
+| We succeeded at 03:00, due again at 03:30 | a timestamp that also looks stale when a sweep is late |
+
+Three additive columns now answer one each: `last_sync_attempt_at`, `last_sync_error_category`,
+`next_sync_at`. Nothing is backfilled — null means «never recorded», which is the truth for every row
+that predates them.
+
+Two smaller faults fell out of writing them. The success stamp lived inside `retainRaw()`, a method
+about keeping the provider's raw bodies, so a connector that is not an `ApiAdvertisingConnector`
+synced successfully and its account still read «never synced»; and the stamp was written *before*
+`finish()` decided the status, so a run ending «the provider returned no insight rows» had already
+claimed a sync. A checkpoint belongs to the outcome, and is now written where the outcome is decided.
+
+### Health is per account
+
+`AccountHealth` derives seven states in «most actionable first» order, each naming a different
+person's next move. `DELAYED` is deliberately distinct from `FAILED`: nothing errored, the data is
+merely older than the schedule allows, and reporting a late sweep as an error sends somebody to
+reconnect an authorisation that is working.
+
+A connection SUMMARISES its accounts — «10 مربوطة · 9 سليمة · 1 يحتاج انتباه» — rather than claiming
+one state for all of them. Ten accounts behind one authorisation with one whose access was withdrawn
+used to render as a single green «متصل», and that one account is the only fact on the card anybody
+needed.
+
+### One thing that needed no fix, recorded so nobody adds it
+
+§38 asks for cache invalidation after a successful sync. There is **no read-path cache** to
+invalidate: dashboard, analytics, campaigns, reports and the client portal all query live. The only
+caches in the application are the OAuth state store, the PDF render handoff, the request-label
+lookup and the scheduler heartbeats — none of which carries a figure. Client-side, TanStack Query is
+invalidated at the confirmation. Adding a server cache in order to have something to invalidate would
+be inventing the staleness this section exists to prevent.
+
+---
+
+## §16 — The third copy of the ownership rule, and the commerce side (2026-08-17)
+
+`projectIdFor()` existed three times, each ending in a variation of «and otherwise, the tenant's
+oldest project»:
+
+| Where | Fixed in | How it presented |
+|---|---|---|
+| `AccountStructureSyncer` | `fdff1fc` | 309 discovered accounts' campaigns into one project nobody chose |
+| `AccountMetricsSyncer` | this programme | one agency client's sync history visible in another's |
+| `StoreSyncer` | this programme | one client's Salla/Zid revenue in another client's funnel |
+
+Commerce was the worst of the three because it had no assignment concept to fall back *from*.
+`ProjectStores` said so in its own comment: «which project such a store will land in is not knowable
+until the first sweep files it». A store is now assigned through the same `ProjectIntegrationBinding`
+an ad account uses, `SyncStoresCommand` sweeps assigned stores only, and `SyncStoreJob` re-proves its
+scope at run time exactly as the ad-platform workers do.
+
+Both ad-platform syncers also kept an «existing campaign wins» fallback, justified as «a re-sync
+never re-files work already placed». That reasoning is about DISPLAY and was being applied to WRITES:
+it could only fire for an account the worker had already refused, while leaving a second route by
+which data could enter a project nobody assigned it to. Removed. Nothing already filed is moved or
+deleted — it stops receiving new writes, which is what detaching means.
+
+`isActivelyAssigned()` now re-proves the whole chain rather than its first link: the binding, the
+project it names, that project's tenant, the client-workspace fence, and the connection's status. A
+queued job can outlive the project it points at, and a binding row whose project is gone is a
+leftover rather than an authorisation.
+
+---
+
+## §18 — The live Snapchat «validation error», root-caused (2026-08-17)
+
+The first real Snapchat metrics sync, on a live connection with a real assigned account, returned
+**0 metrics** and:
+
+> Request cannot be processed due to validation error
+
+Structure synced. Metrics did not. That asymmetry is the clue: structure never calls `/stats`.
+
+### SNAP-WINDOW-001 — the range was UTC midnight for every account on the platform
+
+```php
+'start_time' => $from.'T00:00:00.000-00:00',
+'end_time'   => $to.'T00:00:00.000-00:00',
+```
+
+Snapchat's measurement reference states the rule outright:
+
+> **time must be of day boundary**, start_time and end_time must be both specified, or neither
+
+and its own DAY responses carry the ad account's offset — the documented example is
+`"start_time": "2016-08-05T22:00:00.000-07:00"`. For an account in `Asia/Riyadh` (UTC+3), UTC
+midnight is **03:00 local**. Not a day boundary. Every DAY request this product made for a non-UTC
+account was refused before a figure was read.
+
+`ReportingWindow` now places the window in the **account's own timezone**, recorded at discovery, and
+encodes it with that offset. An account whose timezone was never captured **fails with a message
+naming the fix** rather than defaulting: defaulting to UTC is what broke this, and defaulting to
+`Asia/Riyadh` would be the same mistake wearing a different constant.
+
+`end` is exclusive, which is also what makes a single day expressible — a naive «from = to = today»
+produces a zero-length range no provider accepts.
+
+### SNAP-PAGING-001 — the first page was taken for the whole answer
+
+The same reference gives the contract: `limit` up to 200, and `paging.next_link` for the rest. The
+connector read one response and returned. An account with 201 campaigns reported 200 and lost the
+rest in silence. Identical in shape to `LINKEDIN-PAGE-001` — found there first only because
+LinkedIn's default page size is 10 and so bites on a small account, where Snapchat's bites on a large
+one.
+
+### SNAP-CHUNK-001 — a month asked for in one range
+
+A first sync asks for thirty days at once. A provider that caps a DAY range refuses the **whole**
+request rather than truncating it, so the customer's very first sync would be the one that fails.
+The reference states **no** hard cap for DAY granularity — the one-day rule is TOTAL granularity, and
+the thirty-day rule is Lead Gen — so an assumption either way would be a guess. Requests are
+therefore split on a configured ceiling, deliberately conservative: each chunk upserts idempotently
+on `(account, campaign, date, metric)`, so splitting costs round trips and nothing else, and a cap we
+have not been told about cannot break a first impression.
+
+### Finalisation, recorded rather than guessed
+
+> **IMPORTANT: Metrics are finalized 48 hours after the end of the day in the timezone set by the Ad
+> Account.**
+
+`integrations.incremental.provisional_hours` records that number so the seven-day restate window has
+a stated reason instead of «seven felt safe»: seven days covers a 48-hour finalisation plus a weekend
+of missed sweeps, and older days are final and are not re-fetched on every run.
+
+**Not claimed:** this is the fix for the error the live sync returned. Whether the live sync then
+succeeds is `BLOCKED_OPERATIONAL_EVIDENCE` until it is run against the real account after deploy.
+Snapchat remains **not** `LIVE_VERIFIED`.
