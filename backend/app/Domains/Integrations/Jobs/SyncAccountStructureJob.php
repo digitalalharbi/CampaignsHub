@@ -56,7 +56,7 @@ final class SyncAccountStructureJob implements ShouldBeUnique, ShouldQueue
 
     /** @param array<string,mixed> $meta */
     public function __construct(
-        private readonly string $accountId,
+        public readonly string $accountId,
         private readonly array $meta = [],
     ) {}
 

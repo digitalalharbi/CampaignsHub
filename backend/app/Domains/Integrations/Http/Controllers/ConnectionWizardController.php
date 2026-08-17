@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Http\Controllers;
 
+use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Catalogue\ProviderHierarchy;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Services\AccountDiscovery;
 use App\Domains\Integrations\Services\ConnectionWizardState;
 use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -18,6 +20,7 @@ use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Throwable;
 
 /**
  * ORCH-100 §3 §38 §39 — what the connection wizard reads between authorisation and confirmation.
@@ -117,13 +120,22 @@ final class ConnectionWizardController extends Controller
             ->orderByRaw('MAX(parent_name) NULLS LAST')
             ->get()
             ->map(function (object $row): array {
-                $id = (string) $row->parent_external_id;
                 $name = $row->parent_name;
 
                 return [
-                    'external_id' => $id,
-                    // The id is a fallback label, never the primary one — people choose by name.
-                    'name' => is_string($name) && $name !== '' ? $name : $id,
+                    'external_id' => (string) $row->parent_external_id,
+                    /*
+                     * RUNTIME-100 §5 — null when the provider gave no name, NOT the id.
+                     *
+                     * This used to fall back to the external id, which is why the live Snapchat
+                     * connection presents a column of raw organisation UUIDs styled as names: 309
+                     * accounts catalogued before `parent_name` was recorded, and an id dressed up as
+                     * a label reads as a name the provider chose rather than as one we never got.
+                     *
+                     * Saying null lets the interface say «الاسم غير متاح» and offer a refresh, which
+                     * is both true and actionable.
+                     */
+                    'name' => is_string($name) && $name !== '' ? $name : null,
                     'account_count' => (int) $row->account_count,
                 ];
             })
@@ -234,6 +246,57 @@ final class ConnectionWizardController extends Controller
             $this->subscriptions->usageSummary($tenant, ['ad_accounts', 'projects', 'clients', 'team_members']),
             'Plan usage retrieved.',
         );
+    }
+
+    /**
+     * POST /connections/{connection}/refresh — re-read the catalogue with the token we already hold.
+     *
+     * RUNTIME-100 §5 §33. The live Snapchat connection shows organisation UUIDs where names belong,
+     * because its 309 accounts were catalogued before `parent_name` was recorded at all. Nothing
+     * about that is a lapsed authorisation, so nothing about fixing it should cost a second consent
+     * screen: the token still works and the provider will answer the same question again.
+     *
+     * Names, currencies, timezones and statuses are brought up to date; external ids never move;
+     * nothing is deleted, and an account that has stopped coming back is marked rather than removed
+     * — it may still be feeding a project a year of history.
+     */
+    public function refresh(Request $request, string $connectionId, AccountDiscovery $discovery, AuditLogger $audit): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.connect'), 403);
+
+        $connection = $this->connectionOr404($connectionId);
+
+        abort_unless(
+            $connection->status === 'connected',
+            409,
+            'This connection is not authorised, so there is nothing to read. Reconnect it first.',
+        );
+
+        try {
+            $result = $discovery->refresh($connection);
+        } catch (Throwable $e) {
+            /*
+             * A provider failure is the provider's, and saying so is the difference between somebody
+             * retrying in a minute and somebody reconnecting an authorisation that was never broken.
+             */
+            return ApiResponse::error(
+                'The provider could not be reached just now. Nothing was changed — try again shortly.',
+                meta: ['provider' => $connection->provider, 'reason' => mb_substr($e->getMessage(), 0, 180)],
+                status: 502,
+            );
+        }
+
+        $audit->log(
+            action: 'integration.discovery.refreshed',
+            entityType: ProviderConnection::class,
+            entityId: (string) $connection->getKey(),
+            after: $result,
+        );
+
+        return ApiResponse::success([
+            ...$result,
+            'wizard' => $this->state->for($connection->refresh()),
+        ], 'Accounts refreshed.');
     }
 
     /** A connection this tenant owns, or a 404 that says nothing about whose it is. */

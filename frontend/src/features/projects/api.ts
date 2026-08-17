@@ -53,7 +53,19 @@ export function listProjects(includeArchived = false): Promise<Project[]> {
   return getData<Project[]>(`/projects${includeArchived ? '?include_archived=1' : ''}`)
 }
 
-export async function createProject(input: { client_workspace_id: string; name: string }): Promise<Project> {
+/**
+ * Create a project.
+ *
+ * `client_workspace_id` is OPTIONAL — PROJECT-CREATE-WORKSPACE-001. A client workspace is an agency's
+ * client, and an advertiser running their own campaigns has none; requiring one made project creation
+ * impossible for them, which the connection wizard worked around with `workspaces[0]` and which
+ * reached production as «حدث خطأ غير متوقع.»
+ *
+ * Omit it and the server resolves the advertiser's own container, or answers 422 naming this field
+ * when the choice is genuinely the customer's — which is a question the interface can ask, rather
+ * than a guess either side makes on their behalf.
+ */
+export async function createProject(input: { client_workspace_id?: string; name: string }): Promise<Project> {
   await ensureCsrfCookie()
   return postData<Project>('/projects', input)
 }

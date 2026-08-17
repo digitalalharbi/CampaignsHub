@@ -14,6 +14,31 @@ import type { Locale } from '@/stores/ui'
  * the case where no response arrived at all is called a network problem.
  */
 
+/**
+ * A refusal the interface itself decided, with a sentence already fit to read.
+ *
+ * RUNTIME-100 §4. `toApiError` reads its message off an axios ENVELOPE, so a plain `new Error('لا
+ * توجد مساحة عميل.')` thrown in a mutation carries no status, no response and no envelope, falls
+ * through to the `unexpected` branch, and has its own message replaced by «حدث خطأ غير متوقع.» That
+ * is exactly what production said when somebody pressed «إنشاء مشروع ومتابعة الربط»: a precise
+ * refusal, written and then thrown away.
+ *
+ * A distinct class rather than «trust every Error.message», because most thrown Errors are OUR bugs
+ * — a TypeError from a bad read — and «Cannot read properties of undefined» is not a sentence to put
+ * in front of a customer. Throwing this one is a statement that the message was written for them.
+ */
+export class Refusal extends Error {
+  // Declared and assigned rather than a parameter property: this project builds with
+  // `erasableSyntaxOnly`, which forbids the shorthand because it emits runtime code.
+  readonly field?: string
+
+  constructor(message: string, field?: string) {
+    super(message)
+    this.name = 'Refusal'
+    this.field = field
+  }
+}
+
 /** The shape axios gives us, narrowed to what can actually be relied on. */
 interface HttpFailure {
   status?: number

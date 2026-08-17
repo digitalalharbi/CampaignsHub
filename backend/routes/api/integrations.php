@@ -75,6 +75,14 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     Route::get('connections/{connection}/hierarchy', [ConnectionWizardController::class, 'hierarchy'])->name('connections.hierarchy');
     Route::get('connections/{connection}/accounts', [ConnectionWizardController::class, 'accounts'])->name('connections.accounts');
     Route::get('plan-usage', [ConnectionWizardController::class, 'planUsage'])->name('plan-usage');
+    /*
+     * RUNTIME-100 §5 — re-read the catalogue with the token we already hold.
+     *
+     * A WRITE, so it sits with the wizard's reads only in the file. Throttled because it calls out
+     * to the provider: a button somebody can hold down should not become our rate-limit problem.
+     */
+    Route::post('connections/{connection}/refresh', [ConnectionWizardController::class, 'refresh'])
+        ->middleware('throttle:10,1')->name('connections.refresh');
 });
 
 // Per-project integrations (ResolveProject enforces project isolation).
@@ -89,6 +97,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
         Route::post('connect', [ProjectIntegrationController::class, 'connect'])->name('connect')
             ->middleware(EnsureWithinPlanLimit::class.':connections');
         Route::post('bindings', [ProjectIntegrationController::class, 'bind'])->name('bind');
+        // RUNTIME-100 §10 — a whole selection confirmed as one decision. Declared before `{binding}`
+        // would matter if that route were a POST; it is not, but the order documents the intent.
+        Route::post('bindings/batch', [ProjectIntegrationController::class, 'bindBatch'])->name('bind-batch');
         Route::post('bindings/{binding}/sync', [ProjectIntegrationController::class, 'sync'])->name('sync');
         Route::delete('bindings/{binding}', [ProjectIntegrationController::class, 'detach'])->name('detach');
     });

@@ -668,3 +668,71 @@ is the stronger statement about what actually happened in the store.
 
 **Not claimed:** no Salla or Zid credential exists on this install and no live round trip has been
 made against either. Both remain `BLOCKED_EXTERNAL_CREDENTIALS`. **Nothing here is `LIVE_VERIFIED`.**
+
+---
+
+## §14 — The production create-project failure, and what it was standing on (2026-08-17)
+
+The first live Snapchat authorisation succeeded, discovery catalogued 309 ad accounts, and the
+customer reached the connection wizard with no projects. Pressing **«إنشاء مشروع ومتابعة الربط»**
+answered **«حدث خطأ غير متوقع.»** and created nothing.
+
+Nothing crashed. `POST /projects` was never called. Two defects were stacked, and the second is why
+the first had no symptom anybody could act on.
+
+### PROJECT-CREATE-WORKSPACE-001 — an advertiser had no container
+
+```ts
+const workspaceId = workspaces.data?.[0]?.id
+if (!workspaceId) throw new Error('لا توجد مساحة عميل.')
+```
+
+A `client_workspaces` row is an **agency's client**. `projects.client_workspace_id` is `NOT NULL`, so
+every project needs one — including the projects of somebody running their own campaigns, who has no
+clients and never will. `[0]` was standing in for a decision the domain had never made: it is nothing
+at all for an advertiser, and for an agency it silently files a new project under whichever client
+sorted first.
+
+The rule now, in `CanonicalWorkspace`, and it never picks among several:
+
+| Account type | Answer |
+|---|---|
+| `personal` — freelancer, agency, in-house team | `null`. Ask. One client today is not a rule about tomorrow |
+| `company` — brand, self-serve | The canonical container: the only existing workspace adopted, or one created under the tenant lock |
+| not yet answered (onboarding abandoned) | Decided by shape, and only where the shape leaves exactly one possible answer — zero or one workspace. Two or more is agency-shaped whatever the column says, and gets asked |
+
+`client_workspaces.is_canonical` is additive with a partial unique index per tenant. Nothing is
+backfilled: adoption happens the first time a single-client tenant resolves its container, in code
+that can see the account type, rather than by guessing for every tenant at once.
+
+### ERROR-HONESTY-001 — the message was written and then discarded
+
+`toApiError` reads `message` off an axios **envelope**. A locally thrown `Error` has no response, no
+status and no envelope, so it fell through to the `unexpected` branch and its own precise message —
+«لا توجد مساحة عميل.» — was replaced by the generic string. The wizard knew exactly why it could not
+proceed and the customer was told nothing.
+
+A `Refusal` class now carries interface-decided refusals through with their own words. Deliberately
+*not* «trust every `Error.message`»: most thrown errors are ours, and «Cannot read properties of
+undefined» is not a sentence to put in front of a customer.
+
+### And why the organisation list reads as UUIDs
+
+Discovery lived as a **private method on the OAuth callback**, so the only way to refresh a catalogue
+was to authorise again. The 309 accounts were catalogued before this product recorded `parent_name`
+at all; the hierarchy endpoint then fell back to `'name' => $external_id`, which is how a column of
+raw Snapchat organisation UUIDs came to be rendered as though the provider had named them that.
+
+`AccountDiscovery` is the same code, reachable: `POST /connections/{id}/refresh` re-asks with the
+token already held. No consent screen, because the authorisation never lapsed — re-consenting to
+repair our own missing column is not a fix, it is a bill. The endpoint upserts on the table's own
+unique key, moves no external id, and **marks** an account that stops coming back rather than deleting
+it: a provider having a bad minute must not be able to erase a customer's inventory, and a bound
+account may be holding a year of history.
+
+The hierarchy now returns `name: null` and the interface says «الاسم غير متاح» beside the button that
+fetches it. An identifier shown as a name claims the provider called it that.
+
+**Not claimed:** none of the above changes the live Snapchat readiness. Selection, assignment and the
+first real scoped sync still require an authenticated production session, and Snapchat remains
+`BLOCKED_OPERATIONAL_EVIDENCE` — **not** `LIVE_VERIFIED`.

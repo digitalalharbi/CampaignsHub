@@ -144,4 +144,25 @@ final class AccountAssignment
             ->distinct()
             ->count('external_account_id');
     }
+
+    /**
+     * The accounts a project currently draws from — the only ones a project-wide sync may touch.
+     *
+     * RUNTIME-100 §29. «Sync this project» has to mean the accounts somebody assigned to it, not
+     * every account the tenant's authorisations discovered. With 309 discovered and one assigned,
+     * the difference between those two readings is 308 accounts of unrequested traffic.
+     *
+     * @return list<string>
+     */
+    public function activeAccountIdsForProject(string $projectId): array
+    {
+        return ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->where('is_active', true)
+            ->distinct()
+            ->pluck('external_account_id')
+            ->map(static fn (mixed $id): string => (string) $id)
+            ->values()
+            ->all();
+    }
 }

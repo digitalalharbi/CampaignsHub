@@ -21,6 +21,14 @@ final class PlanLimitReached extends RuntimeException
         public readonly int $used,
         public readonly ?int $limit,
         string $message,
+        /**
+         * How many the customer asked for in one go, where that is a batch (RUNTIME-100 §10).
+         *
+         * A batch refusal is a different sentence from a single one: «you selected 10 and 2 fit» tells
+         * somebody what to change, where «you have reached your limit» leaves them to work out the
+         * arithmetic from two other numbers.
+         */
+        public readonly ?int $requested = null,
     ) {
         parent::__construct($message);
     }
@@ -28,12 +36,13 @@ final class PlanLimitReached extends RuntimeException
     /** @return array<string,mixed> */
     public function meta(): array
     {
-        return [
+        return array_filter([
             'limit_reached' => true,
             'metric' => $this->metric,
             'used' => $this->used,
             'limit' => $this->limit,
             'remaining' => $this->limit === null ? null : max(0, $this->limit - $this->used),
-        ];
+            'requested' => $this->requested,
+        ], static fn (mixed $v, string $k): bool => $v !== null || in_array($k, ['limit', 'remaining'], true), ARRAY_FILTER_USE_BOTH);
     }
 }

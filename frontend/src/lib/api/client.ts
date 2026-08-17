@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios'
 import type { ApiEnvelope } from './types'
-import { describeFailure, isTimeout } from './errors'
+import { describeFailure, isTimeout, Refusal } from './errors'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -178,9 +178,10 @@ export interface ApiError {
    *
    * `offline` is reserved for a request that got no answer at all; `http` means a server replied
    * and the status is meaningful; `timeout` is us giving up waiting, which is not the same as the
-   * customer being disconnected.
+   * customer being disconnected. `refusal` is the interface's own decision, never sent — so a retry
+   * button is as wrong there as it is on a 403.
    */
-  kind: 'http' | 'offline' | 'timeout' | 'unexpected'
+  kind: 'http' | 'offline' | 'timeout' | 'unexpected' | 'refusal'
 }
 
 /**
@@ -200,6 +201,25 @@ export interface ApiError {
  */
 export function toApiError(error: unknown): ApiError {
   const locale = useUi.getState().locale
+
+  /*
+   * RUNTIME-100 §4 — a refusal the interface decided keeps the words the interface chose.
+   *
+   * Everything below reads an axios envelope, which a locally thrown error does not have; without
+   * this branch such an error reaches the `unexpected` case and is reported as «حدث خطأ غير متوقع.»
+   * That is how the live production failure presented: the wizard knew exactly why it could not
+   * create a project, said so, and the message was discarded on the way to the screen.
+   */
+  if (error instanceof Refusal) {
+    return {
+      message: error.message,
+      status: undefined,
+      errors: error.field ? { [error.field]: [error.message] } : null,
+      meta: null,
+      kind: 'refusal',
+    }
+  }
+
   const axiosError = error as AxiosError<ApiEnvelope<unknown>> | undefined
   const response = axiosError?.response
   const envelope = response?.data
