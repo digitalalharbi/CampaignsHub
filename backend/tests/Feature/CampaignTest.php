@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -98,6 +99,15 @@ final class CampaignTest extends TestCase
 
     // ---- Import via real connector sync --------------------------------------------------------
 
+    /**
+     * A synced campaign arrives LINKED — CAMPAIGNS-VISIBLE-001.
+     *
+     * This asserted `is_linked: false`, which described the defect rather than a requirement: the
+     * Campaigns page lists `unified_campaigns`, nothing in the sync path had ever created one, and so
+     * a real first sync left that page empty with no error and nothing to press. Each imported
+     * campaign is now adopted into a visible one on first import, and stays linked to it until
+     * somebody decides otherwise.
+     */
     public function test_sync_imports_external_campaigns_from_the_connector(): void
     {
         $this->syncSandboxCampaigns($this->projectA);
@@ -106,7 +116,13 @@ final class CampaignTest extends TestCase
             ->getJson("/api/v1/projects/{$this->projectA->id}/external-campaigns")
             ->assertOk()
             ->assertJsonCount(2, 'data')            // sandbox returns 2 campaigns
-            ->assertJsonPath('data.0.is_linked', false);
+            ->assertJsonPath('data.0.is_linked', true);
+
+        // And they are visible where somebody looks for campaigns, which is the point of adopting them.
+        $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/campaigns")
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
     }
 
     public function test_sync_is_idempotent(): void
@@ -124,10 +140,18 @@ final class CampaignTest extends TestCase
 
     // ---- Linking -------------------------------------------------------------------------------
 
+    /**
+     * Linking to a campaign somebody typed, and unlinking again.
+     *
+     * The external now arrives adopted, so this starts by unlinking it — which is also the real
+     * journey: a person merging two platforms' campaigns under one name is moving them OFF the
+     * placeholders adoption created, not linking from nothing.
+     */
     public function test_link_and_unlink_external_campaign(): void
     {
         $campaignId = $this->createCampaign($this->projectA, 'Q4 Push');
         $externalId = $this->firstExternalCampaignId($this->projectA);
+        $this->unlinkFromAdoption($externalId);
 
         $this->actingAs($this->owner, 'sanctum')
             ->postJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$campaignId}/external", ['external_campaign_id' => $externalId])
@@ -152,6 +176,8 @@ final class CampaignTest extends TestCase
         $first = $this->createCampaign($this->projectA, 'Campaign One');
         $second = $this->createCampaign($this->projectA, 'Campaign Two');
         $externalId = $this->firstExternalCampaignId($this->projectA);
+        // Off its adopted placeholder first, so what is being tested is the relink and not the adoption.
+        $this->unlinkFromAdoption($externalId);
 
         // Link to the first.
         $this->actingAs($this->owner, 'sanctum')
@@ -174,10 +200,30 @@ final class CampaignTest extends TestCase
         $this->actingAs($this->owner, 'sanctum')->getJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$second}/external")->assertJsonCount(1, 'data');
     }
 
+    /**
+     * Suggestions are UNLINKED externals, and adoption does not empty that list for ever.
+     *
+     * Adoption happens on FIRST import only — never on `unified_campaign_id === null`, which would
+     * have silently undone every deliberate unlink on the next sweep and left this list permanently
+     * empty. Unlinking is what puts a campaign back in front of somebody deciding where it belongs.
+     */
     public function test_suggestions_return_unlinked_externals(): void
     {
         $this->syncSandboxCampaigns($this->projectA);
-        $campaignId = $this->createCampaign($this->projectA, 'Sandbox Awareness'); // matches a sandbox campaign name
+
+        foreach ($this->externalCampaignIds($this->projectA) as $id) {
+            $this->unlinkFromAdoption($id);
+        }
+
+        /*
+         * A name CLOSE to a sandbox campaign, not identical to it.
+         *
+         * `unified_campaigns` is unique on `(project_id, name)`, and adoption has already taken the
+         * exact name — so reusing it verbatim is now refused, correctly: two campaigns with one name
+         * in one project is a state the product does not have. Similarity ranking is what is under
+         * test here, and it does not need an exact match to demonstrate.
+         */
+        $campaignId = $this->createCampaign($this->projectA, 'Sandbox Awareness Push');
 
         $this->actingAs($this->owner, 'sanctum')
             ->getJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$campaignId}/suggestions")
@@ -264,6 +310,32 @@ final class CampaignTest extends TestCase
         $this->actingAs($this->owner, 'sanctum')
             ->postJson("/api/v1/projects/{$project->id}/integrations/bindings/{$bindingId}/sync")
             ->assertOk()->assertJsonPath('data.status', 'success');
+    }
+
+    /**
+     * Detach an external campaign from the placeholder adoption created for it.
+     *
+     * Uses the same endpoint a person would: the adopted unified campaign is read back from the
+     * external row rather than guessed at, so this stays correct if adoption's naming ever changes.
+     */
+    private function unlinkFromAdoption(string $externalId): void
+    {
+        $unifiedId = (string) ExternalCampaign::withoutGlobalScopes()
+            ->whereKey($externalId)
+            ->value('unified_campaign_id');
+
+        $this->actingAs($this->owner, 'sanctum')
+            ->deleteJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$unifiedId}/external/{$externalId}")
+            ->assertOk();
+    }
+
+    /** @return list<string> */
+    private function externalCampaignIds(Project $project): array
+    {
+        return $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$project->id}/external-campaigns")
+            ->assertOk()
+            ->json('data.*.id');
     }
 
     private function firstExternalCampaignId(Project $project): string

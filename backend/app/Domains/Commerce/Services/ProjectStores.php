@@ -13,11 +13,21 @@ use Illuminate\Support\Facades\DB;
  *
  * ## Why this is not a column
  *
- * `external_accounts` has no `project_id`, and should not grow one: an ad account is routinely shared
- * across a tenant's projects, and the same row type carries both. What a store belongs to is expressed
- * by where its data was filed — {@see StoreSyncer::projectIdFor()} decides that on the first sweep and
- * never re-files afterwards — so the project link is read back from the commerce tables rather than
- * declared twice and allowed to disagree.
+ * `external_accounts` has no `project_id`, and should not grow one: the same row type carries both ad
+ * accounts and stores, and where either belongs is a DECISION recorded in `ProjectIntegrationBinding`.
+ * This reads the link back from the commerce tables rather than declaring it twice and letting the two
+ * disagree.
+ *
+ * ## COMMERCE-PROJECT-001 — what this comment used to say
+ *
+ * «What a store belongs to is expressed by where its data was filed — `StoreSyncer::projectIdFor()`
+ * decides that on the first sweep and never re-files afterwards.» That was true, and it was the
+ * defect: the first sweep decided by taking the tenant's OLDEST project, which for an agency is
+ * another client's funnel, and «never re-files afterwards» is what made the accident permanent.
+ *
+ * A store is now assigned the way an ad account is — explicitly, through the same binding — and
+ * `StoreSyncer` refuses one nobody assigned rather than choosing for them. The read below is
+ * unchanged; only the sentence describing where the answer comes from was wrong.
  *
  * ## The bug this exists to close
  *
@@ -62,8 +72,8 @@ final class ProjectStores
      *
      * Reported separately rather than folded in, because «no store is connected» and «a store is
      * connected and has not been read yet» are different sentences, and the funnel says the wrong one
-     * if it cannot tell them apart. Which project such a store will land in is not knowable until the
-     * first sweep files it, so it belongs to none of them until then.
+     * if it cannot tell them apart. Such a store belongs to no project because nobody has assigned it
+     * to one yet — which is a decision waiting to be made, not an answer waiting to be computed.
      *
      * @return Collection<int, ExternalAccount>
      */
