@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { KeyRound, Loader2, Plug, RefreshCw } from 'lucide-react'
 import {
-  connectConnector, fetchResumableConnections, listConnectors, startPlatformOAuth, syncConnector,
+  connectConnector, fetchResumableConnections, listConnectors, revokeConnection, startPlatformOAuth,
+  syncConnector,
   type Connector, type PlatformState, type ResumableConnection,
 } from './api'
 import { ConnectionWizard } from './ConnectionWizard'
@@ -135,6 +136,24 @@ export function AdPlatformsPanel() {
   const syncMutation = useMutation({
     mutationFn: syncConnector,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['connectors'] }),
+  })
+  /*
+   * COMMAND-CENTER §26 — ending the authorisation.
+   *
+   * Three query keys, because a revoke changes three different screens at once: the connector cards,
+   * the resumable-connection states behind them, and the account inventory, where every account
+   * this connection discovered has just stopped being reachable. Invalidating only `connectors`
+   * would leave the inventory showing «مرتبط بمشروع» over a source nothing can read.
+   */
+  const revokeMutation = useMutation({
+    mutationFn: revokeConnection,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['connectors'] }),
+        queryClient.invalidateQueries({ queryKey: ['resumable-connections'] }),
+        queryClient.invalidateQueries({ queryKey: ['integration-accounts'] }),
+      ])
+    },
   })
   /*
    * Which client the accounts about to be discovered belong to (CONNECT-001).
@@ -300,6 +319,8 @@ export function AdPlatformsPanel() {
               authorizing={authorizeMutation.isPending && authorizeMutation.variables === c.key}
               connecting={connectMutation.isPending && connectMutation.variables === c.key}
               syncing={syncMutation.isPending && syncMutation.variables === c.key}
+              onDisconnect={(connectionId) => revokeMutation.mutate(connectionId)}
+              disconnecting={revokeMutation.isPending}
             />
           ))}
         </div>
@@ -310,6 +331,7 @@ export function AdPlatformsPanel() {
 
 function ConnectorCard({
   connector: c, wizard, onOpenWizard, ar, t, onAuthorize, onConnect, onSync, authorizing, connecting, syncing,
+  onDisconnect, disconnecting,
 }: {
   connector: Connector
   /*
@@ -329,6 +351,14 @@ function ConnectorCard({
   authorizing: boolean
   connecting: boolean
   syncing: boolean
+  /*
+   * COMMAND-CENTER §26 — ending the authorisation, which is NOT undoing a setting.
+   *
+   * Passed in rather than owned here so the whole panel invalidates its queries once, in one place,
+   * after a revoke changes the state of every card that shares the connection.
+   */
+  onDisconnect: (connectionId: string) => void
+  disconnecting: boolean
 }) {
   const state = c.state
   const meta = state ? STATE_META[state] : LEGACY_META[c.status]
@@ -428,6 +458,14 @@ function ConnectorCard({
             <Button variant="ghost" loading={authorizing} onClick={onAuthorize}>
               {ar ? 'إعادة الربط' : 'Reconnect'}
             </Button>
+            <DisconnectButton
+              connectionId={wizard?.connection.id ?? null}
+              accounts={wizard?.health?.connected ?? c.accounts ?? 0}
+              ar={ar}
+              busy={disconnecting}
+              onConfirm={onDisconnect}
+              testId={`connector-disconnect-${c.key}`}
+            />
           </>
         ) : state ? (
           <Button variant="secondary" loading={authorizing} onClick={onAuthorize} data-testid={`connector-connect-${c.key}`}>
@@ -454,4 +492,53 @@ function ConnectorCard({
  */
 export function IntegrationsPage() {
   return <AdPlatformsPanel />
+}
+
+/**
+ * COMMAND-CENTER §26 — «قطع الاتصال» sounds like undoing a setting. It is not.
+ *
+ * Revoking ends the authorisation AND disables every project binding that used any of this
+ * connection's accounts, in every project — because leaving them active would leave projects
+ * pointing at a source nothing can read, and a stale number reported as a current one is worse than
+ * a missing one.
+ *
+ * So the confirmation states the count rather than asking «هل أنت متأكد؟». A confirmation that does
+ * not say what is about to happen is a speed bump, not a safeguard — the customer clicks through it
+ * having learnt nothing, which is exactly the case this guards.
+ *
+ * Two presses, no modal: the second press is the confirmation, it is labelled with the consequence,
+ * and it reverts on blur so a stray click cannot leave the page armed.
+ */
+function DisconnectButton({
+  connectionId, accounts, ar, busy, onConfirm, testId,
+}: {
+  connectionId: string | null
+  accounts: number
+  ar: boolean
+  busy: boolean
+  onConfirm: (connectionId: string) => void
+  testId: string
+}) {
+  const [armed, setArmed] = useState(false)
+
+  // No connection id means there is nothing to revoke — a legacy row that predates the wizard. No
+  // button is offered rather than one that would fail.
+  if (connectionId === null) return null
+
+  return (
+    <Button
+      variant="ghost"
+      loading={busy}
+      onBlur={() => setArmed(false)}
+      onClick={() => (armed ? onConfirm(connectionId) : setArmed(true))}
+      data-testid={testId}
+      className={armed ? 'text-danger' : undefined}
+    >
+      {armed
+        ? (ar
+            ? `تأكيد — سيتوقف ${accounts} حسابًا عن المزامنة`
+            : `Confirm — ${accounts} account(s) stop syncing`)
+        : (ar ? 'قطع الاتصال' : 'Disconnect')}
+    </Button>
+  )
 }
