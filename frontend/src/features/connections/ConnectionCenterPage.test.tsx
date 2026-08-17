@@ -5,13 +5,24 @@ import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
 import type { Connector } from './api'
 
+/*
+ * The mock replaces the WHOLE module, so it has to carry everything the page's tree imports — not
+ * only what these tests call. `AccountInventoryPanel` is rendered by the page and reads its own
+ * inventory endpoint plus the `ACCOUNT_LIFECYCLES` constant; omitting either turns a page test into
+ * «No export is defined on the mock», which says nothing about the page.
+ */
 vi.mock('./api', () => ({
   listConnectors: vi.fn(),
   syncConnector: vi.fn(),
   getConnectionHistory: vi.fn(),
+  ACCOUNT_LIFECYCLES: ['discovered', 'enabled', 'excluded', 'assigned'],
+  listInventory: vi.fn(),
+  setAccountStateBulk: vi.fn(),
+  getAccountLogs: vi.fn(),
+  backfillAccount: vi.fn(),
 }))
 
-import { getConnectionHistory, listConnectors, syncConnector } from './api'
+import { getConnectionHistory, listConnectors, listInventory, syncConnector } from './api'
 
 function connector(overrides: Partial<Connector> = {}): Connector {
   return {
@@ -46,6 +57,13 @@ describe('ConnectionCenterPage', () => {
       connector({ provider: 'meta_ads', label: 'Meta Ads', is_sandbox: false, has_credentials: false, awaiting_external_dependency: true, state: 'awaiting_credentials', state_label: 'Awaiting Credentials', is_healthy: false }),
     ])
     vi.mocked(getConnectionHistory).mockResolvedValue({ provider: 'sandbox', runs: [], errors: [], data_freshness: { last_run_at: null, last_status: null, metrics_upserted: 0 } })
+    // An empty inventory: these tests are about the connector grid, and the panel below it must
+    // resolve rather than hang, or every assertion here would be racing a pending query.
+    vi.mocked(listInventory).mockResolvedValue({
+      accounts: [],
+      summary: { discovered: 0, enabled: 0, excluded: 0, assigned: 0, total: 0 },
+      meta: { total: 0, per_page: 50, current_page: 1, last_page: 1 },
+    })
   })
   afterEach(() => signOut())
 
