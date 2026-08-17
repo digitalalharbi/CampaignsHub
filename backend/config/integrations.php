@@ -45,6 +45,36 @@ return [
          * decisions rather than two literals that happen to differ.
          */
         'restate_days' => (int) env('INTEGRATIONS_RESTATE_DAYS', 7),
+
+        /*
+         * How long a day's figures stay PROVISIONAL — SNAP-WINDOW-001 §10.
+         *
+         * Snapchat states it: «Metrics are finalized 48 hours after the end of the day in the
+         * timezone set by the Ad Account.» Before that boundary a figure may still move, and its
+         * responses carry `finalized_data_end_time` saying where the line currently is.
+         *
+         * The restate window above is what re-asks for those days. This number is here so the reason
+         * for it is written down rather than inferred from «7 felt safe»: seven days comfortably
+         * covers a 48-hour finalisation plus a weekend of missed sweeps, and days older than that are
+         * final and are not re-fetched on every run.
+         */
+        'provisional_hours' => (int) env('INTEGRATIONS_PROVISIONAL_HOURS', 48),
+    ],
+
+    'chunking' => [
+        /*
+         * How many local days one provider request may cover.
+         *
+         * A first sync asks for a month at once. A provider that caps a DAY range refuses the WHOLE
+         * request rather than truncating it, so the customer's very first sync is the one that fails
+         * — and Snapchat's measurement reference states no hard cap for DAY granularity, which means
+         * an assumption either way would be a guess.
+         *
+         * So this is deliberately conservative rather than derived: each chunk is upserted
+         * idempotently on `(account, campaign, date, metric)`, so splitting costs round trips and
+         * nothing else, and a cap we have not been told about cannot break the first impression.
+         */
+        'max_days_per_request' => (int) env('INTEGRATIONS_MAX_DAYS_PER_REQUEST', 7),
     ],
 
     'health' => [

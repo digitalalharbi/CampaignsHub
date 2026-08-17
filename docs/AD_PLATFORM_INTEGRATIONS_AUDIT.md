@@ -837,3 +837,69 @@ deleted — it stops receiving new writes, which is what detaching means.
 project it names, that project's tenant, the client-workspace fence, and the connection's status. A
 queued job can outlive the project it points at, and a binding row whose project is gone is a
 leftover rather than an authorisation.
+
+---
+
+## §18 — The live Snapchat «validation error», root-caused (2026-08-17)
+
+The first real Snapchat metrics sync, on a live connection with a real assigned account, returned
+**0 metrics** and:
+
+> Request cannot be processed due to validation error
+
+Structure synced. Metrics did not. That asymmetry is the clue: structure never calls `/stats`.
+
+### SNAP-WINDOW-001 — the range was UTC midnight for every account on the platform
+
+```php
+'start_time' => $from.'T00:00:00.000-00:00',
+'end_time'   => $to.'T00:00:00.000-00:00',
+```
+
+Snapchat's measurement reference states the rule outright:
+
+> **time must be of day boundary**, start_time and end_time must be both specified, or neither
+
+and its own DAY responses carry the ad account's offset — the documented example is
+`"start_time": "2016-08-05T22:00:00.000-07:00"`. For an account in `Asia/Riyadh` (UTC+3), UTC
+midnight is **03:00 local**. Not a day boundary. Every DAY request this product made for a non-UTC
+account was refused before a figure was read.
+
+`ReportingWindow` now places the window in the **account's own timezone**, recorded at discovery, and
+encodes it with that offset. An account whose timezone was never captured **fails with a message
+naming the fix** rather than defaulting: defaulting to UTC is what broke this, and defaulting to
+`Asia/Riyadh` would be the same mistake wearing a different constant.
+
+`end` is exclusive, which is also what makes a single day expressible — a naive «from = to = today»
+produces a zero-length range no provider accepts.
+
+### SNAP-PAGING-001 — the first page was taken for the whole answer
+
+The same reference gives the contract: `limit` up to 200, and `paging.next_link` for the rest. The
+connector read one response and returned. An account with 201 campaigns reported 200 and lost the
+rest in silence. Identical in shape to `LINKEDIN-PAGE-001` — found there first only because
+LinkedIn's default page size is 10 and so bites on a small account, where Snapchat's bites on a large
+one.
+
+### SNAP-CHUNK-001 — a month asked for in one range
+
+A first sync asks for thirty days at once. A provider that caps a DAY range refuses the **whole**
+request rather than truncating it, so the customer's very first sync would be the one that fails.
+The reference states **no** hard cap for DAY granularity — the one-day rule is TOTAL granularity, and
+the thirty-day rule is Lead Gen — so an assumption either way would be a guess. Requests are
+therefore split on a configured ceiling, deliberately conservative: each chunk upserts idempotently
+on `(account, campaign, date, metric)`, so splitting costs round trips and nothing else, and a cap we
+have not been told about cannot break a first impression.
+
+### Finalisation, recorded rather than guessed
+
+> **IMPORTANT: Metrics are finalized 48 hours after the end of the day in the timezone set by the Ad
+> Account.**
+
+`integrations.incremental.provisional_hours` records that number so the seven-day restate window has
+a stated reason instead of «seven felt safe»: seven days covers a 48-hour finalisation plus a weekend
+of missed sweeps, and older days are final and are not re-fetched on every run.
+
+**Not claimed:** this is the fix for the error the live sync returned. Whether the live sync then
+succeeds is `BLOCKED_OPERATIONAL_EVIDENCE` until it is run against the real account after deploy.
+Snapchat remains **not** `LIVE_VERIFIED`.

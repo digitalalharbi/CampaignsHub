@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Providers;
 
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\Reporting\ReportingWindow;
 
 /**
  * Snapchat Marketing API (`adsapi.snapchat.com/v1`).
@@ -29,6 +31,14 @@ final class SnapchatConnector extends ApiAdvertisingConnector
      * because a sync job that never returns is worse than one that stops and says it stopped.
      */
     private const MAX_PAGES = 50;
+
+    /**
+     * The documented maximum page size for stats — «The maximum pagination limit is 200.»
+     *
+     * Asked for explicitly rather than left to the default, because the default is small and the
+     * cost of a page is a round trip against a per-application rate limit.
+     */
+    private const STATS_PAGE_SIZE = 200;
 
     /**
      * Read a list endpoint to its END, not just its first page.
@@ -346,62 +356,166 @@ final class SnapchatConnector extends ApiAdvertisingConnector
     /** The fields stated in micro-units of the account currency, divided once at this edge. */
     private const MONEY = ['spend', 'revenue'];
 
+    /**
+     * Daily stats for one ad account, broken down by campaign — SNAP-WINDOW-001, SNAP-PAGING-001.
+     *
+     * ## The live failure this replaced
+     *
+     * The first real Snapchat metrics sync returned **0 metrics** and «Request cannot be processed
+     * due to validation error». The range was a string literal:
+     *
+     * ```php
+     * 'start_time' => $from.'T00:00:00.000-00:00',
+     * 'end_time'   => $to.'T00:00:00.000-00:00',
+     * ```
+     *
+     * UTC midnight, for every account on the platform. Snapchat's measurement reference states the
+     * rule outright — «time must be of day boundary, start_time and end_time must be both specified,
+     * or neither» — and its own DAY responses carry the ad account's offset. For an account in
+     * `Asia/Riyadh` that literal is 03:00 local, which is not a day boundary, so the request was
+     * refused before a single figure was read. Structure synced and metrics did not, because
+     * structure never calls `/stats`.
+     *
+     * ## And the first page was being treated as the whole answer
+     *
+     * `breakdown=campaign` returns one entity per campaign, and the reference gives the pagination
+     * contract: `limit` up to 200, with `paging.next_link` for the rest. This read one response and
+     * returned. An account with 201 campaigns reported the first 200 and lost the rest silently —
+     * the same defect LinkedIn had at a page size of 10, which is why it was found there first.
+     */
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("adaccounts/{$adAccountId}/stats"), [
-                'granularity' => 'DAY',
-                'breakdown' => 'campaign',
-                // Asked for from the map, so a metric cannot be mapped and then never requested.
-                'fields' => implode(',', array_values(array_unique(self::METRICS))),
-                'start_time' => $from.'T00:00:00.000-00:00',
-                'end_time' => $to.'T00:00:00.000-00:00',
-            ]),
-            'daily stats',
-        );
+        $window = ReportingWindow::localDays($this->accountTimezone($adAccountId), $from, $to);
 
         $rows = [];
 
-        foreach ((array) ($body['timeseries_stats'] ?? []) as $wrapper) {
-            /** @var array<string,mixed> $series */
-            $series = (array) ($wrapper['timeseries_stat'] ?? []);
-            $campaignId = (string) ($series['id'] ?? '');
-
-            if ($campaignId === '') {
-                continue;
-            }
-
-            foreach ((array) ($series['timeseries'] ?? []) as $point) {
-                /** @var array<string,mixed> $stats */
-                $stats = (array) ($point['stats'] ?? []);
-
-                $row = [
-                    'campaign_id' => $campaignId,
-                    'date' => substr((string) ($point['start_time'] ?? $from), 0, 10),
-                ];
-
-                foreach (self::METRICS as $canonical => $field) {
-                    /*
-                     * ABSENT, not zero.
-                     *
-                     * A metric this account does not report must arrive as a missing key, so the
-                     * pipeline stores no row for it and every surface says «غير مُرسَل» rather than
-                     * printing a measured zero. An awareness campaign that was never asked to sell
-                     * anything has no purchases; it does not have zero of them.
-                     */
-                    if (! array_key_exists($field, $stats)) {
-                        continue;
-                    }
-
-                    $row[$canonical] = in_array($canonical, self::MONEY, true)
-                        ? (float) $stats[$field] / self::MICRO
-                        : (float) $stats[$field];
-                }
-
+        /*
+         * One request per chunk — SNAP-WINDOW-001 §8.
+         *
+         * A first sync asks for thirty days at once, and a provider that caps a DAY range refuses
+         * the WHOLE request rather than truncating it: the customer's very first sync would be the
+         * one that fails. Each chunk is upserted idempotently on `(account, campaign, date, metric)`,
+         * so splitting costs round trips and nothing else.
+         */
+        foreach ($window->chunked($this->maxDaysPerRequest()) as $chunk) {
+            foreach ($this->fetchWindow($adAccountId, $tokens, $chunk) as $row) {
                 $rows[] = $row;
             }
         }
 
         return $rows;
+    }
+
+    /**
+     * One provider-valid window's worth of stats, read to its last page.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function fetchWindow(string $adAccountId, OAuthTokens $tokens, ReportingWindow $window): array
+    {
+        $url = $this->url("adaccounts/{$adAccountId}/stats").'?'.http_build_query([
+            'granularity' => 'DAY',
+            'breakdown' => 'campaign',
+            // Asked for from the map, so a metric cannot be mapped and then never requested.
+            'fields' => implode(',', array_values(array_unique(self::METRICS))),
+            'start_time' => $window->startIso(),
+            'end_time' => $window->endIso(),
+            // The documented maximum. Fewer pages is fewer round trips against a per-app rate limit.
+            'limit' => self::STATS_PAGE_SIZE,
+        ]);
+
+        $rows = [];
+
+        for ($page = 0; $page < self::MAX_PAGES && $url !== null; $page++) {
+            $body = $this->read($this->api($tokens)->get($url), 'daily stats');
+
+            foreach ((array) ($body['timeseries_stats'] ?? []) as $wrapper) {
+                /** @var array<string,mixed> $series */
+                $series = (array) ($wrapper['timeseries_stat'] ?? []);
+                $campaignId = (string) ($series['id'] ?? '');
+
+                if ($campaignId === '') {
+                    continue;
+                }
+
+                foreach ((array) ($series['timeseries'] ?? []) as $point) {
+                    $rows[] = $this->pointToRow($campaignId, (array) $point, $window->startIso());
+                }
+            }
+
+            $next = $body['paging']['next_link'] ?? null;
+            $url = is_string($next) && $next !== '' ? $next : null;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * One timeseries point, mapped onto canonical keys.
+     *
+     * The date is taken from the point's own `start_time`, which Snapchat returns on the ACCOUNT's
+     * offset — so a day is the account's day, and a spend figure lands on the date the advertiser
+     * would name rather than on whatever UTC made of it.
+     *
+     * @param  array<string,mixed>  $point
+     * @return array<string,mixed>
+     */
+    private function pointToRow(string $campaignId, array $point, string $fallbackDate): array
+    {
+        /** @var array<string,mixed> $stats */
+        $stats = (array) ($point['stats'] ?? []);
+
+        $row = [
+            'campaign_id' => $campaignId,
+            'date' => substr((string) ($point['start_time'] ?? $fallbackDate), 0, 10),
+        ];
+
+        foreach (self::METRICS as $canonical => $field) {
+            /*
+             * ABSENT, not zero.
+             *
+             * A metric this account does not report must arrive as a missing key, so the pipeline
+             * stores no row for it and every surface says «غير مُرسَل» rather than printing a
+             * measured zero. An awareness campaign that was never asked to sell anything has no
+             * purchases; it does not have zero of them.
+             */
+            if (! array_key_exists($field, $stats)) {
+                continue;
+            }
+
+            $row[$canonical] = in_array($canonical, self::MONEY, true)
+                ? (float) $stats[$field] / self::MICRO
+                : (float) $stats[$field];
+        }
+
+        return $row;
+    }
+
+    /** The configured ceiling on how many local days one request may cover. */
+    private function maxDaysPerRequest(): int
+    {
+        return max(1, (int) config('integrations.chunking.max_days_per_request', 7));
+    }
+
+    /**
+     * The ad account's own timezone, read from what discovery recorded.
+     *
+     * Not guessed at, and not defaulted: a default is precisely what broke this. An account whose
+     * timezone was never captured is one we cannot place a reporting day for, and `ReportingWindow`
+     * says so rather than producing a figure that belongs to the wrong day.
+     */
+    private function accountTimezone(string $adAccountId): ?string
+    {
+        if ($this->connection === null) {
+            return null;
+        }
+
+        $timezone = ExternalAccount::withoutGlobalScopes()
+            ->where('provider_connection_id', $this->connection->getKey())
+            ->where('external_id', $adAccountId)
+            ->where('account_type', 'ad_account')
+            ->value('timezone');
+
+        return is_string($timezone) && $timezone !== '' ? $timezone : null;
     }
 }
