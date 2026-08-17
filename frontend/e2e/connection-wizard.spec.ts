@@ -43,12 +43,40 @@ for (const vp of VIEWPORTS) {
     await expect(page.locator('main')).toBeVisible()
     await page.waitForLoadState('networkidle')
 
-    const overflow = await page.evaluate(() => {
+    /*
+     * Name the offender, not merely the number.
+     *
+     * «24px» tells whoever reads the failure that something is wrong and nothing about what. The
+     * elements that actually cross the viewport edge are what turns a red test into a fix, so they
+     * are collected here and reported with it.
+     */
+    const result = await page.evaluate(() => {
       const de = document.documentElement
-      return Math.max(de.scrollWidth, document.body.scrollWidth) - de.clientWidth
+      const vw = de.clientWidth
+      const overflow = Math.max(de.scrollWidth, document.body.scrollWidth) - vw
+      const offenders: string[] = []
+
+      if (overflow > 1) {
+        document.querySelectorAll('*').forEach((el) => {
+          const r = el.getBoundingClientRect()
+          if (r.right > vw + 1 || r.left < -1) {
+            const node = el as HTMLElement
+            offenders.push(
+              `<${el.tagName.toLowerCase()} class="${String(node.className).slice(0, 70)}"> `
+              + `left=${Math.round(r.left)} right=${Math.round(r.right)} w=${Math.round(r.width)} `
+              + `text="${(node.innerText || '').slice(0, 30).replace(/\n/g, ' ')}"`,
+            )
+          }
+        })
+      }
+
+      return { overflow, offenders: offenders.slice(0, 8) }
     })
 
-    expect(overflow, `the page scrolls sideways by ${overflow}px`).toBeLessThanOrEqual(1)
+    expect(
+      result.overflow,
+      `the page scrolls sideways by ${result.overflow}px; offenders:\n${result.offenders.join('\n')}`,
+    ).toBeLessThanOrEqual(1)
   })
 }
 

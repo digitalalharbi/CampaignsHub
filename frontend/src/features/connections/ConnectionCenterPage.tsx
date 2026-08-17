@@ -305,16 +305,24 @@ export function ConnectionCenterPage() {
           })}
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        {/*
+          The two filters wrap instead of overflowing on a narrow phone.
+          
+          A 320px screen cannot hold a 180px-minimum search box and a fixed 176px select side by
+          side, and the row was not allowed to wrap — so at 320 the select hung 24px off the start
+          edge and the whole page scrolled sideways. `flex-wrap` lets them stack, and each control
+          may then shrink to the row rather than dictate its width.
+        */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-0 flex-1 sm:flex-none">
             <Search size={15} className="pointer-events-none absolute inset-y-0 my-auto ms-2.5 text-text-muted" />
             <input
               value={search} onChange={(e) => setSearch(e.target.value)} placeholder={c.search_ph}
               aria-label={c.search_ph}
-              className="w-full min-w-[180px] rounded-lg border border-border bg-background py-1.5 ps-8 pe-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none sm:w-56"
+              className="w-full rounded-lg border border-border bg-background py-1.5 ps-8 pe-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none sm:w-56 sm:min-w-[180px]"
             />
           </div>
-          <div className="w-44">
+          <div className="min-w-0 flex-1 sm:w-44 sm:flex-none">
             <SearchableSelect
               value={status} onChange={setStatus} options={statusOptions}
               placeholder={c.status_ph}

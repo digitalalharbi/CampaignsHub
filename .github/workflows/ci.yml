@@ -77,3 +77,76 @@ jobs:
         run: npm run test
       - name: Production build
         run: npm run build
+
+  # ── The browser gate, on a runner that is only running the gate ────────────────────────────────
+  #
+  # `npm run gate` verbatim: same script, same Playwright config, same three projects, same
+  # `workers: 1`. Nothing about what the gate MEANS changes here — only where it runs.
+  #
+  # It was run on a developer's laptop, and that is the whole reason for this job. A gate competing
+  # with a browser, an editor and Spotlight produced single layout assertions taking fifty-seven
+  # minutes and wholesale firefox failures across specs that had passed on chromium minutes earlier
+  # — an environment collapsing, reported as a hundred product defects. A verdict that depends on
+  # what else the machine happens to be doing is not a verdict.
+  gate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mediabuying_e2e
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, pcntl
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Backend dependencies
+        working-directory: backend
+        run: composer install --no-interaction --prefer-dist
+      - name: Backend environment
+        working-directory: backend
+        run: cp .env.example .env && php artisan key:generate
+      # The gate's own servers read these; `e2e/env.ts` overrides the rest per run.
+      - name: Frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Gate — chromium, firefox, webkit
+        working-directory: frontend
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+          REDIS_HOST: 127.0.0.1
+          REDIS_CLIENT: phpredis
+        # No `continue-on-error`, no retry wrapper: the script exits with the first non-zero code it
+        # saw, and that code is the gate's verdict.
+        run: npm run gate
+      - name: Failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-artifacts
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+          retention-days: 7
