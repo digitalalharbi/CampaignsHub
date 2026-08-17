@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { IntegrationsPage } from './IntegrationsPage'
 import type { Connector } from './api'
 import { renderWithProviders } from '@/test/utils'
@@ -16,6 +16,7 @@ const rows = vi.hoisted(() => ({ data: [] as Connector[] }))
 const started = vi.hoisted(() => ({ calls: [] as Array<{ provider: string; clientWorkspaceId?: string | null }> }))
 const workspaces = vi.hoisted(() => ({ data: [] as Array<{ id: string; name: string }> }))
 const wizardStates = vi.hoisted(() => ({ connections: [] as unknown[], resumable: [] as unknown[] }))
+const revoked = vi.hoisted(() => ({ calls: [] as string[] }))
 
 // The client picker reads the tenant's own client workspaces — the `→ Client` link in the chain.
 vi.mock('@/features/projects/api', async (importOriginal) => ({
@@ -49,6 +50,10 @@ vi.mock('./api', async (importOriginal) => {
       accounts: [], meta: { total: 309, per_page: 25, current_page: 1, last_page: 13 },
     }),
     fetchPlanUsage: () => Promise.resolve({ ad_accounts: { limit: 5, used: 0, remaining: 5 } }),
+    revokeConnection: (connectionId: string) => {
+      revoked.calls.push(connectionId)
+      return Promise.resolve({ status: 'revoked' })
+    },
   }
 })
 
@@ -382,5 +387,62 @@ describe('an authorisation with nothing selected yet', () => {
 
     const line = await screen.findByTestId('connector-health-snapchat')
     expect(line.textContent).not.toMatch(/يحتاج انتباه|need attention/)
+  })
+})
+
+/**
+ * COMMAND-CENTER §26 — disconnecting says what it costs before it happens.
+ *
+ * The endpoint existed on the server and nothing in the interface reached it, so «قطع الاتصال» was
+ * a documented capability the customer could not perform. It is here now, and it is deliberately not
+ * one press: revoking disables every project binding this connection's accounts feed, in every
+ * project, and a customer who has just been told «متصل · 9 تعمل» has no way to know that.
+ */
+describe('disconnecting a platform', () => {
+  beforeEach(() => {
+    revoked.calls = []
+    wizardStates.connections = []
+    wizardStates.resumable = []
+  })
+
+  it('asks once, naming the number of accounts that stop syncing, and only then revokes', async () => {
+    rows.data = [connector({ key: 'snapchat', state: 'connected', accounts: 9 })]
+    const entry = {
+      connection: { id: 'conn-1', provider: 'snapchat', label: 'Snapchat', label_ar: 'سناب شات', client_workspace_id: null },
+      state: 'active' as const,
+      discovered: 309,
+      assigned: 9,
+      synced: 9,
+      has_parent: true,
+      resumable: false,
+      next_step: null,
+      health: { connected: 9, healthy: 9, needs_attention: 0 },
+    }
+    wizardStates.connections = [entry]
+    wizardStates.resumable = [entry]
+
+    renderWithProviders(<IntegrationsPage />, { route: '/app/integrations' })
+
+    const button = await screen.findByTestId('connector-disconnect-snapchat')
+
+    // First press arms and states the consequence — it does NOT revoke.
+    fireEvent.click(button)
+    expect(button.textContent).toMatch(/9/)
+    expect(button.textContent).toMatch(/تأكيد|Confirm/)
+    expect(revoked.calls).toEqual([])
+
+    // Second press is the confirmation.
+    fireEvent.click(button)
+    await waitFor(() => expect(revoked.calls).toEqual(['conn-1']))
+  })
+
+  /** A row with no connection behind it offers no button, rather than one that would fail. */
+  it('offers nothing to disconnect when there is no connection to revoke', async () => {
+    rows.data = [connector({ key: 'snapchat', state: 'connected', accounts: 0 })]
+
+    renderWithProviders(<IntegrationsPage />, { route: '/app/integrations' })
+
+    await screen.findByTestId('connector-sync-snapchat')
+    expect(screen.queryByTestId('connector-disconnect-snapchat')).not.toBeInTheDocument()
   })
 })
