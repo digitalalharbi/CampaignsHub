@@ -6825,3 +6825,64 @@ before it was fixed.
 ### The warning that has now cost two cycles
 
 `artisan serve` AND `queue:work` both hold code in memory. Restart BOTH before any live verification.
+
+## 2026-08-17 — INTEGRATIONS-END-TO-END-PRODUCT-ACTIVATION-100
+
+**main:** `c07f60b` · deployed, both migrations applied, production healthy.
+
+### Delivered (merged, deployed)
+
+| PR | Commit | What it closed |
+|---|---|---|
+| #27 | `fdff1fc` | ASSIGN-PROJECT-001 · SWEEP-UNASSIGNED-001 · DISCOVERY-NOT-SYNC-001 · PLAN-ADACCOUNTS-001 · QUOTA-RACE-001 · SHARE-SILENT-001 |
+| #28 | `8cb917c` | WIZARD-HIERARCHY-001 · WIZARD-RESUME-001 (backend + UI) |
+| #29 | `c07f60b` | SYNC-SCOPE-001 · CLIENT-ANALYTICS-FLAKE-001 |
+
+Nine defects, every one proven fail-first before its fix.
+
+### The three rules this work established
+
+1. **Discovery ≠ Connected.** An authorisation produces an inventory. The live Snapchat consent
+   produced **309 ad accounts**; none is connected until somebody assigns it to a project.
+2. **Assignment consumes quota; discovery does not.** «Connected Ad Accounts» counts distinct
+   actively-assigned accounts across all providers.
+3. **Sync runs on active bindings only**, and the worker re-proves that at execution rather than
+   trusting the queue.
+
+Also: parent hierarchy is provider-specific and taken from what each adapter really returns; agency
+connections are client-workspace scoped; a project is always explicit and never inferred.
+
+### Verification at this commit
+
+- backend **2160 passed**, frontend **1037 passed**, pint · phpstan · tsc · lint · build clean
+- `production:check` — 0 failing, 2 pre-existing warnings (mail, FX)
+- **Frozen-tree gate `REAL_GATE_EXIT=0`** — 1172 passed across Chromium/Firefox/WebKit,
+  Failed 0 · Flaky 0 · Retries 0 · Skipped 0
+- production: `site=200`, `api=200`; the four new wizard routes answer **401** (deployed and
+  guarded) where an absent route answers **404**
+
+### Open blocker — read this first when resuming
+
+**SNAPCHAT-LIVE-SELECTION — BLOCKED_OPERATIONAL_EVIDENCE.**
+
+VERIFIED from the live connection: system configuration, real OAuth, real callback, real discovery
+(**309 accounts**).
+
+NOT VERIFIED, and not claimed: organisations rendered in the wizard, manual account selection,
+project assignment, connected count becoming 1 rather than 309, first real scoped sync, and campaigns
+/ metrics / analytics / dashboard / reports receiving that account's data.
+
+Every one of those needs an authenticated production session as the operator. Entering credentials is
+outside what may be done here, so the evidence is recorded as blocked rather than asserted.
+
+**To close it:** sign in to production, open Integrations — the Snapchat card should read «تمت
+المصادقة · 309 حسابًا متاحًا · لم يُربط أي حساب بمشروع بعد» with a «اختيار الحسابات» button, and a
+resume banner above it. No re-authorisation is needed; the token is valid and the wizard resumes at
+the organisations step. Choose one organisation, one account, create or pick a project, confirm, and
+check that the connected count is **1**, that the first sync produces campaigns and metrics in that
+project only, and that `last_synced_at` becomes real only after the sync.
+
+The 309 discovered accounts, the connection and its encrypted tokens are untouched by all of the
+above. The one deliberate change to production data: the DISCOVERY-NOT-SYNC-001 backfill cleared
+`last_synced_at` on accounts with no campaign and no successful run — all 309, correctly, because
+none has ever been assigned and so none can ever have synced.
