@@ -243,6 +243,14 @@ export function ConnectionCenterPage() {
           */}
         <StoresPanel />
 
+        {/*
+          COMMAND-CENTER §§7–20 — and the inventory belongs here for the SAME reason those two do.
+          Which accounts an authorisation reaches is a tenant-level fact; it does not become
+          unanswerable because nobody has picked a project yet. Rendering it only in the branch below
+          made «what does this platform have access to» a question you had to choose a project to ask.
+        */}
+        <AccountInventoryPanel />
+
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">
           <span className="block font-semibold text-text-primary">{c.pick_project}</span>
           {c.pick_project_hint}
