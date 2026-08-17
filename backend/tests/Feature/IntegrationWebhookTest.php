@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Commerce\Jobs\SyncStoreJob;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\IntegrationWebhookEvent;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -33,6 +36,10 @@ final class IntegrationWebhookTest extends TestCase
     private Tenant $tenant;
 
     private ExternalAccount $account;
+
+    private ClientWorkspace $workspace;
+
+    private Project $project;
 
     protected function setUp(): void
     {
@@ -73,8 +80,40 @@ final class IntegrationWebhookTest extends TestCase
             'name' => 'Acme ads',
         ]);
 
+        /*
+         * Assigned to a project — RUNTIME-100 §11.
+         *
+         * A delivery for an account nobody attached to a project now queues nothing: the jobs would
+         * refuse it anyway, and a queue full of work that exists only to refuse itself reads as
+         * activity on a connection that is doing nothing. These tests are about the VERIFICATION and
+         * the dispatch that follows it, so the fixture has to satisfy the gate in front of them.
+         */
+        $this->workspace = ClientWorkspace::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'name' => 'Client', 'slug' => 'w-'.uniqid(),
+            'mode' => 'managed', 'status' => 'active', 'client_status' => 'active',
+        ]);
+        $this->project = Project::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $this->workspace->id,
+            'name' => 'Retainer', 'status' => 'active',
+        ]);
+        $this->assign($this->account);
+
         app(TenantContext::class)->forget();
         Queue::fake();
+    }
+
+    /** The explicit decision every sync path now reads before it fetches anything. */
+    private function assign(ExternalAccount $account, string $purpose = 'advertising'): void
+    {
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->workspace->id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $account->getKey(),
+            'provider' => $account->provider,
+            'purpose' => $purpose,
+            'is_active' => true,
+        ]);
     }
 
     // ── refusals ──────────────────────────────────────────────────────────────────────────────
@@ -242,6 +281,7 @@ final class IntegrationWebhookTest extends TestCase
             'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->getKey(),
             'provider' => 'salla', 'external_id' => '778899', 'account_type' => 'store', 'name' => 'متجر',
         ]);
+        $this->assign($store, 'ecommerce');
 
         $body = json_encode(['event' => 'order.updated', 'merchant' => '778899', 'event_id' => 'salla-evt-1']);
 

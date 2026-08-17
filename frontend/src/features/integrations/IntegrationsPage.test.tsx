@@ -344,4 +344,43 @@ describe('an authorisation with nothing selected yet', () => {
     // Not resumable: this is not an unfinished authorisation, it is an unstarted sync.
     expect(screen.queryByTestId('unfinished-connection')).toBeNull()
   })
+
+  /**
+   * RUNTIME-100 §31 — the card summarises its accounts instead of claiming one state for all of them.
+   *
+   * Nine of ten syncing and one whose access was withdrawn used to render as a single green «متصل»,
+   * and that one account is the only fact on the card anybody needed.
+   */
+  it('summarises the connection rather than showing one badge for ten accounts', async () => {
+    rows.data = [connector({ key: 'snapchat', state: 'connected', accounts: 10 })]
+    wizardStates.connections = [{
+      connection: { id: 'conn-3', provider: 'snapchat', label: 'Snapchat', label_ar: 'سناب شات', client_workspace_id: null },
+      state: 'active', discovered: 309, assigned: 10, synced: 9,
+      has_parent: true, resumable: false, next_step: null,
+      health: { connected: 10, healthy: 9, pending_first_sync: 0, needs_attention: 1, states: { healthy: 9, access_lost: 1 } },
+    }]
+
+    renderWithProviders(<IntegrationsPage />, { route: '/app/integrations' })
+
+    const line = await screen.findByTestId('connector-health-snapchat')
+    expect(line.textContent).toMatch(/10/)
+    expect(line.textContent).toMatch(/9/)
+    expect(line.textContent).toMatch(/يحتاج انتباه|need attention/)
+  })
+
+  /** And «everything is fine» stays a short sentence — no attention clause when there is none. */
+  it('does not mention attention when nothing needs it', async () => {
+    rows.data = [connector({ key: 'snapchat', state: 'connected', accounts: 3 })]
+    wizardStates.connections = [{
+      connection: { id: 'conn-4', provider: 'snapchat', label: 'Snapchat', label_ar: 'سناب شات', client_workspace_id: null },
+      state: 'active', discovered: 309, assigned: 3, synced: 3,
+      has_parent: true, resumable: false, next_step: null,
+      health: { connected: 3, healthy: 3, pending_first_sync: 0, needs_attention: 0, states: { healthy: 3 } },
+    }]
+
+    renderWithProviders(<IntegrationsPage />, { route: '/app/integrations' })
+
+    const line = await screen.findByTestId('connector-health-snapchat')
+    expect(line.textContent).not.toMatch(/يحتاج انتباه|need attention/)
+  })
 })

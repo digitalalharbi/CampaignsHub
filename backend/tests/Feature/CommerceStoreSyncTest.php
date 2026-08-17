@@ -16,6 +16,7 @@ use App\Domains\Commerce\Models\CommerceProduct;
 use App\Domains\Commerce\Services\StoreSyncer;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
@@ -435,7 +436,7 @@ final class CommerceStoreSyncTest extends TestCase
             connectionName: $provider,
         );
 
-        return ExternalAccount::withoutGlobalScopes()->create([
+        $store = ExternalAccount::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id,
             'provider_connection_id' => $connection->getKey(),
             'provider' => $provider,
@@ -445,6 +446,26 @@ final class CommerceStoreSyncTest extends TestCase
             'currency' => 'SAR',
             'status' => 'active',
         ]);
+
+        /*
+         * Assigned to the project — COMMERCE-PROJECT-001.
+         *
+         * `StoreSyncer` used to answer «which project?» with the tenant's OLDEST project, so this
+         * fixture worked without ever saying where the store's revenue belonged. It refuses now, the
+         * same way the ad-platform syncers do, and these tests are about what a store's data DOES
+         * once somebody has said which project it feeds — so the fixture has to say it.
+         */
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $store->getKey(),
+            'provider' => $provider,
+            'purpose' => 'ecommerce',
+            'is_active' => true,
+        ]);
+
+        return $store;
     }
 
     /**

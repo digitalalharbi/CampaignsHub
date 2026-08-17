@@ -114,7 +114,35 @@ final class AccountAssignment
      */
     public function isActivelyAssigned(ExternalAccount $account): bool
     {
-        if ($this->projectIdFor($account) === null) {
+        $projectId = $this->projectIdFor($account);
+
+        if ($projectId === null) {
+            return false;
+        }
+
+        /*
+         * RUNTIME-100 §29 — the whole chain is re-proved, not just the binding.
+         *
+         * This asked two questions: is there an active binding, and is the connection still
+         * connected. Both necessary; neither says the binding still describes a coherent world. A
+         * queued job can outlive the project it names — deleted, archived, or moved to another
+         * client — and a binding row whose project is gone is not an authorisation, it is a
+         * leftover. Reading the project back is what turns «somebody once said yes» into «somebody's
+         * yes still stands», and it closes the window between enqueue and run for every link in the
+         * chain rather than for the first one.
+         */
+        $project = Project::withoutGlobalScopes()
+            ->whereKey($projectId)
+            ->first(['id', 'tenant_id', 'client_workspace_id']);
+
+        if ($project === null || (string) $project->tenant_id !== (string) $account->tenant_id) {
+            return false;
+        }
+
+        // The client-workspace fence, re-proved. A tenant-level connection may feed any of the
+        // tenant's clients; one scoped to a client may only ever feed that client's projects.
+        if ($account->client_workspace_id !== null
+            && (string) $account->client_workspace_id !== (string) $project->client_workspace_id) {
             return false;
         }
 
@@ -141,6 +169,16 @@ final class AccountAssignment
         return ProjectIntegrationBinding::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('is_active', true)
+            /*
+             * AD accounts only — COMMERCE-QUOTA-001.
+             *
+             * Commerce shares this table now, and «connected ad accounts» is a cap sold on the six ad
+             * platforms. Without this a merchant connecting their Salla store would silently spend an
+             * advertising slot on a shop.
+             */
+            ->whereIn('external_account_id', ExternalAccount::withoutGlobalScopes()
+                ->where('account_type', 'ad_account')
+                ->select('id'))
             ->distinct()
             ->count('external_account_id');
     }
