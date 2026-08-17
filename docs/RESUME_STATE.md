@@ -1,3 +1,50 @@
+# START HERE — 2026-08-18, the Connection Command Center
+
+## Where the code is
+
+- `origin/main` = **a142c62** (PR #34 merged and deployed).
+- **PR #35** `fix/gate-linking-and-mobile-overflow` — the two real frozen-gate failures, plus a `gate`
+  CI job that runs `npm run gate` **verbatim** on a clean ubuntu runner. frontend green, backend green,
+  gate running at time of writing. **Merge this first.**
+- **PR E** `feat/connection-command-center` — pushed, PR deliberately NOT opened until #35 merges, so
+  its own gate job runs on top of the gate fixes rather than re-discovering them. Rebase onto fresh
+  main, then open.
+
+## What PR E contains
+
+Backend: `AccountLifecycle` (discovered / enabled / excluded / assigned — the last DERIVED from
+`ProjectIntegrationBinding` and never stored), `AccountLabel` (name / reference / named_by_provider),
+`AccountInventoryController` (index, setState, setStateBulk, backfill, logs), migration
+`2026_08_18_110000` adding the nullable `external_accounts.management_state`, and
+`lang/{ar,en}/providers.php` + `lang/{ar,en}/integrations.php`.
+
+Frontend: `AccountInventoryPanel` mounted in the Connection Center; `DisconnectButton` on the platform
+cards wired to the revoke endpoint that had never been called from the interface.
+
+Verified locally: 21 backend tests (95 assertions), 7 panel tests, 21 integrations-page tests,
+phpstan clean, `tsc -b` clean, eslint clean.
+
+## What is NOT done
+
+- **SNAPCHAT-LIVE — BLOCKED_OPERATIONAL_EVIDENCE.** System config, OAuth, callback and the 309-account
+  discovery are VERIFIED. Selection, assignment, the first real scoped sync and downstream live data
+  are NOT `LIVE_VERIFIED` and must not be reported as such until the customer's own live run after
+  deploy.
+- The full three-browser gate has **not yet reached** `REAL_GATE_EXIT=0` on a clean runner. The laptop
+  round found exactly two real failures (both fixed in #35); the firefox leg of that round collapsed
+  under load and was not a verdict.
+- E2E coverage for the inventory panel is not written yet — unit and feature coverage only.
+
+## The standing rules that outlive this session
+
+- `origin/main` is the only truth. Branch → PR → CI → protected merge. No direct push, no bypass.
+- No arbitrary ownership fallback anywhere: no `workspaces[0]`, no `first()`, no `oldest()`.
+  `OneOwnershipRuleTest` holds the invariant.
+- A store never consumes the Connected Ad Accounts quota, and no store quota is invented.
+- Never a raw identifier where a name belongs.
+- Gate failures are root-caused, never re-run until they pass, never called flake without evidence.
+  No weakened assertions, no retries, no timeout inflation, no sleep hacks.
+
 # RESUME STATE — CampaignsHub
 
 > **AUTHORITATIVE HANDOFF — written 2026-07-29 at a context-window emergency close.**
