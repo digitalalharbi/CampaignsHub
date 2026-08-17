@@ -51,6 +51,8 @@ final class ConnectionWizardState
     /** The provider has stopped honouring the authorisation. */
     public const ACCESS_REVOKED = 'access_revoked';
 
+    public function __construct(private readonly AccountHealth $health) {}
+
     /**
      * Everything the integrations page needs to say what is true and offer the next step.
      *
@@ -62,6 +64,7 @@ final class ConnectionWizardState
      *     has_parent: bool,
      *     resumable: bool,
      *     next_step: ?string,
+     *     health: array{connected:int, healthy:int, needs_attention:int, pending_first_sync:int, states:array<string,int>},
      * }
      */
     public function for(ProviderConnection $connection): array
@@ -102,6 +105,14 @@ final class ConnectionWizardState
              * at `needs_selection` for a week is still resumable, because the token is still good.
              */
             'resumable' => $state === self::NEEDS_SELECTION,
+            /*
+             * RUNTIME-100 §31 — a connection's headline is a SUMMARY of its accounts.
+             *
+             * Ten accounts behind one authorisation, nine syncing and one whose access was withdrawn,
+             * used to render as a single green «متصل» — and that one account is the only fact on the
+             * card anybody needed. «10 مربوطة · 9 سليمة · 1 يحتاج انتباه» is the sentence that says it.
+             */
+            'health' => $this->health->summarise((string) $connection->getKey()),
             'next_step' => match ($state) {
                 self::NEEDS_SELECTION => ProviderHierarchy::hasParent($connection->provider) ? 'parent' : 'accounts',
                 self::FIRST_SYNC_PENDING => 'sync',

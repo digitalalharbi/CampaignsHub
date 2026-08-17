@@ -11,6 +11,46 @@
 `origin/main` on `https://github.com/digitalalharbi/CampaignsHub`. A local branch or worktree is a
 working copy, never a source of truth — `git fetch origin` first, always.
 
+## ⚠️ START HERE — THE RUNTIME CLOSURE, 2026-08-17
+
+**The live production failure is fixed and deployed.** Pressing «إنشاء مشروع ومتابعة الربط» answered
+«حدث خطأ غير متوقع.» because a `client_workspaces` row is an AGENCY'S CLIENT and an advertiser has
+none — `workspaces.data?.[0]?.id` was standing in for a decision the domain had never made — and
+because `toApiError` discarded the precise message the wizard had already written.
+
+Merged and deployed: **PR #31 → `9974dec`**.
+
+### The rule that existed three times
+
+`projectIdFor()` was written in three places, each ending in «and otherwise, the tenant's oldest
+project». Each was fixed separately, which is the whole lesson:
+
+| Where | Fixed in | How it presented |
+|---|---|---|
+| `AccountStructureSyncer` | `fdff1fc` | 309 discovered accounts' campaigns into one project nobody chose |
+| `AccountMetricsSyncer` | RUNTIME-100 | one agency client's sync history readable by another |
+| `StoreSyncer` | RUNTIME-100 | one client's Salla/Zid revenue in another client's funnel |
+
+There is now ONE source — `AccountAssignment` — and `OneOwnershipRuleTest` holds the invariant rather
+than any single caller, so a fourth copy cannot be added quietly. **Do not reintroduce a fallback**,
+including an «existing campaign wins» one: it can only fire for an account the worker has already
+refused, and it is a second route into a project nobody assigned.
+
+### And the campaigns page was empty after a real sync
+
+`/app/campaigns` lists `unified_campaigns`; nothing in the sync path had ever created one. Imports
+are now adopted on FIRST import only — never on `unified_campaign_id === null`, which would undo
+every deliberate unlink on the next sweep.
+
+### Snapchat readiness — UNCHANGED
+
+OAuth **VERIFIED** · callback **VERIFIED** · discovery 309 **VERIFIED**.
+Selection, assignment and the first real scoped sync remain **BLOCKED_OPERATIONAL_EVIDENCE**. They
+need an authenticated production session, which is the operator's step. **Snapchat is NOT
+`LIVE_VERIFIED`.**
+
+---
+
 ## ⚠️ START HERE — THE PHONE'S FIRST SCREEN, 2026-08-16
 
 **MOBILE-HERO-001.** The marketing homepage stacked, on one column: eyebrow → headline →

@@ -7,6 +7,7 @@ namespace App\Domains\Commerce\Console;
 use App\Domains\Commerce\Jobs\SyncStoreJob;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Services\AccountAssignment;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -59,6 +60,15 @@ final class SyncStoresCommand extends Command
             ->where('account_type', 'store')
             ->where('status', 'active')
             ->orderBy('id')
+            /*
+             * COMMERCE-PROJECT-001 — assigned stores only, as the ad sweeps already do.
+             *
+             * A store discovered by an authorisation is inventory. Sweeping every one of them reads a
+             * merchant's orders because they connected Salla, not because anybody said which project
+             * those orders belong to — and `StoreSyncer` then had to invent an answer, which it did
+             * by taking the tenant's oldest project.
+             */
+            ->tap(fn ($q) => app(AccountAssignment::class)->scopeToAssigned($q))
             ->chunkById(200, function ($stores) use ($from, $to, &$queued): void {
                 foreach ($stores as $store) {
                     SyncStoreJob::dispatch(

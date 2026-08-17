@@ -6,7 +6,6 @@ namespace App\Domains\Integrations\Sync;
 
 use App\Domains\Campaigns\Actions\ImportExternalCampaigns;
 use App\Domains\Campaigns\Actions\ImportExternalStructure;
-use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
@@ -230,21 +229,20 @@ final class AccountStructureSyncer
      * Now `AccountAssignment` is the single answer, so the sweep, this syncer and the bind endpoint
      * cannot disagree about what «assigned» means.
      *
-     * An existing campaign still wins, so a re-sync never re-files work already placed — but it is
-     * no longer a way IN, only a way to stay put.
+     * ## And there is no second answer
+     *
+     * This kept an «existing campaign wins» fallback, on the reasoning that a detached account should
+     * not orphan campaigns already on somebody's surfaces. That reasoning was about DISPLAY and it was
+     * being applied to WRITES: a detached account is one the customer has told us to stop reading, and
+     * the worker refuses it before this method is ever reached. So the fallback could only fire in a
+     * path that no longer exists — while leaving a second route by which data could enter a project
+     * nobody had assigned it to.
+     *
+     * One rule, one source. Campaigns already filed are not moved or deleted; they simply stop
+     * receiving new writes, which is exactly what detaching means.
      */
     private function projectIdFor(ExternalAccount $account): ?string
     {
-        $assigned = $this->assignment->projectIdFor($account);
-
-        if ($assigned !== null) {
-            return $assigned;
-        }
-
-        // Placed by an earlier assignment that has since been detached: keep it where it is rather
-        // than orphaning campaigns that are already on somebody's surfaces.
-        return ExternalCampaign::withoutGlobalScopes()
-            ->where('external_account_id', $account->getKey())
-            ->value('project_id');
+        return $this->assignment->projectIdFor($account);
     }
 }
