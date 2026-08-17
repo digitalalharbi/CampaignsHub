@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Integrations\Http\Controllers\AccountInventoryController;
 use App\Domains\Integrations\Http\Controllers\AdPlatformOAuthController;
 use App\Domains\Integrations\Http\Controllers\ConnectionWizardController;
 use App\Domains\Integrations\Http\Controllers\IntegrationController;
@@ -83,6 +84,24 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
      */
     Route::post('connections/{connection}/refresh', [ConnectionWizardController::class, 'refresh'])
         ->middleware('throttle:10,1')->name('connections.refresh');
+
+    /*
+     * COMMAND-CENTER §§7–20 — the inventory that outlives the wizard.
+     *
+     * Tenant-scoped, not project-scoped, and that is the whole point: sources belong to the tenant
+     * and are LENT to projects through a binding. A project-scoped route could not answer «what does
+     * CampaignsHub have access to», which is the question this page exists for.
+     *
+     * The bulk route is declared BEFORE the parameterised one. Laravel matches in order, and
+     * `accounts/state` would otherwise be read as an account whose id is the word «state».
+     */
+    Route::get('accounts', [AccountInventoryController::class, 'index'])->name('accounts.index');
+    Route::post('accounts/state', [AccountInventoryController::class, 'setStateBulk'])->name('accounts.state-bulk');
+    Route::get('accounts/{account}/logs', [AccountInventoryController::class, 'logs'])->name('accounts.logs');
+    Route::post('accounts/{account}/state', [AccountInventoryController::class, 'setState'])->name('accounts.state');
+    // Throttled: it calls the provider, and a window somebody drags is a lot of requests.
+    Route::post('accounts/{account}/backfill', [AccountInventoryController::class, 'backfill'])
+        ->middleware('throttle:20,1')->name('accounts.backfill');
 });
 
 // Per-project integrations (ResolveProject enforces project isolation).
