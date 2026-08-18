@@ -47,7 +47,7 @@ async function inventoryResolved(page: import('@playwright/test').Page): Promise
   ).toBeVisible({ timeout: 15000 })
 }
 
-test('the inventory lists discovered accounts by name, with a state that is not «connected»', async ({ page }) => {
+test('the inventory lists discovered accounts by name, never by identifier', async ({ page }) => {
   await connectSandbox(page.request)
   await page.goto(INTEGRATIONS)
   await inventoryResolved(page)
@@ -72,33 +72,35 @@ test('the inventory lists discovered accounts by name, with a state that is not 
   await expect(first.getByText(/المعرّف:|Reference:/)).toBeVisible()
 })
 
-test('a discovered account can be enabled, and enabling is not assignment', async ({ page }) => {
+test('an account with no project says so, and offers no history to pull', async ({ page }) => {
   await connectSandbox(page.request)
   await page.goto(INTEGRATIONS)
   await inventoryResolved(page)
 
-  const row = page.locator('[data-testid="inventory-row"]').first()
-  const name = (await row.locator('span').first().innerText()).trim()
-
-  // Select it, then enable it through the bulk bar — the only path, because the real number is 309.
-  await row.getByRole('button', { name }).click()
-  const bar = page.getByTestId('inventory-bulk-bar')
-  await expect(bar).toBeVisible()
-  await bar.getByRole('button', { name: /تفعيل|^Enable$/ }).click()
+  const unlinked = page.locator('[data-testid="inventory-row"][data-linked="false"]').first()
+  await expect(unlinked, 'the sandbox connection produced no unlinked account').toBeVisible()
 
   /*
-   * Filtering to `enabled` proves the decision REACHED THE SERVER: the chip's count and the list
-   * both come from a fresh request, so a purely local state change would show nothing here.
+   * INTEG-RUNTIME §5 — the reason nothing is happening to it, said in words rather than implied by
+   * an empty cell. There is no «enable» to press: enabling an account attached nothing, synced
+   * nothing and cost nothing, so the step was removed rather than explained.
    */
-  await page.getByRole('button', { name: /مُفعّل|^Enabled/ }).click()
-  await inventoryResolved(page)
-  await expect(page.locator('[data-testid="inventory-row"]').first()).toBeVisible()
-
-  // And enabling did not assign it: no project is named on the row.
+  await expect(unlinked.getByText(/غير مرتبط بمشروع|Not linked to a project/)).toBeVisible()
   await expect(
-    page.locator('[data-testid="inventory-row"]').first().getByText(/المشروع:|Project:/),
-    'enabling an account must not attach it to a project — only a binding does that',
+    unlinked.getByRole('button', { name: /سحب بيانات سابقة|Pull history/ }),
+    'history has nowhere to land for an account no project owns',
   ).toHaveCount(0)
+})
+
+test('no curation step is offered, because none of them ever did anything', async ({ page }) => {
+  await connectSandbox(page.request)
+  await page.goto(INTEGRATIONS)
+  await inventoryResolved(page)
+
+  const main = page.locator('main')
+  await expect(main.getByRole('button', { name: /^تفعيل$|^Enable$/ })).toHaveCount(0)
+  await expect(main.getByRole('button', { name: /^استبعاد$|^Exclude$/ })).toHaveCount(0)
+  await expect(page.getByTestId('inventory-bulk-bar')).toHaveCount(0)
 })
 
 test('the inventory does not overflow a 320px phone', async ({ page }) => {

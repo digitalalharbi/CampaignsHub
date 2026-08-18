@@ -29,6 +29,28 @@ on:
         description: 'Accounts to show'
         required: false
         default: '10'
+      linked:
+        description: 'Only accounts with an ACTIVE binding to a project'
+        type: boolean
+        required: false
+        default: false
+      payload:
+        description: 'Print the provider''s own last insights body'
+        type: boolean
+        required: false
+        default: false
+      probe_account:
+        description: 'Optional: ask the provider directly for this account (id, ours or theirs). Stores nothing.'
+        required: false
+        default: ''
+      probe_from:
+        description: 'Probe window start, YYYY-MM-DD'
+        required: false
+        default: ''
+      probe_to:
+        description: 'Probe window end, YYYY-MM-DD'
+        required: false
+        default: ''
 
 concurrency:
   group: production-diagnostics
@@ -47,12 +69,14 @@ jobs:
           ACCOUNT: ${{ inputs.account }}
           RUNS: ${{ inputs.runs }}
           ACCOUNTS: ${{ inputs.accounts }}
+          LINKED: ${{ inputs.linked && '--linked' || '' }}
+          PAYLOAD: ${{ inputs.payload && '--payload' || '' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          envs: PROVIDER,ACCOUNT,RUNS,ACCOUNTS
+          envs: PROVIDER,ACCOUNT,RUNS,ACCOUNTS,LINKED,PAYLOAD
           script: |
             set -Eeuo pipefail
             cd /opt/campaignshub
@@ -69,4 +93,39 @@ jobs:
                 --provider="${PROVIDER}" \
                 --account="${ACCOUNT}" \
                 --runs="${RUNS}" \
-                --accounts="${ACCOUNTS}"
+                --accounts="${ACCOUNTS}" \
+                ${LINKED} ${PAYLOAD}
+
+  # ── The probe ────────────────────────────────────────────────────────────────────────────────────
+  #
+  # `integrations:probe` DOES call the platform — that is its whole purpose — and stores nothing: no
+  # run row, no metric, no retained payload, no checkpoint. It exists because «the provider returned
+  # 0 rows» has two readings, and only asking over a different window separates them.
+  #
+  # It runs only when `probe_account` is given, so the default dispatch stays a pure read of what is
+  # already recorded.
+  probe:
+    if: inputs.probe_account != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe the provider
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          ACCOUNT: ${{ inputs.probe_account }}
+          FROM: ${{ inputs.probe_from }}
+          TO: ${{ inputs.probe_to }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: ACCOUNT,FROM,TO
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan integrations:probe \
+                "${ACCOUNT}" --from="${FROM}" --to="${TO}"

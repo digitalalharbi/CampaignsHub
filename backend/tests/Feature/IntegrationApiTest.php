@@ -34,7 +34,17 @@ final class IntegrationApiTest extends TestCase
         $this->user->assignRole($role);
     }
 
-    public function test_index_lists_connectors_with_status(): void
+    /**
+     * The list is the SIX ad platforms, and nothing else — INTEG-RUNTIME §2.
+     *
+     * It used to assert that `sandbox` was present. The sandbox is a local fake that exists so the
+     * end-to-end suite and the demo seeder have a connection to drive without a real platform
+     * credential; listing it here put a ninth provider on the customer's own page, wearing a green
+     * chip above the platforms they came for. It is still in the registry outside production — this
+     * is the surface that filters it, so «what this product integrates with» and «what a test can
+     * drive» stay separate facts.
+     */
+    public function test_index_lists_the_six_ad_platforms_and_no_local_fake(): void
     {
         app(TenantContext::class)->forget();
 
@@ -43,8 +53,12 @@ final class IntegrationApiTest extends TestCase
             ->json('data');
 
         $keys = array_column($data, 'key');
-        $this->assertContains('meta', $keys);
-        $this->assertContains('sandbox', $keys);
+
+        // The SET, sorted. The product's reading order is a rendering decision and is asserted where
+        // it is made — `integrations.spec.ts`, against `@/lib/platforms`.
+        sort($keys);
+        $this->assertSame(['google_ads', 'linkedin', 'meta', 'snapchat', 'tiktok', 'x'], $keys);
+        $this->assertNotContains('sandbox', $keys);
 
         $meta = collect($data)->firstWhere('key', 'meta');
         $this->assertSame('awaiting_credentials', $meta['status']);

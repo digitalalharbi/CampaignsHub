@@ -72,8 +72,8 @@ Status legend: Tested = feature tests + phpstan green; Awaiting Ext Dep = adapte
 | Messaging: client⇄team threads + team notification | backend | **Tested** | `MessagingTest` 6; commit `12d6dbd` |
 | Branding Center: assets/scopes/light-dark/sizes/white-label | backend | **Tested** | `BrandingTest` 7; commit `ee0322c` |
 | Request Journey: full state machine + hierarchical taxonomy | backend | **Tested** | `RequestJourneyTest` 8; commit `fb1547d` |
-| Connection Center: 16 connectors + honest 7-state framework | backend | **Tested** | `ConnectionCenterTest` 9; commit `e4dced5` |
-| Real ad/analytics/store/Drive sync | connector | Awaiting Ext Dep | Sandbox verified; `config/connectors.php` |
+| Connection Center: 16 connectors + honest 7-state framework | backend | **REMOVED** | INTEG-RUNTIME §1 §2 — a parallel runtime in which every real platform was a `NullConnector`, and six of the sixteen were providers this product does not integrate with. Deleted with `ConnectionCenterTest` |
+| Real ad + store sync (8 providers) | connector | Awaiting Ext Dep | `AdvertisingConnectorRegistry` + `CommerceConnectorRegistry`; `config/connectors.php` deleted. Analytics and Drive are not integration providers (INTEG-RUNTIME §2) |
 | Backend expansion integrated + regressed | backend | **Tested** | full suite 333 passed; phpstan clean; `38c44b9` |
 | Client portal backend (quotes/invoices/pay/messages/journey) | backend | **Tested** | ClientPortalBillingTest 22; commit 1815dd6 |
 | Google Drive links (tenant/client/project/campaign) | backend | **Tested** | DriveTest 9; commit 00f655c; Sandbox path |
