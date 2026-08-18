@@ -1,57 +1,58 @@
 import { useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarClock, CheckSquare, EyeOff, ScrollText, Search, Square, X } from 'lucide-react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { CalendarClock, EyeOff, ScrollText, Search, X } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import { toApiError } from '@/lib/api/client'
 import { fmtDateTime } from '@/lib/datetime'
+import { syncStatusMeaning } from '@/lib/syncStatus'
 import {
-  ACCOUNT_LIFECYCLES, backfillAccount, getAccountLogs, listInventory, setAccountStateBulk,
-  type AccountLifecycle, type InventoryAccount, type InventoryQuery, type SettableLifecycle,
+  backfillAccount, getAccountLogs, listAccounts,
+  type AccountRow, type AccountsQuery, type LinkFilter,
 } from './api'
 
 /**
- * COMMAND-CENTER §§7–20 — the inventory of every account behind every connection.
+ * INTEG-RUNTIME §3 §5 — every account this tenant reaches, and where each one goes.
  *
- * ## The screen this replaces
+ * ## The screen this replaces, twice over
  *
- * One real Snapchat authorisation returned **309 ad accounts** and the product rendered them as 309
- * identical rows saying «متصل». Three unrelated facts wore the same word — the provider returned it,
- * the customer claimed it, a project owns it — so the page could not answer either of the questions
- * anybody actually has: «which of these am I paying for?» and «where do this account's numbers go?»
+ * One real Snapchat authorisation returned **309 ad accounts** and the product first rendered them as
+ * 309 identical rows saying «متصل» — three unrelated facts wearing one word, so the page could not
+ * answer either question anybody has: «which of these am I paying for?» and «where do this account's
+ * numbers go?»
  *
- * ## What is deliberately NOT here
+ * The first answer to that was a four-state curation workflow: discovered → enabled → excluded, with
+ * chips, a bulk bar and a column of its own. It was internal bookkeeping promoted to customer-facing
+ * vocabulary. **Enabling an account did nothing** — it did not sync, did not attach, did not spend a
+ * quota slot; only linking it to a project ever did any of those — so the customer was asked to learn
+ * a state machine in order to press a button with no effect.
  *
- * No visual borrowing from any other tool. The useful IDEA in that class of product is that sources
- * are managed in one place with an explicit account-by-account decision; the layout, wording and
- * chrome below are this product's own, in Arabic first, and the states are named for what they mean
- * here rather than for what somebody else called them.
+ * There is one distinction left, and it is the only one that was ever real: an account is **linked to
+ * a project**, or it is not. That answer is read from the binding, which is the single record of
+ * ownership in this system.
  *
  * ## The two numbers on every chip
  *
- * The counts describe the WHOLE inventory and the list describes the filtered part. That is the
- * difference between «مُفعّل ٤» and «٤ من ٣٠٩» — one of them tells the customer whether they have
- * finished choosing.
+ * The counts describe the WHOLE inventory and the list describes the filtered part. «مرتبطة ٤» leaves
+ * the customer with no way to know whether four is most of what they have or a rounding error on
+ * three hundred; «٤ من ٣٠٩» answers it.
  */
 
 const COPY = {
   ar: {
     title: 'الحسابات المكتشَفة',
-    subtitle: 'كل حساب تصل إليه المنصة، وما يحدث له فعليًا. الاكتشاف ليس تفعيلًا، والتفعيل ليس ارتباطًا بمشروع.',
+    subtitle: 'كل حساب تصل إليه المنصة عبر ارتباطاتك، وإلى أي مشروع تذهب بياناته.',
     search_ph: 'ابحث بالاسم أو المعرّف…',
     all: 'الكل',
+    linked: 'مرتبطة بمشروع',
+    unlinked: 'غير مرتبطة',
     of: 'من',
     loading: 'جارٍ التحميل…',
     empty: 'لا توجد حسابات مطابقة.',
     empty_all: 'لم يُكتشف أي حساب بعد. اربط منصة من الأعلى ليظهر ما تصل إليه هنا.',
-    selected: 'محدد',
-    enable: 'تفعيل',
-    exclude: 'استبعاد',
-    reset: 'إعادة إلى «مكتشَف»',
-    clear: 'إلغاء التحديد',
     logs: 'سجل المزامنة',
     backfill: 'سحب بيانات سابقة',
     project: 'المشروع',
-    no_project: 'لا مشروع',
+    no_project: 'غير مرتبط بمشروع — لا تُجلب له بيانات',
     reference: 'المعرّف',
     unnamed_note: 'لم تُرسل المنصة اسمًا لهذا الحساب. سمِّه في لوحة المزوّد ليظهر هنا.',
     quota_free: 'لا يستهلك حصة الحسابات الإعلانية',
@@ -63,30 +64,31 @@ const COPY = {
     submit_backfill: 'ابدأ السحب',
     queued: 'أُدرج الطلب في الطابور.',
     no_runs: 'لا توجد عمليات مزامنة لهذا الحساب بعد.',
-    run_status: 'الحالة',
-    run_window: 'النطاق',
-    run_metrics: 'المقاييس',
+    run_window: 'الفترة',
+    run_rows: 'صفوف من المنصة',
+    run_metrics: 'قياسات محفوظة',
     run_started: 'البدء',
-    run_error: 'الخطأ',
+    run_duration: 'المدة',
+    run_detail: 'تفاصيل تقنية',
+    trigger_automatic: 'تلقائية',
+    trigger_manual: 'يدوية',
+    trigger_backfill: 'سحب تاريخي',
   },
   en: {
     title: 'Discovered accounts',
-    subtitle: 'Every account this platform can reach, and what is actually happening to it. Discovery is not enabling, and enabling is not assignment to a project.',
+    subtitle: 'Every account this platform can reach through your connections, and which project its data feeds.',
     search_ph: 'Search by name or reference…',
     all: 'All',
+    linked: 'Linked to a project',
+    unlinked: 'Not linked',
     of: 'of',
     loading: 'Loading…',
     empty: 'No matching accounts.',
     empty_all: 'Nothing discovered yet. Connect a platform above and what it can reach appears here.',
-    selected: 'selected',
-    enable: 'Enable',
-    exclude: 'Exclude',
-    reset: 'Back to “Discovered”',
-    clear: 'Clear selection',
     logs: 'Sync log',
     backfill: 'Pull history',
     project: 'Project',
-    no_project: 'No project',
+    no_project: 'Not linked to a project — nothing is fetched for it',
     reference: 'Reference',
     unnamed_note: 'The provider sent no name for this account. Name it in the provider’s console and it appears here.',
     quota_free: 'Does not use an ad-account slot',
@@ -98,78 +100,47 @@ const COPY = {
     submit_backfill: 'Start',
     queued: 'Queued.',
     no_runs: 'No syncs for this account yet.',
-    run_status: 'Status',
     run_window: 'Window',
-    run_metrics: 'Metrics',
+    run_rows: 'Rows from the platform',
+    run_metrics: 'Metrics imported',
     run_started: 'Started',
-    run_error: 'Error',
+    run_duration: 'Duration',
+    run_detail: 'Technical detail',
+    trigger_automatic: 'Automatic',
+    trigger_manual: 'Manual',
+    trigger_backfill: 'Backfill',
   },
 } as const
 
 /** Widened so either language satisfies it — a `typeof COPY.ar` would only accept the Arabic one. */
 type Copy = typeof COPY.ar | typeof COPY.en
 
-/**
- * Each state gets its own colour AND its own words.
- *
- * Colour alone would put this back where it started: four shades of one badge that everybody reads
- * as «connected». The label is the signal; the tint is only there to make the list scannable.
- */
-const STATE_TONE: Record<AccountLifecycle, string> = {
-  discovered: 'bg-surface-hover text-text-secondary border-border',
-  enabled: 'bg-brand-500/10 text-brand-600 border-brand-500/30',
-  excluded: 'bg-surface-hover text-text-muted border-border line-through',
-  assigned: 'bg-success/10 text-success border-success/30',
-}
-
-export function AccountInventoryPanel() {
+export function AccountsPanel() {
   const locale = useUi((s) => s.locale)
-  const c = COPY[locale === 'ar' ? 'ar' : 'en']
-  const queryClient = useQueryClient()
+  const ar = locale === 'ar'
+  const c = COPY[ar ? 'ar' : 'en']
 
-  const [state, setState] = useState<AccountLifecycle | 'all'>('all')
+  const [link, setLink] = useState<LinkFilter | 'all'>('all')
   const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [logsFor, setLogsFor] = useState<InventoryAccount | null>(null)
-  const [backfillFor, setBackfillFor] = useState<InventoryAccount | null>(null)
+  const [logsFor, setLogsFor] = useState<AccountRow | null>(null)
+  const [backfillFor, setBackfillFor] = useState<AccountRow | null>(null)
 
-  const query: InventoryQuery = useMemo(
-    () => ({ ...(state === 'all' ? {} : { state }), ...(search.trim() === '' ? {} : { q: search.trim() }), per_page: 50 }),
-    [state, search],
+  const query: AccountsQuery = useMemo(
+    () => ({
+      ...(link === 'all' ? {} : { link }),
+      ...(search.trim() === '' ? {} : { q: search.trim() }),
+      per_page: 50,
+    }),
+    [link, search],
   )
 
-  const inventory = useQuery({
+  const accountsQuery = useQuery({
     queryKey: ['integration-accounts', query],
-    queryFn: () => listInventory(query),
+    queryFn: () => listAccounts(query),
   })
 
-  const bulk = useMutation({
-    mutationFn: ({ ids, next }: { ids: string[]; next: SettableLifecycle }) => setAccountStateBulk(ids, next),
-    onSuccess: () => {
-      setSelected(new Set())
-      void queryClient.invalidateQueries({ queryKey: ['integration-accounts'] })
-    },
-  })
-
-  const accounts = inventory.data?.accounts ?? []
-  const summary = inventory.data?.summary
-
-  const toggle = (id: string) => {
-    setSelected((current) => {
-      const next = new Set(current)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-
-      return next
-    })
-  }
-
-  /*
-   * The bulk bar refuses `exclude` while an assigned account is in the selection, in the interface as
-   * well as on the server. The server is the rule; this only saves the customer a round trip that
-   * ends in a refusal they could have been shown before pressing.
-   */
-  const selectionHasAssigned = accounts.some((a) => selected.has(a.id) && a.lifecycle === 'assigned')
+  const accounts = accountsQuery.data?.accounts ?? []
+  const summary = accountsQuery.data?.summary
 
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4">
@@ -180,24 +151,23 @@ export function AccountInventoryPanel() {
 
       {/* The chips are the filter AND the census — «٤ من ٣٠٩» in one control. */}
       <div className="flex flex-wrap items-center gap-2">
-        <StateChip
-          label={c.all}
-          count={summary?.total}
-          active={state === 'all'}
-          onClick={() => setState('all')}
+        <Chip label={c.all} count={summary?.total} active={link === 'all'} onClick={() => setLink('all')} />
+        <Chip
+          label={c.linked}
+          count={summary?.linked}
+          total={summary?.total}
+          totalWord={c.of}
+          active={link === 'linked'}
+          onClick={() => setLink((current) => (current === 'linked' ? 'all' : 'linked'))}
         />
-        {ACCOUNT_LIFECYCLES.map((s) => (
-          <StateChip
-            key={s}
-            label={accounts.find((a) => a.lifecycle === s)?.lifecycle_label ?? s}
-            count={summary?.[s]}
-            total={summary?.total}
-            totalWord={c.of}
-            active={state === s}
-            tone={STATE_TONE[s]}
-            onClick={() => setState((current) => (current === s ? 'all' : s))}
-          />
-        ))}
+        <Chip
+          label={c.unlinked}
+          count={summary?.unlinked}
+          total={summary?.total}
+          totalWord={c.of}
+          active={link === 'unlinked'}
+          onClick={() => setLink((current) => (current === 'unlinked' ? 'all' : 'unlinked'))}
+        />
 
         <div className="relative min-w-0 flex-1 sm:flex-none">
           <Search size={15} className="pointer-events-none absolute inset-y-0 my-auto ms-2.5 text-text-muted" />
@@ -212,56 +182,7 @@ export function AccountInventoryPanel() {
         </div>
       </div>
 
-      {selected.size > 0 && (
-        <div
-          data-testid="inventory-bulk-bar"
-          className="flex flex-wrap items-center gap-2 rounded-lg border border-brand-500/30 bg-brand-500/5 px-3 py-2 text-sm"
-        >
-          <span className="font-semibold text-text-primary">
-            {selected.size} {c.selected}
-          </span>
-          <button
-            type="button"
-            onClick={() => bulk.mutate({ ids: [...selected], next: 'enabled' })}
-            disabled={bulk.isPending}
-            className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-text-primary hover:bg-surface-hover disabled:opacity-50"
-          >
-            {c.enable}
-          </button>
-          <button
-            type="button"
-            onClick={() => bulk.mutate({ ids: [...selected], next: 'excluded' })}
-            disabled={bulk.isPending || selectionHasAssigned}
-            title={selectionHasAssigned ? c.exclude : undefined}
-            className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-text-primary hover:bg-surface-hover disabled:opacity-50"
-          >
-            {c.exclude}
-          </button>
-          <button
-            type="button"
-            onClick={() => bulk.mutate({ ids: [...selected], next: 'discovered' })}
-            disabled={bulk.isPending}
-            className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-text-primary hover:bg-surface-hover disabled:opacity-50"
-          >
-            {c.reset}
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelected(new Set())}
-            className="ms-auto text-xs text-text-secondary underline"
-          >
-            {c.clear}
-          </button>
-        </div>
-      )}
-
-      {bulk.isError && (
-        <p className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
-          {toApiError(bulk.error).message}
-        </p>
-      )}
-
-      {inventory.isLoading ? (
+      {accountsQuery.isLoading ? (
         <p className="p-6 text-center text-sm text-text-secondary">{c.loading}</p>
       ) : accounts.length === 0 ? (
         <p
@@ -276,25 +197,13 @@ export function AccountInventoryPanel() {
             <li
               key={account.id}
               data-testid="inventory-row"
+              data-linked={account.is_linked}
               className="flex flex-wrap items-start gap-3 rounded-lg border border-border bg-background p-3"
             >
-              <button
-                type="button"
-                onClick={() => toggle(account.id)}
-                aria-pressed={selected.has(account.id)}
-                aria-label={account.name}
-                className="mt-0.5 text-text-secondary hover:text-text-primary"
-              >
-                {selected.has(account.id) ? <CheckSquare size={16} /> : <Square size={16} />}
-              </button>
-
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   {/* The NAME leads. Always words — the server never returns an id here. */}
                   <span className="truncate text-sm font-semibold text-text-primary">{account.name}</span>
-                  <span className={`rounded-full border px-2 py-0.5 text-[11px] ${STATE_TONE[account.lifecycle]}`}>
-                    {account.lifecycle_label}
-                  </span>
                   <span className="text-[11px] text-text-muted">
                     {account.provider_label} · {account.account_type_label}
                   </span>
@@ -304,8 +213,11 @@ export function AccountInventoryPanel() {
                   {/* The identifier, as a reference — labelled, secondary, never the name. */}
                   <span className="font-mono">{c.reference}: {account.reference}</span>
                   {account.parent_name !== null && <span>{account.parent_name}</span>}
-                  {account.assigned_project_name !== null && (
+                  {account.is_linked ? (
                     <span className="text-success">{c.project}: {account.assigned_project_name}</span>
+                  ) : (
+                    /* Said in words, because «no project» is the reason nothing is happening to it. */
+                    <span className="text-text-muted">{c.no_project}</span>
                   )}
                   <span>
                     {c.last_sync}: {account.last_synced_at === null ? c.never : fmtDateTime(account.last_synced_at)}
@@ -330,7 +242,8 @@ export function AccountInventoryPanel() {
                 >
                   <ScrollText size={13} /> {c.logs}
                 </button>
-                {account.lifecycle === 'assigned' && (
+                {/* Offered only where history has somewhere to land — the server refuses otherwise. */}
+                {account.is_linked && (
                   <button
                     type="button"
                     onClick={() => setBackfillFor(account)}
@@ -345,7 +258,7 @@ export function AccountInventoryPanel() {
         </ul>
       )}
 
-      {logsFor !== null && <LogsDialog account={logsFor} c={c} onClose={() => setLogsFor(null)} />}
+      {logsFor !== null && <LogsDialog account={logsFor} c={c} ar={ar} onClose={() => setLogsFor(null)} />}
       {backfillFor !== null && (
         <BackfillDialog account={backfillFor} c={c} onClose={() => setBackfillFor(null)} />
       )}
@@ -353,15 +266,14 @@ export function AccountInventoryPanel() {
   )
 }
 
-function StateChip({
-  label, count, total, totalWord, active, tone, onClick,
+function Chip({
+  label, count, total, totalWord, active, onClick,
 }: {
   label: string
   count?: number
   total?: number
   totalWord?: string
   active: boolean
-  tone?: string
   onClick: () => void
 }) {
   return (
@@ -370,16 +282,12 @@ function StateChip({
       onClick={onClick}
       aria-pressed={active}
       className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-        active ? 'border-brand-500 bg-brand-500/10 text-brand-600' : (tone ?? 'border-border text-text-secondary')
+        active ? 'border-brand-500 bg-brand-500/10 text-brand-600' : 'border-border text-text-secondary'
       }`}
     >
       {label}
       {count !== undefined && (
         <span className="ms-1.5 font-mono text-[11px]">
-          {/*
-            Both numbers, always. «مُفعّل ٤» leaves the customer with no way to know whether four is
-            most of what they have or a rounding error on three hundred.
-          */}
           {count}
           {total !== undefined && totalWord !== undefined ? ` ${totalWord} ${total}` : ''}
         </span>
@@ -388,17 +296,26 @@ function StateChip({
   )
 }
 
+/** §9 — a run reads as an event: when, why, over what, what came back, and how long it took. */
 function LogsDialog({
-  account, c, onClose,
+  account, c, ar, onClose,
 }: {
-  account: InventoryAccount
+  account: AccountRow
   c: Copy
+  ar: boolean
   onClose: () => void
 }) {
   const logs = useQuery({
     queryKey: ['integration-account-logs', account.id],
     queryFn: () => getAccountLogs(account.id),
   })
+
+  const triggerLabel = (trigger: string): string => {
+    if (trigger === 'manual') return c.trigger_manual
+    if (trigger === 'backfill') return c.trigger_backfill
+
+    return c.trigger_automatic
+  }
 
   return (
     <Dialog title={`${c.logs} — ${account.name}`} closeLabel={c.close} onClose={onClose}>
@@ -408,26 +325,50 @@ function LogsDialog({
         <p className="p-4 text-center text-sm text-text-secondary">{c.no_runs}</p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {logs.data?.runs.map((run) => (
-            <li key={run.id} className="rounded-lg border border-border p-2.5 text-xs">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="font-semibold text-text-primary">{c.run_status}: {run.status}</span>
-                <span className="text-text-secondary">
-                  {c.run_window}: {run.window_start} → {run.window_end}
-                </span>
-                <span className="text-text-secondary">{c.run_metrics}: {run.metrics_upserted ?? 0}</span>
-                <span className="text-text-muted">
-                  {c.run_started}: {run.started_at === null ? c.never : fmtDateTime(run.started_at)}
-                </span>
-              </div>
-              {/* Shown exactly as recorded. A log that tidies its own errors is a log nobody can debug from. */}
-              {run.error !== null && (
-                <p className="mt-1 rounded bg-danger/5 px-2 py-1 font-mono text-[11px] text-danger">
-                  {c.run_error}: {run.error}
-                </p>
-              )}
-            </li>
-          ))}
+          {logs.data?.runs.map((run) => {
+            const meaning = syncStatusMeaning(run.status)
+
+            return (
+              <li key={run.id} data-testid="account-log-row" data-status={run.status} className="rounded-lg border border-border p-2.5 text-xs">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className={`rounded-full px-2 py-0.5 font-semibold ${
+                    meaning.tone === 'danger' ? 'text-danger' : meaning.tone === 'warning' ? 'text-warning' : meaning.tone === 'success' ? 'text-success' : 'text-text-secondary'
+                  }`}
+                  >
+                    {ar ? meaning.ar : meaning.en}
+                  </span>
+                  <span className="rounded bg-surface-hover px-1.5 py-0.5 text-text-secondary">{triggerLabel(run.trigger)}</span>
+                  <span className="text-text-secondary">
+                    {c.run_window}: {run.window_start} → {run.window_end}
+                  </span>
+                </div>
+
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-text-muted">
+                  {/* «—» for a count nobody took; the number for a count of zero. Not the same claim. */}
+                  <span>{c.run_rows}: {run.provider_rows ?? '—'}</span>
+                  <span>{c.run_metrics}: {run.metrics_imported}</span>
+                  <span>{c.run_duration}: {run.duration_seconds === null ? '—' : `${run.duration_seconds}s`}</span>
+                  <span>{c.run_started}: {run.started_at === null ? c.never : fmtDateTime(run.started_at)}</span>
+                </div>
+
+                {(ar ? meaning.hint_ar : meaning.hint_en) !== '' && (
+                  <p className="mt-1 text-text-secondary">{ar ? meaning.hint_ar : meaning.hint_en}</p>
+                )}
+
+                {/*
+                  The provider's own words, behind a disclosure. Kept verbatim — an operator needs it
+                  exactly as recorded — and off the face of the row, where an English stack trace in
+                  red says nothing the badge above has not already said.
+                */}
+                {run.error !== null && (
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-text-secondary">{c.run_detail}</summary>
+                    <p className="mt-1 rounded bg-surface-hover px-2 py-1 font-mono text-[11px] text-text-secondary" dir="ltr">{run.error}</p>
+                  </details>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
     </Dialog>
@@ -437,7 +378,7 @@ function LogsDialog({
 function BackfillDialog({
   account, c, onClose,
 }: {
-  account: InventoryAccount
+  account: AccountRow
   c: Copy
   onClose: () => void
 }) {
@@ -454,8 +395,8 @@ function BackfillDialog({
         {/*
           Text inputs with an explicit YYYY-MM-DD pattern, not `type="date"`.
           A native date input renders in the BROWSER's locale, so an Arabic interface would show a
-          Gregorian picker in whatever order the operating system prefers, and the value the customer
-          reads back would not be the value this product stores.
+          picker in whatever order the operating system prefers, and the value the customer reads
+          back would not be the value this product stores.
         */}
         <label className="flex flex-col gap-1 text-xs text-text-secondary">
           {c.from}

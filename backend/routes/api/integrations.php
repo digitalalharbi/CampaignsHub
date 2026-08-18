@@ -92,13 +92,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
      * and are LENT to projects through a binding. A project-scoped route could not answer «what does
      * CampaignsHub have access to», which is the question this page exists for.
      *
-     * The bulk route is declared BEFORE the parameterised one. Laravel matches in order, and
-     * `accounts/state` would otherwise be read as an account whose id is the word «state».
+     * There is no «enable» or «exclude» endpoint here, deliberately. An account is either linked to
+     * a project or it is not, and that answer lives in `ProjectIntegrationBinding` — a second way to
+     * say who owns an account is the exact defect this programme spent three PRs removing.
      */
     Route::get('accounts', [AccountInventoryController::class, 'index'])->name('accounts.index');
-    Route::post('accounts/state', [AccountInventoryController::class, 'setStateBulk'])->name('accounts.state-bulk');
     Route::get('accounts/{account}/logs', [AccountInventoryController::class, 'logs'])->name('accounts.logs');
-    Route::post('accounts/{account}/state', [AccountInventoryController::class, 'setState'])->name('accounts.state');
     // Throttled: it calls the provider, and a window somebody drags is a lot of requests.
     Route::post('accounts/{account}/backfill', [AccountInventoryController::class, 'backfill'])
         ->middleware('throttle:20,1')->name('accounts.backfill');

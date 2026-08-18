@@ -287,3 +287,111 @@ export async function revokeConnection(connectionId: string): Promise<{ status: 
   await ensureCsrfCookie()
   return postData(`/connections/${connectionId}/revoke`)
 }
+
+// ── The tenant's discovered accounts ─────────────────────────────────────────────────────────────
+
+/**
+ * INTEG-RUNTIME §3 §5 — one account, and the one thing that is true of it.
+ *
+ * `is_linked` is read on the server from `ProjectIntegrationBinding` where `is_active`. There is no
+ * curation state here and there must not be: an earlier cut carried discovered / enabled / excluded
+ * as well, and «enabled» named a decision that changed nothing — it did not sync, attach or cost a
+ * quota slot. Only the binding ever did.
+ */
+export interface AccountRow {
+  id: string
+  provider: string
+  provider_label: string
+  account_type: 'ad_account' | 'store'
+  account_type_label: string
+  /** What to READ. Never an identifier — the server substitutes words when the provider gave none. */
+  name: string
+  /** What to MATCH against the provider's own console. Always the raw external id. */
+  reference: string
+  named_by_provider: boolean
+  parent_name: string | null
+  parent_external_id: string | null
+  currency: string | null
+  timezone: string | null
+  connection_id: string
+  connection_name: string | null
+  is_linked: boolean
+  assigned_project_id: string | null
+  /** The project's NAME. An id is not an answer to «where does this go». */
+  assigned_project_name: string | null
+  /** Null where nothing has ever tried to sync — an absent badge, never a green one. */
+  health: string | null
+  last_synced_at: string | null
+  last_sync_attempt_at: string | null
+  last_sync_error_category: string | null
+  next_sync_at: string | null
+  access_lost_at: string | null
+  counts_toward_ad_account_quota: boolean
+}
+
+export type LinkFilter = 'linked' | 'unlinked'
+
+export interface AccountsSummary {
+  linked: number
+  unlinked: number
+  total: number
+}
+
+export interface AccountsPage {
+  accounts: AccountRow[]
+  /** Counts the WHOLE inventory, deliberately unaffected by the filters that cut the list. */
+  summary: AccountsSummary
+  meta: { total: number; per_page: number; current_page: number; last_page: number }
+}
+
+export interface AccountsQuery {
+  provider?: string
+  connection?: string
+  account_type?: 'ad_account' | 'store'
+  link?: LinkFilter
+  q?: string
+  page?: number
+  per_page?: number
+}
+
+export function listAccounts(query: AccountsQuery = {}): Promise<AccountsPage> {
+  const params = new URLSearchParams()
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value))
+  })
+
+  return getData<AccountsPage>(`/accounts?${params.toString()}`)
+}
+
+/** One run as `MetricSyncRun::logRow()` states it — see `CampaignSyncRun`, which is the same shape. */
+export interface AccountSyncRun {
+  id: string
+  provider: string
+  status: string
+  trigger: 'automatic' | 'manual' | 'backfill'
+  window_start: string | null
+  window_end: string | null
+  provider_rows: number | null
+  parsed_rows: number | null
+  mapped_rows: number | null
+  metrics_imported: number
+  duration_seconds: number | null
+  attempts: number
+  started_at: string | null
+  finished_at: string | null
+  error: string | null
+}
+
+export function getAccountLogs(id: string): Promise<{ account: AccountRow; runs: AccountSyncRun[] }> {
+  return getData(`/accounts/${id}/logs`)
+}
+
+/** A window the scheduled sweep will never cover — refused for an account no project owns. */
+export async function backfillAccount(
+  id: string,
+  from: string,
+  to: string,
+): Promise<{ account_id: string; from: string; to: string; queued: boolean }> {
+  await ensureCsrfCookie()
+  return postData(`/accounts/${id}/backfill`, { from, to })
+}

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -48,6 +49,20 @@ final class IntegrationController extends Controller
              * platforms.
              */
             if (in_array($connector->key(), $listed, true)) {
+                continue;
+            }
+
+            /*
+             * INTEG-RUNTIME §2 — the eight, and only the eight, are offered to a customer.
+             *
+             * `AdvertisingConnectorRegistry` still carries the sandbox connector outside production,
+             * because the end-to-end suite and the demo seeder need a connection to exercise without a
+             * real platform credential. That is a development need; listing it here made it a NINTH
+             * provider on the customer's own page, with a green chip, above the platforms they came
+             * for. It is filtered at the surface rather than removed from the registry, so the two
+             * facts stay separate: what this product integrates with, and what a test can drive.
+             */
+            if (! ProviderCatalogue::has($connector->key())) {
                 continue;
             }
 

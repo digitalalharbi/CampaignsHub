@@ -2,75 +2,64 @@ import { expect, test } from '@playwright/test'
 import { AUTH, E2E_ORIGIN, seededProject } from './helpers'
 
 /**
- * The integrations surfaces lead with the six real ad platforms (PROJINT-001, INTEG-UI-001).
+ * The integrations surface offers the EIGHT providers this product integrates with — INTEG-RUNTIME §2.
  *
- * The grid used to be ordered by whatever the API returned, which put `sandbox` — a local fake
- * provider that exists so the product can be demonstrated without credentials — at the head of the
- * list, above Meta and Google, wearing a green "connected" chip. Somebody opening this page to
- * connect their advertising met a connected generic connector first and the platforms they came for
- * eleventh.
+ * ## What this spec used to be asserting
  *
- * The other eleven connectors are real and stay reachable. What is asserted here is which ones the
- * page LEADS with, and that nothing claims a connection it does not have.
+ * It read `main li[data-testid="connector-card"]` from a grid of sixteen «connectors» built out of
+ * `config/connectors.php`, in which every real platform was a `NullConnector` that could not
+ * authorise, could not sync and existed only to be listed. Six of the sixteen were providers this
+ * product does not integrate with at all, and one was the sandbox — a local fake, at the head of the
+ * list, wearing a green «connected» chip, above the platforms a customer came for.
+ *
+ * That grid is gone with its runtime. The six ad platforms below are the real connectors, and each
+ * card is the one a customer actually acts on.
  */
-test.describe('the integrations centre', () => {
+test.describe('the integrations surface', () => {
   test.use({ storageState: AUTH.advertiser })
 
   /**
    * The product's order (PLATFORM-ORDER-001) — سناب شات، تيك توك، ميتا، جوجل أدز، إكس، لينكدإن.
    *
-   * This list used to lead with Meta, which is how the drift stayed invisible: the connection centre
-   * and the dashboard led with Meta, the report engine led with Snapchat, and each had a test that
-   * agreed with the file beside it. The order now lives in `@/lib/platforms`, and this asserts the
-   * rendered result against it.
+   * The order lives in `@/lib/platforms`; this asserts the rendered result against it. Registry keys,
+   * not labels: `google_ads` is one platform however it is spelled, and a label is translated.
    */
-  const AD_PLATFORMS = ['Snapchat Ads', 'TikTok Ads', 'Meta Ads', 'Google Ads', 'X Ads', 'LinkedIn Ads']
+  const AD_PLATFORMS = ['snapchat', 'tiktok', 'meta', 'google_ads', 'x', 'linkedin']
 
-  /**
-   * The CONNECTOR CARDS, in the order the page offers them.
-   *
-   * Scoped to `[data-testid="connector-card"]` rather than to `main li`, which is what this used to
-   * say. The two meant the same thing only for as long as the connector grid was the only list on
-   * the page: the account inventory added its own rows, an assigned one leads with the chip
-   * «مرتبط بمشروع», and that string arrived at the head of this list and pushed «LinkedIn Ads» off
-   * the end of the slice. It failed identically on all three browsers, which is what a selector
-   * reading the wrong elements looks like — and it passed locally, because the inventory only
-   * renders that chip once some earlier spec in the full run has assigned an account.
-   *
-   * The assertions below are unchanged. Only the set they read from is now the set they always
-   * described.
-   */
-  async function connectorNames(page: import('@playwright/test').Page): Promise<string[]> {
-    return page.locator('main li[data-testid="connector-card"]').evaluateAll((els) =>
-      els
-        .map((el) => ((el as HTMLElement).innerText || '').split('\n').filter(Boolean)[1] ?? '')
-        .filter(Boolean),
+  /** The PLATFORM CARDS, in the order the page offers them. */
+  async function platformKeys(page: import('@playwright/test').Page): Promise<string[]> {
+    return page.locator('[data-testid="platform-card"]').evaluateAll((els) =>
+      els.map((el) => (el as HTMLElement).dataset.platform ?? '').filter(Boolean),
     )
   }
 
-  test('the six ad platforms come first, in order', async ({ page }) => {
+  test('the six ad platforms are offered, in the product order', async ({ page }) => {
     await page.goto('/app/integrations')
     await expect(page.locator('main')).toBeVisible()
-    await expect.poll(async () => (await connectorNames(page)).length, { timeout: 20000 }).toBeGreaterThan(6)
+    await expect.poll(async () => (await platformKeys(page)).length, { timeout: 20000 }).toBe(6)
 
-    const names = await connectorNames(page)
-    expect(names.slice(0, 6)).toEqual(AD_PLATFORMS)
-  })
-
-  /** Sandbox is not a customer's integration, so it is last — never the first thing offered. */
-  test('the fake provider is last, not first', async ({ page }) => {
-    await page.goto('/app/integrations')
-    await expect.poll(async () => (await connectorNames(page)).length, { timeout: 20000 }).toBeGreaterThan(6)
-
-    const names = await connectorNames(page)
-    expect(names[names.length - 1]).toMatch(/Sandbox/i)
+    expect(await platformKeys(page)).toEqual(AD_PLATFORMS)
   })
 
   /**
-   * Nothing claims to be connected without credentials.
+   * **The ninth provider, gone.** The sandbox is not one of the eight and is not offered as one.
    *
-   * No provider has credentials in any environment, so the summary must read zero connected — and
-   * the page must say so rather than leaving the reader to infer it.
+   * It still exists in the registry outside production, because the end-to-end suite and the demo
+   * seeder need a connection to drive without a real platform credential. That is a development
+   * need; listing it here made it a provider the customer could choose.
+   */
+  test('the local fake is not offered as a provider', async ({ page }) => {
+    await page.goto('/app/integrations')
+    await expect.poll(async () => (await platformKeys(page)).length, { timeout: 20000 }).toBe(6)
+
+    expect(await platformKeys(page)).not.toContain('sandbox')
+    await expect(page.locator('[data-testid="platform-card"]').filter({ hasText: /sandbox/i })).toHaveCount(0)
+  })
+
+  /**
+   * Nothing claims to be connected without credentials, and no raw enum reaches the reader.
+   *
+   * No provider has credentials in any environment, so nothing on this page may read as connected.
    */
   test('no platform claims a connection it does not have', async ({ page }) => {
     await page.goto('/app/integrations')
@@ -78,10 +67,6 @@ test.describe('the integrations centre', () => {
     await expect(main).toBeVisible()
     await expect.poll(async () => (await main.innerText()).length, { timeout: 20000 }).toBeGreaterThan(100)
 
-    // The honesty note is on the page, in whichever language it opens in.
-    await expect(main).toContainText(/الحالات صادقة|states are honest/i)
-
-    // …and the raw connection enum is never printed at the reader.
     const text = await main.innerText()
     expect(text).not.toMatch(/\bالحساب:\s*(connected|awaiting_credentials|needs_action)\b/)
   })
@@ -89,16 +74,24 @@ test.describe('the integrations centre', () => {
   /** Every ad platform's card offers the action its state allows, and no dead control. */
   test('each ad platform offers a real action for its state', async ({ page }) => {
     await page.goto('/app/integrations')
-    await expect.poll(async () => (await connectorNames(page)).length, { timeout: 20000 }).toBeGreaterThan(6)
+    await expect.poll(async () => (await platformKeys(page)).length, { timeout: 20000 }).toBe(6)
 
     for (const platform of AD_PLATFORMS) {
-      // Scoped for the same reason as `connectorNames` above: this wants a connector CARD, and
-      // `main li` is now several different lists.
-      const card = page.locator('main li[data-testid="connector-card"]').filter({ hasText: platform }).first()
+      const card = page.locator(`[data-testid="platform-card"][data-platform="${platform}"]`)
       await expect(card, `${platform} has no card`).toBeVisible()
       // Awaiting credentials → the card offers "connect"; it must not offer a sync that cannot run.
       await expect(card.getByRole('button')).not.toHaveCount(0)
     }
+  })
+
+  /** The stores and the accounts live on the same page — one place manages every source (§3). */
+  test('stores and the discovered accounts are on the same page as the platforms', async ({ page }) => {
+    await page.goto('/app/integrations')
+    await expect(page.getByTestId('ad-platforms-panel')).toBeVisible()
+    await expect(
+      page.locator('[data-testid="inventory-row"], [data-testid="inventory-empty"]').first(),
+      'the accounts panel never resolved',
+    ).toBeVisible({ timeout: 20000 })
   })
 })
 

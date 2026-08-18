@@ -20,7 +20,6 @@ final class ExternalAccount extends Model
         'external_id', 'parent_external_id', 'parent_name', 'name', 'currency', 'timezone', 'status', 'metadata',
         'discovered_at', 'access_lost_at', 'last_synced_at', 'last_structure_synced_at',
         'last_sync_attempt_at', 'last_sync_error_category', 'next_sync_at',
-        'management_state', 'management_state_changed_at',
     ];
 
     protected $casts = [
@@ -43,13 +42,6 @@ final class ExternalAccount extends Model
          */
         'last_sync_attempt_at' => 'datetime',
         'next_sync_at' => 'datetime',
-        /*
-         * COMMAND-CENTER §7 — the customer's decision, and when they made it.
-         *
-         * NULL is «discovered»: the provider returned it and nobody has said anything. `assigned` is
-         * never a value here — that is the binding's answer, and a second copy of it would drift.
-         */
-        'management_state_changed_at' => 'datetime',
     ];
 
     /** @return BelongsTo<ProviderConnection, $this> */

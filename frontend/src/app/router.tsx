@@ -64,7 +64,7 @@ import { messagingRoutes } from '@/features/messaging/messagingRoutes'
 import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRoutes'
 import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
-import { ConnectionCenterPage } from '@/features/connections/ConnectionCenterPage'
+import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
 import { DrivePage } from '@/features/drive/DrivePage'
 import { TasksPage } from '@/features/tasks/TasksPage'
 import { CreativesPage } from '@/features/content/CreativesPage'
@@ -324,11 +324,18 @@ export const router = createBrowserRouter(withErrorBoundary([
           // routes redirect (see docs/ROUTE_REDIRECT_MAP.md) — no dead links, one engine per function.
           ...requestJourneyRoutes,
           ...subscriptionsRoutes,
-          { path: 'integrations', element: <ConnectionCenterPage /> },
-          { path: 'integrations/drive', element: <DrivePage /> },
+          { path: 'integrations', element: <IntegrationsPage /> },
           { path: 'files', element: <FilesLibraryPage /> },
+          /*
+           * INTEG-RUNTIME §2 — Drive is a FILE source, not one of the eight providers.
+           *
+           * It used to live at `/integrations/drive`, which put a ninth provider on the integrations
+           * surface. Its folder links feed the files library and the client portal's attachments, so
+           * the capability stays; what moves is the claim that it is an integration.
+           */
+          { path: 'files/drive', element: <DrivePage /> },
           { path: 'connections', element: <Navigate to="/app/integrations" replace /> },
-          { path: 'drive', element: <Navigate to="/app/integrations/drive" replace /> },
+          { path: 'drive', element: <Navigate to="/app/files/drive" replace /> },
           { path: 'branding', element: <Navigate to="/app/settings/branding" replace /> },
           { path: 'content', element: <CreativesPage /> },
           /*
@@ -486,9 +493,8 @@ export const router = createBrowserRouter(withErrorBoundary([
              *
              * MOUNTED, not copied. Same component as `/app/integrations`, per ADR 0002.
              */
-            { path: 'integrations', element: <ConnectionCenterPage /> },
-            { path: 'integrations/drive', element: <DrivePage /> },
-            /*
+            { path: 'integrations', element: <IntegrationsPage /> },
+              /*
              * The analytics page, missing from this portal for exactly the reason `/agency/integrations`
              * was.
              *
@@ -511,6 +517,14 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'alerts', element: <AlertsPage /> },
             { path: 'tasks', element: <TasksPage /> },
             { path: 'files', element: <FilesLibraryPage /> },
+          /*
+           * INTEG-RUNTIME §2 — Drive is a FILE source, not one of the eight providers.
+           *
+           * It used to live at `/integrations/drive`, which put a ninth provider on the integrations
+           * surface. Its folder links feed the files library and the client portal's attachments, so
+           * the capability stays; what moves is the claim that it is an integration.
+           */
+          { path: 'files/drive', element: <DrivePage /> },
             { path: 'team', element: <AgencyTeamPage /> },
             ...messagingRoutes,
             ...billingRoutes,
