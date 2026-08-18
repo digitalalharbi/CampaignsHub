@@ -11,6 +11,7 @@ use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Metrics\Services\SyncRunLog;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -57,10 +58,12 @@ final class SyncRunController extends Controller
             ->keyBy('id');
 
         return ApiResponse::success([
-            'runs' => $runs->map(fn (MetricSyncRun $r) => $r->logRow(
+            // §8 — the same answer every thirty minutes is said once, with a count. Nothing is
+            // hidden: any change at all starts a new row, which is the moment worth noticing.
+            'runs' => SyncRunLog::collapse($runs->map(fn (MetricSyncRun $r) => $r->logRow(
                 $accounts->get($r->external_account_id)?->name,
                 $accounts->get($r->external_account_id)?->external_id,
-            ))->all(),
+            ))->all()),
             'summary' => $runs->groupBy('status')->map->count(),
         ], 'Sync runs.');
     }

@@ -26,6 +26,63 @@ async function contentLength(page: Page): Promise<number> {
   return (await main.innerText()).trim().length
 }
 
+/**
+ * Walk a rail, and let a failure NAME itself.
+ *
+ * ## Why this replaced a bare `for` loop
+ *
+ * The agency walk failed once on webkit with `locator('main')` not found — and the report said
+ * exactly that and nothing else. Which of the fifteen links? What did the browser have on screen?
+ * The screenshot answered the second question and made the first one worse: the document was
+ * **completely blank**. No shell, no navigation, no error boundary. That is not «a page rendered
+ * empty», which is what this test is for; it is the application never mounting, and the two need
+ * different people to look at them.
+ *
+ * A route that renders nothing still renders the shell around it, and would fail on all three
+ * browsers. So the interesting evidence is the one thing nobody collected: the URL the browser
+ * actually ended on, whether the document itself arrived, and what the console said while it did
+ * not. All three are captured here and thrown WITH the failure, so the next occurrence is a
+ * diagnosis instead of a hunt.
+ *
+ * Nothing is retried and no timeout is raised. The assertion is the same assertion.
+ */
+async function walkRail(page: Page, hrefs: string[]): Promise<void> {
+  const problems: string[] = []
+  page.on('console', (m) => {
+    if (m.type() === 'error') problems.push(`console: ${m.text()}`)
+  })
+  page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`))
+  page.on('requestfailed', (r) => problems.push(`requestfailed: ${r.url()} — ${r.failure()?.errorText ?? '?'}`))
+
+  for (const href of hrefs) {
+    problems.length = 0
+
+    const response = await page.goto(href)
+
+    await expect(page.getByText(/later phase/i), `${href} is a placeholder`).toHaveCount(0)
+
+    try {
+      expect(await contentLength(page), `${href} rendered an empty page`).toBeGreaterThan(40)
+    } catch (failure) {
+      const body = (await page.locator('body').innerText().catch(() => '')).trim()
+
+      throw new Error(
+        [
+          `${href} did not render.`,
+          `  document status : ${response?.status() ?? 'no response'}`,
+          `  ended on        : ${page.url()}`,
+          `  <main> present  : ${(await page.locator('main').count()) > 0}`,
+          `  <nav> present   : ${(await page.locator('nav').count()) > 0}`,
+          `  body text       : ${body === '' ? '(the document is blank — the app never mounted)' : body.slice(0, 200)}`,
+          `  browser said    : ${problems.length === 0 ? '(nothing)' : problems.slice(0, 5).join(' | ')}`,
+          '',
+          String(failure),
+        ].join('\n'),
+      )
+    }
+  }
+}
+
 test.describe('the advertiser portal', () => {
   test.use({ storageState: AUTH.advertiser })
 
@@ -80,11 +137,7 @@ test.describe('the advertiser portal', () => {
      */
     test.setTimeout(15_000 + hrefs.length * 8_000)
 
-    for (const href of hrefs) {
-      await page.goto(href)
-      await expect(page.getByText(/later phase/i), `${href} is a placeholder`).toHaveCount(0)
-      expect(await contentLength(page), `${href} rendered an empty page`).toBeGreaterThan(40)
-    }
+    await walkRail(page, hrefs)
   })
 })
 
@@ -103,11 +156,7 @@ test.describe('the agency portal', () => {
     // Same reasoning as the advertiser walk above: budget the clock to the number of pages opened.
     test.setTimeout(15_000 + hrefs.length * 8_000)
 
-    for (const href of hrefs) {
-      await page.goto(href)
-      await expect(page.getByText(/later phase/i), `${href} is a placeholder`).toHaveCount(0)
-      expect(await contentLength(page), `${href} rendered an empty page`).toBeGreaterThan(40)
-    }
+    await walkRail(page, hrefs)
   })
 })
 
@@ -126,11 +175,7 @@ test.describe('the platform console', () => {
     // Same reasoning as the advertiser walk above: budget the clock to the number of pages opened.
     test.setTimeout(15_000 + hrefs.length * 8_000)
 
-    for (const href of hrefs) {
-      await page.goto(href)
-      await expect(page.getByText(/later phase/i), `${href} is a placeholder`).toHaveCount(0)
-      expect(await contentLength(page), `${href} rendered an empty page`).toBeGreaterThan(40)
-    }
+    await walkRail(page, hrefs)
   })
 })
 
@@ -204,11 +249,7 @@ test.describe('the client portal', () => {
     // Same reasoning as the advertiser walk above: budget the clock to the number of pages opened.
     test.setTimeout(15_000 + hrefs.length * 8_000)
 
-    for (const href of hrefs) {
-      await page.goto(href)
-      await expect(page.getByText(/later phase/i), `${href} is a placeholder`).toHaveCount(0)
-      expect(await contentLength(page), `${href} rendered an empty page`).toBeGreaterThan(40)
-    }
+    await walkRail(page, hrefs)
   })
 
   /** Direct open, refresh and Back all land in the portal — not at its login. */

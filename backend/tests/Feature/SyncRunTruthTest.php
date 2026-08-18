@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
@@ -12,11 +13,15 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
+use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Sync\AccountStructureSyncer;
 use App\Domains\Metrics\Enums\SyncRunStatus;
+use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\AccountMetricsSyncer;
 use App\Domains\Metrics\Services\InsightPayloadRows;
+use App\Domains\Metrics\Services\SyncRunLog;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -258,21 +263,277 @@ final class SyncRunTruthTest extends TestCase
         $this->assertSame('automatic', $run->trigger());
     }
 
+    // ── The live Snapchat body, followed all the way to a stored figure ───────────────────────
+
+    /**
+     * **SNAP-BREAKDOWN-001, end to end.** Production's own response → a stored metric, as numbers.
+     *
+     * ## What this holds
+     *
+     * The live account produced `no_data` every thirty minutes for a week. The retained body says
+     * otherwise: with `breakdown=campaign` Snapchat returns the AD ACCOUNT as the series and nests
+     * the campaigns under `breakdown_stats.campaign[]`, so the connector's `timeseries_stat.timeseries`
+     * was an absent key and `timeseries_stat.id` was the account. Zero rows, from a body carrying
+     * 100.17 USD of spend, 44,396 impressions and two purchases.
+     *
+     * The body below is that production response, reduced and with its figures kept exactly. Every
+     * assertion is a NUMBER at a named stage — raw, parsed, mapped, stored — because «it works now»
+     * asserted as a status is the same sentence that was true while this was broken.
+     */
+    public function test_the_production_snapchat_body_is_followed_from_raw_row_to_stored_figure(): void
+    {
+        $this->configureSnapchat();
+        $account = $this->assignedAccount(provider: 'snapchat', externalId: 'act-1');
+
+        // The campaign must be discovered for the row to have somewhere to land — structure first.
+        ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $account->getKey(),
+            'provider' => 'snapchat',
+            'external_id' => '20c79671-4d9c-41f5-8427-3a023d85afc1',
+            'name' => '12Aug 2026-, Sales Products lingering',
+            'status' => 'paused',
+        ]);
+
+        Http::fake(['adsapi.snapchat.com/*' => Http::response([
+            'request_id' => 'e31a34f2-8aef-493a-bd72-f59486be76bf',
+            'request_status' => 'SUCCESS',
+            'timeseries_stats' => [[
+                'timeseries_stat' => [
+                    'id' => 'act-1',
+                    'type' => 'AD_ACCOUNT',
+                    'paging' => ['next_link' => ''],
+                    'start_time' => '2026-08-11T00:00:00.000+03:00',
+                    'end_time' => '2026-08-13T00:00:00.000+03:00',
+                    'breakdown_stats' => [
+                        'campaign' => [[
+                            'id' => '20c79671-4d9c-41f5-8427-3a023d85afc1',
+                            'type' => 'CAMPAIGN',
+                            'granularity' => 'DAY',
+                            'timeseries' => [
+                                [
+                                    'start_time' => '2026-08-11T00:00:00.000+03:00',
+                                    'end_time' => '2026-08-12T00:00:00.000+03:00',
+                                    'stats' => [
+                                        'spend' => 0, 'swipes' => 0, 'uniques' => 0, 'impressions' => 0,
+                                        'landing_page_views' => 0, 'conversion_add_cart' => 0,
+                                        'conversion_purchases' => 0, 'conversion_purchases_value' => 0,
+                                    ],
+                                ],
+                                [
+                                    'start_time' => '2026-08-12T00:00:00.000+03:00',
+                                    'end_time' => '2026-08-13T00:00:00.000+03:00',
+                                    'stats' => [
+                                        'spend' => 100_170_000, 'swipes' => 1171, 'uniques' => 20633,
+                                        'impressions' => 44396, 'landing_page_views' => 351,
+                                        'conversion_add_cart' => 19, 'conversion_purchases' => 2,
+                                        'conversion_purchases_value' => 193_265_034,
+                                    ],
+                                ],
+                            ],
+                        ]],
+                    ],
+                ],
+            ]],
+        ])]);
+
+        $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-11'), Carbon::parse('2026-08-12'));
+
+        // raw → parsed → mapped → stored, each as a number at its own stage.
+        $this->assertSame(2, (int) $run->provider_raw_rows, 'Snapchat sent two day points');
+        $this->assertSame(2, (int) $run->parsed_rows, 'and the parser kept both');
+        $this->assertSame(2, (int) $run->mapped_campaign_rows, 'and both named a campaign we know');
+        $this->assertGreaterThan(0, (int) $run->metrics_upserted);
+        $this->assertSame(SyncRunStatus::Success->value, $run->status);
+
+        // The figure itself, in the account's currency, on the account's own day.
+        $spend = DailyMetric::withoutGlobalScopes()
+            ->where('metric_key', 'spend')
+            ->where('metric_date', '2026-08-12')
+            ->value('value');
+
+        $this->assertSame(
+            100.17,
+            round((float) $spend, 2),
+            'SNAP-BREAKDOWN-001: 100170000 micro-USD is 100.17, and it reached storage',
+        );
+
+        // The quiet day is stored as a measured ZERO, because Snapchat measured it and said zero.
+        $this->assertSame(
+            0.0,
+            (float) DailyMetric::withoutGlobalScopes()
+                ->where('metric_key', 'spend')->where('metric_date', '2026-08-11')->value('value'),
+        );
+
+        // Swipes are this platform's click, which is what makes a Snapchat CTR comparable.
+        $this->assertSame(
+            1171.0,
+            (float) DailyMetric::withoutGlobalScopes()
+                ->where('metric_key', 'clicks')->where('metric_date', '2026-08-12')->value('value'),
+        );
+    }
+
+    // ── The receipt ───────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Every provider call leaves a receipt — including the one that failed.
+     *
+     * «The provider returned 0 rows» is a claim about a REQUEST as much as about an account, and the
+     * request was the half that was never written down: an empty body and a 200 are indistinguishable
+     * in the retained payload. The URL carries the window, the granularity, the breakdown and the
+     * field list; the status and Snapchat's own `request_id` are what let a call be looked up on the
+     * platform's side.
+     */
+    public function test_every_provider_call_records_its_status_url_and_request_id(): void
+    {
+        $this->configureSnapchat();
+        $account = $this->assignedAccount(provider: 'snapchat', externalId: 'snap-1');
+
+        Http::fake(['adsapi.snapchat.com/*' => Http::response([
+            'request_status' => 'SUCCESS',
+            'request_id' => 'req-abc-123',
+            'timeseries_stats' => [],
+        ])]);
+
+        app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-03'));
+
+        /** @var ApiAdvertisingConnector $connector */
+        $connector = app(AdvertisingConnectorRegistry::class)->get('snapchat')
+            ->withConnection(ProviderConnection::withoutGlobalScopes()->findOrFail($account->provider_connection_id));
+
+        // A fresh clone has an empty log; the point is proved on a call this test makes itself.
+        $connector->syncInsights('snap-1', '2026-08-01', '2026-08-03');
+
+        $calls = $connector->takeCallLog();
+
+        $this->assertNotSame([], $calls);
+        $this->assertSame(200, $calls[0]['status']);
+        $this->assertSame('req-abc-123', $calls[0]['request_id']);
+        $this->assertStringContainsString('adsapi.snapchat.com', $calls[0]['url']);
+        // The URL carries the question, which is what makes a zero answerable.
+        $this->assertStringContainsString('granularity=DAY', $calls[0]['url']);
+        $this->assertStringContainsString('breakdown=campaign', $calls[0]['url']);
+        $this->assertContains('timeseries_stats', $calls[0]['keys']);
+    }
+
+    /** Drained per sync — a call carried into the next window would be attributed to it. */
+    public function test_the_call_log_is_drained_when_taken(): void
+    {
+        $this->configureSnapchat();
+        $account = $this->assignedAccount(provider: 'snapchat', externalId: 'snap-1');
+
+        Http::fake(['adsapi.snapchat.com/*' => Http::response(['timeseries_stats' => []])]);
+
+        /** @var ApiAdvertisingConnector $connector */
+        $connector = app(AdvertisingConnectorRegistry::class)->get('snapchat')
+            ->withConnection(ProviderConnection::withoutGlobalScopes()->findOrFail($account->provider_connection_id));
+
+        $connector->syncInsights('snap-1', '2026-08-01', '2026-08-03');
+
+        $this->assertNotSame([], $connector->takeCallLog());
+        $this->assertSame([], $connector->takeCallLog(), 'taking it twice must not report the same call twice');
+    }
+
+    // ── The log says the same answer once ─────────────────────────────────────────────────────
+
+    /**
+     * §8 — «لا تكرر نفس الخطأ كل ٣٠ دقيقة في واجهة مزعجة».
+     *
+     * The sweep runs every half hour, so an account the platform has nothing to report for produces
+     * forty-eight indistinguishable rows a day. Every one is still recorded; the LOG says it once.
+     */
+    public function test_consecutive_identical_runs_are_said_once_with_a_count(): void
+    {
+        $rows = [
+            $this->logRow('no_data', '2026-08-18T06:30:00+00:00'),
+            $this->logRow('no_data', '2026-08-18T06:00:00+00:00'),
+            $this->logRow('no_data', '2026-08-18T05:30:00+00:00'),
+        ];
+
+        $collapsed = SyncRunLog::collapse($rows);
+
+        $this->assertCount(1, $collapsed);
+        $this->assertSame(3, $collapsed[0]['repeats']);
+        // The rows arrive newest first, so the streak's marker is its OLDEST attempt, not its newest.
+        $this->assertSame('2026-08-18T05:30:00+00:00', $collapsed[0]['repeats_since']);
+    }
+
+    /** Anything that CHANGED starts a new row — that is the moment a reader needs to notice. */
+    public function test_a_change_of_any_kind_breaks_the_streak(): void
+    {
+        $collapsed = SyncRunLog::collapse([
+            $this->logRow('success', '2026-08-18T06:30:00+00:00', metrics: 12),
+            $this->logRow('no_data', '2026-08-18T06:00:00+00:00'),
+            $this->logRow('no_data', '2026-08-18T05:30:00+00:00'),
+            $this->logRow('failed', '2026-08-18T05:00:00+00:00'),
+        ]);
+
+        $this->assertCount(3, $collapsed);
+        $this->assertSame(['success', 'no_data', 'failed'], array_column($collapsed, 'status'));
+        $this->assertSame([1, 2, 1], array_column($collapsed, 'repeats'));
+    }
+
+    /**
+     * A run that STORED something is never folded into one that did not.
+     *
+     * «Nothing happened, forty-eight times» and «nothing happened forty-seven times and then data
+     * arrived» are different days, and the second is the one being waited for.
+     */
+    public function test_a_run_that_stored_metrics_is_never_folded_into_one_that_did_not(): void
+    {
+        $collapsed = SyncRunLog::collapse([
+            $this->logRow('success', '2026-08-18T06:30:00+00:00', metrics: 40),
+            $this->logRow('success', '2026-08-18T06:00:00+00:00', metrics: 0),
+        ]);
+
+        $this->assertCount(2, $collapsed);
+    }
+
     // ── Reading a past run back out of the provider's own body ────────────────────────────────
 
-    /** Snapchat's shape, counted: points across every series, and the campaign ids they name. */
+    /**
+     * Snapchat's REAL shape, counted: the day points under each campaign, and the campaign ids.
+     *
+     * SNAP-BREAKDOWN-001 — this used to read `timeseries_stat.timeseries` and `timeseries_stat.id`,
+     * which is the ad account's series and the ad account's id. It agreed with the connector's own
+     * mistake, so recovering a past run's counts from the stored body confirmed the same zero from
+     * the same error and read as corroboration.
+     */
     public function test_a_kept_snapchat_body_yields_its_row_count_and_campaign_ids(): void
     {
         $read = InsightPayloadRows::of('snapchat', [
-            'timeseries_stats' => [
-                ['timeseries_stat' => ['id' => 'c-1', 'timeseries' => [['stats' => []], ['stats' => []]]]],
-                ['timeseries_stat' => ['id' => 'c-2', 'timeseries' => [['stats' => []]]]],
-            ],
+            'timeseries_stats' => [[
+                'timeseries_stat' => [
+                    'id' => 'act-1',
+                    'type' => 'AD_ACCOUNT',
+                    'breakdown_stats' => [
+                        'campaign' => [
+                            ['id' => 'c-1', 'timeseries' => [['stats' => []], ['stats' => []]]],
+                            ['id' => 'c-2', 'timeseries' => [['stats' => []]]],
+                        ],
+                    ],
+                ],
+            ]],
         ]);
 
         $this->assertNotNull($read);
         $this->assertSame(3, $read['rows']);
-        $this->assertSame(['c-1', 'c-2'], $read['campaign_ids']);
+        $this->assertSame(['c-1', 'c-2'], $read['campaign_ids'], 'the CAMPAIGN ids, never the account\'s');
+    }
+
+    /** A response with no breakdown is still Snapchat's, and is still read. */
+    public function test_a_snapchat_body_without_a_breakdown_is_read_from_the_series_itself(): void
+    {
+        $read = InsightPayloadRows::of('snapchat', [
+            'timeseries_stats' => [
+                ['timeseries_stat' => ['id' => 'c-1', 'type' => 'CAMPAIGN', 'timeseries' => [['stats' => []], ['stats' => []]]]],
+            ],
+        ]);
+
+        $this->assertNotNull($read);
+        $this->assertSame(2, $read['rows']);
+        $this->assertSame(['c-1'], $read['campaign_ids']);
     }
 
     /** A shape this reader does not know returns NULL — never a plausible zero. */
@@ -290,6 +551,29 @@ final class SyncRunTruthTest extends TestCase
         foreach (PlatformCredentials::for('snapchat')->requires() as $key) {
             config()->set("ad_platforms.platforms.snapchat.{$key}", "test-{$key}");
         }
+    }
+
+    /**
+     * One log row, in the shape `MetricSyncRun::logRow()` produces.
+     *
+     * Built by hand rather than from saved runs because what is under test is the COLLAPSE — its
+     * identity rule and its ordering — and a fixture of forty-eight real runs would test the sweep.
+     *
+     * @return array<string,mixed>
+     */
+    private function logRow(string $status, string $startedAt, int $metrics = 0): array
+    {
+        return [
+            'id' => $status.$startedAt,
+            'provider' => 'snapchat',
+            'status' => $status,
+            'trigger' => 'automatic',
+            'window_start' => '2026-08-11',
+            'window_end' => '2026-08-18',
+            'metrics_imported' => $metrics,
+            'error' => $status === 'failed' ? 'boom' : null,
+            'started_at' => $startedAt,
+        ];
     }
 
     private function assignedAccount(string $provider = 'sandbox', string $externalId = 'act-1'): ExternalAccount
