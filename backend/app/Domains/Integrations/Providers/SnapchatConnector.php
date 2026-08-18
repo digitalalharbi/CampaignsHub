@@ -431,25 +431,15 @@ final class SnapchatConnector extends ApiAdvertisingConnector
 
             foreach ((array) ($body['timeseries_stats'] ?? []) as $wrapper) {
                 /** @var array<string,mixed> $series */
-                $series = (array) ($wrapper['timeseries_stat'] ?? []);
-                $campaignId = (string) ($series['id'] ?? '');
+                $series = (array) ((array) $wrapper)['timeseries_stat'] ?? [];
 
-                if ($campaignId === '') {
-                    // Counted as arrived, then dropped: `provider_raw_rows > parsed_rows` is exactly
-                    // how a series Snapchat sent without an id becomes visible instead of vanishing.
-                    $this->countRawInsightRows(count((array) ($series['timeseries'] ?? [])));
+                foreach ($this->campaignSeries($series) as $campaignId => $points) {
+                    // What Snapchat sent, counted before any of our guards can drop one.
+                    $this->countRawInsightRows(count($points));
 
-                    continue;
-                }
-
-                /** @var list<mixed> $points */
-                $points = (array) ($series['timeseries'] ?? []);
-
-                // What Snapchat sent, counted before any of our guards can drop one.
-                $this->countRawInsightRows(count($points));
-
-                foreach ($points as $point) {
-                    $rows[] = $this->pointToRow($campaignId, (array) $point, $window->startIso());
+                    foreach ($points as $point) {
+                        $rows[] = $this->pointToRow((string) $campaignId, (array) $point, $window->startIso());
+                    }
                 }
             }
 
@@ -458,6 +448,74 @@ final class SnapchatConnector extends ApiAdvertisingConnector
         }
 
         return $rows;
+    }
+
+    /**
+     * The per-CAMPAIGN day series inside one `timeseries_stat` — SNAP-BREAKDOWN-001.
+     *
+     * ## The live defect this exists for
+     *
+     * The connector read `timeseries_stat.timeseries` and took `timeseries_stat.id` for a campaign.
+     * With `breakdown=campaign` Snapchat returns neither. The series IS the ad account, and the
+     * campaigns hang underneath it:
+     *
+     * ```json
+     * {"timeseries_stat":{
+     *    "id":"3072e77d-…","type":"AD_ACCOUNT",
+     *    "breakdown_stats":{"campaign":[
+     *      {"id":"20c79671-…","type":"CAMPAIGN","granularity":"DAY","timeseries":[{"stats":{…}}]}
+     *    ]}}}
+     * ```
+     *
+     * So `timeseries` was an absent key and the loop produced nothing — **zero rows, every thirty
+     * minutes, for a live account that had returned 100.17 USD of spend, 44,396 impressions and two
+     * purchases in the same body**. The run said «the provider returned no insight rows for this
+     * window», which was the one thing the body disproved. Every test agreed with the connector
+     * because the fixture invented the same shape; see `SnapchatReportingWindowTest::series()`.
+     *
+     * The unbroken-down shape is still read, second. A request without `breakdown` returns the
+     * series keyed by the entity itself, and that is a real Snapchat response — supporting only the
+     * shape we currently ask for would break the moment somebody asks a different question.
+     *
+     * @param  array<string,mixed>  $series  one `timeseries_stat`
+     * @return array<string, list<mixed>> provider campaign id → its day points
+     */
+    private function campaignSeries(array $series): array
+    {
+        /** @var array<string,mixed> $breakdown */
+        $breakdown = (array) ($series['breakdown_stats'] ?? []);
+
+        if (isset($breakdown['campaign']) && is_array($breakdown['campaign'])) {
+            $byCampaign = [];
+
+            foreach ($breakdown['campaign'] as $entry) {
+                /** @var array<string,mixed> $campaign */
+                $campaign = (array) $entry;
+                $id = (string) ($campaign['id'] ?? '');
+
+                if ($id === '') {
+                    continue;
+                }
+
+                /*
+                 * Merged rather than assigned. Snapchat may split one campaign across entries when a
+                 * window is chunked, and assigning would keep only the last of them — a silent loss
+                 * of every earlier day, which is precisely the class of bug this method exists for.
+                 */
+                $byCampaign[$id] = [...($byCampaign[$id] ?? []), ...array_values((array) ($campaign['timeseries'] ?? []))];
+            }
+
+            return $byCampaign;
+        }
+
+        // No breakdown: the series is the entity, and its id is what the rows belong to.
+        $id = (string) ($series['id'] ?? '');
+
+        if ($id === '' || ! isset($series['timeseries'])) {
+            return [];
+        }
+
+        return [$id => array_values((array) $series['timeseries'])];
     }
 
     /**
