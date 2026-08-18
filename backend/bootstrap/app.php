@@ -9,6 +9,7 @@ use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Identity\Middleware\RejectRevokedSessions;
 use App\Domains\Integrations\Console\DiagnoseSyncCommand;
+use App\Domains\Integrations\Console\ProbeInsightsCommand;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
@@ -84,6 +85,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // INTEG-RUNTIME §7 — read-only: where a sync's rows stopped, with the four counts. Calls no
         // provider and writes nothing, which is what makes it safe to point at production.
         DiagnoseSyncCommand::class,
+        // INTEG-RUNTIME §7 — asks the provider over a chosen window and stores nothing, which is what
+        // separates «the account was quiet» from «the request cannot return rows for this account».
+        ProbeInsightsCommand::class,
         // COMMERCE-001 — the store sweep: products, customers, orders and abandoned carts.
         SyncStoresCommand::class,
         // FX-FEED-001 — the exchange rates the conversions need. Registered even though no source

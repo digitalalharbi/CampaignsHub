@@ -4,13 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Http\Controllers;
 
-use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountHealth;
 use App\Domains\Integrations\Services\AccountLabel;
-use App\Domains\Integrations\Services\AccountLifecycle;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Projects\Models\Project;
@@ -20,55 +18,58 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
- * COMMAND-CENTER §§7–20 — one inventory of every account behind every connection.
+ * INTEG-RUNTIME §3 — every account behind every connection, and the ONE thing that is true of each.
  *
- * ## What this is for
+ * ## What this answers
  *
- * The wizard answers «I have just authorised Snapchat, which of these 309 do I want?» — once, per
- * connection, during a flow. This answers the question the customer has every day afterwards:
- * **what does CampaignsHub have access to, what is it actually doing with it, and where.** That
- * question spans connections and providers, so it cannot be answered from inside one wizard.
+ * The wizard answers «I have just authorised Snapchat; which of these 309 feed which project?» —
+ * once, during a flow. This answers the question the customer has every day afterwards: **what does
+ * CampaignsHub reach, and where is each of them going.** That spans connections and providers, so it
+ * cannot be answered from inside one wizard.
  *
- * Eight providers, two shapes: six advertising and two commerce. They are listed TOGETHER here on
- * purpose — the customer has one set of sources, not two — while remaining separate everywhere it
- * matters: a store is never counted against the Connected Ad Accounts quota, and no store quota is
- * invented (COMMERCE-QUOTA-001).
+ * Eight providers, two shapes — six advertising and two commerce — listed together because the
+ * customer has one set of sources, not two, while remaining separate everywhere it matters: a store
+ * never counts against the Connected Ad Accounts quota and no store quota is invented.
  *
- * ## Every row says three things, and they are different things
+ * ## There are two states here, not four
  *
- *  - `lifecycle` — discovered, enabled, excluded or assigned (`AccountLifecycle`).
- *  - `health` — how the syncing is going, for the accounts where syncing happens (`AccountHealth`).
- *  - `assigned_project` — the NAME of the project that owns it, never only an id.
+ * An account is either **linked to a project** or it is not. That is the whole model, and it is read
+ * from `ProjectIntegrationBinding` where `is_active` — the single ownership record — never from a
+ * column on the account.
  *
- * A row that is `discovered` has no health worth reporting and says so, rather than showing a green
- * tick over an account nothing has ever tried to sync.
+ * This replaced a four-state curation workflow (discovered / enabled / excluded / assigned) with its
+ * own column, its own endpoints and its own bulk bar. It was internal bookkeeping promoted to
+ * customer-facing vocabulary: «enabled» meant nothing to the person reading it, because enabling an
+ * account did not make anything happen — only linking it to a project ever did. The journey is
+ * OAuth → discovery → organisation → account → project → confirm → first sync, with no step in the
+ * middle whose only effect is to change a word on a chip.
  *
- * ## Paginated, and filtered to what was chosen by default
+ * ## Paginated, and the counts describe the whole
  *
- * 309 rows is the real number from one real authorisation. An «everything, unpaginated» inventory is
- * a page nobody can use and a query that gets slower every month. The default view is what the
- * customer has curated; the rest is one filter away and the counts always name the whole.
+ * 309 is the real number from one real authorisation. «4 of 309» is only true if the 309 is counted
+ * without the filter that produced the 4, so the summary is computed before the filters — and the
+ * linked/unlinked split is expressed in SQL rather than filtered in PHP after paginating, because a
+ * page cut and then filtered is a page short by however many rows the filter removed.
  */
 final class AccountInventoryController extends Controller
 {
-    /** COMMAND-CENTER §18 — the most history one request may pull, so a backfill cannot become a year. */
+    /** §3 — the most history one request may pull, so a backfill cannot quietly become a year. */
     private const MAX_BACKFILL_DAYS = 90;
 
     public function __construct(
         private readonly TenantContext $tenant,
-        private readonly AccountLifecycle $lifecycle,
         private readonly AccountLabel $label,
         private readonly AccountHealth $health,
     ) {}
 
     /**
-     * GET /integrations/accounts — the inventory.
+     * GET /integrations/accounts — every source this tenant reaches.
      *
-     * Filters are additive and all optional: `provider`, `state`, `connection`, `q`, `account_type`.
+     * Filters are additive and all optional: `provider`, `link` (linked|unlinked), `connection`,
+     * `account_type`, `q`.
      */
     public function index(Request $request): JsonResponse
     {
@@ -78,27 +79,17 @@ final class AccountInventoryController extends Controller
             'provider' => ['sometimes', 'nullable', 'string', 'max:40'],
             'connection' => ['sometimes', 'nullable', 'uuid'],
             'account_type' => ['sometimes', 'nullable', Rule::in(['ad_account', 'store'])],
-            'state' => ['sometimes', 'nullable', Rule::in([
-                AccountLifecycle::DISCOVERED,
-                AccountLifecycle::ENABLED,
-                AccountLifecycle::EXCLUDED,
-                AccountLifecycle::ASSIGNED,
-            ])],
+            'link' => ['sometimes', 'nullable', Rule::in(['linked', 'unlinked'])],
             'q' => ['sometimes', 'nullable', 'string', 'max:120'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $tenantId = $this->tenant->tenantId();
+        $tenantId = (string) $this->tenant->tenantId();
 
         $base = ExternalAccount::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->whereIn('account_type', ['ad_account', 'store']);
 
-        /*
-         * The summary counts the WHOLE inventory, before the filters — «4 of 309» is only true if
-         * the 309 is counted without the filter that produced the 4. Assignment is counted from the
-         * bindings rather than from a column, because there is no such column and there must not be.
-         */
         $summary = $this->summarise($tenantId);
 
         $query = (clone $base)
@@ -121,29 +112,15 @@ final class AccountInventoryController extends Controller
                     ->orWhere('parent_name', 'ilike', $term));
             });
 
-        $state = $validated['state'] ?? null;
-
-        /*
-         * `assigned` and `discovered` cannot be filtered by column — one lives in the bindings and
-         * the other is the ABSENCE of a decision. Both are expressed as SQL rather than filtered in
-         * PHP after paginating, because filtering a page after it has been cut returns a page that
-         * is short by however many rows the filter removed.
-         */
-        $assignedAccountIds = fn () => ProjectIntegrationBinding::withoutGlobalScopes()
+        $linkedIds = fn () => ProjectIntegrationBinding::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('is_active', true)
             ->select('external_account_id');
 
-        if ($state === AccountLifecycle::ASSIGNED) {
-            $query->whereIn('id', $assignedAccountIds());
-        } elseif ($state === AccountLifecycle::DISCOVERED) {
-            $query->whereNull('management_state')->whereNotIn('id', $assignedAccountIds());
-        } elseif ($state === AccountLifecycle::ENABLED) {
-            $query->where('management_state', AccountLifecycle::ENABLED)
-                ->whereNotIn('id', $assignedAccountIds());
-        } elseif ($state === AccountLifecycle::EXCLUDED) {
-            $query->where('management_state', AccountLifecycle::EXCLUDED)
-                ->whereNotIn('id', $assignedAccountIds());
+        if (($validated['link'] ?? null) === 'linked') {
+            $query->whereIn('id', $linkedIds());
+        } elseif (($validated['link'] ?? null) === 'unlinked') {
+            $query->whereNotIn('id', $linkedIds());
         }
 
         $page = $query->orderBy('provider')->orderBy('name')->orderBy('external_id')
@@ -165,128 +142,17 @@ final class AccountInventoryController extends Controller
     }
 
     /**
-     * POST /integrations/accounts/{account}/state — enable, exclude, or return to undecided.
-     *
-     * `assigned` is not settable. It is the binding's answer, and offering it here would create a
-     * second way to say who owns an account — the exact defect RUNTIME-100 spent three PRs removing.
-     */
-    public function setState(Request $request, string $accountId, AuditLogger $audit): JsonResponse
-    {
-        abort_unless($request->user()->hasPermission('integrations.connect'), 403);
-
-        $validated = $request->validate([
-            'state' => ['required', Rule::in(AccountLifecycle::SETTABLE)],
-        ]);
-
-        $account = $this->accountOr404($accountId);
-        $target = $validated['state'];
-
-        /*
-         * Refused rather than silently ignored. Excluding an assigned account would leave a row the
-         * customer believes is gone while its spend keeps arriving in a project's reporting — and
-         * `stateFor()` would keep answering `assigned` anyway, so the interface and the database
-         * would disagree about something the customer had just been told.
-         */
-        if ($target === AccountLifecycle::EXCLUDED && $this->lifecycle->stateFor($account) === AccountLifecycle::ASSIGNED) {
-            return ApiResponse::error(__('integrations.exclude_assigned'), status: 409);
-        }
-
-        $before = $account->management_state;
-
-        $account->forceFill([
-            'management_state' => $target === AccountLifecycle::DISCOVERED ? null : $target,
-            'management_state_changed_at' => Carbon::now(),
-        ])->save();
-
-        $audit->log(
-            action: 'integration.account.state_changed',
-            entityType: ExternalAccount::class,
-            entityId: (string) $account->id,
-            before: ['management_state' => $before],
-            after: ['management_state' => $account->management_state],
-        );
-
-        return ApiResponse::success(
-            $this->present([$account->refresh()], (string) $this->tenant->tenantId())[0],
-            __('api.ok'),
-        );
-    }
-
-    /**
-     * POST /integrations/accounts/state — the same decision for many accounts at once.
-     *
-     * Present because the real number is 309. Asking somebody to press «استبعاد» three hundred times
-     * is not a feature with a rough edge, it is a feature that will not be used.
-     *
-     * Atomic: either every account named is moved or none is. A half-applied bulk action leaves the
-     * customer unable to tell which half, and their only recourse is to check all 309 by hand.
-     */
-    public function setStateBulk(Request $request, AuditLogger $audit): JsonResponse
-    {
-        abort_unless($request->user()->hasPermission('integrations.connect'), 403);
-
-        $validated = $request->validate([
-            'account_ids' => ['required', 'array', 'min:1', 'max:500'],
-            'account_ids.*' => ['uuid'],
-            'state' => ['required', Rule::in(AccountLifecycle::SETTABLE)],
-        ]);
-
-        $tenantId = (string) $this->tenant->tenantId();
-        $target = $validated['state'];
-
-        $accounts = ExternalAccount::withoutGlobalScopes()
-            ->where('tenant_id', $tenantId)
-            ->whereIn('id', $validated['account_ids'])
-            ->get();
-
-        if ($accounts->count() !== count(array_unique($validated['account_ids']))) {
-            return ApiResponse::error(__('integrations.connection_not_authorized'), status: 404);
-        }
-
-        if ($target === AccountLifecycle::EXCLUDED) {
-            $assigned = ProjectIntegrationBinding::withoutGlobalScopes()
-                ->where('tenant_id', $tenantId)
-                ->where('is_active', true)
-                ->whereIn('external_account_id', $accounts->modelKeys())
-                ->exists();
-
-            if ($assigned) {
-                return ApiResponse::error(__('integrations.exclude_assigned'), status: 409);
-            }
-        }
-
-        DB::transaction(function () use ($accounts, $target, $audit, $tenantId): void {
-            ExternalAccount::withoutGlobalScopes()
-                ->where('tenant_id', $tenantId)
-                ->whereIn('id', $accounts->modelKeys())
-                ->update([
-                    'management_state' => $target === AccountLifecycle::DISCOVERED ? null : $target,
-                    'management_state_changed_at' => Carbon::now(),
-                ]);
-
-            $audit->log(
-                action: 'integration.account.state_changed_bulk',
-                entityType: ExternalAccount::class,
-                entityId: (string) $accounts->first()?->id,
-                after: ['management_state' => $target, 'count' => $accounts->count()],
-            );
-        });
-
-        return ApiResponse::success(['updated' => $accounts->count(), 'state' => $target], __('api.ok'));
-    }
-
-    /**
      * POST /integrations/accounts/{account}/backfill — fetch a window of history that already passed.
      *
      * ## Why this is not «sync with different dates»
      *
      * The scheduled sweep is deliberately short: it restates the last few days, because that is what
      * providers still revise. Somebody who connects an account in August and needs June's numbers for
-     * a client report is not asking for a sync, they are asking for a window the sweep will never
+     * a client report is not asking for a sync — they are asking for a window the sweep will never
      * cover, and without this they have no way to get it at all.
      *
      * Refused for an account no project owns, and the refusal names the reason. Backfilling an
-     * unassigned account is the same fault RUNTIME-100 closed everywhere else: data with nowhere
+     * unlinked account is the same fault this programme closed everywhere else: data with nowhere
      * honest to land, which previously landed in whichever project sorted first.
      */
     public function backfill(Request $request, string $accountId): JsonResponse
@@ -300,7 +166,7 @@ final class AccountInventoryController extends Controller
 
         $account = $this->accountOr404($accountId);
 
-        if ($this->lifecycle->stateFor($account) !== AccountLifecycle::ASSIGNED) {
+        if (! $this->isLinked($account)) {
             return ApiResponse::error(__('integrations.backfill_unassigned'), status: 409);
         }
 
@@ -311,9 +177,8 @@ final class AccountInventoryController extends Controller
             return ApiResponse::error(__('integrations.backfill_window_invalid'), status: 422);
         }
 
-        // `diffInDays` is exclusive of the start day, and the window itself is inclusive of both
-        // ends — so a 90-day window is 89 whole days apart, and off-by-one here would silently
-        // permit 91.
+        // `diffInDays` is exclusive of the start day and the window is inclusive of both ends — so a
+        // 90-day window is 89 whole days apart, and off-by-one here would silently permit 91.
         if ($from->diffInDays($to) + 1 > self::MAX_BACKFILL_DAYS) {
             return ApiResponse::error(
                 __('integrations.backfill_window_too_long', ['days' => self::MAX_BACKFILL_DAYS]),
@@ -325,7 +190,8 @@ final class AccountInventoryController extends Controller
             (string) $account->id,
             $from->toDateString(),
             $to->toDateString(),
-            ['source' => 'backfill', 'requested_by' => (string) $request->user()->getKey()],
+            // Recorded as a backfill so the sync log can say which of the three causes this was.
+            ['source' => 'backfill', 'backfill' => true, 'requested_by' => (string) $request->user()->getKey()],
         );
 
         return ApiResponse::success([
@@ -342,6 +208,11 @@ final class AccountInventoryController extends Controller
      * Per ACCOUNT, not per provider. The provider-level history already existed and could not answer
      * the only question anybody asks when a number looks wrong: «what happened to THIS account?»
      * With ten accounts behind one authorisation, a provider-level log is nine other accounts' noise.
+     *
+     * The rows come from `MetricSyncRun::logRow()`, the same serializer the project and campaign logs
+     * use, so this log carries the four counts too — «the platform sent 400 rows and we stored 0» is
+     * the sentence that makes a zero readable, and it must not be missing from the one log that is
+     * about a single account.
      */
     public function logs(Request $request, string $accountId): JsonResponse
     {
@@ -355,19 +226,7 @@ final class AccountInventoryController extends Controller
             ->orderByDesc('started_at')
             ->limit(50)
             ->get()
-            ->map(fn (MetricSyncRun $r): array => [
-                'id' => (string) $r->id,
-                'status' => $r->status,
-                'window_start' => $r->window_start?->toDateString(),
-                'window_end' => $r->window_end?->toDateString(),
-                'metrics_upserted' => $r->metrics_upserted,
-                'attempts' => $r->attempts,
-                'started_at' => $r->started_at?->toIso8601String(),
-                'finished_at' => $r->finished_at?->toIso8601String(),
-                // The error is shown as it was recorded. A log that tidies its own errors is a log
-                // nobody can debug from.
-                'error' => $r->error,
-            ])
+            ->map(fn (MetricSyncRun $r): array => $r->logRow())
             ->values();
 
         return ApiResponse::success([
@@ -408,7 +267,6 @@ final class AccountInventoryController extends Controller
 
         return array_map(function (ExternalAccount $account) use ($bindings, $projectNames, $connectionNames): array {
             $projectId = $bindings[$account->id] ?? null;
-            $state = $this->lifecycle->stateFor($account, $projectId !== null);
             $label = $this->label->describe($account);
 
             return [
@@ -418,7 +276,7 @@ final class AccountInventoryController extends Controller
                 'account_type' => $account->account_type,
                 'account_type_label' => __('integrations.account_type.'.$account->account_type),
 
-                // COMMAND-CENTER §12 — what to read, and what to match, never merged into one field.
+                // §3 — what to READ, and what to MATCH, never merged into one field.
                 'name' => $label['name'],
                 'reference' => $label['reference'],
                 'named_by_provider' => $label['named_by_provider'],
@@ -431,20 +289,18 @@ final class AccountInventoryController extends Controller
                 'connection_id' => (string) $account->provider_connection_id,
                 'connection_name' => $connectionNames[$account->provider_connection_id] ?? null,
 
-                'lifecycle' => $state,
-                'lifecycle_label' => __('integrations.lifecycle.'.$state),
-                'lifecycle_hint' => __('integrations.lifecycle_hint.'.$state),
-
+                // The whole model: linked to a project, or not. Read from the binding, never stored.
+                'is_linked' => $projectId !== null,
                 'assigned_project_id' => $projectId,
                 // A project id is not an answer to «where does this go». The name is.
                 'assigned_project_name' => $projectId !== null ? ($projectNames[$projectId] ?? null) : null,
 
                 /*
                  * Health is only reported where syncing is a thing that happens. An account nothing
-                 * has ever tried to sync has no health, and inventing one would put a badge on 305
-                 * rows that mean nothing by it.
+                 * has ever tried to sync has no health, and inventing one would put a badge on
+                 * hundreds of rows that mean nothing by it.
                  */
-                'health' => $state === AccountLifecycle::ASSIGNED ? $this->health->for($account) : null,
+                'health' => $projectId !== null ? $this->health->for($account) : null,
                 'last_synced_at' => $account->last_synced_at?->toIso8601String(),
                 'last_sync_attempt_at' => $account->last_sync_attempt_at?->toIso8601String(),
                 'last_sync_error_category' => $account->last_sync_error_category,
@@ -452,10 +308,9 @@ final class AccountInventoryController extends Controller
                 'access_lost_at' => $account->access_lost_at?->toIso8601String(),
 
                 /*
-                 * COMMERCE-QUOTA-001 — said out loud on the row rather than left to be inferred.
-                 * A store goes through the same explicit assignment and costs nothing against the
-                 * Connected Ad Accounts cap, and the row that spends a slot should be the row that
-                 * says so.
+                 * Said out loud on the row rather than left to be inferred. A store goes through the
+                 * same explicit assignment and costs nothing against the Connected Ad Accounts cap,
+                 * and the row that spends a slot should be the row that says so.
                  */
                 'counts_toward_ad_account_quota' => $account->account_type === 'ad_account',
             ];
@@ -463,13 +318,13 @@ final class AccountInventoryController extends Controller
     }
 
     /**
-     * How many accounts are in each state across the WHOLE tenant.
+     * How many of the tenant's accounts are linked, and how many are not.
      *
      * @return array<string, int>
      */
     private function summarise(string $tenantId): array
     {
-        $assignedIds = ProjectIntegrationBinding::withoutGlobalScopes()
+        $linkedIds = ProjectIntegrationBinding::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('is_active', true)
             ->pluck('external_account_id')
@@ -479,21 +334,18 @@ final class AccountInventoryController extends Controller
             ->where('tenant_id', $tenantId)
             ->whereIn('account_type', ['ad_account', 'store']);
 
-        $assigned = (clone $base)->whereIn('id', $assignedIds)->count();
+        $total = (clone $base)->count();
+        $linked = (clone $base)->whereIn('id', $linkedIds)->count();
 
-        $countUnassigned = fn (?string $managementState): int => (clone $base)
-            ->when($managementState === null, fn ($q) => $q->whereNull('management_state'))
-            ->when($managementState !== null, fn ($q) => $q->where('management_state', $managementState))
-            ->whereNotIn('id', $assignedIds)
-            ->count();
+        return ['linked' => $linked, 'unlinked' => $total - $linked, 'total' => $total];
+    }
 
-        return [
-            AccountLifecycle::DISCOVERED => $countUnassigned(null),
-            AccountLifecycle::ENABLED => $countUnassigned(AccountLifecycle::ENABLED),
-            AccountLifecycle::EXCLUDED => $countUnassigned(AccountLifecycle::EXCLUDED),
-            AccountLifecycle::ASSIGNED => $assigned,
-            'total' => (clone $base)->count(),
-        ];
+    private function isLinked(ExternalAccount $account): bool
+    {
+        return ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('external_account_id', $account->getKey())
+            ->where('is_active', true)
+            ->exists();
     }
 
     /** The account, or a 404 — never another tenant's, and never a type this page does not manage. */

@@ -34,7 +34,14 @@ test.describe('the advertiser portal', () => {
   const REDIRECTS: { from: string; to: RegExp }[] = [
     { from: '/integrations', to: /\/app\/integrations/ },
     { from: '/app/connections', to: /\/app\/integrations/ },
-    { from: '/app/drive', to: /\/app\/integrations\/drive/ },
+    /*
+     * INTEG-RUNTIME §2 — Drive is a FILE source, not one of the eight providers.
+     *
+     * The canonical target moved from `/app/integrations/drive` to `/app/files/drive`. Its folder
+     * links feed the files library and the client portal's attachments, so the capability stays;
+     * what moved is the claim that it is an integration.
+     */
+    { from: '/app/drive', to: /\/app\/files\/drive/ },
     { from: '/app/branding', to: /\/app\/settings\/branding/ },
   ]
 
