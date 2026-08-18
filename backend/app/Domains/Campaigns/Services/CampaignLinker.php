@@ -70,6 +70,17 @@ final class CampaignLinker
             'unified_campaign_id' => null,
             'linked_at' => null,
             'linked_by' => null,
+            /*
+             * CAMPAIGNS-ADOPT-001 — the decision, recorded.
+             *
+             * A null `unified_campaign_id` is ambiguous: it is what an unlink produces AND what a
+             * campaign that has never been adopted looks like. The importer needs to tell them
+             * apart, and this stamp is the only thing that can. Without it, «adopt anything
+             * unlinked» would undo this on the next sweep, and «adopt only new rows» leaves every
+             * campaign discovered before adoption existed invisible forever — which is what
+             * happened on the live account.
+             */
+            'unlinked_at' => now(),
         ])->save();
 
         return $external->refresh();

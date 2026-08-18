@@ -225,6 +225,19 @@ final class DiagnoseSyncCommand extends Command
         $spend = (float) (clone $metrics)->where('metric_key', 'spend')->sum('value');
         $purchases = (float) (clone $metrics)->where('metric_key', 'purchases')->sum('value');
         $revenue = (float) (clone $metrics)->where('metric_key', 'revenue')->sum('value');
+
+        /*
+         * FX-001 — money is WITHHELD, not zeroed, when no rate can be vouched for.
+         *
+         * `sum(value)` over withheld rows is 0, and printing that as «spend 0.00» says the account
+         * spent nothing — which is the opposite of the truth and exactly the mis-statement the
+         * withholding exists to avoid. The original amount survives on every row, so both are shown
+         * and the withheld count says which number to read.
+         */
+        $withheld = (clone $metrics)->whereIn('metric_key', ['spend', 'revenue'])->whereNull('value')->count();
+        $spendOriginal = (float) (clone $metrics)->where('metric_key', 'spend')->sum('original_amount');
+        $revenueOriginal = (float) (clone $metrics)->where('metric_key', 'revenue')->sum('original_amount');
+        $sourceCurrency = (string) ((clone $metrics)->whereNotNull('original_currency')->value('original_currency') ?? '');
         $latest = (clone $metrics)->max('metric_date');
 
         $external = ExternalCampaign::withoutGlobalScopes()
@@ -233,8 +246,28 @@ final class DiagnoseSyncCommand extends Command
 
         $this->line(sprintf('  project           : %s', $projectName ?? $projectId));
         $this->line(sprintf('  daily_metric rows : %d across %d day(s), latest %s', $rows, $days, $latest ?? '—'));
-        $this->line(sprintf('  spend / purchases : %s / %s', number_format($spend, 2), number_format($purchases, 0)));
-        $this->line(sprintf('  revenue           : %s', number_format($revenue, 2)));
+        $this->line(sprintf('  purchases         : %s', number_format($purchases, 0)));
+        $this->line(sprintf(
+            '  spend / revenue   : %s / %s in the project currency%s',
+            number_format($spend, 2),
+            number_format($revenue, 2),
+            $withheld > 0 ? '  ← WITHHELD, see below' : '',
+        ));
+        $this->line(sprintf(
+            '  as the platform reported it: %s / %s %s',
+            number_format($spendOriginal, 2),
+            number_format($revenueOriginal, 2),
+            $sourceCurrency !== '' ? $sourceCurrency : '(currency not recorded)',
+        ));
+
+        if ($withheld > 0) {
+            $this->line(sprintf(
+                '  %d money row(s) are WITHHELD: no %s→project exchange rate exists, so the figure is '
+                    .'null rather than wrong. Each converts itself the day a rate is available (FX-FEED-001).',
+                $withheld,
+                $sourceCurrency !== '' ? $sourceCurrency : 'source',
+            ));
+        }
         $this->line(sprintf('  campaigns visible : %d external, %d linked to a unified campaign',
             (clone $external)->count(),
             (clone $external)->whereNotNull('unified_campaign_id')->count(),

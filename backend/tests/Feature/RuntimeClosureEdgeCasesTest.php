@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Campaigns\Actions\StampHistoricalUnlinks;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignLinker;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
@@ -21,7 +23,9 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -157,6 +161,119 @@ final class RuntimeClosureEdgeCasesTest extends TestCase
         $this->assertSame('unmapped_rows', $account->refresh()->last_sync_error_category);
     }
 
+    /**
+     * **CAMPAIGNS-ADOPT-001.** A campaign discovered before adoption existed still becomes visible.
+     *
+     * ## The live failure
+     *
+     * `CAMPAIGNS-VISIBLE-001` adopted a synced campaign into a `unified_campaign` so the Campaigns
+     * page would have something to show — but only on FIRST import, because `unified_campaign_id IS
+     * NULL` is also what a deliberate unlink produces and adopting on it would undo somebody's
+     * decision every sweep.
+     *
+     * A row discovered before that shipped is never new again, so it was never adopted. On the live
+     * Snapchat account: **89 campaigns, 1,056 stored metrics, and an empty Campaigns page** with
+     * nothing to press. The condition needed a third fact, not a stricter version of the same one.
+     */
+    public function test_a_campaign_discovered_before_adoption_existed_is_adopted_on_a_later_sweep(): void
+    {
+        $account = $this->assigned('sandbox', 'sandbox-act-1');
+
+        app(AccountStructureSyncer::class)->sync($account);
+
+        // Put the estate back into the state the live account was in: discovered, never adopted.
+        ExternalCampaign::withoutGlobalScopes()->update(['unified_campaign_id' => null]);
+        UnifiedCampaign::withoutGlobalScopes()->delete();
+
+        app(AccountStructureSyncer::class)->sync($account->refresh());
+
+        $orphans = ExternalCampaign::withoutGlobalScopes()->whereNull('unified_campaign_id')->count();
+
+        $this->assertSame(0, $orphans, 'every discovered campaign has something visible to belong to');
+        $this->assertGreaterThan(0, UnifiedCampaign::withoutGlobalScopes()->count());
+    }
+
+    /** And a deliberate unlink still wins — that is the rule the `$isNew` gate was protecting. */
+    public function test_a_deliberate_unlink_survives_every_later_sweep(): void
+    {
+        $account = $this->assigned('sandbox', 'sandbox-act-2');
+
+        app(AccountStructureSyncer::class)->sync($account);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->firstOrFail();
+        app(CampaignLinker::class)->unlink($external);
+
+        app(AccountStructureSyncer::class)->sync($account->refresh());
+
+        $external->refresh();
+        $this->assertNull($external->unified_campaign_id, 'the sweep must not undo a person\'s decision');
+        $this->assertNotNull($external->unlinked_at, 'and the decision is recorded, which is what makes that possible');
+    }
+
+    /**
+     * **The dangerous half of CAMPAIGNS-ADOPT-001.** A legacy row a PERSON detached is not re-adopted.
+     *
+     * Existing rows carry no `unlinked_at`, and `unified_campaign_id IS NULL` is equally true of
+     * «never adopted» and «deliberately unlinked». Left unstamped, the first sweep after the deploy
+     * would silently reverse every real decision on production.
+     *
+     * `StampHistoricalUnlinks` recovers them from the audit trail, and that trail is PROOF rather
+     * than a hint: `unlink()` is the only path that clears the link, its one route has always written
+     * `campaign.external_unlinked`, `audit_logs` predates `external_campaigns` by three days, and
+     * nothing prunes it. So a row with an entry was detached on purpose — and stays detached.
+     */
+    public function test_a_legacy_row_the_audit_trail_shows_was_unlinked_is_never_re_adopted(): void
+    {
+        $account = $this->assigned('sandbox', 'sandbox-act-3');
+        app(AccountStructureSyncer::class)->sync($account);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->firstOrFail();
+
+        // The state a legacy row is in: detached, with no `unlinked_at`, and an audit entry saying
+        // a person did it. Written directly because this row predates the column by construction.
+        $external->forceFill(['unified_campaign_id' => null, 'unlinked_at' => null])->save();
+        DB::table('audit_logs')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'action' => StampHistoricalUnlinks::AUDIT_ACTION,
+            'entity_type' => ExternalCampaign::class,
+            'entity_id' => (string) $external->id,
+            'created_at' => Carbon::now()->subDay(),
+        ]);
+
+        $recovered = (new StampHistoricalUnlinks)->execute();
+
+        $this->assertSame(1, $recovered, 'the decision is recovered from the audit trail');
+        $this->assertNotNull($external->refresh()->unlinked_at);
+
+        app(AccountStructureSyncer::class)->sync($account->refresh());
+
+        $this->assertNull(
+            $external->refresh()->unified_campaign_id,
+            'CAMPAIGNS-ADOPT-001: the sweep re-adopted a campaign a person had deliberately detached.',
+        );
+    }
+
+    /** And a legacy row the audit trail shows was NEVER unlinked is adoptable — proven, not assumed. */
+    public function test_a_legacy_row_with_no_unlink_in_the_audit_trail_is_adopted(): void
+    {
+        $account = $this->assigned('sandbox', 'sandbox-act-4');
+        app(AccountStructureSyncer::class)->sync($account);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->firstOrFail();
+        $external->forceFill(['unified_campaign_id' => null, 'unlinked_at' => null])->save();
+
+        // No audit entry for this row: it was never detached by anybody.
+        $this->assertSame(0, (new StampHistoricalUnlinks)->execute());
+
+        app(AccountStructureSyncer::class)->sync($account->refresh());
+
+        $this->assertNotNull(
+            $external->refresh()->unified_campaign_id,
+            'a campaign nobody ever detached must become visible',
+        );
+    }
+
     // ── Doing it twice ────────────────────────────────────────────────────────────────────────
 
     /** The same window synced twice writes the same rows, not twice as many. */
@@ -221,7 +338,16 @@ final class RuntimeClosureEdgeCasesTest extends TestCase
         $external = ExternalCampaign::withoutGlobalScopes()->firstOrFail();
         $this->assertNotNull($external->unified_campaign_id, 'the first import adopts it');
 
-        $external->forceFill(['unified_campaign_id' => null, 'linked_at' => null, 'linked_by' => null])->save();
+        /*
+         * Unlinked through the product's ONLY unlink path — CAMPAIGNS-ADOPT-001.
+         *
+         * This used to write the three columns by hand, which is the one thing a fixture must not do
+         * here: `CampaignLinker::unlink()` is what records the DECISION, and a test that bypasses it
+         * is testing a state the product cannot produce. It passed for the wrong reason — the
+         * importer only adopted brand-new rows — and would have gone on passing while every campaign
+         * discovered before adoption existed stayed invisible forever.
+         */
+        app(CampaignLinker::class)->unlink($external);
 
         app(AccountStructureSyncer::class)->sync($account->refresh());
 
