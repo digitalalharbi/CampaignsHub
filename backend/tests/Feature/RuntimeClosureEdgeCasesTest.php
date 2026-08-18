@@ -9,12 +9,15 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CampaignLinker;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Jobs\SyncAccountStructureJob;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountHealth;
 use App\Domains\Integrations\Sync\AccountStructureSyncer;
+use App\Domains\Metrics\Enums\SyncRunStatus;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Services\AccountMetricsSyncer;
@@ -272,6 +275,41 @@ final class RuntimeClosureEdgeCasesTest extends TestCase
             $external->refresh()->unified_campaign_id,
             'a campaign nobody ever detached must become visible',
         );
+    }
+
+    /**
+     * **A job that DIED still says so.** A killed structure sync does not leave its run open.
+     *
+     * On production this job was being killed: 89 campaigns, and a sweep that reads campaigns, ad
+     * squads, ads and creatives for all of them, against a 120-second worker default. Three attempts,
+     * three kills — and because a killed process never reaches `finish()`, each left its run at
+     * `running` forever. Nothing reported a failure, so nothing looked wrong, while the Campaigns
+     * page stayed empty beside a thousand stored metrics.
+     *
+     * `AccountStructureSyncer` catches every `Throwable` a provider can raise, so `running` cannot
+     * mean «the platform refused». It means the process went away, and that is what this hook is for.
+     */
+    public function test_a_killed_structure_job_closes_its_run_instead_of_leaving_it_open(): void
+    {
+        $account = $this->assigned('sandbox', 'sandbox-act-5');
+
+        $run = IntegrationSyncRun::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'provider_connection_id' => $account->provider_connection_id,
+            'type' => 'structure',
+            'status' => SyncRunStatus::Running->value,
+            'records' => 0,
+            'started_at' => Carbon::now()->subMinutes(5),
+        ]);
+
+        (new SyncAccountStructureJob((string) $account->getKey()))->failed(null);
+
+        $run->refresh();
+
+        $this->assertSame(SyncRunStatus::Failed->value, $run->status);
+        $this->assertNotNull($run->finished_at);
+        $this->assertNotNull($run->error, 'a run that was killed must say what happened to it');
     }
 
     // ── Doing it twice ────────────────────────────────────────────────────────────────────────
