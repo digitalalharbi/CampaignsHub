@@ -448,7 +448,9 @@ function ConnectorCard({ c, locale, projectId, conn, onOpen }: {
   const Icon = CATEGORY_ICON[providerCategory(conn.provider)]
   const kind = primaryActionKind(conn.state)
   return (
-    <li>
+    // Named so a test can ask for CONNECTOR CARDS rather than for every list item on the page —
+    // see `integrations.spec.ts`, which asserts the order of the six ad platforms.
+    <li data-testid="connector-card">
       <button
         type="button" onClick={onOpen}
         className="flex h-full w-full flex-col gap-2.5 rounded-2xl border border-border bg-surface p-3 text-start transition-colors hover:border-brand-500 focus:border-brand-500 focus:outline-none"
