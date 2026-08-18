@@ -47,7 +47,15 @@ final class InsightPayloadRows
         };
     }
 
-    /** `timeseries_stats[].timeseries_stat` — one series per campaign, each with a day series. */
+    /**
+     * `timeseries_stats[].timeseries_stat` — the AD ACCOUNT, with its campaigns nested underneath.
+     *
+     * SNAP-BREAKDOWN-001. This read `timeseries_stat.timeseries` and `timeseries_stat.id`, matching
+     * the connector's own wrong assumption — so when the diagnosis recovered a past run's counts from
+     * the stored body it confirmed the same zero, from the same mistake, and looked like corroboration.
+     * With `breakdown=campaign` the day points live at `breakdown_stats.campaign[].timeseries`, and
+     * the campaign id is on that entry, not on the series.
+     */
     private static function snapchat(array $body): ?array
     {
         if (! array_key_exists('timeseries_stats', $body)) {
@@ -59,6 +67,23 @@ final class InsightPayloadRows
 
         foreach ((array) $body['timeseries_stats'] as $wrapper) {
             $series = (array) (((array) $wrapper)['timeseries_stat'] ?? []);
+            $breakdown = (array) ($series['breakdown_stats'] ?? []);
+
+            if (isset($breakdown['campaign']) && is_array($breakdown['campaign'])) {
+                foreach ($breakdown['campaign'] as $entry) {
+                    $campaign = (array) $entry;
+                    $rows += count((array) ($campaign['timeseries'] ?? []));
+
+                    $id = (string) ($campaign['id'] ?? '');
+                    if ($id !== '') {
+                        $ids[] = $id;
+                    }
+                }
+
+                continue;
+            }
+
+            // No breakdown: the series is the entity, and its id is what the rows belong to.
             $rows += count((array) ($series['timeseries'] ?? []));
 
             $id = (string) ($series['id'] ?? '');

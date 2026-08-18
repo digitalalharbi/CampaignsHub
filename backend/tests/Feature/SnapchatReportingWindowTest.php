@@ -255,19 +255,55 @@ final class SnapchatReportingWindowTest extends TestCase
     }
 
     /** @return array<string,mixed> */
+    /**
+     * One ad-account series carrying its per-campaign breakdown — SNAPCHAT'S OWN SHAPE.
+     *
+     * ## The fixture that hid a live defect for a month
+     *
+     * This used to return `['timeseries_stat' => ['id' => $campaignId, 'type' => 'CAMPAIGN',
+     * 'timeseries' => [...]]]` — an invented shape, and the connector was written to match it. Every
+     * test passed. On the live account it returned **zero rows for seven days**, because with
+     * `breakdown=campaign` Snapchat answers with the AD ACCOUNT as the series and nests the campaigns
+     * underneath:
+     *
+     * ```json
+     * {"timeseries_stats":[{"timeseries_stat":{
+     *    "id":"3072e77d-…","type":"AD_ACCOUNT",
+     *    "breakdown_stats":{"campaign":[
+     *      {"id":"20c79671-…","type":"CAMPAIGN","granularity":"DAY","timeseries":[{"stats":{…}}]}
+     *    ]}}}]}
+     * ```
+     *
+     * So `timeseries_stat.timeseries` does not exist at all, and `timeseries_stat.id` is the ad
+     * account — not a campaign. The parser read an absent key, produced nothing, and the run was
+     * recorded as «the provider returned no insight rows». It had returned 100.17 USD of spend,
+     * 44,396 impressions and two purchases.
+     *
+     * The body below is that production response, reduced. A mock that is not the platform's shape
+     * tests the mock.
+     */
     private function series(string $campaignId, float $spend): array
     {
         return [
             'timeseries_stat' => [
-                'id' => $campaignId,
-                'type' => 'CAMPAIGN',
-                'granularity' => 'DAY',
-                'timeseries' => [[
-                    // Snapchat returns the account's own offset; the row's date must follow it.
-                    'start_time' => '2026-08-01T00:00:00.000+03:00',
-                    'end_time' => '2026-08-02T00:00:00.000+03:00',
-                    'stats' => ['spend' => $spend * 1_000_000, 'impressions' => 10],
-                ]],
+                'id' => 'act-1',
+                'type' => 'AD_ACCOUNT',
+                'paging' => ['next_link' => ''],
+                'start_time' => '2026-08-01T00:00:00.000+03:00',
+                'end_time' => '2026-08-02T00:00:00.000+03:00',
+                'breakdown_stats' => [
+                    'campaign' => [[
+                        'id' => $campaignId,
+                        'type' => 'CAMPAIGN',
+                        'granularity' => 'DAY',
+                        'timeseries' => [[
+                            // Snapchat returns the account's own offset; the row's date must follow it.
+                            'start_time' => '2026-08-01T00:00:00.000+03:00',
+                            'end_time' => '2026-08-02T00:00:00.000+03:00',
+                            'stats' => ['spend' => $spend * 1_000_000, 'impressions' => 10],
+                        ]],
+                    ]],
+                ],
             ],
         ];
     }
