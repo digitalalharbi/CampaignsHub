@@ -17,6 +17,7 @@ use App\Domains\Metrics\Enums\SyncRunStatus;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\AccountMetricsSyncer;
 use App\Domains\Metrics\Services\InsightPayloadRows;
+use App\Domains\Metrics\Services\SyncRunLog;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -258,6 +259,61 @@ final class SyncRunTruthTest extends TestCase
         $this->assertSame('automatic', $run->trigger());
     }
 
+    // ── The log says the same answer once ─────────────────────────────────────────────────────
+
+    /**
+     * §8 — «لا تكرر نفس الخطأ كل ٣٠ دقيقة في واجهة مزعجة».
+     *
+     * The sweep runs every half hour, so an account the platform has nothing to report for produces
+     * forty-eight indistinguishable rows a day. Every one is still recorded; the LOG says it once.
+     */
+    public function test_consecutive_identical_runs_are_said_once_with_a_count(): void
+    {
+        $rows = [
+            $this->logRow('no_data', '2026-08-18T06:30:00+00:00'),
+            $this->logRow('no_data', '2026-08-18T06:00:00+00:00'),
+            $this->logRow('no_data', '2026-08-18T05:30:00+00:00'),
+        ];
+
+        $collapsed = SyncRunLog::collapse($rows);
+
+        $this->assertCount(1, $collapsed);
+        $this->assertSame(3, $collapsed[0]['repeats']);
+        // The rows arrive newest first, so the streak's marker is its OLDEST attempt, not its newest.
+        $this->assertSame('2026-08-18T05:30:00+00:00', $collapsed[0]['repeats_since']);
+    }
+
+    /** Anything that CHANGED starts a new row — that is the moment a reader needs to notice. */
+    public function test_a_change_of_any_kind_breaks_the_streak(): void
+    {
+        $collapsed = SyncRunLog::collapse([
+            $this->logRow('success', '2026-08-18T06:30:00+00:00', metrics: 12),
+            $this->logRow('no_data', '2026-08-18T06:00:00+00:00'),
+            $this->logRow('no_data', '2026-08-18T05:30:00+00:00'),
+            $this->logRow('failed', '2026-08-18T05:00:00+00:00'),
+        ]);
+
+        $this->assertCount(3, $collapsed);
+        $this->assertSame(['success', 'no_data', 'failed'], array_column($collapsed, 'status'));
+        $this->assertSame([1, 2, 1], array_column($collapsed, 'repeats'));
+    }
+
+    /**
+     * A run that STORED something is never folded into one that did not.
+     *
+     * «Nothing happened, forty-eight times» and «nothing happened forty-seven times and then data
+     * arrived» are different days, and the second is the one being waited for.
+     */
+    public function test_a_run_that_stored_metrics_is_never_folded_into_one_that_did_not(): void
+    {
+        $collapsed = SyncRunLog::collapse([
+            $this->logRow('success', '2026-08-18T06:30:00+00:00', metrics: 40),
+            $this->logRow('success', '2026-08-18T06:00:00+00:00', metrics: 0),
+        ]);
+
+        $this->assertCount(2, $collapsed);
+    }
+
     // ── Reading a past run back out of the provider's own body ────────────────────────────────
 
     /** Snapchat's shape, counted: points across every series, and the campaign ids they name. */
@@ -290,6 +346,29 @@ final class SyncRunTruthTest extends TestCase
         foreach (PlatformCredentials::for('snapchat')->requires() as $key) {
             config()->set("ad_platforms.platforms.snapchat.{$key}", "test-{$key}");
         }
+    }
+
+    /**
+     * One log row, in the shape `MetricSyncRun::logRow()` produces.
+     *
+     * Built by hand rather than from saved runs because what is under test is the COLLAPSE — its
+     * identity rule and its ordering — and a fixture of forty-eight real runs would test the sweep.
+     *
+     * @return array<string,mixed>
+     */
+    private function logRow(string $status, string $startedAt, int $metrics = 0): array
+    {
+        return [
+            'id' => $status.$startedAt,
+            'provider' => 'snapchat',
+            'status' => $status,
+            'trigger' => 'automatic',
+            'window_start' => '2026-08-11',
+            'window_end' => '2026-08-18',
+            'metrics_imported' => $metrics,
+            'error' => $status === 'failed' ? 'boom' : null,
+            'started_at' => $startedAt,
+        ];
     }
 
     private function assignedAccount(string $provider = 'sandbox', string $externalId = 'act-1'): ExternalAccount
