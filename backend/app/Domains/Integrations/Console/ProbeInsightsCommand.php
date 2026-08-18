@@ -102,6 +102,8 @@ final class ProbeInsightsCommand extends Command
         } catch (Throwable $e) {
             $this->line('');
             $this->error('  The provider call threw: '.$e->getMessage());
+            // The receipt is printed for a refusal too — it is the case that needs it most.
+            $this->reportCalls($connector);
 
             return self::SUCCESS;
         }
@@ -109,6 +111,7 @@ final class ProbeInsightsCommand extends Command
         if (! $result->success) {
             $this->line('');
             $this->error('  The provider refused: '.($result->message ?? 'no message given'));
+            $this->reportCalls($connector);
 
             return self::SUCCESS;
         }
@@ -131,6 +134,8 @@ final class ProbeInsightsCommand extends Command
             }
         }
 
+        $this->reportCalls($connector);
+
         $this->line('');
         $this->line(sprintf('  provider_raw_rows    %d', $rawRows));
         $this->line(sprintf('  parsed_rows          %d', count($rows)));
@@ -150,6 +155,39 @@ final class ProbeInsightsCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * What was ASKED, and what the wire said — the half of «they returned 0» nobody wrote down.
+     *
+     * An empty body and a 200 are indistinguishable in the retained payload. The URL carries the
+     * window, the breakdown, the granularity and the field list; the status and the platform's own
+     * request id are what let somebody look the call up on the platform's side. No secret is in any
+     * of it — every platform here authenticates in a header.
+     */
+    private function reportCalls(object $connector): void
+    {
+        if (! $connector instanceof ApiAdvertisingConnector) {
+            return;
+        }
+
+        $calls = $connector->takeCallLog();
+
+        $this->line('');
+        $this->line(sprintf('  calls made: %d', count($calls)));
+
+        foreach ($calls as $index => $call) {
+            $this->line(sprintf(
+                '  [%d] HTTP %d  request_id=%s',
+                $index,
+                $call['status'],
+                $call['request_id'] ?? '—',
+            ));
+            $this->line('      '.$call['url']);
+            // The response SHAPE, not its contents: the top-level keys say whether the platform
+            // answered with a payload, an error envelope or an empty success.
+            $this->line('      response keys: '.(implode(', ', $call['keys']) ?: '(none)'));
+        }
     }
 
     private function date(string $option, string $fallback): string

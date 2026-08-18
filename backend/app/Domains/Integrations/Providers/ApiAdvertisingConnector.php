@@ -63,6 +63,22 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
     protected array $rawResponses = [];
 
     /**
+     * One entry per call: what was asked, and what the wire said back.
+     *
+     * INTEG-RUNTIME §7 — «the provider returned 0 rows» is a claim about a REQUEST as much as about
+     * an account, and the request is the half that was never written down. An empty body and a 200
+     * look identical in the retained payload; the URL, the status and the platform's own request id
+     * are what turn «they had nothing» into «they had nothing, for THIS question, and here is the
+     * receipt they can look up».
+     *
+     * The URL carries no secret — every platform here authenticates in a header — so it is recorded
+     * whole rather than sanitised into uselessness.
+     *
+     * @var list<array{url:string,status:int,request_id:?string,keys:list<string>}>
+     */
+    protected array $callLog = [];
+
+    /**
      * How many data records the platform actually handed this connector in the current sync.
      *
      * INTEG-RUNTIME §7 — the first of the four numbers a run has to be able to state. Without it,
@@ -404,16 +420,49 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
      */
     protected function read(Response $response, string $what): array
     {
+        /** @var array<string,mixed> $body */
+        $body = $response->json() ?? [];
+
+        /*
+         * Recorded BEFORE the success check, deliberately.
+         *
+         * A refusal is the case a diagnosis most needs the receipt for, and the old order threw the
+         * exception first — so the one call anybody wanted to see was the one call that left no trace
+         * of its status or its request id.
+         */
+        $this->callLog[] = [
+            'url' => (string) $response->effectiveUri(),
+            'status' => $response->status(),
+            // Snapchat and TikTok both return one; the others do not, and null says so.
+            'request_id' => isset($body['request_id']) && is_scalar($body['request_id'])
+                ? (string) $body['request_id']
+                : null,
+            'keys' => array_map(strval(...), array_keys($body)),
+        ];
+
         if (! PlatformHttp::succeeded($response)) {
             throw new RuntimeException($this->label()." could not return {$what}: ".PlatformHttp::reason($response));
         }
 
-        /** @var array<string,mixed> $body */
-        $body = $response->json() ?? [];
-
         $this->rawResponses[] = $body;
 
         return $body;
+    }
+
+    /**
+     * Take the call log for this sync, and forget it.
+     *
+     * Drained like the bodies and the row count, and for the same reason: one connector instance is
+     * bound per sync, and a call carried into the next window would be attributed to it.
+     *
+     * @return list<array{url:string,status:int,request_id:?string,keys:list<string>}>
+     */
+    public function takeCallLog(): array
+    {
+        $log = $this->callLog;
+        $this->callLog = [];
+
+        return $log;
     }
 
     /** Record that the platform returned `$count` of its own data records. */

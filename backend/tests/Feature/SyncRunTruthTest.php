@@ -12,6 +12,8 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
+use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Sync\AccountStructureSyncer;
 use App\Domains\Metrics\Enums\SyncRunStatus;
 use App\Domains\Metrics\Models\MetricSyncRun;
@@ -257,6 +259,67 @@ final class SyncRunTruthTest extends TestCase
 
         $run->meta = null;
         $this->assertSame('automatic', $run->trigger());
+    }
+
+    // ── The receipt ───────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Every provider call leaves a receipt — including the one that failed.
+     *
+     * «The provider returned 0 rows» is a claim about a REQUEST as much as about an account, and the
+     * request was the half that was never written down: an empty body and a 200 are indistinguishable
+     * in the retained payload. The URL carries the window, the granularity, the breakdown and the
+     * field list; the status and Snapchat's own `request_id` are what let a call be looked up on the
+     * platform's side.
+     */
+    public function test_every_provider_call_records_its_status_url_and_request_id(): void
+    {
+        $this->configureSnapchat();
+        $account = $this->assignedAccount(provider: 'snapchat', externalId: 'snap-1');
+
+        Http::fake(['adsapi.snapchat.com/*' => Http::response([
+            'request_status' => 'SUCCESS',
+            'request_id' => 'req-abc-123',
+            'timeseries_stats' => [],
+        ])]);
+
+        app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-03'));
+
+        /** @var ApiAdvertisingConnector $connector */
+        $connector = app(AdvertisingConnectorRegistry::class)->get('snapchat')
+            ->withConnection(ProviderConnection::withoutGlobalScopes()->findOrFail($account->provider_connection_id));
+
+        // A fresh clone has an empty log; the point is proved on a call this test makes itself.
+        $connector->syncInsights('snap-1', '2026-08-01', '2026-08-03');
+
+        $calls = $connector->takeCallLog();
+
+        $this->assertNotSame([], $calls);
+        $this->assertSame(200, $calls[0]['status']);
+        $this->assertSame('req-abc-123', $calls[0]['request_id']);
+        $this->assertStringContainsString('adsapi.snapchat.com', $calls[0]['url']);
+        // The URL carries the question, which is what makes a zero answerable.
+        $this->assertStringContainsString('granularity=DAY', $calls[0]['url']);
+        $this->assertStringContainsString('breakdown=campaign', $calls[0]['url']);
+        $this->assertContains('timeseries_stats', $calls[0]['keys']);
+    }
+
+    /** Drained per sync — a call carried into the next window would be attributed to it. */
+    public function test_the_call_log_is_drained_when_taken(): void
+    {
+        $this->configureSnapchat();
+        $account = $this->assignedAccount(provider: 'snapchat', externalId: 'snap-1');
+
+        Http::fake(['adsapi.snapchat.com/*' => Http::response(['timeseries_stats' => []])]);
+
+        /** @var ApiAdvertisingConnector $connector */
+        $connector = app(AdvertisingConnectorRegistry::class)->get('snapchat')
+            ->withConnection(ProviderConnection::withoutGlobalScopes()->findOrFail($account->provider_connection_id));
+
+        $connector->syncInsights('snap-1', '2026-08-01', '2026-08-03');
+
+        $this->assertNotSame([], $connector->takeCallLog());
+        $this->assertSame([], $connector->takeCallLog(), 'taking it twice must not report the same call twice');
     }
 
     // ── The log says the same answer once ─────────────────────────────────────────────────────
