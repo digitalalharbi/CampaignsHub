@@ -431,7 +431,7 @@ final class SnapchatConnector extends ApiAdvertisingConnector
 
             foreach ((array) ($body['timeseries_stats'] ?? []) as $wrapper) {
                 /** @var array<string,mixed> $series */
-                $series = (array) ((array) $wrapper)['timeseries_stat'] ?? [];
+                $series = (array) (((array) $wrapper)['timeseries_stat'] ?? []);
 
                 foreach ($this->campaignSeries($series) as $campaignId => $points) {
                     // What Snapchat sent, counted before any of our guards can drop one.
