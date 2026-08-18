@@ -1,4 +1,42 @@
-# START HERE — 2026-08-18, the Connection Command Center
+# START HERE — 2026-08-18, after the Command Center landed
+
+## Where the code is
+
+`origin/main` = **0efb480**, deployed to production. Migration
+`2026_08_18_110000_add_management_state_to_external_accounts` confirmed in the deploy log;
+`/api/v1/accounts` answers 401 while an absent route answers 404.
+
+- PR #35 — the two real frozen-gate failures + the `gate` CI job. Merged, deployed.
+- PR #36 — the Connection Command Center. Merged, deployed.
+
+## The gate
+
+`npm run gate`, verbatim, on ubuntu-latest. **`REAL_GATE_EXIT=0`, Failed=0, Flaky=0, Retries=0.**
+
+    chromium  402 passed  13.6m
+    firefox   395 passed  22.3m
+    webkit    395 passed  22.5m
+
+The laptop round is now explained rather than excused: firefox there produced single layout
+assertions taking 16–57 minutes under load average 7.66, and on a runner doing nothing else the same
+leg finishes in 22 minutes. That was the environment, and it is measured, not claimed.
+
+## What is still NOT verified
+
+**SNAPCHAT-LIVE — BLOCKED_OPERATIONAL_EVIDENCE.** System config, OAuth, callback and the 309-account
+discovery are VERIFIED. Selection, assignment, the first real scoped sync and downstream live data
+are NOT `LIVE_VERIFIED` and must not be reported as such until the customer's own live run.
+
+## The standing rules
+
+- `origin/main` is the only truth. Branch → PR → CI → protected merge. No direct push, no bypass.
+- No arbitrary ownership fallback: no `workspaces[0]`, no `first()`, no `oldest()`.
+  `OneOwnershipRuleTest` holds the invariant.
+- A store never consumes the Connected Ad Accounts quota, and no store quota is invented.
+- Never a raw identifier where a name belongs.
+- Gate failures are root-caused from the run's own evidence, never re-run until they pass, never
+  called flake without proof. No weakened assertions, no retries, no timeout inflation, no sleeps.
+
 
 ## Where the code is
 
