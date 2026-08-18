@@ -53,11 +53,17 @@ differences are only in what each platform's real implementation will have to do
 Triggering a sync for the demo Meta account produced a real `MetricSyncRun`:
 
 ```
-status  : awaiting_credentials
-error   : No credentials for Meta Marketing API — nothing was fetched.
-          Add credentials to enable this sync.
+status  : failed
+category: awaiting_credentials          (on the account, not the run)
+error   : No credentials for Meta Marketing API — nothing was fetched, and no
+          request was made. Add credentials to enable this sync.
 upserted: 0
 ```
+
+**Updated for INTEG-RUNTIME §8.** The sync vocabulary is six words — running, success, no_data,
+partial_mapping, failed, awaiting_assignment — so the run says `failed` and the distinction that
+decides who acts survives as `external_accounts.last_sync_error_category`. Nothing else about this
+changes: no request went out, nothing was fabricated, and the message still says exactly why.
 
 That is the whole point: the trigger, the queue, the connector check, the run record and the log are
 all real. Only the secret is absent — and the system says so instead of failing vaguely or, worse,
