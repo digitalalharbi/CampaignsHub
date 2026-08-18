@@ -26,8 +26,22 @@ test.describe('the integrations centre', () => {
    */
   const AD_PLATFORMS = ['Snapchat Ads', 'TikTok Ads', 'Meta Ads', 'Google Ads', 'X Ads', 'LinkedIn Ads']
 
+  /**
+   * The CONNECTOR CARDS, in the order the page offers them.
+   *
+   * Scoped to `[data-testid="connector-card"]` rather than to `main li`, which is what this used to
+   * say. The two meant the same thing only for as long as the connector grid was the only list on
+   * the page: the account inventory added its own rows, an assigned one leads with the chip
+   * «مرتبط بمشروع», and that string arrived at the head of this list and pushed «LinkedIn Ads» off
+   * the end of the slice. It failed identically on all three browsers, which is what a selector
+   * reading the wrong elements looks like — and it passed locally, because the inventory only
+   * renders that chip once some earlier spec in the full run has assigned an account.
+   *
+   * The assertions below are unchanged. Only the set they read from is now the set they always
+   * described.
+   */
   async function connectorNames(page: import('@playwright/test').Page): Promise<string[]> {
-    return page.locator('main li').evaluateAll((els) =>
+    return page.locator('main li[data-testid="connector-card"]').evaluateAll((els) =>
       els
         .map((el) => ((el as HTMLElement).innerText || '').split('\n').filter(Boolean)[1] ?? '')
         .filter(Boolean),
@@ -78,7 +92,9 @@ test.describe('the integrations centre', () => {
     await expect.poll(async () => (await connectorNames(page)).length, { timeout: 20000 }).toBeGreaterThan(6)
 
     for (const platform of AD_PLATFORMS) {
-      const card = page.locator('main li').filter({ hasText: platform }).first()
+      // Scoped for the same reason as `connectorNames` above: this wants a connector CARD, and
+      // `main li` is now several different lists.
+      const card = page.locator('main li[data-testid="connector-card"]').filter({ hasText: platform }).first()
       await expect(card, `${platform} has no card`).toBeVisible()
       // Awaiting credentials → the card offers "connect"; it must not offer a sync that cannot run.
       await expect(card.getByRole('button')).not.toHaveCount(0)

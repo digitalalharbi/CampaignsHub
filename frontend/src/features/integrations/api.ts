@@ -272,3 +272,18 @@ export async function refreshDiscoveredAccounts(connectionId: string): Promise<{
   await ensureCsrfCookie()
   return postData(`/connections/${connectionId}/refresh`)
 }
+
+/**
+ * COMMAND-CENTER §26 — end the authorisation, and say what that costs before it happens.
+ *
+ * Not a local flag. The server marks the connection revoked AND disables every project binding that
+ * used any of its accounts, across every project — because leaving them active would leave projects
+ * pointing at a source nothing can read, reporting a stale number as a current one.
+ *
+ * That is why the caller must confirm with the count in front of them: «قطع الاتصال» sounds like
+ * undoing a setting and is actually the end of the data flow for however many accounts.
+ */
+export async function revokeConnection(connectionId: string): Promise<{ status: string }> {
+  await ensureCsrfCookie()
+  return postData(`/connections/${connectionId}/revoke`)
+}

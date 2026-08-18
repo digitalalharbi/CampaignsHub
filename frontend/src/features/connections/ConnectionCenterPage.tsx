@@ -12,6 +12,7 @@ import { toApiError } from '@/lib/api/client'
 import { fmtDateTime } from '@/lib/datetime'
 import { AdPlatformsPanel } from '@/features/integrations/IntegrationsPage'
 import { StoresPanel } from '@/features/commerce/StoresPanel'
+import { AccountInventoryPanel } from './AccountInventoryPanel'
 import { SearchableSelect } from '@/components/forms/SearchableSelect'
 import type { Option } from '@/components/forms/types'
 import {
@@ -242,6 +243,14 @@ export function ConnectionCenterPage() {
           */}
         <StoresPanel />
 
+        {/*
+          COMMAND-CENTER §§7–20 — and the inventory belongs here for the SAME reason those two do.
+          Which accounts an authorisation reaches is a tenant-level fact; it does not become
+          unanswerable because nobody has picked a project yet. Rendering it only in the branch below
+          made «what does this platform have access to» a question you had to choose a project to ask.
+        */}
+        <AccountInventoryPanel />
+
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">
           <span className="block font-semibold text-text-primary">{c.pick_project}</span>
           {c.pick_project_hint}
@@ -277,6 +286,17 @@ export function ConnectionCenterPage() {
 
       {/* Stores, at the same tenant level and for the same reason as above (COMMERCE-001). */}
       <StoresPanel />
+
+      {/*
+        COMMAND-CENTER §§7–20 — what the authorisations above actually reach.
+
+        Directly beneath them because it is the answer to the question pressing «ربط» raises: one
+        Snapchat authorisation returned 309 ad accounts, and until this panel existed the customer
+        had no way to see them, choose among them, or find out where any one of them sends its
+        numbers. Tenant-level for the same reason the panels above are: a source belongs to the
+        tenant and is LENT to a project through a binding.
+      */}
+      <AccountInventoryPanel />
 
       {/* Summary tiles */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
@@ -428,7 +448,9 @@ function ConnectorCard({ c, locale, projectId, conn, onOpen }: {
   const Icon = CATEGORY_ICON[providerCategory(conn.provider)]
   const kind = primaryActionKind(conn.state)
   return (
-    <li>
+    // Named so a test can ask for CONNECTOR CARDS rather than for every list item on the page —
+    // see `integrations.spec.ts`, which asserts the order of the six ad platforms.
+    <li data-testid="connector-card">
       <button
         type="button" onClick={onOpen}
         className="flex h-full w-full flex-col gap-2.5 rounded-2xl border border-border bg-surface p-3 text-start transition-colors hover:border-brand-500 focus:border-brand-500 focus:outline-none"
