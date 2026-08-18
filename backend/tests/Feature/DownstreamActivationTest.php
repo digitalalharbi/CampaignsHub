@@ -10,6 +10,7 @@ use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
@@ -19,6 +20,8 @@ use App\Domains\Integrations\Sync\AccountStructureSyncer;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Services\AccountMetricsSyncer;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
@@ -239,6 +242,85 @@ final class DownstreamActivationTest extends TestCase
         $freshness = $this->asOperator($this->projectB, 'metrics/freshness');
 
         $this->assertNotSame([], $freshness, 'RUNTIME-100 §24: a report reads live project data, so freshness must be answerable');
+    }
+
+    /**
+     * §10 — the creatives surface carries what the sync discovered, for B and not for A.
+     *
+     * `test_ad_sets_ads_and_creatives_land_in_the_same_project` asserts the ROWS; this asserts the
+     * screen that reads them, which is a different question. A creative can be filed perfectly and
+     * still be invisible, and «Content» is one of the nine surfaces the chain has to reach.
+     */
+    public function test_the_creatives_surface_carries_the_synced_creatives(): void
+    {
+        $this->firstSync();
+
+        $b = $this->asOperator($this->projectB, 'creatives?from=2020-01-01&to=2035-01-01');
+        $a = $this->asOperator($this->projectA, 'creatives?from=2020-01-01&to=2035-01-01');
+
+        $this->assertNotSame([], $b['creatives'] ?? $b, 'the assigned project has the creatives the sync discovered');
+        $this->assertSame([], $a['creatives'] ?? [], 'and the other client has none of them');
+    }
+
+    /**
+     * §10 — a shareable link carries the synced figures, and needs no session to do it.
+     *
+     * The client link is the last surface in the chain and the only one whose reader has no account
+     * here at all. It is opened with **no acting user**: a share that only works while somebody is
+     * signed in is not a share, and this is the assertion that would catch a middleware change
+     * quietly putting the whole public route behind auth.
+     */
+    public function test_a_shared_client_link_carries_the_synced_figures_without_a_session(): void
+    {
+        $this->firstSync();
+
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+
+        $report = Report::create([
+            'project_id' => $this->projectB->id,
+            'name' => 'B — executive',
+            'type' => 'executive',
+            'status' => 'completed',
+            'currency' => 'SAR',
+            'period_start' => Carbon::now()->subDays(30)->toDateString(),
+            'period_end' => Carbon::now()->toDateString(),
+            'data' => ['kpis' => []],
+        ]);
+
+        /*
+         * The campaigns are NAMED in the scope, which is the product's own rule and not a
+         * convenience here: `LiveReportService` degrades an empty `campaign_ids` to «nothing», never
+         * to «everything», so a link built without them shows the client an empty report rather than
+         * silently widening to whatever the project acquires later. The link builder does the same.
+         */
+        $campaignIds = UnifiedCampaign::withoutGlobalScopes()
+            ->where('project_id', $this->projectB->id)
+            ->pluck('id')
+            ->all();
+
+        $this->assertNotSame([], $campaignIds, 'the sync produced no visible campaign to share');
+
+        [, $token] = app(ShareService::class)->create($report, [
+            'scope' => [
+                'project_id' => $this->projectB->id,
+                'campaign_ids' => $campaignIds,
+                'earliest' => Carbon::now()->subDays(30)->toDateString(),
+                'latest' => Carbon::now()->toDateString(),
+            ],
+        ], null);
+
+        app(TenantContext::class)->forget();
+
+        // No `actingAs`. This is a stranger with a link.
+        $totals = $this->getJson("/api/v1/reports/shared/{$token}/live")
+            ->assertOk()
+            ->json('data.totals');
+
+        $this->assertGreaterThan(
+            0,
+            (float) ($totals['spend'] ?? 0),
+            '§10: the figures the sync produced reach the client link, or the chain stops one screen short',
+        );
     }
 
     // ── Fixtures ──────────────────────────────────────────────────────────────────────────────
