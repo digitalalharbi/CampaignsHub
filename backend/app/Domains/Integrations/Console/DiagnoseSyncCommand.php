@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Console;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
+use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Models\DailyMetric;
@@ -183,6 +184,8 @@ final class DiagnoseSyncCommand extends Command
             }
         }
 
+        $this->reportStructureRuns($account);
+
         if ((bool) $this->option('payload')) {
             $this->reportPayload($account, $runs->first());
         }
@@ -284,6 +287,42 @@ final class DiagnoseSyncCommand extends Command
             ->count();
 
         $this->line(sprintf('  rows in ANY OTHER project: %d   (must be 0)', $elsewhere));
+    }
+
+    /**
+     * The STRUCTURE runs — campaigns, ad sets, ads, creatives.
+     *
+     * A separate pipeline on a separate clock (`integrations:sync-structure`, every six hours) and a
+     * separate table, and its outcome was invisible here. That matters: metrics can succeed while
+     * structure fails, and the visible result is a project full of figures with no campaign to hang
+     * them on — which is exactly the state the live account was found in.
+     */
+    private function reportStructureRuns(ExternalAccount $account): void
+    {
+        $runs = IntegrationSyncRun::withoutGlobalScopes()
+            ->where('provider_connection_id', $account->provider_connection_id)
+            ->orderByDesc('started_at')
+            ->limit(4)
+            ->get();
+
+        $this->line('');
+        $this->line(sprintf('  Structure runs (last %d):', $runs->count()));
+
+        if ($runs->isEmpty()) {
+            $this->line('  none recorded.');
+
+            return;
+        }
+
+        foreach ($runs as $run) {
+            $this->line(sprintf(
+                '  %s  %-16s records=%d  %s',
+                $run->started_at?->toDateTimeString() ?? '—',
+                (string) $run->status,
+                (int) $run->records,
+                $run->error === null ? '' : mb_substr((string) $run->error, 0, 240),
+            ));
+        }
     }
 
     /**
