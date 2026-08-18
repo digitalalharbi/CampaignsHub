@@ -1,70 +1,46 @@
-# START HERE — 2026-08-19, the integrations runtime closure
+# START HERE — 2026-08-18, Snapchat live and storing
 
-## The governing brief
+## The verdict
 
-The customer's final integrations instruction supersedes every earlier one where they conflict. In
-short: **one runtime**, **eight providers**, Integrations owns every source, a project shows only what
-was bound to it, ownership is an ACTIVE EXPLICIT BINDING and nothing else, and there is no separate
-«enable» step in the customer's journey. Priority one is closing the LIVE Snapchat connection —
-OAuth, discovery, selection, assignment and sync execution are verified; **live metrics data is not**.
+**SNAP-BREAKDOWN-001 — the live zero was ours, and it is fixed.**
 
-## The order of work
+`integrations:diagnose --payload` on production printed Snapchat's own retained body. It was not
+empty. With `breakdown=campaign` Snapchat returns the AD ACCOUNT as the series and nests the
+campaigns under `breakdown_stats.campaign[]`; the connector read `timeseries_stat.timeseries` (an
+absent key) and took `timeseries_stat.id` (the account) for a campaign id. Two reasons for zero, one
+line each — against a body carrying 100.17 USD of spend, 44,396 impressions and two purchases.
 
-1. **`fix/sync-truth-and-snapchat-diagnosis`** — the four counts and the six statuses, plus a
-   read-only `integrations:diagnose` and a manual `Production Diagnostics` workflow. This lands
-   first because §7 forbids guessing and the numbers live on the VPS.
-2. Then: one runtime (delete `Domains/Integrations/Connectors/*`, `config/connectors.php`,
-   `ConnectionCenterService/Controller`), eight providers only, and the removal of the
-   discovered/enabled/excluded workflow.
-3. Then: whatever the production numbers say the Snapchat defect is.
-4. Then: downstream proof, and the same contract for the other seven providers.
+The fixture had invented the same shape, so eleven Snapchat tests agreed with the connector about a
+response the platform never sends.
 
-## The production diagnosis (2026-08-18, read-only, from the VPS)
+## Live evidence, production, `origin/main`
 
-`integrations:diagnose --provider=snapchat` on production, through `docker compose exec`. No provider
-was called and nothing was written.
+The 12:00 scheduled sweep, unaided, against the same connection and the same window as the failures
+above it:
 
-    Estate [snapchat]: 309 account(s) discovered, 1 with an ACTIVE binding to a project.
+    2026-08-18 12:00:05 | 2026-08-11 → 2026-08-18 | success | raw 88 | parsed 88 | mapped 88 | stored 1056
+    2026-08-18 11:30:04 | 2026-08-11 → 2026-08-18 | no_data |   0 |   0 |   0 |    0
+    2026-08-18 11:00:10 | 2026-08-11 → 2026-08-18 | no_data |   0 |   0 |   0 |    0
 
-    RazzahAvenu Self Service  [snapchat]
-      provider id 3072e77d-88e3-4be1-96d3-abb6013a5265
-      connection=connected  timezone=Asia/Riyadh  currency=USD
-      binding=ACTIVE → رزه افينيو   campaigns discovered=89
+Read-only probes on the same account (`integrations:probe`, stores nothing, no re-OAuth):
 
-      started              window                    status   raw  parsed  mapped  stored
-      2026-08-18 06:30:04  2026-08-11 → 2026-08-18   no_data  0    —       0       0
-      … the same, every 30 minutes, for every run recorded
-
-`raw = 0` is **recovered from the platform's own retained body**, not inferred from the status. So:
-structure discovery works (89 campaigns), the schedule works (a run every half hour), the ownership
-rule works (308 unbound accounts sync nothing, and have no runs at all), and the platform returned no
-insight rows for that seven-day window.
-
-**What is still open.** §7's rule says a provider that really returned 0 is `NO_DATA` and not an
-error — and «really» is the question. Zero rows for seven days across 89 campaigns has two readings:
-the account was genuinely quiet, or the request cannot return rows for this account. Nothing already
-stored separates them. `integrations:probe` (read-only, calls the platform, stores nothing) and
-`--payload` (prints the retained body) exist to settle it, and both need this PR deployed first.
-
-## What is NOT verified
-
-**SNAPCHAT-LIVE — BLOCKED_OPERATIONAL_EVIDENCE.** 309 accounts discovered on a real authorisation.
-Metrics have never been observed landing. Nothing here may be called `LIVE_VERIFIED` until the
-customer's own live run says so.
+| window | HTTP | raw | parsed | mapped |
+|---|---|---|---|---|
+| 2026-08-17 (last complete day) | 200 | 11 | 11 | 11 |
+| 2026-08-11 → 2026-08-17 | 200 | 77 | 77 | 77 |
+| 2026-07-01 → 2026-07-14 | 200 (2 calls) | 98 | 98 | 98 |
 
 ## The standing rules
 
 - `origin/main` is the only truth. Branch → PR → CI → protected merge → deploy → verify. No direct
   push, no bypass, no `@claude` GitHub Action.
-- Ownership is `ProjectIntegrationBinding` where `is_active`. No `first()`, no `oldest()`, no
-  workspace or project fallback. `OneOwnershipRuleTest` holds it.
+- One runtime. Eight providers. Ownership is `ProjectIntegrationBinding` where `is_active` — no
+  `first()`, no `oldest()`, no workspace or project fallback.
 - A store never consumes the Connected Ad Accounts quota, and no store quota is invented.
 - Never a raw identifier where a name belongs.
 - Gate failures are root-caused from the run's own evidence, never re-run until they pass, never
   called flake without proof. No weakened assertions, no retries, no timeout inflation, no sleeps.
-- Evidence words mean what they say: `VERIFIED` only with live evidence;
-  `IMPLEMENTED_NOT_VERIFIED` for tested code that has not run live; `BLOCKED_EXTERNAL_CREDENTIALS`
-  only for missing credentials; `BLOCKED_OPERATIONAL_EVIDENCE` only where a human must act.
+- A provider fixture is the platform's shape or it tests itself — SNAP-FIXTURE-001.
 
 ---
 

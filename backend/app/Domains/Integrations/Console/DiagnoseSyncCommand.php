@@ -9,6 +9,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\InsightPayloadRows;
 use App\Domains\Projects\Models\Project;
@@ -49,7 +50,8 @@ final class DiagnoseSyncCommand extends Command
         {--runs=5 : How many recent runs to show per account}
         {--accounts=10 : How many accounts to show}
         {--linked : Only accounts with an ACTIVE binding to a project}
-        {--payload : Print the provider\'s own last insights body, and the campaigns it could match}';
+        {--payload : Print the provider\'s own last insights body, and the campaigns it could match}
+        {--downstream : What the assigned PROJECT now holds — the tables every surface reads}';
 
     protected $description = 'Read-only: where a sync\'s rows stopped, per account, with the four counts.';
 
@@ -184,6 +186,71 @@ final class DiagnoseSyncCommand extends Command
         if ((bool) $this->option('payload')) {
             $this->reportPayload($account, $runs->first());
         }
+
+        if ((bool) $this->option('downstream')) {
+            $this->reportDownstream($account, $binding?->project_id === null ? null : (string) $binding->project_id, $projectName);
+        }
+    }
+
+    /**
+     * INTEG-RUNTIME §10 — what the assigned PROJECT now holds, in the tables every surface reads.
+     *
+     * ## Why this is the honest way to prove the chain from a console
+     *
+     * The dashboard, analytics, campaigns, reports and the client link do not each keep their own
+     * copy of anything: they all read `daily_metrics` and `unified_campaigns`, scoped by project. So
+     * «did the data reach the surfaces» is answerable without a session — the question is whether
+     * those two tables hold it, for the project the binding names and for no other.
+     *
+     * What this deliberately does NOT claim is that a screen rendered. That is a different assertion,
+     * held by the end-to-end suite, and a console cannot make it.
+     */
+    private function reportDownstream(ExternalAccount $account, ?string $projectId, ?string $projectName): void
+    {
+        $this->line('');
+        $this->line('  DOWNSTREAM — what the project now holds');
+
+        if ($projectId === null) {
+            $this->line('  This account is not linked to a project, so nothing downstream is expected.');
+
+            return;
+        }
+
+        $metrics = DailyMetric::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->where('external_account_id', $account->getKey());
+
+        $rows = (clone $metrics)->count();
+        $days = (clone $metrics)->distinct()->count('metric_date');
+        $spend = (float) (clone $metrics)->where('metric_key', 'spend')->sum('value');
+        $purchases = (float) (clone $metrics)->where('metric_key', 'purchases')->sum('value');
+        $revenue = (float) (clone $metrics)->where('metric_key', 'revenue')->sum('value');
+        $latest = (clone $metrics)->max('metric_date');
+
+        $external = ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $account->getKey())
+            ->where('project_id', $projectId);
+
+        $this->line(sprintf('  project           : %s', $projectName ?? $projectId));
+        $this->line(sprintf('  daily_metric rows : %d across %d day(s), latest %s', $rows, $days, $latest ?? '—'));
+        $this->line(sprintf('  spend / purchases : %s / %s', number_format($spend, 2), number_format($purchases, 0)));
+        $this->line(sprintf('  revenue           : %s', number_format($revenue, 2)));
+        $this->line(sprintf('  campaigns visible : %d external, %d linked to a unified campaign',
+            (clone $external)->count(),
+            (clone $external)->whereNotNull('unified_campaign_id')->count(),
+        ));
+
+        /*
+         * The isolation half, and it is the half that matters. «The data arrived» is trivially
+         * satisfied by filing everything into the first project to hand — which is the exact defect
+         * this programme spent three PRs removing — so the count that must be ZERO is reported too.
+         */
+        $elsewhere = DailyMetric::withoutGlobalScopes()
+            ->where('external_account_id', $account->getKey())
+            ->where('project_id', '!=', $projectId)
+            ->count();
+
+        $this->line(sprintf('  rows in ANY OTHER project: %d   (must be 0)', $elsewhere));
     }
 
     /**
