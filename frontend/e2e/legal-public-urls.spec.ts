@@ -51,7 +51,29 @@ test.describe('the compliance URLs a platform review opens', () => {
 
     await page.getByTestId('data-deletion-name').fill('Reviewer');
     await page.getByTestId('data-deletion-email').fill('reviewer@example.test')
+
+    /*
+     * The SERVER's answer to the submit, captured before the click resolves.
+     *
+     * This failed once on webkit — and only webkit — with «`data-deletion-verify` not found», and the
+     * screenshot showed the form still on screen: the step had never advanced. Which tells you the
+     * post did not succeed and nothing at all about WHY, because the response was never looked at.
+     *
+     * Throttling was ruled out from the configuration rather than guessed away: outside production
+     * the limits are 60 per subject and 600 per address per minute, far above anything this suite
+     * does. So the status and body are what remain, and they are now in the failure message.
+     *
+     * No retry, no longer timeout. The assertion is the same assertion.
+     */
+    const submitted = page.waitForResponse(
+      (r) => r.url().includes('/data-deletion') && r.request().method() === 'POST',
+      { timeout: 20_000 },
+    ).catch(() => null)
+
     await page.getByTestId('data-deletion-submit').click()
+
+    const response = await submitted
+    const body = response === null ? '(no response was observed)' : (await response.text().catch(() => '(unreadable)')).slice(0, 300)
 
     /*
      * A reference, and the step that asks for the code — the request is NOT actionable yet.
@@ -59,7 +81,10 @@ test.describe('the compliance URLs a platform review opens', () => {
      * That second half is the point of the whole unit: an address somebody typed is a claim, and a
      * claim does not justify destroying anything.
      */
-    await expect(page.getByTestId('data-deletion-verify')).toBeVisible({ timeout: 20_000 })
+    await expect(
+      page.getByTestId('data-deletion-verify'),
+      `the submit did not advance the form. server said ${response?.status() ?? 'nothing'}: ${body}`,
+    ).toBeVisible({ timeout: 20_000 })
     await expect(page.getByTestId('data-deletion-reference')).not.toBeEmpty()
   })
 
