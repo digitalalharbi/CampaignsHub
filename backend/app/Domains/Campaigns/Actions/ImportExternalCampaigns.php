@@ -106,16 +106,24 @@ final class ImportExternalCampaigns
                  * would merge two budgets under one name on the strength of a matching string. One
                  * each is the honest default, and merging afterwards is a decision they can take.
                  *
-                 * Only on FIRST import, never on a re-import. `unified_campaign_id === null` would
-                 * have been the obvious condition and it is wrong: `CampaignLinker::unlink()` sets it
-                 * to null deliberately, so adopting on null means the next sweep silently undoes a
-                 * person's decision to unlink — and the suggestions list, which is built from
-                 * unlinked externals, would never have anything in it again.
+                 * Adopted when it has never been adopted AND never been unlinked — CAMPAIGNS-ADOPT-001.
                  *
-                 * A row is adopted once, when it first arrives. What happens to it after that belongs
-                 * to whoever is looking at it.
+                 * `unified_campaign_id === null` alone is the obvious condition and it is wrong:
+                 * `CampaignLinker::unlink()` produces exactly that, so adopting on it would undo a
+                 * person's decision on the next sweep, and the suggestions list — built from unlinked
+                 * externals — would never have anything in it again.
+                 *
+                 * The first fix for that was `$isNew`, and it had a worse failure. A campaign
+                 * discovered BEFORE adoption existed is never new again, so it is never adopted: on
+                 * the live Snapchat account, 89 campaigns and 1,056 stored metrics with an empty
+                 * Campaigns page and nothing to press. `unlinked_at` is the record the condition was
+                 * missing — it says «somebody detached this on purpose», which is the only thing
+                 * that had to be protected.
+                 *
+                 * A row is still adopted once. What happens to it after that belongs to whoever is
+                 * looking at it, and now it sticks.
                  */
-                if ($isNew && $campaign->unified_campaign_id === null) {
+                if ($campaign->unified_campaign_id === null && $campaign->unlinked_at === null) {
                     $campaign->unified_campaign_id = $this->adopt($campaign, $account)->getKey();
                     $campaign->save();
                 }

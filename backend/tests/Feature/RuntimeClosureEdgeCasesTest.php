@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignLinker;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
@@ -157,6 +158,55 @@ final class RuntimeClosureEdgeCasesTest extends TestCase
         $this->assertSame('unmapped_rows', $account->refresh()->last_sync_error_category);
     }
 
+    /**
+     * **CAMPAIGNS-ADOPT-001.** A campaign discovered before adoption existed still becomes visible.
+     *
+     * ## The live failure
+     *
+     * `CAMPAIGNS-VISIBLE-001` adopted a synced campaign into a `unified_campaign` so the Campaigns
+     * page would have something to show — but only on FIRST import, because `unified_campaign_id IS
+     * NULL` is also what a deliberate unlink produces and adopting on it would undo somebody's
+     * decision every sweep.
+     *
+     * A row discovered before that shipped is never new again, so it was never adopted. On the live
+     * Snapchat account: **89 campaigns, 1,056 stored metrics, and an empty Campaigns page** with
+     * nothing to press. The condition needed a third fact, not a stricter version of the same one.
+     */
+    public function test_a_campaign_discovered_before_adoption_existed_is_adopted_on_a_later_sweep(): void
+    {
+        $account = $this->assigned('sandbox', 'sandbox-act-1');
+
+        app(AccountStructureSyncer::class)->sync($account);
+
+        // Put the estate back into the state the live account was in: discovered, never adopted.
+        ExternalCampaign::withoutGlobalScopes()->update(['unified_campaign_id' => null]);
+        UnifiedCampaign::withoutGlobalScopes()->delete();
+
+        app(AccountStructureSyncer::class)->sync($account->refresh());
+
+        $orphans = ExternalCampaign::withoutGlobalScopes()->whereNull('unified_campaign_id')->count();
+
+        $this->assertSame(0, $orphans, 'every discovered campaign has something visible to belong to');
+        $this->assertGreaterThan(0, UnifiedCampaign::withoutGlobalScopes()->count());
+    }
+
+    /** And a deliberate unlink still wins — that is the rule the `$isNew` gate was protecting. */
+    public function test_a_deliberate_unlink_survives_every_later_sweep(): void
+    {
+        $account = $this->assigned('sandbox', 'sandbox-act-2');
+
+        app(AccountStructureSyncer::class)->sync($account);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->firstOrFail();
+        app(CampaignLinker::class)->unlink($external);
+
+        app(AccountStructureSyncer::class)->sync($account->refresh());
+
+        $external->refresh();
+        $this->assertNull($external->unified_campaign_id, 'the sweep must not undo a person\'s decision');
+        $this->assertNotNull($external->unlinked_at, 'and the decision is recorded, which is what makes that possible');
+    }
+
     // ── Doing it twice ────────────────────────────────────────────────────────────────────────
 
     /** The same window synced twice writes the same rows, not twice as many. */
@@ -221,7 +271,16 @@ final class RuntimeClosureEdgeCasesTest extends TestCase
         $external = ExternalCampaign::withoutGlobalScopes()->firstOrFail();
         $this->assertNotNull($external->unified_campaign_id, 'the first import adopts it');
 
-        $external->forceFill(['unified_campaign_id' => null, 'linked_at' => null, 'linked_by' => null])->save();
+        /*
+         * Unlinked through the product's ONLY unlink path — CAMPAIGNS-ADOPT-001.
+         *
+         * This used to write the three columns by hand, which is the one thing a fixture must not do
+         * here: `CampaignLinker::unlink()` is what records the DECISION, and a test that bypasses it
+         * is testing a state the product cannot produce. It passed for the wrong reason — the
+         * importer only adopted brand-new rows — and would have gone on passing while every campaign
+         * discovered before adoption existed stayed invisible forever.
+         */
+        app(CampaignLinker::class)->unlink($external);
 
         app(AccountStructureSyncer::class)->sync($account->refresh());
 
