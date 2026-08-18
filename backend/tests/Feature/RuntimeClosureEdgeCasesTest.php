@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Campaigns\Actions\StampHistoricalUnlinks;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CampaignLinker;
@@ -22,7 +23,9 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -205,6 +208,70 @@ final class RuntimeClosureEdgeCasesTest extends TestCase
         $external->refresh();
         $this->assertNull($external->unified_campaign_id, 'the sweep must not undo a person\'s decision');
         $this->assertNotNull($external->unlinked_at, 'and the decision is recorded, which is what makes that possible');
+    }
+
+    /**
+     * **The dangerous half of CAMPAIGNS-ADOPT-001.** A legacy row a PERSON detached is not re-adopted.
+     *
+     * Existing rows carry no `unlinked_at`, and `unified_campaign_id IS NULL` is equally true of
+     * «never adopted» and «deliberately unlinked». Left unstamped, the first sweep after the deploy
+     * would silently reverse every real decision on production.
+     *
+     * `StampHistoricalUnlinks` recovers them from the audit trail, and that trail is PROOF rather
+     * than a hint: `unlink()` is the only path that clears the link, its one route has always written
+     * `campaign.external_unlinked`, `audit_logs` predates `external_campaigns` by three days, and
+     * nothing prunes it. So a row with an entry was detached on purpose — and stays detached.
+     */
+    public function test_a_legacy_row_the_audit_trail_shows_was_unlinked_is_never_re_adopted(): void
+    {
+        $account = $this->assigned('sandbox', 'sandbox-act-3');
+        app(AccountStructureSyncer::class)->sync($account);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->firstOrFail();
+
+        // The state a legacy row is in: detached, with no `unlinked_at`, and an audit entry saying
+        // a person did it. Written directly because this row predates the column by construction.
+        $external->forceFill(['unified_campaign_id' => null, 'unlinked_at' => null])->save();
+        DB::table('audit_logs')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'action' => StampHistoricalUnlinks::AUDIT_ACTION,
+            'entity_type' => ExternalCampaign::class,
+            'entity_id' => (string) $external->id,
+            'created_at' => Carbon::now()->subDay(),
+        ]);
+
+        $recovered = (new StampHistoricalUnlinks)->execute();
+
+        $this->assertSame(1, $recovered, 'the decision is recovered from the audit trail');
+        $this->assertNotNull($external->refresh()->unlinked_at);
+
+        app(AccountStructureSyncer::class)->sync($account->refresh());
+
+        $this->assertNull(
+            $external->refresh()->unified_campaign_id,
+            'CAMPAIGNS-ADOPT-001: the sweep re-adopted a campaign a person had deliberately detached.',
+        );
+    }
+
+    /** And a legacy row the audit trail shows was NEVER unlinked is adoptable — proven, not assumed. */
+    public function test_a_legacy_row_with_no_unlink_in_the_audit_trail_is_adopted(): void
+    {
+        $account = $this->assigned('sandbox', 'sandbox-act-4');
+        app(AccountStructureSyncer::class)->sync($account);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->firstOrFail();
+        $external->forceFill(['unified_campaign_id' => null, 'unlinked_at' => null])->save();
+
+        // No audit entry for this row: it was never detached by anybody.
+        $this->assertSame(0, (new StampHistoricalUnlinks)->execute());
+
+        app(AccountStructureSyncer::class)->sync($account->refresh());
+
+        $this->assertNotNull(
+            $external->refresh()->unified_campaign_id,
+            'a campaign nobody ever detached must become visible',
+        );
     }
 
     // ── Doing it twice ────────────────────────────────────────────────────────────────────────

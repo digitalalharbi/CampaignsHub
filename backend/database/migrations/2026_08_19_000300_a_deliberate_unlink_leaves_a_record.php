@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Campaigns\Actions\StampHistoricalUnlinks;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -22,13 +23,23 @@ use Illuminate\Support\Facades\Schema;
  * `unlinked_at` is the record the condition was missing. From now on an unlink says so, and adoption
  * can fire for anything that has never been unlinked, whether it is new or was discovered in July.
  *
- * ## What this migration deliberately does NOT do
+ * ## Existing rows are recovered from EVIDENCE, not left to chance
  *
- * It does not guess which existing rows were unlinked by hand. `unlink()` nulls `linked_at` as well,
- * so no trace survives, and inventing one would be a fabrication of exactly the kind this codebase
- * refuses. Every existing row therefore starts with `unlinked_at = NULL` and will be adopted once.
- * A person who had unlinked such a row can unlink it again — and from that moment it stays unlinked,
- * which is the guarantee that was missing in the first place.
+ * Leaving every existing row unstamped would have the first sweep re-adopt each one — including the
+ * ones a person detached on purpose. That is a silent reversal of real decisions, and it is not
+ * acceptable.
+ *
+ * `StampHistoricalUnlinks` recovers them from the audit trail, and the reason that trail is PROOF
+ * rather than a hint is checkable rather than assumed: `CampaignLinker::unlink()` is the only path
+ * that clears the link, its one route has always written `campaign.external_unlinked` (since
+ * `280f333`, the commit that introduced external campaigns at all), `audit_logs` was created three
+ * days before `create_campaigns_tables`, and nothing prunes it — `integrations:prune-raw` retains
+ * provider payloads, not audits.
+ *
+ * So every external campaign that has ever existed lived its whole life under unlink auditing. A row
+ * with no entry was never unlinked; a row with one carries the timestamp of the most recent decision,
+ * because a campaign can be linked and unlinked more than once and the last decision is the one that
+ * stands.
  */
 return new class extends Migration
 {
@@ -37,6 +48,12 @@ return new class extends Migration
         Schema::table('external_campaigns', function (Blueprint $table) {
             $table->timestampTz('unlinked_at')->nullable()->after('linked_by');
         });
+
+        $stamped = (new StampHistoricalUnlinks)->execute();
+
+        // Printed so the deploy log carries the evidence: how many decisions were recovered, and
+        // therefore how many rows this migration protected from being silently re-adopted.
+        echo "  CAMPAIGNS-ADOPT-001: {$stamped} historically unlinked campaign(s) recovered from the audit trail.".PHP_EOL;
     }
 
     public function down(): void
