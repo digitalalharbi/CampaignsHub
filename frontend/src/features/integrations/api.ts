@@ -380,6 +380,9 @@ export interface AccountSyncRun {
   started_at: string | null
   finished_at: string | null
   error: string | null
+  /** Consecutive identical runs this row stands for — see `CampaignSyncRun`. */
+  repeats: number
+  repeats_since: string | null
 }
 
 export function getAccountLogs(id: string): Promise<{ account: AccountRow; runs: AccountSyncRun[] }> {

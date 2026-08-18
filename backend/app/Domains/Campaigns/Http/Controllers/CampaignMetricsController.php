@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\SyncRunLog;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -136,7 +137,8 @@ final class CampaignMetricsController extends Controller
 
         return ApiResponse::success([
             'linked_accounts' => $accountIds->count(),
-            'runs' => $runs->map(fn (MetricSyncRun $r) => $r->logRow())->all(),
+            // §8 — consecutive identical outcomes are said once, with a count and a since.
+            'runs' => SyncRunLog::collapse($runs->map(fn (MetricSyncRun $r) => $r->logRow())->all()),
         ], 'Campaign sync log.');
     }
 

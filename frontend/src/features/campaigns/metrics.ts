@@ -207,6 +207,15 @@ export interface CampaignSyncRun {
   finished_at: string | null
   error: string | null
   is_demo?: boolean
+  /**
+   * How many CONSECUTIVE identical runs this row stands for — INTEG-RUNTIME §8.
+   *
+   * The sweep runs every thirty minutes, so an account the platform has nothing to report for
+   * produces forty-eight indistinguishable rows a day. They are still all recorded; the log says the
+   * answer once and counts it, because a wall nobody scrolls hides the one row that is different.
+   */
+  repeats: number
+  repeats_since: string | null
 }
 
 export interface CampaignSyncLog {

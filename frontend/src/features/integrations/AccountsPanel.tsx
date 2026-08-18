@@ -68,6 +68,7 @@ const COPY = {
     run_rows: 'صفوف من المنصة',
     run_metrics: 'قياسات محفوظة',
     run_started: 'البدء',
+    run_since: 'منذ',
     run_duration: 'المدة',
     run_detail: 'تفاصيل تقنية',
     trigger_automatic: 'تلقائية',
@@ -104,6 +105,7 @@ const COPY = {
     run_rows: 'Rows from the platform',
     run_metrics: 'Metrics imported',
     run_started: 'Started',
+    run_since: 'Since',
     run_duration: 'Duration',
     run_detail: 'Technical detail',
     trigger_automatic: 'Automatic',
@@ -338,6 +340,12 @@ function LogsDialog({
                     {ar ? meaning.ar : meaning.en}
                   </span>
                   <span className="rounded bg-surface-hover px-1.5 py-0.5 text-text-secondary">{triggerLabel(run.trigger)}</span>
+                  {/* §8 — the same answer, said once, with how many times it was the answer. */}
+                  {run.repeats > 1 && (
+                    <span className="rounded bg-surface-hover px-1.5 py-0.5 text-text-secondary" data-testid="account-log-repeats">
+                      {ar ? `${run.repeats} محاولة متطابقة` : `${run.repeats} identical attempts`}
+                    </span>
+                  )}
                   <span className="text-text-secondary">
                     {c.run_window}: {run.window_start} → {run.window_end}
                   </span>
@@ -348,7 +356,12 @@ function LogsDialog({
                   <span>{c.run_rows}: {run.provider_rows ?? '—'}</span>
                   <span>{c.run_metrics}: {run.metrics_imported}</span>
                   <span>{c.run_duration}: {run.duration_seconds === null ? '—' : `${run.duration_seconds}s`}</span>
-                  <span>{c.run_started}: {run.started_at === null ? c.never : fmtDateTime(run.started_at)}</span>
+                  <span>
+                    {run.repeats > 1 ? c.run_since : c.run_started}:{' '}
+                    {(run.repeats > 1 ? run.repeats_since : run.started_at) === null
+                      ? c.never
+                      : fmtDateTime((run.repeats > 1 ? run.repeats_since : run.started_at) as string)}
+                  </span>
                 </div>
 
                 {(ar ? meaning.hint_ar : meaning.hint_en) !== '' && (
