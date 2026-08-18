@@ -25,7 +25,7 @@
 | Requests | features/requests (7 tsx, Detail 1045) | مكتمل جزئيًا | rich detail + intake | align statuses to taxonomy; relate to campaign |
 | Clients | features/clients/ClientCommandCenterPage (346, 10 tsx) | مكتمل جزئيًا | command center + tabs | related-entities links (projects→platforms→campaigns→finance) |
 | Projects | features/projects/ProjectIntegrationsPage (572) | يحتاج إعادة تصميم | integrations-centric | «المنصات المرتبطة» around 6 real platforms; project overview |
-| Integrations | features/connections/ConnectionCenterPage (605) | يحتاج ربطًا فعليًا | ConnectionCenter + 6 awaiting-cred connectors + Sandbox | show the 6 real platforms first (not "Sandbox/Advertising Connector" cards); drawer with accounts/scopes/sync/errors/token/last-sync/next-sync/disconnect |
+| Integrations | features/integrations/IntegrationsPage | يحتاج اعتمادات المنصات | **Done (INTEG-RUNTIME §1 §2).** `features/connections/*` and the parallel connector framework are deleted. The page renders the 6 real ad platforms, the 2 stores, and every discovered account with the project it feeds |
 | Subscriptions | features/subscriptions (240) | مكتمل جزئيًا | plan page, no filters | fine for now |
 | CRM/Leads | features/crm/LeadsPage (135) | واجهة فقط / thin | list | lift if in scope |
 | Notifications | (dropdown, no page) | مكتمل جزئيًا | — | keep separate from Alerts |

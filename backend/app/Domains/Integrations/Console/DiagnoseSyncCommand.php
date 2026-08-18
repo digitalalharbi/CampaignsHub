@@ -47,7 +47,9 @@ final class DiagnoseSyncCommand extends Command
         {--provider= : Limit to one provider key, e.g. snapchat}
         {--account= : Limit to one external account id (ours) or the provider\'s own id}
         {--runs=5 : How many recent runs to show per account}
-        {--accounts=10 : How many accounts to show}';
+        {--accounts=10 : How many accounts to show}
+        {--linked : Only accounts with an ACTIVE binding to a project}
+        {--payload : Print the provider\'s own last insights body, and the campaigns it could match}';
 
     protected $description = 'Read-only: where a sync\'s rows stopped, per account, with the four counts.';
 
@@ -62,6 +64,14 @@ final class DiagnoseSyncCommand extends Command
             ->when($provider !== null, fn ($q) => $q->where('provider', $provider))
             ->when($accountRef !== null, fn ($q) => $q->where(
                 fn ($w) => $w->where('id', $accountRef)->orWhere('external_id', $accountRef),
+            ))
+            /*
+             * `--linked` exists because 309 discovered accounts is 308 rows of «binding=NONE» around
+             * the one row anybody is asking about, and a diagnosis nobody can find is not a diagnosis.
+             */
+            ->when((bool) $this->option('linked'), fn ($q) => $q->whereIn(
+                'id',
+                ProjectIntegrationBinding::withoutGlobalScopes()->where('is_active', true)->select('external_account_id'),
             ))
             ->orderByDesc('last_sync_attempt_at')
             ->orderByDesc('discovered_at')
@@ -169,6 +179,59 @@ final class DiagnoseSyncCommand extends Command
             if (($run->error ?? '') !== '') {
                 $this->line(sprintf('  %s → %s', $run->started_at?->toDateTimeString() ?? '?', $run->error));
             }
+        }
+
+        if ((bool) $this->option('payload')) {
+            $this->reportPayload($account, $runs->first());
+        }
+    }
+
+    /**
+     * The provider's OWN last words about this account, printed.
+     *
+     * `provider_raw_rows = 0` says the body held no data points. It does not say WHY, and there are
+     * two very different whys: the account genuinely had no delivery in the window, or we asked a
+     * question this account cannot answer and the platform replied politely with nothing. Only the
+     * body distinguishes them, and it is already stored — so the answer is a read, not a theory.
+     *
+     * Truncated, because a stats body can be large and this goes into a log a human reads.
+     */
+    private function reportPayload(ExternalAccount $account, ?MetricSyncRun $run): void
+    {
+        if ($run === null) {
+            return;
+        }
+
+        $payloads = IntegrationRawPayload::withoutGlobalScopes()
+            ->where('sync_run_id', $run->getKey())
+            ->where('resource', 'insights')
+            ->get(['payload', 'window_start', 'window_end', 'fetched_at']);
+
+        $this->line('');
+        $this->line(sprintf('  Retained bodies for the last run: %d', $payloads->count()));
+
+        foreach ($payloads->take(3) as $index => $payload) {
+            $this->line(sprintf(
+                '  [%d] window %s → %s, fetched %s',
+                $index,
+                $payload->window_start?->toDateString() ?? '?',
+                $payload->window_end?->toDateString() ?? '?',
+                $payload->fetched_at?->toDateTimeString() ?? '?',
+            ));
+            $this->line('  '.mb_substr(json_encode($payload->payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '', 0, 1200));
+        }
+
+        // What the mapper WOULD have had to match against, if a row had arrived.
+        $campaigns = ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $account->getKey())
+            ->orderByDesc('updated_at')
+            ->limit(5)
+            ->get(['external_id', 'name', 'status']);
+
+        $this->line('');
+        $this->line('  Campaigns discovered for this account (5 most recently updated):');
+        foreach ($campaigns as $campaign) {
+            $this->line(sprintf('    %s  %s  [%s]', $campaign->external_id, $campaign->name, $campaign->status));
         }
     }
 

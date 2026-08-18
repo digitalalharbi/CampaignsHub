@@ -19,6 +19,33 @@ OAuth, discovery, selection, assignment and sync execution are verified; **live 
 3. Then: whatever the production numbers say the Snapchat defect is.
 4. Then: downstream proof, and the same contract for the other seven providers.
 
+## The production diagnosis (2026-08-18, read-only, from the VPS)
+
+`integrations:diagnose --provider=snapchat` on production, through `docker compose exec`. No provider
+was called and nothing was written.
+
+    Estate [snapchat]: 309 account(s) discovered, 1 with an ACTIVE binding to a project.
+
+    RazzahAvenu Self Service  [snapchat]
+      provider id 3072e77d-88e3-4be1-96d3-abb6013a5265
+      connection=connected  timezone=Asia/Riyadh  currency=USD
+      binding=ACTIVE → رزه افينيو   campaigns discovered=89
+
+      started              window                    status   raw  parsed  mapped  stored
+      2026-08-18 06:30:04  2026-08-11 → 2026-08-18   no_data  0    —       0       0
+      … the same, every 30 minutes, for every run recorded
+
+`raw = 0` is **recovered from the platform's own retained body**, not inferred from the status. So:
+structure discovery works (89 campaigns), the schedule works (a run every half hour), the ownership
+rule works (308 unbound accounts sync nothing, and have no runs at all), and the platform returned no
+insight rows for that seven-day window.
+
+**What is still open.** §7's rule says a provider that really returned 0 is `NO_DATA` and not an
+error — and «really» is the question. Zero rows for seven days across 89 campaigns has two readings:
+the account was genuinely quiet, or the request cannot return rows for this account. Nothing already
+stored separates them. `integrations:probe` (read-only, calls the platform, stores nothing) and
+`--payload` (prints the retained body) exist to settle it, and both need this PR deployed first.
+
 ## What is NOT verified
 
 **SNAPCHAT-LIVE — BLOCKED_OPERATIONAL_EVIDENCE.** 309 accounts discovered on a real authorisation.
