@@ -1,46 +1,55 @@
-# START HERE — 2026-08-18, Snapchat live and storing
+# START HERE — 2026-08-19, Snapchat live, storing and visible
 
-## The verdict
+## Where it ended
 
-**SNAP-BREAKDOWN-001 — the live zero was ours, and it is fixed.**
+The live Snapchat account reaches the product end to end. Production, unaided, on `origin/main`:
 
-`integrations:diagnose --payload` on production printed Snapchat's own retained body. It was not
-empty. With `breakdown=campaign` Snapchat returns the AD ACCOUNT as the series and nests the
-campaigns under `breakdown_stats.campaign[]`; the connector read `timeseries_stat.timeseries` (an
-absent key) and took `timeseries_stat.id` (the account) for a campaign id. Two reasons for zero, one
-line each — against a body carrying 100.17 USD of spend, 44,396 impressions and two purchases.
+    metrics     2026-08-18 12:00:05 | 2026-08-11 → 2026-08-18 | success | raw 88 | parsed 88 | mapped 88 | stored 1056
+    downstream  project «رزه افينيو» — 1,056 metric rows across 8 days
+                campaigns visible: 89 external, 87 linked to a unified campaign
+                rows in ANY OTHER project: 0
 
-The fixture had invented the same shape, so eleven Snapchat tests agreed with the connector about a
-response the platform never sends.
-
-## Live evidence, production, `origin/main`
-
-The 12:00 scheduled sweep, unaided, against the same connection and the same window as the failures
-above it:
-
-    2026-08-18 12:00:05 | 2026-08-11 → 2026-08-18 | success | raw 88 | parsed 88 | mapped 88 | stored 1056
-    2026-08-18 11:30:04 | 2026-08-11 → 2026-08-18 | no_data |   0 |   0 |   0 |    0
-    2026-08-18 11:00:10 | 2026-08-11 → 2026-08-18 | no_data |   0 |   0 |   0 |    0
-
-Read-only probes on the same account (`integrations:probe`, stores nothing, no re-OAuth):
+Read-only probes against the same connection, no re-authorisation, storing nothing:
 
 | window | HTTP | raw | parsed | mapped |
 |---|---|---|---|---|
 | 2026-08-17 (last complete day) | 200 | 11 | 11 | 11 |
 | 2026-08-11 → 2026-08-17 | 200 | 77 | 77 | 77 |
-| 2026-07-01 → 2026-07-14 | 200 (2 calls) | 98 | 98 | 98 |
+| 2026-07-01 → 2026-07-14 | 200, 2 calls | 98 | 98 | 98 |
+
+## The three defects behind «0 metrics»
+
+1. **SNAP-BREAKDOWN-001.** With `breakdown=campaign`, Snapchat returns the AD ACCOUNT as the series
+   and nests campaigns under `breakdown_stats.campaign[]`. The connector read
+   `timeseries_stat.timeseries` — absent — and took `timeseries_stat.id`, the account, for a campaign.
+   The fixture had invented the same shape, so eleven tests agreed with the bug.
+2. **CAMPAIGNS-ADOPT-001.** Adoption fired only on FIRST import, so campaigns discovered before that
+   feature existed were never adopted: 1,056 metrics and an empty Campaigns page. `unlinked_at` now
+   separates «never adopted» from «deliberately unlinked», and legacy rows were recovered from the
+   audit trail — the migration reported **0** historical unlinks on production, so nothing was reversed.
+3. **STRUCTURE-TIMEOUT-001 / STRUCTURE-KILLED-001.** The structure job was being killed at Horizon's
+   120-second default (89 campaigns × campaigns + squads + ads + creatives) and, because a killed
+   process never reaches `finish()`, left its run at `running` forever. Nothing reported a failure.
+
+## What is still open, honestly
+
+- **FX — configuration, not code.** `spend 3,291.60 / revenue 9,668.81 USD` are stored as the platform
+  reported them; the project-currency figures are WITHHELD because no USD→SAR rate source is
+  configured (`fx.rates.driver` is null by design). 176 money rows are null rather than wrong, and each
+  converts itself the day a rate exists — `ReportingCurrencyTest::test_a_resync_converts_a_row_that_was_withheld`
+  holds that. Remedy: set `FX_RATE_DRIVER`, or enter a rate at `/admin/settings/currency-rates`, which
+  records rate, date and source. **No rate may be invented.**
+- **2 of 89 campaigns are not yet linked.** 87 adopted; the remaining two are not explained and must
+  not be reported as adopted.
 
 ## The standing rules
 
-- `origin/main` is the only truth. Branch → PR → CI → protected merge → deploy → verify. No direct
-  push, no bypass, no `@claude` GitHub Action.
-- One runtime. Eight providers. Ownership is `ProjectIntegrationBinding` where `is_active` — no
-  `first()`, no `oldest()`, no workspace or project fallback.
-- A store never consumes the Connected Ad Accounts quota, and no store quota is invented.
-- Never a raw identifier where a name belongs.
-- Gate failures are root-caused from the run's own evidence, never re-run until they pass, never
-  called flake without proof. No weakened assertions, no retries, no timeout inflation, no sleeps.
-- A provider fixture is the platform's shape or it tests itself — SNAP-FIXTURE-001.
+- `origin/main` is the only truth. Branch → PR → CI → protected merge → deploy → verify.
+- One runtime. Eight providers. Ownership is `ProjectIntegrationBinding` where `is_active`.
+- A provider fixture is the platform's shape, or it tests itself — SNAP-FIXTURE-001, UNLINK-FIXTURE-001.
+- A gate failure is root-caused from the run's own evidence. When the evidence cannot name the cause,
+  the SPEC is instrumented so the next occurrence does — never a retry, never a longer timeout.
+- Never invent a financial input.
 
 ---
 
