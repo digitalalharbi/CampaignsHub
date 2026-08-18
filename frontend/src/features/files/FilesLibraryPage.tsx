@@ -76,7 +76,7 @@ export function FilesLibraryPage() {
           <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
           <p className="text-sm text-text-secondary">{c.subtitle}</p>
         </div>
-        <Link to={portalTo('/integrations/drive')}
+        <Link to={portalTo('/files/drive')}
           className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:border-brand-500 hover:text-brand-600">
           <FolderGit2 size={15} /> {c.drive_cta}
         </Link>

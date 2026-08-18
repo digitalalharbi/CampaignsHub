@@ -55,10 +55,18 @@ jobs:
           envs: PROVIDER,ACCOUNT,RUNS,ACCOUNTS
           script: |
             set -Eeuo pipefail
-            cd /opt/campaignshub/backend
+            cd /opt/campaignshub
+            # Production runs in containers — there is no `php` on the host's PATH, which is what the
+            # first attempt at this workflow discovered (`bash: line 8: php: command not found`). The
+            # command goes where the application actually lives, exactly as `deploy-production.sh`
+            # runs `artisan migrate`.
+            #
             # Quoted, and passed as VALUES to a fixed command. Nothing here builds a command from input.
-            php artisan integrations:diagnose \
-              --provider="${PROVIDER}" \
-              --account="${ACCOUNT}" \
-              --runs="${RUNS}" \
-              --accounts="${ACCOUNTS}"
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan integrations:diagnose \
+                --provider="${PROVIDER}" \
+                --account="${ACCOUNT}" \
+                --runs="${RUNS}" \
+                --accounts="${ACCOUNTS}"

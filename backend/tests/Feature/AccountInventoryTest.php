@@ -11,7 +11,6 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
-use App\Domains\Integrations\Services\AccountLifecycle;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -25,7 +24,7 @@ use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
- * COMMAND-CENTER §§7–20 — the inventory, and the three states it refuses to collapse.
+ * INTEG-RUNTIME §3 §5 — the inventory, and the ONE distinction it draws.
  *
  * ## What is actually being held here
  *
@@ -35,9 +34,17 @@ use Tests\TestCase;
  *
  *  - a page that lists everything is a page nobody can read, so the counts must describe the whole
  *    while the list describes a filtered part — and the two must not disagree;
- *  - an account nobody chose must not be counted, billed, synced or reported on;
+ *  - an account no project owns must not be counted, billed, synced or reported on;
  *  - a row whose provider supplied no name must not be presented as an identifier, because choosing
  *    between two UUIDs is not a hard question, it is an unanswerable one.
+ *
+ * ## Two states, not four
+ *
+ * An earlier cut of this file held a four-state curation workflow — discovered / enabled / excluded /
+ * assigned — with its own column and its own endpoints. It was internal bookkeeping promoted to
+ * customer-facing vocabulary: enabling an account attached nothing, synced nothing and cost nothing,
+ * so «enabled» meant nothing to the person reading it. §5 removes the step. An account is linked to
+ * a project or it is not, and that answer comes from `ProjectIntegrationBinding`.
  */
 final class AccountInventoryTest extends TestCase
 {
@@ -93,41 +100,26 @@ final class AccountInventoryTest extends TestCase
     // ── The three states are three states ─────────────────────────────────────────────────────────
 
     /**
-     * **The conflation, pinned.** Discovered, enabled and assigned are reported as different things.
+     * **Linked, or not.** Two accounts, one bound to a project, and the rows say which is which.
      *
-     * Structured assertions on the lifecycle field of named rows — not a substring search of the
-     * response body, which would pass just as happily if every row said «assigned».
+     * Structured assertions on the field of named rows — not a substring search of the response body,
+     * which would pass just as happily if every row claimed to be linked.
      */
-    public function test_discovered_enabled_and_assigned_are_three_distinct_states(): void
+    public function test_an_account_is_linked_to_a_project_or_it_is_not(): void
     {
-        $discovered = $this->account('snap-discovered', 'مكتشف');
-        $enabled = $this->account('snap-enabled', 'مفعل');
-        $enabled->forceFill(['management_state' => AccountLifecycle::ENABLED])->save();
-        $assigned = $this->account('snap-assigned', 'مرتبط');
-        $this->assign($assigned);
+        $unlinked = $this->account('snap-unlinked', 'غير مرتبط');
+        $linked = $this->account('snap-linked', 'مرتبط');
+        $this->assign($linked);
 
-        $rows = $this->inventory()->json('data.accounts');
-        $byId = collect($rows)->keyBy('id');
+        $byId = collect($this->inventory()->json('data.accounts'))->keyBy('id');
 
-        $this->assertSame(AccountLifecycle::DISCOVERED, $byId[$discovered->id]['lifecycle']);
-        $this->assertSame(AccountLifecycle::ENABLED, $byId[$enabled->id]['lifecycle']);
-        $this->assertSame(
-            AccountLifecycle::ASSIGNED,
-            $byId[$assigned->id]['lifecycle'],
-            'COMMAND-CENTER §7: the product said «متصل» for all three, and that one word is what let '
-                .'an account nobody chose be counted as though somebody had.',
+        $this->assertFalse($byId[$unlinked->id]['is_linked']);
+        $this->assertNull($byId[$unlinked->id]['assigned_project_id']);
+        $this->assertTrue(
+            $byId[$linked->id]['is_linked'],
+            'the product said «متصل» for both, and that one word is what let an account nobody chose '
+                .'be counted as though somebody had.',
         );
-    }
-
-    /** Assignment outranks curation: a bound account is assigned even if nobody enabled it first. */
-    public function test_assignment_outranks_the_stored_decision(): void
-    {
-        $account = $this->account('snap-1', 'حساب');
-        $account->forceFill(['management_state' => AccountLifecycle::ENABLED])->save();
-        $this->assign($account);
-
-        $row = $this->row($account);
-        $this->assertSame(AccountLifecycle::ASSIGNED, $row['lifecycle']);
     }
 
     /** The project is named, not merely identified — an id is not an answer to «where does this go». */
@@ -166,48 +158,45 @@ final class AccountInventoryTest extends TestCase
     public function test_the_summary_counts_the_whole_inventory_not_the_filtered_page(): void
     {
         foreach (range(1, 30) as $i) {
-            $this->account('snap-d-'.$i, 'مكتشف '.$i);
+            $this->account('snap-u-'.$i, 'غير مرتبط '.$i);
         }
         foreach (range(1, 3) as $i) {
-            $this->account('snap-e-'.$i, 'مفعل '.$i)
-                ->forceFill(['management_state' => AccountLifecycle::ENABLED])->save();
+            $this->assign($this->account('snap-l-'.$i, 'مرتبط '.$i));
         }
-        $this->assign($this->account('snap-a-1', 'مرتبط'));
 
-        $response = $this->inventory(['state' => AccountLifecycle::ENABLED]);
+        $response = $this->inventory(['link' => 'linked']);
 
         $this->assertCount(3, $response->json('data.accounts'), 'the LIST is the filtered part');
 
         $summary = $response->json('data.summary');
-        $this->assertSame(30, $summary[AccountLifecycle::DISCOVERED]);
-        $this->assertSame(3, $summary[AccountLifecycle::ENABLED]);
-        $this->assertSame(1, $summary[AccountLifecycle::ASSIGNED]);
-        $this->assertSame(34, $summary['total'], 'the SUMMARY is the whole');
+        $this->assertSame(3, $summary['linked']);
+        $this->assertSame(30, $summary['unlinked']);
+        $this->assertSame(33, $summary['total'], 'the SUMMARY is the whole');
     }
 
     /**
-     * A state filter is applied in SQL, so a page of 25 is 25 matching rows — not 25 minus the misses.
+     * The link filter is applied in SQL, so a page of 25 is 25 matching rows — not 25 minus the misses.
      *
      * Filtering after pagination is the classic version of this bug: the query cuts 25 rows, PHP
      * removes the ones that do not match, and the customer pages through an inventory that appears
-     * to have holes in it.
+     * to have holes in it. It matters here because «linked» has no column — it is a join to the
+     * bindings — which is exactly the shape that tempts somebody to filter in PHP.
      */
     public function test_a_filtered_page_is_full(): void
     {
         foreach (range(1, 40) as $i) {
-            $this->account('snap-d-'.$i, 'مكتشف '.$i);
+            $this->account('snap-u-'.$i, 'غير مرتبط '.$i);
         }
         foreach (range(1, 30) as $i) {
-            $this->account('snap-e-'.$i, 'مفعل '.$i)
-                ->forceFill(['management_state' => AccountLifecycle::ENABLED])->save();
+            $this->assign($this->account('snap-l-'.$i, 'مرتبط '.$i));
         }
 
-        $response = $this->inventory(['state' => AccountLifecycle::ENABLED, 'per_page' => 25]);
+        $response = $this->inventory(['link' => 'linked', 'per_page' => 25]);
 
         $this->assertCount(25, $response->json('data.accounts'));
         $this->assertSame(30, $response->json('data.meta.total'));
         foreach ($response->json('data.accounts') as $row) {
-            $this->assertSame(AccountLifecycle::ENABLED, $row['lifecycle']);
+            $this->assertTrue($row['is_linked']);
         }
     }
 
@@ -251,90 +240,9 @@ final class AccountInventoryTest extends TestCase
         $this->assertSame('2024', $this->row($numeric)['name'], 'refusing this would invent a blank the provider did not have');
     }
 
-    // ── Curation ──────────────────────────────────────────────────────────────────────────────────
+    // ── Isolation ─────────────────────────────────────────────────────────────────────────────────
 
-    /** Enabling records the decision and nothing else — enabling is not connecting. */
-    public function test_enabling_an_account_does_not_start_a_sync(): void
-    {
-        Queue::fake();
-        $account = $this->account('snap-1', 'حساب');
-
-        $this->actingAs($this->user, 'sanctum')
-            ->postJson("/api/v1/accounts/{$account->id}/state", ['state' => AccountLifecycle::ENABLED])
-            ->assertOk()
-            ->assertJsonPath('data.lifecycle', AccountLifecycle::ENABLED);
-
-        Queue::assertNothingPushed();
-    }
-
-    /**
-     * **Refused, not ignored.** An assigned account cannot be excluded.
-     *
-     * Silently ignoring it would leave a row the customer believes is gone while its spend keeps
-     * arriving in a project's reporting.
-     */
-    public function test_excluding_an_assigned_account_is_refused_with_the_reason(): void
-    {
-        $account = $this->account('snap-1', 'حساب');
-        $this->assign($account);
-
-        $response = $this->actingAs($this->user, 'sanctum')
-            ->postJson("/api/v1/accounts/{$account->id}/state", ['state' => AccountLifecycle::EXCLUDED]);
-
-        $response->assertStatus(409);
-        $this->assertSame(
-            AccountLifecycle::ASSIGNED,
-            $this->row($account->refresh())['lifecycle'],
-            'the refusal has to leave the account where it was, or the screen and the database disagree',
-        );
-    }
-
-    /** `assigned` is not a state anybody may set — it is the binding's answer. */
-    public function test_assigned_cannot_be_set_directly(): void
-    {
-        $account = $this->account('snap-1', 'حساب');
-
-        $this->actingAs($this->user, 'sanctum')
-            ->postJson("/api/v1/accounts/{$account->id}/state", ['state' => AccountLifecycle::ASSIGNED])
-            ->assertStatus(422)
-            ->assertJsonValidationErrors('state');
-    }
-
-    /** Bulk is atomic: 500 accounts move together or not at all. */
-    public function test_a_bulk_exclusion_containing_an_assigned_account_moves_nothing(): void
-    {
-        $free = $this->account('snap-1', 'حر');
-        $bound = $this->account('snap-2', 'مرتبط');
-        $this->assign($bound);
-
-        $this->actingAs($this->user, 'sanctum')
-            ->postJson('/api/v1/accounts/state', [
-                'account_ids' => [$free->id, $bound->id],
-                'state' => AccountLifecycle::EXCLUDED,
-            ])
-            ->assertStatus(409);
-
-        $this->assertNull(
-            $free->refresh()->management_state,
-            'a half-applied bulk action leaves the customer unable to tell which half',
-        );
-    }
-
-    /** And a clean bulk moves all of them, in one decision. */
-    public function test_a_clean_bulk_exclusion_moves_every_account_named(): void
-    {
-        $ids = collect(range(1, 20))->map(fn (int $i) => $this->account('snap-'.$i, 'حساب '.$i)->id)->all();
-
-        $this->actingAs($this->user, 'sanctum')
-            ->postJson('/api/v1/accounts/state', ['account_ids' => $ids, 'state' => AccountLifecycle::EXCLUDED])
-            ->assertOk()
-            ->assertJsonPath('data.updated', 20);
-
-        $this->assertSame(20, ExternalAccount::withoutGlobalScopes()
-            ->whereIn('id', $ids)->where('management_state', AccountLifecycle::EXCLUDED)->count());
-    }
-
-    /** Another tenant's account is not one this tenant may curate. */
+    /** Another tenant's account is not one this tenant may read the history of. */
     public function test_another_tenants_account_is_a_404(): void
     {
         $other = Tenant::create(['name' => 'Other', 'slug' => 'ot-'.uniqid(), 'status' => 'active']);
@@ -344,7 +252,7 @@ final class AccountInventoryTest extends TestCase
         app(TenantContext::class)->forget();
 
         $this->actingAs($this->user, 'sanctum')
-            ->postJson("/api/v1/accounts/{$theirs->id}/state", ['state' => AccountLifecycle::ENABLED])
+            ->getJson("/api/v1/accounts/{$theirs->id}/logs")
             ->assertStatus(404);
     }
 

@@ -80,9 +80,19 @@ final class ProjectIntegrationController extends Controller
         return ApiResponse::success($bindings, 'Project integrations retrieved.');
     }
 
-    /** Establish a Sandbox connection and discover accounts (wizard step 1). */
+    /**
+     * Establish a Sandbox connection and discover accounts — NOT available in production.
+     *
+     * INTEG-RUNTIME §2 lists the eight providers production supports, and the sandbox is not one of
+     * them. It exists so the end-to-end suite and the demo seeder have a connection to exercise
+     * without a real platform credential, which is a development need and reads as an offer of a
+     * ninth provider anywhere else. `AdvertisingConnectorRegistry` already excludes the sandbox
+     * connector in production; this closes the endpoint that could still create the connection.
+     */
     public function connect(Request $request, EstablishSandboxConnection $action): JsonResponse
     {
+        abort_if(app()->environment('production'), 404);
+
         abort_unless($request->user()->hasPermission('integrations.connect'), 403);
 
         $result = $action->execute(scope: $request->string('scope')->toString() ?: 'project_only');

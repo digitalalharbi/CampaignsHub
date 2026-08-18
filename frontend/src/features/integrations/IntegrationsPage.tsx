@@ -8,6 +8,8 @@ import {
   type Connector, type PlatformState, type ResumableConnection,
 } from './api'
 import { ConnectionWizard } from './ConnectionWizard'
+import { AccountsPanel } from './AccountsPanel'
+import { StoresPanel } from '@/features/commerce/StoresPanel'
 import { listClientWorkspaces } from '@/features/projects/api'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -364,7 +366,12 @@ function ConnectorCard({
   const meta = state ? STATE_META[state] : LEGACY_META[c.status]
 
   return (
-    <Card>
+    /*
+     * Named so a test can ask for PLATFORM CARDS rather than for every box on the page — see
+     * `integrations.spec.ts`, which asserts the order of the six ad platforms and would otherwise
+     * be reading the store panel and the account rows as well.
+     */
+    <Card data-testid="platform-card" data-platform={c.key}>
       <div className="flex items-start justify-between gap-2">
         <CardTitle>{c.label}</CardTitle>
         <Badge tone={meta.tone} data-testid={`connector-state-${c.key}`}>
@@ -486,12 +493,35 @@ function ConnectorCard({
 }
 
 /**
- * The standalone page kept for the tests that drive this panel in isolation, and for any surface that
- * wants only the platforms. It renders exactly what the Connection Centre mounts — one implementation,
- * not two that drift.
+ * `/integrations` — the ONE place sources are managed (INTEG-RUNTIME §3).
+ *
+ * ## What this replaced
+ *
+ * There were two pages and two runtimes. `ConnectionCenterPage` drew a grid of sixteen «connectors»
+ * from `config/connectors.php`, in which every real platform was a `NullConnector` that could not
+ * authorise, could not sync and existed only to be listed — and then mounted the REAL panels
+ * underneath it. So the customer saw Meta twice: once as a card that could do nothing, once as a
+ * platform they could actually connect. Six of those sixteen were providers this product does not
+ * integrate with at all.
+ *
+ * §1 allows one runtime and §2 allows eight providers, so the grid, its config, its service, its
+ * controller and its routes are gone, and what is left is what was always doing the work:
+ *
+ *  1. the six advertising platforms — connect, reconnect, sync, disconnect;
+ *  2. the two commerce platforms, in their own shape;
+ *  3. every account those connections reach, and which project each one feeds.
+ *
+ * Tenant-level, deliberately: an authorisation belongs to the tenant and is LENT to projects through
+ * a binding, so this page is reachable before any project is chosen.
  */
 export function IntegrationsPage() {
-  return <AdPlatformsPanel />
+  return (
+    <div className="flex flex-col gap-4">
+      <AdPlatformsPanel />
+      <StoresPanel />
+      <AccountsPanel />
+    </div>
+  )
 }
 
 /**
