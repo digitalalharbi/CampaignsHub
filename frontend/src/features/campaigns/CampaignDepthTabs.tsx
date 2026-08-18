@@ -236,6 +236,17 @@ export function CampaignSyncLogTab({ campaign, projectId }: { campaign: UnifiedC
                     <span className="font-semibold text-text-primary">{r.provider}</span>
                     <Badge tone={meaning.tone}>{ar ? meaning.ar : meaning.en}</Badge>
                     <Badge tone="neutral">{ar ? trigger.ar : trigger.en}</Badge>
+                    {/*
+                      * §8 — «٤٨ محاولة متطابقة» instead of forty-eight identical rows.
+                      *
+                      * Every run is still recorded. Saying the same answer once, with a count and a
+                      * since, is what keeps the row that IS different visible.
+                      */}
+                    {r.repeats > 1 && (
+                      <Badge tone="neutral" data-testid="sync-log-repeats">
+                        {ar ? `${num(r.repeats)} محاولة متطابقة` : `${num(r.repeats)} identical attempts`}
+                      </Badge>
+                    )}
                   </span>
                   <span className="tnum text-xs text-text-muted">
                     {r.window_start} → {r.window_end}
@@ -248,7 +259,14 @@ export function CampaignSyncLogTab({ campaign, projectId }: { campaign: UnifiedC
                 )}
 
                 <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
-                  <span>{ar ? 'بدأت' : 'Started'}: <span className="tnum">{r.started_at ? fmtDateTime(r.started_at) : '—'}</span></span>
+                  <span>
+                    {r.repeats > 1 ? (ar ? 'منذ' : 'Since') : (ar ? 'بدأت' : 'Started')}:{' '}
+                    <span className="tnum">
+                      {(r.repeats > 1 ? r.repeats_since : r.started_at) === null
+                        ? '—'
+                        : fmtDateTime((r.repeats > 1 ? r.repeats_since : r.started_at) as string)}
+                    </span>
+                  </span>
                   <span>{ar ? 'المدة' : 'Duration'}: <span className="tnum">{duration(r.duration_seconds, ar)}</span></span>
                   <span>{ar ? 'صفوف من المنصة' : 'Rows from the platform'}: <span className="tnum">{count(r.provider_rows)}</span></span>
                   <span>{ar ? 'قياسات محفوظة' : 'Metrics imported'}: <span className="tnum">{num(r.metrics_imported)}</span></span>

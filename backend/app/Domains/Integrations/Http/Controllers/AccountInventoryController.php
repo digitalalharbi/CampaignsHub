@@ -11,6 +11,7 @@ use App\Domains\Integrations\Services\AccountHealth;
 use App\Domains\Integrations\Services\AccountLabel;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Metrics\Services\SyncRunLog;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -224,14 +225,20 @@ final class AccountInventoryController extends Controller
             ->where('tenant_id', $this->tenant->tenantId())
             ->where('external_account_id', $account->id)
             ->orderByDesc('started_at')
-            ->limit(50)
+            ->limit(200)
             ->get()
             ->map(fn (MetricSyncRun $r): array => $r->logRow())
-            ->values();
+            ->values()
+            ->all();
+
+        // §8 — forty-eight identical answers a day is a log nobody reads, so the one row that is
+        // different is the one nobody sees. Every run is still recorded; consecutive identical ones
+        // are said once, with a count and a since.
+        $runs = SyncRunLog::collapse($runs);
 
         return ApiResponse::success([
             'account' => $this->present([$account], (string) $this->tenant->tenantId())[0],
-            'runs' => $runs,
+            'runs' => array_slice($runs, 0, 50),
         ], __('api.ok'));
     }
 
