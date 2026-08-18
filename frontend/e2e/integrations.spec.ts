@@ -71,16 +71,47 @@ test.describe('the integrations surface', () => {
     expect(text).not.toMatch(/\bالحساب:\s*(connected|awaiting_credentials|needs_action)\b/)
   })
 
-  /** Every ad platform's card offers the action its state allows, and no dead control. */
-  test('each ad platform offers a real action for its state', async ({ page }) => {
+  /**
+   * Every ad platform's card offers the action its state allows — and for two states that is NONE.
+   *
+   * ## What the first cut of this test got wrong
+   *
+   * It asserted every card carries at least one button, and every card in the gate has zero. That is
+   * the PRODUCT being right: `awaiting_credentials` and `unavailable` are facts about the system's
+   * configuration, not the customer's, and INTEG-UI-001 deliberately offers nothing to press for
+   * either — a customer cannot obtain our OAuth app's keys, so a «Connect» button there leads to an
+   * authorise URL that cannot be built. The card says the platform operator is setting it up, and
+   * stops.
+   *
+   * No provider has credentials in any environment here, so all six are in that state and the real
+   * assertion is the one below: the state is stated, the explanation is present, and there is no
+   * dead control.
+   */
+  test('an operator-blocked platform explains itself and offers no dead control', async ({ page }) => {
     await page.goto('/app/integrations')
     await expect.poll(async () => (await platformKeys(page)).length, { timeout: 20000 }).toBe(6)
 
     for (const platform of AD_PLATFORMS) {
       const card = page.locator(`[data-testid="platform-card"][data-platform="${platform}"]`)
       await expect(card, `${platform} has no card`).toBeVisible()
-      // Awaiting credentials → the card offers "connect"; it must not offer a sync that cannot run.
-      await expect(card.getByRole('button')).not.toHaveCount(0)
+
+      // The state is named on the card, never left to be inferred.
+      await expect(card.getByTestId(`connector-state-${platform}`)).toBeVisible()
+
+      const blocked = card.getByTestId(`connector-needs-operator-${platform}`)
+
+      if (await blocked.count() > 0) {
+        await expect(blocked).toBeVisible()
+        await expect(
+          card.getByRole('button'),
+          `${platform} is waiting on the platform operator and must offer nothing to press`,
+        ).toHaveCount(0)
+      } else {
+        await expect(
+          card.getByRole('button'),
+          `${platform} is in an actionable state and must offer its action`,
+        ).not.toHaveCount(0)
+      }
     }
   })
 
