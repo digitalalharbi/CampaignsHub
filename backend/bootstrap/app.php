@@ -8,6 +8,7 @@ use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Identity\Middleware\RejectRevokedSessions;
+use App\Domains\Integrations\Console\DiagnoseSyncCommand;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
@@ -80,6 +81,9 @@ return Application::configure(basePath: dirname(__DIR__))
         SyncAdPlatformStructureCommand::class,
         RefreshAdPlatformTokensCommand::class,
         PruneRawPayloadsCommand::class,
+        // INTEG-RUNTIME §7 — read-only: where a sync's rows stopped, with the four counts. Calls no
+        // provider and writes nothing, which is what makes it safe to point at production.
+        DiagnoseSyncCommand::class,
         // COMMERCE-001 — the store sweep: products, customers, orders and abandoned carts.
         SyncStoresCommand::class,
         // FX-FEED-001 — the exchange rates the conversions need. Registered even though no source

@@ -214,6 +214,8 @@ final class LinkedInConnector extends ApiAdvertisingConnector
                 .'videoViews,videoCompletions,totalEngagements,landingPageClicks',
         ]);
 
+        $this->countRawInsightRows(count($reported));
+
         $rows = [];
 
         foreach ($reported as $row) {

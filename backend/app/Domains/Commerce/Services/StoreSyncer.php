@@ -14,6 +14,7 @@ use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\ValueObjects\SyncResult;
+use App\Domains\Metrics\Enums\SyncRunStatus;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
 use Throwable;
@@ -75,7 +76,7 @@ final class StoreSyncer
         if ($projectId === null) {
             return $this->finish(
                 $run,
-                'awaiting_assignment',
+                SyncRunStatus::AwaitingAssignment->value,
                 0,
                 'This store is not assigned to a project yet, so nothing was fetched. Assign it to a project first.',
             );
@@ -84,21 +85,21 @@ final class StoreSyncer
         $connector = $this->registry->get($store->provider);
 
         if ($connector === null) {
-            return $this->finish($run, 'failed', 0, "No commerce connector is registered for '{$store->provider}'.");
+            return $this->finish($run, SyncRunStatus::Failed->value, 0, "No commerce connector is registered for '{$store->provider}'.");
         }
 
         if ($connector instanceof ApiCommerceConnector) {
             $connection = ProviderConnection::withoutGlobalScopes()->find($store->provider_connection_id);
 
             if ($connection === null) {
-                return $this->finish($run, 'failed', 0, 'The store has no provider connection to sync through.');
+                return $this->finish($run, SyncRunStatus::Failed->value, 0, 'The store has no provider connection to sync through.');
             }
 
             $connector = $connector->withConnection($connection);
         }
 
         if ($connector->status() === ConnectorStatus::AwaitingCredentials) {
-            return $this->finish($run, 'awaiting_credentials', 0, 'No credentials for '.$connector->label().' — nothing was fetched.');
+            return $this->finish($run, SyncRunStatus::Failed->value, 0, 'No credentials for '.$connector->label().' — nothing was fetched, and no request was made.');
         }
 
         $problems = [];
@@ -134,10 +135,18 @@ final class StoreSyncer
 
         $store->forceFill(['last_synced_at' => Carbon::now()])->save();
 
+        /*
+         * INTEG-RUNTIME §8 — a store speaks the same six words as an ad account.
+         *
+         * `no_data` is the one that had no name here before: a shop that took no orders in the window
+         * used to be reported as `success` with a count of zero, which reads on every screen as «we
+         * have your sales» over an empty table. It is now stated as what it is, and it is not red.
+         */
         $status = match (true) {
-            $records === 0 && $problems !== [] => 'failed',
-            $problems !== [] => 'partial',
-            default => 'success',
+            $records === 0 && $problems !== [] => SyncRunStatus::Failed->value,
+            $problems !== [] => SyncRunStatus::PartialMapping->value,
+            $records === 0 => SyncRunStatus::NoData->value,
+            default => SyncRunStatus::Success->value,
         };
 
         return $this->finish(

@@ -119,7 +119,10 @@ final class AdPlatformSyncSweepTest extends TestCase
             $account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'),
         );
 
-        $this->assertSame('partial', $run->status);
+        // Meta answered with one row and it named a campaign we have never discovered.
+        $this->assertSame('partial_mapping', $run->status);
+        $this->assertSame(1, (int) $run->provider_raw_rows);
+        $this->assertSame(0, (int) $run->mapped_campaign_rows);
 
         $raw = IntegrationRawPayload::withoutGlobalScopes()->firstOrFail();
         $this->assertSame(0, $raw->normalised_rows);
@@ -135,7 +138,7 @@ final class AdPlatformSyncSweepTest extends TestCase
             $account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'),
         );
 
-        $this->assertSame('awaiting_credentials', $run->status);
+        $this->assertSame('failed', $run->status);
         $this->assertSame(0, IntegrationRawPayload::withoutGlobalScopes()->count());
     }
 

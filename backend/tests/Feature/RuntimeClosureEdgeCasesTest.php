@@ -100,13 +100,18 @@ final class RuntimeClosureEdgeCasesTest extends TestCase
      * nobody at all acts on a failure that never happened — and collapsing them is how a real failure
      * gets buried under thousands that mean «we already knew».
      */
-    public function test_a_first_sync_without_credentials_is_not_a_failure(): void
+    public function test_a_first_sync_without_credentials_keeps_its_own_category(): void
     {
         $account = $this->assigned('snapchat', 'snap-act-1');
 
         $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::now()->subDays(30), Carbon::now());
 
-        $this->assertSame('awaiting_credentials', $run->status);
+        /*
+         * INTEG-RUNTIME §8 narrows the sync vocabulary to six words, and «awaiting credentials» is
+         * not among them. What this test is actually about survives intact and is asserted below: the
+         * CATEGORY, which is what decides who acts — an operator adding keys, versus nobody at all.
+         */
+        $this->assertSame('failed', $run->status);
         $this->assertStringContainsString('No credentials', (string) $run->error);
         $this->assertSame('awaiting_credentials', $account->refresh()->last_sync_error_category);
         $this->assertNull($account->last_synced_at, 'a refusal is not a sync');
@@ -125,20 +130,31 @@ final class RuntimeClosureEdgeCasesTest extends TestCase
     }
 
     /**
-     * A window the provider had no rows for is `partial` and carries no error category.
+     * Rows that arrived and could not be placed DO ask for attention — they are missing figures.
      *
-     * An account with no spend last Tuesday is not an account that needs attention, and filling the
-     * attention count with that noise is how people learn to ignore it.
+     * ## What this replaced
+     *
+     * This test was called «an empty window does not mark the account as needing attention» and it
+     * asserted that on a fixture producing the OPPOSITE case. Its own comment said so — «the
+     * sandbox's insight rows map to no known campaign» — which is rows arriving and failing to be
+     * placed, a real gap in a client's report. Both outcomes landed on the single word `partial`, so
+     * the test passed while proving nothing about an empty window.
+     *
+     * That conflation is precisely what §8 splits. The genuinely empty window — a provider asked and
+     * answering with nothing — is proved in `SyncRunTruthTest` against a real Snapchat response,
+     * because the sandbox connector always invents two rows and can never produce it. This file keeps
+     * the case it can actually reach.
      */
-    public function test_an_empty_window_does_not_mark_the_account_as_needing_attention(): void
+    public function test_rows_that_could_not_be_placed_do_mark_the_account(): void
     {
         $account = $this->assigned('sandbox', 'sandbox-act-1');
 
         // No structure sync first, so the sandbox's insight rows map to no known campaign.
         $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::now()->subDays(30), Carbon::now());
 
-        $this->assertSame('partial', $run->status);
-        $this->assertNull($account->refresh()->last_sync_error_category);
+        $this->assertSame('partial_mapping', $run->status);
+        $this->assertSame(0, (int) $run->mapped_campaign_rows);
+        $this->assertSame('unmapped_rows', $account->refresh()->last_sync_error_category);
     }
 
     // ── Doing it twice ────────────────────────────────────────────────────────────────────────

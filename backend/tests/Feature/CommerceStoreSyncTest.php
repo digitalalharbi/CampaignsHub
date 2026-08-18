@@ -218,7 +218,7 @@ final class CommerceStoreSyncTest extends TestCase
 
         $run = app(StoreSyncer::class)->sync($store, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-05'));
 
-        $this->assertSame('partial', $run->status);
+        $this->assertSame('partial_mapping', $run->status);
         $this->assertStringContainsString('does not expose abandoned carts', (string) $run->error);
 
         // The Arabic name, not «Array» and not the English placeholder.
@@ -355,14 +355,15 @@ final class CommerceStoreSyncTest extends TestCase
 
     // ── Honest refusals ───────────────────────────────────────────────────────────────────────
 
-    public function test_an_unconfigured_store_platform_calls_nothing_and_records_awaiting_credentials(): void
+    /** An unconfigured store calls nothing. §8 gives that outcome the word `failed`. */
+    public function test_an_unconfigured_store_platform_calls_nothing_and_records_a_failed_run(): void
     {
         Http::preventStrayRequests();
         Http::fake();
 
         $run = app(StoreSyncer::class)->sync($this->store('salla'), Carbon::parse('2026-08-01'), Carbon::parse('2026-08-05'));
 
-        $this->assertSame('awaiting_credentials', $run->status);
+        $this->assertSame('failed', $run->status);
         $this->assertSame(0, $run->records);
         Http::assertNothingSent();
     }

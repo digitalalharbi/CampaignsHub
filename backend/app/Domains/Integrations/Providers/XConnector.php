@@ -224,7 +224,14 @@ final class XConnector extends ApiAdvertisingConnector
                 'daily stats',
             );
 
-            foreach ((array) ($body['data'] ?? []) as $entity) {
+            /** @var list<mixed> $entities */
+            $entities = (array) ($body['data'] ?? []);
+
+            // X returns one record per ENTITY, each carrying its own day series — so the unit here is
+            // the entity. See the note on `$rawInsightRows`: the number is not cross-platform.
+            $this->countRawInsightRows(count($entities));
+
+            foreach ($entities as $entity) {
                 $campaignId = (string) ($entity['id'] ?? '');
                 /** @var array<string,mixed> $series */
                 $series = (array) (($entity['id_data'][0]['metrics'] ?? []));

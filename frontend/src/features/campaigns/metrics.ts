@@ -183,17 +183,30 @@ export interface CampaignEventsPayload {
 export const useCampaignEvents = (p: string | null, c: string | null, r: Range) =>
   useCampaignMetric<CampaignEventsPayload>('events', p, c, r)
 
+/**
+ * One run, exactly as `MetricSyncRun::logRow()` states it — INTEG-RUNTIME §9.
+ *
+ * The three row counts are NULLABLE and the nullability carries meaning: a run recorded before the
+ * counters existed measured nothing, and rendering 0 for it would put a figure on the screen that
+ * nobody ever took. The UI shows «—» for null and a number for 0.
+ */
 export interface CampaignSyncRun {
   id: string
   provider: string
   status: string
+  trigger: 'automatic' | 'manual' | 'backfill'
   window_start: string | null
   window_end: string | null
-  metrics_upserted: number
+  provider_rows: number | null
+  parsed_rows: number | null
+  mapped_rows: number | null
+  metrics_imported: number
+  duration_seconds: number | null
   attempts: number
   started_at: string | null
   finished_at: string | null
   error: string | null
+  is_demo?: boolean
 }
 
 export interface CampaignSyncLog {

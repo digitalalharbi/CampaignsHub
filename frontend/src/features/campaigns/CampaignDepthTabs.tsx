@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Clock, Layers, Target, XCircle } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Clock, Layers, MinusCircle, Target, XCircle } from 'lucide-react'
 import { useCampaignEvents, useCampaignSyncLog } from './metrics'
 import { objectiveLabel } from './labels'
 import type { UnifiedCampaign } from './types'
@@ -9,6 +9,7 @@ import { money, num } from '@/features/analytics/format'
 import { fmtDateTime } from '@/lib/datetime'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
+import { syncStatusMeaning } from '@/lib/syncStatus'
 
 /**
  * CAMPDET-010 — the depth sections that were missing from the campaign detail page: who the campaign
@@ -146,12 +147,47 @@ export function CampaignEventsTab({ campaign, projectId, range }: { campaign: Un
   )
 }
 
-const SYNC_TONE: Record<string, { tone: 'success' | 'danger' | 'warning' | 'neutral'; ar: string; Icon: typeof CheckCircle2 }> = {
-  success: { tone: 'success', ar: 'ناجحة', Icon: CheckCircle2 },
-  partial: { tone: 'warning', ar: 'جزئية', Icon: AlertCircle },
-  failed: { tone: 'danger', ar: 'فاشلة', Icon: XCircle },
-  running: { tone: 'neutral', ar: 'قيد التنفيذ', Icon: Clock },
-  pending: { tone: 'neutral', ar: 'بالانتظار', Icon: Clock },
+/**
+ * The icon per status. The WORD and the COLOUR come from `syncStatusMeaning` — INTEG-RUNTIME §8.
+ *
+ * This file used to own all three, and so did `PlatformIntegrationsPanel`, which is how the same run
+ * could be amber here and grey there. Only the icon is local now, because only the icon is this
+ * layout's business.
+ */
+const SYNC_ICON: Record<string, typeof CheckCircle2> = {
+  success: CheckCircle2,
+  no_data: MinusCircle,
+  partial_mapping: AlertCircle,
+  failed: XCircle,
+  running: Clock,
+  awaiting_assignment: AlertCircle,
+}
+
+const TONE_TEXT: Record<string, string> = {
+  danger: 'text-danger',
+  success: 'text-success',
+  warning: 'text-warning',
+  neutral: 'text-text-muted',
+}
+
+const TRIGGER_LABEL: Record<string, { ar: string; en: string }> = {
+  automatic: { ar: 'تلقائية', en: 'Automatic' },
+  manual: { ar: 'يدوية', en: 'Manual' },
+  backfill: { ar: 'سحب تاريخي', en: 'Backfill' },
+}
+
+/** «—» for a count nobody took, the number for a count of zero. The two are not the same claim. */
+function count(value: number | null | undefined): string {
+  return value === null || value === undefined ? '—' : num(value)
+}
+
+function duration(seconds: number | null, ar: boolean): string {
+  if (seconds === null) return '—'
+  if (seconds < 60) return ar ? `${num(seconds)} ث` : `${num(seconds)}s`
+
+  const minutes = Math.floor(seconds / 60)
+
+  return ar ? `${num(minutes)} د ${num(seconds % 60)} ث` : `${num(minutes)}m ${num(seconds % 60)}s`
 }
 
 /** The real sync history for the accounts feeding this campaign — failures included, not hidden. */
@@ -188,28 +224,52 @@ export function CampaignSyncLogTab({ campaign, projectId }: { campaign: UnifiedC
       ) : (
         <ul data-testid="sync-log" className="space-y-2">
           {runs.map((r) => {
-            const meta = SYNC_TONE[r.status] ?? { tone: 'neutral' as const, ar: r.status, Icon: Clock }
-            const Icon = meta.Icon
+            const meaning = syncStatusMeaning(r.status)
+            const Icon = SYNC_ICON[r.status] ?? Clock
+            const trigger = TRIGGER_LABEL[r.trigger] ?? { ar: r.trigger, en: r.trigger }
+
             return (
-              <li key={r.id} className="rounded-xl border border-border bg-surface p-3">
+              <li key={r.id} data-testid="sync-log-row" data-status={r.status} className="rounded-xl border border-border bg-surface p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="flex items-center gap-2">
-                    <Icon size={15} className={meta.tone === 'danger' ? 'text-danger' : meta.tone === 'success' ? 'text-success' : meta.tone === 'warning' ? 'text-warning' : 'text-text-muted'} />
+                    <Icon size={15} className={TONE_TEXT[meaning.tone]} />
                     <span className="font-semibold text-text-primary">{r.provider}</span>
-                    <Badge tone={meta.tone}>{meta.ar}</Badge>
+                    <Badge tone={meaning.tone}>{ar ? meaning.ar : meaning.en}</Badge>
+                    <Badge tone="neutral">{ar ? trigger.ar : trigger.en}</Badge>
                   </span>
                   <span className="tnum text-xs text-text-muted">
                     {r.window_start} → {r.window_end}
                   </span>
                 </div>
+
+                {/* What the status MEANS, in the reader's own language — not left to be inferred. */}
+                {(ar ? meaning.hint_ar : meaning.hint_en) && (
+                  <p className="mt-1 text-xs text-text-secondary">{ar ? meaning.hint_ar : meaning.hint_en}</p>
+                )}
+
                 <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
-                  <span>بدأت: <span className="tnum">{r.started_at ? fmtDateTime(r.started_at) : '—'}</span></span>
-                  <span>انتهت: <span className="tnum">{r.finished_at ? fmtDateTime(r.finished_at) : '—'}</span></span>
-                  <span>قياسات محدَّثة: <span className="tnum">{num(r.metrics_upserted)}</span></span>
-                  {r.attempts > 1 && <span>محاولات: <span className="tnum">{r.attempts}</span></span>}
+                  <span>{ar ? 'بدأت' : 'Started'}: <span className="tnum">{r.started_at ? fmtDateTime(r.started_at) : '—'}</span></span>
+                  <span>{ar ? 'المدة' : 'Duration'}: <span className="tnum">{duration(r.duration_seconds, ar)}</span></span>
+                  <span>{ar ? 'صفوف من المنصة' : 'Rows from the platform'}: <span className="tnum">{count(r.provider_rows)}</span></span>
+                  <span>{ar ? 'قياسات محفوظة' : 'Metrics imported'}: <span className="tnum">{num(r.metrics_imported)}</span></span>
+                  {r.attempts > 1 && <span>{ar ? 'محاولات' : 'Attempts'}: <span className="tnum">{r.attempts}</span></span>}
                 </div>
+
+                {/*
+                  * INTEG-RUNTIME §9 — the provider's own words belong behind a disclosure.
+                  *
+                  * This was a red English paragraph on the face of every failed row. On an Arabic
+                  * screen it is unreadable to the person it is aimed at and alarming to the person it
+                  * is not, and it says nothing the badge above has not already said. The detail is
+                  * kept — an operator needs it verbatim — and it is one click away.
+                  */}
                 {r.error && (
-                  <p className="mt-2 rounded-lg bg-danger/10 p-2 text-xs text-danger" dir="ltr">{r.error}</p>
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-text-secondary">
+                      {ar ? 'تفاصيل تقنية' : 'Technical detail'}
+                    </summary>
+                    <p data-testid="sync-log-detail" className="mt-1 rounded-lg bg-surface-muted p-2 text-xs text-text-secondary" dir="ltr">{r.error}</p>
+                  </details>
                 )}
               </li>
             )

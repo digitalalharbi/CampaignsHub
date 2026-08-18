@@ -47,6 +47,7 @@ const ANALYTICS_PLATFORMS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snap
 /** The objectives with a layout elsewhere in the product — the same six the dashboard offers. */
 const ANALYTICS_OBJECTIVES = ['awareness', 'traffic', 'leads', 'sales', 'app_installs', 'engagement']
 import { useUi } from '@/stores/ui'
+import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { useQuery } from '@tanstack/react-query'
@@ -528,18 +529,15 @@ function QualityTab({ projectId, range, filters }: TabProps) {
           num(r.days_with_data),
           r.missing_days === null ? '—'
             : r.missing_days > 0 ? <span key="m" className="font-semibold text-warning">{r.missing_days}</span> : '0',
-          <span
-            key="s"
-            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-              r.last_sync_status === 'failed'
-                ? 'bg-[var(--negative-background)] text-danger'
-                : r.last_sync_status === 'partial'
-                  ? 'bg-[var(--warning-background)] text-warning'
-                  : 'bg-[var(--positive-background)] text-success'
-            }`}
-          >
-            {r.last_sync_status ?? '—'}
-          </span>,
+          /*
+           * INTEG-RUNTIME §8 — the status cell reads the shared meaning instead of its own ternary.
+           *
+           * The chain it replaces had a green default, so EVERY status it did not know about — and
+           * after the split that includes `no_data`, `partial_mapping` and `awaiting_assignment` —
+           * was painted as a success. A raw English key on a positive green pill was the whole
+           * report a customer got about an account that had never been assigned to a project.
+           */
+          <SyncStatusPill key="s" status={r.last_sync_status} ar={ar} />,
         ])}
       />
       <p className="mt-3 text-xs text-text-muted">{ar ? 'لا يتم جمع Reach عبر المنصات كوصول فريد — يُعرض لكل منصة على حدة.' : 'Reach is not summed across platforms as unique reach — it is shown per platform.'}</p>

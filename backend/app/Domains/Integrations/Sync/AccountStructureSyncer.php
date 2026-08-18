@@ -15,6 +15,7 @@ use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\ValueObjects\SyncResult;
+use App\Domains\Metrics\Enums\SyncRunStatus;
 use Illuminate\Support\Carbon;
 use Throwable;
 
@@ -60,21 +61,21 @@ final class AccountStructureSyncer
             'project_id' => $projectId,
             'provider_connection_id' => $account->provider_connection_id,
             'type' => 'structure',
-            'status' => 'running',
+            'status' => SyncRunStatus::Running->value,
             'started_at' => Carbon::now(),
         ])->save();
 
         $connector = $this->registry->get($account->provider);
 
         if ($connector === null) {
-            return $this->finish($run, 'failed', 0, "No connector is registered for provider '{$account->provider}'.");
+            return $this->finish($run, SyncRunStatus::Failed->value, 0, "No connector is registered for provider '{$account->provider}'.");
         }
 
         if ($connector instanceof ApiAdvertisingConnector) {
             $connection = ProviderConnection::withoutGlobalScopes()->find($account->provider_connection_id);
 
             if ($connection === null) {
-                return $this->finish($run, 'failed', 0, 'The ad account has no provider connection to sync through.');
+                return $this->finish($run, SyncRunStatus::Failed->value, 0, 'The ad account has no provider connection to sync through.');
             }
 
             // A clone per account — the registry hands out one instance per platform for the whole
@@ -85,7 +86,7 @@ final class AccountStructureSyncer
         if ($connector->status() === ConnectorStatus::AwaitingCredentials) {
             return $this->finish(
                 $run,
-                'awaiting_credentials',
+                SyncRunStatus::Failed->value,
                 0,
                 'No credentials for '.$connector->label().' — nothing was fetched.',
             );
@@ -103,7 +104,7 @@ final class AccountStructureSyncer
         if ($projectId === null) {
             return $this->finish(
                 $run,
-                'awaiting_assignment',
+                SyncRunStatus::AwaitingAssignment->value,
                 0,
                 'This account is not assigned to a project yet. Assign it to a project, then sync.',
             );
@@ -140,9 +141,11 @@ final class AccountStructureSyncer
 
         $status = match (true) {
             // Nothing landed and every call complained: this is a failure, not a quiet account.
-            $records === 0 && $problems !== [] => 'failed',
-            $problems !== [] => 'partial',
-            default => 'success',
+            $records === 0 && $problems !== [] => SyncRunStatus::Failed->value,
+            $problems !== [] => SyncRunStatus::PartialMapping->value,
+            // An account with no campaigns yet is not a failed read of it — INTEG-RUNTIME §8.
+            $records === 0 => SyncRunStatus::NoData->value,
+            default => SyncRunStatus::Success->value,
         };
 
         return $this->finish($run, $status, $records, $problems === [] ? null : implode(' ', $problems));
