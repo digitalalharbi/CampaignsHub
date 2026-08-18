@@ -136,18 +136,7 @@ final class CampaignMetricsController extends Controller
 
         return ApiResponse::success([
             'linked_accounts' => $accountIds->count(),
-            'runs' => $runs->map(fn (MetricSyncRun $r) => [
-                'id' => $r->id,
-                'provider' => $r->provider,
-                'status' => $r->status,
-                'window_start' => $r->window_start?->toDateString(),
-                'window_end' => $r->window_end?->toDateString(),
-                'metrics_upserted' => $r->metrics_upserted,
-                'attempts' => $r->attempts,
-                'started_at' => optional($r->started_at)->toIso8601String(),
-                'finished_at' => optional($r->finished_at)->toIso8601String(),
-                'error' => $r->error,
-            ])->all(),
+            'runs' => $runs->map(fn (MetricSyncRun $r) => $r->logRow())->all(),
         ], 'Campaign sync log.');
     }
 

@@ -10,6 +10,7 @@ use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountHealth;
+use App\Domains\Integrations\Sync\AccountStructureSyncer;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\AccountMetricsSyncer;
 use App\Domains\Projects\Models\Project;
@@ -143,11 +144,21 @@ final class SyncCheckpointAndHealthTest extends TestCase
         $this->assertNull($account->last_synced_at, 'a refusal is not a sync');
     }
 
-    /** A success clears the failure and moves the success checkpoint, not merely the attempt one. */
+    /**
+     * A success clears the failure and moves the success checkpoint, not merely the attempt one.
+     *
+     * Structure is discovered FIRST, which is the product's own order (`FirstSync`: structure, then
+     * metrics) and is what makes this a success at all. Without it every insight row names a campaign
+     * this install has never heard of, the run is `partial_mapping`, and the account is correctly
+     * marked as needing attention — so the version of this test that skipped discovery was asserting
+     * on an outcome it had not actually produced.
+     */
     public function test_a_success_clears_the_error_category(): void
     {
         $account = $this->assignedAccount($this->projectB, $this->clientB);
         $account->forceFill(['last_sync_error_category' => 'provider_error'])->save();
+
+        app(AccountStructureSyncer::class)->sync($account);
 
         app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'));
 

@@ -88,7 +88,13 @@ function StoreCard({ store, provider, ar, onSync, syncing }: {
 
       <p className="mt-2 text-[11px] text-text-muted">
         {ar ? 'آخر مزامنة' : 'Last sync'}: <span className="tnum">{stamp(store.last_synced_at, ar)}</span>
-        {store.last_run?.status === 'partial' && store.last_run.error && (
+        {store.last_run?.status === 'no_data' && (
+          /* Not an error and not amber: the shop simply had nothing in the window we asked about. */
+          <span data-testid="store-no-data" className="block text-text-muted">
+            {ar ? 'لا توجد بيانات للفترة المطلوبة.' : 'No data for the requested period.'}
+          </span>
+        )}
+        {store.last_run?.status === 'partial_mapping' && store.last_run.error && (
           <span data-testid="store-partial" className="block text-warning">{store.last_run.error}</span>
         )}
         {store.last_run?.status === 'failed' && store.last_run.error && (

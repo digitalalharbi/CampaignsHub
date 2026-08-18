@@ -250,7 +250,8 @@ final class AdPlatformStructureSyncTest extends TestCase
 
         $run = app(AccountStructureSyncer::class)->sync($account);
 
-        $this->assertSame('partial', $run->status);
+        // INTEG-RUNTIME §8 — rows arrived and one could not be placed: `partial_mapping`.
+        $this->assertSame('partial_mapping', $run->status);
         $this->assertStringContainsString('skipped', (string) $run->error);
         $this->assertSame(0, ExternalAdSet::withoutGlobalScopes()->count());
     }
@@ -419,14 +420,21 @@ final class AdPlatformStructureSyncTest extends TestCase
 
     // ── Honest refusals ───────────────────────────────────────────────────────────────────────
 
-    public function test_an_unconfigured_platform_is_recorded_as_awaiting_credentials_and_calls_nothing(): void
+    /**
+     * An unconfigured platform is not CALLED — and §8 gives that outcome the word `failed`.
+     *
+     * The point of the test is unchanged and is asserted below: `Http::assertNothingSent()`. Nothing
+     * was fabricated and nothing went out; the run says so in words, and the account's error category
+     * still separates «add keys» from «the platform had a bad minute».
+     */
+    public function test_an_unconfigured_platform_calls_nothing_and_records_a_failed_run(): void
     {
         Http::preventStrayRequests();
         Http::fake();
 
         $run = app(AccountStructureSyncer::class)->sync($this->account('tiktok'));
 
-        $this->assertSame('awaiting_credentials', $run->status);
+        $this->assertSame('failed', $run->status);
         $this->assertSame(0, $run->records);
         Http::assertNothingSent();
     }
@@ -445,7 +453,7 @@ final class AdPlatformStructureSyncTest extends TestCase
 
         $run = app(AccountStructureSyncer::class)->sync($account);
 
-        $this->assertSame('partial', $run->status);
+        $this->assertSame('partial_mapping', $run->status);
         $this->assertStringContainsString('request limit', (string) $run->error);
         $this->assertSame(1, ExternalCampaign::withoutGlobalScopes()->count());
     }

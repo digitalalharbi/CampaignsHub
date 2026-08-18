@@ -1,3 +1,46 @@
+# START HERE — 2026-08-19, the integrations runtime closure
+
+## The governing brief
+
+The customer's final integrations instruction supersedes every earlier one where they conflict. In
+short: **one runtime**, **eight providers**, Integrations owns every source, a project shows only what
+was bound to it, ownership is an ACTIVE EXPLICIT BINDING and nothing else, and there is no separate
+«enable» step in the customer's journey. Priority one is closing the LIVE Snapchat connection —
+OAuth, discovery, selection, assignment and sync execution are verified; **live metrics data is not**.
+
+## The order of work
+
+1. **`fix/sync-truth-and-snapchat-diagnosis`** — the four counts and the six statuses, plus a
+   read-only `integrations:diagnose` and a manual `Production Diagnostics` workflow. This lands
+   first because §7 forbids guessing and the numbers live on the VPS.
+2. Then: one runtime (delete `Domains/Integrations/Connectors/*`, `config/connectors.php`,
+   `ConnectionCenterService/Controller`), eight providers only, and the removal of the
+   discovered/enabled/excluded workflow.
+3. Then: whatever the production numbers say the Snapchat defect is.
+4. Then: downstream proof, and the same contract for the other seven providers.
+
+## What is NOT verified
+
+**SNAPCHAT-LIVE — BLOCKED_OPERATIONAL_EVIDENCE.** 309 accounts discovered on a real authorisation.
+Metrics have never been observed landing. Nothing here may be called `LIVE_VERIFIED` until the
+customer's own live run says so.
+
+## The standing rules
+
+- `origin/main` is the only truth. Branch → PR → CI → protected merge → deploy → verify. No direct
+  push, no bypass, no `@claude` GitHub Action.
+- Ownership is `ProjectIntegrationBinding` where `is_active`. No `first()`, no `oldest()`, no
+  workspace or project fallback. `OneOwnershipRuleTest` holds it.
+- A store never consumes the Connected Ad Accounts quota, and no store quota is invented.
+- Never a raw identifier where a name belongs.
+- Gate failures are root-caused from the run's own evidence, never re-run until they pass, never
+  called flake without proof. No weakened assertions, no retries, no timeout inflation, no sleeps.
+- Evidence words mean what they say: `VERIFIED` only with live evidence;
+  `IMPLEMENTED_NOT_VERIFIED` for tested code that has not run live; `BLOCKED_EXTERNAL_CREDENTIALS`
+  only for missing credentials; `BLOCKED_OPERATIONAL_EVIDENCE` only where a human must act.
+
+---
+
 # START HERE — 2026-08-18, after the Command Center landed
 
 ## Where the code is

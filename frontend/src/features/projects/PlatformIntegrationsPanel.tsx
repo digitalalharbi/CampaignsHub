@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/States'
 import { platformColor } from '@/features/analytics/components'
 import { useAuth } from '@/stores/auth'
+import { syncStatusMeaning } from '@/lib/syncStatus'
 import { fmtDateTime } from '@/lib/datetime'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
@@ -85,14 +86,6 @@ export interface PlatformsPayload {
   summary: { total: number; with_credentials: number; with_accounts: number; discovered_campaigns: number }
 }
 
-const SYNC_TONE: Record<string, { ar: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
-  success: { ar: 'ناجحة', tone: 'success' },
-  partial: { ar: 'جزئية', tone: 'warning' },
-  failed: { ar: 'فاشلة', tone: 'danger' },
-  running: { ar: 'قيد التنفيذ', tone: 'neutral' },
-  awaiting_credentials: { ar: 'لم تُنفَّذ — بانتظار بيانات اعتماد', tone: 'warning' },
-}
-
 export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) {
   const qc = useQueryClient()
   const ar = useUi((s) => s.locale) === 'ar'
@@ -132,7 +125,8 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
 
       <div className="grid gap-3 lg:grid-cols-2">
         {platforms.map((p) => {
-          const syncMeta = p.last_sync ? SYNC_TONE[p.last_sync.status] ?? { ar: p.last_sync.status, tone: 'neutral' as const } : null
+          // INTEG-RUNTIME §8 — the word and the colour come from the one module that decides them.
+          const syncMeta = p.last_sync ? syncStatusMeaning(p.last_sync.status) : null
           return (
             <article key={p.key} data-testid={`platform-${p.key}`} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-small)]">
               <header className="flex flex-wrap items-start justify-between gap-2">

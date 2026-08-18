@@ -1,0 +1,64 @@
+name: Production Diagnostics
+
+# INTEG-RUNTIME §7 — the only way to ask production a question, and it can only ask questions.
+#
+# `integrations:diagnose` calls no provider, refreshes no token, queues no job and writes no row: it
+# reads the run log and the retained provider payloads and prints where the rows stopped. This
+# workflow exists because that answer lives on the VPS and nowhere else, and «why is the number 0?»
+# cannot be settled from a laptop.
+#
+# Manual only. There is no push trigger and no schedule, so it runs when a human asks and not
+# otherwise. The command is fixed here — the inputs are filters passed as arguments, never a command.
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'Provider key to diagnose (snapchat, meta, tiktok, google_ads, x, linkedin, salla, zid)'
+        required: false
+        default: 'snapchat'
+      account:
+        description: 'Optional: one account id — ours or the provider''s own'
+        required: false
+        default: ''
+      runs:
+        description: 'Recent runs to show per account'
+        required: false
+        default: '5'
+      accounts:
+        description: 'Accounts to show'
+        required: false
+        default: '10'
+
+concurrency:
+  group: production-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Diagnose on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          PROVIDER: ${{ inputs.provider }}
+          ACCOUNT: ${{ inputs.account }}
+          RUNS: ${{ inputs.runs }}
+          ACCOUNTS: ${{ inputs.accounts }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: PROVIDER,ACCOUNT,RUNS,ACCOUNTS
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub/backend
+            # Quoted, and passed as VALUES to a fixed command. Nothing here builds a command from input.
+            php artisan integrations:diagnose \
+              --provider="${PROVIDER}" \
+              --account="${ACCOUNT}" \
+              --runs="${RUNS}" \
+              --accounts="${ACCOUNTS}"

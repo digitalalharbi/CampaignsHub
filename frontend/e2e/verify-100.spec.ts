@@ -228,10 +228,12 @@ test.describe('SYNC-001 — the sync pipeline, reported honestly', () => {
   test.use({ storageState: AUTH.advertiser })
 
   /**
-   * A sync with no credentials is not a failure, and is not a success either.
+   * A sync with no credentials is certainly not a SUCCESS.
    *
-   * The pipeline records `awaiting_credentials` for a provider it has no keys for. Reporting that as
-   * a failed sync would send somebody debugging; reporting it as a successful one would be a lie.
+   * The pipeline records such a run as `failed` with the error category `awaiting_credentials`
+   * (INTEG-RUNTIME §8), so an operator can still tell «add keys» from «the platform had a bad
+   * minute». What must never appear is a claim of a live connection over a platform with no keys —
+   * which is the one thing this asserts.
    */
   test('the project sync surface states its real state', async ({ page }) => {
     await selectProject(page, await seededProject(page.request, BOUND_PROJECT))

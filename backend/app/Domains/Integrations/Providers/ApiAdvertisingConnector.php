@@ -62,6 +62,22 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
      */
     protected array $rawResponses = [];
 
+    /**
+     * How many data records the platform actually handed this connector in the current sync.
+     *
+     * INTEG-RUNTIME §7 — the first of the four numbers a run has to be able to state. Without it,
+     * «zero metrics» is unreadable: it is equally true of a provider that sent nothing and of a
+     * parser that dropped everything, and those have different owners. Each connector increments this
+     * where it iterates the provider's OWN records, before any of our guards can drop one — so the
+     * count is what arrived, not what survived.
+     *
+     * The unit is whatever the platform returns a record IN, and that differs by design: a Snapchat
+     * timeseries point, a Meta insight row, an X entity. The number is not comparable across
+     * platforms and is not meant to be. It answers one question — «did they send us anything?» — and
+     * `parsed_rows` beside it answers «and what did we make of it?».
+     */
+    protected int $rawInsightRows = 0;
+
     /** The platform key in `config/ad_platforms.php` — usually the same as `key()`. */
     abstract protected function platform(): string;
 
@@ -398,6 +414,26 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
         $this->rawResponses[] = $body;
 
         return $body;
+    }
+
+    /** Record that the platform returned `$count` of its own data records. */
+    protected function countRawInsightRows(int $count): void
+    {
+        $this->rawInsightRows += max(0, $count);
+    }
+
+    /**
+     * Take the raw record count for this sync, and reset it.
+     *
+     * Drained for the same reason the bodies are: one connector instance is bound per sync, and a
+     * count carried into the next window would attribute January's rows to February's run.
+     */
+    public function takeRawInsightRows(): int
+    {
+        $count = $this->rawInsightRows;
+        $this->rawInsightRows = 0;
+
+        return $count;
     }
 
     /**

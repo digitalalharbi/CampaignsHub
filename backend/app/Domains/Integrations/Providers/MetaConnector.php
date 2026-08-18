@@ -339,6 +339,8 @@ final class MetaConnector extends ApiAdvertisingConnector
             'limit' => 500,
         ]);
 
+        $this->countRawInsightRows(count($reported));
+
         $rows = [];
 
         foreach ($reported as $row) {

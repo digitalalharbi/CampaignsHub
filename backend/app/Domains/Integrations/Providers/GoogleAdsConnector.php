@@ -302,6 +302,8 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector
         // The sales, asked for separately and by category — see the note on the method.
         $sales = $this->purchasesByCampaignDay($tokens, $adAccountId, $from, $to);
 
+        $this->countRawInsightRows(count($rows));
+
         $insights = [];
 
         foreach ($rows as $row) {

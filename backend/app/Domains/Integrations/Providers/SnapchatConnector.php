@@ -435,10 +435,20 @@ final class SnapchatConnector extends ApiAdvertisingConnector
                 $campaignId = (string) ($series['id'] ?? '');
 
                 if ($campaignId === '') {
+                    // Counted as arrived, then dropped: `provider_raw_rows > parsed_rows` is exactly
+                    // how a series Snapchat sent without an id becomes visible instead of vanishing.
+                    $this->countRawInsightRows(count((array) ($series['timeseries'] ?? [])));
+
                     continue;
                 }
 
-                foreach ((array) ($series['timeseries'] ?? []) as $point) {
+                /** @var list<mixed> $points */
+                $points = (array) ($series['timeseries'] ?? []);
+
+                // What Snapchat sent, counted before any of our guards can drop one.
+                $this->countRawInsightRows(count($points));
+
+                foreach ($points as $point) {
                     $rows[] = $this->pointToRow($campaignId, (array) $point, $window->startIso());
                 }
             }
