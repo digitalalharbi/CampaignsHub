@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Console;
 
+use App\Domains\Campaigns\Actions\StampHistoricalUnlinks;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
@@ -15,6 +17,7 @@ use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\InsightPayloadRows;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 /**
  * INTEG-RUNTIME §7 — «why is the answer 0?», answered with numbers instead of a theory.
@@ -287,6 +290,68 @@ final class DiagnoseSyncCommand extends Command
             ->count();
 
         $this->line(sprintf('  rows in ANY OTHER project: %d   (must be 0)', $elsewhere));
+
+        $this->reportUnadopted($account);
+    }
+
+    /**
+     * The campaigns that did NOT become visible, each with the evidence for why.
+     *
+     * «87 of 89» is not an answer, it is two unanswered questions. A campaign that never became
+     * visible is either a correct product state — somebody detached it, or the platform reports it in
+     * a way this product does not adopt — or a defect, and the two look identical from a count.
+     *
+     * So each one is printed with everything that decides it: what the platform calls it, its status,
+     * whether it carries a link, whether it carries a recorded unlink, and whether the audit trail
+     * holds a detachment for it. Nothing is inferred here; every column is read.
+     */
+    private function reportUnadopted(ExternalAccount $account): void
+    {
+        $orphans = ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $account->getKey())
+            ->whereNull('unified_campaign_id')
+            ->orderBy('name')
+            ->get(['id', 'external_id', 'name', 'status', 'project_id', 'unlinked_at', 'linked_at', 'created_at', 'updated_at']);
+
+        $this->line('');
+        $this->line(sprintf('  Campaigns with NO visible campaign: %d', $orphans->count()));
+
+        if ($orphans->isEmpty()) {
+            return;
+        }
+
+        foreach ($orphans as $orphan) {
+            $audited = DB::table('audit_logs')
+                ->where('action', StampHistoricalUnlinks::AUDIT_ACTION)
+                ->where('entity_id', (string) $orphan->id)
+                ->count();
+
+            /*
+             * A campaign whose name is already taken by another visible campaign in the same project
+             * is the one shape that can fail adoption without anybody having decided anything:
+             * `unified_campaigns` is unique on `(project_id, name)`.
+             */
+            $nameTaken = UnifiedCampaign::withoutGlobalScopes()
+                ->where('project_id', $orphan->project_id)
+                ->where('name', $orphan->name)
+                ->count();
+
+            $this->line(sprintf(
+                '    %s  «%s»  status=%s  project=%s',
+                $orphan->external_id,
+                $orphan->name,
+                $orphan->status,
+                $orphan->project_id === null ? 'NONE' : 'set',
+            ));
+            $this->line(sprintf(
+                '      unlinked_at=%s  linked_at=%s  unlink audit entries=%d  same-name visible campaigns=%d',
+                $orphan->unlinked_at ?? '—',
+                $orphan->linked_at ?? '—',
+                $audited,
+                $nameTaken,
+            ));
+            $this->line(sprintf('      first seen %s, last touched %s', $orphan->created_at, $orphan->updated_at));
+        }
     }
 
     /**
