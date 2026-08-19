@@ -1,0 +1,75 @@
+name: Production Structure Sync
+
+# SNAP-STRUCTURE-RETRY-001 — queue the structure sweep on demand, then show what it did.
+#
+# The sweep already runs on a six-hour schedule; this changes nothing about what it does, it only
+# asks for it NOW. Without it, proving that a queue fix let a sweep finish means waiting up to six
+# hours for the scheduler, and the proof this exists to produce is exactly «one run, start to
+# finish, with counts».
+#
+# It is deliberately a SEPARATE workflow from Production Diagnostics, which calls nothing and writes
+# nothing. This one dispatches jobs. Collapsing the two would have cost that guarantee, and the
+# guarantee is why the diagnostics workflow can be run without thinking about it.
+#
+# Manual only — no push trigger, no schedule. The command is fixed here; the provider is passed as a
+# VALUE, never assembled into a command.
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'Provider key to sweep (snapchat, meta, tiktok, google_ads, x, linkedin)'
+        required: false
+        default: 'snapchat'
+      settle_seconds:
+        description: 'How long to let the queue work before printing the runs'
+        required: false
+        default: '300'
+      runs:
+        description: 'Recent runs to print per account afterwards'
+        required: false
+        default: '6'
+
+concurrency:
+  group: production-structure-sync
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Queue the sweep and report what it did
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          PROVIDER: ${{ inputs.provider }}
+          SETTLE: ${{ inputs.settle_seconds }}
+          RUNS: ${{ inputs.runs }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 30m
+          envs: PROVIDER,SETTLE,RUNS
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+
+            COMPOSE="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
+
+            # The contract first. If this exits non-zero the sweep would be re-delivered mid-flight
+            # again, and queueing it would produce another MaxAttemptsExceeded rather than evidence.
+            echo "── queue contract ──────────────────────────────────────────────────────────────"
+            $COMPOSE exec -T queue php artisan queue:contract
+
+            echo "── queueing ────────────────────────────────────────────────────────────────────"
+            $COMPOSE exec -T backend php artisan integrations:sync-structure --provider="${PROVIDER}"
+
+            echo "── letting the worker work for ${SETTLE}s ──────────────────────────────────────"
+            sleep "${SETTLE}"
+
+            echo "── what the runs say ───────────────────────────────────────────────────────────"
+            $COMPOSE exec -T backend php artisan integrations:diagnose \
+              --provider="${PROVIDER}" --runs="${RUNS}" --linked
