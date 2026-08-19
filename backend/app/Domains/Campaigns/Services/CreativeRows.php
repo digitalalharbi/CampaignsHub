@@ -6,6 +6,7 @@ namespace App\Domains\Campaigns\Services;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
@@ -124,12 +125,23 @@ final class CreativeRows
         foreach ([
             'campaign_ids' => 'campaign_id',
             'ad_set_ids' => 'external_ad_set_id',
-            'ad_ids' => 'external_ad_id',
             'project_ids' => 'project_id',
         ] as $param => $column) {
             if (($ids = $list($param)) !== []) {
                 $query->whereIn($column, $ids);
             }
+        }
+
+        /*
+         * CREATIVE-AD-RELATION-001 — filtered THROUGH the ads, not through a column that names one.
+         *
+         * This read `whereIn('external_ad_id', $ids)`, and that column holds whichever ad was
+         * imported last. So filtering by any of the other ads carrying a creative returned nothing,
+         * and filtering by the last one returned it — with no way to tell those two apart from the
+         * result. `ads()` is the real relation, so every ad that carries the creative matches.
+         */
+        if (($adIds = $list('ad_ids')) !== []) {
+            $query->whereHas('ads', fn ($q) => $q->whereIn('external_ads.external_id', $adIds));
         }
 
         /*
@@ -333,6 +345,34 @@ final class CreativeRows
     }
 
     /**
+     * The external ids of every ad reachable from these creatives — CREATIVE-AD-RELATION-001.
+     *
+     * Read from `external_ads` through the real relation rather than from
+     * `external_creatives.external_ad_id`, which holds one ad per creative and so offered a list
+     * that was really a count of creatives: 1,451 values on the live Snapchat account where 5,706
+     * ads exist, with every ad but the last of each creative unselectable.
+     *
+     * @param  Closure(): Builder  $base  a fresh bounded query, same contract as `filterOptions`
+     * @return list<string>
+     */
+    private function adExternalIds(Closure $base): array
+    {
+        $creativeIds = $base()->distinct()->pluck('id')->all();
+
+        if ($creativeIds === []) {
+            return [];
+        }
+
+        return ExternalAd::query()
+            ->whereIn('creative_id', $creativeIds)
+            ->distinct()
+            ->orderBy('external_id')
+            ->pluck('external_id')
+            ->map(static fn ($v): string => (string) $v)
+            ->all();
+    }
+
+    /**
      * What the filter controls may offer — derived from the rows in reach, never from a fixed list.
      *
      * A select populated from an enum offers platforms this project has never run and campaigns it
@@ -376,7 +416,14 @@ final class CreativeRows
                 'id' => (string) $c->id, 'name' => $c->name, 'objective' => $c->objective,
             ])->all(),
             'ad_sets' => $distinct('external_ad_set_id'),
-            'ads' => $distinct('external_ad_id'),
+            /*
+             * CREATIVE-AD-RELATION-001 — the ads themselves, not `distinct('external_ad_id')`.
+             *
+             * That column carries one ad per creative, so the option list was really a count of
+             * CREATIVES wearing an ad's name: on the live Snapchat account it offered 1,451 values
+             * where 5,706 ads exist, and every ad but the last of each creative was unselectable.
+             */
+            'ads' => $this->adExternalIds($base),
             'objectives' => $campaigns->pluck('objective')->filter()->unique()->sort()->values()->all(),
             'paths' => array_map(static fn (MarketingPath $p): string => $p->value, MarketingPath::cases()),
             'projects' => $projects->map(static fn ($p): array => [

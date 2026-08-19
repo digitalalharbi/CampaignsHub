@@ -9,6 +9,7 @@ use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /** An ad creative synced from a platform. Project/tenant scoped. Thumbnails are never fabricated. */
 final class ExternalCreative extends Model
@@ -26,6 +27,26 @@ final class ExternalCreative extends Model
         'first_seen_at', 'last_active_at', 'source_updated_at', 'asset_expires_at', 'raw', 'cards',
         'creative_group_id', 'last_synced_at', 'is_demo',
     ];
+
+    /**
+     * Every ad that carries this creative — CREATIVE-AD-RELATION-001.
+     *
+     * The honest inverse of `ExternalAd::creative()`, and the only truthful way to ask the question.
+     * `external_creatives.external_ad_id` looks like it answers it and does not: `creativeFor()`
+     * rewrites that column on every upsert, so it holds whichever ad was imported last. On the live
+     * Snapchat account 5,706 ads share 1,451 creatives — about four ads each — and the column names
+     * one of the four.
+     *
+     * Providers send ONE creative per ad (Snapchat a single `creative_id`, Meta a single creative,
+     * TikTok one built from the media on the ad), so this is many-to-one and `external_ads.creative_id`
+     * already models it exactly. An association table would model something no provider sends.
+     *
+     * @return HasMany<ExternalAd, $this>
+     */
+    public function ads(): HasMany
+    {
+        return $this->hasMany(ExternalAd::class, 'creative_id');
+    }
 
     protected $casts = [
         'last_synced_at' => 'datetime',
