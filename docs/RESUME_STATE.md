@@ -1,68 +1,71 @@
-# START HERE — 2026-08-19, Snapchat: metrics live, the rest still open
+# START HERE — 2026-08-19, the 2-of-89 answered, and a new blocker found
 
-## Status, stated exactly
+## Status
 
 | | |
 |---|---|
 | Snapchat live metrics + scheduled ingestion | **VERIFIED** |
-| Campaign adoption | **PARTIAL — 87 of 89** |
-| Visual downstream (Campaigns, Dashboard, Analytics, Reports, shared link) | **BLOCKED_OPERATIONAL_EVIDENCE** — no live review has been done |
-| FX conversion to the project currency | **AWAITING CONFIGURATION** — no rate source |
+| Campaign adoption | **VERIFIED for Snapchat — 87 of 87.** The other two rows are not Snapchat's |
+| Scheduled STRUCTURE sync | **BROKEN — see SNAP-STRUCTURE-RETRY-001 below.** Next thing to fix |
+| Visual downstream | **BLOCKED_OPERATIONAL_EVIDENCE** — no production session available here |
+| FX conversion to the project currency | **AWAITING CONFIGURATION** |
 
-**Snapchat is NOT end to end.** Metrics arrive, are attributed to the right project and are stored on
-schedule; that is what is proven. Two campaigns of eighty-nine are unexplained, no screen has been
-observed rendering this data, and every money figure in the project's own currency is withheld.
+## The two campaigns of «89», answered
 
-## What production produced, unaided
+    sbx-cmp-1  «Sandbox Awareness»    status=active  unlinked_at=—  unlink audits=0  same-name visible=1
+    sbx-cmp-2  «Sandbox Conversions»  status=paused  unlinked_at=—  unlink audits=0  same-name visible=1
+    first seen 2026-08-17 09:01:34
 
-    metrics     2026-08-18 12:00:05 | 2026-08-11 → 2026-08-18 | success | raw 88 | parsed 88 | mapped 88 | stored 1056
-    downstream  project «رزه افينيو» — 1,056 metric rows across 8 days
-                campaigns visible: 89 external, 87 linked to a unified campaign
+They are **sandbox demo rows, not Snapchat campaigns** — `sbx-cmp-*` is the sandbox connector's own
+id space, and they predate the guard that now makes them impossible to create
+(`ProjectIntegrationController::connect` 404s in production since PR #38). Snapchat itself returns
+**87** campaigns, which the metrics runs corroborate exactly: `raw 87 → parsed 87 → mapped 87 →
+stored 1044`.
+
+So the real figure is **87 of 87 Snapchat campaigns linked**, and «89» was never Snapchat's number.
+
+Why the two are not adopted is also answered rather than guessed: each reports
+`same-name visible campaigns=1` — a unified campaign already holds that exact name in that project,
+and `unified_campaigns` is unique on `(project_id, name)`. Nothing about them is a Snapchat defect.
+They are residue, and removing them is a data-cleanup decision for the owner, not a code change.
+
+## NEW BLOCKER — SNAP-STRUCTURE-RETRY-001
+
+The structure sync is failing on every attempt, and now says so (that part is the §43 fix working):
+
+    2026-08-19 08:52:30  failed  records=0  "SyncAccountStructureJob has been attempted too many times."
+    2026-08-19 08:50:59  failed  records=0  (same)
+    2026-08-19 08:49:29  failed  records=0  (same)
+    2026-08-19 08:20:46  failed  records=0  (same)
+
+`$timeout = 900` shipped in `faa27ea` and these are AFTER it, so the timeout was not the whole cause.
+`MaxAttemptsExceeded` means the job is being re-queued while it is still running. The measured gaps
+are **~91 seconds** (18:55:02 → 18:56:33 → 18:58:04), which is the shape of `queue.connections.*.
+retry_after` releasing the job back before it finishes: a job timeout longer than `retry_after` is
+re-dispatched on a loop until `$tries` is exhausted.
+
+**First file to read:** `backend/config/queue.php` → `retry_after` on the active connection, and
+`backend/config/horizon.php` → the supervisor's `timeout`. The rule is `retry_after` > job timeout >
+supervisor timeout is wrong; it must be `retry_after` **greater than** the longest job timeout. Verify
+against the 91-second measurement before changing anything, and do not raise timeouts blindly.
+
+Consequence while it is broken: campaigns, ad squads, ads and creatives do not refresh. Metrics
+continue normally — they are a different job on a different clock.
+
+## What production produced
+
+    metrics     2026-08-19 10:30:03 | 2026-08-12 → 2026-08-19 | success | raw 87 | parsed 87 | mapped 87 | stored 1044
+    downstream  project «رزه افينيو» — 1,176 metric rows across 9 days
+                as the platform reported it: 3,406.11 spend / 10,057.95 revenue USD
+                196 money rows WITHHELD — no USD→project rate configured
+                campaigns visible: 89 external, 87 linked   (89 includes the 2 sandbox rows)
                 rows in ANY OTHER project: 0
-
-Read-only probes on the same connection — no re-authorisation, nothing stored:
-
-| window | HTTP | raw | parsed | mapped |
-|---|---|---|---|---|
-| 2026-08-17 (last complete day) | 200 | 11 | 11 | 11 |
-| 2026-08-11 → 2026-08-17 | 200 | 77 | 77 | 77 |
-| 2026-07-01 → 2026-07-14 | 200, 2 calls | 98 | 98 | 98 |
-
-## The three defects behind «0 metrics»
-
-1. **SNAP-BREAKDOWN-001.** With `breakdown=campaign`, Snapchat returns the AD ACCOUNT as the series
-   and nests campaigns under `breakdown_stats.campaign[]`. The connector read
-   `timeseries_stat.timeseries` — absent — and took `timeseries_stat.id`, the account, for a campaign.
-   The fixture had invented the same shape, so eleven tests agreed with the bug.
-2. **CAMPAIGNS-ADOPT-001.** Adoption fired only on FIRST import, so campaigns discovered before that
-   feature existed were never adopted. `unlinked_at` now separates «never adopted» from «deliberately
-   unlinked»; legacy rows were recovered from the audit trail, and the migration reported **0**
-   historical unlinks on production, so no decision was reversed.
-3. **STRUCTURE-TIMEOUT-001 / STRUCTURE-KILLED-001.** The structure job was killed at Horizon's
-   120-second default and, because a killed process never reaches `finish()`, left its run `running`
-   forever. Nothing reported a failure.
-
-## Open, and what would close each
-
-- **2 of 89 campaigns unlinked.** Not explained. Either they are a correct product state (excluded or
-  deliberately detached) or a defect, and the expected result is 89/89. Evidence needed per campaign:
-  external id, name, status, `unified_campaign_id`, `unlinked_at`, whether an unlink audit entry
-  exists, and the import outcome.
-- **No live browser review.** Nothing here claims a screen rendered. Requires a signed-in session on
-  production, which this workstation does not hold.
-- **FX.** `spend 3,291.60 / revenue 9,668.81 USD` are stored as the platform reported them. The
-  project-currency value is WITHHELD because `fx.rates.driver` is null by design; 176 money rows are
-  null rather than wrong, and each converts itself the day a rate exists
-  (`ReportingCurrencyTest::test_a_resync_converts_a_row_that_was_withheld`). Remedy: set
-  `FX_RATE_DRIVER`, or enter a rate at `/admin/settings/currency-rates`, which records rate, date and
-  source. **No rate may be invented, and the project-currency figure is not LIVE_VERIFIED until one
-  is configured.**
 
 ## The standing rules
 
 - `origin/main` is the only truth. Branch → PR → CI → protected merge → deploy → verify.
 - One runtime. Eight providers. Ownership is `ProjectIntegrationBinding` where `is_active`.
-- A provider fixture is the platform's shape, or it tests itself — SNAP-FIXTURE-001, UNLINK-FIXTURE-001.
+- A provider fixture is the platform's shape, or it tests itself.
 - A gate failure is root-caused from the run's own evidence. Where the evidence cannot name the cause,
   the SPEC is instrumented so the next occurrence does — never a retry, never a longer timeout.
 - Never invent a financial input.
