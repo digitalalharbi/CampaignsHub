@@ -29,14 +29,14 @@ use Tests\TestCase;
  *
  * ## What the shape actually is
  *
- * Every provider this application reads sends **one creative per ad**: Snapchat names a single
- * `creative_id`, Meta a single creative, TikTok builds one from the media on the ad. Many ads then
- * share that creative — on the live Snapchat account, 5,706 ads over 1,451 creatives, about four
- * ads each.
+ * **The Snapchat shape is proven**: its ads name a single `creative_id`, and many ads share it — on
+ * the live account, 5,706 ads over 1,451 creatives, about four each. That is many-to-one, and
+ * `external_ads.creative_id` already models it correctly, per ad, with a `belongsTo`.
  *
- * That is many-to-one, and `external_ads.creative_id` already models it correctly, per ad, with a
- * `belongsTo`. **No association table is needed, and adding one would model something no provider
- * sends.**
+ * Other adapters emit at most one creative per ad row; Google Ads and LinkedIn emit none.
+ * **Platform-native capabilities are not claimed** — those would need each API's contract read. What
+ * follows from what IS known is enough: no association table is needed, and adding one would model
+ * something no adapter here produces.
  *
  * ## Where the defect is
  *

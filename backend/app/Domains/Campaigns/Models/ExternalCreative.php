@@ -37,9 +37,10 @@ final class ExternalCreative extends Model
      * Snapchat account 5,706 ads share 1,451 creatives — about four ads each — and the column names
      * one of the four.
      *
-     * Providers send ONE creative per ad (Snapchat a single `creative_id`, Meta a single creative,
-     * TikTok one built from the media on the ad), so this is many-to-one and `external_ads.creative_id`
-     * already models it exactly. An association table would model something no provider sends.
+     * The Snapchat shape is proven: its ads name a single `creative_id` and many ads share it, so this is
+     * many-to-one and `external_ads.creative_id` models it exactly. Other adapters emit at most one
+     * creative per ad row; Google Ads and LinkedIn emit none. Platform-native capabilities are not
+     * claimed — an association table would model something no adapter here produces.
      *
      * @return HasMany<ExternalAd, $this>
      */

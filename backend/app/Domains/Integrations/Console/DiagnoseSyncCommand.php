@@ -312,7 +312,7 @@ final class DiagnoseSyncCommand extends Command
             .'   (correct on LinkedIn and Google, where ads hang off the campaign; on Snapchat an ad'
             .' is placed BY its squad, so anything above 0 here is a defect)');
         $this->line("  ads with no creative         : {$adsWithoutCreative}"
-            .'   (Google Ads and LinkedIn send none at all, so 0 is not expected there)');
+            .'   (reported, not judged — see below)');
         $this->line('  creatives referenced by ads   : '.$referencedCreativeIds->count()
             .'   (distinct `external_ads.creative_id` — the canonical relation)');
         $this->line("  creatives referenced by no ad: {$creativesWithNoAd}"
@@ -330,10 +330,18 @@ final class DiagnoseSyncCommand extends Command
             $this->warn("  {$creativesWithNoAd} creative(s) are referenced by no ad at all.");
         }
 
-        // Google Ads and LinkedIn send no creative with an ad at all, so 0 there is the shape, not a gap.
-        if ($adsWithoutCreative > 0 && ! in_array($account->provider, ['google_ads', 'linkedin'], true)) {
-            $this->warn("  {$adsWithoutCreative} ad(s) carry no creative on a provider that sends one.");
-        }
+        /*
+         * «ads with no creative» is REPORTED and not called a defect — for any provider.
+         *
+         * The first draft warned on every provider except Google Ads and LinkedIn, reasoning that the
+         * others emit a `creative` key so one must be expected. That does not follow: our adapters
+         * emitting AT MOST one creative per ad row says what our code can produce, and says nothing
+         * about whether the platform requires an ad to have one. An ad in review, a deleted creative,
+         * a draft — each is a number, and none of them is proven to be a fault here.
+         *
+         * The threshold for warning is a verified platform contract, not an inference from our own
+         * adapter's shape. Until one is read, the number stands on its own.
+         */
 
         $this->line('');
         $this->line('  Orphaned ad squads and ads cannot appear above: `external_campaign_id` is NOT NULL on');
