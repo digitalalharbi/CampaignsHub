@@ -78,10 +78,22 @@ Deploy, then prove on production, in this order:
 1. `php artisan queue:contract` in the **queue** container — active connection `redis`, `retry_after`
    1200, worker 900. The deploy script prints this and exits non-zero if it is wrong.
 2. Horizon restarted after the deploy (`horizon:terminate` is the last step of the deploy script).
-3. `integrations:diagnose --provider=snapchat --account=<id> --runs` showing ONE structure run that
-   starts once, is not re-delivered, does not report `MaxAttemptsExceeded`, finishes `success`, has
-   `records > 0`, and leaves no row at `running`.
-4. Record the MEASURED `started_at → finished_at` of that run, and replace the estimate above with it.
+3. Run the **Production Structure Acceptance** workflow. It calls
+   `integrations:accept-structure --provider=snapchat --observe=1500`, which queues one sweep and
+   polls the run rows CREATED BY THAT INVOCATION until they are terminal, and fails on any of:
+
+   - fewer runs than accounts (the job was never queued — usually a stale unique-job lock)
+   - more runs than accounts (re-delivery)
+   - `MaxAttemptsExceeded` in any run's error
+   - a run still `running` when the window closes
+   - `success` with `records = 0`
+   - `no_data` while the retained payload carries rows
+   - any run already `running` before the check started
+
+   A fixed sleep cannot do this. The job's ceiling is 900s, so a five-minute wait calls a healthy
+   sweep «still running» — and prints something reassuring for the very defect it should catch,
+   because a job re-queued every ninety seconds always leaves a recent-looking run.
+4. Record the MEASURED runtime the command prints, and replace the estimate above with it.
 
 Until 1–4 exist, this is **IMPLEMENTED_NOT_VERIFIED**, not fixed.
 

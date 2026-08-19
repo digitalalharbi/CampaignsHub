@@ -8,6 +8,7 @@ use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Identity\Middleware\RejectRevokedSessions;
+use App\Domains\Integrations\Console\AcceptStructureSyncCommand;
 use App\Domains\Integrations\Console\DiagnoseSyncCommand;
 use App\Domains\Integrations\Console\ProbeInsightsCommand;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
@@ -80,6 +81,10 @@ return Application::configure(basePath: dirname(__DIR__))
         SyncAdPlatformsCommand::class,
         // STRUCT-001 — the discovery half: campaigns, ad sets, ads and creatives, on its own cadence.
         SyncAdPlatformStructureCommand::class,
+        // SNAP-STRUCTURE-RETRY-001 — the same sweep, queued once and WATCHED to a terminal state.
+        // A fixed wait cannot tell a slow sweep from one the broker restarted underneath it, which is
+        // the only distinction that matters here.
+        AcceptStructureSyncCommand::class,
         RefreshAdPlatformTokensCommand::class,
         PruneRawPayloadsCommand::class,
         // INTEG-RUNTIME §7 — read-only: where a sync's rows stopped, with the four counts. Calls no
