@@ -56,6 +56,51 @@ measurement also settles how impossible the old configuration was: an honest swe
 seconds, so `retry_after = 90` re-delivered it **seven times over** during one run, and the old
 120-second supervisor timeout would have killed it at 18 % complete.
 
+## Phase 2 — the hierarchy, counted on production (2026-08-19)
+
+`integrations:diagnose --provider=snapchat --linked --hierarchy --downstream`, run `32273929086`:
+
+| level | count |
+|---|---|
+| campaigns | **89** |
+| ad_squads | **187** |
+| ads | **5,706** |
+| creatives | **1,451** |
+
+    ads with no ad squad : 0     (Snapchat places an ad BY its squad — anything above 0 is a defect)
+    creatives with no ad : 0
+
+No level is 0. Orphaned ad squads and ads cannot appear: `external_campaign_id` is NOT NULL with a
+cascading foreign key on both tables, so a row naming an undiscovered parent is rejected at import,
+counted as `skipped`, and turns the run `partial_mapping`.
+
+### CREATIVE-COUNT-001 — `records` counts upserts, not rows
+
+The run reported `records=11,686`. The levels decompose it exactly:
+
+    87 campaigns + 187 ad squads + 5,706 ads + 5,706 creative upserts = 11,686
+
+`ImportExternalStructure::creativeFor()` is called once per AD, does `updateOrCreate` keyed on
+`(project_id, provider, external_creative_id)`, and increments the counter on every call. So the
+headline overstated creatives by **3.9×** — 5,706 reported against 1,451 that exist. The sweep's
+total is not a statement about what the database holds, which is why the per-level counts were worth
+having.
+
+### CREATIVE-AD-RELATION-001 — the next defect
+
+`external_creatives.external_ad_id` is a single string column, overwritten on each upsert, so it
+keeps only the LAST ad that referenced the creative. 5,706 ads share 1,451 creatives — roughly four
+ads per creative — and the table can express one.
+
+`creatives with no ad : 0` is therefore true and incomplete. The relation is many-to-one in reality
+and one-to-one in the schema.
+
+**This blocks Phase 4 and Phase 5 as specified:** Phase 4 wants each creative's ad relation, and
+Phase 5 wants metrics at creative level, which cannot be attributed through a relation that only
+remembers the most recent ad. **First file to read:** `ImportExternalStructure::creativeFor()` (the
+`updateOrCreate` key and `external_ad_id`), then `ExternalCreative` and whatever reads
+`external_ad_id` today.
+
 ## The two campaigns of «89», answered
 
     sbx-cmp-1  «Sandbox Awareness»    status=active  unlinked_at=—  unlink audits=0  same-name visible=1
