@@ -94,6 +94,24 @@ component and its tests.
 
 **The parent requirement stays PARTIAL until that lands.**
 
+### Before Phase 4 — CREATIVE-ACCOUNT-IDENTITY-001, a second question
+
+`external_creatives` is unique on `(project_id, provider, external_creative_id)` and carries no
+`external_account_id`. `external_campaigns` does carry one — so campaigns, squads and ads are
+account-scoped and creatives are not. A project may hold several accounts of one provider, since the
+binding is unique on `(project_id, external_account_id, purpose)`.
+
+**Is `external_creative_id` unique across a provider, or only inside an ad account?** If account-
+scoped, two accounts in one project sharing a creative id collapse into one row and the canonical key
+must include account identity — its own migration and functional PR. If provider-global, nothing
+changes.
+
+Probe: retained or live Snapchat structure for one `external_creative_id` under distinct
+`external_account_id` values, plus the provider's identity contract if it states one. **The collision
+test is written only if account-scoped identity is established** — writing it first would assert the
+answer. The live account has one active binding, so production cannot exhibit this today: latent, not
+active.
+
 ### Before Phase 4 — CREATIVE-CAMPAIGN-RELATION-001, a question not a verdict
 
 `creativeFor()` canonicalises by `(project_id, provider, external_creative_id)` but rewrites
