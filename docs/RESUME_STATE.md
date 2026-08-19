@@ -67,10 +67,14 @@ seconds, so `retry_after = 90` re-delivered it **seven times over** during one r
 
 | level | count |
 |---|---|
-| campaigns | **89** |
+| campaigns | **89** external campaign rows — **87 of them Snapchat's**, plus the 2 sandbox rows |
 | ad_squads | **187** |
 | ads | **5,706** |
 | creatives | **1,451** |
+
+**89 is not Snapchat's campaign count.** It is how many `external_campaigns` rows the account has, and
+two of those (`sbx-cmp-1`, `sbx-cmp-2`) are sandbox residue Snapchat never returned. Snapchat's figure
+is 87, corroborated exactly by every metrics run: `raw 87 → parsed 87 → mapped 87`.
 
     ads with no ad squad : 0     (Snapchat places an ad BY its squad — anything above 0 is a defect)
     creatives with no ad : 0
