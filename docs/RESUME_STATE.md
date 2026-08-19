@@ -1,15 +1,26 @@
-# START HERE — 2026-08-19, Snapchat live, storing and visible
+# START HERE — 2026-08-19, Snapchat: metrics live, the rest still open
 
-## Where it ended
+## Status, stated exactly
 
-The live Snapchat account reaches the product end to end. Production, unaided, on `origin/main`:
+| | |
+|---|---|
+| Snapchat live metrics + scheduled ingestion | **VERIFIED** |
+| Campaign adoption | **PARTIAL — 87 of 89** |
+| Visual downstream (Campaigns, Dashboard, Analytics, Reports, shared link) | **BLOCKED_OPERATIONAL_EVIDENCE** — no live review has been done |
+| FX conversion to the project currency | **AWAITING CONFIGURATION** — no rate source |
+
+**Snapchat is NOT end to end.** Metrics arrive, are attributed to the right project and are stored on
+schedule; that is what is proven. Two campaigns of eighty-nine are unexplained, no screen has been
+observed rendering this data, and every money figure in the project's own currency is withheld.
+
+## What production produced, unaided
 
     metrics     2026-08-18 12:00:05 | 2026-08-11 → 2026-08-18 | success | raw 88 | parsed 88 | mapped 88 | stored 1056
     downstream  project «رزه افينيو» — 1,056 metric rows across 8 days
                 campaigns visible: 89 external, 87 linked to a unified campaign
                 rows in ANY OTHER project: 0
 
-Read-only probes against the same connection, no re-authorisation, storing nothing:
+Read-only probes on the same connection — no re-authorisation, nothing stored:
 
 | window | HTTP | raw | parsed | mapped |
 |---|---|---|---|---|
@@ -24,30 +35,35 @@ Read-only probes against the same connection, no re-authorisation, storing nothi
    `timeseries_stat.timeseries` — absent — and took `timeseries_stat.id`, the account, for a campaign.
    The fixture had invented the same shape, so eleven tests agreed with the bug.
 2. **CAMPAIGNS-ADOPT-001.** Adoption fired only on FIRST import, so campaigns discovered before that
-   feature existed were never adopted: 1,056 metrics and an empty Campaigns page. `unlinked_at` now
-   separates «never adopted» from «deliberately unlinked», and legacy rows were recovered from the
-   audit trail — the migration reported **0** historical unlinks on production, so nothing was reversed.
-3. **STRUCTURE-TIMEOUT-001 / STRUCTURE-KILLED-001.** The structure job was being killed at Horizon's
-   120-second default (89 campaigns × campaigns + squads + ads + creatives) and, because a killed
-   process never reaches `finish()`, left its run at `running` forever. Nothing reported a failure.
+   feature existed were never adopted. `unlinked_at` now separates «never adopted» from «deliberately
+   unlinked»; legacy rows were recovered from the audit trail, and the migration reported **0**
+   historical unlinks on production, so no decision was reversed.
+3. **STRUCTURE-TIMEOUT-001 / STRUCTURE-KILLED-001.** The structure job was killed at Horizon's
+   120-second default and, because a killed process never reaches `finish()`, left its run `running`
+   forever. Nothing reported a failure.
 
-## What is still open, honestly
+## Open, and what would close each
 
-- **FX — configuration, not code.** `spend 3,291.60 / revenue 9,668.81 USD` are stored as the platform
-  reported them; the project-currency figures are WITHHELD because no USD→SAR rate source is
-  configured (`fx.rates.driver` is null by design). 176 money rows are null rather than wrong, and each
-  converts itself the day a rate exists — `ReportingCurrencyTest::test_a_resync_converts_a_row_that_was_withheld`
-  holds that. Remedy: set `FX_RATE_DRIVER`, or enter a rate at `/admin/settings/currency-rates`, which
-  records rate, date and source. **No rate may be invented.**
-- **2 of 89 campaigns are not yet linked.** 87 adopted; the remaining two are not explained and must
-  not be reported as adopted.
+- **2 of 89 campaigns unlinked.** Not explained. Either they are a correct product state (excluded or
+  deliberately detached) or a defect, and the expected result is 89/89. Evidence needed per campaign:
+  external id, name, status, `unified_campaign_id`, `unlinked_at`, whether an unlink audit entry
+  exists, and the import outcome.
+- **No live browser review.** Nothing here claims a screen rendered. Requires a signed-in session on
+  production, which this workstation does not hold.
+- **FX.** `spend 3,291.60 / revenue 9,668.81 USD` are stored as the platform reported them. The
+  project-currency value is WITHHELD because `fx.rates.driver` is null by design; 176 money rows are
+  null rather than wrong, and each converts itself the day a rate exists
+  (`ReportingCurrencyTest::test_a_resync_converts_a_row_that_was_withheld`). Remedy: set
+  `FX_RATE_DRIVER`, or enter a rate at `/admin/settings/currency-rates`, which records rate, date and
+  source. **No rate may be invented, and the project-currency figure is not LIVE_VERIFIED until one
+  is configured.**
 
 ## The standing rules
 
 - `origin/main` is the only truth. Branch → PR → CI → protected merge → deploy → verify.
 - One runtime. Eight providers. Ownership is `ProjectIntegrationBinding` where `is_active`.
 - A provider fixture is the platform's shape, or it tests itself — SNAP-FIXTURE-001, UNLINK-FIXTURE-001.
-- A gate failure is root-caused from the run's own evidence. When the evidence cannot name the cause,
+- A gate failure is root-caused from the run's own evidence. Where the evidence cannot name the cause,
   the SPEC is instrumented so the next occurrence does — never a retry, never a longer timeout.
 - Never invent a financial input.
 
