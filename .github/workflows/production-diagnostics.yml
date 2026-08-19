@@ -44,6 +44,11 @@ on:
         type: boolean
         required: false
         default: false
+      hierarchy:
+        description: 'Campaigns → ad squads → ads → creatives, with the orphans at each level'
+        type: boolean
+        required: false
+        default: false
       probe_account:
         description: 'Optional: ask the provider directly for this account (id, ours or theirs). Stores nothing.'
         required: false
@@ -77,12 +82,13 @@ jobs:
           LINKED: ${{ inputs.linked && '--linked' || '' }}
           PAYLOAD: ${{ inputs.payload && '--payload' || '' }}
           DOWNSTREAM: ${{ inputs.downstream && '--downstream' || '' }}
+          HIERARCHY: ${{ inputs.hierarchy && '--hierarchy' || '' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          envs: PROVIDER,ACCOUNT,RUNS,ACCOUNTS,LINKED,PAYLOAD,DOWNSTREAM
+          envs: PROVIDER,ACCOUNT,RUNS,ACCOUNTS,LINKED,PAYLOAD,DOWNSTREAM,HIERARCHY
           script: |
             set -Eeuo pipefail
             cd /opt/campaignshub
@@ -100,7 +106,7 @@ jobs:
                 --account="${ACCOUNT}" \
                 --runs="${RUNS}" \
                 --accounts="${ACCOUNTS}" \
-                ${LINKED} ${PAYLOAD} ${DOWNSTREAM}
+                ${LINKED} ${PAYLOAD} ${DOWNSTREAM} ${HIERARCHY}
 
   # ── The probe ────────────────────────────────────────────────────────────────────────────────────
   #

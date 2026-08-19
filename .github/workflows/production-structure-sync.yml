@@ -79,4 +79,4 @@ jobs:
 
             echo "── the runs, and what the project now holds ────────────────────────────────────"
             $COMPOSE exec -T backend php artisan integrations:diagnose \
-              --provider="${PROVIDER}" --runs=6 --linked --downstream
+              --provider="${PROVIDER}" --runs=6 --linked --hierarchy --downstream
