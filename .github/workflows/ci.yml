@@ -90,6 +90,13 @@ jobs:
   # what else the machine happens to be doing is not a verdict.
   gate:
     runs-on: ubuntu-latest
+    # A gate that cannot START its tests is not a verdict, and must not look like one.
+    #
+    # Sized from measurement: chromium 13.5m + firefox 22.5m + webkit 22.5m is ~59 minutes of tests,
+    # and observed job durations have run 49–70 minutes. Two hours is real headroom. GitHub's default
+    # is SIX, which is how a stalled browser download sat `in_progress` for 2h40m on run 32224855943
+    # with backend and frontend long since green and not one test executed.
+    timeout-minutes: 120
     services:
       postgres:
         image: postgres:16
@@ -126,8 +133,12 @@ jobs:
       - name: Frontend dependencies
         working-directory: frontend
         run: npm ci
+      # Pure download, no application code. It takes ~2 minutes when GitHub's mirror is healthy; the
+      # bound is here so a stall on their side fails in fifteen minutes and says which step did it,
+      # instead of holding a runner until the job timeout and reporting nothing at all.
       - name: Browsers
         working-directory: frontend
+        timeout-minutes: 15
         run: npx playwright install --with-deps chromium firefox webkit
       # The report exporter's Arabic text-layer pass (CAMPAIGNSHUB-PDF-TEXTLAYER) shells out to
       # python3 + pikepdf. It is best-effort and never blocks an export, but leaving it absent here
