@@ -29,6 +29,41 @@ return [
     |
     */
 
+    /*
+     * SNAP-STRUCTURE-RETRY-001 — `retry_after` is a delivery guarantee, not a knob.
+     *
+     * ## The live failure
+     *
+     * `retry_after` shipped at Laravel's published default of 90 seconds while
+     * `SyncAccountStructureJob` declares a timeout of 900. Redis therefore released the job back onto
+     * the queue every ninety seconds while it was STILL RUNNING. Production showed it exactly:
+     * 18:55:02 → 18:56:33 → 18:58:04, ninety-one seconds apart, three attempts spent on one piece of
+     * work that had never stopped, ending in `MaxAttemptsExceeded`. No structure sweep on the live
+     * Snapchat account had ever been allowed to finish, so Campaigns, Ad Sets, Ads and Creatives
+     * stayed empty beside metrics that were arriving perfectly well.
+     *
+     * ## The invariant
+     *
+     *     max job timeout  <=  worker/supervisor timeout  <  retry_after
+     *
+     * A worker must be allowed to finish (or be killed) before the broker is allowed to hand the job
+     * to somebody else. Violate it and the queue silently duplicates long work; nothing throws, and
+     * the only symptom is a job that never completes. `QueueRetryContractTest` now fails the build if
+     * this ordering is ever broken again.
+     *
+     * ## Where 1200 comes from — the request budget, not a round number
+     *
+     * A Snapchat structure sweep is four paged endpoint walks (campaigns, ad squads, ads, creatives).
+     * `PlatformHttp` allows 4 attempts per request at a 60s HTTP timeout, and honours `Retry-After`
+     * up to 120s. The realistic bad day for this account is ~60 requests at a couple of seconds each
+     * (~120s) plus one full throttle wait on each of the four walks (~480s) — around ten minutes,
+     * which is what the job's 900s ceiling was sized for. `retry_after` is that ceiling plus a 300s
+     * margin: the time between the timeout alarm firing and the worker actually releasing the job,
+     * during which `failed()` writes the run row to Postgres and Horizon records the failure.
+     *
+     * The margin is deliberately 1.33× the job timeout rather than an enormous value: a broker that
+     * waits an hour to re-deliver genuinely lost work is its own outage.
+     */
     'connections' => [
 
         'sync' => [
@@ -40,7 +75,7 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', env('QUEUE_RETRY_AFTER', 1200)),
             'after_commit' => false,
         ],
 
@@ -48,7 +83,7 @@ return [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),
             'queue' => env('BEANSTALKD_QUEUE', 'default'),
-            'retry_after' => (int) env('BEANSTALKD_QUEUE_RETRY_AFTER', 90),
+            'retry_after' => (int) env('BEANSTALKD_QUEUE_RETRY_AFTER', env('QUEUE_RETRY_AFTER', 1200)),
             'block_for' => 0,
             'after_commit' => false,
         ],
@@ -68,7 +103,7 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', env('QUEUE_RETRY_AFTER', 1200)),
             'block_for' => null,
             'after_commit' => false,
         ],

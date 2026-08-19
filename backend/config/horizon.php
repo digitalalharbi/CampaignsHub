@@ -206,10 +206,24 @@ return [
      * reporting a perfectly healthy queue. `reports` is listed FIRST so a backlog of routine work
      * never delays the one job a human is watching a spinner for.
      *
-     * `tries` and `timeout` are 3 and 120 to match the `queue:work` line the runbook has always
-     * specified. Leaving Horizon's 1 and 60 would have quietly halved the timeout and removed retries
-     * the moment an operator switched supervisors — a change in delivery guarantees arriving as a
-     * side effect of a deployment change.
+     * `tries` is 3 to match the `queue:work` line the runbook has always specified. Leaving Horizon's
+     * 1 would have quietly removed retries the moment an operator switched supervisors — a change in
+     * delivery guarantees arriving as a side effect of a deployment change.
+     *
+     * ## Why the timeout is 900 and not Horizon's 60, or the 120 this shipped with
+     *
+     * SNAP-STRUCTURE-RETRY-001. This is the WORKER timeout: the ceiling for any job on this
+     * supervisor that does not declare its own. `SyncAccountStructureJob` declares 900, sized to the
+     * Snapchat request budget, and a supervisor timeout below that is a contradiction the queue
+     * resolves in the worst way — Laravel's rule is `retry_after` > worker timeout >= the longest job,
+     * and 120 sat under both. The three numbers now read in one direction:
+     *
+     *     job timeout 900  <=  supervisor timeout 900  <  retry_after 1200
+     *
+     * The cost is bounded and worth naming: a job on this supervisor that hangs without its own
+     * timeout is now killed after fifteen minutes rather than two. `maxProcesses` is 10 in
+     * production, so one long structure sweep does not hold up the `reports` queue behind it.
+     * `QueueRetryContractTest` fails the build if any of these three drift out of order.
      */
     'defaults' => [
         'supervisor-1' => [
@@ -222,7 +236,7 @@ return [
             'maxJobs' => 0,
             'memory' => 128,
             'tries' => 3,
-            'timeout' => 120,
+            'timeout' => 900,
             'nice' => 0,
         ],
     ],

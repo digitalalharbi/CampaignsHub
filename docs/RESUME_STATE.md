@@ -1,4 +1,4 @@
-# START HERE — 2026-08-19, the 2-of-89 answered, and a new blocker found
+# START HERE — 2026-08-19, the queue contract fixed, awaiting live proof
 
 ## Status
 
@@ -6,7 +6,8 @@
 |---|---|
 | Snapchat live metrics + scheduled ingestion | **VERIFIED** |
 | Campaign adoption | **VERIFIED for Snapchat — 87 of 87.** The other two rows are not Snapchat's |
-| Scheduled STRUCTURE sync | **BROKEN — see SNAP-STRUCTURE-RETRY-001 below.** Next thing to fix |
+| Scheduled STRUCTURE sync | **FIX WRITTEN, NOT YET LIVE-PROVEN** — SNAP-STRUCTURE-RETRY-001 below |
+| Ad Sets / Ads / Creatives / Content | **EMPTY** — downstream of the structure sync, blocked on the above |
 | Visual downstream | **BLOCKED_OPERATIONAL_EVIDENCE** — no production session available here |
 | FX conversion to the project currency | **AWAITING CONFIGURATION** |
 
@@ -29,28 +30,60 @@ Why the two are not adopted is also answered rather than guessed: each reports
 and `unified_campaigns` is unique on `(project_id, name)`. Nothing about them is a Snapchat defect.
 They are residue, and removing them is a data-cleanup decision for the owner, not a code change.
 
-## NEW BLOCKER — SNAP-STRUCTURE-RETRY-001
+## SNAP-STRUCTURE-RETRY-001 — root cause found, fix written, LIVE PROOF STILL OWED
 
-The structure sync is failing on every attempt, and now says so (that part is the §43 fix working):
+### What production showed
 
     2026-08-19 08:52:30  failed  records=0  "SyncAccountStructureJob has been attempted too many times."
     2026-08-19 08:50:59  failed  records=0  (same)
     2026-08-19 08:49:29  failed  records=0  (same)
     2026-08-19 08:20:46  failed  records=0  (same)
 
-`$timeout = 900` shipped in `faa27ea` and these are AFTER it, so the timeout was not the whole cause.
-`MaxAttemptsExceeded` means the job is being re-queued while it is still running. The measured gaps
-are **~91 seconds** (18:55:02 → 18:56:33 → 18:58:04), which is the shape of `queue.connections.*.
-retry_after` releasing the job back before it finishes: a job timeout longer than `retry_after` is
-re-dispatched on a loop until `$tries` is exhausted.
+    measured re-delivery gaps: 18:55:02 → 18:56:33 → 18:58:04  —  ~91 seconds
 
-**First file to read:** `backend/config/queue.php` → `retry_after` on the active connection, and
-`backend/config/horizon.php` → the supervisor's `timeout`. The rule is `retry_after` > job timeout >
-supervisor timeout is wrong; it must be `retry_after` **greater than** the longest job timeout. Verify
-against the 91-second measurement before changing anything, and do not raise timeouts blindly.
+### The root cause
 
-Consequence while it is broken: campaigns, ad squads, ads and creatives do not refresh. Metrics
-continue normally — they are a different job on a different clock.
+Ninety-one seconds is not a coincidence. It is `retry_after`.
+
+| where | value, before | value, now |
+|---|---|---|
+| `config/queue.php` → redis `retry_after` (production runs `QUEUE_CONNECTION=redis`) | **90** | **1200** |
+| `config/horizon.php` → `supervisor-1.timeout` | **120** | **900** |
+| `SyncAccountStructureJob::$timeout` | 900 | 900 (unchanged) |
+
+Redis released the job back onto the queue every ninety seconds **while it was still running**.
+Three attempts, one piece of work that had never stopped, then `MaxAttemptsExceeded`. The §49
+`$timeout = 900` fix was necessary and not sufficient — it stopped Horizon killing the job at 120s,
+and thereby exposed the violation underneath it.
+
+The contract, now enforced by `QueueRetryContractTest` and by `php artisan queue:contract`:
+
+    longest job timeout  <=  worker/supervisor timeout  <  retry_after
+    900                  <=  900                        <  1200
+
+**Where 1200 comes from.** Four paged endpoint walks; `PlatformHttp` allows 4 attempts per request at
+a 60s HTTP timeout and honours `Retry-After` up to 120s. A realistic bad day is ~60 requests at a
+couple of seconds (~120s) plus one full throttle wait on each walk (~480s) — about ten minutes, which
+is what the 900s ceiling was sized for. `retry_after` is that ceiling plus 300s for the gap between
+the alarm firing and the worker releasing the job. 1.33×, not an enormous number: a broker that waits
+an hour to re-deliver genuinely lost work is its own outage.
+
+**Fail-first, proven.** Reverting `retry_after` to the live 90 in the working tree failed 3 of the 5
+contract tests; restoring 1200 passed all 5.
+
+### What is still owed before Phase 1 can be called done
+
+Deploy, then prove on production, in this order:
+
+1. `php artisan queue:contract` in the **queue** container — active connection `redis`, `retry_after`
+   1200, worker 900. The deploy script prints this and exits non-zero if it is wrong.
+2. Horizon restarted after the deploy (`horizon:terminate` is the last step of the deploy script).
+3. `integrations:diagnose --provider=snapchat --account=<id> --runs` showing ONE structure run that
+   starts once, is not re-delivered, does not report `MaxAttemptsExceeded`, finishes `success`, has
+   `records > 0`, and leaves no row at `running`.
+4. Record the MEASURED `started_at → finished_at` of that run, and replace the estimate above with it.
+
+Until 1–4 exist, this is **IMPLEMENTED_NOT_VERIFIED**, not fixed.
 
 ## What production produced
 

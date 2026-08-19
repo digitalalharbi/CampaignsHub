@@ -34,7 +34,7 @@ say "backend :8000"
 (cd "$BE" && PHP_CLI_SERVER_WORKERS=4 nohup php artisan serve --no-reload --host=127.0.0.1 --port=8000 >"$RUN/backend.log" 2>&1 &)
 # 4) Queue worker (reports,default) + Scheduler.
 say "queue worker (reports,default) + scheduler"
-(cd "$BE" && nohup php artisan queue:work --queue=reports,default --tries=3 --sleep=1 >"$RUN/queue.log" 2>&1 &)
+(cd "$BE" && nohup php artisan queue:work --queue=reports,default --tries=3 --timeout=900 --sleep=1 >"$RUN/queue.log" 2>&1 &)
 (cd "$BE" && nohup php artisan schedule:work >"$RUN/scheduler.log" 2>&1 &)
 # 5) Frontend dev server (Vite HMR).
 say "frontend :5173 (Vite HMR)"

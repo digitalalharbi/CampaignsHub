@@ -16,7 +16,7 @@ Operational requirements to run CampaignsHub in production. Verified against the
 > time a customer opens one from an email. `deploy/nginx-spa.conf` is the working configuration for
 > both origins, including the `SESSION_DOMAIN` leading dot that makes the shared cookie work.
 | Scheduler | `* * * * * php artisan schedule:run` (system cron) | Runs the timed jobs below |
-| Queue worker | `php artisan horizon` (supervised) — or `php artisan queue:work --queue=reports,default --tries=3 --timeout=120` | Report generation + async work |
+| Queue worker | `php artisan horizon` (supervised) — or `php artisan queue:work --queue=reports,default --tries=3 --timeout=900` | Report generation + async work |
 
 **Without the queue worker**, scheduled reports are created and queued but stay `processing` (a report must be
 `completed` before it can be exported/shared). **Without the scheduler**, no scheduled reports, SLA evaluation,
@@ -33,6 +33,29 @@ or alerts fire.
 sets. The dashboard is at `/horizon` and is gated on `users.is_platform_admin` — **not** on any tenant
 role or permission. That is deliberate: Horizon lists job payloads, and a payload here carries tenant
 ids, client names and store identifiers, so it is one screen showing every tenant's work at once.
+
+### The worker timeout is not a preference — SNAP-STRUCTURE-RETRY-001
+
+`--timeout=900` above matches `config/horizon.php`, and both must stay under the connection's
+`retry_after` (1200) and at or above the longest job's own timeout (`SyncAccountStructureJob`, 900):
+
+    longest job timeout  <=  worker timeout  <  retry_after
+    900                  <=  900             <  1200
+
+This is a contract, not three independent numbers. It shipped violated — `retry_after` at Laravel's
+default of 90 against a job declaring 900 — and Redis handed the same still-running structure sweep to
+a worker every ninety seconds until its attempts were spent, so no sweep on the live Snapchat account
+ever finished and Ad Sets, Ads and Creatives stayed empty. Nothing threw; 2,287 tests passed.
+
+Check it at any time, in the container you actually care about:
+
+```bash
+php artisan queue:contract
+```
+
+It prints the active connection, every `retry_after`, every worker timeout and every job's timeout,
+and exits non-zero if the ordering is wrong. The deploy script runs it in both the `backend` and
+`queue` containers before restarting Horizon.
 
 Horizon's long-wait notifications are deliberately **not** routed. Every delivery channel in this
 installation is `awaiting_provider_credentials` (§2), so wiring them would produce a queue monitor
