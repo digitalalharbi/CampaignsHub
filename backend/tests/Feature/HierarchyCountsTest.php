@@ -131,13 +131,14 @@ final class HierarchyCountsTest extends TestCase
 
         // An ad hanging off the campaign with no squad — correct on LinkedIn, a defect on Snapchat.
         $this->ad('ad-no-squad', null, $campaign);
-        // A creative belonging to no ad — unreachable from any screen that walks downwards.
+        // A creative no ad points at — unreachable through `external_ads.creative_id`, which is the
+        // relation the report reads. Its `external_ad_id` is irrelevant to that question.
         $this->creative('cr-no-ad', null, $campaign);
 
         $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
-            ->expectsOutputToContain('ads with no ad squad : 1')
-            ->expectsOutputToContain('creatives with no ad : 1')
-            ->expectsOutputToContain('1 creative(s) belong to no ad.')
+            ->expectsOutputToContain('ads with no ad squad         : 1')
+            ->expectsOutputToContain('creatives referenced by no ad: 1')
+            ->expectsOutputToContain('1 creative(s) are referenced by no ad at all.')
             ->assertSuccessful();
     }
 
@@ -241,9 +242,16 @@ final class HierarchyCountsTest extends TestCase
         ]);
     }
 
+    /**
+     * The creative, and — when an ad carries it — the CANONICAL link from that ad to it.
+     *
+     * `external_ads.creative_id` is the relation the report reads. A fixture that set only
+     * `external_creatives.external_ad_id` would be exercising the column this ticket removed from
+     * the diagnosis, and would pass or fail for reasons unrelated to what is being tested.
+     */
     private function creative(string $externalId, ?ExternalAd $ad, ?ExternalCampaign $campaign): ExternalCreative
     {
-        return ExternalCreative::withoutGlobalScopes()->create([
+        $creative = ExternalCreative::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id,
             'project_id' => $this->project->id,
             'external_campaign_id' => $campaign?->id,
@@ -253,5 +261,9 @@ final class HierarchyCountsTest extends TestCase
             'name' => "Creative {$externalId}",
             'format' => 'image',
         ]);
+
+        $ad?->forceFill(['creative_id' => $creative->getKey()])->save();
+
+        return $creative;
     }
 }

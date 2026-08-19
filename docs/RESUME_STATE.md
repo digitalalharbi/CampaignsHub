@@ -61,6 +61,71 @@ measurement also settles how impossible the old configuration was: an honest swe
 seconds, so `retry_after = 90` re-delivered it **seven times over** during one run, and the old
 120-second supervisor timeout would have killed it at 18 % complete.
 
+## CREATIVE-AD-RELATION-001 — PARTIAL. The relation already existed.
+
+**Canonical relation: `external_ads.creative_id`.** It has modelled one creative per ad, per ad,
+since `2026_07_29_000500`, with `ExternalAd::creative()` as a real `belongsTo`.
+
+- **No many-to-many table.** It would model something no connector here sends.
+- **No backfill from `external_ad_id`.** None was needed: `creative_id` was always written correctly.
+- **The Snapchat shape is proven.** Four ads, one creative, all four recorded. Other adapters emit
+  at most one creative per ad row; Google Ads and LinkedIn emit none. **Platform-native capabilities
+  are not claimed** — those need each API's contract read.
+
+The defect is the reverse column. `external_creatives.external_ad_id` is rewritten by `creativeFor()`
+on every upsert, so it names whichever ad was imported last — pinned in a test at `ad-4` of four.
+
+**#50 fixes the backend consumers:**
+
+    ExternalCreative::ads()           the honest inverse (hasMany on creative_id)
+    CreativeRows  ad_ids filter       whereHas('ads', …) — was whereIn('external_ad_id', …)
+    CreativeRows  ads options         read from external_ads — was distinct('external_ad_id')
+    integrations:diagnose --hierarchy ads with no creative / creatives referenced by ads /
+                                      creatives referenced by zero ads, all from creative_id
+
+On this branch `CreativeRows` and `DiagnoseSyncCommand` no longer read `external_ad_id` at all, so
+**`CreativePresenter` is the only production reader left.**
+
+**Still OPEN — `CreativePresenter` is the next consumer to migrate.** It emits a singular `ad_id`
+(`:65`) and `external_ids.ad` (`:115`) from the legacy column, and `CreativePulseSection:684-691`
+builds its drill-down from that — so a creative links to whichever ad was imported last. A creative
+has many ads; a singular field is wrong by construction. Fixing it changes `api.ts:112`, the
+component and its tests.
+
+**The parent requirement stays PARTIAL until that lands.**
+
+### Before Phase 4 — CREATIVE-ACCOUNT-IDENTITY-001, a second question
+
+`external_creatives` is unique on `(project_id, provider, external_creative_id)` and carries no
+`external_account_id`. `external_campaigns` does carry one — so campaigns, squads and ads are
+account-scoped and creatives are not. A project may hold several accounts of one provider, since the
+binding is unique on `(project_id, external_account_id, purpose)`.
+
+**Is `external_creative_id` unique across a provider, or only inside an ad account?** If account-
+scoped, two accounts in one project sharing a creative id collapse into one row and the canonical key
+must include account identity — its own migration and functional PR. If provider-global, nothing
+changes.
+
+Probe: retained or live Snapchat structure for one `external_creative_id` under distinct
+`external_account_id` values, plus the provider's identity contract if it states one. **The collision
+test is written only if account-scoped identity is established** — writing it first would assert the
+answer. The live account has one active binding, so production cannot exhibit this today: latent, not
+active.
+
+### Before Phase 4 — CREATIVE-CAMPAIGN-RELATION-001, a question not a verdict
+
+`creativeFor()` canonicalises by `(project_id, provider, external_creative_id)` but rewrites
+`campaign_id` / `external_campaign_id` on every upsert, from whichever ad it is processing. If a
+creative only ever lives in one campaign that is harmless repetition; if it can be used by ads in two
+campaigns it is the same last-writer shape as `external_ad_id`, and `CreativeRows`' campaign filter
+reads `creative.campaign_id` directly. **Prove the shape from retained or live Snapchat structure
+before calling it anything** — does any `external_creative_id` appear on ads in more than one
+campaign? If yes, campaign filtering derives through ads as `ad_ids` now does.
+
+Not yet measured: whether production's 5,706 ads all carry a correct `creative_id`. The counts above
+are from the test fixtures. The read-only hierarchy diagnosis is run on the live Snapchat account
+after #50 deploys, and the canonical-relation counts recorded then.
+
 ## Phase 3 — Ad Sets and Ads reach the API, and why they were missing
 
 `SnapchatStructureReachesTheApiTest` follows ONE Snapchat body to the HTTP response:
