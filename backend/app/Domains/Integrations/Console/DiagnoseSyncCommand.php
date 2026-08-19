@@ -283,13 +283,40 @@ final class DiagnoseSyncCommand extends Command
             ->whereNull('external_ad_set_id')
             ->count();
 
-        $creativesWithoutAd = (clone $creatives)->whereNull('external_ad_id')->count();
+        /*
+         * CREATIVE-AD-RELATION-001 — measured from the CANONICAL relation, never from
+         * `external_creatives.external_ad_id`.
+         *
+         * That column is rewritten by `creativeFor()` on every upsert, so it names whichever ad was
+         * imported last. `whereNull('external_ad_id')` therefore answered «has this creative ever
+         * been touched by an import», not «is this creative reachable from an ad» — a question it
+         * looks exactly like it is answering. `external_ads.creative_id` is the relation, so these
+         * three numbers are read from the ads.
+         */
+        $adsWithoutCreative = ExternalAd::withoutGlobalScopes()
+            ->whereIn('id', $adIds)
+            ->whereNull('creative_id')
+            ->count();
 
-        $this->line("  ads with no ad squad : {$adsWithoutSquad}"
+        $referencedCreativeIds = ExternalAd::withoutGlobalScopes()
+            ->whereIn('id', $adIds)
+            ->whereNotNull('creative_id')
+            ->distinct()
+            ->pluck('creative_id');
+
+        $creativesWithNoAd = (clone $creatives)
+            ->whereNotIn('id', $referencedCreativeIds->all())
+            ->count();
+
+        $this->line("  ads with no ad squad         : {$adsWithoutSquad}"
             .'   (correct on LinkedIn and Google, where ads hang off the campaign; on Snapchat an ad'
             .' is placed BY its squad, so anything above 0 here is a defect)');
-        $this->line("  creatives with no ad : {$creativesWithoutAd}"
-            .'   (orphaned — no screen that walks the hierarchy downwards can reach them)');
+        $this->line("  ads with no creative         : {$adsWithoutCreative}"
+            .'   (Google Ads and LinkedIn send none at all, so 0 is not expected there)');
+        $this->line('  creatives referenced by ads   : '.$referencedCreativeIds->count()
+            .'   (distinct `external_ads.creative_id` — the canonical relation)');
+        $this->line("  creatives referenced by no ad: {$creativesWithNoAd}"
+            .'   (unreachable from any screen that walks the hierarchy downwards)');
 
         foreach (['campaigns' => $campaignIds->count(), 'ad_squads' => $adSetIds->count(),
             'ads' => $adIds->count(), 'creatives' => (clone $creatives)->count()] as $level => $count) {
@@ -299,8 +326,13 @@ final class DiagnoseSyncCommand extends Command
             }
         }
 
-        if ($creativesWithoutAd > 0) {
-            $this->warn("  {$creativesWithoutAd} creative(s) belong to no ad.");
+        if ($creativesWithNoAd > 0) {
+            $this->warn("  {$creativesWithNoAd} creative(s) are referenced by no ad at all.");
+        }
+
+        // Google Ads and LinkedIn send no creative with an ad at all, so 0 there is the shape, not a gap.
+        if ($adsWithoutCreative > 0 && ! in_array($account->provider, ['google_ads', 'linkedin'], true)) {
+            $this->warn("  {$adsWithoutCreative} ad(s) carry no creative on a provider that sends one.");
         }
 
         $this->line('');

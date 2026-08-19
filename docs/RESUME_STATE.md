@@ -61,6 +61,40 @@ measurement also settles how impossible the old configuration was: an honest swe
 seconds, so `retry_after = 90` re-delivered it **seven times over** during one run, and the old
 120-second supervisor timeout would have killed it at 18 % complete.
 
+## CREATIVE-AD-RELATION-001 — PARTIAL. The relation already existed.
+
+**Canonical relation: `external_ads.creative_id`.** It has modelled one creative per ad, per ad,
+since `2026_07_29_000500`, with `ExternalAd::creative()` as a real `belongsTo`.
+
+- **No many-to-many table.** It would model something no connector here sends.
+- **No backfill from `external_ad_id`.** None was needed: `creative_id` was always written correctly.
+- **Proven for Snapchat only.** Four ads, one creative, all four recorded. Every connector emits at
+  most one `creative` per ad row, and Google Ads and LinkedIn emit none — but whether Meta, TikTok,
+  X, LinkedIn or Google permit more in their OWN models is unverified and needs their API contracts.
+
+The defect is the reverse column. `external_creatives.external_ad_id` is rewritten by `creativeFor()`
+on every upsert, so it names whichever ad was imported last — pinned in a test at `ad-4` of four.
+
+**#50 fixes the backend consumers:**
+
+    ExternalCreative::ads()           the honest inverse (hasMany on creative_id)
+    CreativeRows  ad_ids filter       whereHas('ads', …) — was whereIn('external_ad_id', …)
+    CreativeRows  ads options         read from external_ads — was distinct('external_ad_id')
+    integrations:diagnose --hierarchy ads with no creative / creatives referenced by ads /
+                                      creatives referenced by zero ads, all from creative_id
+
+**Still OPEN — `CreativePresenter` is the next consumer to migrate.** It emits a singular `ad_id`
+(`:65`) and `external_ids.ad` (`:115`) from the legacy column, and `CreativePulseSection:684-691`
+builds its drill-down from that — so a creative links to whichever ad was imported last. A creative
+has many ads; a singular field is wrong by construction. Fixing it changes `api.ts:112`, the
+component and its tests.
+
+**The parent requirement stays PARTIAL until that lands.**
+
+Not yet measured: whether production's 5,706 ads all carry a correct `creative_id`. The counts above
+are from the test fixtures. The read-only hierarchy diagnosis is run on the live Snapchat account
+after #50 deploys, and the canonical-relation counts recorded then.
+
 ## Phase 3 — Ad Sets and Ads reach the API, and why they were missing
 
 `SnapchatStructureReachesTheApiTest` follows ONE Snapchat body to the HTTP response:

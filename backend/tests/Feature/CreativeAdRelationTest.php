@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
@@ -108,6 +109,8 @@ final class CreativeAdRelationTest extends TestCase
         ]);
     }
 
+    // ── The relation itself ───────────────────────────────────────────────────────────────────
+
     /**
      * The fact the schema already holds, stated so a regression is unmistakable.
      */
@@ -115,8 +118,7 @@ final class CreativeAdRelationTest extends TestCase
     {
         $this->sync();
 
-        $creative = ExternalCreative::withoutGlobalScopes()
-            ->where('external_creative_id', 'cr-1')->firstOrFail();
+        $creative = $this->sharedCreative();
 
         $this->assertSame(
             1,
@@ -140,20 +142,11 @@ final class CreativeAdRelationTest extends TestCase
     {
         $this->sync();
 
-        $creative = ExternalCreative::withoutGlobalScopes()
-            ->where('external_creative_id', 'cr-1')->firstOrFail();
-
         $this->assertSame(
             'ad-4',
-            $creative->external_ad_id,
+            $this->sharedCreative()->external_ad_id,
             'This is the defect, asserted so it cannot be mistaken for a relation: the column holds '
             .'the LAST ad imported, and says nothing about the other three.',
-        );
-
-        $this->assertGreaterThan(
-            1,
-            ExternalAd::withoutGlobalScopes()->where('creative_id', $creative->getKey())->count(),
-            'Four ads point at this creative; the column above names one of them.',
         );
     }
 
@@ -164,78 +157,153 @@ final class CreativeAdRelationTest extends TestCase
     {
         $this->sync();
 
-        $creative = ExternalCreative::withoutGlobalScopes()
-            ->where('external_creative_id', 'cr-1')->firstOrFail();
-
         $this->assertSame(
             ['ad-1', 'ad-2', 'ad-3', 'ad-4'],
-            $creative->ads()->withoutGlobalScopes()->orderBy('external_id')->pluck('external_id')->all(),
+            $this->sharedCreative()->ads()->withoutGlobalScopes()->orderBy('external_id')->pluck('external_id')->all(),
             'ExternalCreative::ads() is the honest inverse of ExternalAd::creative().',
         );
     }
 
-    /**
-     * Idempotency: a second sweep changes no counts and adds no duplicate creative.
-     */
     public function test_a_second_sweep_adds_no_creative_and_no_relation_drifts(): void
     {
         $this->sync();
         $this->sync();
 
-        $creative = ExternalCreative::withoutGlobalScopes()
-            ->where('external_creative_id', 'cr-1')->firstOrFail();
-
         $this->assertSame(1, ExternalCreative::withoutGlobalScopes()->count());
-        $this->assertSame(4, ExternalAd::withoutGlobalScopes()->where('creative_id', $creative->getKey())->count());
+        $this->assertSame(
+            4,
+            ExternalAd::withoutGlobalScopes()->where('creative_id', $this->sharedCreative()->getKey())->count(),
+        );
     }
 
+    // ── The readers, exercised directly ───────────────────────────────────────────────────────
+    //
+    // The four tests above prove the SHAPE. They execute none of `CreativeRows`, so they are not
+    // evidence for it: the filter and the options list are separate code paths and get their own
+    // failing-first cases here. Both fail against `external_ad_id` and pass against the relation.
+
     /**
-     * Isolation: another project's ads never appear against this project's creative, even when the
-     * provider hands out the same creative id — which it does, because ids are per-account.
+     * FAIL-FIRST: filtering by ANY of the four ads must find the creative they share.
+     *
+     * Against the old column this passed for `ad-4` and returned nothing for the other three — and
+     * an empty result reads as «this ad has no creatives», which is a sentence the data disproves.
      */
-    public function test_another_projects_ads_never_attach_to_this_projects_creative(): void
+    public function test_filtering_by_each_of_the_four_ads_returns_the_shared_creative(): void
     {
         $this->sync();
 
-        $otherWs = ClientWorkspace::create([
-            'tenant_id' => $this->tenant->id, 'name' => 'C2', 'slug' => 'c2-'.uniqid(),
-            'mode' => 'managed', 'status' => 'active', 'client_status' => 'active',
-        ]);
-        $otherProject = Project::create([
-            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $otherWs->id, 'name' => 'P2', 'status' => 'active',
-        ]);
+        $creative = $this->sharedCreative();
 
-        $otherCampaign = ExternalCampaign::withoutGlobalScopes()->create([
-            'tenant_id' => $this->tenant->id, 'project_id' => $otherProject->id,
-            'external_account_id' => $this->account->id, 'provider' => 'snapchat',
-            'external_id' => 'cmp-other', 'name' => 'Other', 'status' => 'active',
-        ]);
-        $otherSet = ExternalAdSet::withoutGlobalScopes()->create([
-            'tenant_id' => $this->tenant->id, 'project_id' => $otherProject->id,
-            'external_campaign_id' => $otherCampaign->id, 'provider' => 'snapchat',
-            'external_id' => 'sq-other', 'name' => 'Other squad', 'status' => 'active',
-        ]);
-        $otherCreative = ExternalCreative::withoutGlobalScopes()->create([
-            'tenant_id' => $this->tenant->id, 'project_id' => $otherProject->id,
-            'external_campaign_id' => $otherCampaign->id, 'provider' => 'snapchat',
-            // The SAME provider creative id — ids are per-account, so this collision is realistic.
-            'external_creative_id' => 'cr-1', 'name' => 'Other creative', 'format' => 'image',
-        ]);
-        ExternalAd::withoutGlobalScopes()->create([
-            'tenant_id' => $this->tenant->id, 'project_id' => $otherProject->id,
-            'external_campaign_id' => $otherCampaign->id, 'external_ad_set_id' => $otherSet->id,
-            'creative_id' => $otherCreative->id, 'provider' => 'snapchat',
-            'external_id' => 'ad-other', 'name' => 'Other ad', 'status' => 'active',
-        ]);
+        foreach (['ad-1', 'ad-2', 'ad-3', 'ad-4'] as $adExternalId) {
+            $query = ExternalCreative::withoutGlobalScopes()->where('project_id', $this->project->id);
+            app(CreativeRows::class)->applyFilters($query, ['ad_ids' => [$adExternalId]]);
 
-        $mine = ExternalCreative::withoutGlobalScopes()
-            ->where('project_id', $this->project->id)->where('external_creative_id', 'cr-1')->firstOrFail();
+            $this->assertSame(
+                [$creative->getKey()],
+                $query->pluck('id')->all(),
+                "Filtering by {$adExternalId} must find the creative that ad carries.",
+            );
+        }
+    }
+
+    /**
+     * FAIL-FIRST: the ads filter offers every ad, not one per creative.
+     */
+    public function test_the_ads_filter_offers_all_four_ad_ids(): void
+    {
+        $this->sync();
+
+        $options = app(CreativeRows::class)->filterOptions(
+            fn () => ExternalCreative::withoutGlobalScopes()->where('project_id', $this->project->id),
+        );
 
         $this->assertSame(
             ['ad-1', 'ad-2', 'ad-3', 'ad-4'],
-            $mine->ads()->withoutGlobalScopes()->orderBy('external_id')->pluck('external_id')->all(),
-            'The other project shares a provider creative id and must not share the relation.',
+            $options['ads'],
+            'The option list read `distinct(external_ad_id)`, which offers one ad per creative — so '
+            .'three of these four were unselectable and the control looked like a complete list.',
         );
+    }
+
+    /**
+     * A different project's ad id must not select this project's creative, and must not appear in
+     * its options — provider ids are per-account, so the collision below is realistic.
+     */
+    public function test_another_projects_ads_do_not_leak_into_this_projects_filter_or_options(): void
+    {
+        $this->sync();
+        [$otherProject, $otherCreative] = $this->otherProjectWithCollidingIds();
+
+        $query = ExternalCreative::withoutGlobalScopes()->where('project_id', $this->project->id);
+        app(CreativeRows::class)->applyFilters($query, ['ad_ids' => ['ad-other']]);
+
+        $this->assertSame([], $query->pluck('id')->all(), "Another project's ad must select nothing here.");
+
+        $options = app(CreativeRows::class)->filterOptions(
+            fn () => ExternalCreative::withoutGlobalScopes()->where('project_id', $this->project->id),
+        );
+
+        $this->assertNotContains('ad-other', $options['ads']);
+
+        // And the relation itself stays on its own side of the boundary.
+        $this->assertSame(
+            ['ad-1', 'ad-2', 'ad-3', 'ad-4'],
+            $this->sharedCreative()->ads()->withoutGlobalScopes()->orderBy('external_id')->pluck('external_id')->all(),
+        );
+        $this->assertSame(
+            ['ad-other'],
+            $otherCreative->ads()->withoutGlobalScopes()->pluck('external_id')->all(),
+        );
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────────────────────────
+
+    private function sharedCreative(): ExternalCreative
+    {
+        return ExternalCreative::withoutGlobalScopes()
+            ->where('project_id', $this->project->id)
+            ->where('external_creative_id', 'cr-1')
+            ->firstOrFail();
+    }
+
+    /**
+     * A second project holding the SAME provider ids — creative `cr-1` included.
+     *
+     * @return array{0: Project, 1: ExternalCreative}
+     */
+    private function otherProjectWithCollidingIds(): array
+    {
+        $ws = ClientWorkspace::create([
+            'tenant_id' => $this->tenant->id, 'name' => 'C2', 'slug' => 'c2-'.uniqid(),
+            'mode' => 'managed', 'status' => 'active', 'client_status' => 'active',
+        ]);
+        $project = Project::create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $ws->id, 'name' => 'P2', 'status' => 'active',
+        ]);
+
+        $campaign = ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $project->id,
+            'external_account_id' => $this->account->id, 'provider' => 'snapchat',
+            'external_id' => 'cmp-other', 'name' => 'Other', 'status' => 'active',
+        ]);
+        $set = ExternalAdSet::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $project->id,
+            'external_campaign_id' => $campaign->id, 'provider' => 'snapchat',
+            'external_id' => 'sq-other', 'name' => 'Other squad', 'status' => 'active',
+        ]);
+        $creative = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $project->id,
+            'external_campaign_id' => $campaign->id, 'provider' => 'snapchat',
+            'external_creative_id' => 'cr-1', 'name' => 'Other creative', 'format' => 'image',
+        ]);
+        ExternalAd::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $project->id,
+            'external_campaign_id' => $campaign->id, 'external_ad_set_id' => $set->id,
+            'creative_id' => $creative->id, 'provider' => 'snapchat',
+            'external_id' => 'ad-other', 'name' => 'Other ad', 'status' => 'active',
+        ]);
+
+        return [$project, $creative];
     }
 
     private function sync(): void
