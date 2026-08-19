@@ -26,18 +26,34 @@ Then read, in this order — they are the project's own record and they outrank 
 Work from what those say. If a document contradicts the code, the code is the fact and the document
 is a defect worth fixing.
 
-## The Claude GitHub Action is PAUSED_BY_OWNER
+## AUTOPILOT_ENABLED_BY_OWNER — 2026-08-20
 
-`.github/workflows/claude.yml` works — it was proven end to end on PR #5 — and it is **not to be
-used**. The owner paused it to avoid spending Anthropic API credits. Do not write `@claude` in an
-issue or a pull request, and do not trigger a run any other way.
+The owner has re-enabled autonomous development. `.github/workflows/campaignshub-autopilot.yml` runs
+the agent; `.github/workflows/claude.yml` remains as it was and is still not triggered by `@claude`.
 
-Nothing is removed: the GitHub App stays installed, `ANTHROPIC_API_KEY` stays in Actions secrets, and
-the workflow file stays exactly as it is. This is a decision about USE, not a rollback, and it is
-reversed by the owner saying so.
+**The cost guard is part of the decision, not an optimisation.** Enabling the agent was never
+authorisation for unbounded paid API consumption, so the schedule is deliberately split in two:
 
-Development happens in a Claude Code conversation instead. The cycle below is unchanged — the work is
-authored in the conversation and still reaches `main` only through a branch, a pull request and CI.
+- A deterministic **preflight** job — `gh`, shell and repository files only — decides whether there is
+  work. It costs zero Anthropic tokens.
+- The Anthropic action is gated on `needs.preflight.outputs.invoke_claude == 'true'`. **An idle
+  scheduled hour invokes Anthropic zero times.**
+
+Claude is invoked for implementation, for investigation that needs reasoning, and to root-cause a
+real test failure. It is never invoked to wait for CI, to merge a known-green SHA, to wait for a
+deploy, to poll a workflow, or to discover that there is nothing to do. Those are controller jobs and
+they are deterministic.
+
+**Secrets never reach the agent.** The Claude job holds `contents: write`, `pull-requests: write`,
+`issues: write` and `actions: read` — never `actions: write`. Provider credentials (Snapchat, Meta,
+Google Ads, TikTok, X, LinkedIn), VPS credentials and payment credentials are not exposed to it, and
+production is reached only through the existing fixed-command workflows. The agent does not SSH and
+does not construct remote commands.
+
+Everything else in this document remains binding, in particular: Git outranks the matrix, which
+outranks `RESUME_STATE`, which outranks any other document; VERIFIED work is never redone without a
+proven fail-first defect; nothing is claimed LIVE_VERIFIED without real operational evidence; and no
+change reaches `main` except through a branch, a pull request and green CI.
 
 ## How work reaches main
 
