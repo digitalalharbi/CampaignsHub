@@ -7,7 +7,7 @@
 | Snapchat live metrics + scheduled ingestion | **VERIFIED** |
 | Campaign adoption | **VERIFIED for Snapchat — 87 of 87.** The other two rows are not Snapchat's |
 | Scheduled STRUCTURE sync | **LIVE_VERIFIED** — one clean run on production, evidence below |
-| Ad Sets / Ads / Creatives / Content | **DISCOVERED, not yet proven on screen** — 11,686 records stored |
+| Ad Sets / Ads / Creatives / Content | **DISCOVERED, not yet proven on screen** — 187 ad squads, 5,706 ads, 1,451 creatives |
 | Visual downstream | **BLOCKED_OPERATIONAL_EVIDENCE** — no production session available here |
 | FX conversion to the project currency | **AWAITING CONFIGURATION** |
 
@@ -44,6 +44,11 @@ Acceptance `32264564608` — `integrations:accept-structure --observe=1500`:
     ✓ One run started, was not re-delivered, finished success, and stored 11686 record(s).
     ✓ Measured structure sweep runtime: 667s.
 
+**«11686 record(s)» is the command's own wording and it is wrong.** 11,686 is the number of UPSERT
+OPERATIONS the sweep performed, not rows in any table — see CREATIVE-COUNT-001 below, where it
+decomposes exactly and overstates creatives by 3.9×. The wording is corrected in the functional PR
+that fixes CREATIVE-AD-RELATION-001; this file is docs-only and does not touch the command.
+
 The poll printed `1/1 run(s) started` for eleven minutes and never `2/1`. No `MaxAttemptsExceeded`,
 no stale `running` row, no duplicate.
 
@@ -55,6 +60,65 @@ The estimate in `config/queue.php` was reasoned from the request budget and came
 measurement also settles how impossible the old configuration was: an honest sweep needs 667
 seconds, so `retry_after = 90` re-delivered it **seven times over** during one run, and the old
 120-second supervisor timeout would have killed it at 18 % complete.
+
+## Phase 2 — the hierarchy, counted on production (2026-08-19)
+
+`integrations:diagnose --provider=snapchat --linked --hierarchy --downstream`, run `32273929086`:
+
+| level | count |
+|---|---|
+| campaigns | **89** external campaign rows — **87 of them Snapchat's**, plus the 2 sandbox rows |
+| ad_squads | **187** |
+| ads | **5,706** |
+| creatives | **1,451** |
+
+**89 is not Snapchat's campaign count.** It is how many `external_campaigns` rows the account has, and
+two of those (`sbx-cmp-1`, `sbx-cmp-2`) are sandbox residue Snapchat never returned. Snapchat's figure
+is 87, corroborated exactly by every metrics run: `raw 87 → parsed 87 → mapped 87`.
+
+    ads with no ad squad : 0     (Snapchat places an ad BY its squad — anything above 0 is a defect)
+    creatives with no ad : 0
+
+No level is 0. Orphaned ad squads and ads cannot appear: `external_campaign_id` is NOT NULL with a
+cascading foreign key on both tables, so a row naming an undiscovered parent is rejected at import,
+counted as `skipped`, and turns the run `partial_mapping`.
+
+### CREATIVE-COUNT-001 — `records` counts upserts, not rows
+
+The run reported `records=11,686`. The levels decompose it exactly:
+
+    87 campaigns + 187 ad squads + 5,706 ads + 5,706 creative upserts = 11,686
+
+`ImportExternalStructure::creativeFor()` is called once per AD, does `updateOrCreate` keyed on
+`(project_id, provider, external_creative_id)`, and increments the counter on every call. So the
+headline overstated creatives by **3.9×** — 5,706 reported against 1,451 that exist. The sweep's
+total is not a statement about what the database holds, which is why the per-level counts were worth
+having.
+
+### CREATIVE-AD-RELATION-001 — the next defect
+
+`external_creatives.external_ad_id` is a single string column, overwritten on each upsert, so it
+keeps only the LAST ad that referenced the creative. 5,706 ads share 1,451 creatives — roughly four
+ads per creative — and the table can express one.
+
+`creatives with no ad : 0` is therefore true and incomplete. The relation is many-to-one in reality
+and one-to-one in the schema.
+
+**Blast radius, read off the code rather than assumed.** `external_ad_id` is read in exactly three
+places, all creative surfaces:
+
+    CreativePresenter.php:65,115     the creative detail payload
+    CreativeRows.php:127,379         the library's `ad_ids` filter, and its distinct-ads aggregate
+                                     — which reports 1,451 today where 5,706 is the truth
+    DiagnoseSyncCommand.php:286      the orphan count
+
+Phase 3's path is `CampaignStructureController` and `RelatedEntitiesController`, which read
+`ExternalAdSet` by `external_campaign_id` and `ExternalAd` by `external_ad_set_id`. Neither touches
+this column.
+
+**So it blocks Phase 4 and Phase 5 and nothing else.** Phase 3 proceeds first, unchanged from the
+brief. **First file to read when Phase 4 opens:** `ImportExternalStructure::creativeFor()` — the
+`updateOrCreate` key and the `external_ad_id` assignment.
 
 ## The two campaigns of «89», answered
 
@@ -74,73 +138,6 @@ Why the two are not adopted is also answered rather than guessed: each reports
 `same-name visible campaigns=1` — a unified campaign already holds that exact name in that project,
 and `unified_campaigns` is unique on `(project_id, name)`. Nothing about them is a Snapchat defect.
 They are residue, and removing them is a data-cleanup decision for the owner, not a code change.
-
-## SNAP-STRUCTURE-RETRY-001 — root cause found, fix written, LIVE PROOF STILL OWED
-
-### What production showed
-
-    2026-08-19 08:52:30  failed  records=0  "SyncAccountStructureJob has been attempted too many times."
-    2026-08-19 08:50:59  failed  records=0  (same)
-    2026-08-19 08:49:29  failed  records=0  (same)
-    2026-08-19 08:20:46  failed  records=0  (same)
-
-    measured re-delivery gaps: 18:55:02 → 18:56:33 → 18:58:04  —  ~91 seconds
-
-### The root cause
-
-Ninety-one seconds is not a coincidence. It is `retry_after`.
-
-| where | value, before | value, now |
-|---|---|---|
-| `config/queue.php` → redis `retry_after` (production runs `QUEUE_CONNECTION=redis`) | **90** | **1200** |
-| `config/horizon.php` → `supervisor-1.timeout` | **120** | **900** |
-| `SyncAccountStructureJob::$timeout` | 900 | 900 (unchanged) |
-
-Redis released the job back onto the queue every ninety seconds **while it was still running**.
-Three attempts, one piece of work that had never stopped, then `MaxAttemptsExceeded`. The §49
-`$timeout = 900` fix was necessary and not sufficient — it stopped Horizon killing the job at 120s,
-and thereby exposed the violation underneath it.
-
-The contract, now enforced by `QueueRetryContractTest` and by `php artisan queue:contract`:
-
-    longest job timeout  <=  worker/supervisor timeout  <  retry_after
-    900                  <=  900                        <  1200
-
-**Where 1200 comes from.** Four paged endpoint walks; `PlatformHttp` allows 4 attempts per request at
-a 60s HTTP timeout and honours `Retry-After` up to 120s. A realistic bad day is ~60 requests at a
-couple of seconds (~120s) plus one full throttle wait on each walk (~480s) — about ten minutes, which
-is what the 900s ceiling was sized for. `retry_after` is that ceiling plus 300s for the gap between
-the alarm firing and the worker releasing the job. 1.33×, not an enormous number: a broker that waits
-an hour to re-deliver genuinely lost work is its own outage.
-
-**Fail-first, proven.** Reverting `retry_after` to the live 90 in the working tree failed 3 of the 5
-contract tests; restoring 1200 passed all 5.
-
-### What is still owed before Phase 1 can be called done
-
-Deploy, then prove on production, in this order:
-
-1. `php artisan queue:contract` in the **queue** container — active connection `redis`, `retry_after`
-   1200, worker 900. The deploy script prints this and exits non-zero if it is wrong.
-2. Horizon restarted after the deploy (`horizon:terminate` is the last step of the deploy script).
-3. Run the **Production Structure Acceptance** workflow. It calls
-   `integrations:accept-structure --provider=snapchat --observe=1500`, which queues one sweep and
-   polls the run rows CREATED BY THAT INVOCATION until they are terminal, and fails on any of:
-
-   - fewer runs than accounts (the job was never queued — usually a stale unique-job lock)
-   - more runs than accounts (re-delivery)
-   - `MaxAttemptsExceeded` in any run's error
-   - a run still `running` when the window closes
-   - `success` with `records = 0`
-   - `no_data` while the retained payload carries rows
-   - any run already `running` before the check started
-
-   A fixed sleep cannot do this. The job's ceiling is 900s, so a five-minute wait calls a healthy
-   sweep «still running» — and prints something reassuring for the very defect it should catch,
-   because a job re-queued every ninety seconds always leaves a recent-looking run.
-4. Record the MEASURED runtime the command prints, and replace the estimate above with it.
-
-Until 1–4 exist, this is **IMPLEMENTED_NOT_VERIFIED**, not fixed.
 
 ## What production produced
 
