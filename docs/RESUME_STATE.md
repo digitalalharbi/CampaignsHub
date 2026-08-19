@@ -1,4 +1,4 @@
-# START HERE — 2026-08-19, the queue contract fixed, awaiting live proof
+# START HERE — 2026-08-19, SNAP-STRUCTURE-RETRY-001 closed on production
 
 ## Status
 
@@ -6,10 +6,55 @@
 |---|---|
 | Snapchat live metrics + scheduled ingestion | **VERIFIED** |
 | Campaign adoption | **VERIFIED for Snapchat — 87 of 87.** The other two rows are not Snapchat's |
-| Scheduled STRUCTURE sync | **FIX WRITTEN, NOT YET LIVE-PROVEN** — SNAP-STRUCTURE-RETRY-001 below |
-| Ad Sets / Ads / Creatives / Content | **EMPTY** — downstream of the structure sync, blocked on the above |
+| Scheduled STRUCTURE sync | **LIVE_VERIFIED** — one clean run on production, evidence below |
+| Ad Sets / Ads / Creatives / Content | **DISCOVERED, not yet proven on screen** — 11,686 records stored |
 | Visual downstream | **BLOCKED_OPERATIONAL_EVIDENCE** — no production session available here |
 | FX conversion to the project currency | **AWAITING CONFIGURATION** |
+
+## SNAP-STRUCTURE-RETRY-001 — CLOSED, with production evidence
+
+### The root cause
+
+`retry_after` shipped at Laravel's published default of 90 seconds while `SyncAccountStructureJob`
+declares `$timeout = 900`. Redis released the job back onto the queue every ninety seconds **while it
+was still running**. Production showed it to the second — 12:55:01 → 12:56:32 → 12:58:03, ninety-one
+seconds apart, three attempts on one sweep that had never stopped, ending in `MaxAttemptsExceeded`.
+
+| where | before | after |
+|---|---|---|
+| `config/queue.php` → `retry_after`, every connection with one | **90** | **1200** |
+| `config/horizon.php` → `supervisor-1.timeout` | **120** | **900** |
+| `SyncAccountStructureJob::$timeout` | 900 | 900 (unchanged) |
+
+### Proven on production, 2026-08-19
+
+Deploy `32264366045` — `queue:contract` printed from BOTH containers, one second apart:
+
+    Active queue connection: redis
+      database: 1200s   beanstalkd: 1200s   redis: 1200s ← active
+    Worker timeouts: defaults/supervisor-1 900s, production/supervisor-1 900s
+    Job timeouts: SyncAccountStructureJob 900s, GenerateReportExportJob 180s, GenerateReportJob 120s
+    Contract holds: longest job 900s <= worker 900s < retry_after 1200s.
+
+Acceptance `32264564608` — `integrations:accept-structure --observe=1500`:
+
+    bd34d613-9a69-4f8a-b9c6-edb3e217499a  success  records=11686
+    2026-08-19 14:32:02 → 2026-08-19 14:43:09  (667s)
+
+    ✓ One run started, was not re-delivered, finished success, and stored 11686 record(s).
+    ✓ Measured structure sweep runtime: 667s.
+
+The poll printed `1/1 run(s) started` for eleven minutes and never `2/1`. No `MaxAttemptsExceeded`,
+no stale `running` row, no duplicate.
+
+### The margin, now measured rather than derived
+
+**667s measured  <  900s job ceiling  <  1200s retry_after** — 1.35× and 1.8× headroom.
+
+The estimate in `config/queue.php` was reasoned from the request budget and came out close. The
+measurement also settles how impossible the old configuration was: an honest sweep needs 667
+seconds, so `retry_after = 90` re-delivered it **seven times over** during one run, and the old
+120-second supervisor timeout would have killed it at 18 % complete.
 
 ## The two campaigns of «89», answered
 

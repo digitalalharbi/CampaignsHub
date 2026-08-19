@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Console;
 
 use App\Domains\Campaigns\Actions\StampHistoricalUnlinks;
+use App\Domains\Campaigns\Models\ExternalAd;
+use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
@@ -55,7 +58,8 @@ final class DiagnoseSyncCommand extends Command
         {--accounts=10 : How many accounts to show}
         {--linked : Only accounts with an ACTIVE binding to a project}
         {--payload : Print the provider\'s own last insights body, and the campaigns it could match}
-        {--downstream : What the assigned PROJECT now holds — the tables every surface reads}';
+        {--downstream : What the assigned PROJECT now holds — the tables every surface reads}
+        {--hierarchy : Campaigns → ad squads → ads → creatives, with the orphans at each level}';
 
     protected $description = 'Read-only: where a sync\'s rows stopped, per account, with the four counts.';
 
@@ -170,20 +174,27 @@ final class DiagnoseSyncCommand extends Command
             ->limit($runLimit)
             ->get();
 
+        /*
+         * A missing METRICS run is not a reason to stop reporting — SNAP-STRUCTURE-RETRY-001 §2.
+         *
+         * This used to `return` here, so an account with no metrics run said one line and then
+         * nothing: no structure runs, no hierarchy, no downstream, however much of all three it
+         * actually held. Structure and metrics are two pipelines on two clocks, and the whole point
+         * of this command is that they are reported separately. Silence about one of them because
+         * the other has not run yet is the same failure in miniature as the one being diagnosed.
+         */
         if ($runs->isEmpty()) {
-            $this->line('  No metrics run has ever been recorded for this account.');
+            $this->line('  No metrics run has ever been recorded for this account. Structure is reported below regardless.');
+        } else {
+            $this->table(
+                ['started', 'window', 'status', 'raw', 'parsed', 'mapped', 'stored', 'source'],
+                $runs->map(fn (MetricSyncRun $run) => $this->runRow($run, $account))->all(),
+            );
 
-            return;
-        }
-
-        $this->table(
-            ['started', 'window', 'status', 'raw', 'parsed', 'mapped', 'stored', 'source'],
-            $runs->map(fn (MetricSyncRun $run) => $this->runRow($run, $account))->all(),
-        );
-
-        foreach ($runs as $run) {
-            if (($run->error ?? '') !== '') {
-                $this->line(sprintf('  %s → %s', $run->started_at?->toDateTimeString() ?? '?', $run->error));
+            foreach ($runs as $run) {
+                if (($run->error ?? '') !== '') {
+                    $this->line(sprintf('  %s → %s', $run->started_at?->toDateTimeString() ?? '?', $run->error));
+                }
             }
         }
 
@@ -193,9 +204,110 @@ final class DiagnoseSyncCommand extends Command
             $this->reportPayload($account, $runs->first());
         }
 
+        if ((bool) $this->option('hierarchy')) {
+            $this->reportHierarchy($account);
+        }
+
         if ((bool) $this->option('downstream')) {
             $this->reportDownstream($account, $binding?->project_id === null ? null : (string) $binding->project_id, $projectName);
         }
+    }
+
+    /**
+     * SNAP-STRUCTURE-RETRY-001 §2 — the four levels, counted, and whether each row was PLACED.
+     *
+     * ## Why counts alone are not an answer
+     *
+     * A sweep reporting «11,686 records» says nothing about shape. Every one of those rows could be a
+     * campaign, or every ad could be filed under nothing, and the total would read the same. The
+     * counts say what was discovered; placement says whether any screen can reach it, because most of
+     * them walk the hierarchy downwards from the campaign.
+     *
+     * ## Where the orphans actually are, which is not where you would look for them
+     *
+     * `external_ad_sets.external_campaign_id` and `external_ads.external_campaign_id` are NOT NULL
+     * with cascading foreign keys. **An orphaned ad squad or ad cannot be stored at all** — a row
+     * naming a parent the sweep has not discovered is rejected at import, counted as `skipped`, and
+     * turns the run `partial_mapping`. So a column headed «orphan ad squads» would print 0 for ever,
+     * whatever happened, which is precisely the kind of reassuring number this whole ticket is about.
+     * The real figure lives in the run, and is shown there.
+     *
+     * Two nullable parents remain, and they are counted because they can genuinely happen:
+     *
+     * - an ad with no ad squad — CORRECT on LinkedIn and Google, where ads hang off the campaign,
+     *   and wrong on Snapchat, where `ad_squad_id` is how an ad is placed at all. One number cannot
+     *   be a defect on one platform and normal on another, so it is stated and left to be read.
+     * - a creative with no ad — nothing on any screen can reach it.
+     *
+     * Scoped to THIS account's campaigns throughout. A tenant-wide count would fold in every other
+     * connection and report a healthy hierarchy for an account that has none.
+     */
+    private function reportHierarchy(ExternalAccount $account): void
+    {
+        $campaignIds = ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $account->getKey())
+            ->pluck('id');
+
+        $this->line('');
+        $this->line('  HIERARCHY — what the structure sweep discovered, and whether it was placed');
+
+        if ($campaignIds->isEmpty()) {
+            $this->line('  No campaigns discovered for this account, so there is no hierarchy to count.');
+
+            return;
+        }
+
+        $adSetIds = ExternalAdSet::withoutGlobalScopes()
+            ->whereIn('external_campaign_id', $campaignIds)
+            ->pluck('id');
+
+        $adIds = ExternalAd::withoutGlobalScopes()
+            ->whereIn('external_campaign_id', $campaignIds)
+            ->pluck('id');
+
+        $creatives = ExternalCreative::withoutGlobalScopes()
+            ->whereIn('external_campaign_id', $campaignIds);
+
+        $this->table(
+            ['level', 'count'],
+            [
+                ['campaigns', $campaignIds->count()],
+                ['ad_squads', $adSetIds->count()],
+                ['ads', $adIds->count()],
+                ['creatives', (clone $creatives)->count()],
+            ],
+        );
+
+        $adsWithoutSquad = ExternalAd::withoutGlobalScopes()
+            ->whereIn('id', $adIds)
+            ->whereNull('external_ad_set_id')
+            ->count();
+
+        $creativesWithoutAd = (clone $creatives)->whereNull('external_ad_id')->count();
+
+        $this->line("  ads with no ad squad : {$adsWithoutSquad}"
+            .'   (correct on LinkedIn and Google, where ads hang off the campaign; on Snapchat an ad'
+            .' is placed BY its squad, so anything above 0 here is a defect)');
+        $this->line("  creatives with no ad : {$creativesWithoutAd}"
+            .'   (orphaned — no screen that walks the hierarchy downwards can reach them)');
+
+        foreach (['campaigns' => $campaignIds->count(), 'ad_squads' => $adSetIds->count(),
+            'ads' => $adIds->count(), 'creatives' => (clone $creatives)->count()] as $level => $count) {
+            if ($count === 0) {
+                $this->warn("  {$level} = 0. If the provider returned rows at this level, that is a defect, "
+                    .'not a quiet account — read the body with --payload before accepting it.');
+            }
+        }
+
+        if ($creativesWithoutAd > 0) {
+            $this->warn("  {$creativesWithoutAd} creative(s) belong to no ad.");
+        }
+
+        $this->line('');
+        $this->line('  Orphaned ad squads and ads cannot appear above: `external_campaign_id` is NOT NULL on');
+        $this->line('  both tables, so a row naming an undiscovered parent is REJECTED at import rather than');
+        $this->line('  stored detached. It is counted as `skipped` and makes the run `partial_mapping` —');
+        $this->line('  the structure runs printed above carry that count, and it is the number to read.');
     }
 
     /**
