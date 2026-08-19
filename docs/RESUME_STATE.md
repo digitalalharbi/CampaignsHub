@@ -61,6 +61,45 @@ measurement also settles how impossible the old configuration was: an honest swe
 seconds, so `retry_after = 90` re-delivered it **seven times over** during one run, and the old
 120-second supervisor timeout would have killed it at 18 % complete.
 
+## Phase 3 — Ad Sets and Ads reach the API, and why they were missing
+
+`SnapchatStructureReachesTheApiTest` follows ONE Snapchat body to the HTTP response:
+
+    adsquads[].adsquad → SnapchatConnector → SyncResult → ImportExternalStructure
+      → external_ad_sets / external_ads / external_creatives
+      → GET /projects/{p}/campaigns/{c}/structure
+
+It protects the claim a generic reader gets wrong: **a Snapchat ad does not name its campaign.** It
+names an `ad_squad_id`, and the campaign is resolved through the squad.
+
+**The probe was fail-first and the product passed it.** Both failures were the test's own:
+
+- the controller orders ad sets `orderBy('name')`, so «Jeddah» precedes «Riyadh» and index 0 is
+  `sq-2` — every assertion is now keyed by `external_id`, ads included, never by position;
+- `150.0` serialises to JSON as `150`, so a strict float assertion was testing PHP's encoder rather
+  than the connector's micro-unit arithmetic.
+
+So layers 4-7 were never broken. **Ad Sets and Ads were invisible because the tables were empty** —
+the structure sweep never finished, which is SNAP-STRUCTURE-RETRY-001, now closed.
+
+What is NOT claimed: that the Campaign Structure SCREEN renders on production. Production holds the
+rows and the API contract is asserted, but a screen rendering needs an authenticated production
+session that is not available here, and no Demo user may be created to fake one. That row stays
+`BLOCKED_OPERATIONAL_EVIDENCE`.
+
+### An intermittent gate failure, recorded rather than acted on
+
+Run `32276682907` (docs-only branch) failed once on webkit:
+
+    ✘ legal-public-urls.spec.ts:42:3 › the deletion page is a working flow, in both languages
+      server said 419: «This page has expired. Please refresh and try again.»
+      chromium 405 passed · firefox 397 passed · webkit 396 passed, 1 failed
+
+419 is CSRF token mismatch, not throttling — which the earlier config reading had already ruled out
+and the captured body now confirms. It did **not** reproduce on `32279139960`, so it is intermittent.
+Recorded with its evidence; nothing changed for it, and it is not called a product defect on one
+observation.
+
 ## Phase 2 — the hierarchy, counted on production (2026-08-19)
 
 `integrations:diagnose --provider=snapchat --linked --hierarchy --downstream`, run `32273929086`:
