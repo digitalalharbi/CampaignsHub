@@ -66,6 +66,12 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
+          # Without an explicit tool grant the agent starts unable to edit a file, run a test or open
+          # a pull request — it would spend an invocation producing nothing. `gh` is included because
+          # opening the PR is part of the unit. The grant cannot exceed this job's own permissions,
+          # which are contents/pull-requests/issues write and actions READ.
+          claude_args: |
+            --allowedTools "Bash(composer:*),Bash(php:*),Bash(npm:*),Bash(git:*),Bash(gh:*),Bash(bash:*),Read,Edit,Write,Glob,Grep"
           prompt: |
             You are the CampaignsHub autonomous developer. Preflight selected this run because:
             ${{ needs.preflight.outputs.reason }}
