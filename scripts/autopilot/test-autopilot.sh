@@ -154,6 +154,19 @@ else
   bad "a fully green exact head was refused"
 fi
 
+echo "A2 · the agent can actually work"
+python3 - "$WF" <<'PYTOOLS' && ok "agent has an explicit tool grant within its own permissions" || bad "agent would start unable to edit, test or open a PR"
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1]))
+w = d['jobs']['develop']['steps'][-1]['with']
+assert 'prompt' in w, 'no prompt: the agent would not know what to do'
+args = w.get('claude_args', '')
+assert '--allowedTools' in args, 'no tool grant: the agent could not edit a file or run a test'
+for need in ('Edit', 'Write', 'Read', 'Bash(git:*)', 'Bash(gh:*)'):
+    assert need in args, 'missing ' + need
+assert d['jobs']['develop']['permissions']['actions'] == 'read', 'grant must not exceed job permissions'
+PYTOOLS
+
 echo "I · no secret is forwarded to the agent"
 python3 - "$WF" <<'PY' && ok "agent receives only ANTHROPIC_API_KEY + github.token" || bad "secret leak into the agent job"
 import sys, yaml, re
