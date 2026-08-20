@@ -311,6 +311,19 @@ final class CreativeRows
             ->get(['id', 'name', 'objective'])
             ->keyBy('id');
 
+        /*
+         * CREATIVE-PRESENTER-ADS-BACKEND-001 — one query for every creative's ads, not one each.
+         *
+         * `card()` now reads `$creative->ads`, and this loop calls it once per row. Left to lazy
+         * loading that is a query per creative: `CreativePulseApiTest` caught it immediately —
+         * «two hundred creatives cost the same queries as two» is exactly the guard for this, and
+         * two hundred creatives had become two hundred extra round trips.
+         *
+         * `loadMissing` rather than `load`: the caller may already have eager-loaded the relation,
+         * and re-loading it would throw the saving away for a second identical query.
+         */
+        $creatives->loadMissing('ads');
+
         $out = [];
         foreach ($creatives as $creative) {
             $id = (string) $creative->getKey();
