@@ -35,6 +35,18 @@ export type MetricReading =
   | { kind: 'not_provided' }
   /** Reported, but nothing for this window — or a ratio whose denominator is missing. */
   | { kind: 'no_data' }
+  /**
+   * The platform DID report it, and we cannot convert it to the project's currency.
+   *
+   * FX-WITHHELD-UI-001. This is not «no data» and it is certainly not zero. FX-001 withholds a money
+   * figure when no exchange rate exists for the day, because a converted number would be invented.
+   * Without this variant the withheld null fell through to `no_data`, and a project whose platform
+   * reported 3,465.33 USD read «0» under «لم ترسله المنصة» — a sentence the payload disproves.
+   *
+   * `original` is the platform's own figure, already formatted WITH its own currency, so the reader
+   * sees the real amount and is told plainly why it is not in their currency.
+   */
+  | { kind: 'withheld'; original: string }
 
 export type MetricItem = {
   key: string
@@ -62,6 +74,14 @@ export type MetricItem = {
 const T = {
   notProvided: { ar: 'لم ترسله المنصة', en: 'Not provided' },
   noData: { ar: 'لا توجد بيانات', en: 'No data' },
+  withheldHint: {
+    ar: 'المنصة أرسلت هذا الرقم، ولا يتوفر سعر صرف لتحويله إلى عملة المشروع.',
+    en: 'The platform reported this figure; no exchange rate is available to convert it.',
+  },
+  withheldNote: {
+    ar: 'التحويل إلى عملة المشروع غير متاح حاليًا',
+    en: 'Conversion to the project currency is unavailable',
+  },
   notProvidedHint: {
     ar: 'هذه المنصة لا ترسل هذا المؤشر — والقيمة ليست صفرًا.',
     en: 'This platform does not report this metric — the value is not zero.',
@@ -152,7 +172,12 @@ function Delta({
 }
 
 export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
-  const missing = item.reading.kind !== 'value'
+  /*
+   * A withheld figure is NOT missing. It has a real number to show, so it must not take the muted
+   * «nothing here» treatment that `not_provided` and `no_data` share — that treatment is what made
+   * 3,465.33 USD look like an absence.
+   */
+  const missing = item.reading.kind === 'not_provided' || item.reading.kind === 'no_data'
   const missingText =
     item.reading.kind === 'not_provided' ? t('notProvided', ar) : t('noData', ar)
   const missingHint =
@@ -183,6 +208,23 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
       {item.reading.kind === 'value' ? (
         <span dir="ltr" className="tnum text-2xl font-extrabold leading-none tracking-tight text-text-primary">
           {item.reading.text}
+        </span>
+      ) : item.reading.kind === 'withheld' ? (
+        /*
+          FX-WITHHELD-UI-001 — the real figure, at full weight, with the reason underneath.
+
+          It reads at the same size as a converted number because it IS the number the platform
+          reported; only the currency is not the reader's. `dir="ltr"` keeps «3,465.33 USD» in Latin
+          order inside an RTL page, exactly as a converted figure is kept.
+        */
+        <span className="flex flex-col gap-0.5">
+          <span dir="ltr" className="tnum text-2xl font-extrabold leading-none tracking-tight text-text-primary">
+            {item.reading.original}
+          </span>
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium leading-tight text-text-muted">
+            {t('withheldNote', ar)}
+            <InfoHint text={t('withheldHint', ar)} label={t('withheldNote', ar)} />
+          </span>
         </span>
       ) : (
         <span className="inline-flex items-center gap-1 py-1 text-sm font-semibold text-text-muted">
