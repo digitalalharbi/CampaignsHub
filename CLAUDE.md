@@ -26,30 +26,40 @@ Then read, in this order — they are the project's own record and they outrank 
 Work from what those say. If a document contradicts the code, the code is the fact and the document
 is a defect worth fixing.
 
-## PAID AUTONOMOUS DEVELOPMENT IS CANCELLED BY OWNER — 2026-08-20
+## Execution policy — owner decision, 2026-08-20
 
-The owner cancelled the paid autonomous execution model. **`AUTOPILOT-001` and
-`AUTOPILOT-CONTINUOUS-CHAIN-001` are no longer product requirements.**
+**ALL PRODUCT DEVELOPMENT EXECUTION HAPPENS DIRECTLY FROM THE CLAUDE CODE CONTAINER.**
 
-No workflow in this repository may invoke a paid model automatically. Concretely:
+**GitHub is source control, CI and deployment only. GitHub must never invoke Claude or Anthropic for
+development.**
 
-- `.github/workflows/campaignshub-autopilot.yml` has no `schedule`, no `develop` job, no `uses:` and
-  no `secrets.` reference — it cannot spend credit even if dispatched.
-- `.github/workflows/claude.yml` stays in the tree and stays untriggered. Do not write `@claude`.
-- `scripts/autopilot/test-autopilot.sh` fails the build if a schedule, a paid job, an action
-  invocation or a secret reference is re-added to either file.
+`AUTOPILOT-001` and `AUTOPILOT-CONTINUOUS-CHAIN-001` are cancelled and are no longer product
+requirements. Do not build a replacement.
 
-Development runs **directly from a Claude Code container**. GitHub is source control, CI and
-deployment — not the development engine. The cycle is: change real product code in the container,
-test locally, commit, push, CI, merge, deploy, verify, continue.
+Both model-invoking workflows are disabled in the tree rather than deleted, so the decision is
+visible where somebody would otherwise re-add it by accident:
+
+- `.github/workflows/campaignshub-autopilot.yml` — the scheduled path. No `schedule`, no `develop`
+  job.
+- `.github/workflows/claude.yml` — the `@claude` mention path. Its four event triggers are gone, so
+  writing `@claude` on an issue or a review does nothing.
+
+Neither file contains `anthropics/claude-code-action`, `ANTHROPIC_API_KEY`, any `secrets.`
+reference, or any `uses:` at all. Each keeps a manually dispatched no-op that states the position.
+
+`scripts/autopilot/test-autopilot.sh` fails the build if either workflow regains an automatic
+trigger, the action, the key, a secret reference or any action invocation — and separately asserts
+that `ci.yml`, `deploy-production.yml` and `production-diagnostics.yml` still have jobs, so the
+cancellation cannot be achieved by breaking the workflows that do real work.
+
+The cycle is: change real product code in the container, test locally, commit, push, CI, merge,
+deploy, verify, continue to the next unit.
 
 Everything else in this document remains binding: Git outranks the matrix, which outranks
 `RESUME_STATE`; VERIFIED work is never redone without a proven fail-first defect; nothing is claimed
-LIVE_VERIFIED without real operational evidence; and no change reaches `main` except through a
-branch, a pull request and green CI.
-
-Backend rows and green API tests are never completion on their own. A data feature is done when the
-chain reaches the rendered UI and, where possible, live evidence.
+LIVE_VERIFIED without real operational evidence; no change reaches `main` except through a branch, a
+pull request and green CI; and backend rows or green API tests are never completion on their own — a
+data feature is done when the chain reaches the rendered UI and, where possible, live evidence.
 
 ## How work reaches main
 

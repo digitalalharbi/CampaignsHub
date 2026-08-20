@@ -16,33 +16,55 @@ PASS=0; FAIL=0
 ok()  { printf '  ✓ %s\n' "$1"; PASS=$((PASS+1)); }
 bad() { printf '  ✗ %s\n' "$1"; FAIL=$((FAIL+1)); }
 
-echo "CANCELLED · the autopilot workflow cannot consume Anthropic credit"
+echo "CANCELLED · no GitHub workflow may invoke a paid model"
 
-python3 - "$WF" <<'PYCHECK' && ok "no schedule, no paid job, no action invocation, no secret access" || bad "the paid path is reachable again"
+# Both files, one rule. The autopilot workflow was the scheduled path and claude.yml was the
+# @claude-mention path; either one reintroduced is a paid development path through GitHub.
+for WF in "$ROOT/.github/workflows/campaignshub-autopilot.yml" "$ROOT/.github/workflows/claude.yml"; do
+  NAME="$(basename "$WF")"
+  python3 - "$WF" <<'PYCHECK' && ok "$NAME cannot invoke a paid model" || bad "$NAME can invoke a paid model again"
 import sys, re, yaml
-src = open(sys.argv[1]).read()
-d = yaml.safe_load(src)
 
-# An hourly trigger is what would spend money unattended.
-assert 'schedule' not in d[True], 'a schedule trigger has been re-added'
-
-# The develop job was the only caller of the paid action.
-assert 'develop' not in d['jobs'], 'the paid develop job has been re-added'
-
-# No `uses:` at all — an action cannot be invoked, paid or otherwise.
-assert not re.findall(r'^\s*uses:', src, re.M), 'the workflow invokes an action again'
-
-# Without a secrets reference the workflow cannot read ANTHROPIC_API_KEY even if dispatched.
-assert 'secrets.' not in src, 'the workflow references a secret again'
-PYCHECK
-
-# claude.yml is likewise not to be triggered; it must stay off every automatic trigger.
-python3 - "$ROOT/.github/workflows/claude.yml" <<'PYCHECK2' && ok "claude.yml has no schedule and no push trigger" || bad "claude.yml can fire automatically"
-import sys, yaml
-d = yaml.safe_load(open(sys.argv[1]))
+path = sys.argv[1]
+raw = open(path).read()
+d = yaml.safe_load(raw)
 on = d[True]
-for forbidden in ('schedule', 'push'):
-    assert forbidden not in on, f'claude.yml gained a {forbidden} trigger'
+
+# Comments are stripped before the string checks. The cancellation is DOCUMENTED in these files, so
+# the words «claude-code-action» and «ANTHROPIC_API_KEY» legitimately appear in prose explaining what
+# was removed. A guard that failed on its own explanation would push the next person to delete the
+# explanation rather than keep it, which is the opposite of what is wanted here.
+src = '\n'.join(line for line in raw.splitlines() if not line.lstrip().startswith('#'))
+
+# Nothing may run a model automatically. `workflow_dispatch` alone is allowed because the remaining
+# job is a no-op that prints the cancellation.
+allowed = {'workflow_dispatch'}
+extra = set(on if isinstance(on, dict) else [on]) - allowed
+assert not extra, f'{path}: automatic trigger(s) restored: {sorted(extra)}'
+
+# The action itself, by name — the single most direct way the paid path returns.
+assert 'claude-code-action' not in src, f'{path}: anthropics/claude-code-action is back'
+
+# The key, by name, however it is referenced.
+assert 'ANTHROPIC_API_KEY' not in src, f'{path}: ANTHROPIC_API_KEY is back'
+
+# No secret at all can reach these workflows, so none can be forwarded to a model.
+assert 'secrets.' not in src, f'{path}: a secret reference is back'
+
+# And no action may be invoked from here whatsoever.
+assert not re.findall(r'^\s*uses:', src, re.M), f'{path}: an action invocation is back'
+PYCHECK
+done
+
+# The cancellation must not have been achieved by breaking the workflows that do real work.
+python3 - "$ROOT/.github/workflows" <<'PYCHECK2' && ok "CI, Deploy Production and Production Diagnostics are intact" || bad "a working workflow was damaged"
+import sys, pathlib, yaml
+d = pathlib.Path(sys.argv[1])
+for name in ('ci.yml', 'deploy-production.yml', 'production-diagnostics.yml'):
+    f = d / name
+    assert f.exists(), f'{name} is missing'
+    parsed = yaml.safe_load(f.read_text())
+    assert parsed.get('jobs'), f'{name} has no jobs'
 PYCHECK2
 
 printf '\n%d passed · %d failed\n' "$PASS" "$FAIL"
