@@ -122,7 +122,24 @@ reads `creative.campaign_id` directly. **Prove the shape from retained or live S
 before calling it anything** — does any `external_creative_id` appear on ads in more than one
 campaign? If yes, campaign filtering derives through ads as `ad_ids` now does.
 
-Not yet measured: whether production's 5,706 ads all carry a correct `creative_id`. The counts above
+### Measured on production — the canonical relation is fully populated
+
+Run `32305946281`, read-only, against deploy `32305567341` of `b6cec1a`:
+
+    campaigns 89 · ad_squads 187 · ads 5,706 · creatives 1,451
+
+    ads with no ad squad          : 0
+    ads with no creative          : 0
+    creatives referenced by ads   : 1451     ← distinct external_ads.creative_id
+    creatives referenced by no ad : 0
+
+Every one of the 5,706 ads carries a `creative_id`; every one of the 1,451 creatives is reachable
+from at least one ad; and the distinct creatives referenced by ads equals the creative count exactly.
+No dangling row on either side. `HIERARCHY-PLACEMENT-CREATIVE-001` is LIVE_VERIFIED.
+
+This is the first creative-placement measurement that means anything. The superseded run
+`32273929086` printed the same `0` from `whereNull('external_ad_id')`, which would have read 0
+whatever the relation looked like. The counts above
 are from the test fixtures. The read-only hierarchy diagnosis is run on the live Snapchat account
 after #50 deploys, and the canonical-relation counts recorded then.
 

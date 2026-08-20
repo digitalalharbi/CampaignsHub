@@ -41,6 +41,16 @@ jobs:
       # optional would be deleting the coverage while keeping the reassurance.
       - name: Python dependency for the PDF text-layer contract
         run: python3 -m pip install --quiet pikepdf
+      # AUTOPILOT-001 — the agent's cost guard and merge gate, exercised with a stubbed `gh`.
+      # Cheap, hermetic, no network: it is here because a workflow that only parses is not a
+      # workflow that behaves, and the two claims worth protecting are "an idle hour costs nothing"
+      # and "only an exact-head green PR can be merged".
+      - name: Autopilot controllers
+        # `working-directory: backend` applies to this job, so the path must be absolute from the
+        # workspace root — the suite lives at the repository root, not inside the Laravel app.
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/autopilot/test-autopilot.sh
+
       - name: Pint (style)
         run: ./vendor/bin/pint --test
       - name: Larastan (static analysis)
