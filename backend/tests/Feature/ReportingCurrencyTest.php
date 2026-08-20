@@ -305,6 +305,47 @@ final class ReportingCurrencyTest extends TestCase
         $this->assertSame(1, $withheld, 'the withheld row is not countable, so nobody can be told');
     }
 
+    /**
+     * FX-WITHHELD-UI-001 — the AGGREGATOR must say «withheld», not just the database.
+     *
+     * The test above proves a withheld row is countable with a direct query. No screen runs direct
+     * queries: every surface reads `MetricsAggregator`, and until now that returned `spend => 0` with
+     * nothing beside it. So a project whose platform reported 3,465.33 USD rendered «0» on the
+     * dashboard, «0 SAR» as CPA and «—» as ROAS, over a label reading «لم ترسله المنصة» — which is
+     * false, because the platform sent it and we withheld it.
+     *
+     * The totals now carry the original amount and the withheld row count, so a reader can show the
+     * real figure and say the conversion is unavailable, instead of showing a zero that is a lie.
+     */
+    public function test_the_totals_report_the_withheld_original_beside_the_converted_zero(): void
+    {
+        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+
+        $this->sync($this->account('USD', 'usd'), [['campaign_id' => 'c-usd', 'date' => '2026-06-01', 'spend' => 100]]);
+        // No JPY rate exists, so this 5,000 is withheld rather than invented.
+        $this->sync($this->account('JPY', 'jpy'), [['campaign_id' => 'c-jpy', 'date' => '2026-06-01', 'spend' => 5000]]);
+
+        $totals = $this->totals(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-01'));
+
+        // The converted total still excludes what cannot be converted — that part was always right.
+        $this->assertEqualsWithDelta(375.0, (float) $totals['spend'], 0.01);
+
+        // What is new: the total itself now admits the withholding.
+        $this->assertSame(
+            1,
+            (int) $totals['spend_withheld_rows'],
+            'The aggregator hides the withholding, so every screen reading it must render 0 as if it were true.',
+        );
+
+        // 100 USD + 5,000 JPY as the platforms reported them, unconverted and unmixed.
+        $this->assertEqualsWithDelta(
+            5100.0,
+            (float) $totals['spend_original'],
+            0.01,
+            'The platform-reported original is unavailable, so no screen can show the real figure.',
+        );
+    }
+
     /** Once the rate exists, a re-sync replaces the withheld figure — nothing has to be re-fetched. */
     public function test_a_resync_converts_a_row_that_was_withheld(): void
     {

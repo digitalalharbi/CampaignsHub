@@ -26,6 +26,7 @@ final class MetricsAggregator
         'conversions' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'conversions'), 0)",
         'spend' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'), 0)",
         'revenue' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'revenue'), 0)",
+
         // DASH-010-D: objective-specific base metrics (tall table → new keys, no schema change).
         'reach' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'reach'), 0)",
         'video_views' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'video_views'), 0)",
@@ -84,10 +85,45 @@ final class MetricsAggregator
      *
      * @return list<string>
      */
+    /**
+     * The money-truth annotations — provenance, not metrics.
+     *
+     * These describe `spend` and `revenue` (was anything withheld, and what did the platform actually
+     * report) rather than measuring anything themselves. They deliberately have no catalogue entry:
+     * a `MetricDefinition` for «spend_withheld_rows» would offer it as a KPI somebody could chart,
+     * and it is not one. Callers that check «is every emitted metric defined» subtract these.
+     *
+     * @return list<string>
+     */
+    public static function moneyTruthKeys(): array
+    {
+        return array_keys(self::MONEY_TRUTH);
+    }
+
     public static function readKeys(): array
     {
         return array_values(array_unique([...array_keys(self::PIVOT), ...self::FUNNEL_STAGES]));
     }
+
+    /**
+     * FX-WITHHELD-UI-001 — money truth, kept OUT of `PIVOT` on purpose.
+     *
+     * `PIVOT` is also `readKeys()`: the list of metric keys the connectors are asked to fetch. These
+     * four are aggregates over columns we already store, not metrics any platform reports, so putting
+     * them in `PIVOT` would have made the sync request «spend_withheld_rows» from Snapchat.
+     *
+     * They exist because `COALESCE(SUM(value), 0)` is right for arithmetic and wrong for a KPI card.
+     * When FX-001 withholds a row there is no rate, `value` is null on purpose, and the coalesce turns
+     * that into a literal 0 — indistinguishable from a day that truly cost nothing. Production paid
+     * for the difference: 3,465.33 USD of real Snapchat spend rendered as «0» under a label saying
+     * «لم ترسله المنصة», when the platform had sent it and we withheld it.
+     */
+    private const MONEY_TRUTH = [
+        'spend_withheld_rows' => "COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL)",
+        'spend_original' => "COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend'), 0)",
+        'revenue_withheld_rows' => "COUNT(*) FILTER (WHERE metric_key = 'revenue' AND value IS NULL AND original_amount IS NOT NULL)",
+        'revenue_original' => "COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'revenue'), 0)",
+    ];
 
     /** When set, every aggregation is scoped to this single unified campaign (command center). */
     private ?string $campaignId = null;
@@ -272,10 +308,12 @@ final class MetricsAggregator
     /** @return array<string, float> base sums + derived KPIs for the period. */
     public function totals(Carbon $from, Carbon $to): array
     {
+        $select = array_merge(self::PIVOT, self::MONEY_TRUTH);
+
         $row = $this->base($from, $to)->selectRaw(implode(', ', array_map(
             fn ($expr, $alias) => "{$expr} AS {$alias}",
-            self::PIVOT,
-            array_keys(self::PIVOT),
+            $select,
+            array_keys($select),
         )))->first();
 
         return $this->withDerived((array) $row);
@@ -752,6 +790,16 @@ final class MetricsAggregator
             'conversions' => round($conv, 2),
             'spend' => round($spend, 2),
             'revenue' => round($revenue, 2),
+
+            /*
+             * FX-WITHHELD-UI-001 — carried through, because this method returns a fresh literal and
+             * anything not named here is silently dropped. That is exactly how the withholding
+             * became invisible: the aggregate existed in SQL and never reached a caller.
+             */
+            'spend_withheld_rows' => (int) ($row['spend_withheld_rows'] ?? 0),
+            'spend_original' => round((float) ($row['spend_original'] ?? 0), 2),
+            'revenue_withheld_rows' => (int) ($row['revenue_withheld_rows'] ?? 0),
+            'revenue_original' => round((float) ($row['revenue_original'] ?? 0), 2),
             'reach' => round($reach, 2),
             'video_views' => round($videoViews, 2),
             'video_completions' => round($videoCompletions, 2),

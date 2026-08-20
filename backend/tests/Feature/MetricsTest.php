@@ -707,6 +707,20 @@ final class MetricsTest extends TestCase
         app(TenantContext::class)->forget();
 
         $defined = MetricDefinition::pluck('key')->all();
+
+        /*
+         * FX-WITHHELD-UI-001 — the money-truth annotations are subtracted, not catalogued.
+         *
+         * `spend_withheld_rows`, `spend_original` and their revenue twins describe `spend` and
+         * `revenue` — whether anything was withheld for want of an FX rate, and what the platform
+         * actually reported. They measure nothing themselves, so a `MetricDefinition` would offer
+         * «withheld rows» as a KPI somebody could chart, which it is not.
+         *
+         * They are subtracted from a NAMED source rather than a literal list here, so adding another
+         * annotation cannot silently widen the exemption.
+         */
+        $emitted = array_values(array_diff($emitted, MetricsAggregator::moneyTruthKeys()));
+
         $missing = array_values(array_diff($emitted, $defined));
 
         $this->assertSame([], $missing, 'Every metric the dashboard computes needs a definition: '.implode(', ', $missing));
