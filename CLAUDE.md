@@ -26,34 +26,30 @@ Then read, in this order — they are the project's own record and they outrank 
 Work from what those say. If a document contradicts the code, the code is the fact and the document
 is a defect worth fixing.
 
-## AUTOPILOT_ENABLED_BY_OWNER — 2026-08-20
+## PAID AUTONOMOUS DEVELOPMENT IS CANCELLED BY OWNER — 2026-08-20
 
-The owner has re-enabled autonomous development. `.github/workflows/campaignshub-autopilot.yml` runs
-the agent; `.github/workflows/claude.yml` remains as it was and is still not triggered by `@claude`.
+The owner cancelled the paid autonomous execution model. **`AUTOPILOT-001` and
+`AUTOPILOT-CONTINUOUS-CHAIN-001` are no longer product requirements.**
 
-**The cost guard is part of the decision, not an optimisation.** Enabling the agent was never
-authorisation for unbounded paid API consumption, so the schedule is deliberately split in two:
+No workflow in this repository may invoke a paid model automatically. Concretely:
 
-- A deterministic **preflight** job — `gh`, shell and repository files only — decides whether there is
-  work. It costs zero Anthropic tokens.
-- The Anthropic action is gated on `needs.preflight.outputs.invoke_claude == 'true'`. **An idle
-  scheduled hour invokes Anthropic zero times.**
+- `.github/workflows/campaignshub-autopilot.yml` has no `schedule`, no `develop` job, no `uses:` and
+  no `secrets.` reference — it cannot spend credit even if dispatched.
+- `.github/workflows/claude.yml` stays in the tree and stays untriggered. Do not write `@claude`.
+- `scripts/autopilot/test-autopilot.sh` fails the build if a schedule, a paid job, an action
+  invocation or a secret reference is re-added to either file.
 
-Claude is invoked for implementation, for investigation that needs reasoning, and to root-cause a
-real test failure. It is never invoked to wait for CI, to merge a known-green SHA, to wait for a
-deploy, to poll a workflow, or to discover that there is nothing to do. Those are controller jobs and
-they are deterministic.
+Development runs **directly from a Claude Code container**. GitHub is source control, CI and
+deployment — not the development engine. The cycle is: change real product code in the container,
+test locally, commit, push, CI, merge, deploy, verify, continue.
 
-**Secrets never reach the agent.** The Claude job holds `contents: write`, `pull-requests: write`,
-`issues: write` and `actions: read` — never `actions: write`. Provider credentials (Snapchat, Meta,
-Google Ads, TikTok, X, LinkedIn), VPS credentials and payment credentials are not exposed to it, and
-production is reached only through the existing fixed-command workflows. The agent does not SSH and
-does not construct remote commands.
+Everything else in this document remains binding: Git outranks the matrix, which outranks
+`RESUME_STATE`; VERIFIED work is never redone without a proven fail-first defect; nothing is claimed
+LIVE_VERIFIED without real operational evidence; and no change reaches `main` except through a
+branch, a pull request and green CI.
 
-Everything else in this document remains binding, in particular: Git outranks the matrix, which
-outranks `RESUME_STATE`, which outranks any other document; VERIFIED work is never redone without a
-proven fail-first defect; nothing is claimed LIVE_VERIFIED without real operational evidence; and no
-change reaches `main` except through a branch, a pull request and green CI.
+Backend rows and green API tests are never completion on their own. A data feature is done when the
+chain reaches the rendered UI and, where possible, live evidence.
 
 ## How work reaches main
 
