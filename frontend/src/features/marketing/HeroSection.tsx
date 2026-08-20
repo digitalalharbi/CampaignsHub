@@ -161,7 +161,19 @@ export function HeroSection({
           className="order-2 rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] lg:col-start-2 lg:row-start-2 lg:-mt-3 lg:self-start lg:rounded-t-none lg:border-t-0 lg:pt-0 lg:shadow-none"
         >
           {authed ? (
-            <Link to="/app/dashboard" className="block"><Button className="w-full">{c.nav.dashboard} <Arrow size={15} /></Button></Link>
+            /*
+              HERO-SEAM-001 — the signed-in branch needs its own top padding.
+
+              The container carries `lg:pt-0` so the guest stack starts flush at the seam with the
+              chooser above it; with three buttons and a helper line filling the card, a flush start
+              reads as continuous content. This branch has ONE button, so `pt-0` above and `p-3.5`
+              below produced 0px of space over the button and 14px under it — measured, not guessed.
+              The button looked stuck to the card above, floating in a white block.
+
+              Matching the container's own padding restores the balance, and only for this branch, so
+              the guest seam that measures pixel-perfect today does not move.
+            */
+            <Link to="/app/dashboard" className="block lg:pt-3.5"><Button className="w-full">{c.nav.dashboard} <Arrow size={15} /></Button></Link>
           ) : (
             <div className="space-y-2">
               <Link to={primaryTo} data-testid="hero-primary-cta" className="block">
