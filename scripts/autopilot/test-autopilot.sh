@@ -54,7 +54,7 @@ GH
 }
 
 run_preflight() {
-  ( export STATE="$1" PATH="$TMP/bin:$PATH" GITHUB_REPOSITORY=o/r GITHUB_OUTPUT="$1/out" MATRIX_PATH="${MATRIX_PATH:-}"
+  ( export STATE="$1" PATH="$TMP/bin:$PATH" GITHUB_REPOSITORY=o/r GITHUB_OUTPUT="$1/out" MATRIX_PATH="${MATRIX_PATH:-}" GITHUB_RUN_ID="${GITHUB_RUN_ID:-}"
     cd "$ROOT"; : >"$1/out"; bash scripts/autopilot/preflight.sh >/dev/null 2>&1 || true )
   grep -E '^invoke_claude=' "$1/out" | tail -1 | cut -d= -f2
 }
@@ -103,6 +103,21 @@ S=$(state c3)
 echo '[{"number":7,"headRefName":"autopilot/x","headRefOid":"aaa111","isDraft":false,"mergeable":"MERGEABLE"}]' >"$S/pr_list.json"
 echo '[{"databaseId":9,"status":"completed","conclusion":"failure","headSha":"aaa111"}]' >"$S/ci_runs.json"
 [ "$(run_preflight "$S")" = "true" ] && ok "real failure → true (root-cause needs reasoning)" || bad "failed CI must invoke Claude"
+
+echo "C4 · the current Autopilot run must not block itself"
+S=$(state c4); echo '[]' >"$S/pr_list.json"
+# The run's own entry, exactly as `gh run list` reports it while the run is executing.
+echo '[{"databaseId":424242,"status":"in_progress"}]' >"$S/other_runs.json"
+[ "$(GITHUB_RUN_ID=424242 run_preflight "$S")" = "true" ] \
+  && ok "a run does not see itself as a competing controller" \
+  || bad "AUTOPILOT-SELF-DEADLOCK-001: preflight blocked on its own run"
+
+echo "C5 · a DIFFERENT active controller still blocks"
+S=$(state c5); echo '[]' >"$S/pr_list.json"
+echo '[{"databaseId":999999,"status":"in_progress"}]' >"$S/other_runs.json"
+[ "$(GITHUB_RUN_ID=424242 run_preflight "$S")" = "false" ] \
+  && ok "another controller mid-flight still stops overlapping work" \
+  || bad "a genuinely busy controller was ignored"
 
 echo "D · actionable requirement, no active PR"
 S=$(state d); echo '[]' >"$S/pr_list.json"; echo '[]' >"$S/other_runs.json"

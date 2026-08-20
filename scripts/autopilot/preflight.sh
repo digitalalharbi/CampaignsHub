@@ -60,9 +60,25 @@ if [ -n "$ACTIVE" ]; then
 fi
 
 # ── 2. Another controller is mid-flight ───────────────────────────────────────────────────────────
+#
+# AUTOPILOT-SELF-DEADLOCK-001 — the current run must never count as its own competitor.
+#
+# `gh run list --workflow "CampaignsHub Autopilot"` includes THIS run, which is `in_progress` by
+# definition while this script executes. The first version counted it, concluded a controller was
+# busy, and emitted `invoke_claude=false` — so every scheduled run blocked itself, `develop` was
+# skipped for ever, and no functional PR could ever be created. It was invisible while an autopilot
+# PR happened to be open, because section 1 returns before reaching here; it bit exactly on the path
+# that lets the agent start work.
+#
+# The current run is excluded by id. Everything else still blocks: workflow concurrency already
+# serialises autopilot runs, and Deploy Production and Production Diagnostics must continue to stop
+# overlapping work.
+SELF="${GITHUB_RUN_ID:-0}"
+
 for WF in "Deploy Production" "Production Diagnostics" "CampaignsHub Autopilot"; do
-  BUSY="$(gh run list --repo "$REPO" --workflow "$WF" --limit 5 \
-    --json status,databaseId --jq '[.[] | select(.status != "completed")] | length' 2>/dev/null || echo 0)"
+  BUSY="$(gh run list --repo "$REPO" --workflow "$WF" --limit 10 \
+    --json status,databaseId \
+    --jq "[.[] | select(.status != \"completed\") | select(.databaseId != ${SELF})] | length" 2>/dev/null || echo 0)"
   [ "${BUSY:-0}" -gt 0 ] && emit false "'$WF' is already running — no overlapping work"
 done
 
