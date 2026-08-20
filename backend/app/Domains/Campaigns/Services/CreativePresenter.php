@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Services;
 
+use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 
@@ -62,7 +63,31 @@ final class CreativePresenter
              * the last two steps become filters the reader has to set by hand.
              */
             'ad_set_id' => $creative->external_ad_set_id === null ? null : (string) $creative->external_ad_set_id,
+            /*
+             * CREATIVE-PRESENTER-ADS-BACKEND-001 — the singular `ad_id` above is LEGACY and is kept
+             * only until the frontend migrates.
+             *
+             * It reads `external_creatives.external_ad_id`, which `creativeFor()` rewrites on every
+             * upsert, so it names whichever ad was imported last. On the live Snapchat account four
+             * ads share each creative, so the drill-down built from it points at one of four and
+             * says nothing about the rest.
+             *
+             * `ads` below is the truthful collection, read through `ExternalCreative::ads()` — the
+             * `hasMany` on `external_ads.creative_id`, which is the canonical relation. Ordered by
+             * `external_id` so the same creative renders identically on every request; an unordered
+             * collection would make a card's first ad depend on the database's row order.
+             */
             'ad_id' => $creative->external_ad_id === null ? null : (string) $creative->external_ad_id,
+            'ads' => $creative->ads
+                ->sortBy('external_id')
+                ->map(static fn (ExternalAd $ad): array => [
+                    'id' => (string) $ad->getKey(),
+                    'external_id' => (string) $ad->external_id,
+                    'name' => $ad->name,
+                    'status' => $ad->status,
+                    'external_ad_set_id' => $ad->external_ad_set_id === null ? null : (string) $ad->external_ad_set_id,
+                    'external_campaign_id' => $ad->external_campaign_id === null ? null : (string) $ad->external_campaign_id,
+                ])->values()->all(),
             'preview' => $preview,
             'aspect_ratio' => $creative->aspect_ratio,
             'duration_seconds' => $creative->duration_seconds,

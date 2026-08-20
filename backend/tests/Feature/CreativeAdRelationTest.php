@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -254,6 +255,49 @@ final class CreativeAdRelationTest extends TestCase
             ['ad-other'],
             $otherCreative->ads()->withoutGlobalScopes()->pluck('external_id')->all(),
         );
+    }
+
+    // ── the presenter ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * CREATIVE-PRESENTER-ADS-BACKEND-001 — the card names every ad, not the last one imported.
+     *
+     * `ad_id` stays on the card until the frontend migrates, and it will keep naming `ad-4`; that is
+     * the legacy value and it is asserted elsewhere. What matters here is that `ads` carries all
+     * four, because a drill-down built from a single arbitrary ad is a link to one quarter of the
+     * truth.
+     */
+    public function test_the_card_carries_every_ad_that_uses_the_creative(): void
+    {
+        $this->sync();
+
+        $card = app(CreativePresenter::class)->card($this->sharedCreative()->load('ads'), null);
+
+        $this->assertSame(
+            ['ad-1', 'ad-2', 'ad-3', 'ad-4'],
+            array_column($card['ads'], 'external_id'),
+            'Ordered by external_id so a card renders identically on every request.',
+        );
+
+        $first = $card['ads'][0];
+        $this->assertSame('Ad 1', $first['name']);
+        $this->assertSame('active', $first['status']);
+        $this->assertNotNull($first['external_ad_set_id'], 'A Snapchat ad is placed by its squad.');
+        $this->assertNotNull($first['external_campaign_id']);
+    }
+
+    /**
+     * Another project's ad shares the provider creative id and must not appear in this card.
+     */
+    public function test_another_projects_ad_does_not_leak_into_the_card(): void
+    {
+        $this->sync();
+        $this->otherProjectWithCollidingIds();
+
+        $card = app(CreativePresenter::class)->card($this->sharedCreative()->load('ads'), null);
+
+        $this->assertNotContains('ad-other', array_column($card['ads'], 'external_id'));
+        $this->assertCount(4, $card['ads']);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────────
