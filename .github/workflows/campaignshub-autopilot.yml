@@ -1,168 +1,36 @@
-name: CampaignsHub Autopilot
+name: CampaignsHub Autopilot (DISABLED)
 
-# AUTOPILOT-001 — autonomous development, with the cost guard as part of the design.
+# CANCELLED BY OWNER — 2026-08-20.
 #
-# The owner enabled the agent and did NOT authorise unbounded paid API consumption. So the hourly
-# schedule runs a deterministic preflight — `gh`, shell, repository files — and the Anthropic action
-# is gated on its answer. An idle hour invokes Anthropic ZERO times.
+# The owner cancelled the paid autonomous development model. This workflow no longer invokes
+# Anthropic, and it can no longer consume API credit.
 #
-# Claude is invoked to implement, to investigate what needs reasoning, and to root-cause a real test
-# failure. It is never invoked to wait for CI, to merge a known-green SHA, to wait for a deploy, or to
-# discover there is nothing to do — those are the controller jobs below, and they cost nothing.
+# What was removed, and why the file survives at all:
 #
-# Secrets: the agent job never receives provider, VPS or payment credentials, and never holds
-# `actions: write`. Production is reached only through the existing fixed-command workflows.
+#   - the `schedule:` trigger — an hourly run is what would have spent money unattended;
+#   - the `develop` job — the only step that ever called `anthropics/claude-code-action`.
+#
+# The file is kept rather than deleted so the cancellation is visible in the tree instead of being a
+# silent absence somebody re-adds by accident. `AUTOPILOT-001` and `AUTOPILOT-CONTINUOUS-CHAIN-001`
+# are no longer product requirements.
+#
+# Development now runs directly from a Claude Code container. GitHub remains source control, CI and
+# deployment — not the development engine. `.github/workflows/claude.yml` is likewise not to be
+# triggered.
+#
+# `workflow_dispatch` is retained with no paid job: it is a no-op that states the position when run.
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '17 * * * *'
-
-concurrency:
-  group: campaignshub-autopilot
-  cancel-in-progress: false
 
 permissions: {}
 
 jobs:
-  # ── Free. Decides whether anything below is worth paying for. ───────────────────────────────────
-  preflight:
+  cancelled:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: read
-      actions: read
-    outputs:
-      invoke_claude: ${{ steps.decide.outputs.invoke_claude }}
-      reason: ${{ steps.decide.outputs.reason }}
-      pr_number: ${{ steps.decide.outputs.pr_number }}
-      pr_head: ${{ steps.decide.outputs.pr_head }}
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - id: decide
-        run: bash scripts/autopilot/preflight.sh
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-  # ── The only paid job, and only when preflight says there is real work. ────────────────────────
-  develop:
-    needs: preflight
-    if: needs.preflight.outputs.invoke_claude == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      actions: read        # READ only. Dispatching belongs to the controllers, not to the agent.
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Develop one functional unit
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ github.token }}
-          # Without an explicit tool grant the agent starts unable to edit a file, run a test or open
-          # a pull request — it would spend an invocation producing nothing. `gh` is included because
-          # opening the PR is part of the unit. The grant cannot exceed this job's own permissions,
-          # which are contents/pull-requests/issues write and actions READ.
-          claude_args: |
-            --allowedTools "Bash(composer:*),Bash(php:*),Bash(npm:*),Bash(git:*),Bash(gh:*),Bash(bash:*),Read,Edit,Write,Glob,Grep"
-          prompt: |
-            You are the CampaignsHub autonomous developer. Preflight selected this run because:
-            ${{ needs.preflight.outputs.reason }}
-
-            Git is the source of truth, and it outranks every document. Read, in this order, before
-            deciding anything: CLAUDE.md, docs/RESUME_STATE.md,
-            docs/REQUIREMENTS_TRACEABILITY_MATRIX.md, docs/MASTER_EXECUTION_CONTRACT.md,
-            HANDOFF_MANIFEST.md, docs/PRODUCTION_HANDOFF.md,
-            docs/INTEGRATION_CREDENTIALS_CHECKLIST.md, docs/CHANGE_MANAGEMENT.md,
-            docs/ENGINEERING_GUIDE.md. Then inspect origin/main, the open PRs and their exact heads.
-
-            Do EXACTLY ONE coherent functional unit this run.
-
-            If PR #${{ needs.preflight.outputs.pr_number }} exists and its CI failed, that PR is your
-            unit: read the failing job's log, reproduce the failure, fix the root cause on that same
-            branch, add regression coverage that fails without the fix, and push. Do not open a
-            competing PR. If the failure is the known Ubuntu-mirror stall in the `Browsers` step —
-            no test ever started — it is infrastructure: say so and change nothing.
-
-            Otherwise select the first actionable non-VERIFIED requirement from the matrix, in the
-            product's priority order: creatives/content, spend end-to-end and reconciliation, ad
-            sets/ads, campaign details, normalized objectives, objective-aware KPIs, normalized
-            metrics, dashboard/analytics, reports, alerts, then the six providers end to end.
-
-            Rules that are not negotiable:
-            - Branch `autopilot/<requirement-id>`; label the PR `campaignshub-autopilot`. Never push
-              to main.
-            - Fail-first whenever a defect is testable. Fix real code, not only documents.
-            - Never redo VERIFIED work without a proven defect.
-            - Never write LIVE_VERIFIED without real operational evidence, and never invent evidence.
-            - Enforce tenant/project/account isolation; loading, empty and error states; RTL and LTR.
-            - No fabricated data, previews or metrics.
-            - Record honest statuses: BLOCKED_EXTERNAL_CREDENTIALS when a real credential is missing,
-              BLOCKED_OPERATIONAL_EVIDENCE when only a live session is missing,
-              INVESTIGATION_REQUIRED when evidence does not yet answer the question. Then move to the
-              next actionable requirement rather than stopping.
-            - Update the matrix and RESUME_STATE inside the same functional PR.
-            - Do not ask the owner anything. When ambiguous, choose what best serves the goal —
-              manage, monitor and analyse all paid campaigns in one place — record the decision, test
-              it, continue.
-
-            Two investigations must be closed from evidence before Phase 4 opens:
-            CREATIVE-CAMPAIGN-RELATION-001 and CREATIVE-ACCOUNT-IDENTITY-001. Do not change schema
-            for either until the evidence answers the question.
-
-            You have no provider, VPS or payment credentials and must not seek them. Production is
-            reached only by the existing fixed-command workflows, which the controllers dispatch.
-
-  # ── Free. Proves nine conditions, then merges that exact SHA. ──────────────────────────────────
-  merge:
-    needs: preflight
-    if: needs.preflight.outputs.pr_number != ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
-      pull-requests: write
-    outputs:
-      merged_sha: ${{ steps.gate.outputs.merged_sha }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: gate
-        continue-on-error: true      # "not eligible" is an ordinary outcome, not a failed run.
-        run: bash scripts/autopilot/merge-gate.sh "${{ needs.preflight.outputs.pr_number }}"
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-  # ── Free. A GITHUB_TOKEN merge does not reliably fire push workflows, so ask explicitly. ───────
-  deploy:
-    needs: merge
-    if: needs.merge.outputs.merged_sha != ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      actions: write     # Scoped to this job alone: dispatching an approved workflow, nothing else.
-    steps:
-      - name: Dispatch and verify Deploy Production
+      - name: State the cancellation
         run: |
-          set -Eeuo pipefail
-          gh workflow run deploy-production.yml --repo "$GITHUB_REPOSITORY" --ref main
-          sleep 30
-          for _ in $(seq 1 80); do
-            RUN=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-production.yml \
-                    --limit 1 --json databaseId,status,conclusion)
-            [ "$(printf '%s' "$RUN" | jq -r .[0].status)" = "completed" ] && break
-            sleep 30
-          done
-          CONCL=$(printf '%s' "$RUN" | jq -r .[0].conclusion)
-          ID=$(printf '%s' "$RUN" | jq -r .[0].databaseId)
-          printf '::notice::deploy run %s concluded %s\n' "$ID" "$CONCL"
-          # Deployment is not claimed until this succeeds — a dispatch is not an outcome.
-          [ "$CONCL" = "success" ]
-        env:
-          GH_TOKEN: ${{ github.token }}
+          echo "::notice::Paid autonomous development is CANCELLED BY OWNER (2026-08-20)."
+          echo "::notice::No Anthropic invocation exists in this workflow. Development runs from the container."

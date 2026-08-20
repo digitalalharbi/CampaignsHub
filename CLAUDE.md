@@ -26,34 +26,40 @@ Then read, in this order — they are the project's own record and they outrank 
 Work from what those say. If a document contradicts the code, the code is the fact and the document
 is a defect worth fixing.
 
-## AUTOPILOT_ENABLED_BY_OWNER — 2026-08-20
+## Execution policy — owner decision, 2026-08-20
 
-The owner has re-enabled autonomous development. `.github/workflows/campaignshub-autopilot.yml` runs
-the agent; `.github/workflows/claude.yml` remains as it was and is still not triggered by `@claude`.
+**ALL PRODUCT DEVELOPMENT EXECUTION HAPPENS DIRECTLY FROM THE CLAUDE CODE CONTAINER.**
 
-**The cost guard is part of the decision, not an optimisation.** Enabling the agent was never
-authorisation for unbounded paid API consumption, so the schedule is deliberately split in two:
+**GitHub is source control, CI and deployment only. GitHub must never invoke Claude or Anthropic for
+development.**
 
-- A deterministic **preflight** job — `gh`, shell and repository files only — decides whether there is
-  work. It costs zero Anthropic tokens.
-- The Anthropic action is gated on `needs.preflight.outputs.invoke_claude == 'true'`. **An idle
-  scheduled hour invokes Anthropic zero times.**
+`AUTOPILOT-001` and `AUTOPILOT-CONTINUOUS-CHAIN-001` are cancelled and are no longer product
+requirements. Do not build a replacement.
 
-Claude is invoked for implementation, for investigation that needs reasoning, and to root-cause a
-real test failure. It is never invoked to wait for CI, to merge a known-green SHA, to wait for a
-deploy, to poll a workflow, or to discover that there is nothing to do. Those are controller jobs and
-they are deterministic.
+Both model-invoking workflows are disabled in the tree rather than deleted, so the decision is
+visible where somebody would otherwise re-add it by accident:
 
-**Secrets never reach the agent.** The Claude job holds `contents: write`, `pull-requests: write`,
-`issues: write` and `actions: read` — never `actions: write`. Provider credentials (Snapchat, Meta,
-Google Ads, TikTok, X, LinkedIn), VPS credentials and payment credentials are not exposed to it, and
-production is reached only through the existing fixed-command workflows. The agent does not SSH and
-does not construct remote commands.
+- `.github/workflows/campaignshub-autopilot.yml` — the scheduled path. No `schedule`, no `develop`
+  job.
+- `.github/workflows/claude.yml` — the `@claude` mention path. Its four event triggers are gone, so
+  writing `@claude` on an issue or a review does nothing.
 
-Everything else in this document remains binding, in particular: Git outranks the matrix, which
-outranks `RESUME_STATE`, which outranks any other document; VERIFIED work is never redone without a
-proven fail-first defect; nothing is claimed LIVE_VERIFIED without real operational evidence; and no
-change reaches `main` except through a branch, a pull request and green CI.
+Neither file contains `anthropics/claude-code-action`, `ANTHROPIC_API_KEY`, any `secrets.`
+reference, or any `uses:` at all. Each keeps a manually dispatched no-op that states the position.
+
+`scripts/autopilot/test-autopilot.sh` fails the build if either workflow regains an automatic
+trigger, the action, the key, a secret reference or any action invocation — and separately asserts
+that `ci.yml`, `deploy-production.yml` and `production-diagnostics.yml` still have jobs, so the
+cancellation cannot be achieved by breaking the workflows that do real work.
+
+The cycle is: change real product code in the container, test locally, commit, push, CI, merge,
+deploy, verify, continue to the next unit.
+
+Everything else in this document remains binding: Git outranks the matrix, which outranks
+`RESUME_STATE`; VERIFIED work is never redone without a proven fail-first defect; nothing is claimed
+LIVE_VERIFIED without real operational evidence; no change reaches `main` except through a branch, a
+pull request and green CI; and backend rows or green API tests are never completion on their own — a
+data feature is done when the chain reaches the rendered UI and, where possible, live evidence.
 
 ## How work reaches main
 
