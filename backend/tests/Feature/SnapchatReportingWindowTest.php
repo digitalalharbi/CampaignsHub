@@ -282,6 +282,85 @@ final class SnapchatReportingWindowTest extends TestCase
      * The body below is that production response, reduced. A mock that is not the platform's shape
      * tests the mock.
      */
+    // ── SNAP-CREATIVE-METRICS-001 ─────────────────────────────────────────────────────────────
+
+    /**
+     * The stats call, asked at the CREATIVE level.
+     *
+     * Every metric this product held was a campaign total, because `breakdown` was the literal
+     * string `campaign`. The content library listed 1,451 real creatives with «لا توجد بيانات»
+     * under each, and that was accurate — no creative-level row existed anywhere.
+     */
+    public function test_creative_level_stats_are_requested_and_returned_per_creative(): void
+    {
+        $this->account('act-1', 'Asia/Riyadh');
+
+        Http::fake([
+            '*/adaccounts/act-1/stats*' => Http::response(['timeseries_stats' => [
+                $this->creativeSeries('cr-1', 12.5),
+            ]], 200),
+            '*' => Http::response([], 200),
+        ]);
+
+        $rows = $this->connector()->syncCreativeInsights('act-1', '2026-08-01', '2026-08-01')->records;
+
+        $this->assertCount(1, $rows, 'The creative breakdown produced no rows.');
+        $this->assertSame('cr-1', $rows[0]['campaign_id'], "The row must carry the provider's CREATIVE id.");
+        $this->assertSame('2026-08-01', $rows[0]['date']);
+        $this->assertEqualsWithDelta(12.5, (float) $rows[0]['spend'], 0.01, 'Micro-units must be divided.');
+
+        // The request actually asked Snapchat for the creative level — not campaign with a new name.
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'breakdown=creative'));
+    }
+
+    /**
+     * The campaign path is untouched: it feeds `daily_metrics`, whose natural key has no room for a
+     * creative. A change that quietly moved campaign totals to a different level would be far worse
+     * than the missing creative rows.
+     */
+    public function test_the_campaign_level_still_asks_for_campaign(): void
+    {
+        $this->account('act-1', 'Asia/Riyadh');
+
+        Http::fake([
+            '*/adaccounts/act-1/stats*' => Http::response(['timeseries_stats' => [
+                $this->series('cmp-1', 40.0),
+            ]], 200),
+            '*' => Http::response([], 200),
+        ]);
+
+        $rows = $this->connector()->syncInsights('act-1', '2026-08-01', '2026-08-01')->records;
+
+        $this->assertSame('cmp-1', $rows[0]['campaign_id']);
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'breakdown=campaign'));
+    }
+
+    /** The account's own shape, with the creative breakdown Snapchat returns for `breakdown=creative`. */
+    private function creativeSeries(string $creativeId, float $spend): array
+    {
+        return [
+            'timeseries_stat' => [
+                'id' => 'act-1',
+                'type' => 'AD_ACCOUNT',
+                'paging' => ['next_link' => ''],
+                'start_time' => '2026-08-01T00:00:00.000+03:00',
+                'end_time' => '2026-08-02T00:00:00.000+03:00',
+                'breakdown_stats' => [
+                    'creative' => [[
+                        'id' => $creativeId,
+                        'type' => 'CREATIVE',
+                        'granularity' => 'DAY',
+                        'timeseries' => [[
+                            'start_time' => '2026-08-01T00:00:00.000+03:00',
+                            'end_time' => '2026-08-02T00:00:00.000+03:00',
+                            'stats' => ['spend' => $spend * 1_000_000, 'impressions' => 300],
+                        ]],
+                    ]],
+                ],
+            ],
+        ];
+    }
+
     private function series(string $campaignId, float $spend): array
     {
         return [

@@ -1,0 +1,157 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domains\Campaigns\Actions;
+
+use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Integrations\Models\ExternalAccount;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+/**
+ * SNAP-CREATIVE-METRICS-001 — provider creative rows become `creative_daily_metrics`.
+ *
+ * ## Why this table and not `daily_metrics`
+ *
+ * `daily_metrics` is keyed `(external_account_id, external_campaign_id, metric_key, metric_date,
+ * attribution_window)` with `external_campaign_id` NOT NULL. There is no column for a creative and
+ * no honest way to invent one. `creative_daily_metrics` has existed since `2026_07_27_120000`,
+ * complete and empty, waiting for exactly these rows.
+ *
+ * ## A creative we have not discovered is SKIPPED, never created
+ *
+ * The structure sweep owns creative identity; this action owns numbers. A stats row naming a
+ * creative the sweep has not seen is counted as skipped and dropped — inventing an `ExternalCreative`
+ * here would produce a row with a provider id and nothing else: no name, no format, no ad, no
+ * campaign. That is a placeholder wearing a creative's clothes, and the content library would show
+ * it as real.
+ *
+ * ## Idempotent by the table's own key
+ *
+ * `unique(creative_id, metric_date)` makes the upsert safe to repeat, so a re-sync of an overlapping
+ * window corrects figures in place rather than doubling them — which matters because attribution
+ * keeps moving for days after the fact.
+ */
+final class UpsertCreativeDailyMetrics
+{
+    /** Columns the provider row can carry, in the shape `pointToRow()` produces. */
+    private const MEASURES = [
+        'spend', 'impressions', 'clicks', 'conversions', 'revenue', 'video_views', 'video_completions',
+    ];
+
+    /**
+     * @param  list<array<string,mixed>>  $rows  canonical rows; the provider creative id is in `campaign_id`
+     * @return array{upserted:int,skipped:int,ambiguous:int}
+     */
+    public function execute(ExternalAccount $account, array $rows): array
+    {
+        if ($rows === []) {
+            return ['upserted' => 0, 'skipped' => 0, 'ambiguous' => 0];
+        }
+
+        /*
+         * Resolution is SCOPED, and ambiguity fails closed — CREATIVE-ACCOUNT-IDENTITY-001.
+         *
+         * `external_creatives` is unique on `(project_id, provider, external_creative_id)` and holds
+         * no account column, while a project may bind several accounts of one provider. Matching on
+         * `provider + external_creative_id` alone would therefore let one account's stats land on
+         * another account's creative — silently, and only in the projects where it matters.
+         *
+         * The account is reached through the canonical relation that does exist: a creative names its
+         * external campaign, and a campaign names its account. Scoping through it means a row can
+         * only ever be written to a creative that belongs to the account the stats came from.
+         *
+         * If a provider creative id still resolves to more than one row inside that scope, nothing
+         * is written for it. Picking one would be a coin toss recorded as a measurement.
+         */
+        $ids = array_values(array_unique(array_filter(
+            array_map(static fn (array $r): string => (string) ($r['campaign_id'] ?? ''), $rows),
+        )));
+
+        $scoped = ExternalCreative::withoutGlobalScopes()
+            ->where('provider', $account->provider)
+            ->where('tenant_id', $account->tenant_id)
+            ->whereIn('external_creative_id', $ids)
+            ->whereIn('external_campaign_id', ExternalCampaign::withoutGlobalScopes()
+                ->where('external_account_id', $account->getKey())
+                ->select('id'))
+            ->get(['id', 'tenant_id', 'project_id', 'campaign_id', 'external_creative_id']);
+
+        $byProviderId = [];
+        $ambiguous = [];
+
+        foreach ($scoped as $creative) {
+            $key = (string) $creative->external_creative_id;
+
+            if (isset($byProviderId[$key])) {
+                $ambiguous[$key] = true;
+
+                continue;
+            }
+
+            $byProviderId[$key] = $creative;
+        }
+
+        // An id that resolved more than once resolves to nothing.
+        foreach (array_keys($ambiguous) as $key) {
+            unset($byProviderId[$key]);
+        }
+
+        $upserted = 0;
+        $skipped = 0;
+        $payload = [];
+        $now = Carbon::now();
+
+        foreach ($rows as $row) {
+            $creative = $byProviderId[(string) ($row['campaign_id'] ?? '')] ?? null;
+            $date = (string) ($row['date'] ?? '');
+
+            if ($creative === null || $date === '') {
+                $skipped++;
+
+                continue;
+            }
+
+            $measures = [];
+            foreach (self::MEASURES as $key) {
+                /*
+                 * ABSENT stays absent — the column default is what applies.
+                 *
+                 * A platform that does not report video completions has not reported zero of them,
+                 * and writing 0 here would turn «not measured» into «measured as none» on a card
+                 * that reads the two differently.
+                 */
+                if (array_key_exists($key, $row) && $row[$key] !== null) {
+                    $measures[$key] = $row[$key];
+                }
+            }
+
+            $payload[] = [
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $creative->tenant_id,
+                'project_id' => $creative->project_id,
+                'creative_id' => $creative->id,
+                'campaign_id' => $creative->campaign_id,
+                'metric_date' => $date,
+                'is_demo' => false,
+                'created_at' => $now,
+                'updated_at' => $now,
+                ...$measures,
+            ];
+            $upserted++;
+        }
+
+        foreach (array_chunk($payload, 500) as $chunk) {
+            DB::table('creative_daily_metrics')->upsert(
+                $chunk,
+                ['creative_id', 'metric_date'],
+                [...self::MEASURES, 'campaign_id', 'updated_at'],
+            );
+        }
+
+        return ['upserted' => $upserted, 'skipped' => $skipped, 'ambiguous' => count($ambiguous)];
+    }
+}

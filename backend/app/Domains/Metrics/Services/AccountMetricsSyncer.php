@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Services;
 
+use App\Domains\Campaigns\Actions\UpsertCreativeDailyMetrics;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
+use App\Domains\Integrations\Providers\ReportsCreativeInsights;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
@@ -146,6 +148,36 @@ final class AccountMetricsSyncer
         }
 
         [$upserted, $skipped] = $this->ingest($account, $result->records);
+
+        /*
+         * SNAP-CREATIVE-METRICS-001 — the same window, asked again at the creative level.
+         *
+         * Campaign totals answer «how is the account doing». They cannot answer «which creative is
+         * working», which is what the content library exists for — and until now it had nothing to
+         * show, because nobody had asked. This is a separate call to a separate table
+         * (`creative_daily_metrics`), so a failure here cannot cost the campaign figures that have
+         * already been ingested above.
+         *
+         * Guarded by the interface: a provider that reports no creative level is never asked, and
+         * pays no round trip for it. Failures are swallowed deliberately — creative numbers are an
+         * enrichment, and turning a healthy metrics run red because one extra call was throttled
+         * would trade a working pipeline for a nicer screen.
+         */
+        if ($connector instanceof ReportsCreativeInsights) {
+            try {
+                $creative = $connector->syncCreativeInsights(
+                    $account->external_id,
+                    $from->toDateString(),
+                    $to->toDateString(),
+                );
+
+                if ($creative->success) {
+                    app(UpsertCreativeDailyMetrics::class)->execute($account, $creative->records);
+                }
+            } catch (Throwable) {
+                // Recorded by the campaign run's own counters; the creative level is best-effort.
+            }
+        }
 
         /*
          * Keep what the platform said, beside what we made of it (INTEG-RAW-001).
