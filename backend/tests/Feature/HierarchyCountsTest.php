@@ -200,6 +200,23 @@ final class HierarchyCountsTest extends TestCase
         );
     }
 
+    /**
+     * SNAP-CREATIVE-METRICS-001 — the report distinguishes «no creatives» from «creatives with no
+     * numbers», which is the exact confusion that hid this defect for so long.
+     */
+    public function test_creatives_without_any_figure_are_called_out(): void
+    {
+        $campaign = $this->campaign('cmp-1');
+        $adSet = $this->adSet('sq-1', $campaign);
+        $ad = $this->ad('ad-1', $adSet, $campaign);
+        $this->creative('cr-1', $ad, $campaign);
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('creative_daily_metrics rows : 0')
+            ->expectsOutputToContain('No creative-level figures at all')
+            ->assertSuccessful();
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────────────────────
 
     private function campaign(string $externalId): ExternalCampaign

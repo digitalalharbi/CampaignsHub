@@ -343,6 +343,40 @@ final class DiagnoseSyncCommand extends Command
          * adapter's shape. Until one is read, the number stands on its own.
          */
 
+        /*
+         * SNAP-CREATIVE-METRICS-001 — are there creative-level NUMBERS, not just creative rows?
+         *
+         * The hierarchy above counts entities. It said 1,451 creatives while every one of them
+         * showed «لا توجد بيانات», because `breakdown` was campaign-only and no creative-level row
+         * had ever been fetched. Counting the entities could not tell those two states apart; this
+         * can.
+         */
+        $creativeIds = (clone $creatives)->pluck('id');
+
+        $metricRows = $creativeIds->isEmpty() ? 0 : (int) DB::table('creative_daily_metrics')
+            ->whereIn('creative_id', $creativeIds->all())
+            ->count();
+
+        $withMetrics = $creativeIds->isEmpty() ? 0 : (int) DB::table('creative_daily_metrics')
+            ->whereIn('creative_id', $creativeIds->all())
+            ->distinct()
+            ->count('creative_id');
+
+        $latest = $creativeIds->isEmpty() ? null : DB::table('creative_daily_metrics')
+            ->whereIn('creative_id', $creativeIds->all())
+            ->max('metric_date');
+
+        $this->line('');
+        $this->line('  CREATIVE METRICS — whether the numbers exist, not just the creatives');
+        $this->line("  creative_daily_metrics rows : {$metricRows}");
+        $this->line('  creatives with any figure   : '.$withMetrics.' of '.$creativeIds->count());
+        $this->line('  latest metric_date          : '.($latest ?? '—'));
+
+        if ($metricRows === 0 && $creativeIds->isNotEmpty()) {
+            $this->warn('  No creative-level figures at all. Every creative will read «لا توجد بيانات» — '
+                .'correctly, because nothing has been fetched for them.');
+        }
+
         $this->line('');
         $this->line('  Orphaned ad squads and ads cannot appear above: `external_campaign_id` is NOT NULL on');
         $this->line('  both tables, so a row naming an undiscovered parent is REJECTED at import rather than');
