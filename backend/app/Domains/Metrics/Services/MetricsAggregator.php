@@ -123,6 +123,18 @@ final class MetricsAggregator
         'spend_original' => "COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend'), 0)",
         'revenue_withheld_rows' => "COUNT(*) FILTER (WHERE metric_key = 'revenue' AND value IS NULL AND original_amount IS NOT NULL)",
         'revenue_original' => "COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'revenue'), 0)",
+
+        /*
+         * The currency the original is IN — without it the number cannot be shown.
+         *
+         * «3,465.33» beside a project that reports in SAR reads as riyals, which is a worse lie than
+         * the zero it replaces. `MIN` rather than an aggregate over many: a withheld figure is
+         * withheld precisely because one rate is missing, so these rows share a currency. If a second
+         * ever appears the reader gets one of them and the ORIGINAL total is the sum across both,
+         * which would be wrong — so the count below is what a caller must check first.
+         */
+        'money_original_currency' => 'MIN(original_currency) FILTER (WHERE value IS NULL AND original_amount IS NOT NULL)',
+        'money_original_currencies' => 'COUNT(DISTINCT original_currency) FILTER (WHERE value IS NULL AND original_amount IS NOT NULL)',
     ];
 
     /** When set, every aggregation is scoped to this single unified campaign (command center). */
@@ -800,6 +812,8 @@ final class MetricsAggregator
             'spend_original' => round((float) ($row['spend_original'] ?? 0), 2),
             'revenue_withheld_rows' => (int) ($row['revenue_withheld_rows'] ?? 0),
             'revenue_original' => round((float) ($row['revenue_original'] ?? 0), 2),
+            'money_original_currency' => $row['money_original_currency'] ?? null,
+            'money_original_currencies' => (int) ($row['money_original_currencies'] ?? 0),
             'reach' => round($reach, 2),
             'video_views' => round($videoViews, 2),
             'video_completions' => round($videoCompletions, 2),
