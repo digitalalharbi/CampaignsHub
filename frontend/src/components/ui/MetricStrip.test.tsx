@@ -133,4 +133,32 @@ describe('reading', () => {
     expect(reading(0, format)).toEqual({ kind: 'value', text: '0' })
     expect(calls).toEqual([0])
   })
+
+  it('shows a withheld figure at full weight with the reason, never as zero or as absent', () => {
+    // FX-WITHHELD-UI-001. The platform reported 3,465.33 USD and no rate exists to convert it.
+    // Before this variant the withheld null fell through to «no data» and the screen read 0.
+    render(
+      <MetricStrip
+        id="t"
+        ar
+        primary={[item({ key: 'spend', label: 'الإنفاق', reading: { kind: 'withheld', original: '3,465.33 USD' } })]}
+      />,
+    )
+
+    const card = screen.getByTestId('metric-spend')
+
+    // The real figure is present — the whole point of the variant.
+    expect(card).toHaveTextContent('3,465.33 USD')
+
+    // And the reader is told why it is not in their currency.
+    expect(card).toHaveTextContent(/التحويل إلى عملة المشروع غير متاح/)
+
+    // It must NOT be described as something the platform failed to send.
+    expect(card).not.toHaveTextContent('لم ترسله المنصة')
+    expect(card).not.toHaveTextContent('لا توجد بيانات')
+
+    // The card is a real reading, not a muted absence.
+    expect(card).toHaveAttribute('data-state', 'withheld')
+  })
+
 })
