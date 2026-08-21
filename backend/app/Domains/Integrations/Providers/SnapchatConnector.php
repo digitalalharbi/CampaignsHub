@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Reporting\ReportingWindow;
+use App\Domains\Integrations\ValueObjects\SyncResult;
 
 /**
  * Snapchat Marketing API (`adsapi.snapchat.com/v1`).
@@ -19,7 +20,7 @@ use App\Domains\Integrations\Reporting\ReportingWindow;
  *
  * Awaiting credentials on this install — no round trip has been made against a real organisation.
  */
-final class SnapchatConnector extends ApiAdvertisingConnector
+final class SnapchatConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights
 {
     /** Snapchat states money in millionths. */
     private const MICRO = 1_000_000;
@@ -421,9 +422,23 @@ final class SnapchatConnector extends ApiAdvertisingConnector
      * `campaign_id` is the PROVIDER'S CREATIVE id. The caller resolves it against
      * `external_creatives.external_creative_id`; a creative we have not discovered yet is the
      * caller's decision to skip, not this adapter's to invent.
-     *
-     * @return list<array<string,mixed>>
      */
+    public function syncCreativeInsights(string $adAccountId, string $from, string $to): SyncResult
+    {
+        /*
+         * No `refusal()` pre-check — it is private to the base class, and duplicating it here would
+         * put a second copy of the credential rule in the codebase. `tokens()` throws when there are
+         * none, and the catch below turns that into the same failed result the pre-check would have
+         * produced. One rule, one place.
+         */
+        try {
+            return SyncResult::of($this->fetchCreativeInsights($this->tokens(), $adAccountId, $from, $to));
+        } catch (\Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+    }
+
+    /** @return list<array<string,mixed>> */
     public function fetchCreativeInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
         $window = ReportingWindow::localDays($this->accountTimezone($adAccountId), $from, $to);
@@ -476,8 +491,18 @@ final class SnapchatConnector extends ApiAdvertisingConnector
                 $series = (array) (((array) $wrapper)['timeseries_stat'] ?? []);
 
                 foreach ($this->campaignSeries($series, $breakdown) as $campaignId => $points) {
-                    // What Snapchat sent, counted before any of our guards can drop one.
-                    $this->countRawInsightRows(count($points));
+                    /*
+                     * Counted for the CAMPAIGN level only — SYNC-TRUTH-004.
+                     *
+                     * The four counters describe the metrics run, whose parsed and mapped figures are
+                     * campaign rows. Counting the creative pass here too made `provider_raw_rows` 4
+                     * against `parsed_rows` 2 on a run that had parsed everything it fetched, so a
+                     * healthy sweep reported itself as having dropped half its rows. A diagnostic
+                     * that lies about loss is worse than no diagnostic.
+                     */
+                    if ($breakdown === 'campaign') {
+                        $this->countRawInsightRows(count($points));
+                    }
 
                     foreach ($points as $point) {
                         $rows[] = $this->pointToRow((string) $campaignId, (array) $point, $window->startIso());

@@ -302,12 +302,7 @@ final class SnapchatReportingWindowTest extends TestCase
             '*' => Http::response([], 200),
         ]);
 
-        $rows = $this->connector()->fetchCreativeInsights(
-            new OAuthTokens('AT', 'RT', Carbon::now()->addDay()),
-            'act-1',
-            '2026-08-01',
-            '2026-08-01',
-        );
+        $rows = $this->connector()->syncCreativeInsights('act-1', '2026-08-01', '2026-08-01')->records;
 
         $this->assertCount(1, $rows, 'The creative breakdown produced no rows.');
         $this->assertSame('cr-1', $rows[0]['campaign_id'], "The row must carry the provider's CREATIVE id.");
