@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Reporting\ReportingWindow;
+use App\Domains\Integrations\ValueObjects\SyncResult;
 
 /**
  * Snapchat Marketing API (`adsapi.snapchat.com/v1`).
@@ -19,7 +20,7 @@ use App\Domains\Integrations\Reporting\ReportingWindow;
  *
  * Awaiting credentials on this install — no round trip has been made against a real organisation.
  */
-final class SnapchatConnector extends ApiAdvertisingConnector
+final class SnapchatConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights
 {
     /** Snapchat states money in millionths. */
     private const MICRO = 1_000_000;
@@ -407,15 +408,71 @@ final class SnapchatConnector extends ApiAdvertisingConnector
     }
 
     /**
+     * SNAP-CREATIVE-METRICS-001 — the same stats call, asked at the CREATIVE level.
+     *
+     * `fetchInsights()` above is untouched: it feeds `daily_metrics`, whose natural key is
+     * `(account, campaign, metric, date, window)` and which has no column for a creative. This is a
+     * separate read with a separate destination — `creative_daily_metrics`, keyed
+     * `(creative_id, metric_date)` — so campaign totals cannot be disturbed by it.
+     *
+     * The window is chunked identically, for the identical reason: a provider that caps a DAY range
+     * refuses the whole request rather than truncating it, and a first sync asks for thirty days.
+     *
+     * Rows come back in the same canonical shape `pointToRow()` produces, except that the id in
+     * `campaign_id` is the PROVIDER'S CREATIVE id. The caller resolves it against
+     * `external_creatives.external_creative_id`; a creative we have not discovered yet is the
+     * caller's decision to skip, not this adapter's to invent.
+     */
+    public function syncCreativeInsights(string $adAccountId, string $from, string $to): SyncResult
+    {
+        /*
+         * No `refusal()` pre-check — it is private to the base class, and duplicating it here would
+         * put a second copy of the credential rule in the codebase. `tokens()` throws when there are
+         * none, and the catch below turns that into the same failed result the pre-check would have
+         * produced. One rule, one place.
+         */
+        try {
+            return SyncResult::of($this->fetchCreativeInsights($this->tokens(), $adAccountId, $from, $to));
+        } catch (\Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+    }
+
+    /** @return list<array<string,mixed>> */
+    public function fetchCreativeInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
+    {
+        $window = ReportingWindow::localDays($this->accountTimezone($adAccountId), $from, $to);
+
+        $rows = [];
+
+        foreach ($window->chunked($this->maxDaysPerRequest()) as $chunk) {
+            foreach ($this->fetchWindow($adAccountId, $tokens, $chunk, 'creative') as $row) {
+                $rows[] = $row;
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
      * One provider-valid window's worth of stats, read to its last page.
      *
      * @return list<array<string,mixed>>
      */
-    private function fetchWindow(string $adAccountId, OAuthTokens $tokens, ReportingWindow $window): array
+    private function fetchWindow(string $adAccountId, OAuthTokens $tokens, ReportingWindow $window, string $breakdown = 'campaign'): array
     {
         $url = $this->url("adaccounts/{$adAccountId}/stats").'?'.http_build_query([
             'granularity' => 'DAY',
-            'breakdown' => 'campaign',
+            /*
+             * SNAP-CREATIVE-METRICS-001 — the level is a parameter, not a constant.
+             *
+             * It was hardcoded to `campaign`, so the only metrics this product ever held were
+             * campaign totals. The content library listed 1,451 real creatives with «لا توجد بيانات»
+             * under every one of them, and that was accurate: not a single creative-level row
+             * existed to show. `creative_daily_metrics` has been in the schema since
+             * `2026_07_27_120000`, complete and empty, because nobody ever asked Snapchat for it.
+             */
+            'breakdown' => $breakdown,
             // Asked for from the map, so a metric cannot be mapped and then never requested.
             'fields' => implode(',', array_values(array_unique(self::METRICS))),
             'start_time' => $window->startIso(),
@@ -433,9 +490,19 @@ final class SnapchatConnector extends ApiAdvertisingConnector
                 /** @var array<string,mixed> $series */
                 $series = (array) (((array) $wrapper)['timeseries_stat'] ?? []);
 
-                foreach ($this->campaignSeries($series) as $campaignId => $points) {
-                    // What Snapchat sent, counted before any of our guards can drop one.
-                    $this->countRawInsightRows(count($points));
+                foreach ($this->campaignSeries($series, $breakdown) as $campaignId => $points) {
+                    /*
+                     * Counted for the CAMPAIGN level only — SYNC-TRUTH-004.
+                     *
+                     * The four counters describe the metrics run, whose parsed and mapped figures are
+                     * campaign rows. Counting the creative pass here too made `provider_raw_rows` 4
+                     * against `parsed_rows` 2 on a run that had parsed everything it fetched, so a
+                     * healthy sweep reported itself as having dropped half its rows. A diagnostic
+                     * that lies about loss is worse than no diagnostic.
+                     */
+                    if ($breakdown === 'campaign') {
+                        $this->countRawInsightRows(count($points));
+                    }
 
                     foreach ($points as $point) {
                         $rows[] = $this->pointToRow((string) $campaignId, (array) $point, $window->startIso());
@@ -480,15 +547,15 @@ final class SnapchatConnector extends ApiAdvertisingConnector
      * @param  array<string,mixed>  $series  one `timeseries_stat`
      * @return array<string, list<mixed>> provider campaign id → its day points
      */
-    private function campaignSeries(array $series): array
+    private function campaignSeries(array $series, string $level = 'campaign'): array
     {
         /** @var array<string,mixed> $breakdown */
         $breakdown = (array) ($series['breakdown_stats'] ?? []);
 
-        if (isset($breakdown['campaign']) && is_array($breakdown['campaign'])) {
+        if (isset($breakdown[$level]) && is_array($breakdown[$level])) {
             $byCampaign = [];
 
-            foreach ($breakdown['campaign'] as $entry) {
+            foreach ($breakdown[$level] as $entry) {
                 /** @var array<string,mixed> $campaign */
                 $campaign = (array) $entry;
                 $id = (string) ($campaign['id'] ?? '');
