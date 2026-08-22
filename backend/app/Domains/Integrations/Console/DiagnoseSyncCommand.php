@@ -386,13 +386,27 @@ final class DiagnoseSyncCommand extends Command
             return;
         }
 
-        $agg = app(MetricsAggregator::class);
+        /*
+         * Scoped the way the CONTROLLER scopes it — `forProjects()`, not just the context.
+         *
+         * `base()` filters on `$this->projectIds`, a property set by `forProjects()`. Setting only
+         * `ProjectContext` leaves it null, which skips the project filter entirely and aggregates
+         * across every project — a different question from the one the dashboard asks, and the first
+         * version of this diagnostic asked it without noticing.
+         */
+        $agg = app(MetricsAggregator::class)->forProjects([(string) $projectId]);
         app(ProjectContext::class)->setProjectId((string) $projectId);
         $totals = $agg->totals(Carbon::now()->subDays(29)->startOfDay(), Carbon::now()->endOfDay());
         app(ProjectContext::class)->forget();
 
         $this->line('');
         $this->line('  WHAT THE DASHBOARD CARD READS (MetricsAggregator::totals, last 30 days)');
+        /*
+         * `impressions` is the CONTROL. Without it, a row of zeros cannot distinguish «the money is
+         * missing» from «this query sees nothing at all», and the first run of this diagnostic
+         * printed zeros that could have meant either.
+         */
+        $this->line('  impressions (control)  : '.($totals['impressions'] ?? '—'));
         $this->line('  spend                  : '.($totals['spend'] ?? '—'));
         $this->line('  spend_withheld_rows    : '.($totals['spend_withheld_rows'] ?? '—'));
         $this->line('  spend_original         : '.($totals['spend_original'] ?? '—'));
