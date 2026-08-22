@@ -362,6 +362,37 @@ export function readMetric(
   const value = (totals as Record<string, number | null> | undefined)?.[key] as number | null | undefined
 
   if (!spec.derived && reported && reported[key] === false) return { kind: 'not_provided' }
+
+  /*
+   * FX-WITHHELD-UI-001 — withheld money shows the REAL figure, never a zero.
+   *
+   * FX-001 stores `value = null` when no exchange rate exists for the day, because a converted
+   * number would be invented. The aggregator then coalesces that null to 0 for arithmetic — correct
+   * for summing, and a lie on a card. The live Snapchat account reported 3,465.33 USD and every
+   * screen read «0 SAR».
+   *
+   * `spend_original` / `revenue_original` carry what the platform actually said, and
+   * `*_withheld_rows` says whether any of it was withheld at all. Shown only when a currency is
+   * known and unambiguous: «3,465.33» without «USD» beside a project reporting in SAR would read as
+   * riyals, which is worse than the zero. Ambiguous or missing currency falls through to the
+   * existing states rather than guessing.
+   */
+  const t = totals as Record<string, number | string | null> | undefined
+  const withheldRows = Number(t?.[`${key}_withheld_rows`] ?? 0)
+
+  if ((key === 'spend' || key === 'revenue') && withheldRows > 0) {
+    const original = Number(t?.[`${key}_original`] ?? 0)
+    const currency = t?.money_original_currency
+    const currencies = Number(t?.money_original_currencies ?? 0)
+
+    if (original > 0 && typeof currency === 'string' && currency !== '' && currencies === 1) {
+      return {
+        kind: 'withheld',
+        original: `${original.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`,
+      }
+    }
+  }
+
   if (value === null || value === undefined) return { kind: 'no_data' }
 
   return { kind: 'value', text: spec.format(value) }
