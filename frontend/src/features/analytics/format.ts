@@ -1,3 +1,4 @@
+import { formatMoneyReading, readMoney } from '@/lib/money/contract'
 /** Latin-digit formatters (project rule: numbers/dates/ids stay Latin even in Arabic UI). */
 
 export function compact(n: number | null | undefined): string {
@@ -72,4 +73,33 @@ export type Trend = 'up' | 'down' | 'flat'
 export function trend(delta: number | null | undefined): Trend {
   if (delta === null || delta === undefined || Math.abs(delta) < 0.0005) return 'flat'
   return delta > 0 ? 'up' : 'down'
+}
+
+
+/**
+ * MONEY-TRUTH-001 — rendering only. The RULES live in `@/lib/money/contract`.
+ *
+ * This existed as a second implementation of the withheld-money rules alongside `readMetric()`, with
+ * a test proving the two currently agreed. That is not one contract: two copies drift, and the drift
+ * stays invisible until an owner sees spend on one screen and «0» on another. Both now delegate.
+ */
+export type MoneyReading = { text: string; withheld: boolean; note: string | null }
+
+export function moneyFromTotals(
+  totals: Record<string, unknown> | undefined,
+  key: 'spend' | 'revenue',
+  ar: boolean,
+  reportingCurrency: string | null = null,
+): MoneyReading {
+  const r = readMoney(totals, key, reportingCurrency, ar)
+
+  if (r.kind === 'unavailable' || r.kind === 'absent') {
+    return { text: '\u2014', withheld: r.kind === 'unavailable', note: r.note }
+  }
+
+  return {
+    text: formatMoneyReading(r, money),
+    withheld: r.kind === 'withheld',
+    note: r.note,
+  }
 }

@@ -115,6 +115,13 @@ export interface Summary {
   reported: Record<string, boolean>
   commerce: CommerceSummary | null
   conversions_basis: ConversionsBasis
+  /**
+   * MONEY-TRUTH-001 — the currency `current`'s converted money is expressed in.
+   *
+   * Null when the range holds no money rows, in which case there is no currency to name. Every money
+   * surface reads this instead of assuming a market's currency.
+   */
+  currency: string | null
 }
 export interface TimePoint extends MetricTotals {
   date: string

@@ -26,7 +26,8 @@ import {
   type MetricFilters,
 } from './hooks'
 import { DemoBadge, KpiCard, Panel, SERIES, platformColor, tooltipProps } from './components'
-import { compact, money, num, percent, ratio } from './format'
+import { compact, money, moneyFromTotals, num, percent, ratio } from './format'
+import { formatMoneyReading, readCostPer, readRoas } from '@/lib/money/contract'
 import { funnelStageLabel } from './metricLabels'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -271,15 +272,105 @@ function PerformanceTab({ projectId, range, filters }: TabProps) {
   const ts = useTimeseries(projectId, range, filters)
   const cur = s.data?.current
   const d = s.data?.delta ?? {}
+
+  /*
+   * MONEY-TRUTH-001 — one reading, computed once, used by every money surface on this page.
+   *
+   * A delta is suppressed for a withheld figure on purpose: «+12%» against a number we could not
+   * convert would be a comparison of two unknowns, printed as a change.
+   */
+  const reportingCurrency = s.data?.currency ?? null
+  const totalsForMoney = cur as Record<string, unknown> | undefined
+
+  const spendReading = moneyFromTotals(totalsForMoney, 'spend', ar, reportingCurrency)
+  const revenueReading = moneyFromTotals(totalsForMoney, 'revenue', ar, reportingCurrency)
+
+  const cpaRaw = readCostPer(totalsForMoney, 'cpa', 'conversions', reportingCurrency, ar)
+  const cpaReading = {
+    text: formatMoneyReading(cpaRaw, money),
+    withheld: cpaRaw.kind === 'withheld',
+    note: cpaRaw.note,
+  }
+
+  /*
+   * MONEY-TRUTH-001 (timeseries) — a withheld day must never be drawn as zero.
+   *
+   * The chart plotted `dataKey="spend"` straight from the row, and a withheld day arrives as the
+   * aggregator's coalesced 0. So the KPI card could read 4,128.93 USD while the line directly beneath
+   * it sat on the axis — the same screen contradicting itself.
+   *
+   * When the money for this window is withheld the monetary lines are withdrawn and the reason is
+   * stated, rather than drawing a zero line that means «FX unavailable». Results stay: they are
+   * counts and were never in doubt.
+   */
+  const moneyPlottable = !spendReading.withheld && !revenueReading.withheld
+
+  /*
+   * ROAS reading — the ratio, and whether a period-over-period delta means anything for it.
+   *
+   * A delta is only shown when the figure is a normal converted one. Comparing a ratio derived from
+   * unconverted originals against a previous period computed on a different basis would print a
+   * change that nobody measured.
+   */
+  const roasRaw = readRoas(totalsForMoney, ar)
+  const roasReading = {
+    text: roasRaw.value === null ? '—' : ratio(roasRaw.value),
+    note: roasRaw.note,
+    comparable: roasRaw.kind === 'converted' || roasRaw.kind === 'zero',
+  }
   const points = ts.data ?? []
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KpiCard label={ar ? 'الإنفاق' : 'Spend'} value={money(cur?.spend)} delta={d.spend} invertGood />
-        <KpiCard label={ar ? 'الإيرادات' : 'Revenue'} value={money(cur?.revenue)} delta={d.revenue} />
-        <KpiCard label="ROAS" value={ratio(cur?.roas ?? null)} delta={d.roas} />
+        {/*
+          MONEY-TRUTH-001 — read through the shared contract, not `money(raw)`.
+
+          These two printed «0 SAR» over 4,128.93 USD of real spend, because the aggregator coalesces
+          a withheld sum to 0 and `money()` cannot tell that from a measured zero. The dashboard
+          already read it correctly through `readMetric`; this page did not, so one account showed
+          spend on one screen and nothing on another for the same window.
+        */}
+        <KpiCard
+          label={ar ? 'الإنفاق' : 'Spend'}
+          value={spendReading.text}
+          hint={spendReading.note ?? undefined}
+          delta={spendReading.withheld ? null : d.spend}
+          invertGood
+        />
+        <KpiCard
+          label={ar ? 'الإيرادات' : 'Revenue'}
+          value={revenueReading.text}
+          hint={revenueReading.note ?? undefined}
+          delta={revenueReading.withheld ? null : d.revenue}
+        />
+        {/*
+          ROAS through the canonical contract — MONEY-TRUTH-001.
+
+          The aggregator's `roas` is revenue/spend computed from figures that were coalesced to 0 when
+          withheld, so it is 0 or nonsense exactly when the money is unconvertible. Being a RATIO it
+          survives a missing rate when both sides share one original currency — the quotient is
+          identical before and after conversion — and is refused when they do not.
+        */}
+        <KpiCard
+          label="ROAS"
+          value={roasReading.text}
+          hint={roasReading.note ?? undefined}
+          delta={roasReading.comparable ? d.roas : null}
+        />
         <KpiCard label={ar ? 'النتائج' : 'Results'} value={num(cur?.conversions)} delta={d.conversions} />
-        <KpiCard label="CPA" value={money(cur?.cpa)} delta={d.cpa} invertGood />
+        {/*
+          CPA is money one level down: its numerator is spend. With spend withheld the aggregator
+          divided a coalesced 0, so the card said «CPA 0 SAR» over 4,128.93 USD of real spend — the
+          same lie, derived. `readCostPer` recomputes it from the original when that is valid and
+          refuses when it is not.
+        */}
+        <KpiCard
+          label="CPA"
+          value={cpaReading.text}
+          hint={cpaReading.note ?? undefined}
+          delta={cpaReading.withheld ? null : d.cpa}
+          invertGood
+        />
         <KpiCard label="CTR" value={percent(cur?.ctr, 2)} delta={d.ctr} />
       </div>
       {/*
@@ -310,8 +401,13 @@ function PerformanceTab({ projectId, range, filters }: TabProps) {
               <YAxis tick={axis} tickFormatter={(v) => compact(Number(v))} width={44} />
               <Tooltip {...tooltipProps} formatter={(v: number) => num(v)} />
               <Legend wrapperStyle={{ fontSize: 13 }} />
-              <Line name={ar ? 'الإنفاق' : 'Spend'} type="monotone" dataKey="spend" stroke={SERIES.spend} strokeWidth={2} dot={false} />
-              <Line name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} />
+              {/* Withdrawn rather than drawn as zero — see MONEY-TRUTH-001 above. */}
+              {moneyPlottable && (
+                <Line name={ar ? 'الإنفاق' : 'Spend'} type="monotone" dataKey="spend" stroke={SERIES.spend} strokeWidth={2} dot={false} />
+              )}
+              {moneyPlottable && (
+                <Line name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} />
+              )}
               <Line name={ar ? 'النتائج' : 'Results'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>

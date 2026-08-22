@@ -1,3 +1,4 @@
+import { formatMoneyReading, readMoney } from '@/lib/money/contract'
 import type { MetricItem, MetricReading } from '@/components/ui/MetricStrip'
 import type { MetricTotals, Summary } from '@/features/analytics/api'
 import { money, num, percent, ratio } from '@/features/analytics/format'
@@ -358,6 +359,7 @@ export function readMetric(
   spec: Spec,
   totals: Record<string, number | null> | MetricTotals | undefined,
   reported: Record<string, boolean> | undefined,
+  reportingCurrency?: string | null,
 ): MetricReading {
   const value = (totals as Record<string, number | null> | undefined)?.[key] as number | null | undefined
 
@@ -377,20 +379,20 @@ export function readMetric(
    * riyals, which is worse than the zero. Ambiguous or missing currency falls through to the
    * existing states rather than guessing.
    */
-  const t = totals as Record<string, number | string | null> | undefined
-  const withheldRows = Number(t?.[`${key}_withheld_rows`] ?? 0)
+  /*
+   * MONEY-TRUTH-001 — delegated, not reimplemented.
+   *
+   * These rules used to live here AND in `moneyFromTotals`. One canonical reader now owns them, so
+   * the dashboard and Analytics cannot disagree by drifting apart.
+   */
+  if (key === 'spend' || key === 'revenue') {
+    const m = readMoney(totals as Record<string, unknown> | undefined, key, reportingCurrency ?? null, true)
 
-  if ((key === 'spend' || key === 'revenue') && withheldRows > 0) {
-    const original = Number(t?.[`${key}_original`] ?? 0)
-    const currency = t?.money_original_currency
-    const currencies = Number(t?.money_original_currencies ?? 0)
-
-    if (original > 0 && typeof currency === 'string' && currency !== '' && currencies === 1) {
-      return {
-        kind: 'withheld',
-        original: `${original.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`,
-      }
+    if (m.kind === 'withheld' && m.amount !== null) {
+      // Same formatter as every other surface — the text itself is part of the contract.
+      return { kind: 'withheld', original: formatMoneyReading(m, (n, c) => `${n} ${c ?? ''}`.trim()) }
     }
+    if (m.kind === 'unavailable') return { kind: 'no_data' }
   }
 
   if (value === null || value === undefined) return { kind: 'no_data' }
