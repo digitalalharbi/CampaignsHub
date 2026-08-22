@@ -27,7 +27,7 @@ import {
 } from './hooks'
 import { DemoBadge, KpiCard, Panel, SERIES, platformColor, tooltipProps } from './components'
 import { compact, money, moneyFromTotals, num, percent, ratio } from './format'
-import { formatMoneyReading, readCostPer } from '@/lib/money/contract'
+import { formatMoneyReading, readCostPer, readRoas } from '@/lib/money/contract'
 import { funnelStageLabel } from './metricLabels'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -304,6 +304,20 @@ function PerformanceTab({ projectId, range, filters }: TabProps) {
    * counts and were never in doubt.
    */
   const moneyPlottable = !spendReading.withheld && !revenueReading.withheld
+
+  /*
+   * ROAS reading — the ratio, and whether a period-over-period delta means anything for it.
+   *
+   * A delta is only shown when the figure is a normal converted one. Comparing a ratio derived from
+   * unconverted originals against a previous period computed on a different basis would print a
+   * change that nobody measured.
+   */
+  const roasRaw = readRoas(totalsForMoney, ar)
+  const roasReading = {
+    text: roasRaw.value === null ? '—' : ratio(roasRaw.value),
+    note: roasRaw.note,
+    comparable: roasRaw.kind === 'converted' || roasRaw.kind === 'zero',
+  }
   const points = ts.data ?? []
   return (
     <div className="space-y-4">
@@ -329,7 +343,20 @@ function PerformanceTab({ projectId, range, filters }: TabProps) {
           hint={revenueReading.note ?? undefined}
           delta={revenueReading.withheld ? null : d.revenue}
         />
-        <KpiCard label="ROAS" value={ratio(cur?.roas ?? null)} delta={d.roas} />
+        {/*
+          ROAS through the canonical contract — MONEY-TRUTH-001.
+
+          The aggregator's `roas` is revenue/spend computed from figures that were coalesced to 0 when
+          withheld, so it is 0 or nonsense exactly when the money is unconvertible. Being a RATIO it
+          survives a missing rate when both sides share one original currency — the quotient is
+          identical before and after conversion — and is refused when they do not.
+        */}
+        <KpiCard
+          label="ROAS"
+          value={roasReading.text}
+          hint={roasReading.note ?? undefined}
+          delta={roasReading.comparable ? d.roas : null}
+        />
         <KpiCard label={ar ? 'النتائج' : 'Results'} value={num(cur?.conversions)} delta={d.conversions} />
         {/*
           CPA is money one level down: its numerator is spend. With spend withheld the aggregator
