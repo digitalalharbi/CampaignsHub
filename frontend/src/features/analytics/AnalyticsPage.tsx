@@ -26,7 +26,7 @@ import {
   type MetricFilters,
 } from './hooks'
 import { DemoBadge, KpiCard, Panel, SERIES, platformColor, tooltipProps } from './components'
-import { compact, money, num, percent, ratio } from './format'
+import { compact, money, moneyFromTotals, num, percent, ratio } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -271,12 +271,40 @@ function PerformanceTab({ projectId, range, filters }: TabProps) {
   const ts = useTimeseries(projectId, range, filters)
   const cur = s.data?.current
   const d = s.data?.delta ?? {}
+
+  /*
+   * MONEY-TRUTH-001 — one reading, computed once, used by every money surface on this page.
+   *
+   * A delta is suppressed for a withheld figure on purpose: «+12%» against a number we could not
+   * convert would be a comparison of two unknowns, printed as a change.
+   */
+  const spendReading = moneyFromTotals(cur as Record<string, unknown> | undefined, 'spend', ar)
+  const revenueReading = moneyFromTotals(cur as Record<string, unknown> | undefined, 'revenue', ar)
   const points = ts.data ?? []
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KpiCard label={ar ? 'الإنفاق' : 'Spend'} value={money(cur?.spend)} delta={d.spend} invertGood />
-        <KpiCard label={ar ? 'الإيرادات' : 'Revenue'} value={money(cur?.revenue)} delta={d.revenue} />
+        {/*
+          MONEY-TRUTH-001 — read through the shared contract, not `money(raw)`.
+
+          These two printed «0 SAR» over 4,128.93 USD of real spend, because the aggregator coalesces
+          a withheld sum to 0 and `money()` cannot tell that from a measured zero. The dashboard
+          already read it correctly through `readMetric`; this page did not, so one account showed
+          spend on one screen and nothing on another for the same window.
+        */}
+        <KpiCard
+          label={ar ? 'الإنفاق' : 'Spend'}
+          value={spendReading.text}
+          hint={spendReading.note ?? undefined}
+          delta={spendReading.withheld ? null : d.spend}
+          invertGood
+        />
+        <KpiCard
+          label={ar ? 'الإيرادات' : 'Revenue'}
+          value={revenueReading.text}
+          hint={revenueReading.note ?? undefined}
+          delta={revenueReading.withheld ? null : d.revenue}
+        />
         <KpiCard label="ROAS" value={ratio(cur?.roas ?? null)} delta={d.roas} />
         <KpiCard label={ar ? 'النتائج' : 'Results'} value={num(cur?.conversions)} delta={d.conversions} />
         <KpiCard label="CPA" value={money(cur?.cpa)} delta={d.cpa} invertGood />
