@@ -101,7 +101,7 @@ export function HeroSection({
         </div>
 
         {/* ── The decision ── */}
-        <div className="order-4 flex flex-col rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] lg:col-start-2 lg:row-start-1">
+        <div className="order-4 flex flex-col rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] lg:col-start-2 lg:row-start-1 lg:rounded-b-none lg:border-b-0">
           <h2 className="font-heading text-[18px] font-extrabold text-text-primary">{c.options.title}</h2>
           <p className="mt-1 text-[12px] leading-snug text-text-secondary">{c.options.subtitle}</p>
 
