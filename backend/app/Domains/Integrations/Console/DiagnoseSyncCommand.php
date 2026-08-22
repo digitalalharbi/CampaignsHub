@@ -18,8 +18,11 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\InsightPayloadRows;
+use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Console\Command;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -365,6 +368,45 @@ final class DiagnoseSyncCommand extends Command
         $latest = $creativeIds->isEmpty() ? null : DB::table('creative_daily_metrics')
             ->whereIn('creative_id', $creativeIds->all())
             ->max('metric_date');
+
+        /*
+         * FX-WITHHELD-UI-001 — what the DASHBOARD's aggregator computes, not what the table holds.
+         *
+         * The rows below are read straight from `daily_metrics`. The dashboard does not read them
+         * that way: it calls `MetricsAggregator::totals()`, and the card decides between «0» and the
+         * real figure from four fields that aggregator produces. Printing the table's own totals
+         * proved the data existed while telling us nothing about what the screen would do with it.
+         */
+        $projectId = ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $account->getKey())
+            ->whereNotNull('project_id')
+            ->value('project_id');
+
+        if ($projectId === null) {
+            return;
+        }
+
+        $agg = app(MetricsAggregator::class);
+        app(ProjectContext::class)->setProjectId((string) $projectId);
+        $totals = $agg->totals(Carbon::now()->subDays(29)->startOfDay(), Carbon::now()->endOfDay());
+        app(ProjectContext::class)->forget();
+
+        $this->line('');
+        $this->line('  WHAT THE DASHBOARD CARD READS (MetricsAggregator::totals, last 30 days)');
+        $this->line('  spend                  : '.($totals['spend'] ?? '—'));
+        $this->line('  spend_withheld_rows    : '.($totals['spend_withheld_rows'] ?? '—'));
+        $this->line('  spend_original         : '.($totals['spend_original'] ?? '—'));
+        $this->line('  money_original_currency: '.($totals['money_original_currency'] ?? 'NULL'));
+        $this->line('  money_original_currencies: '.($totals['money_original_currencies'] ?? '—'));
+
+        $shows = ((int) ($totals['spend_withheld_rows'] ?? 0)) > 0
+            && ((float) ($totals['spend_original'] ?? 0)) > 0
+            && is_string($totals['money_original_currency'] ?? null)
+            && ((int) ($totals['money_original_currencies'] ?? 0)) === 1;
+
+        $this->line('  → the card will show: '.($shows
+            ? number_format((float) $totals['spend_original'], 2).' '.$totals['money_original_currency']
+            : 'the converted figure ('.($totals['spend'] ?? 0).') — the withheld branch does NOT fire'));
 
         $this->line('');
         $this->line('  CREATIVE METRICS — whether the numbers exist, not just the creatives');
