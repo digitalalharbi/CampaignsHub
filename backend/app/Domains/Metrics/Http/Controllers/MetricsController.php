@@ -63,6 +63,18 @@ final class MetricsController extends Controller
              * metric, and the strip renders «لم ترسله المنصة» rather than a zero for the first.
              */
             'reported' => $this->scoped($request)->reportedKeys($from, $to),
+            /*
+             * MONEY-TRUTH-001 — the currency the converted figures are IN.
+             *
+             * It was in `meta` only, and `meta` is not carried through the summary hook, so every
+             * money surface had to assume one. A generic helper defaulting to SAR states the wrong
+             * unit the first time a project reports in anything else, silently — so the payload says
+             * it rather than leaving each caller to guess.
+             *
+             * Null when this range holds no money rows at all: there is then no currency to name, and
+             * inventing one would be the same class of lie one level up.
+             */
+            'currency' => $this->rangeCurrency($from, $to),
             'commerce' => $this->commerce($request, $from, $to),
             /*
              * REPORT-OBJECTIVE-005 — what the single «conversions» figure above is.

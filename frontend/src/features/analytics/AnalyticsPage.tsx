@@ -279,7 +279,7 @@ function PerformanceTab({ projectId, range, filters }: TabProps) {
    * A delta is suppressed for a withheld figure on purpose: «+12%» against a number we could not
    * convert would be a comparison of two unknowns, printed as a change.
    */
-  const reportingCurrency = (s.data?.meta as { currency?: string | null } | undefined)?.currency ?? null
+  const reportingCurrency = s.data?.currency ?? null
   const totalsForMoney = cur as Record<string, unknown> | undefined
 
   const spendReading = moneyFromTotals(totalsForMoney, 'spend', ar, reportingCurrency)
@@ -421,7 +421,7 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
               <YAxis yAxisId="r" orientation="right" tick={axis} width={32} />
               <Tooltip {...tooltipProps} />
               <Legend wrapperStyle={{ fontSize: 13 }} />
-              <Bar yAxisId="l" name={ar ? 'الإنفاق' : 'Spend'} dataKey={moneyPlottable ? 'spend' : '__withheld__'} radius={[6, 6, 0, 0]}>
+              <Bar yAxisId="l" name={ar ? 'الإنفاق' : 'Spend'} dataKey="spend" radius={[6, 6, 0, 0]}>
                 {rows.map((r) => (
                   <Cell key={r.provider} fill={platformColor(r.provider)} />
                 ))}
