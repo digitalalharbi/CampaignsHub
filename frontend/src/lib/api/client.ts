@@ -156,6 +156,29 @@ api.interceptors.request.use((config) => {
 /** Prime the CSRF cookie before the first unsafe (POST/PUT/DELETE) request. */
 export async function ensureCsrfCookie(): Promise<void> {
   await axios.get('/sanctum/csrf-cookie', { withCredentials: true })
+
+  /*
+   * WEBKIT-CSRF-RACE-001 — the request resolving is not the cookie becoming READABLE.
+   *
+   * Axios builds the next POST by reading `document.cookie` synchronously, and WebKit commits a
+   * `Set-Cookie` a moment AFTER the response settles. Chromium and Firefox commit it before, which
+   * is why this only ever failed on one browser.
+   *
+   * The symptom was 419 «This page has expired» on a form that had correctly primed its token, four
+   * times in one day across `legal-public-urls`, `public-report-noauth` and
+   * `registration-onboarding` — always webkit, always a session or form test, never reproducible on
+   * demand. It reads exactly like flake, which is what made it expensive: it blocked every merge and
+   * invited re-running until green.
+   *
+   * So this returns when the token is readable, not when the network call is done. Bounded at ~500ms
+   * so a genuinely absent token still fails fast at the POST instead of freezing the form; on the two
+   * browsers that never had the problem the first check passes and nothing is delayed.
+   */
+  if (typeof document === 'undefined') return
+
+  for (let attempt = 0; attempt < 25 && !document.cookie.includes('XSRF-TOKEN='); attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
 }
 
 /** Normalized error surfaced to the UI. */
