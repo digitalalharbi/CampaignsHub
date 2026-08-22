@@ -112,6 +112,12 @@ final class MetricsAggregator
      * four are aggregates over columns we already store, not metrics any platform reports, so putting
      * them in `PIVOT` would have made the sync request «spend_withheld_rows» from Snapchat.
      *
+     * `*_original` sums ONLY the withheld rows. It summed every original at first, including rows
+     * that converted perfectly well, so a project mixing converted and unconvertible money reported
+     * an original larger than the amount actually withheld — 5,100 where 5,000 was withheld. It went
+     * unnoticed because production's rows are entirely withheld and entirely USD; the breakdown test
+     * is what exposed it, by grouping a converted row beside an unconvertible one.
+     *
      * They exist because `COALESCE(SUM(value), 0)` is right for arithmetic and wrong for a KPI card.
      * When FX-001 withholds a row there is no rate, `value` is null on purpose, and the coalesce turns
      * that into a literal 0 — indistinguishable from a day that truly cost nothing. Production paid
@@ -120,9 +126,9 @@ final class MetricsAggregator
      */
     private const MONEY_TRUTH = [
         'spend_withheld_rows' => "COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL)",
-        'spend_original' => "COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend'), 0)",
+        'spend_original' => "COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0)",
         'revenue_withheld_rows' => "COUNT(*) FILTER (WHERE metric_key = 'revenue' AND value IS NULL AND original_amount IS NOT NULL)",
-        'revenue_original' => "COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'revenue'), 0)",
+        'revenue_original' => "COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'revenue' AND value IS NULL AND original_amount IS NOT NULL), 0)",
 
         /*
          * The currency the original is IN — without it the number cannot be shown.
@@ -454,7 +460,19 @@ final class MetricsAggregator
     {
         $rows = $this->base($from, $to)
             ->select('provider')
-            ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", self::PIVOT, array_keys(self::PIVOT))))
+            /*
+             * MONEY-TRUTH-002 — provenance per ROW, not only on the grand total.
+             *
+             * `totals()` learned to carry the withheld amounts; these breakdowns did not, so platform
+             * comparison and campaign ranking still received a coalesced 0 with nothing to say it was
+             * withheld. The same lie, one level down: a platform that spent 4,128.93 USD ranked as
+             * having spent nothing, beneath a summary card showing the real figure.
+             */
+            ->selectRaw(implode(', ', array_map(
+                fn ($e, $a) => "{$e} AS {$a}",
+                array_merge(self::PIVOT, self::MONEY_TRUTH),
+                array_keys(array_merge(self::PIVOT, self::MONEY_TRUTH)),
+            )))
             ->groupBy('provider')
             ->get()
             ->map(fn ($r) => ['provider' => $r->provider] + $this->withDerived((array) $r))
@@ -592,10 +610,24 @@ final class MetricsAggregator
             ->leftJoin('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
             ->select('daily_metrics.unified_campaign_id as campaign_id', 'unified_campaigns.name as campaign_name', 'unified_campaigns.client_display_name as client_display_name', 'unified_campaigns.objective as objective', 'unified_campaigns.objective_source as objective_source')
             ->selectRaw('MAX(daily_metrics.provider) AS provider')
+            /*
+             * MONEY-TRUTH-002 — the same provenance, qualified for the join.
+             *
+             * This breakdown left-joins `unified_campaigns`, so every column has to name its table or
+             * Postgres cannot resolve it. The withheld expressions read two further columns —
+             * `original_amount` and `original_currency` — which is why the qualifier below covers four
+             * names rather than the original two.
+             */
             ->selectRaw(implode(', ', array_map(
-                fn ($e, $a) => str_replace('value', 'daily_metrics.value', str_replace('metric_key', 'daily_metrics.metric_key', $e))." AS {$a}",
-                self::PIVOT,
-                array_keys(self::PIVOT),
+                function ($e, $a) {
+                    foreach (['metric_key', 'original_amount', 'original_currency', 'value'] as $column) {
+                        $e = preg_replace('/(?<!\.)\b'.$column.'\b/', 'daily_metrics.'.$column, $e);
+                    }
+
+                    return $e." AS {$a}";
+                },
+                array_merge(self::PIVOT, self::MONEY_TRUTH),
+                array_keys(array_merge(self::PIVOT, self::MONEY_TRUTH)),
             )))
             /*
              * `objective` joins the grouping because a report has to know what each campaign's money

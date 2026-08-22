@@ -1,4 +1,4 @@
-import { formatMoneyReading, readMoney } from '@/lib/money/contract'
+import { formatMoneyReading, type MoneyTotals, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
 /** Latin-digit formatters (project rule: numbers/dates/ids stay Latin even in Arabic UI). */
 
 export function compact(n: number | null | undefined): string {
@@ -102,4 +102,32 @@ export function moneyFromTotals(
     withheld: r.kind === 'withheld',
     note: r.note,
   }
+}
+
+/**
+ * MONEY-TRUTH-002 — the row readers for breakdown tables.
+ *
+ * Platform comparison and campaign ranking read the same fields as the summary cards, one row at a
+ * time, and were the last places still calling `money()` on a raw figure. A platform that spent
+ * 4,128.93 USD ranked as having spent nothing directly beneath a card showing the real amount.
+ *
+ * They delegate to the same canonical reader, so a table and a card cannot disagree.
+ */
+export function rowMoney(row: MoneyTotals, key: 'spend' | 'revenue', currency: string | null = null): string {
+  return formatMoneyReading(readMoney(row, key, currency, true), money)
+}
+
+export function rowCostPer(
+  row: MoneyTotals,
+  key: string,
+  denominator: string,
+  currency: string | null = null,
+): string {
+  return formatMoneyReading(readCostPer(row, key, denominator, currency, true), money)
+}
+
+/** ROAS survives a missing rate when both sides share one currency; otherwise it is refused. */
+export function rowRoas(row: MoneyTotals): string {
+  const r = readRoas(row, true)
+  return r.value === null ? '—' : ratio(r.value)
 }

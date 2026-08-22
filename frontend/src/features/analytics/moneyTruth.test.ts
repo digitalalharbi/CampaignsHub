@@ -133,3 +133,51 @@ describe('derived money and timeseries provenance', () => {
     expect(r.currency).toBe('AED')
   })
 })
+
+import { rowCostPer, rowMoney, rowRoas } from './format'
+
+/**
+ * MONEY-TRUTH-002 — breakdown rows obey the same contract as the summary cards.
+ *
+ * Platform comparison and campaign ranking were the last surfaces calling `money()` on a raw figure.
+ * A platform that spent 4,128.93 USD ranked as having spent nothing, in a table sitting directly
+ * beneath a card that showed the real amount.
+ */
+describe('breakdown rows', () => {
+  const withheldRow = {
+    provider: 'snapchat',
+    spend: 0, revenue: 0, roas: 0, cpa: 0, conversions: 102,
+    spend_original: 4128.93, spend_withheld_rows: 262,
+    revenue_original: 12969.03, revenue_withheld_rows: 262,
+    money_original_currency: 'USD', money_original_currencies: 1,
+  }
+
+  it('a row shows the withheld original, not a zero', () => {
+    expect(rowMoney(withheldRow, 'spend')).toBe('4,128.93 USD')
+    expect(rowMoney(withheldRow, 'spend')).not.toContain('0 SAR')
+  })
+
+  it('a row CPA is derived from the original rather than the coalesced zero', () => {
+    const text = rowCostPer(withheldRow, 'cpa', 'conversions')
+
+    expect(text).toContain('USD')
+    expect(text).not.toBe('0 SAR')
+  })
+
+  it('a row ROAS survives one shared currency and is refused across two', () => {
+    expect(rowRoas(withheldRow)).toMatch(/3\.1/)
+    expect(rowRoas({ ...withheldRow, money_original_currencies: 2 })).toBe('—')
+  })
+
+  it('a converted row is untouched', () => {
+    const converted = { spend: 15480.5, spend_withheld_rows: 0, roas: 2.97, conversions: 102, cpa: 151.77 }
+
+    expect(rowMoney(converted, 'spend')).toContain('15K')
+    expect(rowRoas(converted)).toBe('2.97x')
+  })
+
+  /** A row that genuinely spent nothing must still say zero — this is a measurement. */
+  it('a row that spent nothing still reads zero', () => {
+    expect(rowMoney({ spend: 0, spend_withheld_rows: 0 }, 'spend')).toBe('0 SAR')
+  })
+})

@@ -100,6 +100,22 @@ export interface ConversionsBasis {
   note_en: string
 }
 
+/**
+ * MONEY-TRUTH-002 — provenance on breakdown rows.
+ *
+ * The backend's `byProvider` and `byCampaign` now carry the same withheld fields the summary does, so
+ * a table row can tell «spent nothing» from «spent something we cannot convert». Declared here rather
+ * than cast at the call site: a field that silently stops arriving should break the build.
+ */
+export interface MoneyProvenance {
+  spend_withheld_rows?: number | null
+  spend_original?: number | null
+  revenue_withheld_rows?: number | null
+  revenue_original?: number | null
+  money_original_currency?: string | null
+  money_original_currencies?: number | null
+}
+
 export interface Summary {
   current: MetricTotals
   previous: MetricTotals
@@ -126,7 +142,7 @@ export interface Summary {
 export interface TimePoint extends MetricTotals {
   date: string
 }
-export interface PlatformRow extends MetricTotals {
+export interface PlatformRow extends MetricTotals, MoneyProvenance {
   provider: string
   spend_share: number
 }
