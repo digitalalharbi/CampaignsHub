@@ -1,3 +1,4 @@
+import { formatMoneyReading, readMoney } from '@/lib/money/contract'
 /** Latin-digit formatters (project rule: numbers/dates/ids stay Latin even in Arabic UI). */
 
 export function compact(n: number | null | undefined): string {
@@ -76,29 +77,11 @@ export function trend(delta: number | null | undefined): Trend {
 
 
 /**
- * MONEY-TRUTH-001 — the ONE reading every money surface must use.
+ * MONEY-TRUTH-001 — rendering only. The RULES live in `@/lib/money/contract`.
  *
- * ## Why this exists
- *
- * `money()` takes a number. That is the whole problem: by the time a caller has a number, the
- * distinction between «this account spent nothing» and «we cannot convert what it spent» has already
- * been destroyed. `MetricsAggregator` coalesces a withheld `SUM(value)` to 0 for arithmetic — correct
- * for summing, fatal on a card — so `money(cur?.spend)` printed «0 SAR» over 4,128.93 USD of real
- * Snapchat spend.
- *
- * The dashboard learned this through `readMetric()`. Analytics, platform comparison, campaign
- * ranking and budget did not: they call `money()` on the raw field. Two code paths, one truth, and
- * the owner saw spend on one screen and zero on another for the same account and window.
- *
- * So the rule lives here, once, and takes the TOTALS rather than a number.
- *
- * ## The rule
- *
- * - a converted value exists            → the project's currency
- * - withheld, one known original        → that original, in ITS currency, marked unconvertible
- * - withheld, several currencies        → never summed into a fake number
- * - a genuinely measured zero           → zero, because that is a measurement
- * - nothing reported                    → «—», which is not zero either
+ * This existed as a second implementation of the withheld-money rules alongside `readMetric()`, with
+ * a test proving the two currently agreed. That is not one contract: two copies drift, and the drift
+ * stays invisible until an owner sees spend on one screen and «0» on another. Both now delegate.
  */
 export type MoneyReading = { text: string; withheld: boolean; note: string | null }
 
@@ -106,38 +89,17 @@ export function moneyFromTotals(
   totals: Record<string, unknown> | undefined,
   key: 'spend' | 'revenue',
   ar: boolean,
-  currency = 'SAR',
+  reportingCurrency: string | null = null,
 ): MoneyReading {
-  const withheldRows = Number(totals?.[`${key}_withheld_rows`] ?? 0)
-  const original = Number(totals?.[`${key}_original`] ?? 0)
-  const originalCurrency = totals?.money_original_currency
-  const currencyCount = Number(totals?.money_original_currencies ?? 0)
+  const r = readMoney(totals, key, reportingCurrency, ar)
 
-  if (withheldRows > 0 && original > 0 && typeof originalCurrency === 'string' && originalCurrency !== '') {
-    /*
-     * More than one unconvertible currency cannot be added together. Their sum is not a quantity of
-     * anything, and printing it beside a single currency label would state a figure nobody measured.
-     */
-    if (currencyCount !== 1) {
-      return {
-        text: '—',
-        withheld: true,
-        note: ar
-          ? 'مبالغ بعملات متعددة لا يمكن جمعها أو تحويلها'
-          : 'Amounts in several currencies that cannot be summed or converted',
-      }
-    }
-
-    return {
-      text: `${original.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${originalCurrency}`,
-      withheld: true,
-      note: ar ? 'التحويل إلى عملة المشروع غير متاح حاليًا' : 'Conversion to the project currency is unavailable',
-    }
+  if (r.kind === 'unavailable' || r.kind === 'absent') {
+    return { text: '\u2014', withheld: r.kind === 'unavailable', note: r.note }
   }
 
-  const value = totals?.[key]
-
-  if (value === null || value === undefined) return { text: '—', withheld: false, note: null }
-
-  return { text: money(Number(value), currency), withheld: false, note: null }
+  return {
+    text: formatMoneyReading(r, money),
+    withheld: r.kind === 'withheld',
+    note: r.note,
+  }
 }

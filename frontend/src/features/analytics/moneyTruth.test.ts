@@ -71,3 +71,65 @@ describe('money truth', () => {
     expect(r.text).toBe('—')
   })
 })
+
+import { readCostPer, readMoney, readRoas } from '@/lib/money/contract'
+
+/**
+ * The derived money metrics, and the chart, obey the same provenance as the raw totals.
+ */
+describe('derived money and timeseries provenance', () => {
+  const withheld = { ...WITHHELD, conversions: 102 }
+
+  it('CPA is never derived as 0 from a withheld numerator', () => {
+    const r = readCostPer(withheld, 'cpa', 'conversions', 'SAR', false)
+
+    expect(r.kind).toBe('withheld')
+    expect(r.amount).toBeCloseTo(4128.93 / 102, 4)
+    expect(r.currency).toBe('USD')
+    expect(r.amount).not.toBe(0)
+  })
+
+  it('CPA is unavailable rather than infinite when there is no denominator', () => {
+    const r = readCostPer({ ...WITHHELD, conversions: 0 }, 'cpa', 'conversions', 'SAR', false)
+
+    expect(r.kind).toBe('unavailable')
+    expect(r.amount).toBeNull()
+  })
+
+  it('ROAS survives a missing rate when both sides share one currency', () => {
+    const r = readRoas(WITHHELD, false)
+
+    // 12,969.03 / 4,128.93 — the ratio is identical before and after conversion.
+    expect(r.kind).toBe('withheld')
+    expect(r.value).toBeCloseTo(12969.03 / 4128.93, 4)
+  })
+
+  it('ROAS refuses to divide unlike currencies', () => {
+    const r = readRoas({ ...WITHHELD, money_original_currencies: 2 }, false)
+
+    expect(r.kind).toBe('unavailable')
+    expect(r.value).toBeNull()
+  })
+
+  /**
+   * The card and the chart read the SAME provenance, so one cannot show a figure while the other
+   * draws a zero line beneath it.
+   */
+  it('card and chart agree about whether spend exists', () => {
+    const card = readMoney(WITHHELD, 'spend', 'SAR', false)
+    const plottable = card.kind !== 'withheld' && card.kind !== 'unavailable'
+
+    expect(card.kind).toBe('withheld')
+    expect(plottable).toBe(false)
+
+    const measured = readMoney({ spend: 1500, spend_withheld_rows: 0 }, 'spend', 'SAR', false)
+    expect(measured.kind).toBe('converted')
+    expect(measured.kind !== 'withheld' && measured.kind !== 'unavailable').toBe(true)
+  })
+
+  it('does not assume a reporting currency', () => {
+    const r = readMoney({ spend: 900, spend_withheld_rows: 0 }, 'spend', 'AED', false)
+
+    expect(r.currency).toBe('AED')
+  })
+})

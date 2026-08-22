@@ -27,6 +27,7 @@ import {
 } from './hooks'
 import { DemoBadge, KpiCard, Panel, SERIES, platformColor, tooltipProps } from './components'
 import { compact, money, moneyFromTotals, num, percent, ratio } from './format'
+import { formatMoneyReading, readCostPer } from '@/lib/money/contract'
 import { funnelStageLabel } from './metricLabels'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -278,8 +279,31 @@ function PerformanceTab({ projectId, range, filters }: TabProps) {
    * A delta is suppressed for a withheld figure on purpose: «+12%» against a number we could not
    * convert would be a comparison of two unknowns, printed as a change.
    */
-  const spendReading = moneyFromTotals(cur as Record<string, unknown> | undefined, 'spend', ar)
-  const revenueReading = moneyFromTotals(cur as Record<string, unknown> | undefined, 'revenue', ar)
+  const reportingCurrency = (s.data?.meta as { currency?: string | null } | undefined)?.currency ?? null
+  const totalsForMoney = cur as Record<string, unknown> | undefined
+
+  const spendReading = moneyFromTotals(totalsForMoney, 'spend', ar, reportingCurrency)
+  const revenueReading = moneyFromTotals(totalsForMoney, 'revenue', ar, reportingCurrency)
+
+  const cpaRaw = readCostPer(totalsForMoney, 'cpa', 'conversions', reportingCurrency, ar)
+  const cpaReading = {
+    text: formatMoneyReading(cpaRaw, money),
+    withheld: cpaRaw.kind === 'withheld',
+    note: cpaRaw.note,
+  }
+
+  /*
+   * MONEY-TRUTH-001 (timeseries) — a withheld day must never be drawn as zero.
+   *
+   * The chart plotted `dataKey="spend"` straight from the row, and a withheld day arrives as the
+   * aggregator's coalesced 0. So the KPI card could read 4,128.93 USD while the line directly beneath
+   * it sat on the axis — the same screen contradicting itself.
+   *
+   * When the money for this window is withheld the monetary lines are withdrawn and the reason is
+   * stated, rather than drawing a zero line that means «FX unavailable». Results stay: they are
+   * counts and were never in doubt.
+   */
+  const moneyPlottable = !spendReading.withheld && !revenueReading.withheld
   const points = ts.data ?? []
   return (
     <div className="space-y-4">
@@ -307,7 +331,19 @@ function PerformanceTab({ projectId, range, filters }: TabProps) {
         />
         <KpiCard label="ROAS" value={ratio(cur?.roas ?? null)} delta={d.roas} />
         <KpiCard label={ar ? 'النتائج' : 'Results'} value={num(cur?.conversions)} delta={d.conversions} />
-        <KpiCard label="CPA" value={money(cur?.cpa)} delta={d.cpa} invertGood />
+        {/*
+          CPA is money one level down: its numerator is spend. With spend withheld the aggregator
+          divided a coalesced 0, so the card said «CPA 0 SAR» over 4,128.93 USD of real spend — the
+          same lie, derived. `readCostPer` recomputes it from the original when that is valid and
+          refuses when it is not.
+        */}
+        <KpiCard
+          label="CPA"
+          value={cpaReading.text}
+          hint={cpaReading.note ?? undefined}
+          delta={cpaReading.withheld ? null : d.cpa}
+          invertGood
+        />
         <KpiCard label="CTR" value={percent(cur?.ctr, 2)} delta={d.ctr} />
       </div>
       {/*
@@ -338,8 +374,13 @@ function PerformanceTab({ projectId, range, filters }: TabProps) {
               <YAxis tick={axis} tickFormatter={(v) => compact(Number(v))} width={44} />
               <Tooltip {...tooltipProps} formatter={(v: number) => num(v)} />
               <Legend wrapperStyle={{ fontSize: 13 }} />
-              <Line name={ar ? 'الإنفاق' : 'Spend'} type="monotone" dataKey="spend" stroke={SERIES.spend} strokeWidth={2} dot={false} />
-              <Line name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} />
+              {/* Withdrawn rather than drawn as zero — see MONEY-TRUTH-001 above. */}
+              {moneyPlottable && (
+                <Line name={ar ? 'الإنفاق' : 'Spend'} type="monotone" dataKey="spend" stroke={SERIES.spend} strokeWidth={2} dot={false} />
+              )}
+              {moneyPlottable && (
+                <Line name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} />
+              )}
               <Line name={ar ? 'النتائج' : 'Results'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
@@ -380,7 +421,7 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
               <YAxis yAxisId="r" orientation="right" tick={axis} width={32} />
               <Tooltip {...tooltipProps} />
               <Legend wrapperStyle={{ fontSize: 13 }} />
-              <Bar yAxisId="l" name={ar ? 'الإنفاق' : 'Spend'} dataKey="spend" radius={[6, 6, 0, 0]}>
+              <Bar yAxisId="l" name={ar ? 'الإنفاق' : 'Spend'} dataKey={moneyPlottable ? 'spend' : '__withheld__'} radius={[6, 6, 0, 0]}>
                 {rows.map((r) => (
                   <Cell key={r.provider} fill={platformColor(r.provider)} />
                 ))}
