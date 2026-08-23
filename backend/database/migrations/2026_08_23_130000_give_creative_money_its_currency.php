@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Campaigns\Actions\BackfillCreativeMoneyProvenance;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -48,36 +49,10 @@ return new class extends Migration
             $table->string('project_currency', 3)->nullable()->after('original_currency');
         });
 
-        // Preserve what was stored, and stop calling it the project's currency.
-        DB::statement(
-            "UPDATE creative_daily_metrics
-                SET spend_original = NULLIF(spend, 0),
-                    revenue_original = NULLIF(revenue, 0),
-                    spend = NULL,
-                    revenue = NULL
-              WHERE original_currency IS NULL"
-        );
-
-        // The currency, but only where the project leaves no room for doubt.
-        DB::statement(
-            "UPDATE creative_daily_metrics AS m
-                SET original_currency = u.currency
-               FROM (
-                    SELECT c.id AS creative_id, MIN(a.currency) AS currency
-                      FROM external_creatives c
-                      JOIN external_accounts a
-                        ON a.provider = c.provider
-                      JOIN external_campaigns ec
-                        ON ec.external_account_id = a.id
-                       AND ec.project_id = c.project_id
-                     WHERE a.currency IS NOT NULL
-                  GROUP BY c.id
-                    HAVING COUNT(DISTINCT a.currency) = 1
-               ) AS u
-              WHERE m.creative_id = u.creative_id
-                AND m.original_currency IS NULL
-                AND (m.spend_original IS NOT NULL OR m.revenue_original IS NOT NULL)"
-        );
+        // The data half lives in an action so its idempotence can be TESTED — a migration body
+        // cannot be re-run in a test, and «running it twice changes nothing» is a claim about real
+        // stored money.
+        app(BackfillCreativeMoneyProvenance::class)->execute();
     }
 
     public function down(): void

@@ -422,6 +422,33 @@ final class DiagnoseSyncCommand extends Command
             ? number_format((float) $totals['spend_original'], 2).' '.$totals['money_original_currency']
             : 'the converted figure ('.($totals['spend'] ?? 0).') — the withheld branch does NOT fire'));
 
+        /*
+         * ANALYTICS-PROVENANCE-001 — what the badge beside those figures will SAY.
+         *
+         * «Demo» used to be a literal in the JSX of four pages, so every project was labelled demo
+         * beside its own money. It now derives from the rows, which means the claim is checkable —
+         * and a claim that cannot be checked on production is not evidence, it is a hope. This is
+         * how «the badge is right on the live project» becomes something a person can read rather
+         * than something a test asserts about a fixture.
+         */
+        $provenance = $agg->provenance(Carbon::now()->subDays(29)->startOfDay(), Carbon::now()->endOfDay());
+
+        $this->line('');
+        $this->line('  WHAT THE PROVENANCE BADGE READS (MetricsAggregator::provenance, last 30 days)');
+        $this->line('  live rows  : '.$provenance['live_rows']);
+        $this->line('  demo rows  : '.$provenance['demo_rows']);
+        $this->line('  → the badge will show: '.match ($provenance['source']) {
+            'live' => 'NOTHING — real data carries no warning, which is the whole point',
+            'demo' => '«بيانات تجريبية · Demo»',
+            'mixed' => '«بيانات مختلطة · Mixed» — live and demo rows in one project',
+            default => 'NOTHING — there are no rows in this window to characterise',
+        });
+
+        if ($provenance['source'] === 'mixed') {
+            $this->warn('  Demo rows are sitting inside a project that also holds real ones. The badge '
+                .'says so, but the TOTALS above add them together — run `demo:remove` for this tenant.');
+        }
+
         $this->line('');
         $this->line('  CREATIVE METRICS — whether the numbers exist, not just the creatives');
         $this->line("  creative_daily_metrics rows : {$metricRows}");
