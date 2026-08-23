@@ -157,6 +157,16 @@ export interface CampaignRow extends MetricTotals {
   campaign_id: string
   campaign_name: string | null
   provider: string
+  objective: string | null
+  /**
+   * ANALYTICS-OBJECTIVE-VISIBLE-001 — the canonical family, computed by the BACKEND.
+   *
+   * Never derived here. `CampaignObjective::family()` is the one mapping, and a copy in TypeScript
+   * would drift the first time an objective is added — silently grouping a campaign under a verdict
+   * it was never bought for.
+   */
+  objective_family: string | null
+  objective_source: string | null
 }
 /**
  * One stage of the project (or campaign) funnel — FUNNEL-NULL-001.
