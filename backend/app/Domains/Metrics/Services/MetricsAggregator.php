@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Services;
 
+use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Services\CreativeFunnel;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Concerns\ProjectScope;
@@ -754,6 +756,18 @@ final class MetricsAggregator
                 'campaign_name' => $r->campaign_name,
                 'client_display_name' => $r->client_display_name,
                 'objective' => $r->objective,
+                /*
+                 * ANALYTICS-OBJECTIVE-VISIBLE-001 — the FAMILY, computed where the mapping lives.
+                 *
+                 * The Objective view groups campaigns into the eight canonical families and
+                 * headlines each with the metrics that family is actually judged by. That mapping is
+                 * `CampaignObjective::family()`, and it belongs here rather than mirrored in
+                 * TypeScript: a second copy would drift the first time an objective is added, and
+                 * the drift would be silent — a campaign quietly grouped under the wrong verdict.
+                 */
+                'objective_family' => $r->objective === null
+                    ? ObjectiveFamily::Unknown->value
+                    : (CampaignObjective::tryFrom((string) $r->objective)?->family() ?? ObjectiveFamily::Unknown)->value,
                 'objective_source' => $r->objective_source,
                 'provider' => $r->provider,
             ] + $this->withDerived((array) $r))

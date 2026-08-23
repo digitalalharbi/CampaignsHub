@@ -63,6 +63,8 @@ const TABS = [
   // ANALYTICS-DRILLDOWN-001 — the two rungs that had no table beneath them until now.
   { id: 'ad_sets', ar: 'تحليل المجموعات الإعلانية', en: 'Ad set analysis' },
   { id: 'ads', ar: 'تحليل الإعلانات', en: 'Ads analysis' },
+  // ANALYTICS-OBJECTIVE-VISIBLE-001 — campaigns grouped by what they were bought to do.
+  { id: 'objective', ar: 'تحليل الأهداف', en: 'Objective analysis' },
   { id: 'funnel', ar: 'التحويلات والقمع', en: 'Conversions & funnel' },
   // FUNNEL-001 — the ad funnel and the STORE funnel in one place, with the source of every number.
   { id: 'store', ar: 'الفانل والمتجر', en: 'Funnel & store' },
@@ -262,6 +264,7 @@ export function AnalyticsPage() {
       {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}
       {tab === 'ads' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />}
+      {tab === 'objective' && <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'store' && <StoreFunnelTab projectId={currentProjectId} range={range} />}
       {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} filters={filters} />}
@@ -1025,4 +1028,110 @@ function metricOrDash(value: number | null | undefined, digits = 0): string {
 /** A rate, or «—». Same rule: an unavailable ratio is not a ratio of zero. */
 function rateOrDash(value: number | null | undefined): string {
   return typeof value === 'number' ? `${(value * 100).toFixed(2)}%` : '—'
+}
+
+/**
+ * ANALYTICS-OBJECTIVE-VISIBLE-001 — campaigns judged by what they were bought to do.
+ *
+ * The objective work so far was a backend filter and a KPI list; nothing on screen let an operator
+ * SEE the split. This groups the project's campaigns into the eight canonical families and headlines
+ * each one with the metrics that family is actually judged by — reach and frequency for awareness,
+ * leads and CPL for lead generation, purchases and ROAS for sales.
+ *
+ * The family comes from the payload, never from a mapping repeated here: `CampaignObjective::family()`
+ * is the single definition, and a copy in TypeScript would drift the first time an objective is added.
+ *
+ * Money renders through the canonical reader, so a withheld figure states its own currency instead of
+ * becoming a zero.
+ */
+function ObjectiveTab({ projectId, range, filters }: TabProps) {
+  const ar = useAr()
+  const c = useCampaigns(projectId, range, filters)
+  const s = useSummary(projectId, range, filters)
+  const currency = s.data?.currency ?? null
+  const rows = c.data ?? []
+
+  /** Ordered so the funnel reads top to bottom; a family with no campaigns is not shown at all. */
+  const FAMILIES: Array<{ key: string; ar: string; en: string; kpis: string[] }> = [
+    { key: 'awareness', ar: 'الوعي', en: 'Awareness', kpis: ['impressions', 'reach', 'frequency', 'cpm'] },
+    { key: 'traffic', ar: 'الزيارات', en: 'Traffic', kpis: ['clicks', 'ctr', 'cpc'] },
+    { key: 'engagement', ar: 'التفاعل', en: 'Engagement', kpis: ['engagements', 'engagement_rate'] },
+    { key: 'video', ar: 'المشاهدات', en: 'Video', kpis: ['video_views', 'completion_rate'] },
+    { key: 'leads', ar: 'العملاء المحتملون', en: 'Leads', kpis: ['leads', 'conversion_rate'] },
+    { key: 'sales', ar: 'المبيعات', en: 'Sales', kpis: ['conversions', 'revenue', 'roas'] },
+    { key: 'app', ar: 'التطبيق', en: 'App', kpis: ['installs'] },
+    { key: 'unknown', ar: 'غير مصنَّف', en: 'Unclassified', kpis: ['impressions', 'clicks'] },
+  ]
+
+  const grouped = FAMILIES.map((f) => ({
+    ...f,
+    campaigns: rows.filter((r) => (r.objective_family ?? 'unknown') === f.key),
+  })).filter((f) => f.campaigns.length > 0)
+
+  return (
+    <div className="space-y-4">
+      <Panel
+        title={ar ? 'الأداء حسب الهدف' : 'Performance by objective'}
+        description={ar
+          ? 'كل عائلة تُقاس بما اشتُريت من أجله — لا يُحكم على حملة وعي بعائد الإنفاق'
+          : 'Each family is judged by what it was bought for — an awareness campaign is not judged on ROAS'}
+        loading={c.isLoading}
+        error={c.isError}
+        empty={!c.isLoading && grouped.length === 0}
+      >
+        <div className="space-y-4" data-testid="objective-families">
+          {grouped.map((f) => {
+            const spend = f.campaigns.reduce((t, r) => t + (typeof r.spend === 'number' ? r.spend : 0), 0)
+            const withheld = f.campaigns.reduce((t, r) => t + (r.spend_withheld_rows ?? 0), 0)
+            const original = f.campaigns.reduce((t, r) => t + (r.spend_original ?? 0), 0)
+            const money = f.campaigns.find((r) => (r.spend_withheld_rows ?? 0) > 0)
+
+            return (
+              <div key={f.key} className="rounded-xl border border-border p-3" data-testid={`objective-family-${f.key}`}>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="font-semibold text-text-primary">{ar ? f.ar : f.en}</h3>
+                  <span className="text-xs text-text-secondary">
+                    {f.campaigns.length} {ar ? 'حملة' : f.campaigns.length === 1 ? 'campaign' : 'campaigns'}
+                    {' · '}
+                    <span className="tnum" dir="ltr">
+                      {/* Withheld money keeps its own currency; a converted total uses the project's. */}
+                      {withheld > 0
+                        ? rowMoney({ spend: null, spend_withheld_rows: withheld, spend_original: original, money_original_currency: money?.money_original_currency ?? null, money_original_currencies: 1 }, 'spend', currency)
+                        : rowMoney({ spend }, 'spend', currency)}
+                    </span>
+                  </span>
+                </div>
+
+                {/* The verdict metrics for THIS family — not the same row of KPIs for every objective. */}
+                <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+                  {f.kpis.map((k) => {
+                    const total = f.campaigns.reduce<number | null>((t, r) => {
+                      const v = (r as unknown as Record<string, unknown>)[k]
+                      return typeof v === 'number' ? (t ?? 0) + v : t
+                    }, null)
+
+                    return (
+                      <div key={k} className="flex flex-col">
+                        <dt className="text-text-secondary">{k}</dt>
+                        <dd className="tnum text-text-primary" dir="ltr">
+                          {/* Null stays «—»: an unavailable figure is not a figure of zero. */}
+                          {total === null ? '—' : total.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                        </dd>
+                      </div>
+                    )
+                  })}
+                </dl>
+
+                <ul className="mt-2 space-y-0.5 text-xs text-text-secondary">
+                  {f.campaigns.slice(0, 5).map((r) => (
+                    <li key={r.campaign_id} className="truncate">{r.campaign_name ?? r.campaign_id}</li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })}
+        </div>
+      </Panel>
+    </div>
+  )
 }
