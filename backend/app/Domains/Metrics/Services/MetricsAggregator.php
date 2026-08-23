@@ -279,20 +279,67 @@ final class MetricsAggregator
         return $clone;
     }
 
-    private function base(Carbon $from, Carbon $to): Builder
+    /**
+     * DEMO-LIVE-AGGREGATION-ISOLATION-001 — an operational total never quietly contains demo money.
+     *
+     * ## The defect
+     *
+     * `base()` had no `is_demo` filter of any kind, so every aggregate this class produces — the
+     * dashboard KPIs, the platform breakdown, the campaign ranking — summed real rows and seeded
+     * ones together whenever both were in scope. ANALYTICS-PROVENANCE-001 made that VISIBLE by
+     * reporting «mixed», and a badge is where it stopped: the figures directly beneath it were
+     * still adding invented spend to a customer's real spend. Naming a leak is not closing it.
+     *
+     * ## The policy, and why it is derived rather than configured
+     *
+     * There is no `is_demo` column on `projects` or `tenants` — demo-ness is a fact about ROWS, put
+     * there by the seeders. So the scope's nature is read from the rows themselves:
+     *
+     *   - the scope holds any live row  → it is an OPERATIONAL scope, and demo rows are excluded;
+     *   - the scope holds only demo rows → it is a DEMO scope, and they are exactly what to show.
+     *
+     * A live project that somehow acquired demo rows therefore reports its own real numbers, and the
+     * demo tenant keeps working as a demo. Nothing has to be flagged by hand, and no environment
+     * variable decides whose money is real.
+     *
+     * ## Why the scope decides and not the window
+     *
+     * Deliberately evaluated WITHOUT the date range. If the window decided, a project with live rows
+     * in June and demo rows in July would switch policy as somebody dragged the date picker — the
+     * same KPI meaning two different things on two ranges, with nothing on screen to say so.
+     */
+    private function excludesDemo(): bool
     {
-        // Reuse the model's project/tenant scope, then drop to the query builder for aggregation.
-        $query = DailyMetric::query()
-            ->when($this->acrossProjects, fn ($q) => $q->withoutGlobalScope(ProjectScope::class))
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+        return $this->excludesDemo ??= $this->scoped(DailyMetric::query())
+            // Qualified, as every column in this class is: `byCampaign()` left-joins
+            // `unified_campaigns`, and an unqualified name is one added column away from ambiguous.
+            ->where('daily_metrics.is_demo', false)
+            ->exists();
+    }
+
+    /** Memo for {@see excludesDemo()} — one existence check per aggregator, not per aggregate. */
+    private ?bool $excludesDemo = null;
+
+    /**
+     * The scope filters alone: tenant, project, campaign, provider, account, objective. No date, no
+     * demo policy.
+     *
+     * Extracted so `excludesDemo()` can ask about the whole scope rather than one window, and so
+     * `provenance()` can count BOTH kinds — a provenance report filtered by the demo policy would
+     * only ever be able to say «live», which is the one answer it exists to be able to doubt.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<DailyMetric>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<DailyMetric>
+     */
+    private function scoped(mixed $query): mixed
+    {
+        $query->when($this->acrossProjects, fn ($q) => $q->withoutGlobalScope(ProjectScope::class));
 
         if ($this->campaignId !== null) {
             $query->where('unified_campaign_id', $this->campaignId);
         }
 
         if ($this->campaignIds !== null) {
-            // Empty set → match nothing, never "all" — see forCampaigns(). The never-matching UUID keeps
-            // the column type valid on Postgres, exactly as the project bound does.
             $query->whereIn(
                 'daily_metrics.unified_campaign_id',
                 $this->campaignIds ?: ['00000000-0000-0000-0000-000000000000'],
@@ -300,9 +347,6 @@ final class MetricsAggregator
         }
 
         if ($this->projectIds !== null) {
-            // Empty set → match nothing (a client with no projects has no metrics), never "all".
-            // A never-matching UUID keeps the column type valid on Postgres. Column is qualified because
-            // byCampaign() left-joins unified_campaigns (which also has a project_id).
             $query->whereIn('daily_metrics.project_id', $this->projectIds ?: ['00000000-0000-0000-0000-000000000000']);
         }
 
@@ -320,7 +364,31 @@ final class MetricsAggregator
             });
         }
 
+        return $query;
+    }
+
+    private function base(Carbon $from, Carbon $to): Builder
+    {
+        $query = $this->baseIncludingDemo($from, $to);
+
+        if ($this->excludesDemo()) {
+            // Operational scope: the customer's own rows are the answer, and a seeded row added to
+            // them is not a rounding error — it is invented money inside a real total.
+            $query->where('daily_metrics.is_demo', false);
+        }
+
         return $query->toBase();
+    }
+
+    /**
+     * The same scope and window with NO demo policy — for counting what is actually there.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<DailyMetric>
+     */
+    private function baseIncludingDemo(Carbon $from, Carbon $to): mixed
+    {
+        return $this->scoped(DailyMetric::query())
+            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
     }
 
     /** @return array<string, float> base sums + derived KPIs for the period. */
@@ -476,9 +544,9 @@ final class MetricsAggregator
      */
     public function provenance(Carbon $from, Carbon $to): array
     {
-        $row = $this->base($from, $to)
-            ->selectRaw('COUNT(*) FILTER (WHERE is_demo = false) AS live_rows')
-            ->selectRaw('COUNT(*) FILTER (WHERE is_demo = true) AS demo_rows')
+        $row = $this->baseIncludingDemo($from, $to)->toBase()
+            ->selectRaw('COUNT(*) FILTER (WHERE daily_metrics.is_demo = false) AS live_rows')
+            ->selectRaw('COUNT(*) FILTER (WHERE daily_metrics.is_demo = true) AS demo_rows')
             ->first();
 
         $live = (int) ($row->live_rows ?? 0);
