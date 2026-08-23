@@ -638,6 +638,31 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
      * @param  list<string>  $parentIds  campaign ids for the ad-squad grain, ad-squad ids for the ad grain
      * @return list<array<string,mixed>>
      */
+    /**
+     * The caller-facing entry point, mirroring `syncCreativeInsights()`.
+     *
+     * Tokens are resolved INSIDE the connector — `tokens()` is protected on the base class, and one
+     * rule about credentials living in one place is worth more than a shorter signature.
+     *
+     * @param  list<string>  $parentIds
+     */
+    public function syncEntityInsights(
+        string $adAccountId,
+        string $parentPath,
+        string $breakdown,
+        array $parentIds,
+        string $from,
+        string $to,
+    ): SyncResult {
+        try {
+            return SyncResult::of($this->fetchEntityInsights(
+                $this->tokens(), $adAccountId, $parentPath, $breakdown, $parentIds, $from, $to,
+            ));
+        } catch (\Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+    }
+
     public function fetchEntityInsights(
         OAuthTokens $tokens,
         string $adAccountId,

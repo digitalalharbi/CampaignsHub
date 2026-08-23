@@ -5,16 +5,22 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Services;
 
 use App\Domains\Campaigns\Actions\UpsertCreativeDailyMetrics;
+use App\Domains\Campaigns\Models\ExternalAd;
+use App\Domains\Campaigns\Models\ExternalAdSet;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Providers\ReportsCreativeInsights;
+use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
+use App\Domains\Metrics\Actions\UpsertEntityDailyMetrics;
 use App\Domains\Metrics\Enums\SyncRunStatus;
+use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
@@ -228,6 +234,25 @@ final class AccountMetricsSyncer
         }
 
         /*
+         * METRICS-BACKBONE-001 — the two rungs between a campaign and a creative.
+         *
+         * `entity_daily_metrics`, `UpsertEntityDailyMetrics`, `fetchEntityInsights()` and
+         * `EntityMetricsAggregator` all existed and NOTHING CALLED THEM. The table stayed empty in
+         * production, so the Ad Set and Ads tabs had nothing to render and the drill-down stopped at
+         * the campaign. A backbone nobody calls is not a backbone.
+         *
+         * The shape is forced by the API: `breakdown=adsquad` lives on the CAMPAIGN stats endpoint
+         * and `breakdown=ad` on the AD SQUAD endpoint, so each rung is swept from its own parents —
+         * campaigns give ad squads, ad squads give ads.
+         *
+         * Same guarantees as the creative call above: a separate table, so a failure here cannot
+         * cost the campaign figures already ingested, and failures do not turn a healthy run red.
+         */
+        if ($connector instanceof SnapchatConnector) {
+            $this->syncEntityGrains($connector, $account, $run, $from, $to);
+        }
+
+        /*
          * Keep what the platform said, beside what we made of it (INTEG-RAW-001).
          *
          * Written after the ingest so `normalised_rows` can record how many metrics came OUT of this
@@ -342,6 +367,101 @@ final class AccountMetricsSyncer
     private static function carriedKeys(): array
     {
         return MetricsAggregator::readKeys();
+    }
+
+    /**
+     * METRICS-BACKBONE-001 — ad-squad then ad metrics, each swept from its own parents.
+     *
+     * Runs after the campaign ingest and writes only to `entity_daily_metrics`, so nothing here can
+     * disturb a figure any existing surface already reads.
+     *
+     * Every failure is contained. `fetchEntityInsights()` already isolates one parent's failure from
+     * the rest; this wraps the whole grain so a provider change cannot cost the metrics run.
+     */
+    private function syncEntityGrains(
+        SnapchatConnector $connector,
+        ExternalAccount $account,
+        MetricSyncRun $run,
+        Carbon $from,
+        Carbon $to,
+    ): void {
+        // The campaigns this account owns — the parents of the ad-squad grain.
+        $campaigns = ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $account->id)
+            ->pluck('external_id', 'id');
+
+        $squadRows = $this->grain(
+            fn (): array => $connector->syncEntityInsights(
+                $account->external_id, 'campaigns', 'adsquad',
+                $campaigns->values()->all(), $from->toDateString(), $to->toDateString(),
+            )->records,
+        );
+
+        /*
+         * The sweep resolves the provider's ids against what the structure sync already discovered.
+         * An entity we have not discovered is skipped by the upsert rather than invented — the
+         * structure sweep owns identity and this owns numbers.
+         */
+        $squads = ExternalAdSet::withoutGlobalScopes()
+            ->whereIn('external_campaign_id', $campaigns->keys())
+            ->get(['id', 'external_id', 'project_id', 'tenant_id', 'external_campaign_id']);
+
+        $knownSquads = [];
+        foreach ($squads as $squad) {
+            $knownSquads[(string) $squad->external_id] = [
+                'id' => (string) $squad->getKey(),
+                'project_id' => (string) $squad->project_id,
+                'tenant_id' => (string) $squad->tenant_id,
+                'campaign_id' => $squad->external_campaign_id === null ? null : (string) $squad->external_campaign_id,
+                'ad_set_id' => null,
+            ];
+        }
+
+        app(UpsertEntityDailyMetrics::class)->execute(
+            $account, EntityDailyMetric::AD_SET, $squadRows, $knownSquads, (string) $run->getKey(),
+        );
+
+        $adRows = $this->grain(
+            fn (): array => $connector->syncEntityInsights(
+                $account->external_id, 'adsquads', 'ad',
+                $squads->pluck('external_id')->map(static fn ($v): string => (string) $v)->all(),
+                $from->toDateString(), $to->toDateString(),
+            )->records,
+        );
+
+        $ads = ExternalAd::withoutGlobalScopes()
+            ->whereIn('external_ad_set_id', $squads->modelKeys())
+            ->get(['id', 'external_id', 'project_id', 'tenant_id', 'external_campaign_id', 'external_ad_set_id']);
+
+        $knownAds = [];
+        foreach ($ads as $ad) {
+            $knownAds[(string) $ad->external_id] = [
+                'id' => (string) $ad->getKey(),
+                'project_id' => (string) $ad->project_id,
+                'tenant_id' => (string) $ad->tenant_id,
+                'campaign_id' => $ad->external_campaign_id === null ? null : (string) $ad->external_campaign_id,
+                'ad_set_id' => $ad->external_ad_set_id === null ? null : (string) $ad->external_ad_set_id,
+            ];
+        }
+
+        app(UpsertEntityDailyMetrics::class)->execute(
+            $account, EntityDailyMetric::AD, $adRows, $knownAds, (string) $run->getKey(),
+        );
+    }
+
+    /**
+     * One grain's fetch, with its failure contained.
+     *
+     * @param  callable(): list<array<string,mixed>>  $fetch
+     * @return list<array<string,mixed>>
+     */
+    private function grain(callable $fetch): array
+    {
+        try {
+            return $fetch();
+        } catch (Throwable) {
+            return [];
+        }
     }
 
     /**
