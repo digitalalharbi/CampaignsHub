@@ -7,6 +7,7 @@ namespace App\Domains\Metrics\Services;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Services\CreativeFunnel;
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Support\AdPlatforms;
@@ -595,6 +596,50 @@ final class MetricsAggregator
         usort($rows, fn ($a, $b) => $b['spend'] <=> $a['spend']);
 
         return $rows;
+    }
+
+    /**
+     * ANALYTICS-DRILLDOWN-001 — the ACCOUNT rung, between the platform and its campaigns.
+     *
+     * The drill-down read Platform → Campaign, skipping the level an operator actually manages: a
+     * customer can hold several Snapchat ad accounts, and «Snapchat spent X» is not an answer when
+     * two accounts run different countries out of different budgets.
+     *
+     * Grouped on `daily_metrics.external_account_id`, which is the account the row was INGESTED for,
+     * so this is a real attribution rather than a guess from the campaign's name or the connection.
+     * The name is joined from `external_accounts` rather than stored here, for the same reason the
+     * entity grain joins it: a renamed account must not need its metrics rewritten.
+     *
+     * @return list<array<string, mixed>> one row per ad account
+     */
+    public function byAccount(Carbon $from, Carbon $to): array
+    {
+        $select = array_merge(self::PIVOT, self::MONEY_TRUTH);
+
+        $rows = $this->base($from, $to)
+            ->select('daily_metrics.external_account_id as account_id', 'daily_metrics.provider')
+            ->selectRaw(implode(', ', array_map(
+                static fn ($expr, $alias) => "{$expr} AS {$alias}",
+                $select,
+                array_keys($select),
+            )))
+            ->groupBy('daily_metrics.external_account_id', 'daily_metrics.provider')
+            ->get();
+
+        $names = ExternalAccount::withoutGlobalScopes()
+            ->whereIn('id', $rows->pluck('account_id')->filter()->all())
+            ->pluck('name', 'id');
+
+        return $rows->map(fn ($r): array => [
+            'account_id' => $r->account_id === null ? null : (string) $r->account_id,
+            'provider' => $r->provider,
+            /*
+             * Null rather than a placeholder when the account has been removed since the rows were
+             * ingested — «Unknown account» would hide that the account is gone, and its spend is
+             * still real and still has to be shown somewhere.
+             */
+            'account_name' => $r->account_id === null ? null : ($names[$r->account_id] ?? null),
+        ] + $this->withDerived((array) $r))->all();
     }
 
     /** @return list<array<string, mixed>> one row per unified campaign (id/name/provider) ranked by spend. */

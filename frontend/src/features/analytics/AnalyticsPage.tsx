@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import {
   useBudget,
+  useAccounts,
   useCampaigns,
   useEntities,
   useFreshness,
@@ -60,6 +61,8 @@ import { AttributionPanel } from './AttributionPanel'
 const TABS = [
   { id: 'performance', ar: 'نظرة عامة على الأداء', en: 'Performance overview' },
   { id: 'platforms', ar: 'تحليل المنصات', en: 'Platform analysis' },
+  // ANALYTICS-DRILLDOWN-001 — the rung an operator actually manages, between platform and campaign.
+  { id: 'accounts', ar: 'تحليل الحسابات', en: 'Account analysis' },
   { id: 'campaigns', ar: 'تحليل الحملات', en: 'Campaign analysis' },
   // ANALYTICS-DRILLDOWN-001 — the two rungs that had no table beneath them until now.
   { id: 'ad_sets', ar: 'تحليل المجموعات الإعلانية', en: 'Ad set analysis' },
@@ -264,6 +267,7 @@ export function AnalyticsPage() {
 
       {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
+      {tab === 'accounts' && <AccountsTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}
       {tab === 'ads' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />}
@@ -1208,5 +1212,67 @@ function CreativeTab({ projectId, range }: { projectId: string | null; range: Ta
         </div>
       </Panel>
     </div>
+  )
+}
+
+/**
+ * ANALYTICS-DRILLDOWN-001 — the ad accounts beneath a platform.
+ *
+ * The chain read Platform → Campaign, skipping the level an operator manages. A customer can hold
+ * several ad accounts on one platform, and «Snapchat spent X» is not an answer when two accounts run
+ * different markets from different budgets.
+ *
+ * Grouped on the account each row was INGESTED for, so the attribution is real rather than inferred
+ * from a campaign name. An account removed since ingestion keeps its spend and shows no name, rather
+ * than being called «Unknown» — which would hide that it is gone.
+ */
+function AccountsTab({ projectId, range, filters }: TabProps) {
+  const ar = useAr()
+  const a = useAccounts(projectId, range, filters)
+  const s = useSummary(projectId, range, filters)
+  const currency = s.data?.currency ?? null
+  const rows = a.data ?? []
+
+  return (
+    <Panel
+      title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'}
+      description={ar ? 'مرتّبة حسب الإنفاق' : 'Ordered by spend'}
+      loading={a.isLoading}
+      error={a.isError}
+      empty={!a.isLoading && rows.length === 0}
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm" data-testid="account-table">
+          <thead>
+            <tr className="border-b border-border text-start text-xs text-text-secondary">
+              <th className="p-2 text-start font-medium">{ar ? 'الحساب' : 'Account'}</th>
+              <th className="p-2 text-start font-medium">{ar ? 'المنصة' : 'Platform'}</th>
+              <th className="p-2 text-start font-medium">{ar ? 'الإنفاق' : 'Spend'}</th>
+              <th className="p-2 text-start font-medium">{ar ? 'الظهور' : 'Impressions'}</th>
+              <th className="p-2 text-start font-medium">{ar ? 'النقرات' : 'Clicks'}</th>
+              <th className="p-2 text-start font-medium">CTR</th>
+              <th className="p-2 text-start font-medium">CPM</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...rows]
+              .sort((x, y) => (y.impressions ?? 0) - (x.impressions ?? 0))
+              .map((r) => (
+                <tr key={`${r.account_id ?? 'none'}-${r.provider}`} className="border-b border-border/60">
+                  <td className="p-2 font-medium text-text-primary">
+                    {r.account_name ?? (ar ? 'حساب لم يعد متاحًا' : 'Account no longer available')}
+                  </td>
+                  <td className="p-2 text-text-secondary">{providerLabel(r.provider, ar ? 'ar' : 'en')}</td>
+                  <td className="p-2 tnum" dir="ltr">{rowMoney(r, 'spend', currency)}</td>
+                  <td className="p-2 tnum" dir="ltr">{metricOrDash(r.impressions)}</td>
+                  <td className="p-2 tnum" dir="ltr">{metricOrDash(r.clicks)}</td>
+                  <td className="p-2 tnum" dir="ltr">{rateOrDash(r.ctr)}</td>
+                  <td className="p-2 tnum" dir="ltr">{rowCostPer(r, 'cpm', (r.impressions ?? 0) / 1000, currency)}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
   )
 }
