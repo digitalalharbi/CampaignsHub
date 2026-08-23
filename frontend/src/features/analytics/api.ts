@@ -412,6 +412,88 @@ function useMetric<T>(key: string, projectId: string | null, range: Range, path:
   })
 }
 
+/**
+ * ANALYTICS-DRILLDOWN-001 — one row per ad squad or ad, from `entity_daily_metrics`.
+ *
+ * Extends `MoneyProvenance` for the same reason every other row shape does: the canonical money
+ * reader keys off those field names, so an ad squad's withheld spend renders through the identical
+ * code path as a dashboard KPI rather than a second implementation that agrees by luck.
+ */
+export interface EntityRow extends MoneyProvenance {
+  entity_id: string
+  external_id: string
+  /** Null when the structure sweep has since removed the entity — a real state, not a placeholder. */
+  name: string | null
+  status: string | null
+  campaign_id: string | null
+  ad_set_id: string | null
+  active_days: number
+  last_active_on: string | null
+  spend: number | null
+  impressions: number | null
+  reach: number | null
+  frequency: number | null
+  clicks: number | null
+  landing_page_views: number | null
+  engagements: number | null
+  video_views: number | null
+  video_p25: number | null
+  video_p50: number | null
+  video_p75: number | null
+  video_p100: number | null
+  video_watch_seconds: number | null
+  conversions: number | null
+  purchases: number | null
+  leads: number | null
+  installs: number | null
+  revenue: number | null
+  ctr: number | null
+  cpc: number | null
+  cpm: number | null
+  cpa: number | null
+  cpl: number | null
+  cpi: number | null
+  cpe: number | null
+  cost_per_view: number | null
+  cost_per_lpv: number | null
+  roas: number | null
+  aov: number | null
+  conversion_rate: number | null
+  engagement_rate: number | null
+  completion_rate: number | null
+  view_rate: number | null
+}
+
+export interface EntityPage {
+  entities: EntityRow[]
+  entity_type: string
+  period: { from: string; to: string }
+  currency: string | null
+  attribution_window: string | null
+}
+
+/**
+ * The ad-squad or ad level, optionally narrowed to one parent.
+ *
+ * `parent` is part of the query key AND the request: it changes the DATABASE scope, so a cached
+ * unfiltered response must never be handed back for a drilled-down request.
+ */
+export const useEntities = (
+  p: string | null,
+  r: Range,
+  level: 'ad_set' | 'ad',
+  parent?: string | null,
+  f?: MetricFilters,
+) =>
+  useQuery({
+    queryKey: ['metrics', 'entities', level, p, r.from, r.to, parent ?? '', f?.provider?.join(',') ?? '', f?.objective?.join(',') ?? ''],
+    queryFn: () =>
+      getData<EntityPage>(
+        `${base(p!)}/entities/${level}?${q(r)}${qf(f)}${parent === undefined || parent === null ? '' : `&parent=${encodeURIComponent(parent)}`}`,
+      ),
+    enabled: Boolean(p),
+  })
+
 export const useSummary = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Summary>('summary', p, r, 'summary', f)
 export const useTimeseries = (p: string | null, r: Range, f?: MetricFilters) => useMetric<TimePoint[]>('timeseries', p, r, 'timeseries', f)
 export const usePlatforms = (p: string | null, r: Range, f?: MetricFilters) => useMetric<PlatformRow[]>('platforms', p, r, 'platforms', f)
