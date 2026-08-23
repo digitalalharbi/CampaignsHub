@@ -235,6 +235,25 @@ final class MetricsController extends Controller
         ], 'Campaign comparison.', meta: $this->meta($from, $to));
     }
 
+    /**
+     * ANALYTICS-DRILLDOWN-001 — the accounts beneath a platform.
+     *
+     * The chain read Platform → Campaign, skipping the level an operator manages. A customer can
+     * hold several ad accounts on one platform, and «Snapchat spent X» is not an answer when two
+     * accounts run different markets from different budgets.
+     */
+    public function accounts(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        return ApiResponse::success(
+            $this->scoped($request)->byAccount($from, $to),
+            'Metrics by ad account.',
+            meta: $this->meta($from, $to),
+        );
+    }
+
     public function campaigns(Request $request): JsonResponse
     {
         $this->authorizeView($request);

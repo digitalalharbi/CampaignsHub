@@ -67,6 +67,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/summary', [MetricsController::class, 'summary'])->name('metrics.summary');
     Route::get('metrics/timeseries', [MetricsController::class, 'timeseries'])->name('metrics.timeseries');
     Route::get('metrics/platforms', [MetricsController::class, 'platforms'])->name('metrics.platforms');
+    Route::get('metrics/accounts', [MetricsController::class, 'accounts'])->name('metrics.accounts');
     Route::get('metrics/campaigns', [MetricsController::class, 'campaigns'])->name('metrics.campaigns');
     /*
      * ANALYTICS-DRILLDOWN-001 — the two rungs beneath a campaign.

@@ -507,6 +507,17 @@ export const useEntities = (
 export const useSummary = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Summary>('summary', p, r, 'summary', f)
 export const useTimeseries = (p: string | null, r: Range, f?: MetricFilters) => useMetric<TimePoint[]>('timeseries', p, r, 'timeseries', f)
 export const usePlatforms = (p: string | null, r: Range, f?: MetricFilters) => useMetric<PlatformRow[]>('platforms', p, r, 'platforms', f)
+export interface AccountRow extends MetricTotals {
+  account_id: string | null
+  provider: string
+  /** Null when the account has been removed since these rows were ingested — its spend is still real. */
+  account_name: string | null
+}
+
+/** ANALYTICS-DRILLDOWN-001 — the ad accounts beneath a platform. */
+export const useAccounts = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<AccountRow[]>('accounts', p, r, 'accounts', f)
+
 export const useCampaigns = (p: string | null, r: Range, f?: MetricFilters) => useMetric<CampaignRow[]>('campaigns', p, r, 'campaigns', f)
 export const useFunnel = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FunnelStage[]>('funnel', p, r, 'funnel', f)
 export const useBudget = (p: string | null, r: Range, f?: MetricFilters) => useMetric<BudgetRow[]>('budget', p, r, 'budget', f)
