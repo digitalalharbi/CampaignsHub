@@ -18,6 +18,7 @@ use App\Domains\Metrics\Enums\SyncRunStatus;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -172,11 +173,58 @@ final class AccountMetricsSyncer
                 );
 
                 if ($creative->success) {
-                    app(UpsertCreativeDailyMetrics::class)->execute($account, $creative->records);
+                    $written = app(UpsertCreativeDailyMetrics::class)->execute($account, $creative->records);
+
+                    /*
+                     * CONTENT-STATE-SEMANTICS-001 — «it worked and there was nothing» is an ANSWER.
+                     *
+                     * Recording success with a row count is what lets the Content Library say «لم
+                     * يعمل خلال هذه الفترة» for a creative that genuinely did not run, instead of
+                     * «لا توجد بيانات» — which is what it also says when a request failed. Those
+                     * are opposite situations for an operator: one is a campaign to leave alone,
+                     * the other is a pipeline to go and fix.
+                     */
+                    $run->forceFill([
+                        'creative_status' => 'success',
+                        'creative_rows' => $written['upserted'],
+                        'creative_error' => null,
+                    ])->save();
+                } else {
+                    $run->forceFill([
+                        'creative_status' => 'failed',
+                        'creative_rows' => 0,
+                        // The provider's own words. «Rate limited» and «this account reports no
+                        // creative stats» both arrive here and mean entirely different things.
+                        'creative_error' => Str::limit((string) $creative->message, 480),
+                    ])->save();
                 }
-            } catch (Throwable) {
-                // Recorded by the campaign run's own counters; the creative level is best-effort.
+            } catch (Throwable $e) {
+                /*
+                 * Still swallowed for the RUN's verdict — creative numbers are an enrichment, and
+                 * turning a healthy metrics run red because one extra call was throttled would
+                 * trade a working pipeline for a nicer screen. But it is no longer swallowed for
+                 * the READER: the failure is now written down where the Content Library can find
+                 * it and say what actually happened.
+                 */
+                $run->forceFill([
+                    'creative_status' => 'failed',
+                    'creative_rows' => 0,
+                    'creative_error' => Str::limit($e->getMessage(), 480),
+                ])->save();
             }
+        } else {
+            /*
+             * Never asked, and that is not a failure — it is a fact about the provider.
+             *
+             * Only Snapchat implements `ReportsCreativeInsights`. A TikTok creative showing «no
+             * data» implies numbers that failed to arrive; «هذه المنصة لا توفر بيانات أداء لكل
+             * محتوى» is the truth, and it is a different sentence.
+             */
+            $run->forceFill([
+                'creative_status' => 'unsupported',
+                'creative_rows' => 0,
+                'creative_error' => null,
+            ])->save();
         }
 
         /*
