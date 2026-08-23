@@ -34,13 +34,36 @@ final class CreativePresenter
     /**
      * Query parameters that mean the URL is carrying a credential.
      *
-     * Matched case-insensitively as whole parameter names. Deliberately broad: a false positive costs
-     * one preview, a false negative publishes a token.
+     * Matched case-insensitively as WHOLE parameter names, never substrings — `Key-Pair-Id` must not
+     * trip the `key` rule, and it is half of how a signed CDN URL is formed.
+     *
+     * Broad on credentials: a false negative publishes a token, which is unrecoverable. But see the
+     * note below on signatures — being broad about the WRONG thing cost every preview in the
+     * product, which is its own kind of failure.
      */
     private const CREDENTIAL_PARAMS = [
-        'access_token', 'accesstoken', 'token', 'auth', 'authorization', 'signature', 'sig',
+        'access_token', 'accesstoken', 'token', 'auth', 'authorization',
         'apikey', 'api_key', 'key', 'secret', 'bearer', 'oauth_token',
     ];
+
+    /*
+     * SNAP-SIGNED-MEDIA-001 — a CDN signature is not a credential, and treating it as one hid
+     * every asset the platform actually supplied.
+     *
+     * `signature` and `sig` were on the list above. That is how essentially every CDN serves private
+     * media — Snapchat's `download_link` included — so a media URL fetched perfectly and stored
+     * correctly was then classified «withheld» and never rendered. The Content library said the
+     * platform's link carried a credential when what it carried was a time-limited grant for one
+     * object.
+     *
+     * The distinction is not stylistic. An `access_token` or `bearer` is a key to the ACCOUNT: leak
+     * it and someone can read and change a customer's advertising. A CloudFront-style `Signature`,
+     * with its `Expires` and `Key-Pair-Id`, authorises exactly one file for a short window and can
+     * do nothing else, which is why the same URL is what the platform's own UI puts in an `<img>`.
+     *
+     * So the rule stays absolute where it matters — a token, key or secret in a query still withholds
+     * the whole URL — and stops blocking the one thing that makes provider media visible at all.
+     */
 
     /** @return array<string, mixed> the card shape used by the library, the dashboard and reports */
     public function card(ExternalCreative $creative, ?UnifiedCampaign $campaign): array
