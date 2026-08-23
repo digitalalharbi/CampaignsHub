@@ -22,7 +22,7 @@ import {
   useSummary,
   useTimeseries,
 } from '../analytics/hooks'
-import { DemoBadge, Panel, SERIES, tooltipProps } from '../analytics/components'
+import { Panel, ProvenanceBadge, SERIES, tooltipProps } from '../analytics/components'
 import { compact, money, num, percent, ratio } from '../analytics/format'
 import { UnifiedCampaignOverview, providerName, type OverviewVM } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import { SavedViewsBar } from './SavedViewsBar'
@@ -389,7 +389,7 @@ export function DashboardPage() {
         testid="dashboard-intro"
         title={t.title}
         purpose={t.purpose}
-        badges={<DemoBadge />}
+        badges={<ProvenanceBadge provenance={summary.data?.provenance} />}
         meta={<DataFreshness lastSyncAt={lastSync} ar={ar} />}
         actions={
           <>

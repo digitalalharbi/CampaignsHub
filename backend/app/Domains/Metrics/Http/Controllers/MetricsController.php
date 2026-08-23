@@ -75,6 +75,15 @@ final class MetricsController extends Controller
              * inventing one would be the same class of lie one level up.
              */
             'currency' => $this->rangeCurrency($from, $to),
+            /*
+             * ANALYTICS-PROVENANCE-001 — live, demo, both, or nothing.
+             *
+             * The badge was rendered unconditionally on the dashboard, campaigns and analytics, so a
+             * project syncing real Snapchat spend was labelled «بيانات تجريبية · Demo» beside its own
+             * money. Derived from `is_demo` on the rows actually in scope — not from the environment
+             * and not from a frontend constant, neither of which knows whose rows these are.
+             */
+            'provenance' => $this->scoped($request)->provenance($from, $to),
             'commerce' => $this->commerce($request, $from, $to),
             /*
              * REPORT-OBJECTIVE-005 — what the single «conversions» figure above is.

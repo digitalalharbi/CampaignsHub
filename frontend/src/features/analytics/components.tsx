@@ -183,6 +183,42 @@ export function DemoBadge() {
   )
 }
 
+/** What the backend says the rows in scope actually are. */
+export type Provenance = { source: 'live' | 'demo' | 'mixed' | 'none'; live_rows?: number; demo_rows?: number }
+
+/**
+ * ANALYTICS-PROVENANCE-001 — the badge, derived rather than always-on.
+ *
+ * `DemoBadge` was rendered unconditionally on the dashboard, campaigns and analytics, so a project
+ * syncing real Snapchat spend was labelled «بيانات تجريبية · Demo» beside its own money. A badge that
+ * is always on carries no information, and this one carried something false: it is the product's
+ * promise that a figure is NOT a customer's real spend.
+ *
+ * `live` shows nothing — the absence of a warning is the correct signal for real data, and a
+ * «LIVE» chip on every screen would be the same noise in the other direction.
+ *
+ * `mixed` is named rather than resolved. A project holding both is a real state, and picking one
+ * label would hide demo rows inside a live total.
+ *
+ * `none` shows nothing either: with no rows there is nothing to characterise, and the surfaces
+ * already have their own empty states.
+ */
+export function ProvenanceBadge({ provenance }: { provenance?: Provenance | null }) {
+  const source = provenance?.source
+
+  if (source === 'demo') return <DemoBadge />
+
+  if (source === 'mixed') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--warning-background)] px-2 py-0.5 text-xs font-semibold text-warning">
+        {ar() ? 'بيانات مختلطة · حقيقية وتجريبية' : 'Mixed · live and demo'}
+      </span>
+    )
+  }
+
+  return null
+}
+
 export function ChartTooltipStyle() {
   return null
 }
