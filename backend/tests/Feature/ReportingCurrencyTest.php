@@ -337,13 +337,50 @@ final class ReportingCurrencyTest extends TestCase
             'The aggregator hides the withholding, so every screen reading it must render 0 as if it were true.',
         );
 
-        // 100 USD + 5,000 JPY as the platforms reported them, unconverted and unmixed.
+        /*
+         * ONLY the withheld original — 5,000 JPY. The 100 USD converted perfectly well and is already
+         * inside the 375 SAR asserted above; adding its original here would count it twice and
+         * overstate what could not be converted.
+         *
+         * This assertion read 5,100 at first, which encoded the bug rather than the rule. The
+         * breakdown test is what exposed it, by grouping a converted row beside an unconvertible one.
+         */
         $this->assertEqualsWithDelta(
-            5100.0,
+            5000.0,
             (float) $totals['spend_original'],
             0.01,
-            'The platform-reported original is unavailable, so no screen can show the real figure.',
+            'The withheld original is wrong, so a card would state an amount nobody withheld.',
         );
+    }
+
+    /**
+     * MONEY-TRUTH-002 — the BREAKDOWNS carry provenance too, not only the grand total.
+     *
+     * `totals()` learned this first, and platform comparison and campaign ranking read different
+     * methods entirely. A platform that spent 5,000 JPY ranked as having spent nothing, directly
+     * beneath a summary card showing the real amount — the same lie one level down.
+     */
+    public function test_the_provider_breakdown_reports_withheld_money(): void
+    {
+        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+
+        $this->sync($this->account('USD', 'usd'), [['campaign_id' => 'c-usd', 'date' => '2026-06-01', 'spend' => 100]]);
+        $this->sync($this->account('JPY', 'jpy'), [['campaign_id' => 'c-jpy', 'date' => '2026-06-01', 'spend' => 5000]]);
+
+        app(ProjectContext::class)->setProjectId($this->project->id);
+        $rows = app(MetricsAggregator::class)->byProvider(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-01'));
+        app(ProjectContext::class)->forget();
+
+        $this->assertNotEmpty($rows, 'The breakdown returned nothing at all.');
+
+        $withheld = array_values(array_filter($rows, fn ($r) => (int) ($r['spend_withheld_rows'] ?? 0) > 0));
+
+        $this->assertNotEmpty(
+            $withheld,
+            'No row admits the withholding, so a platform that spent real money ranks as having spent nothing.',
+        );
+        $this->assertEqualsWithDelta(5000.0, (float) $withheld[0]['spend_original'], 0.01);
+        $this->assertSame('JPY', $withheld[0]['money_original_currency']);
     }
 
     /** Once the rate exists, a re-sync replaces the withheld figure — nothing has to be re-fetched. */

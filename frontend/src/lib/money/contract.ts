@@ -28,7 +28,32 @@ export type MoneyReading = {
   note: string | null
 }
 
-export type MoneyTotals = Record<string, unknown> | undefined
+/**
+ * What a money-bearing payload declares.
+ *
+ * Written as optional named fields rather than `Record<string, unknown>` so a typed row — a platform
+ * or campaign breakdown — can be passed without a cast at every call site. Casting at the boundary is
+ * how a field silently stops arriving and nobody notices: the compiler has to be able to see it.
+ *
+ * The readers below index dynamically (`${key}_withheld_rows`), which a fixed shape cannot express,
+ * so the narrowing happens ONCE inside this module instead of at each caller.
+ */
+export type MoneyFields = {
+  spend?: number | null
+  revenue?: number | null
+  roas?: number | null
+  spend_withheld_rows?: number | null
+  spend_original?: number | null
+  revenue_withheld_rows?: number | null
+  revenue_original?: number | null
+  money_original_currency?: string | null
+  money_original_currencies?: number | null
+}
+
+export type MoneyTotals = (MoneyFields & Record<string, unknown>) | MoneyFields | undefined
+
+/** The one place the dynamic-key narrowing happens. */
+const bag = (t: MoneyTotals): Record<string, unknown> | undefined => t as Record<string, unknown> | undefined
 
 const NOTES = {
   unconvertible: {
@@ -56,10 +81,11 @@ const num = (v: unknown): number => Number(v ?? 0)
  * a quantity of anything, and printing it beside one currency's name states a figure nobody measured.
  */
 function withholding(totals: MoneyTotals, key: string): { withheld: boolean; original: number; currency: string | null; mixed: boolean } {
-  const rows = num(totals?.[`${key}_withheld_rows`])
-  const original = num(totals?.[`${key}_original`])
-  const currency = totals?.money_original_currency
-  const count = num(totals?.money_original_currencies)
+  const t = bag(totals)
+  const rows = num(t?.[`${key}_withheld_rows`])
+  const original = num(t?.[`${key}_original`])
+  const currency = t?.money_original_currency
+  const count = num(t?.money_original_currencies)
 
   if (rows <= 0 || original <= 0) return { withheld: false, original: 0, currency: null, mixed: false }
   if (count !== 1 || typeof currency !== 'string' || currency === '') {
@@ -87,7 +113,7 @@ export function readMoney(
   if (w.mixed) return { kind: 'unavailable', amount: null, currency: null, note: note('mixed', ar) }
   if (w.withheld) return { kind: 'withheld', amount: w.original, currency: w.currency, note: note('unconvertible', ar) }
 
-  const value = totals?.[key]
+  const value = bag(totals)?.[key]
   if (value === null || value === undefined) return { kind: 'absent', amount: null, currency: null, note: null }
 
   const n = Number(value)
@@ -114,7 +140,7 @@ export function readCostPer(
   if (w.mixed) return { kind: 'unavailable', amount: null, currency: null, note: note('mixed', ar) }
 
   if (w.withheld) {
-    const denominator = num(totals?.[denominatorKey])
+    const denominator = num(bag(totals)?.[denominatorKey])
 
     // No denominator means no rate to state — «unavailable», not zero and not infinity.
     if (denominator <= 0) return { kind: 'unavailable', amount: null, currency: null, note: note('unconvertible', ar) }
@@ -127,7 +153,7 @@ export function readCostPer(
     }
   }
 
-  const value = totals?.[key]
+  const value = bag(totals)?.[key]
   if (value === null || value === undefined) return { kind: 'absent', amount: null, currency: null, note: null }
 
   const n = Number(value)
@@ -157,7 +183,7 @@ export function readRoas(totals: MoneyTotals, ar: boolean): { kind: MoneyReading
     return { kind: 'withheld', value: revenue.original / spend.original, note: note('derivedFromOriginal', ar) }
   }
 
-  const value = totals?.roas
+  const value = bag(totals)?.roas
   if (value === null || value === undefined) return { kind: 'absent', value: null, note: null }
 
   return { kind: Number(value) === 0 ? 'zero' : 'converted', value: Number(value), note: null }
