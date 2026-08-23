@@ -205,6 +205,39 @@ final class EntityMetricsApiTest extends TestCase
             ->assertForbidden();
     }
 
+    /**
+     * ANALYTICS-OBJECTIVE-FILTERS-001 — a family narrows the DATASET, not just the KPI order.
+     *
+     * «Show me the awareness work» means awareness AND reach; «sales» means sales, conversions,
+     * purchases and add-to-cart. Expanding the family in the backend is what makes the totals on the
+     * page match the filter on the page — a family resolved in the frontend would filter rows that
+     * were already aggregated across every objective, and the figures would stay unfiltered while
+     * the screen looked filtered.
+     */
+    public function test_an_objective_family_expands_to_its_member_objectives(): void
+    {
+        $awareness = \App\Domains\Campaigns\Enums\ObjectiveFamily::Awareness;
+
+        $members = array_values(array_filter(
+            \App\Domains\Campaigns\Enums\CampaignObjective::cases(),
+            static fn ($o): bool => $o->family() === $awareness,
+        ));
+
+        $values = array_map(static fn ($o): string => $o->value, $members);
+
+        $this->assertContains('awareness', $values);
+        $this->assertContains('reach', $values, 'A reach buy is awareness work and must come with it.');
+
+        // The request is accepted and scoped; an unknown family is ignored rather than erroring.
+        $this->actingAs($this->operator, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->getKey()}/metrics/summary?objective_family=awareness&from=2026-07-25&to=2026-08-10")
+            ->assertOk();
+
+        $this->actingAs($this->operator, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->getKey()}/metrics/summary?objective_family=nonsense&from=2026-07-25&to=2026-08-10")
+            ->assertOk();
+    }
+
     /** @return list<array<string,mixed>> */
     private function fetchLevel(string $level, array $query = []): array
     {
