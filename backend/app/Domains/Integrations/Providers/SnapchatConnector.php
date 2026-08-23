@@ -354,6 +354,53 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         'revenue' => 'conversion_purchases_value',
     ];
 
+    /**
+     * CANONICAL-METRIC-CATALOG-001 — the full set Snapchat exposes, for the ad-squad and ad grains.
+     *
+     * Deliberately separate from {@see self::METRICS} rather than an extension of it. That map feeds
+     * `daily_metrics`, whose catalogue decides which keys survive; adding to it would push keys
+     * through a pipeline that filters them out anyway, and any mistake there would land on the
+     * campaign totals every surface already reads. This map feeds `entity_daily_metrics` only.
+     *
+     * Field names verified against the current Marketing API (developers.snap.com, August 2026).
+     * Nothing here is guessed: a metric Snapchat does not expose is absent from this table rather
+     * than present and empty, which is the difference between UNSUPPORTED and NOT_REPORTED.
+     */
+    private const ENTITY_METRICS = [
+        // delivery
+        'spend' => 'spend',
+        'impressions' => 'impressions',
+        'reach' => 'uniques',
+        'frequency' => 'frequency',
+        // traffic — Snapchat calls a click a swipe
+        'clicks' => 'swipes',
+        'landing_page_views' => 'conversion_page_views',
+        // video. `screen_time_millis` is MILLISECONDS and is converted at this edge, once.
+        'video_views' => 'video_views',
+        'video_views_2s' => 'video_views_time_based',
+        'video_views_5s' => 'video_views_5s',
+        'video_views_15s' => 'video_views_15s',
+        'video_p25' => 'quartile_1',
+        'video_p50' => 'quartile_2',
+        'video_p75' => 'quartile_3',
+        'video_p100' => 'view_completion',
+        'video_watch_seconds' => 'screen_time_millis',
+        // results
+        'conversions' => 'conversion_purchases',
+        'purchases' => 'conversion_purchases',
+        'revenue' => 'conversion_purchases_value',
+        'add_to_cart' => 'conversion_add_cart',
+        'checkout' => 'conversion_start_checkout',
+        'leads' => 'native_leads',
+        'sign_ups' => 'conversion_sign_ups',
+        'installs' => 'total_installs',
+        'app_opens' => 'conversion_app_opens',
+        'page_views' => 'conversion_page_views',
+    ];
+
+    /** Reported in milliseconds; the product reports watch time in seconds. Divided once, here. */
+    private const MILLIS = ['video_watch_seconds'];
+
     /** The fields stated in micro-units of the account currency, divided once at this edge. */
     private const MONEY = ['spend', 'revenue'];
 
@@ -452,6 +499,153 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         }
 
         return $rows;
+    }
+
+    /**
+     * METRICS-BACKBONE-001 — stats for the two rungs the product could not measure.
+     *
+     * ## Why this is per-parent and not one account call
+     *
+     * The creative grain works from `adaccounts/{id}/stats?breakdown=creative` — one call for the
+     * whole account. The API offers no such shortcut here: `breakdown=adsquad` lives on the CAMPAIGN
+     * stats endpoint and `breakdown=ad` on the AD SQUAD endpoint, so each parent must be asked for
+     * its own children. On the live account that is 89 campaigns, then 187 ad squads.
+     *
+     * That cost is why this is its own method taking a parent list, rather than another `$breakdown`
+     * value on `fetchWindow()`: the caller decides how much of the account to sweep.
+     *
+     * @param  list<string>  $parentIds  campaign ids for the ad-squad grain, ad-squad ids for the ad grain
+     * @return list<array<string,mixed>>
+     */
+    public function fetchEntityInsights(
+        OAuthTokens $tokens,
+        string $adAccountId,
+        string $parentPath,
+        string $breakdown,
+        array $parentIds,
+        string $from,
+        string $to,
+    ): array {
+        $window = ReportingWindow::localDays($this->accountTimezone($adAccountId), $from, $to);
+        $rows = [];
+
+        foreach ($parentIds as $parentId) {
+            foreach ($window->chunked($this->maxDaysPerRequest()) as $chunk) {
+                /*
+                 * One parent's failure costs that parent's children and nothing else. A sweep of 187
+                 * ad squads that abandoned everything because the ninth was throttled would report
+                 * far less than it knows, and the result would look like an account with no ads
+                 * rather than one call that needs retrying.
+                 */
+                try {
+                    foreach ($this->fetchEntityWindow($parentPath, $parentId, $tokens, $chunk, $breakdown) as $row) {
+                        $rows[] = $row;
+                    }
+                } catch (\Throwable) {
+                    continue;
+                }
+            }
+        }
+
+        return $rows;
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function fetchEntityWindow(
+        string $parentPath,
+        string $parentId,
+        OAuthTokens $tokens,
+        ReportingWindow $window,
+        string $breakdown,
+    ): array {
+        $url = $this->url("{$parentPath}/{$parentId}/stats").'?'.http_build_query([
+            'granularity' => 'DAY',
+            'breakdown' => $breakdown,
+            'fields' => implode(',', array_values(array_unique(self::ENTITY_METRICS))),
+            'start_time' => $window->startIso(),
+            'end_time' => $window->endIso(),
+            'limit' => self::STATS_PAGE_SIZE,
+        ]);
+
+        $rows = [];
+
+        for ($page = 0; $page < self::MAX_PAGES && $url !== null; $page++) {
+            $body = $this->read($this->api($tokens)->get($url), "{$breakdown} stats");
+
+            foreach ((array) ($body['timeseries_stats'] ?? []) as $wrapper) {
+                $series = (array) (((array) $wrapper)['timeseries_stat'] ?? []);
+
+                foreach ($this->entitySeries($series, $breakdown) as $entityId => $points) {
+                    foreach ($points as $point) {
+                        $rows[] = $this->entityPointToRow($entityId, (array) $point);
+                    }
+                }
+            }
+
+            $next = $body['paging']['next_link'] ?? null;
+            $url = is_string($next) && $next !== '' ? $next : null;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * The per-entity series inside one response.
+     *
+     * @param  array<string,mixed>  $series
+     * @return array<string, list<array<string,mixed>>>
+     */
+    private function entitySeries(array $series, string $breakdown): array
+    {
+        $out = [];
+
+        foreach ((array) ($series['breakdown_stats'][$breakdown] ?? []) as $entry) {
+            $entry = (array) $entry;
+            $id = (string) ($entry['id'] ?? '');
+
+            if ($id === '') {
+                continue;
+            }
+
+            $out[$id] = (array) ($entry['timeseries'] ?? []);
+        }
+
+        return $out;
+    }
+
+    /**
+     * One point, in the canonical shape the upsert expects.
+     *
+     * @param  array<string,mixed>  $point
+     * @return array<string,mixed>
+     */
+    private function entityPointToRow(string $entityId, array $point): array
+    {
+        /** @var array<string,mixed> $stats */
+        $stats = (array) ($point['stats'] ?? []);
+
+        $row = [
+            'entity_id' => $entityId,
+            'date' => substr((string) ($point['start_time'] ?? ''), 0, 10),
+        ];
+
+        foreach (self::ENTITY_METRICS as $canonical => $field) {
+            // ABSENT, not zero: a metric this account does not report arrives as a missing key so
+            // the column stays null and the reader says «not reported» rather than «none».
+            if (! array_key_exists($field, $stats)) {
+                continue;
+            }
+
+            $value = (float) $stats[$field];
+
+            $row[$canonical] = match (true) {
+                in_array($canonical, self::MONEY, true) => $value / self::MICRO,
+                in_array($canonical, self::MILLIS, true) => $value / 1000,
+                default => $value,
+            };
+        }
+
+        return $row;
     }
 
     /**
