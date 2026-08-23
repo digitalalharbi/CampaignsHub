@@ -32,7 +32,8 @@ import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, Platfo
  * The ratio goes in raw. If a figure ever arrives already scaled to 0–100, convert it at the source
  * rather than reintroducing a second multiplication here.
  */
-import { compact, money, num, percent, ratio, trend } from '@/features/analytics/format'
+import { compact, money, moneyFromTotals, num, percent, ratio, rowCostPer, trend } from '@/features/analytics/format'
+import { readRoas } from '@/lib/money/contract'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { providerLabel } from './labels'
@@ -96,20 +97,36 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
   const convRate = k && k.clicks > 0 ? k.conversions / k.clicks : null
   const cur = campaign.budget_currency || 'SAR'
 
+  /*
+   * MONEY-TRUTH-003 — the same contract the dashboard and Analytics use.
+   *
+   * `k` is `MetricsAggregator::totals()`, which coalesces a withheld sum to 0. Read raw, this card
+   * showed «المصروف 0» over money the platform really spent, and CPA/CPC/CPM divided that same zero.
+   *
+   * BUDGET and المتبقي are deliberately NOT read through this: a campaign budget is set by the
+   * advertiser in the campaign's own currency and is never withheld. Routing it through a
+   * provider-money contract would invent a provenance question it does not have.
+   */
+  const spendRead = moneyFromTotals(k, 'spend', true, cur)
+  const revenueRead = moneyFromTotals(k, 'revenue', true, cur)
+  const roasRead = readRoas(k, true)
+
   if (summary.isLoading) return <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
 
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
       <KpiCard label="الميزانية" value={budget != null ? money(budget, cur) : '—'} />
-      <KpiCard label="المصروف" value={money(spend, cur)} delta={d.spend} deltaKey="spend" spark={sparks(perf.data, 'spend')} />
+      <KpiCard label="المصروف" value={spendRead.text} sub={spendRead.note ?? undefined} delta={spendRead.withheld ? null : d.spend} deltaKey="spend" spark={spendRead.withheld ? undefined : sparks(perf.data, 'spend')} />
       <KpiCard label="المتبقي" value={remaining != null ? money(remaining, cur) : '—'} sub={utilization != null ? `استهلاك ${percent(utilization, 0)}` : undefined} />
       <KpiCard label="النتائج" value={num(k?.conversions)} delta={d.conversions} deltaKey="conversions" spark={sparks(perf.data, 'conversions')} />
-      <KpiCard label={costLabel(campaign.objective)} value={money(k?.cpa ?? null, cur)} delta={d.cpa} deltaKey="cpa" spark={sparks(perf.data, 'cpa')} />
-      <KpiCard label="الإيرادات" value={money(k?.revenue ?? null, cur)} delta={d.revenue} deltaKey="revenue" spark={sparks(perf.data, 'revenue')} />
-      <KpiCard label="ROAS" value={ratio(k?.roas ?? null)} delta={d.roas} deltaKey="roas" spark={sparks(perf.data, 'roas')} />
+      <KpiCard label={costLabel(campaign.objective)} value={rowCostPer(k, 'cpa', 'conversions', cur)} delta={spendRead.withheld ? null : d.cpa} deltaKey="cpa" spark={spendRead.withheld ? undefined : sparks(perf.data, 'cpa')} />
+      <KpiCard label="الإيرادات" value={revenueRead.text} sub={revenueRead.note ?? undefined} delta={revenueRead.withheld ? null : d.revenue} deltaKey="revenue" spark={revenueRead.withheld ? undefined : sparks(perf.data, 'revenue')} />
+      <KpiCard label="ROAS" value={roasRead.value === null ? '—' : ratio(roasRead.value)} sub={roasRead.note ?? undefined} delta={roasRead.kind === 'converted' || roasRead.kind === 'zero' ? d.roas : null} deltaKey="roas" spark={roasRead.kind === 'converted' ? sparks(perf.data, 'roas') : undefined} />
       <KpiCard label="CTR" value={percent(k?.ctr ?? 0)} delta={d.ctr} deltaKey="ctr" spark={sparks(perf.data, 'ctr')} />
-      <KpiCard label="CPC" value={money(k?.cpc ?? null, cur)} delta={d.cpc} deltaKey="cpc" />
-      <KpiCard label="CPM" value={money(k?.cpm ?? null, cur)} delta={d.cpm} deltaKey="cpm" />
+      <KpiCard label="CPC" value={rowCostPer(k, 'cpc', 'clicks', cur)} delta={spendRead.withheld ? null : d.cpc} deltaKey="cpc" />
+      {/* CPM divides by impressions per THOUSAND. The factor lives here, visible, rather than in a
+          generic reader — and rather than as a field name no payload carries. */}
+      <KpiCard label="CPM" value={rowCostPer(k, 'cpm', (k?.impressions ?? 0) / 1000, cur)} delta={spendRead.withheld ? null : d.cpm} deltaKey="cpm" />
       <KpiCard label="معدل التحويل" value={convRate != null ? percent(convRate) : '—'} />
       <KpiCard label="مرات الظهور" value={compact(k?.impressions ?? 0)} delta={d.impressions} deltaKey="impressions" />
     </div>

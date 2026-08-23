@@ -131,7 +131,15 @@ export function readMoney(
 export function readCostPer(
   totals: MoneyTotals,
   key: string,
-  denominatorKey: string,
+  /**
+   * The denominator: a field NAME, or the number itself.
+   *
+   * CPM divides by impressions per THOUSAND, which is not a stored field. Accepting a computed
+   * number keeps that factor at the call site where it is visible, instead of inventing a field name
+   * like `impressions_thousands` that no payload carries — which silently yields «unavailable»
+   * because the lookup misses, and looks like a provenance decision rather than a typo.
+   */
+  denominator: string | number,
   reportingCurrency: string | null,
   ar: boolean,
 ): MoneyReading {
@@ -140,14 +148,14 @@ export function readCostPer(
   if (w.mixed) return { kind: 'unavailable', amount: null, currency: null, note: note('mixed', ar) }
 
   if (w.withheld) {
-    const denominator = num(bag(totals)?.[denominatorKey])
+    const d = typeof denominator === 'number' ? denominator : num(bag(totals)?.[denominator])
 
     // No denominator means no rate to state — «unavailable», not zero and not infinity.
-    if (denominator <= 0) return { kind: 'unavailable', amount: null, currency: null, note: note('unconvertible', ar) }
+    if (d <= 0) return { kind: 'unavailable', amount: null, currency: null, note: note('unconvertible', ar) }
 
     return {
       kind: 'withheld',
-      amount: w.original / denominator,
+      amount: w.original / d,
       currency: w.currency,
       note: note('derivedFromOriginal', ar),
     }
