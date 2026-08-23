@@ -168,22 +168,39 @@ final class EntityMetricsAreActuallySyncedTest extends TestCase
             'start_time' => '2026-08-01T00:00:00.000-07:00', 'stats' => $stats,
         ];
 
-        Http::fake([
-            '*/campaigns/cmp-1/stats*' => Http::response(['timeseries_stats' => [
-                ['timeseries_stat' => ['breakdown_stats' => ['adsquad' => [
-                    ['id' => 'sq-1', 'timeseries' => [$point([
-                        'spend' => 412_500_000, 'impressions' => 90000, 'swipes' => 300, 'uniques' => 45000,
-                    ])]],
-                ]]]],
-            ]], 200),
-            '*/adsquads/sq-1/stats*' => Http::response(['timeseries_stats' => [
-                ['timeseries_stat' => ['breakdown_stats' => ['ad' => [
-                    ['id' => 'ad-1', 'timeseries' => [$point([
-                        'spend' => 100_000_000, 'impressions' => 20000, 'swipes' => 80,
-                    ])]],
-                ]]]],
-            ]], 200),
-            '*' => Http::response([], 200),
-        ]);
+        /*
+         * Both grains come from the SAME campaign endpoint and differ only by `breakdown`, so the
+         * fake has to read the query rather than the path — two URL patterns would both match and
+         * the first would answer for both.
+         */
+        Http::fake(function ($request) use ($point) {
+            $url = $request->url();
+
+            if (! str_contains($url, '/stats')) {
+                return Http::response([], 200);
+            }
+
+            if (str_contains($url, 'breakdown=adsquad')) {
+                return Http::response(['timeseries_stats' => [
+                    ['timeseries_stat' => ['breakdown_stats' => ['adsquad' => [
+                        ['id' => 'sq-1', 'timeseries' => [$point([
+                            'spend' => 412_500_000, 'impressions' => 90000, 'swipes' => 300, 'uniques' => 45000,
+                        ])]],
+                    ]]]],
+                ]], 200);
+            }
+
+            if (str_contains($url, 'breakdown=ad')) {
+                return Http::response(['timeseries_stats' => [
+                    ['timeseries_stat' => ['breakdown_stats' => ['ad' => [
+                        ['id' => 'ad-1', 'timeseries' => [$point([
+                            'spend' => 100_000_000, 'impressions' => 20000, 'swipes' => 80,
+                        ])]],
+                    ]]]],
+                ]], 200);
+            }
+
+            return Http::response([], 200);
+        });
     }
 }

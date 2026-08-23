@@ -422,9 +422,19 @@ final class AccountMetricsSyncer
         );
 
         $adRows = $this->grain(
+            /*
+             * Ads come from the CAMPAIGN endpoint, not the ad-squad one.
+             *
+             * The current API documents both `breakdown=ad` and `breakdown=adsquad` on
+             * `campaigns/{id}/stats`; the ad-squad endpoint documents no breakdown at all. Sweeping
+             * ads from their squads therefore asked 187 times for something that endpoint does not
+             * offer — which is exactly the shape of «every call refused, table silently empty».
+             *
+             * Asking campaigns for both grains is also 89 calls instead of 187 + 89.
+             */
             fn (): array => $connector->syncEntityInsights(
-                $account->external_id, 'adsquads', 'ad',
-                $squads->pluck('external_id')->map(static fn ($v): string => (string) $v)->all(),
+                $account->external_id, 'campaigns', 'ad',
+                $campaigns->values()->all(),
                 $from->toDateString(), $to->toDateString(),
             )->records,
         );
