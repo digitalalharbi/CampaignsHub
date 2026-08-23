@@ -26,7 +26,7 @@ import {
   type MetricFilters,
 } from './hooks'
 import { DemoBadge, KpiCard, Panel, SERIES, platformColor, tooltipProps } from './components'
-import { compact, money, moneyFromTotals, num, percent, ratio } from './format'
+import { compact, money, moneyFromTotals, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { formatMoneyReading, readCostPer, readRoas } from '@/lib/money/contract'
 import { funnelStageLabel } from './metricLabels'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
@@ -463,10 +463,18 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
           head={ar ? ['المنصة', 'الإنفاق', 'النتائج', 'CPA', 'ROAS', 'CTR', 'CPM', 'المساهمة'] : ['Platform', 'Spend', 'Results', 'CPA', 'ROAS', 'CTR', 'CPM', 'Contribution']}
           rows={rows.map((r) => [
             <PlatformCell key="p" provider={r.provider} />,
-            money(r.spend),
+            /*
+             * MONEY-TRUTH-002 — per-row provenance, same contract as the summary cards.
+             *
+             * These read `money(r.spend)` on a field the aggregator coalesces to 0 when withheld, so
+             * a platform that spent 4,128.93 USD ranked as having spent nothing, in a table directly
+             * beneath a card showing the real figure. The rows now carry `*_withheld_rows` and
+             * `*_original` (backend half of this unit), so the same reader serves both.
+             */
+            rowMoney(r, 'spend'),
             num(r.conversions),
-            money(r.cpa),
-            ratio(r.roas),
+            rowCostPer(r, 'cpa', 'conversions'),
+            rowRoas(r),
             percent(r.ctr, 2),
             money(r.cpm),
             percent(r.spend_share, 1),
@@ -491,7 +499,7 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
             <div>
               <div className="text-lg font-bold text-text-primary">{best.campaign_name}</div>
               <div className="mt-1 text-sm text-text-secondary">
-                ROAS <span className="tnum font-semibold text-success">{ratio(best.roas)}</span> · {ar ? 'إنفاق' : 'spend'} {money(best.spend)}
+                ROAS <span className="tnum font-semibold text-success">{rowRoas(best)}</span> · {ar ? 'إنفاق' : 'spend'} {rowMoney(best, 'spend')}
               </div>
             </div>
           )}
@@ -501,7 +509,7 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
             <div>
               <div className="text-lg font-bold text-text-primary">{worst.campaign_name}</div>
               <div className="mt-1 text-sm text-text-secondary">
-                ROAS <span className="tnum font-semibold text-danger">{ratio(worst.roas)}</span> · {ar ? 'إنفاق' : 'spend'} {money(worst.spend)}
+                ROAS <span className="tnum font-semibold text-danger">{rowRoas(worst)}</span> · {ar ? 'إنفاق' : 'spend'} {rowMoney(worst, 'spend')}
               </div>
             </div>
           )}
