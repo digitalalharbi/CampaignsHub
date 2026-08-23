@@ -83,6 +83,27 @@ If it reproduces after rebase, get the real server error (Laravel log / failure 
 re-run and hope. A previous WebKit failure in this project was called flake once and was a genuine
 cookie-timing race.
 
+## 6b. Gate instability is real — but it does NOT explain #75
+
+Measured across three branches this session, each failing a different, unrelated spec:
+
+| PR | spec | shape |
+|---|---|---|
+| #73 | `client-portal.spec.ts:53` | **webkit only**, passed locally on webkit; post-reload assertion at a 15s timeout |
+| #76 | `registration-onboarding.spec.ts:191` | **passed chromium in 7.0s, failed firefox in 29.3s — same run**. A timeout |
+| #75 | `expansion-surfaces.spec.ts` `/app/integrations` | **HTTP 500**. Not a timeout |
+
+The first two are one browser failing what another passed in the same run, at durations that say
+timeout. `playwright.config.ts` sets `workers: 1`, so the gate runs 144 tests × 3 browsers serially
+and takes ~60 minutes; under a loaded runner these tests are marginal.
+
+**Do not use that as cover for #75.** A 500 is a server error, not a slow page, and #75 is the PR
+that migrates `metric_sync_runs`. It stays open and unexplained (§6). Get the real Laravel error
+before forming a view.
+
+Do not "fix" the two timing-shaped failures by raising timeouts without evidence — a previous WebKit
+failure here was called flake once and turned out to be a genuine cookie-timing race.
+
 ## 7. NOT COMPLETE — newly discovered, explicitly open
 
 **#78 exists; the objective work is NOT done.** These are open:
