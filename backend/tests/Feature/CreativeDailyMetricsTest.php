@@ -181,6 +181,100 @@ final class CreativeDailyMetricsTest extends TestCase
         $this->assertSame(1, DB::table('creative_daily_metrics')->where('creative_id', $mine->id)->count());
     }
 
+    /*
+     * ── SNAP-CREATIVE-METRICS-LIVE-001 — `last_active_at`, and why the library looked empty ──────
+     *
+     * Production held 814 creative metric rows and the Creative Library still opened on «لا توجد
+     * بيانات». The default order is `last_active_at DESC, last_synced_at DESC, id`, and nothing in
+     * the pipeline had ever written the first column — the only writer was the demo seeder. It was
+     * NULL for all 1,451 live creatives, the second key tied because one sweep touches the whole
+     * account, and the order collapsed to `id`. The 86 creatives that had delivered were spread
+     * across sixty-one pages.
+     */
+
+    public function test_a_delivering_day_makes_the_creative_active(): void
+    {
+        $creative = $this->creative('cr-1');
+
+        app(UpsertCreativeDailyMetrics::class)->execute($this->account, [
+            ['campaign_id' => 'cr-1', 'date' => '2026-08-01', 'spend' => 10.0, 'impressions' => 900],
+            ['campaign_id' => 'cr-1', 'date' => '2026-08-04', 'spend' => 14.0, 'impressions' => 1200],
+        ]);
+
+        $this->assertSame(
+            '2026-08-04',
+            $creative->fresh()?->last_active_at?->toDateString(),
+            'The library sorts on this column; leaving it null is what buried the creatives that ran.',
+        );
+    }
+
+    /**
+     * A stats row is not delivery. The platform returns a row for every day we ASKED about, so a
+     * date on an all-zero row says only that the request covered it.
+     */
+    public function test_a_day_with_no_delivery_does_not_count_as_active(): void
+    {
+        $creative = $this->creative('cr-1');
+
+        app(UpsertCreativeDailyMetrics::class)->execute($this->account, [
+            ['campaign_id' => 'cr-1', 'date' => '2026-08-01', 'spend' => 0, 'impressions' => 0],
+        ]);
+
+        $this->assertNull(
+            $creative->fresh()?->last_active_at,
+            'A creative that never ran has no last active day — it is not «active a long time ago».',
+        );
+    }
+
+    /**
+     * Spend counts as delivery beside impressions, because a money row whose currency cannot be
+     * converted is still a day the creative ran (FX-001), and some integrations report cost with no
+     * impression column at all.
+     */
+    public function test_spend_alone_is_delivery(): void
+    {
+        $creative = $this->creative('cr-1');
+
+        app(UpsertCreativeDailyMetrics::class)->execute($this->account, [
+            ['campaign_id' => 'cr-1', 'date' => '2026-08-02', 'spend' => 7.5],
+        ]);
+
+        $this->assertSame('2026-08-02', $creative->fresh()?->last_active_at?->toDateString());
+    }
+
+    /**
+     * Re-syncing an OLDER window must not pull the last active day backwards. Attribution keeps
+     * moving for days, so old windows are re-fetched constantly.
+     */
+    public function test_an_older_window_does_not_move_the_last_active_day_back(): void
+    {
+        $creative = $this->creative('cr-1');
+        $upsert = app(UpsertCreativeDailyMetrics::class);
+
+        $upsert->execute($this->account, [
+            ['campaign_id' => 'cr-1', 'date' => '2026-08-10', 'impressions' => 500],
+        ]);
+        $upsert->execute($this->account, [
+            ['campaign_id' => 'cr-1', 'date' => '2026-08-01', 'impressions' => 300],
+        ]);
+
+        $this->assertSame('2026-08-10', $creative->fresh()?->last_active_at?->toDateString());
+    }
+
+    /** One creative's delivery says nothing about another's. */
+    public function test_only_the_creatives_in_the_batch_are_touched(): void
+    {
+        $ran = $this->creative('cr-1');
+        $idle = $this->creative('cr-2');
+
+        app(UpsertCreativeDailyMetrics::class)->execute($this->account, [
+            ['campaign_id' => 'cr-1', 'date' => '2026-08-01', 'impressions' => 100],
+        ]);
+
+        $this->assertNotNull($ran->fresh()?->last_active_at);
+        $this->assertNull($idle->fresh()?->last_active_at);
+    }
+
     private function creative(string $externalId): ExternalCreative
     {
         return ExternalCreative::withoutGlobalScopes()->create([

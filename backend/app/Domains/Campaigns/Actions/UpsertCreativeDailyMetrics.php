@@ -152,6 +152,62 @@ final class UpsertCreativeDailyMetrics
             );
         }
 
+        $this->recordDelivery(array_values(array_unique(array_column($payload, 'creative_id'))));
+
         return ['upserted' => $upserted, 'skipped' => $skipped, 'ambiguous' => count($ambiguous)];
+    }
+
+    /**
+     * SNAP-CREATIVE-METRICS-LIVE-001 — `last_active_at` is a fact, and nothing was writing it.
+     *
+     * ## What was actually wrong with the Creative Library
+     *
+     * The library's default order is `last_active_at DESC, last_synced_at DESC, id`. On production
+     * NOTHING in the sync pipeline had ever written `last_active_at` — the only writer in the
+     * codebase was the demo seeder — so it was NULL for all 1,451 live creatives. The second key
+     * then tied for every one of them, because a structure sweep touches the whole account in one
+     * run. The order collapsed to `id`, and the 86 creatives that had actually delivered were
+     * scattered across sixty-one pages of twenty-four.
+     *
+     * The numbers were there. The page that shows them opened on the creatives that had none, so
+     * the library read as empty while `creative_daily_metrics` held 814 rows.
+     *
+     * ## «Active» means it DELIVERED, not that we asked about it
+     *
+     * A stats call returns a row for a creative that spent nothing, and a date on such a row says
+     * only that we requested that day. So delivery is `impressions > 0 OR spend > 0` — spend is
+     * kept beside impressions because a withheld-currency row is still a day the creative ran, and
+     * because a conversions-only integration can report cost with no impression column at all.
+     *
+     * A creative with no delivering day keeps its NULL: it has not «been active a long time ago»,
+     * we simply have no day on which it ran.
+     *
+     * @param  list<string>  $creativeIds
+     */
+    private function recordDelivery(array $creativeIds): void
+    {
+        foreach (array_chunk($creativeIds, 500) as $chunk) {
+            $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+
+            /*
+             * Recomputed from the whole table, not from this batch — a re-sync of an older window
+             * must not pull a creative's last delivery backwards, and MAX over every stored day is
+             * the answer regardless of which window brought us here.
+             */
+            DB::update(
+                "UPDATE external_creatives AS c
+                    SET last_active_at = d.last_delivery
+                   FROM (
+                        SELECT creative_id, MAX(metric_date)::timestamp AS last_delivery
+                          FROM creative_daily_metrics
+                         WHERE creative_id IN ({$placeholders})
+                           AND (impressions > 0 OR spend > 0)
+                      GROUP BY creative_id
+                   ) AS d
+                  WHERE c.id = d.creative_id
+                    AND (c.last_active_at IS NULL OR c.last_active_at IS DISTINCT FROM d.last_delivery)",
+                $chunk,
+            );
+        }
     }
 }
