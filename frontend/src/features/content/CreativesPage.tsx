@@ -5,6 +5,7 @@ import { GitCompare, Layers, LayoutGrid, Rows3 } from 'lucide-react'
 import { CreativeViewer } from './CreativeViewer'
 import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
+import { emptyReason, type MetricsAvailability } from './availability'
 import { imageLoading } from './format'
 import {
   groupCreatives,
@@ -705,6 +706,7 @@ export function CreativesPage() {
               <CreativeGridCard
                 creative={creative}
                 currency={data?.currency ?? null}
+                availability={data?.metrics_availability?.[creative.provider]}
                 t={t}
                 ar={ar}
                 locale={locale}
@@ -887,6 +889,7 @@ export function CreativesPage() {
 function CreativeGridCard({
   creative,
   currency,
+  availability,
   t,
   ar,
   locale,
@@ -898,6 +901,8 @@ function CreativeGridCard({
   creative: CreativeCard
   /** CREATIVE-MONEY-TRUTH-001 — stated by the payload, never assumed by the card. */
   currency: string | null
+  /** CONTENT-STATE-SEMANTICS-001 — what the sync recorded for THIS creative's provider. */
+  availability: MetricsAvailability | undefined
   t: (typeof COPY)['ar']
   ar: boolean
   locale: 'ar' | 'en'
@@ -985,18 +990,30 @@ function CreativeGridCard({
           {creative.objective ? ` · ${objectiveLabel(creative.objective, locale)}` : ''}
         </p>
 
-        {/* The creative's OWN headline metrics — chosen by its objective, so an awareness video is
-            never asked for a cost per order it was not bought to produce. */}
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-          {creative.headline_metrics.slice(0, 4).map((key) => (
-            <div key={key} className="flex flex-col">
-              <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
-              <dd className="tabular-nums text-text-primary" dir="ltr">
-                {formatMetric(metricState(creative.metrics, key), key, locale, currency)}
-              </dd>
-            </div>
-          ))}
-        </dl>
+        {/*
+          * CONTENT-STATE-SEMANTICS-001 — a creative with NO figures says why, once.
+          *
+          * Repeating «لا توجد بيانات» four times down a metric grid told the operator nothing and
+          * hid the only fact that mattered: whether the platform was asked, answered, or refused.
+          * A creative that has figures keeps the grid; one that has none gets the reason instead.
+          */}
+        {creative.metrics === null ? (
+          <CardEmptyReason availability={availability} locale={locale} />
+        ) : (
+          /* The creative's OWN headline metrics — chosen by its objective, so an awareness video is
+             never asked for a cost per order it was not bought to produce. */
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+            {creative.headline_metrics.slice(0, 4).map((key) => (
+              <div key={key} className="flex flex-col">
+                <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
+                <dd className="tabular-nums text-text-primary" dir="ltr">
+                  {/* CREATIVE-MONEY-TRUTH-001 — the currency is stated by the payload, never defaulted. */}
+                  {formatMetric(metricState(creative.metrics, key), key, locale, currency)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
 
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
           <span className={`rounded px-1.5 py-0.5 text-[11px] ${FATIGUE_TONE[creative.fatigue.status]}`}>
@@ -1024,5 +1041,39 @@ function CreativeGridCard({
         </p>
       </div>
     </article>
+  )
+}
+
+/**
+ * CONTENT-STATE-SEMANTICS-001 — the reason, rendered once, with the right weight.
+ *
+ * `failed` is the only state drawn as a warning: numbers exist at the platform and we do not have
+ * them, which is a pipeline to go and fix. A creative that simply did not run is not a problem and
+ * must not be dressed as one — that is how real alerts stop being read.
+ */
+function CardEmptyReason({
+  availability,
+  locale,
+}: {
+  availability: MetricsAvailability | undefined
+  locale: 'ar' | 'en'
+}) {
+  const reason = emptyReason(availability, locale)
+
+  return (
+    <div
+      className={`rounded-md px-2 py-1.5 text-xs ${
+        reason.tone === 'warning'
+          ? 'bg-warning/10 text-warning'
+          : 'bg-surface-muted text-text-secondary'
+      }`}
+      data-testid={`creative-empty-${reason.kind}`}
+    >
+      {reason.text}
+      {/* The provider's own words — «rate limited» is actionable in a way «no data» never was. */}
+      {reason.kind === 'failed' && reason.detail !== null && (
+        <span className="mt-0.5 block text-[11px] opacity-80">{reason.detail}</span>
+      )}
+    </div>
   )
 }

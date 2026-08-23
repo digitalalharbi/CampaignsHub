@@ -112,6 +112,7 @@ const page = (over: Partial<LibraryPage> = {}): LibraryPage => ({
   total: 1,
   period: { from: '2026-07-08', to: '2026-08-06' },
   currency: 'SAR',
+  metrics_availability: { meta: { status: 'success', rows: 12, error: null, at: null } },
   filters: {
     providers: ['meta', 'tiktok'],
     formats: ['image', 'video'],
@@ -456,4 +457,68 @@ describe('CreativesPage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/same project/)
   })
+
+  /*
+   * ── CONTENT-STATE-SEMANTICS-001 — on the RENDERED card ───────────────────────────────────────
+   *
+   * A helper test cannot catch a page that never calls the helper, and this product has already
+   * shipped one canonical reader that nothing was wired to. These render the real library.
+   */
+
+  it('tells a creative that did not run apart from one whose data failed to arrive', async () => {
+    vi.mocked(listCreatives).mockResolvedValue(
+      page({
+        creatives: [card({ metrics: null })],
+        metrics_availability: { meta: { status: 'success', rows: 814, error: null, at: null } },
+      }),
+    )
+
+    renderWithProviders(<CreativesPage />, { locale: 'ar' })
+
+    expect(await screen.findByTestId('creative-empty-did_not_run')).toHaveTextContent('لم يعمل خلال هذه الفترة')
+    expect(screen.queryByText('لا توجد بيانات')).not.toBeInTheDocument()
+  })
+
+  it('shows a failed fetch as a warning carrying the provider reason', async () => {
+    vi.mocked(listCreatives).mockResolvedValue(
+      page({
+        creatives: [card({ metrics: null })],
+        metrics_availability: {
+          meta: { status: 'failed', rows: 0, error: 'Rate limited by the platform (429).', at: null },
+        },
+      }),
+    )
+
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+
+    const el = await screen.findByTestId('creative-empty-failed')
+
+    expect(el).toHaveTextContent(/could not be fetched/i)
+    expect(el).toHaveTextContent('Rate limited by the platform (429).')
+  })
+
+  it('says a platform reports no creative performance rather than implying data is missing', async () => {
+    vi.mocked(listCreatives).mockResolvedValue(
+      page({
+        creatives: [card({ metrics: null, provider: 'tiktok' })],
+        metrics_availability: { tiktok: { status: 'unsupported', rows: 0, error: null, at: null } },
+      }),
+    )
+
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('creative-empty-unsupported')).toBeInTheDocument()
+  })
+
+  /** A creative WITH figures keeps its metric grid — the reason replaces nothing real. */
+  it('leaves a delivering creative its numbers', async () => {
+    vi.mocked(listCreatives).mockResolvedValue(page())
+
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+
+    await screen.findByText('Hero image')
+
+    expect(screen.queryByTestId(/creative-empty-/)).not.toBeInTheDocument()
+  })
+
 })
