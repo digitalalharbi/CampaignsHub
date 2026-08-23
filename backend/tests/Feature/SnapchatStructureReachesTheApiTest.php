@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
@@ -194,6 +195,34 @@ final class SnapchatStructureReachesTheApiTest extends TestCase
      * wrong discovered no parents and skipped every squad and ad, which is a fair imitation of the
      * defect this whole phase is about.
      */
+    /**
+     * SNAP-CREATIVE-ASSETS-001 — the asset survives all the way to the ROW.
+     *
+     * The connector resolving a media URL is only half of it. `ImportExternalStructure` wrote
+     * `thumbnail_url` and `preview_url` and simply had no line for `asset_url` or `video_url`, so a
+     * perfectly-fetched asset was dropped on the floor and the card went on saying «this platform
+     * does not expose the creative's asset» — a claim about Snapchat that was really a gap here.
+     *
+     * This asserts the stored row, not the connector's return value, because that is the join the
+     * defect lived in.
+     */
+    public function test_the_creatives_video_url_is_stored_not_merely_fetched(): void
+    {
+        $this->fakeSnapchat();
+
+        app(AccountStructureSyncer::class)->sync($this->account);
+
+        $creative = ExternalCreative::withoutGlobalScopes()
+            ->where('external_creative_id', 'cr-1')
+            ->firstOrFail();
+
+        $this->assertSame(
+            'https://cf.snapchat.com/me-1.mp4',
+            $creative->video_url,
+            'The connector fetched the asset and the importer had no column for it.',
+        );
+    }
+
     private function fakeSnapchat(): void
     {
         Http::fake([
@@ -210,7 +239,11 @@ final class SnapchatStructureReachesTheApiTest extends TestCase
                 ]],
             ]], 200),
             '*/creatives*' => Http::response(['creatives' => [
-                ['creative' => ['id' => 'cr-1', 'name' => 'Summer hero', 'type' => 'SNAP_AD']],
+                ['creative' => ['id' => 'cr-1', 'name' => 'Summer hero', 'type' => 'SNAP_AD', 'top_snap_media_id' => 'me-1']],
+            ]], 200),
+            // SNAP-CREATIVE-ASSETS-001 — the asset lives behind a second call, keyed by the media id.
+            '*get_media_by_ids*' => Http::response(['media' => [
+                ['media' => ['id' => 'me-1', 'type' => 'VIDEO', 'download_link' => 'https://cf.snapchat.com/me-1.mp4']],
             ]], 200),
             '*/ads*' => Http::response(['ads' => [
                 // Neither ad names a campaign. That is the platform's shape, not an omission.

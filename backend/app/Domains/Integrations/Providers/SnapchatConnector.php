@@ -246,6 +246,9 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
     /**
      * @return array<string,array<string,mixed>> creative id → the creative row we can state honestly
      */
+    /** Snapchat takes up to 2,000 media ids per batch; chunked so a larger account is never truncated. */
+    private const MEDIA_PER_REQUEST = 2000;
+
     private function creativesById(OAuthTokens $tokens, string $adAccountId): array
     {
         $creatives = [];
@@ -267,12 +270,130 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                     'COLLECTION' => 'carousel',
                     default => null,
                 },
-                // Snapchat's preview needs a separately-signed URL; it is not in this body, so there
-                // is nothing honest to put here.
+                /*
+                 * SNAP-CREATIVE-ASSETS-001 — the asset lives behind a second call, and this is its key.
+                 *
+                 * `top_snap_media_id` is «the Media ID of the top snap (image/video)». The creative
+                 * body carries the id and never the file, which is why this used to store nothing
+                 * and every Snapchat card read «لا تتيح هذه المنصة أصل المحتوى» — a statement about
+                 * the PLATFORM that was false. Snapchat exposes the asset perfectly well; we had
+                 * not asked.
+                 */
+                'media_id' => isset($c['top_snap_media_id']) ? (string) $c['top_snap_media_id'] : null,
+            ], static fn ($v) => $v !== null);
+        }
+
+        return $this->withMedia($tokens, $creatives);
+    }
+
+    /**
+     * SNAP-CREATIVE-ASSETS-001 — resolve every creative's media in ONE call, not one call each.
+     *
+     * ## Why the batch endpoint and not `GET /media/{id}`
+     *
+     * The live account holds 1,451 creatives. Asking per creative is 1,451 round trips against an
+     * API that rate-limits, on a job that already had to have its timeout raised to fifteen minutes
+     * — it would turn a working structure sweep into a throttled one. `get_media_by_ids` takes up
+     * to 2,000 ids per request, so the whole account is one call, with chunking left in place
+     * because an account may exceed that and a silently truncated list is the worst outcome.
+     *
+     * ## What is stored, and what is deliberately not
+     *
+     * `download_link` is the file. It is a signed URL, so it is stored with the expiry the platform
+     * states and `CreativePresenter` already refuses to render an expired one — «انتهت صلاحية رابط
+     * المنصة» rather than a broken image.
+     *
+     * A link carrying a credential in its QUERY is never stored at all. The presenter has a
+     * `withheld` state for exactly this, and the rule is that a token must not reach the browser or
+     * the logs. Snapchat signs with an opaque signature rather than an access token, so this is a
+     * guard rather than an expectation — but a guard is what makes it safe to be wrong about.
+     *
+     * @param  array<string,array<string,mixed>>  $creatives
+     * @return array<string,array<string,mixed>>
+     */
+    private function withMedia(OAuthTokens $tokens, array $creatives): array
+    {
+        $mediaIds = array_values(array_unique(array_filter(
+            array_map(static fn (array $c): ?string => $c['media_id'] ?? null, $creatives),
+        )));
+
+        if ($mediaIds === []) {
+            return $creatives;
+        }
+
+        $media = [];
+
+        foreach (array_chunk($mediaIds, self::MEDIA_PER_REQUEST) as $chunk) {
+            try {
+                $body = $this->read(
+                    $this->api($tokens)->post($this->url('adaccounts/get_media_by_ids'), ['media_ids' => $chunk]),
+                    'media',
+                );
+            } catch (\Throwable) {
+                /*
+                 * The asset is an enrichment. A creative with no picture is still a creative, and
+                 * failing the whole structure sweep because a media lookup was throttled would cost
+                 * the campaigns, ad squads and ads that came with it.
+                 */
+                continue;
+            }
+
+            foreach ((array) ($body['media'] ?? []) as $wrapper) {
+                $m = (array) (((array) $wrapper)['media'] ?? []);
+
+                if (($m['id'] ?? null) === null) {
+                    continue;
+                }
+
+                $media[(string) $m['id']] = $m;
+            }
+        }
+
+        foreach ($creatives as $id => $creative) {
+            $m = $media[$creative['media_id'] ?? ''] ?? null;
+
+            if ($m === null) {
+                continue;
+            }
+
+            $link = $this->safeAssetUrl($m['download_link'] ?? null);
+            $isVideo = strtoupper((string) ($m['type'] ?? '')) === 'VIDEO';
+
+            $creatives[$id] = array_filter([
+                ...$creative,
+                // A video's file is the video; an image's file is the image. Storing a video URL in
+                // the image column is what makes a card try to render an MP4 as a picture.
+                'asset_url' => $isVideo ? null : $link,
+                'video_url' => $isVideo ? $link : null,
+                'source_updated_at' => isset($m['updated_at']) ? (string) $m['updated_at'] : null,
             ], static fn ($v) => $v !== null);
         }
 
         return $creatives;
+    }
+
+    /**
+     * A URL is stored only when it carries no credential.
+     *
+     * `CreativePresenter` has a `withheld` state for a preview link that bears one, and the standing
+     * rule is that a provider token must never reach the browser or a log line. Returning null here
+     * is what makes that state reachable instead of theoretical.
+     */
+    private function safeAssetUrl(mixed $url): ?string
+    {
+        if (! is_string($url) || $url === '') {
+            return null;
+        }
+
+        $query = strtolower((string) (parse_url($url, PHP_URL_QUERY) ?? ''));
+
+        foreach (['access_token', 'oauth', 'bearer', 'apikey', 'api_key'] as $secret) {
+            if (str_contains($query, $secret)) {
+                return null;
+            }
+        }
+
+        return $url;
     }
 
     private function reviewStatus(mixed $status): ?string
