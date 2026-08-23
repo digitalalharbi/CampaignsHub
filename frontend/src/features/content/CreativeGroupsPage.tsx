@@ -218,7 +218,7 @@ export function CreativeGroupsPage({ portal }: { portal: 'app' | 'agency' }) {
         <ul className="grid gap-3 md:grid-cols-2">
           {listQuery.data?.groups.map((group) => (
             <li key={group.id}>
-              <GroupCard group={group} t={t} ar={ar} locale={locale} onOpen={() => setParam('group', group.id)} />
+              <GroupCard group={group} t={t} ar={ar} locale={locale} currency={listQuery.data?.currency ?? null} onOpen={() => setParam('group', group.id)} />
             </li>
           ))}
         </ul>
@@ -232,12 +232,15 @@ function GroupCard({
   t,
   ar,
   locale,
+  currency,
   onOpen,
 }: {
   group: CreativeGroupSummary
   t: (typeof COPY)['ar'] | (typeof COPY)['en']
   ar: boolean
   locale: 'ar' | 'en'
+  /** CREATIVE-MONEY-TRUTH-001 — from the payload; a card never names a currency of its own. */
+  currency: string | null
   onOpen: () => void
 }) {
   return (
@@ -262,7 +265,7 @@ function GroupCard({
 
       {group.mixed_objectives && <MixedNotice group={group} t={t} ar={ar} />}
 
-      <GroupFigures group={group} locale={locale} />
+      <GroupFigures group={group} locale={locale} currency={currency} />
 
       <Button variant="secondary" className="mt-auto self-start" onClick={onOpen}>
         {t.open}
@@ -304,7 +307,7 @@ function MixedNotice({
  * `headline_metrics` is empty exactly when the members disagree about the objective, and in that
  * case the additive figures are still shown — what is withheld is the JUDGEMENT, not the arithmetic.
  */
-function GroupFigures({ group, locale }: { group: CreativeGroupSummary; locale: 'ar' | 'en' }) {
+function GroupFigures({ group, locale, currency }: { group: CreativeGroupSummary; locale: 'ar' | 'en'; currency: string | null }) {
   const keys = group.headline_metrics.length > 0 ? group.headline_metrics : ['spend', 'impressions', 'clicks']
 
   return (
@@ -313,7 +316,7 @@ function GroupFigures({ group, locale }: { group: CreativeGroupSummary; locale: 
         <div key={key} className="rounded-md border border-border p-2">
           <dt className="text-[11px] text-text-secondary">{metricLabel(key, locale)}</dt>
           <dd className="mt-0.5 text-sm font-medium text-text-primary" dir="ltr">
-            {formatMetric(metricState(group.metrics, key), key, locale)}
+            {formatMetric(metricState(group.metrics, key), key, locale, currency)}
           </dd>
         </div>
       ))}
@@ -408,7 +411,7 @@ function GroupDetail({
         {group.mixed_objectives && <MixedNotice group={group} t={t} ar={ar} />}
 
         <h3 className="text-sm font-medium text-text-primary">{t.total}</h3>
-        <GroupFigures group={group} locale={locale} />
+        <GroupFigures group={group} locale={locale} currency={group.currency} />
       </section>
 
       {notice && (
@@ -545,7 +548,7 @@ function PlatformTable({
               </td>
               {keys.map((key) => (
                 <td key={key} className="p-2 text-text-primary" dir="ltr">
-                  {formatMetric(metricState(line.metrics as CreativeMetrics | null, key), key, locale)}
+                  {formatMetric(metricState(line.metrics as CreativeMetrics | null, key), key, locale, group.currency)}
                 </td>
               ))}
             </tr>

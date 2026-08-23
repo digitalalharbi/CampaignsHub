@@ -105,7 +105,20 @@ const MONEY = new Set(['spend', 'revenue', 'cpc', 'cpm', 'cpa', 'aov', 'cost_per
  * codes and dates, and the mixture is unreadable in a sentence and unusable in a table column that
  * has to align.
  */
-export function formatMetric(state: MetricState, key: string, locale: Locale, currency = 'SAR'): string {
+/**
+ * CREATIVE-MONEY-TRUTH-001 — `currency` is required, and that is the point.
+ *
+ * It used to default to `'SAR'`. Twelve call sites omitted it, so twelve surfaces printed «SAR»
+ * beside whatever number they held — including the Creative Library card's own spend, on a project
+ * whose money is in USD. A default that is right for most customers is not a default, it is a wrong
+ * answer for the rest of them, arrived at silently.
+ *
+ * Making it required is what stops that returning: a new call site cannot omit it, because the
+ * compiler will not let it. `null` is an allowed value and means «no single currency can be named» —
+ * the reach spans projects reporting differently, or the pipeline has recorded nothing to convert
+ * into yet — and a monetary figure is then refused rather than labelled with a guess.
+ */
+export function formatMetric(state: MetricState, key: string, locale: Locale, currency: string | null): string {
   const ar = locale === 'ar'
 
   if (state.kind === 'not_provided') return ar ? 'غير مُرسَل' : 'Not provided'
@@ -116,6 +129,10 @@ export function formatMetric(state: MetricState, key: string, locale: Locale, cu
   if (RATE.has(key)) return `${(value * 100).toFixed(2)}%`
   if (key === 'roas') return `${value.toFixed(2)}×`
   if (MONEY.has(key)) {
+    // A number whose currency cannot be named is not a figure anybody can act on, and printing it
+    // bare invites the reader to assume the one they expect.
+    if (currency === null) return ar ? 'العملة غير محددة' : 'Currency not stated'
+
     return `${value.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${currency}`
   }
 

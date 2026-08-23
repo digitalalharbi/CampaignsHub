@@ -68,20 +68,35 @@ export interface PulseList<T> {
   shown: number
 }
 
-export interface FatigueAlert {
+export interface FatigueAlert extends MoneyProvenance {
   creative: CreativeCard
-  spend: number
+  /** Null when this creative's spend could not be converted — the original is carried beside it. */
+  spend: number | null
   signals: Array<{ key: string; direction: string; change: number }>
   note_ar: string | null
   note_en: string | null
 }
 
-export interface SpendByKind {
+/**
+ * CREATIVE-MONEY-TRUTH-001 — the fields the canonical money reader keys off.
+ *
+ * Deliberately the same names the metrics summary uses, so `readMoney()` renders a creative strip
+ * and a dashboard KPI through one implementation rather than two that agree by coincidence.
+ */
+export interface MoneyProvenance {
+  spend_withheld_rows?: number | null
+  spend_original?: number | null
+  money_original_currency?: string | null
+  money_original_currencies?: number | null
+}
+
+export interface SpendByKind extends MoneyProvenance {
   kind: string
   spend: number | null
   /** Null when nothing reported spend — a share of nothing is undefined, not 0%. */
   share: number | null
   creatives: number
+  /** Never reported at all — distinct from reported-but-unconvertible, which is withheld above. */
   spend_not_reported: number
 }
 
@@ -129,9 +144,12 @@ export interface CreativePulse {
     insufficient_data: PulseList<CreativeCard>
     /** Fatigued AND still spending — the version of the fact that names something to do. */
     alerts: PulseList<FatigueAlert>
-    spend_at_risk: number
+    /** Provenance-aware: a withheld riyal and a converted one cannot be added into one number. */
+    spend_at_risk: MoneyProvenance & { spend: number | null }
   }
   spend_by_kind: SpendByKind[]
+  /** What these figures are IN. Null when the reach spans projects reporting in different currencies. */
+  currency: string | null
   image_vs_video: PathComparison[]
   best_platform: PulseList<PlatformComparison>
   /** The same options the library's filter bar offers — derived from the rows in reach, not an enum. */

@@ -155,6 +155,13 @@ export interface LibraryPage {
   per_page: number
   total: number
   period: { from: string; to: string }
+  /**
+   * CREATIVE-MONEY-TRUTH-001 — what the money on these cards is in.
+   *
+   * Null when the reach spans projects reporting in different currencies, or when the pipeline has
+   * recorded nothing to convert into yet. The card then refuses the figure rather than labelling it.
+   */
+  currency: string | null
   filters: LibraryFilterOptions
 }
 
@@ -375,6 +382,8 @@ export interface CreativeGroupDetail extends CreativeGroupSummary {
     metrics: CreativeMetrics | null
   }>
   period: { from: string; to: string }
+  /** What this group's money is in — null when its members report in different currencies. */
+  currency: string | null
   audit: CreativeGroupAuditEntry[]
 }
 
@@ -384,6 +393,8 @@ export interface CreativeGroupsPage {
   per_page: number
   total: number
   period: { from: string; to: string }
+  /** A group's money is no more self-describing than a creative's — see `LibraryPage`. */
+  currency: string | null
 }
 
 export const listCreativeGroups = (query: LibraryQuery) =>
@@ -412,6 +423,11 @@ export interface CreativeComparison {
   creatives: CreativeCard[]
   /** Per-metric winners only. There is deliberately no overall winner in this shape. */
   winners: Record<string, string | null>
+  /**
+   * Null when the compared creatives report in different currencies — the caller supplies the ids
+   * here, so that is reachable. Money is then refused rather than presented as a contest.
+   */
+  currency: string | null
   comparable: boolean
   reason_ar: string | null
   reason_en: string | null

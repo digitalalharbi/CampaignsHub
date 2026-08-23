@@ -704,6 +704,7 @@ export function CreativesPage() {
             <li key={creative.id}>
               <CreativeGridCard
                 creative={creative}
+                currency={data?.currency ?? null}
                 t={t}
                 ar={ar}
                 locale={locale}
@@ -801,14 +802,14 @@ export function CreativesPage() {
                       {creative.objective ? objectiveLabel(creative.objective, locale) : marketingPathLabel(creative.path, locale)}
                     </td>
                     <td className="p-2 tabular-nums" dir="ltr">
-                      {formatMetric(metricState(creative.metrics, 'spend'), 'spend', locale)}
+                      {formatMetric(metricState(creative.metrics, 'spend'), 'spend', locale, data?.currency ?? null)}
                     </td>
                     <td className="p-2" dir="ltr">
                       {resultKey === null ? (
                         <span className="text-text-muted">—</span>
                       ) : (
                         <span className="tabular-nums">
-                          {formatMetric(metricState(creative.metrics, resultKey), resultKey, locale)}
+                          {formatMetric(metricState(creative.metrics, resultKey), resultKey, locale, data?.currency ?? null)}
                           <span className="ms-1 text-[11px] text-text-muted">{metricLabel(resultKey, locale)}</span>
                         </span>
                       )}
@@ -818,7 +819,7 @@ export function CreativesPage() {
                         <span className="text-text-muted">—</span>
                       ) : (
                         <span className="tabular-nums">
-                          {formatMetric(metricState(creative.metrics, efficiencyKey), efficiencyKey, locale)}
+                          {formatMetric(metricState(creative.metrics, efficiencyKey), efficiencyKey, locale, data?.currency ?? null)}
                           <span className="ms-1 text-[11px] text-text-muted">{metricLabel(efficiencyKey, locale)}</span>
                         </span>
                       )}
@@ -885,6 +886,7 @@ export function CreativesPage() {
 
 function CreativeGridCard({
   creative,
+  currency,
   t,
   ar,
   locale,
@@ -894,6 +896,8 @@ function CreativeGridCard({
   detailsTo,
 }: {
   creative: CreativeCard
+  /** CREATIVE-MONEY-TRUTH-001 — stated by the payload, never assumed by the card. */
+  currency: string | null
   t: (typeof COPY)['ar']
   ar: boolean
   locale: 'ar' | 'en'
@@ -988,7 +992,7 @@ function CreativeGridCard({
             <div key={key} className="flex flex-col">
               <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
               <dd className="tabular-nums text-text-primary" dir="ltr">
-                {formatMetric(metricState(creative.metrics, key), key, locale)}
+                {formatMetric(metricState(creative.metrics, key), key, locale, currency)}
               </dd>
             </div>
           ))}

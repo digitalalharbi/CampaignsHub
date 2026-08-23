@@ -150,7 +150,7 @@ export function CreativeCompare({
                         className={`p-2 tabular-nums ${isWinner ? 'bg-success/10 font-semibold text-text-primary' : 'text-text-secondary'}`}
                         dir="ltr"
                       >
-                        {formatMetric(metricState(creative.metrics, key), key, locale)}
+                        {formatMetric(metricState(creative.metrics, key), key, locale, comparison.data?.currency ?? null)}
                         {isWinner && <span className="sr-only"> — {t.winner}</span>}
                       </td>
                     )

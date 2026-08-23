@@ -7,6 +7,7 @@ namespace App\Domains\Campaigns\Actions;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -37,10 +38,34 @@ use Illuminate\Support\Str;
  */
 final class UpsertCreativeDailyMetrics
 {
+    /**
+     * CREATIVE-MONEY-TRUTH-001 — the same FX rule the rest of the pipeline obeys.
+     *
+     * `daily_metrics` reaches its table through `InsightRowNormaliser`, which converts money into
+     * the project's reporting currency and WITHHOLDS it when no rate can be vouched for. These rows
+     * bypassed that entirely: `AccountMetricsSyncer` calls this action with the connector's output
+     * directly. Reusing the same service is what makes it one rule rather than two.
+     */
+    public function __construct(private readonly ReportingCurrency $currency) {}
+
     /** Columns the provider row can carry, in the shape `pointToRow()` produces. */
     private const MEASURES = [
         'spend', 'impressions', 'clicks', 'conversions', 'revenue', 'video_views', 'video_completions',
     ];
+
+    /**
+     * The money columns THIS TABLE has, and the reason they are named here as well as catalogued.
+     *
+     * `metric_definitions.is_currency` is the product's one answer to «is this money», and it stays
+     * the authority — a metric catalogued as money later is converted here with no change. But an
+     * empty or unseeded catalogue would make `isMonetary()` answer false for everything, and the
+     * failure mode of that is the exact defect this class was fixed for: an unconverted figure
+     * stored as though it were already in the project's currency.
+     *
+     * So the two are OR'd. The catalogue can only ever widen what counts as money here, never narrow
+     * it below the two columns the schema itself calls money.
+     */
+    private const MONEY = ['spend', 'revenue'];
 
     /**
      * @param  list<array<string,mixed>>  $rows  canonical rows; the provider creative id is in `campaign_id`
@@ -115,18 +140,57 @@ final class UpsertCreativeDailyMetrics
                 continue;
             }
 
+            /*
+             * The currency this row's money is actually IN — read exactly as `InsightRowNormaliser`
+             * reads it.
+             *
+             * Snapchat states the currency on the ACCOUNT, not on the stats row, which is why the
+             * account is the fallback and the reporting currency is only the last resort. Letting
+             * the reporting currency stand in unconditionally is precisely the bug: it treats an
+             * unlabelled figure as already converted.
+             */
+            $reporting = $this->currency->forProject((string) $creative->project_id);
+            $source = strtoupper((string) ($row['currency'] ?? $account->currency ?? $reporting));
+
             $measures = [];
+            $money = [];
+            $delivered = false;
+
             foreach (self::MEASURES as $key) {
                 /*
-                 * ABSENT stays absent — the column default is what applies.
+                 * ABSENT stays absent.
                  *
                  * A platform that does not report video completions has not reported zero of them,
                  * and writing 0 here would turn «not measured» into «measured as none» on a card
                  * that reads the two differently.
                  */
-                if (array_key_exists($key, $row) && $row[$key] !== null) {
-                    $measures[$key] = $row[$key];
+                if (! array_key_exists($key, $row) || $row[$key] === null) {
+                    continue;
                 }
+
+                if (! in_array($key, self::MONEY, true) && ! $this->currency->isMonetary($key)) {
+                    $measures[$key] = $row[$key];
+
+                    continue;
+                }
+
+                /*
+                 * Money is converted; counts are not. `metric_definitions.is_currency` decides, so a
+                 * metric catalogued as money later needs no change here.
+                 */
+                $amount = (float) $row[$key];
+                $converted = $this->currency->normalise($amount, $source, $reporting, Carbon::parse($date));
+
+                // Null when no rate could be vouched for. NOT zero, and NOT the unconverted figure
+                // wearing the project's currency — which is what this table used to store.
+                $measures[$key] = $converted['value'];
+                $money["{$key}_original"] = $amount;
+                $money['original_currency'] = $source;
+                $money['project_currency'] = $reporting;
+
+                // A day whose money was withheld is still a day the creative ran, so delivery is
+                // judged on the amount the platform reported, never on the withheld null.
+                $delivered = $delivered || $amount > 0;
             }
 
             $payload[] = [
@@ -140,6 +204,7 @@ final class UpsertCreativeDailyMetrics
                 'created_at' => $now,
                 'updated_at' => $now,
                 ...$measures,
+                ...$money,
             ];
             $upserted++;
         }
@@ -148,7 +213,13 @@ final class UpsertCreativeDailyMetrics
             DB::table('creative_daily_metrics')->upsert(
                 $chunk,
                 ['creative_id', 'metric_date'],
-                [...self::MEASURES, 'campaign_id', 'updated_at'],
+                [
+                    ...self::MEASURES,
+                    // CREATIVE-MONEY-TRUTH-001 — a re-sync that finds a rate must be able to replace a
+                    // withheld null with the converted figure, so these update in place too.
+                    'spend_original', 'revenue_original', 'original_currency', 'project_currency',
+                    'campaign_id', 'updated_at',
+                ],
             );
         }
 
@@ -201,7 +272,15 @@ final class UpsertCreativeDailyMetrics
                         SELECT creative_id, MAX(metric_date)::timestamp AS last_delivery
                           FROM creative_daily_metrics
                          WHERE creative_id IN ({$placeholders})
-                           AND (impressions > 0 OR spend > 0)
+                           /*
+                            * `spend_original`, not `spend` — CREATIVE-MONEY-TRUTH-001.
+                            *
+                            * `spend` is NULL when the day's money could not be converted, and a
+                            * withheld figure is still a day the creative ran. Reading the converted
+                            * column here would make every creative on an unquoted currency look as
+                            * though it had never delivered.
+                            */
+                           AND (impressions > 0 OR COALESCE(spend, spend_original, 0) > 0)
                       GROUP BY creative_id
                    ) AS d
                   WHERE c.id = d.creative_id

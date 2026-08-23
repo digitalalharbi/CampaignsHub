@@ -5,6 +5,7 @@ import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, ImageIcon, Pla
 import { CreativeInsightCard } from './CreativeInsightCard'
 import { getCreativePulse, type CreativeMove, type CreativeWinner, type PathComparison, type SpendByKind } from './pulse'
 import { formatMetric, metricLabel, metricState } from './metrics'
+import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
 import { imageLoading } from './format'
 import {
   libraryQueryString,
@@ -176,13 +177,34 @@ const KIND_LABEL = (kind: string, t: (typeof COPY)['ar']) =>
 const num = (n: number | null | undefined) =>
   typeof n === 'number' ? n.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'
 
-const money = (n: number | null | undefined, ar: boolean) =>
-  typeof n === 'number' ? `${n.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${ar ? 'ر.س' : 'SAR'}` : '—'
+/**
+ * CREATIVE-MONEY-TRUTH-001 — money is read through the one contract, never formatted here.
+ *
+ * This file used to hold its own formatter that appended a hard-coded «SAR» / «ر.س» to whatever
+ * number it was given. `creative_daily_metrics` had no currency column, so on production it was
+ * appending a Saudi label to USD figures: 4,128.93 USD rendered as «4,129 SAR», understating spend
+ * by roughly 3.75× and reading as measured fact. A wrong number is worse than a withheld one,
+ * because nothing about it looks wrong.
+ *
+ * `readMoney` decides what can honestly be said — converted, withheld in its own currency, a
+ * measured zero, never reported, or unstatable — and `formatMoneyReading` renders that decision.
+ */
+const money = (fields: MoneyTotals, currency: string | null, ar: boolean) =>
+  formatMoneyReading(readMoney(fields, 'spend', currency, ar), (n, c) =>
+    // Latin digits in both languages, per the product's standing rule, and the currency comes from
+    // the reading — never from this file.
+    typeof n === 'number' ? `${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}${c ? ` ${c}` : ''}` : '—')
 
 const percent = (n: number) => `${(n * 100).toFixed(0)}%`
 
-function value(metrics: CreativeMetrics | null, key: string, locale: 'ar' | 'en'): string {
-  return formatMetric(metricState(metrics, key), key, locale)
+/**
+ * CREATIVE-MONEY-TRUTH-001 — `currency` is threaded, never defaulted.
+ *
+ * `formatMetric` used to fall back to «SAR» when the argument was omitted, which is how a section
+ * reading a USD account came to print Saudi riyals. Every caller here states what it actually holds.
+ */
+function value(metrics: CreativeMetrics | null, key: string, locale: 'ar' | 'en', currency: string | null): string {
+  return formatMetric(metricState(metrics, key), key, locale, currency)
 }
 
 /** The axes this section may render controls for. The host owns the rest. */
@@ -423,6 +445,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                 path={best.path}
                 t={t}
                 locale={ar ? 'ar' : 'en'}
+                currency={data.currency}
                 drill={drill}
               />
             ))}
@@ -435,6 +458,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                 path={best.path}
                 t={t}
                 locale={ar ? 'ar' : 'en'}
+                currency={data.currency}
                 drill={drill}
               />
             ))}
@@ -447,6 +471,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                 path={best.path}
                 t={t}
                 locale={ar ? 'ar' : 'en'}
+                currency={data.currency}
                 drill={drill}
               />
             ))}
@@ -474,7 +499,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                           least spend behind them. */}
                       {best.low_evidence && ` · ${t.provisional}`}
                     </span>
-                    <span className="block font-semibold text-text">{value(best.creative.metrics, best.metric, ar ? 'ar' : 'en')}</span>
+                    <span className="block font-semibold text-text">{value(best.creative.metrics, best.metric, ar ? 'ar' : 'en', data.currency)}</span>
                   </span>
                 </Link>
               ))}
@@ -489,7 +514,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                   {t.alerts}
                 </h3>
                 <p className="text-sm text-text-muted">
-                  {t.spendAtRisk}: <span className="font-semibold text-text">{money(data.fatigue.spend_at_risk, ar)}</span>
+                  {t.spendAtRisk}: <span className="font-semibold text-text">{money(data.fatigue.spend_at_risk, data.currency, ar)}</span>
                 </p>
               </div>
               <ul className="mt-3 flex flex-col gap-2">
@@ -503,7 +528,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                         <span className="block truncate font-medium text-text">{alert.creative.name}</span>
                         <span className="block text-xs text-text-muted">{ar ? alert.note_ar : alert.note_en}</span>
                       </span>
-                      <span className="shrink-0 font-semibold text-text">{money(alert.spend, ar)}</span>
+                      <span className="shrink-0 font-semibold text-text">{money(alert, data.currency, ar)}</span>
                     </Link>
                   </li>
                 ))}
@@ -552,9 +577,10 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               list={data.fastest_growing}
               t={t}
               locale={ar ? 'ar' : 'en'}
+              currency={data.currency}
               drill={drill}
             />
-            <MoveList title={t.declining} tone="danger" list={data.declining} t={t} locale={ar ? 'ar' : 'en'} drill={drill} />
+            <MoveList title={t.declining} tone="danger" list={data.declining} t={t} locale={ar ? 'ar' : 'en'} currency={data.currency} drill={drill} />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -574,7 +600,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               </div>
             </div>
 
-            <SpendSplit rows={data.spend_by_kind} t={t} ar={ar} drill={drill} />
+            <SpendSplit rows={data.spend_by_kind} currency={data.currency} t={t} ar={ar} drill={drill} />
           </div>
 
           {data.image_vs_video.length > 0 && (
@@ -582,7 +608,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               <h3 className="text-sm font-semibold text-text">{t.imageVsVideo}</h3>
               <div className="mt-3 flex flex-col gap-5">
                 {data.image_vs_video.map((row) => (
-                  <PathTable key={row.path} row={row} t={t} locale={ar ? 'ar' : 'en'} />
+                  <PathTable key={row.path} row={row} t={t} locale={ar ? 'ar' : 'en'} currency={data.currency} />
                 ))}
               </div>
             </div>
@@ -613,7 +639,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                           }`}
                         >
                           {providerLabel(p.provider, locale)}{' '}
-                          {p.value === null ? '—' : formatMetric({ kind: 'value', value: p.value }, group.metric, ar ? 'ar' : 'en')}
+                          {p.value === null ? '—' : formatMetric({ kind: 'value', value: p.value }, group.metric, ar ? 'ar' : 'en', data.currency)}
                         </Link>
                       ))}
                     </div>
@@ -715,6 +741,7 @@ function WinnerCard({
   path,
   t,
   locale,
+  currency,
   drill,
 }: {
   heading: string
@@ -723,6 +750,8 @@ function WinnerCard({
   path: string
   t: Copy
   locale: 'ar' | 'en'
+  /** CREATIVE-MONEY-TRUTH-001 — stated by the payload; this card never assumes one. */
+  currency: string | null
   drill: Drill
 }) {
   return (
@@ -743,7 +772,7 @@ function WinnerCard({
           </Link>
           <p className="text-xs text-text-muted">{marketingPathLabel(path, locale)}</p>
           <p className="mt-1 text-lg font-semibold text-text">
-            {value(winner.creative.metrics, winner.metric, locale)}
+            {value(winner.creative.metrics, winner.metric, locale, currency)}
           </p>
           {/* The metric is named beside the number: a winner with no stated axis is a verdict nobody
               can check, and the axis differs by path. */}
@@ -766,6 +795,7 @@ function MoveList({
   list,
   t,
   locale,
+  currency,
   drill,
 }: {
   title: string
@@ -773,6 +803,8 @@ function MoveList({
   list: { items: CreativeMove[]; total: number; shown: number }
   t: Copy
   locale: 'ar' | 'en'
+  /** CREATIVE-MONEY-TRUTH-001 — stated by the payload; this component never assumes one. */
+  currency: string | null
   drill: Drill
 }) {
   const Icon = tone === 'success' ? ArrowUpRight : ArrowDownRight
@@ -794,9 +826,9 @@ function MoveList({
                 <span className="min-w-0">
                   <span className="block truncate font-medium text-text">{move.creative.name}</span>
                   <span className="block text-xs text-text-muted">
-                    {metricLabel(move.metric, locale)} · {formatMetric({ kind: 'value', value: move.previous }, move.metric, locale)}
+                    {metricLabel(move.metric, locale)} · {formatMetric({ kind: 'value', value: move.previous }, move.metric, locale, currency)}
                     {' → '}
-                    {formatMetric({ kind: 'value', value: move.current }, move.metric, locale)}
+                    {formatMetric({ kind: 'value', value: move.current }, move.metric, locale, currency)}
                   </span>
                 </span>
                 <span className={`flex shrink-0 items-center gap-1 font-semibold ${tone === 'success' ? 'text-success' : 'text-danger'}`}>
@@ -815,7 +847,7 @@ function MoveList({
   )
 }
 
-function SpendSplit({ rows, t, ar, drill }: { rows: SpendByKind[]; t: Copy; ar: boolean; drill: Drill }) {
+function SpendSplit({ rows, currency, t, ar, drill }: { rows: SpendByKind[]; currency: string | null; t: Copy; ar: boolean; drill: Drill }) {
   return (
     <div className="rounded-2xl border border-border bg-surface p-5">
       <h3 className="text-sm font-semibold text-text">{t.spendByKind}</h3>
@@ -826,7 +858,7 @@ function SpendSplit({ rows, t, ar, drill }: { rows: SpendByKind[]; t: Copy; ar: 
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span className="text-text">{KIND_LABEL(row.kind, t)}</span>
                 <span className="text-text-muted">
-                  {money(row.spend, ar)} · {row.share === null ? '—' : percent(row.share)}
+                  {money(row, currency, ar)} · {row.share === null ? '—' : percent(row.share)}
                 </span>
               </div>
               <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-surface-muted">
@@ -855,7 +887,7 @@ function SpendSplit({ rows, t, ar, drill }: { rows: SpendByKind[]; t: Copy; ar: 
  * follows, for the same reason: «videos are better» is not a sentence the data supports, while
  * «videos cost less per thousand impressions here» is.
  */
-function PathTable({ row, t, locale }: { row: PathComparison; t: Copy; locale: 'ar' | 'en' }) {
+function PathTable({ row, t, locale, currency }: { row: PathComparison; t: Copy; locale: 'ar' | 'en'; currency: string | null }) {
   const lowerWins = new Set(['cpm', 'cpc', 'cpa', 'cost_per_view', 'cost_per_lpv'])
 
   return (
@@ -888,10 +920,10 @@ function PathTable({ row, t, locale }: { row: PathComparison; t: Copy; locale: '
                     {metricLabel(metric, locale)}
                   </th>
                   <td className={`py-1.5 ${imageWins ? 'font-semibold text-success' : 'text-text'}`}>
-                    {formatMetric(image, metric, locale)}
+                    {formatMetric(image, metric, locale, currency)}
                   </td>
                   <td className={`py-1.5 ${videoWins ? 'font-semibold text-success' : 'text-text'}`}>
-                    {formatMetric(video, metric, locale)}
+                    {formatMetric(video, metric, locale, currency)}
                   </td>
                 </tr>
               )
