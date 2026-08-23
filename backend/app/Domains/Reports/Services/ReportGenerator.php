@@ -22,6 +22,14 @@ use Illuminate\Support\Facades\DB;
  */
 final class ReportGenerator
 {
+    /**
+     * The aggregation contract this generator writes under.
+     *
+     * Bump when a change alters FIGURES rather than presentation, so a reader can be told that an
+     * older snapshot and today's Analytics were computed under different rules.
+     */
+    public const DATA_VERSION = 2;
+
     public function __construct(
         private readonly MetricsAggregator $agg,
         private readonly ReportTemplateEngine $template,
@@ -205,7 +213,27 @@ final class ReportGenerator
         // Now that every figure is in place, read them back and say what happened (§14.7).
         $data['observations'] = $this->observations->build($lens, $data);
 
-        $data['data_version'] = 1;
+        /*
+         * REPORTS-RECONCILIATION-001 — which CONTRACT a snapshot's figures were computed under.
+         *
+         * A report is a snapshot: its `kpis` are frozen at generation. That is correct — a link sent
+         * to a client must keep showing the report that was sent. But the aggregation beneath it has
+         * since changed twice in ways that alter figures rather than presentation:
+         *
+         *   v2 — CREATIVE-MONEY-TRUTH / FX-001: an unconvertible figure is WITHHELD with its
+         *        original, where it used to be coalesced to 0. A v1 snapshot can hold «0» where the
+         *        platform reported real money.
+         *   v2 — DEMO-LIVE-AGGREGATION-ISOLATION-001: demo rows no longer enter an operational
+         *        total. A v1 snapshot of a mixed project can hold seeded spend inside a real figure.
+         *
+         * So a v1 snapshot beside today's Analytics is not «stale by a few hours» — the two were
+         * computed under different rules and CANNOT reconcile. Recording the version is what lets a
+         * reader be told that, instead of quietly comparing two incomparable numbers.
+         *
+         * Bumped rather than backfilled: nobody can know what an old snapshot would have said under
+         * the current rules without regenerating it, and inventing that is the opposite of the point.
+         */
+        $data['data_version'] = self::DATA_VERSION;
         $data['tenant_id'] = (string) $report->tenant_id;
         $data['project_id'] = (string) $report->project_id;
         $data['timezone'] = $report->timezone;
