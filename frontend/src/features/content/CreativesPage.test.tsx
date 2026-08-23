@@ -120,7 +120,7 @@ const page = (over: Partial<LibraryPage> = {}): LibraryPage => ({
     kinds: ['image', 'video', 'carousel'],
     campaigns: [{ id: 'c1', name: 'National Day Sale', objective: 'sales' }],
     ad_sets: ['set-1'],
-    ads: ['ad-1'],
+    ads: [{ value: 'ad-1', label: 'ad-1' }],
     objectives: ['sales', 'awareness'],
     paths: ['awareness', 'traffic', 'leads', 'sales'],
     projects: [{ id: 'p1', name: 'Q3 Launch', client_id: 'cl1' }],

@@ -251,6 +251,7 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
           </div>
         )}
       </div>
+      <SnapshotAge data={data} />
       {mode === 'deck' ? (
         <div className="min-h-[440px] rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6">{cur && render(cur)}{cur && footer(cur)}</div>
       ) : (
@@ -1176,5 +1177,50 @@ function DataQualitySlide({ data }: { data: ReportData }) {
         </p>
       )}
     </div>
+  )
+}
+
+/**
+ * REPORTS-RECONCILIATION-001 — a snapshot says WHEN it was taken.
+ *
+ * `generated_at`, `mode`, `data_source` and `attribution_window` were all present on the payload
+ * and all present in this file's type — and not one of them was ever rendered. A report opened a
+ * month after it was generated showed month-old figures with nothing on screen to say so, which is
+ * indistinguishable from current performance to the person reading it.
+ *
+ * That is the failure the requirement names directly: never present a stale snapshot as current.
+ * It is also, again, a value carried the whole way to the component and then dropped — the same
+ * shape as the creative's ads, the asset URL and `last_active_at` before it.
+ *
+ * A LIVE report says so instead of quoting a generation time, because for a live report the
+ * generation time is not the answer to «how current is this».
+ */
+function SnapshotAge({ data }: { data: ReportData }) {
+  const generated = data.generated_at ?? null
+  const live = data.mode === 'live'
+
+  // Nothing known, nothing claimed. A snapshot written before this metadata existed says nothing
+  // rather than inventing a date for itself.
+  if (!live && generated === null) return null
+
+  const stamp = generated === null ? null : new Date(generated)
+
+  return (
+    <p className="mb-3 text-xs text-text-secondary" data-testid="report-snapshot-age">
+      {live ? (
+        'تقرير مباشر — الأرقام محسوبة الآن من أحدث البيانات'
+      ) : (
+        <>
+          لقطة بتاريخ{' '}
+          <span className="tnum font-semibold text-text-primary" dir="ltr">
+            {stamp?.toLocaleString('en-GB')}
+          </span>
+          {' '}— الأرقام كما كانت في ذلك الوقت، وليست أداءً حاليًا
+        </>
+      )}
+      {data.attribution_window ? (
+        <span className="ms-2 opacity-80">· أساس الإسناد: {data.attribution_window}</span>
+      ) : null}
+    </p>
   )
 }

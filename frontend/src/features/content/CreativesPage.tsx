@@ -551,7 +551,8 @@ export function CreativesPage() {
             <div className="flex flex-wrap items-end gap-3">
               {multi('statuses', t.status, options.statuses.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) })))}
               {multi('ad_set_ids', t.adSet, options.ad_sets.map((id) => ({ value: id, label: id })))}
-              {multi('ad_ids', t.ad, options.ads.map((id) => ({ value: id, label: id })))}
+              {/* Already labelled by the server — the id is the value, the ad's name is what is read. */}
+              {multi('ad_ids', t.ad, options.ads)}
             </div>
           )
         }
