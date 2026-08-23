@@ -12,6 +12,7 @@ use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
+use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\ValueObjects\SyncResult;
@@ -147,6 +148,21 @@ final class AccountStructureSyncer
             $records === 0 => SyncRunStatus::NoData->value,
             default => SyncRunStatus::Success->value,
         };
+
+        /*
+         * SNAP-MEDIA-OBSERVABILITY-001 — what the media enrichment actually did.
+         *
+         * Counts and a reason, never a URL: a signed media link in a log is precisely the leak this
+         * product refuses. «asked» is how many creatives named a media id, «resolved» how many came
+         * back with a usable file. Those two being far apart is the signature of media that is being
+         * fetched and then rejected; both being zero means it was never asked for.
+         */
+        if ($connector instanceof SnapchatConnector) {
+            $run->forceFill(['meta' => [
+                ...(array) ($run->meta ?? []),
+                'media' => $connector->lastMediaOutcome(),
+            ]])->save();
+        }
 
         return $this->finish($run, $status, $records, $problems === [] ? null : implode(' ', $problems));
     }
