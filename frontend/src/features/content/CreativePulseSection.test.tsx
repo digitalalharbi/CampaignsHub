@@ -181,8 +181,9 @@ const pulse = (over: Partial<CreativePulse> = {}): CreativePulse => ({
     watch: empty,
     insufficient_data: empty,
     alerts: empty,
-    spend_at_risk: 0,
+    spend_at_risk: { spend: 0, spend_withheld_rows: 0, spend_original: 0, money_original_currency: null, money_original_currencies: 0 },
   },
+  currency: 'SAR',
   spend_by_kind: [
     { kind: 'image', spend: 1800, share: 0.667, creatives: 2, spend_not_reported: 1 },
     { kind: 'video', spend: 900, share: 0.333, creatives: 1, spend_not_reported: 0 },
@@ -566,4 +567,89 @@ describe('CreativePulseSection', () => {
 
     expect(screen.queryByText('What the figures say')).not.toBeInTheDocument()
   })
+
+  /*
+   * ── CREATIVE-MONEY-TRUTH-001 — the strip said «SAR» whatever the money actually was ───────────
+   *
+   * This section's formatter appended a hard-coded «SAR» / «ر.س» to whatever number it was handed.
+   * `creative_daily_metrics` carried no currency at all, so on production it was labelling USD
+   * figures as Saudi riyals — 4,128.93 USD rendered «4,129 SAR», understating spend by roughly
+   * 3.75× and reading as a measured fact. A wrong number is worse than a withheld one: nothing
+   * about it looks wrong.
+   */
+
+  it('states an unconvertible figure in its own currency, never in the project\'s', async () => {
+    vi.mocked(getCreativePulse).mockResolvedValue(
+      pulse({
+        currency: 'SAR',
+        spend_by_kind: [
+          {
+            kind: 'image',
+            // Withheld exactly as the pipeline reports it: no converted figure, the original kept.
+            spend: null,
+            share: null,
+            creatives: 2,
+            spend_not_reported: 0,
+            spend_withheld_rows: 262,
+            spend_original: 4128.93,
+            money_original_currency: 'USD',
+            money_original_currencies: 1,
+          },
+        ],
+      }),
+    )
+
+    renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
+
+    await screen.findByText('Spend by creative type')
+
+    // Exact, in the currency it was actually spent in — not rounded into a figure it never was.
+    expect(screen.getByText(/4,128\.93 USD/)).toBeInTheDocument()
+    expect(screen.queryByText(/4,129 SAR/)).not.toBeInTheDocument()
+  })
+
+  /** Two unconvertible currencies cannot be added, so no single figure may be printed. */
+  it('refuses to state one figure when the withheld money is in several currencies', async () => {
+    vi.mocked(getCreativePulse).mockResolvedValue(
+      pulse({
+        currency: 'SAR',
+        spend_by_kind: [
+          {
+            kind: 'image', spend: null, share: null, creatives: 2, spend_not_reported: 0,
+            spend_withheld_rows: 40, spend_original: 900, money_original_currency: 'USD',
+            money_original_currencies: 2,
+          },
+        ],
+      }),
+    )
+
+    renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
+
+    // Scoped to the strip itself: other cards on this section carry their own, convertible money.
+    const strip = (await screen.findByText('Spend by creative type')).parentElement!
+
+    expect(strip).not.toHaveTextContent('900')
+    expect(strip).not.toHaveTextContent('USD')
+    expect(strip).not.toHaveTextContent('SAR')
+  })
+
+  /** A converted figure still renders in the reporting currency the SERVER named. */
+  it('uses the currency the payload declares, not one compiled into the page', async () => {
+    vi.mocked(getCreativePulse).mockResolvedValue(
+      pulse({
+        currency: 'AED',
+        spend_by_kind: [
+          { kind: 'image', spend: 1800, share: 1, creatives: 2, spend_not_reported: 0 },
+        ],
+      }),
+    )
+
+    renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
+
+    await screen.findByText('Spend by creative type')
+
+    expect(screen.getByText(/1,800 AED/)).toBeInTheDocument()
+    expect(screen.queryByText(/SAR/)).not.toBeInTheDocument()
+  })
+
 })

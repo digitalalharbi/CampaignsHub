@@ -59,6 +59,29 @@ final class CreativeMetrics
     ];
 
     /**
+     * CREATIVE-MONEY-TRUTH-001 — the withheld half of the money, in the contract's own field names.
+     *
+     * These are deliberately the SAME keys `MetricsAggregator::MONEY_TRUTH` emits, because the
+     * frontend has one money reader (`lib/money/contract.ts`) and it keys off these names. Matching
+     * them is what lets a creative card and a dashboard KPI render an unconvertible figure the same
+     * way without a second implementation — the thing that «one contract» was supposed to mean.
+     *
+     * A row is withheld when its converted value is null AND an original survives. A row the platform
+     * never reported has neither, and must not be counted here: «not reported» and «reported but not
+     * convertible» are different sentences and the card says different things for them.
+     */
+    private const MONEY_TRUTH = [
+        'spend_withheld_rows' => 'COUNT(*) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL)',
+        'spend_original' => 'SUM(spend_original) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL)',
+        'revenue_withheld_rows' => 'COUNT(*) FILTER (WHERE revenue IS NULL AND revenue_original IS NOT NULL)',
+        'revenue_original' => 'SUM(revenue_original) FILTER (WHERE revenue IS NULL AND revenue_original IS NOT NULL)',
+        'money_original_currency' => 'MIN(original_currency) FILTER (WHERE (spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL))',
+        // The reader refuses to name a currency when this is not exactly 1: several unconvertible
+        // currencies cannot be added, and printing one of their names would be a wrong label.
+        'money_original_currencies' => 'COUNT(DISTINCT original_currency) FILTER (WHERE (spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL))',
+    ];
+
+    /**
      * Totals per creative for a window, with derived KPIs and a map of what was actually reported.
      *
      * @param  list<string>  $creativeIds
@@ -79,6 +102,10 @@ final class CreativeMetrics
         $select[] = 'AVG(frequency) AS frequency';
         $select[] = 'AVG(video_avg_watch_seconds) AS video_avg_watch_seconds';
         $select[] = 'COUNT(DISTINCT metric_date) AS active_days';
+
+        foreach (self::MONEY_TRUTH as $alias => $expression) {
+            $select[] = "{$expression} AS {$alias}";
+        }
 
         $rows = DB::table('creative_daily_metrics')
             ->whereIn('creative_id', $creativeIds)
@@ -132,6 +159,20 @@ final class CreativeMetrics
         }
         $figures['reported']['frequency'] = $row['frequency'] !== null;
         $figures['reported']['video_avg_watch_seconds'] = $row['video_avg_watch_seconds'] !== null;
+
+        /*
+         * Carried AFTER `reported` is built, and never inside it.
+         *
+         * These describe the money's provenance, not a metric the platform sends. Adding them to the
+         * reported map would put «Spend withheld rows» on a card as though it were a figure somebody
+         * could act on.
+         */
+        $figures['spend_withheld_rows'] = (int) ($row['spend_withheld_rows'] ?? 0);
+        $figures['revenue_withheld_rows'] = (int) ($row['revenue_withheld_rows'] ?? 0);
+        $figures['spend_original'] = $num('spend_original');
+        $figures['revenue_original'] = $num('revenue_original');
+        $figures['money_original_currency'] = $row['money_original_currency'] === null ? null : (string) $row['money_original_currency'];
+        $figures['money_original_currencies'] = (int) ($row['money_original_currencies'] ?? 0);
 
         return $figures;
     }

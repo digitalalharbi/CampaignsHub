@@ -422,11 +422,62 @@ final class DiagnoseSyncCommand extends Command
             ? number_format((float) $totals['spend_original'], 2).' '.$totals['money_original_currency']
             : 'the converted figure ('.($totals['spend'] ?? 0).') — the withheld branch does NOT fire'));
 
+        /*
+         * ANALYTICS-PROVENANCE-001 — what the badge beside those figures will SAY.
+         *
+         * «Demo» used to be a literal in the JSX of four pages, so every project was labelled demo
+         * beside its own money. It now derives from the rows, which means the claim is checkable —
+         * and a claim that cannot be checked on production is not evidence, it is a hope. This is
+         * how «the badge is right on the live project» becomes something a person can read rather
+         * than something a test asserts about a fixture.
+         */
+        $provenance = $agg->provenance(Carbon::now()->subDays(29)->startOfDay(), Carbon::now()->endOfDay());
+
+        $this->line('');
+        $this->line('  WHAT THE PROVENANCE BADGE READS (MetricsAggregator::provenance, last 30 days)');
+        $this->line('  live rows  : '.$provenance['live_rows']);
+        $this->line('  demo rows  : '.$provenance['demo_rows']);
+        $this->line('  → the badge will show: '.match ($provenance['source']) {
+            'live' => 'NOTHING — real data carries no warning, which is the whole point',
+            'demo' => '«بيانات تجريبية · Demo»',
+            'mixed' => '«بيانات مختلطة · Mixed» — live and demo rows in one project',
+            default => 'NOTHING — there are no rows in this window to characterise',
+        });
+
+        if ($provenance['source'] === 'mixed') {
+            $this->warn('  Demo rows are sitting inside a project that also holds real ones. The badge '
+                .'says so, but the TOTALS above add them together — run `demo:remove` for this tenant.');
+        }
+
         $this->line('');
         $this->line('  CREATIVE METRICS — whether the numbers exist, not just the creatives');
         $this->line("  creative_daily_metrics rows : {$metricRows}");
         $this->line('  creatives with any figure   : '.$withMetrics.' of '.$creativeIds->count());
         $this->line('  latest metric_date          : '.($latest ?? '—'));
+
+        /*
+         * SNAP-CREATIVE-METRICS-LIVE-001 — the column that decides what the library OPENS on.
+         *
+         * The counts above were both true and useless for the actual defect: 814 rows existed and
+         * the library still read as empty, because its default order is `last_active_at DESC` and
+         * nothing in the pipeline had ever written that column. Counting metric rows could not
+         * distinguish «the numbers are missing» from «the numbers are on page 47».
+         *
+         * So this is the number to read after a deploy: if delivering creatives have no last active
+         * day, the sort has nothing to work with and the first page is arbitrary again.
+         */
+        $active = $creativeIds->isEmpty() ? 0 : ExternalCreative::withoutGlobalScopes()
+            ->whereIn('id', $creativeIds->all())
+            ->whereNotNull('last_active_at')
+            ->count();
+
+        $this->line('  creatives with a last active day : '.$active.' of '.$creativeIds->count()
+            .'  ← the library sorts on this; 0 means the first page is arbitrary');
+
+        if ($withMetrics > 0 && $active === 0) {
+            $this->warn('  Creatives HAVE figures but none has a last active day. The delivering ones are '
+                .'scattered through the pager and the library will look empty — run the backfill.');
+        }
 
         if ($metricRows === 0 && $creativeIds->isNotEmpty()) {
             $this->warn('  No creative-level figures at all. Every creative will read «لا توجد بيانات» — '

@@ -19,6 +19,7 @@ import { CreativeVideoPlayer } from '@/features/content/CreativeVideoPlayer'
 import { CreativeCarousel } from '@/features/content/CreativeCarousel'
 import { imageLoading } from '@/features/content/format'
 import { formatMetric, metricLabel, metricState } from '@/features/content/metrics'
+import { formatMoneyReading, readMoney } from '@/lib/money/contract'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -635,6 +636,8 @@ function FatigueBlock({
   const { locale } = useUi()
   const fatigue = data.fatigue
   const ar = locale === 'ar'
+  // One reader for the money, so this figure cannot disagree with the operator's copy of it.
+  const spendAtRisk = readMoney(fatigue.spend_at_risk, 'spend', currency ?? null, ar)
 
   return (
     <div className="grid gap-3 md:grid-cols-3">
@@ -646,9 +649,15 @@ function FatigueBlock({
         <div className="rounded-xl border border-danger/40 bg-danger/5 p-3 md:col-span-3" data-testid="fatigue-alerts">
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-danger">
             <AlertTriangle size={14} /> {t.alerts}
-            {permissions.spend && fatigue.spend_at_risk !== null && (
-              <span className="tnum ms-auto text-xs font-semibold" dir="ltr">
-                {formatMetric({ kind: 'value', value: fatigue.spend_at_risk }, 'spend', locale, currency)}
+            {/*
+              * CREATIVE-MONEY-TRUTH-001 — the client's own copy of this figure obeys the same
+              * contract as the operator's. A shared report is the version somebody outside the
+              * agency reads, so a wrongly-labelled currency here is the one that reaches a client.
+              */}
+            {permissions.spend && spendAtRisk.amount !== null && (
+              <span className="tnum ms-auto text-xs font-semibold" dir="ltr" title={spendAtRisk.note ?? undefined}>
+                {formatMoneyReading(spendAtRisk, (n, c) =>
+                  formatMetric({ kind: 'value', value: n ?? 0 }, 'spend', locale, c ?? currency))}
               </span>
             )}
           </h3>

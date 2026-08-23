@@ -111,6 +111,7 @@ const page = (over: Partial<LibraryPage> = {}): LibraryPage => ({
   per_page: 24,
   total: 1,
   period: { from: '2026-07-08', to: '2026-08-06' },
+  currency: 'SAR',
   filters: {
     providers: ['meta', 'tiktok'],
     formats: ['image', 'video'],
