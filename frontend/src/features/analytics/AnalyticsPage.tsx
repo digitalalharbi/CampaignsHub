@@ -25,7 +25,7 @@ import {
   useTimeseries,
   type MetricFilters,
 } from './hooks'
-import { DemoBadge, KpiCard, Panel, SERIES, platformColor, tooltipProps } from './components'
+import { KpiCard, Panel, ProvenanceBadge, SERIES, platformColor, tooltipProps } from './components'
 import { compact, money, moneyFromTotals, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { formatMoneyReading, readCostPer, readRoas } from '@/lib/money/contract'
 import { funnelStageLabel } from './metricLabels'
@@ -140,6 +140,14 @@ export function AnalyticsPage() {
     return out
   }, [providers, campaignIds, campaignOptions.data, path, objective, ar])
 
+  /*
+   * ANALYTICS-PROVENANCE-001 — the badge needs the summary, and the summary lives in the tab below.
+   *
+   * React Query dedupes on the key, so asking here costs no extra request: the Performance tab's own
+   * `useSummary` with the same project, range and filters resolves to the same cached entry.
+   */
+  const provenanceSummary = useSummary(currentProjectId, range, filters)
+
   return (
     <div className="space-y-5">
       <PageIntro
@@ -148,7 +156,7 @@ export function AnalyticsPage() {
         purpose={ar
           ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
           : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
-        badges={<DemoBadge />}
+        badges={<ProvenanceBadge provenance={provenanceSummary.data?.provenance} />}
       />
 
       <FilterBar

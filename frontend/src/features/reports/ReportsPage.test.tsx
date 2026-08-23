@@ -155,3 +155,62 @@ describe('ReportsPage — engine-fed builder', () => {
     expect(createReport).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * ANALYTICS-PROVENANCE-001 — «Demo» beside the Reports title was a constant, not a fact.
+ *
+ * Each report already carries `is_demo`, so the page can simply read its own rows. These assert the
+ * badge follows them — including the case the constant got wrong: a project of live reports.
+ */
+describe('ReportsPage — provenance', () => {
+  const report = (id: string, isDemo: boolean) => ({
+    id, name: `Report ${id}`, type: 'executive', form: 'detailed', mode: 'project',
+    campaign_objective: null, version: 1, status: 'completed', audience: 'client',
+    period: { from: '2026-07-01', to: '2026-07-31' }, currency: 'SAR', config: {},
+    scope: null, is_demo: isDemo, generated_at: null, last_sent_at: null,
+    created_at: '2026-08-01T00:00:00+00:00', error: null, exports: [],
+  })
+
+  const listing = (rows: ReturnType<typeof report>[]) => ({
+    reports: rows,
+    summary: { total: rows.length, completed: rows.length, processing: 0, failed: 0 },
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProject.setState({ currentProjectId: 'p1' })
+    signInWith(['reports.view'])
+  })
+  afterEach(() => signOut())
+
+  it('does not call a project of live reports «Demo»', async () => {
+    vi.mocked(listReports).mockResolvedValue(
+      listing([report('r1', false), report('r2', false)]) as never,
+    )
+
+    renderWithProviders(<ReportsPage />, { locale: 'en' })
+
+    await screen.findByText('Report r1')
+    expect(screen.queryByText(/Demo|تجريبية/)).not.toBeInTheDocument()
+  })
+
+  it('still says «Demo» when every report is seeded', async () => {
+    vi.mocked(listReports).mockResolvedValue(listing([report('r1', true)]) as never)
+
+    renderWithProviders(<ReportsPage />, { locale: 'en' })
+
+    await screen.findByText('Report r1')
+    expect(screen.getByText(/Demo|تجريبية/)).toBeInTheDocument()
+  })
+
+  it('names the mixed case instead of choosing a side', async () => {
+    vi.mocked(listReports).mockResolvedValue(
+      listing([report('r1', true), report('r2', false)]) as never,
+    )
+
+    renderWithProviders(<ReportsPage />, { locale: 'en' })
+
+    await screen.findByText('Report r1')
+    expect(screen.getByText(/Mixed|مختلطة/)).toBeInTheDocument()
+  })
+})

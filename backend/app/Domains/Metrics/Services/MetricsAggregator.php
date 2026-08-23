@@ -456,6 +456,46 @@ final class MetricsAggregator
     }
 
     /** @return list<array<string, mixed>> one row per provider, ordered by spend desc, with share of spend. */
+    /**
+     * ANALYTICS-PROVENANCE-001 — whether the figures in scope are real, demo, or both.
+     *
+     * Every metric surface rendered `<DemoBadge />` unconditionally, so a project syncing live
+     * Snapchat spend was labelled «بيانات تجريبية · Demo» beside its own real money. A badge that is
+     * always on says nothing, and this one says something false: it is the product's promise that a
+     * figure is NOT a customer's real spend.
+     *
+     * `is_demo` is on every row already and is what the demo seeder sets, so the answer is a count
+     * rather than an inference from environment or a frontend constant — neither of which knows
+     * whose rows these are.
+     *
+     * `mixed` is reported rather than resolved. A project holding both is a real state, and choosing
+     * one label for it would hide demo rows inside a live total, which is the leak this exists to
+     * make visible.
+     *
+     * @return array{source:'live'|'demo'|'mixed'|'none', live_rows:int, demo_rows:int}
+     */
+    public function provenance(Carbon $from, Carbon $to): array
+    {
+        $row = $this->base($from, $to)
+            ->selectRaw('COUNT(*) FILTER (WHERE is_demo = false) AS live_rows')
+            ->selectRaw('COUNT(*) FILTER (WHERE is_demo = true) AS demo_rows')
+            ->first();
+
+        $live = (int) ($row->live_rows ?? 0);
+        $demo = (int) ($row->demo_rows ?? 0);
+
+        return [
+            'source' => match (true) {
+                $live > 0 && $demo > 0 => 'mixed',
+                $demo > 0 => 'demo',
+                $live > 0 => 'live',
+                default => 'none',
+            },
+            'live_rows' => $live,
+            'demo_rows' => $demo,
+        ];
+    }
+
     public function byProvider(Carbon $from, Carbon $to): array
     {
         $rows = $this->base($from, $to)
