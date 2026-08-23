@@ -71,14 +71,14 @@ final class CreativeMetrics
      * convertible» are different sentences and the card says different things for them.
      */
     private const MONEY_TRUTH = [
-        'spend_withheld_rows' => "COUNT(*) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL)",
-        'spend_original' => "SUM(spend_original) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL)",
-        'revenue_withheld_rows' => "COUNT(*) FILTER (WHERE revenue IS NULL AND revenue_original IS NOT NULL)",
-        'revenue_original' => "SUM(revenue_original) FILTER (WHERE revenue IS NULL AND revenue_original IS NOT NULL)",
-        'money_original_currency' => "MIN(original_currency) FILTER (WHERE (spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL))",
+        'spend_withheld_rows' => 'COUNT(*) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL)',
+        'spend_original' => 'SUM(spend_original) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL)',
+        'revenue_withheld_rows' => 'COUNT(*) FILTER (WHERE revenue IS NULL AND revenue_original IS NOT NULL)',
+        'revenue_original' => 'SUM(revenue_original) FILTER (WHERE revenue IS NULL AND revenue_original IS NOT NULL)',
+        'money_original_currency' => 'MIN(original_currency) FILTER (WHERE (spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL))',
         // The reader refuses to name a currency when this is not exactly 1: several unconvertible
         // currencies cannot be added, and printing one of their names would be a wrong label.
-        'money_original_currencies' => "COUNT(DISTINCT original_currency) FILTER (WHERE (spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL))",
+        'money_original_currencies' => 'COUNT(DISTINCT original_currency) FILTER (WHERE (spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL))',
     ];
 
     /**

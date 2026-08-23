@@ -788,7 +788,7 @@ final class CreativeAnalysisController extends Controller
      * and two projects reporting in different currencies have no shared currency to name: null then,
      * and the reader says «conversion unavailable» rather than picking one.
      *
-     * @param  \Illuminate\Support\Collection<int, ExternalCreative>  $creatives
+     * @param  Collection<int, ExternalCreative>  $creatives
      */
     private function reachCurrency(mixed $creatives): ?string
     {
