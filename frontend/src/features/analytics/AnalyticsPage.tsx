@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import {
   useBudget,
+  useAccounts,
   useCampaigns,
   useEntities,
   useFreshness,
@@ -27,6 +28,7 @@ import {
   type MetricFilters,
 } from './hooks'
 import { KpiCard, Panel, ProvenanceBadge, SERIES, platformColor, tooltipProps } from './components'
+import { listCreatives } from '@/features/content/api'
 import { compact, money, moneyFromTotals, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { formatMoneyReading, readCostPer, readRoas } from '@/lib/money/contract'
 import { funnelStageLabel } from './metricLabels'
@@ -59,10 +61,16 @@ import { AttributionPanel } from './AttributionPanel'
 const TABS = [
   { id: 'performance', ar: 'نظرة عامة على الأداء', en: 'Performance overview' },
   { id: 'platforms', ar: 'تحليل المنصات', en: 'Platform analysis' },
+  // ANALYTICS-DRILLDOWN-001 — the rung an operator actually manages, between platform and campaign.
+  { id: 'accounts', ar: 'تحليل الحسابات', en: 'Account analysis' },
   { id: 'campaigns', ar: 'تحليل الحملات', en: 'Campaign analysis' },
   // ANALYTICS-DRILLDOWN-001 — the two rungs that had no table beneath them until now.
   { id: 'ad_sets', ar: 'تحليل المجموعات الإعلانية', en: 'Ad set analysis' },
   { id: 'ads', ar: 'تحليل الإعلانات', en: 'Ads analysis' },
+  // ANALYTICS-OBJECTIVE-VISIBLE-001 — campaigns grouped by what they were bought to do.
+  { id: 'objective', ar: 'تحليل الأهداف', en: 'Objective analysis' },
+  // The creative rung — the last level of the drill-down, reading `creative_daily_metrics`.
+  { id: 'creative', ar: 'تحليل المحتوى', en: 'Creative analysis' },
   { id: 'funnel', ar: 'التحويلات والقمع', en: 'Conversions & funnel' },
   // FUNNEL-001 — the ad funnel and the STORE funnel in one place, with the source of every number.
   { id: 'store', ar: 'الفانل والمتجر', en: 'Funnel & store' },
@@ -259,9 +267,12 @@ export function AnalyticsPage() {
 
       {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
+      {tab === 'accounts' && <AccountsTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}
       {tab === 'ads' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />}
+      {tab === 'objective' && <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />}
+      {tab === 'creative' && <CreativeTab projectId={currentProjectId} range={range} />}
       {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'store' && <StoreFunnelTab projectId={currentProjectId} range={range} />}
       {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} filters={filters} />}
@@ -1025,4 +1036,243 @@ function metricOrDash(value: number | null | undefined, digits = 0): string {
 /** A rate, or «—». Same rule: an unavailable ratio is not a ratio of zero. */
 function rateOrDash(value: number | null | undefined): string {
   return typeof value === 'number' ? `${(value * 100).toFixed(2)}%` : '—'
+}
+
+/**
+ * ANALYTICS-OBJECTIVE-VISIBLE-001 — campaigns judged by what they were bought to do.
+ *
+ * The objective work so far was a backend filter and a KPI list; nothing on screen let an operator
+ * SEE the split. This groups the project's campaigns into the eight canonical families and headlines
+ * each one with the metrics that family is actually judged by — reach and frequency for awareness,
+ * leads and CPL for lead generation, purchases and ROAS for sales.
+ *
+ * The family comes from the payload, never from a mapping repeated here: `CampaignObjective::family()`
+ * is the single definition, and a copy in TypeScript would drift the first time an objective is added.
+ *
+ * Money renders through the canonical reader, so a withheld figure states its own currency instead of
+ * becoming a zero.
+ */
+function ObjectiveTab({ projectId, range, filters }: TabProps) {
+  const ar = useAr()
+  const c = useCampaigns(projectId, range, filters)
+  const s = useSummary(projectId, range, filters)
+  const currency = s.data?.currency ?? null
+  const rows = c.data ?? []
+
+  /** Ordered so the funnel reads top to bottom; a family with no campaigns is not shown at all. */
+  const FAMILIES: Array<{ key: string; ar: string; en: string; kpis: string[] }> = [
+    { key: 'awareness', ar: 'الوعي', en: 'Awareness', kpis: ['impressions', 'reach', 'frequency', 'cpm'] },
+    { key: 'traffic', ar: 'الزيارات', en: 'Traffic', kpis: ['clicks', 'ctr', 'cpc'] },
+    { key: 'engagement', ar: 'التفاعل', en: 'Engagement', kpis: ['engagements', 'engagement_rate'] },
+    { key: 'video', ar: 'المشاهدات', en: 'Video', kpis: ['video_views', 'completion_rate'] },
+    { key: 'leads', ar: 'العملاء المحتملون', en: 'Leads', kpis: ['leads', 'conversion_rate'] },
+    { key: 'sales', ar: 'المبيعات', en: 'Sales', kpis: ['conversions', 'revenue', 'roas'] },
+    { key: 'app', ar: 'التطبيق', en: 'App', kpis: ['installs'] },
+    { key: 'unknown', ar: 'غير مصنَّف', en: 'Unclassified', kpis: ['impressions', 'clicks'] },
+  ]
+
+  const grouped = FAMILIES.map((f) => ({
+    ...f,
+    campaigns: rows.filter((r) => (r.objective_family ?? 'unknown') === f.key),
+  })).filter((f) => f.campaigns.length > 0)
+
+  return (
+    <div className="space-y-4">
+      <Panel
+        title={ar ? 'الأداء حسب الهدف' : 'Performance by objective'}
+        description={ar
+          ? 'كل عائلة تُقاس بما اشتُريت من أجله — لا يُحكم على حملة وعي بعائد الإنفاق'
+          : 'Each family is judged by what it was bought for — an awareness campaign is not judged on ROAS'}
+        loading={c.isLoading}
+        error={c.isError}
+        empty={!c.isLoading && grouped.length === 0}
+      >
+        <div className="space-y-4" data-testid="objective-families">
+          {grouped.map((f) => {
+            const spend = f.campaigns.reduce((t, r) => t + (typeof r.spend === 'number' ? r.spend : 0), 0)
+            const withheld = f.campaigns.reduce((t, r) => t + (r.spend_withheld_rows ?? 0), 0)
+            const original = f.campaigns.reduce((t, r) => t + (r.spend_original ?? 0), 0)
+            const money = f.campaigns.find((r) => (r.spend_withheld_rows ?? 0) > 0)
+
+            return (
+              <div key={f.key} className="rounded-xl border border-border p-3" data-testid={`objective-family-${f.key}`}>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="font-semibold text-text-primary">{ar ? f.ar : f.en}</h3>
+                  <span className="text-xs text-text-secondary">
+                    {f.campaigns.length} {ar ? 'حملة' : f.campaigns.length === 1 ? 'campaign' : 'campaigns'}
+                    {' · '}
+                    <span className="tnum" dir="ltr">
+                      {/* Withheld money keeps its own currency; a converted total uses the project's. */}
+                      {withheld > 0
+                        ? rowMoney({ spend: null, spend_withheld_rows: withheld, spend_original: original, money_original_currency: money?.money_original_currency ?? null, money_original_currencies: 1 }, 'spend', currency)
+                        : rowMoney({ spend }, 'spend', currency)}
+                    </span>
+                  </span>
+                </div>
+
+                {/* The verdict metrics for THIS family — not the same row of KPIs for every objective. */}
+                <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+                  {f.kpis.map((k) => {
+                    const total = f.campaigns.reduce<number | null>((t, r) => {
+                      const v = (r as unknown as Record<string, unknown>)[k]
+                      return typeof v === 'number' ? (t ?? 0) + v : t
+                    }, null)
+
+                    return (
+                      <div key={k} className="flex flex-col">
+                        <dt className="text-text-secondary">{k}</dt>
+                        <dd className="tnum text-text-primary" dir="ltr">
+                          {/* Null stays «—»: an unavailable figure is not a figure of zero. */}
+                          {total === null ? '—' : total.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                        </dd>
+                      </div>
+                    )
+                  })}
+                </dl>
+
+                <ul className="mt-2 space-y-0.5 text-xs text-text-secondary">
+                  {f.campaigns.slice(0, 5).map((r) => (
+                    <li key={r.campaign_id} className="truncate">{r.campaign_name ?? r.campaign_id}</li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })}
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
+/**
+ * ANALYTICS-CREATIVE-VISIBLE-001 — the creative rung, inside Analytics.
+ *
+ * The last level of the drill-down: platform → campaign → ad set → ad → CREATIVE. It reads the same
+ * `CreativeAnalysisController` the Content library reads, deliberately — §15.17 calls an independent
+ * source an architectural defect rather than a discrepancy, and a second query here would let
+ * Analytics and Content disagree about the same creative.
+ *
+ * Figures come from `creative_daily_metrics` only. Nothing is projected down from the campaign or
+ * the ad: a creative that the platform does not break out shows «—», because inventing its share of
+ * a campaign total would be a number nobody measured.
+ */
+function CreativeTab({ projectId, range }: { projectId: string | null; range: TabProps['range'] }) {
+  const ar = useAr()
+
+  const q = useQuery({
+    queryKey: ['analytics', 'creatives', projectId, range.from, range.to],
+    queryFn: () => listCreatives({ from: range.from, to: range.to, per_page: 24 }, projectId),
+    enabled: Boolean(projectId),
+  })
+
+  const rows = q.data?.creatives ?? []
+  const currency = q.data?.currency ?? null
+
+  return (
+    <div className="space-y-4">
+      <Panel
+        title={ar ? 'أداء المحتوى' : 'Creative performance'}
+        description={ar ? 'من بيانات المحتوى نفسه — لا تُنسب أرقام الحملة إلى محتوى' : 'From creative-level data — campaign figures are never attributed to a creative'}
+        loading={q.isLoading}
+        error={q.isError}
+        empty={!q.isLoading && rows.length === 0}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px] text-sm" data-testid="creative-analysis-table">
+            <thead>
+              <tr className="border-b border-border text-start text-xs text-text-secondary">
+                <th className="p-2 text-start font-medium">{ar ? 'المحتوى' : 'Creative'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'الحملة' : 'Campaign'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'الهدف' : 'Objective'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'الإنفاق' : 'Spend'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'الظهور' : 'Impressions'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'النقرات' : 'Clicks'}</th>
+                <th className="p-2 text-start font-medium">CTR</th>
+                <th className="p-2 text-start font-medium">{ar ? 'آخر نشاط' : 'Last active'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((cr) => (
+                <tr key={cr.id} className="border-b border-border/60">
+                  <td className="max-w-56 truncate p-2 font-medium text-text-primary">{cr.name}</td>
+                  <td className="max-w-40 truncate p-2 text-text-secondary">{cr.campaign_name ?? '—'}</td>
+                  <td className="p-2 text-text-secondary">{cr.objective ?? '—'}</td>
+                  {/* The canonical money reader: a withheld figure states its own currency. */}
+                  <td className="p-2 tnum" dir="ltr">{rowMoney(cr.metrics ?? undefined, 'spend', currency)}</td>
+                  <td className="p-2 tnum" dir="ltr">{metricOrDash(cr.metrics?.impressions ?? null)}</td>
+                  <td className="p-2 tnum" dir="ltr">{metricOrDash(cr.metrics?.clicks ?? null)}</td>
+                  <td className="p-2 tnum" dir="ltr">{rateOrDash(cr.metrics?.ctr ?? null)}</td>
+                  <td className="p-2 text-text-secondary" dir="ltr">
+                    {cr.freshness?.last_active_at ? new Date(cr.freshness.last_active_at).toLocaleDateString('en-GB') : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
+/**
+ * ANALYTICS-DRILLDOWN-001 — the ad accounts beneath a platform.
+ *
+ * The chain read Platform → Campaign, skipping the level an operator manages. A customer can hold
+ * several ad accounts on one platform, and «Snapchat spent X» is not an answer when two accounts run
+ * different markets from different budgets.
+ *
+ * Grouped on the account each row was INGESTED for, so the attribution is real rather than inferred
+ * from a campaign name. An account removed since ingestion keeps its spend and shows no name, rather
+ * than being called «Unknown» — which would hide that it is gone.
+ */
+function AccountsTab({ projectId, range, filters }: TabProps) {
+  const ar = useAr()
+  const a = useAccounts(projectId, range, filters)
+  const s = useSummary(projectId, range, filters)
+  const currency = s.data?.currency ?? null
+  const rows = a.data ?? []
+
+  return (
+    <Panel
+      title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'}
+      description={ar ? 'مرتّبة حسب الإنفاق' : 'Ordered by spend'}
+      loading={a.isLoading}
+      error={a.isError}
+      empty={!a.isLoading && rows.length === 0}
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm" data-testid="account-table">
+          <thead>
+            <tr className="border-b border-border text-start text-xs text-text-secondary">
+              <th className="p-2 text-start font-medium">{ar ? 'الحساب' : 'Account'}</th>
+              <th className="p-2 text-start font-medium">{ar ? 'المنصة' : 'Platform'}</th>
+              <th className="p-2 text-start font-medium">{ar ? 'الإنفاق' : 'Spend'}</th>
+              <th className="p-2 text-start font-medium">{ar ? 'الظهور' : 'Impressions'}</th>
+              <th className="p-2 text-start font-medium">{ar ? 'النقرات' : 'Clicks'}</th>
+              <th className="p-2 text-start font-medium">CTR</th>
+              <th className="p-2 text-start font-medium">CPM</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...rows]
+              .sort((x, y) => (y.impressions ?? 0) - (x.impressions ?? 0))
+              .map((r) => (
+                <tr key={`${r.account_id ?? 'none'}-${r.provider}`} className="border-b border-border/60">
+                  <td className="p-2 font-medium text-text-primary">
+                    {r.account_name ?? (ar ? 'حساب لم يعد متاحًا' : 'Account no longer available')}
+                  </td>
+                  <td className="p-2 text-text-secondary">{providerLabel(r.provider, ar ? 'ar' : 'en')}</td>
+                  <td className="p-2 tnum" dir="ltr">{rowMoney(r, 'spend', currency)}</td>
+                  <td className="p-2 tnum" dir="ltr">{metricOrDash(r.impressions)}</td>
+                  <td className="p-2 tnum" dir="ltr">{metricOrDash(r.clicks)}</td>
+                  <td className="p-2 tnum" dir="ltr">{rateOrDash(r.ctr)}</td>
+                  <td className="p-2 tnum" dir="ltr">{rowCostPer(r, 'cpm', (r.impressions ?? 0) / 1000, currency)}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  )
 }

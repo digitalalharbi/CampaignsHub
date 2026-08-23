@@ -141,6 +141,33 @@ final class SnapchatCreativeAssetsTest extends TestCase
         Http::assertNotSent(fn ($request) => str_contains($request->url(), 'get_media_by_ids'));
     }
 
+    /**
+     * SNAP-MEDIA-URL-001 — the ad account id belongs IN the media path.
+     *
+     * The call went to `adaccounts/get_media_by_ids` with no account, and Snapchat answered
+     * «Request URL can not be correctly processed» for every chunk on every sweep. Production
+     * measured it exactly: 1,038 creatives carried a media id, the call was made, 0 resolved — so
+     * all 1,456 Content cards were blank while the structure run reported success.
+     *
+     * Asserting the URL rather than only the outcome, because a fake that answers any URL would let
+     * this pass while production kept failing. That gap is what made the bug survive a deploy.
+     */
+    public function test_the_media_request_names_the_ad_account(): void
+    {
+        $this->fakeApi([
+            'cr-1' => ['media' => 'me-1', 'type' => 'WEB_VIEW'],
+        ], [
+            'me-1' => ['type' => 'IMAGE', 'download_link' => 'https://cf.snapchat.com/media/me-1.jpg'],
+        ]);
+
+        $this->creatives();
+
+        Http::assertSent(fn ($request): bool => str_contains($request->url(), 'adaccounts/act-1/get_media_by_ids'));
+
+        // ...and never the account-less form the platform refuses.
+        Http::assertNotSent(fn ($request): bool => str_contains($request->url(), 'adaccounts/get_media_by_ids'));
+    }
+
     /** @return array<string, array<string, mixed>> */
     private function creatives(): array
     {

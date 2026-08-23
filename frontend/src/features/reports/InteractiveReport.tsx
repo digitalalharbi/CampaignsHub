@@ -112,6 +112,7 @@ export interface ReportData {
   slides?: Slide[]
   disclaimer?: ResolvedDisclaimer | null
   mode?: string
+  data_version?: number
   generated_at?: string
   data_source?: string
   attribution_window?: string | null
@@ -1221,6 +1222,31 @@ function SnapshotAge({ data }: { data: ReportData }) {
       {data.attribution_window ? (
         <span className="ms-2 opacity-80">· أساس الإسناد: {data.attribution_window}</span>
       ) : null}
+
+      {/*
+        * REPORTS-RECONCILIATION-001 — a snapshot from an older contract cannot reconcile.
+        *
+        * The figures beneath have since changed twice in ways that alter NUMBERS, not presentation:
+        * unconvertible money is now withheld with its original where it used to become 0, and demo
+        * rows no longer enter an operational total. A v1 snapshot beside today's Analytics is not
+        * «a few hours stale» — the two were computed under different rules.
+        *
+        * Saying so is the honest alternative to letting a reader compare two incomparable numbers
+        * and conclude one of the screens is broken.
+        */}
+      {!live && (data.data_version ?? 1) < CURRENT_DATA_VERSION && (
+        <span className="mt-1 block text-warning" data-testid="report-stale-contract">
+          هذه اللقطة حُسبت بقواعد أقدم — قد لا تطابق التحليلات الحالية. أعد إنشاء التقرير للمقارنة.
+        </span>
+      )}
     </p>
   )
 }
+
+/**
+ * The aggregation contract the product computes under today — mirrors `ReportGenerator::DATA_VERSION`.
+ *
+ * Duplicated deliberately and narrowly: it is one integer whose only job is to be compared, and a
+ * round trip to fetch it would make every report wait on a request to say «this is current».
+ */
+const CURRENT_DATA_VERSION = 2

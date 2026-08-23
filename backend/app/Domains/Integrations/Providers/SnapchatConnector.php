@@ -306,7 +306,7 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             ], static fn ($v) => $v !== null);
         }
 
-        return $this->withMedia($tokens, $creatives);
+        return $this->withMedia($tokens, $adAccountId, $creatives);
     }
 
     /**
@@ -334,7 +334,7 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
      * @param  array<string,array<string,mixed>>  $creatives
      * @return array<string,array<string,mixed>>
      */
-    private function withMedia(OAuthTokens $tokens, array $creatives): array
+    private function withMedia(OAuthTokens $tokens, string $adAccountId, array $creatives): array
     {
         $this->mediaAsked = 0;
         $this->mediaResolved = 0;
@@ -355,7 +355,23 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         foreach (array_chunk($mediaIds, self::MEDIA_PER_REQUEST) as $chunk) {
             try {
                 $body = $this->read(
-                    $this->api($tokens)->post($this->url('adaccounts/get_media_by_ids'), ['media_ids' => $chunk]),
+                    $this->api($tokens)->post(
+                        /*
+                         * SNAP-MEDIA-URL-001 — the ad account id belongs IN the path.
+                         *
+                         * This asked `adaccounts/get_media_by_ids` with no account, and Snapchat
+                         * answered «Request URL can not be correctly processed» — for every chunk,
+                         * on every sweep. Production proved it exactly: 1,038 creatives carried a
+                         * media id, the call was made, and 0 resolved, so all 1,456 cards were
+                         * blank while the structure run reported success.
+                         *
+                         * The documented route is `POST /adaccounts/{ad_account_id}/get_media_by_ids`.
+                         * Found only because the refusal was recorded rather than swallowed — the
+                         * message names the fault precisely, and a row count never could.
+                         */
+                        $this->url("adaccounts/{$adAccountId}/get_media_by_ids"),
+                        ['media_ids' => $chunk],
+                    ),
                     'media',
                 );
             } catch (\Throwable $e) {

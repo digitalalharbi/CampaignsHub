@@ -68,10 +68,27 @@ export function HeroSection({
         * The order below fixes that with `order` alone: nothing is removed, nothing is duplicated,
         * and from `lg` up the explicit column/row placement wins so the desktop layout is unchanged.
         */}
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.42fr)] lg:py-5">
+      {/*
+        * HERO-LAYOUT-001 — the dashboard sat in a hole the chooser dug.
+        *
+        * The grid was two columns by two ROWS: the promise at (1,1), the chooser at (2,1), the login
+        * card at (2,2) and the dashboard at (1,2). Grid rows span the whole grid, so row 1's height
+        * was whichever of the promise and the chooser was taller — always the chooser. The dashboard,
+        * pinned to row 2, therefore began below the CHOOSER's bottom edge rather than below the text
+        * it belongs to, leaving a large empty band above it and an unbalanced hero.
+        *
+        * `items-start` cannot fix that: the gap is the row's height, not a stretched item. A negative
+        * margin would only drag the image back over a hole that is still there, and would break the
+        * moment the copy or the chooser changed length.
+        *
+        * So the rows are gone. Each column is now its own flow — `contents` on one column so the
+        * mobile `order` sequence below is completely unaffected, a flex column from `lg` up — and the
+        * dashboard follows the promise immediately, because nothing else is in its column.
+        */}
+      <div className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.42fr)] lg:py-5">
 
         {/* ── The promise ── */}
-        <div className="contents lg:col-start-1 lg:row-start-1 lg:block">
+        <div className="contents lg:col-start-1 lg:flex lg:flex-col lg:gap-3">
           <div className="order-1">
             <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3 py-1 text-[12px] font-semibold text-brand-700">
               {txt('hero', 'eyebrow', c.hero.eyebrow)}
@@ -98,10 +115,33 @@ export function HeroSection({
               )
             })}
           </ul>
+
+          {/* ── The proof: the product's own dashboard ──
+          *
+          * Inside the promise's column now, not a grid cell of its own, so it rises to sit directly
+          * beneath the text instead of waiting for the chooser's row to end. `order-5` keeps it last
+          * on a phone, which is where it belongs: the headline and the three doors come first.
+          */}
+          <div id="preview" className="order-5">
+            <HeroDashboard c={c} />
+          </div>
+
         </div>
 
-        {/* ── The decision ── */}
-        <div className="order-4 flex flex-col rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] lg:col-start-2 lg:row-start-1 lg:rounded-b-none lg:border-b-0">
+        {/*
+          * ── The decision ──
+          *
+          * The chooser and the sign-in card are ONE card visually, joined seam to seam. That used to
+          * be two grid cells in rows 1 and 2 with `-mt-3` cancelling the grid gap between them — the
+          * same row structure that pushed the dashboard down the left column.
+          *
+          * A wrapper is the honest version: they share a container with no gap, so they meet exactly
+          * whatever the grid gap later becomes. `contents` below `lg` so the mobile `order` sequence
+          * is untouched — on a phone the sign-in card still comes second, right after the headline,
+          * while `lg:order-*` restores the desktop reading order the old row placement used to give.
+          */}
+        <div className="contents lg:col-start-2 lg:flex lg:flex-col">
+        <div className="order-4 flex flex-col rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] lg:order-1 lg:rounded-b-none lg:border-b-0">
           <h2 className="font-heading text-[18px] font-extrabold text-text-primary">{c.options.title}</h2>
           <p className="mt-1 text-[12px] leading-snug text-text-secondary">{c.options.subtitle}</p>
 
@@ -158,7 +198,7 @@ export function HeroSection({
         */}
         <div
           data-testid="hero-actions"
-          className="order-2 rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] lg:col-start-2 lg:row-start-2 lg:-mt-3 lg:self-start lg:rounded-t-none lg:border-t-0 lg:pt-0 lg:shadow-none"
+          className="order-2 rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] lg:order-2 lg:rounded-t-none lg:border-t-0 lg:pt-0 lg:shadow-none"
         >
           {authed ? (
             <Link to="/app/dashboard" className="block"><Button className="w-full">{c.nav.dashboard} <Arrow size={15} /></Button></Link>
@@ -188,11 +228,8 @@ export function HeroSection({
             </div>
           )}
         </div>
-
-        {/* ── The proof: the product's own dashboard ── */}
-        <div id="preview" className="order-5 lg:col-start-1 lg:row-start-2">
-          <HeroDashboard c={c} />
         </div>
+
       </div>
 
       {/* The paid-media services selector opens in a dialog: it is a long list, and letting it stretch
