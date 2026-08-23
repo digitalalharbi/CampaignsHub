@@ -6,6 +6,7 @@ namespace App\Domains\Campaigns\Services;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -35,6 +36,20 @@ final class CreativeMetrics
      * NOT wrapped in COALESCE: a null sum is the answer when the provider reported nothing, and this
      * is the one place in the aggregation where losing that distinction costs the reader the truth.
      */
+    /**
+     * Every ratio {@see self::derive()} computes — the other half of what this service can supply.
+     *
+     * Named rather than inferred because `supportable()` has to know the difference between «this
+     * table has no such column» and «this is computed from columns it does have».
+     *
+     * @var list<string>
+     */
+    private const DERIVED = [
+        'ctr', 'cpc', 'cpm', 'cpa', 'roas', 'conversion_rate', 'aov', 'cost_per_view',
+        'view_rate', 'completion_rate', 'hook_rate', 'cost_per_lpv', 'engagement_rate',
+        'cpe', 'orders', 'frequency', 'video_avg_watch_seconds',
+    ];
+
     private const SUMS = [
         'spend' => 'spend',
         'impressions' => 'impressions',
@@ -354,15 +369,68 @@ final class CreativeMetrics
      */
     public function headline(?string $objective): array
     {
-        $path = $this->pathFor($objective);
+        /*
+         * OBJECTIVE-AWARE-KPI-001 — chosen by the objective's FAMILY, not by its marketing path.
+         *
+         * The path has three cases and answers a money question. Using it here meant `Leads` and
+         * `AppInstalls` — both on the conversion path — were headlined with `revenue`, `roas` and
+         * `aov`: figures a lead-generation or app-install campaign was never bought to produce and
+         * the platform will never report for it. The requirement is explicit that a campaign must
+         * not be judged by another objective's verdict, and this was the shipping version of that.
+         *
+         * `pathFor()` is untouched and still governs whose CPA the money lands in.
+         */
+        $family = $this->familyFor($objective);
 
-        $metrics = $path->headlineMetrics();
+        $metrics = $family->headlineMetrics();
 
-        // Video adds its own headline figures on any path — a video's hook and completion matter
-        // whether it was bought for reach or for sales.
-        return $path === MarketingPath::Awareness
+        /*
+         * Video figures ride along on an awareness buy, because a video's hook and completion matter
+         * whether it was bought for reach or for sales — but NOT on the video family, which already
+         * leads with them, and not on the others, where they would push the actual verdict down.
+         */
+        $metrics = $family === ObjectiveFamily::Awareness
             ? array_values(array_unique([...$metrics, 'video_views', 'view_rate', 'completion_rate', 'cost_per_view']))
             : $metrics;
+
+        return $this->supportable($metrics);
+    }
+
+    /**
+     * Keep only the metrics THIS table can actually produce.
+     *
+     * `ObjectiveFamily` describes the canonical verdict for a family and is right at campaign level,
+     * where `daily_metrics` carries leads, installs, registrations and in-app events.
+     * `creative_daily_metrics` has none of those columns — a platform that breaks results down per
+     * creative does not break every result type down — so a lead campaign's creative card would put
+     * «no data» in its most prominent position, which is the opposite of an objective-aware card.
+     *
+     * The requirement is explicit: a metric must not reach the UI before the pipeline can supply it.
+     * So the family list is filtered here rather than being trimmed at its definition, and the
+     * definition stays true for the callers that CAN answer it.
+     *
+     * `spend` survives every filter, so a family whose whole verdict is unavailable still leads with
+     * the figure that is always the question.
+     *
+     * @param  list<string>  $metrics
+     * @return list<string>
+     */
+    private function supportable(array $metrics): array
+    {
+        $kept = array_values(array_filter(
+            $metrics,
+            fn (string $key): bool => array_key_exists($key, self::SUMS) || in_array($key, self::DERIVED, true),
+        ));
+
+        return $kept === [] ? ['spend'] : $kept;
+    }
+
+    /** The family whose KPIs this objective is judged by — see {@see CampaignObjective::family()}. */
+    public function familyFor(?string $objective): ObjectiveFamily
+    {
+        $case = $objective === null ? null : CampaignObjective::tryFrom($objective);
+
+        return $case?->family() ?? ObjectiveFamily::Unknown;
     }
 
     public function pathFor(?string $objective): MarketingPath
