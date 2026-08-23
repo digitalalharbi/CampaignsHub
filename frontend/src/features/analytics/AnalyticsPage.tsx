@@ -27,6 +27,7 @@ import {
   type MetricFilters,
 } from './hooks'
 import { KpiCard, Panel, ProvenanceBadge, SERIES, platformColor, tooltipProps } from './components'
+import { listCreatives } from '@/features/content/api'
 import { compact, money, moneyFromTotals, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { formatMoneyReading, readCostPer, readRoas } from '@/lib/money/contract'
 import { funnelStageLabel } from './metricLabels'
@@ -65,6 +66,8 @@ const TABS = [
   { id: 'ads', ar: 'تحليل الإعلانات', en: 'Ads analysis' },
   // ANALYTICS-OBJECTIVE-VISIBLE-001 — campaigns grouped by what they were bought to do.
   { id: 'objective', ar: 'تحليل الأهداف', en: 'Objective analysis' },
+  // The creative rung — the last level of the drill-down, reading `creative_daily_metrics`.
+  { id: 'creative', ar: 'تحليل المحتوى', en: 'Creative analysis' },
   { id: 'funnel', ar: 'التحويلات والقمع', en: 'Conversions & funnel' },
   // FUNNEL-001 — the ad funnel and the STORE funnel in one place, with the source of every number.
   { id: 'store', ar: 'الفانل والمتجر', en: 'Funnel & store' },
@@ -265,6 +268,7 @@ export function AnalyticsPage() {
       {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}
       {tab === 'ads' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />}
       {tab === 'objective' && <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />}
+      {tab === 'creative' && <CreativeTab projectId={currentProjectId} range={range} />}
       {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'store' && <StoreFunnelTab projectId={currentProjectId} range={range} />}
       {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} filters={filters} />}
@@ -1130,6 +1134,77 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
               </div>
             )
           })}
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
+/**
+ * ANALYTICS-CREATIVE-VISIBLE-001 — the creative rung, inside Analytics.
+ *
+ * The last level of the drill-down: platform → campaign → ad set → ad → CREATIVE. It reads the same
+ * `CreativeAnalysisController` the Content library reads, deliberately — §15.17 calls an independent
+ * source an architectural defect rather than a discrepancy, and a second query here would let
+ * Analytics and Content disagree about the same creative.
+ *
+ * Figures come from `creative_daily_metrics` only. Nothing is projected down from the campaign or
+ * the ad: a creative that the platform does not break out shows «—», because inventing its share of
+ * a campaign total would be a number nobody measured.
+ */
+function CreativeTab({ projectId, range }: { projectId: string | null; range: TabProps['range'] }) {
+  const ar = useAr()
+
+  const q = useQuery({
+    queryKey: ['analytics', 'creatives', projectId, range.from, range.to],
+    queryFn: () => listCreatives({ from: range.from, to: range.to, per_page: 24 }, projectId),
+    enabled: Boolean(projectId),
+  })
+
+  const rows = q.data?.creatives ?? []
+  const currency = q.data?.currency ?? null
+
+  return (
+    <div className="space-y-4">
+      <Panel
+        title={ar ? 'أداء المحتوى' : 'Creative performance'}
+        description={ar ? 'من بيانات المحتوى نفسه — لا تُنسب أرقام الحملة إلى محتوى' : 'From creative-level data — campaign figures are never attributed to a creative'}
+        loading={q.isLoading}
+        error={q.isError}
+        empty={!q.isLoading && rows.length === 0}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px] text-sm" data-testid="creative-analysis-table">
+            <thead>
+              <tr className="border-b border-border text-start text-xs text-text-secondary">
+                <th className="p-2 text-start font-medium">{ar ? 'المحتوى' : 'Creative'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'الحملة' : 'Campaign'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'الهدف' : 'Objective'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'الإنفاق' : 'Spend'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'الظهور' : 'Impressions'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'النقرات' : 'Clicks'}</th>
+                <th className="p-2 text-start font-medium">CTR</th>
+                <th className="p-2 text-start font-medium">{ar ? 'آخر نشاط' : 'Last active'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((cr) => (
+                <tr key={cr.id} className="border-b border-border/60">
+                  <td className="max-w-56 truncate p-2 font-medium text-text-primary">{cr.name}</td>
+                  <td className="max-w-40 truncate p-2 text-text-secondary">{cr.campaign_name ?? '—'}</td>
+                  <td className="p-2 text-text-secondary">{cr.objective ?? '—'}</td>
+                  {/* The canonical money reader: a withheld figure states its own currency. */}
+                  <td className="p-2 tnum" dir="ltr">{rowMoney(cr.metrics ?? undefined, 'spend', currency)}</td>
+                  <td className="p-2 tnum" dir="ltr">{metricOrDash(cr.metrics?.impressions ?? null)}</td>
+                  <td className="p-2 tnum" dir="ltr">{metricOrDash(cr.metrics?.clicks ?? null)}</td>
+                  <td className="p-2 tnum" dir="ltr">{rateOrDash(cr.metrics?.ctr ?? null)}</td>
+                  <td className="p-2 text-text-secondary" dir="ltr">
+                    {cr.freshness?.last_active_at ? new Date(cr.freshness.last_active_at).toLocaleDateString('en-GB') : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Panel>
     </div>
