@@ -8,7 +8,7 @@ The next session's work is already chosen and ordered at the bottom of this file
 ## 1. Current main
 
 ```
-origin/main = d2f3e19e2dbb48710b5c21d026455a15ecbd2a1e
+origin/main = 568584e  (#73 merged and deployed 2026-08-23 09:16 UTC)
 ```
 
 ## 2. Merged AND deployed this session
@@ -18,6 +18,7 @@ origin/main = d2f3e19e2dbb48710b5c21d026455a15ecbd2a1e
 | #71 | `3d092c8` | `ANALYTICS-PROVENANCE-001` — the Demo badge was a literal in four pages' JSX; now derived from `MetricsAggregator::provenance()` (live/demo/mixed/none) |
 | #72 | `562b3eb` | `SNAP-CREATIVE-METRICS-LIVE-001` — the Creative Library's default order used `last_active_at`, a column **nothing in the pipeline had ever written** (only the demo seeder). Now recorded on delivery, sorted `NULLS LAST`, with a backfill |
 | #74 | `d2f3e19` | `DEMO-LIVE-AGGREGATION-ISOLATION-001` — `MetricsAggregator::base()` had **no `is_demo` filter at all**; live totals silently summed demo rows. Policy derived per scope, not per window |
+| #73 | `568584e` | `CREATIVE-MONEY-TRUTH-001` — `creative_daily_metrics` had **no currency column**; USD figures were rendered under a hard-coded «SAR». Also: `formatMetric` defaulted to SAR at 20 call sites; the fatigue alert was gated on a withheld-zero and silently never fired |
 
 ## 3. Open PRs — exact state
 
@@ -41,6 +42,31 @@ show as unmerged because they were squash-merged under different SHAs. Their con
 
 ## 4. LIVE_VERIFIED (real production evidence)
 
+### #72 — LIVE_VERIFIED as of 2026-08-23, after #73 deployed the diagnostic
+
+```
+creatives with a last active day : 86 of 1451
+creatives with any figure        : 86 of 1451
+creative_daily_metrics rows      : 819   (was 814 — sync is live)
+```
+
+The two counts match exactly. Before #72 this column was **null for all 1,451** — nothing in the
+pipeline had ever written it. Every delivering creative now has a last active day, so the library's
+default sort has real input. This is the proof row-counts could never give.
+
+### Production is healthy after #73's migration
+```
+daily_metric rows : 1716 across 13 day(s), latest 2026-08-23   (was 1704 — still ingesting)
+as the platform reported it: 4,343.62 / 13,713.37 USD
+286 money row(s) WITHHELD — no USD→project rate exists
+campaigns visible : 89 external, 89 linked   (was 87 — improved)
+rows in ANY OTHER project: 0
+account currency  : USD
+```
+The money migration moved nothing it should not have: campaign money is still withheld rather than
+wrong, and tenant isolation holds.
+
+
 - Snapchat structure sync, queue re-delivery, 89 campaigns / 187 ad squads / 5,706 ads / 1,451 creatives.
 - **Snapchat ad account currency is `USD`** and present — `connection=connected timezone=Asia/Riyadh currency=USD`.
   This is why creative money must never be labelled SAR.
@@ -51,8 +77,20 @@ show as unmerged because they were squash-merged under different SHAs. Their con
 
 ## 5. VERIFIED by tests, NOT live — and why
 
-#71, #72, #73, #74 are all **VERIFIED, not LIVE_VERIFIED**. The two diagnostics that would prove
-them on production ship **inside #73**:
+#72 is now LIVE_VERIFIED (§4). **#71, #73 and #74 are still VERIFIED only**, for a specific reason
+found while verifying:
+
+**The provenance diagnostic cannot answer in console scope.** It printed `live rows: 0, demo rows: 0`
+on a project that demonstrably holds 1,716 rows. The block immediately above it shows
+`impressions (control) : 0`, which that diagnostic's own comment documents as the tell that *the
+query sees nothing at all* rather than *the money is missing*. `--downstream`, which queries the DB
+directly instead of through `MetricsAggregator`, sees everything.
+
+So the aggregator-based diagnostic blocks are scoped wrongly under the console (no request-bound
+project context). **This is a diagnostic defect, not evidence about #71/#74** — and it is the next
+thing to fix before those two can be live-verified. Do not read `0/0` as «no demo contamination».
+
+The two diagnostics themselves ship **inside #73** and are now deployed:
 
 - `WHAT THE PROVENANCE BADGE READS` — live/demo row counts (proves #71 and #74)
 - `creatives with a last active day : N of M` — proves #72's backfill actually ran
