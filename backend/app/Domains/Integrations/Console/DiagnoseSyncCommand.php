@@ -502,10 +502,36 @@ final class DiagnoseSyncCommand extends Command
         $this->line('  ad rows / entities        : '.(int) ($entityRows->ads ?? 0).' / '.(int) ($entityRows->distinct_ads ?? 0));
         $this->line('  latest metric_date        : '.($entityRows->latest ?? '—'));
 
+        /*
+         * What the last sweep RECORDED about these grains — the answer the row count cannot give.
+         *
+         * `entity_failure` is the first refusal the connector met while sweeping; `entity_ad_sets`
+         * and `entity_ads` are what it managed to write. Together they separate «never swept» from
+         * «swept and refused», which a count of zero cannot.
+         */
+        $lastMeta = MetricSyncRun::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->whereNotNull('meta')
+            ->orderByDesc('started_at')
+            ->value('meta');
+
+        $meta = is_array($lastMeta) ? $lastMeta : (array) json_decode((string) $lastMeta, true);
+
+        if (array_key_exists('entity_ad_sets', $meta)) {
+            $this->line('  last sweep wrote          : '.(int) $meta['entity_ad_sets'].' ad-set row(s), '
+                .(int) ($meta['entity_ads'] ?? 0).' ad row(s)');
+
+            if (($meta['entity_failure'] ?? null) !== null) {
+                $this->warn('  the platform refused     : '.$meta['entity_failure']);
+            }
+        } else {
+            $this->line('  last sweep wrote          : nothing recorded — no sweep has run since the '
+                .'ingest was wired');
+        }
+
         if ((int) ($entityRows->total ?? 0) === 0) {
-            $this->warn('  Empty. Either no metrics sweep has run since the ingest was wired, or the '
-                .'ad-squad/ad calls are being refused — compare the newest metrics run above with the '
-                .'deploy time before concluding either.');
+            $this->warn('  Empty. Read the two lines above: «nothing recorded» means no sweep has run '
+                .'since the ingest shipped; a refusal names what the platform said.');
         }
 
         if ($withMetrics > 0 && $active === 0) {

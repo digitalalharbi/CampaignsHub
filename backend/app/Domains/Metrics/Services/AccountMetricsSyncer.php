@@ -417,7 +417,7 @@ final class AccountMetricsSyncer
             ];
         }
 
-        app(UpsertEntityDailyMetrics::class)->execute(
+        $squadResult = app(UpsertEntityDailyMetrics::class)->execute(
             $account, EntityDailyMetric::AD_SET, $squadRows, $knownSquads, (string) $run->getKey(),
         );
 
@@ -444,9 +444,26 @@ final class AccountMetricsSyncer
             ];
         }
 
-        app(UpsertEntityDailyMetrics::class)->execute(
+        $adResult = app(UpsertEntityDailyMetrics::class)->execute(
             $account, EntityDailyMetric::AD, $adRows, $knownAds, (string) $run->getKey(),
         );
+
+        /*
+         * Record WHY the grains are empty, when they are.
+         *
+         * An empty `entity_daily_metrics` has two completely different causes — no sweep has run
+         * since the ingest was wired, or the platform refused every call — and a row count cannot
+         * tell them apart. The run already carries a `meta` column; putting the first refusal there
+         * costs no migration and makes the next diagnostic explain itself instead of guessing.
+         */
+        $run->forceFill([
+            'meta' => [
+                ...(array) ($run->meta ?? []),
+                'entity_ad_sets' => $squadResult['upserted'],
+                'entity_ads' => $adResult['upserted'],
+                'entity_failure' => $connector->lastEntityFailure(),
+            ],
+        ])->save();
     }
 
     /**
