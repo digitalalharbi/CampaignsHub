@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Campaigns\Actions\BackfillCreativeMoneyProvenance;
 use App\Domains\Campaigns\Actions\UpsertCreativeDailyMetrics;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Models\ExternalCampaign;
@@ -232,6 +233,122 @@ final class CreativeMoneyTruthTest extends TestCase
         $this->assertNull($figures['cpc']);
         $this->assertNull($figures['cpm']);
         $this->assertNull($figures['roas']);
+    }
+
+    /*
+     * ── The backfill, on rows written before any of this existed ─────────────────────────────────
+     *
+     * Production holds 814 such rows: an unconverted provider figure sitting in `spend` with nothing
+     * recording which currency it was. These assert what the migration's docblock claims, because
+     * the claims are about rewriting real stored money on a live database.
+     */
+
+    public function test_a_legacy_row_keeps_its_amount_and_loses_the_wrong_label(): void
+    {
+        $creative = $this->creative('cr-1');
+        $this->legacyRow($creative->id, spend: 4128.93, revenue: 12969.03);
+
+        app(BackfillCreativeMoneyProvenance::class)->execute();
+
+        $row = DB::table('creative_daily_metrics')->where('creative_id', $creative->id)->first();
+
+        $this->assertNull($row->spend, 'The figure was never in the project currency.');
+        $this->assertEqualsWithDelta(4128.93, (float) $row->spend_original, 0.01, 'The amount must survive.');
+        $this->assertEqualsWithDelta(12969.03, (float) $row->revenue_original, 0.01);
+        $this->assertSame('USD', $row->original_currency, 'One Snapchat account on the project, so it is knowable.');
+    }
+
+    /** «Running it twice changes nothing» — the claim most likely to be wrong, and the most costly. */
+    public function test_the_backfill_is_idempotent(): void
+    {
+        $creative = $this->creative('cr-1');
+        $this->legacyRow($creative->id, spend: 4128.93, revenue: 12969.03);
+
+        $backfill = app(BackfillCreativeMoneyProvenance::class);
+        $backfill->execute();
+        $second = $backfill->execute();
+
+        $row = DB::table('creative_daily_metrics')->where('creative_id', $creative->id)->first();
+
+        $this->assertSame(['moved' => 0, 'currencies' => 0], $second, 'A second pass had work to do.');
+        $this->assertEqualsWithDelta(4128.93, (float) $row->spend_original, 0.01, 'The amount was overwritten by a null.');
+        $this->assertSame('USD', $row->original_currency);
+    }
+
+    /**
+     * An ambiguous currency stays NULL.
+     *
+     * A project binding two Snapchat accounts that spend in different currencies cannot say which
+     * one a given row came from — the table has no account column. Null renders as «conversion
+     * unavailable», which is true; a guess would be the defect this change exists to remove.
+     */
+    public function test_an_ambiguous_currency_is_left_unstated_rather_than_guessed(): void
+    {
+        $second = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'provider_connection_id' => $this->account->provider_connection_id,
+            'provider' => 'snapchat',
+            'account_type' => 'ad_account',
+            'external_id' => 'act-2',
+            'name' => 'Snap EUR',
+            'status' => 'active',
+            'currency' => 'EUR',
+            'discovered_at' => Carbon::now(),
+        ]);
+
+        ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'external_account_id' => $second->id, 'provider' => 'snapchat',
+            'external_id' => 'cmp-2', 'name' => 'Second', 'status' => 'active',
+        ]);
+
+        $creative = $this->creative('cr-1');
+        $this->legacyRow($creative->id, spend: 500.0, revenue: null);
+
+        app(BackfillCreativeMoneyProvenance::class)->execute();
+
+        $row = DB::table('creative_daily_metrics')->where('creative_id', $creative->id)->first();
+
+        $this->assertEqualsWithDelta(500.0, (float) $row->spend_original, 0.01, 'The amount is still kept.');
+        $this->assertNull($row->original_currency, 'USD and EUR on one project — the row cannot say which.');
+    }
+
+    /** A row the new pipeline already wrote correctly must not be touched. */
+    public function test_a_row_that_already_has_its_provenance_is_left_alone(): void
+    {
+        $creative = $this->creative('cr-1');
+
+        app(UpsertCreativeDailyMetrics::class)->execute($this->account, [
+            ['campaign_id' => 'cr-1', 'date' => '2026-08-01', 'spend' => 250.0],
+        ]);
+
+        $result = app(BackfillCreativeMoneyProvenance::class)->execute();
+
+        $this->assertSame(0, $result['moved']);
+        $this->assertEqualsWithDelta(
+            250.0,
+            (float) DB::table('creative_daily_metrics')->where('creative_id', $creative->id)->value('spend_original'),
+            0.01,
+        );
+    }
+
+    /** The pre-currency shape: an unconverted figure with nothing saying what it is. */
+    private function legacyRow(string $creativeId, float $spend, ?float $revenue): void
+    {
+        DB::table('creative_daily_metrics')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'creative_id' => $creativeId,
+            'campaign_id' => null,
+            'metric_date' => '2026-08-01',
+            'spend' => $spend,
+            'revenue' => $revenue,
+            'impressions' => 2884062,
+            'is_demo' => false,
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
+        ]);
     }
 
     private function rate(string $base, string $quote, string $date, float $rate): void
