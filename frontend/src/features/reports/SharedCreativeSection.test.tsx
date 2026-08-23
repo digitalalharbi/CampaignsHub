@@ -219,9 +219,10 @@ const summary = (over: Partial<SharedCreativeSummaryPayload> = {}): SharedCreati
         total: 1,
         shown: 1,
       },
-      spend_at_risk: 800,
+      spend_at_risk: { spend: 800, spend_withheld_rows: 0, spend_original: 0, money_original_currency: null, money_original_currencies: 0 },
     },
     spend_by_kind: [],
+    currency: 'SAR',
     image_vs_video: [],
     best_platform: empty,
     freshness: {

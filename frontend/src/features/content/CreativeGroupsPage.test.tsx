@@ -118,6 +118,7 @@ const member = (over: Partial<CreativeCard> = {}): CreativeCard =>
 
 const detail = (over: Partial<CreativeGroupDetail> = {}): CreativeGroupDetail => ({
   ...summary(),
+  currency: 'SAR',
   members: [member(), member({ id: 'cr-2', name: 'The film · TikTok', provider: 'tiktok' })],
   by_platform: [
     { provider: 'meta', creative_count: 1, creative_ids: ['cr-1'], metrics: metrics({ spend: 400 }) },
@@ -152,7 +153,7 @@ describe('CreativeGroupsPage', () => {
       page: 1,
       per_page: 24,
       total: 1,
-      period: { from: '2026-07-08', to: '2026-08-06' },
+      period: { from: '2026-07-08', to: '2026-08-06' }, currency: 'SAR',
     })
     vi.mocked(getCreativeGroup).mockResolvedValue(detail())
   })
@@ -187,7 +188,7 @@ describe('CreativeGroupsPage', () => {
       page: 1,
       per_page: 24,
       total: 1,
-      period: { from: '2026-07-08', to: '2026-08-06' },
+      period: { from: '2026-07-08', to: '2026-08-06' }, currency: 'SAR',
     })
 
     renderWithProviders(<CreativeGroupsPage portal="app" />, { route: '/app/content/groups' })
@@ -278,7 +279,7 @@ describe('CreativeGroupsPage', () => {
       page: 1,
       per_page: 24,
       total: 0,
-      period: { from: '2026-07-08', to: '2026-08-06' },
+      period: { from: '2026-07-08', to: '2026-08-06' }, currency: 'SAR',
     })
 
     renderWithProviders(<CreativeGroupsPage portal="app" />, { route: '/app/content/groups' })
