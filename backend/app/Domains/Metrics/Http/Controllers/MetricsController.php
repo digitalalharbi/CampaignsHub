@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Http\Controllers;
 
+use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
@@ -759,7 +761,36 @@ final class MetricsController extends Controller
     /** The objective filter from the request (?objective=sales,leads). Empty when absent. @return list<string> */
     private function objectiveFilter(Request $request): array
     {
-        return $this->listFilter($request, 'objective');
+        $objectives = $this->listFilter($request, 'objective');
+
+        /*
+         * ANALYTICS-OBJECTIVE-FILTERS-001 — a FAMILY narrows the query, not just the KPI order.
+         *
+         * `?objective=` takes exact objective values, which is right for a precise filter and wrong
+         * for the control an operator actually wants: «show me the awareness work» means awareness
+         * AND reach, and «sales» means sales, conversions, purchases and add-to-cart. Making the
+         * user tick four boxes to mean one thing is how a filter stops being used.
+         *
+         * Expanded to member objectives HERE, so the narrowing happens in the aggregator's SQL. A
+         * family resolved in the frontend would filter rows already aggregated across every
+         * objective — the totals would still be the unfiltered ones, and the page would look
+         * filtered while telling the truth about nothing.
+         */
+        foreach ($this->listFilter($request, 'objective_family') as $family) {
+            $case = ObjectiveFamily::tryFrom($family);
+
+            if ($case === null) {
+                continue;
+            }
+
+            foreach (CampaignObjective::cases() as $objective) {
+                if ($objective->family() === $case) {
+                    $objectives[] = $objective->value;
+                }
+            }
+        }
+
+        return array_values(array_unique($objectives));
     }
 
     /**
