@@ -15,6 +15,7 @@ import {
 import {
   useBudget,
   useCampaigns,
+  useEntities,
   useFreshness,
   useFunnel,
   useLastNDaysRange,
@@ -59,6 +60,9 @@ const TABS = [
   { id: 'performance', ar: 'نظرة عامة على الأداء', en: 'Performance overview' },
   { id: 'platforms', ar: 'تحليل المنصات', en: 'Platform analysis' },
   { id: 'campaigns', ar: 'تحليل الحملات', en: 'Campaign analysis' },
+  // ANALYTICS-DRILLDOWN-001 — the two rungs that had no table beneath them until now.
+  { id: 'ad_sets', ar: 'تحليل المجموعات الإعلانية', en: 'Ad set analysis' },
+  { id: 'ads', ar: 'تحليل الإعلانات', en: 'Ads analysis' },
   { id: 'funnel', ar: 'التحويلات والقمع', en: 'Conversions & funnel' },
   // FUNNEL-001 — the ad funnel and the STORE funnel in one place, with the source of every number.
   { id: 'store', ar: 'الفانل والمتجر', en: 'Funnel & store' },
@@ -256,6 +260,8 @@ export function AnalyticsPage() {
       {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
+      {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}
+      {tab === 'ads' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />}
       {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'store' && <StoreFunnelTab projectId={currentProjectId} range={range} />}
       {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} filters={filters} />}
@@ -926,4 +932,97 @@ function MetricTable({ head, rows }: { head: string[]; rows: React.ReactNode[][]
       </table>
     </div>
   )
+}
+
+/**
+ * ANALYTICS-DRILLDOWN-001 — the ad-squad and ad rungs, on screen.
+ *
+ * These two tabs did not exist, and could not have: `daily_metrics` is campaign-grain and
+ * `creative_daily_metrics` is creative-grain, so the 187 ad squads and 5,706 ads on the live account
+ * had no table to read from. `entity_daily_metrics` and its aggregator now answer for them.
+ *
+ * Money goes through the canonical reader, so a withheld ad-squad spend prints «412.50 USD» with the
+ * conversion note rather than «0 SAR» — the same sentence a dashboard KPI would give for the same
+ * money. Every ratio renders through `metricOrDash`, which prints «—» for a null rather than a zero,
+ * because a CPM that could not be computed is not a CPM of nothing.
+ */
+function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad_set' | 'ad' }) {
+  const ar = useAr()
+  const q = useEntities(projectId, range, level, undefined, filters)
+  const rows = q.data?.entities ?? []
+  const currency = q.data?.currency ?? null
+
+  const heading = level === 'ad_set'
+    ? (ar ? 'المجموعات الإعلانية' : 'Ad sets')
+    : (ar ? 'الإعلانات' : 'Ads')
+
+  return (
+    <div className="space-y-4">
+      <Panel
+        title={heading}
+        description={ar ? 'مرتّبة حسب الظهور' : 'Ordered by impressions'}
+        loading={q.isLoading}
+        error={q.isError}
+        empty={!q.isLoading && rows.length === 0}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] text-sm" data-testid={`entity-table-${level}`}>
+            <thead>
+              <tr className="border-b border-border text-start text-xs text-text-secondary">
+                <th className="p-2 text-start font-medium">{ar ? 'الاسم' : 'Name'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'الإنفاق' : 'Spend'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'الظهور' : 'Impressions'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'الوصول' : 'Reach'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'التكرار' : 'Frequency'}</th>
+                <th className="p-2 text-start font-medium">{ar ? 'النقرات' : 'Clicks'}</th>
+                <th className="p-2 text-start font-medium">CTR</th>
+                <th className="p-2 text-start font-medium">CPC</th>
+                <th className="p-2 text-start font-medium">CPM</th>
+                <th className="p-2 text-start font-medium">{ar ? 'النتائج' : 'Results'}</th>
+                <th className="p-2 text-start font-medium">CPA</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...rows]
+                .sort((a, b) => (b.impressions ?? 0) - (a.impressions ?? 0))
+                .map((row) => (
+                  <tr key={row.entity_id} className="border-b border-border/60">
+                    <td className="p-2">
+                      <div className="font-medium text-text-primary">
+                        {/* An entity the sweep has removed keeps its provider id rather than being
+                            called «Unknown», which would hide that it is gone. */}
+                        {row.name ?? row.external_id}
+                      </div>
+                      <div className="text-xs text-text-secondary">{row.external_id}</div>
+                    </td>
+                    <td className="p-2 tnum" dir="ltr">{rowMoney(row, 'spend', currency)}</td>
+                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.impressions)}</td>
+                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.reach)}</td>
+                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.frequency, 2)}</td>
+                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.clicks)}</td>
+                    <td className="p-2 tnum" dir="ltr">{rateOrDash(row.ctr)}</td>
+                    <td className="p-2 tnum" dir="ltr">{rowCostPer(row, 'cpc', row.clicks ?? 0, currency)}</td>
+                    <td className="p-2 tnum" dir="ltr">{rowCostPer(row, 'cpm', (row.impressions ?? 0) / 1000, currency)}</td>
+                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.conversions)}</td>
+                    <td className="p-2 tnum" dir="ltr">{rowCostPer(row, 'cpa', row.conversions ?? 0, currency)}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
+/** A count, or «—». Never 0 for a figure nobody reported — that is a measurement nobody made. */
+function metricOrDash(value: number | null | undefined, digits = 0): string {
+  return typeof value === 'number'
+    ? value.toLocaleString('en-US', { maximumFractionDigits: digits })
+    : '—'
+}
+
+/** A rate, or «—». Same rule: an unavailable ratio is not a ratio of zero. */
+function rateOrDash(value: number | null | undefined): string {
+  return typeof value === 'number' ? `${(value * 100).toFixed(2)}%` : '—'
 }
