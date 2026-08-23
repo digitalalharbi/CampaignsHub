@@ -495,6 +495,59 @@ final class DiagnoseSyncCommand extends Command
             ->selectRaw('MAX(metric_date) AS latest')
             ->first();
 
+        /*
+         * SNAP-MEDIA-OBSERVABILITY-001 — why the Content library shows blank cards, in counts.
+         *
+         * Every number here is derived from stored rows rather than from a log, and none of them is
+         * a URL: a signed media link written to a log is the leak this product refuses. What the
+         * counts separate is «the platform was never asked» (media_id absent), «asked and nothing
+         * came back» (media_id present, both url columns empty) and «we have the file» — three
+         * states that all render as an empty card and call for completely different fixes.
+         */
+        $media = DB::table('external_creatives')
+            ->where('project_id', $projectId)
+            ->selectRaw('COUNT(*) AS total')
+            ->selectRaw('COUNT(*) FILTER (WHERE asset_url IS NOT NULL) AS with_image')
+            ->selectRaw('COUNT(*) FILTER (WHERE video_url IS NOT NULL) AS with_video')
+            ->selectRaw('COUNT(*) FILTER (WHERE thumbnail_url IS NOT NULL) AS with_thumb')
+            ->selectRaw('COUNT(*) FILTER (WHERE asset_url IS NULL AND video_url IS NULL AND thumbnail_url IS NULL) AS with_nothing')
+            ->first();
+
+        $this->line('');
+        $this->line('  CREATIVE MEDIA — whether the asset ever reached the row');
+        $this->line('  creatives            : '.(int) ($media->total ?? 0));
+        $this->line('  with an image file   : '.(int) ($media->with_image ?? 0));
+        $this->line('  with a video file    : '.(int) ($media->with_video ?? 0));
+        $this->line('  with a thumbnail     : '.(int) ($media->with_thumb ?? 0));
+        $this->line('  with NO asset at all : '.(int) ($media->with_nothing ?? 0)
+            .'  ← these are the blank cards');
+
+        /*
+         * What the last structure sweep recorded about the media call itself. «asked» far above
+         * «resolved» means media is being fetched and then rejected — the signed-URL classification
+         * was one such cause; both zero means it was never asked for.
+         */
+        $lastRun = IntegrationSyncRun::withoutGlobalScopes()
+            ->where('type', 'structure')
+            ->whereNotNull('meta')
+            ->orderByDesc('started_at')
+            ->value('meta');
+
+        $runMeta = is_array($lastRun) ? $lastRun : (array) json_decode((string) $lastRun, true);
+        $mediaMeta = (array) ($runMeta['media'] ?? []);
+
+        if ($mediaMeta !== []) {
+            $this->line('  last sweep asked for : '.(int) ($mediaMeta['asked'] ?? 0)
+                .' media id(s), resolved '.(int) ($mediaMeta['resolved'] ?? 0));
+
+            if (($mediaMeta['error'] ?? null) !== null) {
+                $this->warn('  the platform refused : '.$mediaMeta['error']);
+            }
+        } else {
+            $this->line('  last sweep asked for : nothing recorded — no structure sweep has run since '
+                .'media reporting was added');
+        }
+
         $this->line('');
         $this->line('  AD SET / AD METRICS — the rungs Analytics could not show before');
         $this->line('  entity_daily_metrics rows : '.(int) ($entityRows->total ?? 0));

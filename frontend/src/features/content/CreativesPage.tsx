@@ -7,6 +7,7 @@ import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { emptyReason, type MetricsAvailability } from './availability'
 import { imageLoading } from './format'
+import { creativeMoney } from './creativeMoney'
 import {
   groupCreatives,
   libraryQueryString,
@@ -756,6 +757,15 @@ export function CreativesPage() {
                 const resultKey = primaryResultKey(creative.headline_metrics)
                 const efficiencyKey = primaryEfficiencyKey(creative.headline_metrics)
                 const poster = creative.preview.thumbnail_url ?? creative.preview.image_url
+                /*
+                 * CONTENT-PREVIEW-VIDEO-001 — a video with no poster is not «no preview».
+                 *
+                 * Snapchat returns a video creative's file as `video_url` and frequently supplies no
+                 * separate thumbnail. This row derived its poster from `thumbnail_url ?? image_url`
+                 * only, so a creative with a perfectly good video asset rendered «لا توجد معاينة» —
+                 * the product claiming to have nothing while holding the thing itself.
+                 */
+                const video = poster === null ? creative.preview.video_url : null
 
                 return (
                   <tr
@@ -788,6 +798,25 @@ export function CreativesPage() {
                           decoding="async"
                           className="h-10 w-16 rounded object-cover"
                         />
+                      ) : video ? (
+                        /*
+                         * `preload="metadata"` and no `autoPlay`: the browser fetches enough to draw
+                         * the first frame and stops. A grid of twenty `preload="auto"` videos would
+                         * cost a phone tens of megabytes to open a list page, which is why cards
+                         * never mounted a player before — the answer is a cheap one, not none.
+                         *
+                         * `muted` and `playsInline` so the frame renders on iOS without asking to
+                         * play; `#t=0.1` because some browsers draw nothing at exactly zero.
+                         */
+                        <video
+                          src={`${video}#t=0.1`}
+                          preload="metadata"
+                          muted
+                          playsInline
+                          controls={false}
+                          className="h-10 w-16 rounded object-cover"
+                          data-testid="creative-video-poster"
+                        />
                       ) : (
                         <span className="flex h-10 w-16 items-center justify-center rounded bg-surface-hover text-[10px] text-text-muted">
                           {t.noPreview}
@@ -805,7 +834,14 @@ export function CreativesPage() {
                       {creative.objective ? objectiveLabel(creative.objective, locale) : marketingPathLabel(creative.path, locale)}
                     </td>
                     <td className="p-2 tabular-nums" dir="ltr">
-                      {formatMetric(metricState(creative.metrics, 'spend'), 'spend', locale, data?.currency ?? null)}
+                      {/*
+                        * CONTENT-MONEY-VISIBLE-001 — through the canonical reader, not `metricState`.
+                        *
+                        * `metricState` sees only the CONVERTED column, so a withheld figure — which
+                        * is every Snapchat row on production, a USD account with no USD→SAR rate —
+                        * rendered as «No data». Real, measured spend reported as never having run.
+                        */}
+                      {creativeMoney(creative.metrics, 'spend', data?.currency ?? null, locale).text}
                     </td>
                     <td className="p-2" dir="ltr">
                       {resultKey === null ? (
@@ -914,6 +950,13 @@ function CreativeGridCard({
 }) {
   const preview = creative.preview
   const poster = preview.thumbnail_url ?? preview.image_url
+  /*
+   * CONTENT-PREVIEW-VIDEO-001 — a video with no poster is not «no preview».
+   *
+   * Snapchat returns a video creative's file as `video_url` and often supplies no separate
+   * thumbnail, so this card said «لا توجد معاينة» while holding the asset itself.
+   */
+  const video = poster === null ? preview.video_url : null
   const note = ar ? preview.note_ar : preview.note_en
 
   return (
@@ -935,6 +978,22 @@ function CreativeGridCard({
               loading={imageLoading(poster)}
               decoding="async"
               className="h-full w-full object-cover"
+            />
+          ) : video ? (
+            /*
+             * The cheapest thing that shows the asset: `preload="metadata"` fetches enough for a
+             * first frame and stops, and nothing autoplays. Twenty `preload="auto"` videos on one
+             * grid would cost a phone tens of megabytes to open the page — which is the reason
+             * cards never mounted a player, and the reason this one is deliberately inert.
+             */
+            <video
+              src={`${video}#t=0.1`}
+              preload="metadata"
+              muted
+              playsInline
+              controls={false}
+              className="h-full w-full object-cover"
+              data-testid="creative-video-poster"
             />
           ) : (
             <span className="flex h-full flex-col items-center justify-center gap-1 p-3 text-center text-xs text-text-secondary">
@@ -1008,8 +1067,18 @@ function CreativeGridCard({
               <div key={key} className="flex flex-col">
                 <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
                 <dd className="tabular-nums text-text-primary" dir="ltr">
-                  {/* CREATIVE-MONEY-TRUTH-001 — the currency is stated by the payload, never defaulted. */}
-                  {formatMetric(metricState(creative.metrics, key), key, locale, currency)}
+                  {/*
+                    * CONTENT-MONEY-VISIBLE-001 — money through the canonical reader, everything
+                    * else through `metricState`.
+                    *
+                    * `metricState` reads the CONVERTED column only, so a withheld spend rendered as
+                    * «No data» — on production that is every Snapchat creative, because the account
+                    * spends USD and no USD→SAR rate exists. Counts and ratios keep the old path,
+                    * which is correct for them: it already tells a measured zero from «not sent».
+                    */}
+                  {key === 'spend' || key === 'revenue'
+                    ? creativeMoney(creative.metrics, key, currency, locale).text
+                    : formatMetric(metricState(creative.metrics, key), key, locale, currency)}
                 </dd>
               </div>
             ))}

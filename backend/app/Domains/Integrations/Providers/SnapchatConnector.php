@@ -249,6 +249,29 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
     /** Snapchat takes up to 2,000 media ids per batch; chunked so a larger account is never truncated. */
     private const MEDIA_PER_REQUEST = 2000;
 
+    /** How many media ids the last sweep asked about, and how many came back with a usable file. */
+    private int $mediaAsked = 0;
+
+    private int $mediaResolved = 0;
+
+    /** The first media refusal, kept so the caller can say WHY the column is empty. */
+    private ?string $mediaFailure = null;
+
+    /**
+     * What the last media sweep did — counts and a reason, never a URL.
+     *
+     * @return array{asked:int, resolved:int, error:?string}
+     */
+    public function lastMediaOutcome(): array
+    {
+        return [
+            'asked' => $this->mediaAsked,
+            'resolved' => $this->mediaResolved,
+            // A message, never a link: a signed URL in a log is the leak this product refuses.
+            'error' => $this->mediaFailure,
+        ];
+    }
+
     private function creativesById(OAuthTokens $tokens, string $adAccountId): array
     {
         $creatives = [];
@@ -313,9 +336,15 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
      */
     private function withMedia(OAuthTokens $tokens, array $creatives): array
     {
+        $this->mediaAsked = 0;
+        $this->mediaResolved = 0;
+        $this->mediaFailure = null;
+
         $mediaIds = array_values(array_unique(array_filter(
             array_map(static fn (array $c): ?string => $c['media_id'] ?? null, $creatives),
         )));
+
+        $this->mediaAsked = count($mediaIds);
 
         if ($mediaIds === []) {
             return $creatives;
@@ -329,12 +358,20 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                     $this->api($tokens)->post($this->url('adaccounts/get_media_by_ids'), ['media_ids' => $chunk]),
                     'media',
                 );
-            } catch (\Throwable) {
+            } catch (\Throwable $e) {
                 /*
                  * The asset is an enrichment. A creative with no picture is still a creative, and
                  * failing the whole structure sweep because a media lookup was throttled would cost
                  * the campaigns, ad squads and ads that came with it.
+                 *
+                 * Contained, but no longer INVISIBLE. Swallowing this meant a media fetch could fail
+                 * for every creative in the account while the run reported success and the owner saw
+                 * blank cards — «the platform sent no media» and «we never managed to ask» produced
+                 * the identical empty column. Only the first message is kept: the rest are the same
+                 * refusal once per chunk, and repetition is not evidence.
                  */
+                $this->mediaFailure ??= $e->getMessage();
+
                 continue;
             }
 
@@ -357,6 +394,10 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             }
 
             $link = $this->safeAssetUrl($m['download_link'] ?? null);
+
+            if ($link !== null) {
+                $this->mediaResolved++;
+            }
             $isVideo = strtoupper((string) ($m['type'] ?? '')) === 'VIDEO';
 
             $creatives[$id] = array_filter([
