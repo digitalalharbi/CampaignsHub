@@ -17,10 +17,11 @@ final class IntegrationSyncRun extends Model
 
     protected $fillable = [
         'tenant_id', 'project_id', 'binding_id', 'provider_connection_id', 'type', 'status',
-        'records', 'error', 'started_at', 'finished_at',
+        'records', 'error', 'meta', 'started_at', 'finished_at',
     ];
 
     protected $casts = [
+        'meta' => 'array',
         'started_at' => 'datetime',
         'finished_at' => 'datetime',
     ];
