@@ -42,6 +42,7 @@ const COPY = {
     identity: 'التعريف',
     platform: 'المنصة',
     campaign: 'الحملة',
+    ads: 'الإعلانات التي تعرضه',
     objective: 'الهدف',
     path: 'المسار',
     copy: 'النص الإعلاني',
@@ -67,6 +68,7 @@ const COPY = {
     identity: 'Identity',
     platform: 'Platform',
     campaign: 'Campaign',
+    ads: 'Ads running it',
     objective: 'Objective',
     path: 'Path',
     copy: 'Ad copy',
@@ -235,6 +237,25 @@ export function CreativeQuickFacts({
             <dt className="text-white/45">{t.path}</dt>
             <dd className="text-white">{marketingPathLabel(data.path, locale)}</dd>
           </div>
+          {/*
+            * CREATIVE-FRONTEND-ADS-001 — one asset is routinely placed by SEVERAL ads.
+            *
+            * `ad_id` is one ad picked from many by row order, and showing it alone implied each
+            * creative belonged to exactly one. The canonical relation is `external_ads.creative_id`,
+            * the backend has sent the whole list since the presenter was fixed, and nothing read it.
+            * «Which ads are running this?» is the question somebody asks before pausing anything.
+            */}
+          {creative.ads.length > 0 && (
+            <div className="col-span-2 min-w-0">
+              <dt className="text-white/45">
+                {t.ads}
+                {creative.ads.length > 1 && <span className="ms-1 tabular-nums">({creative.ads.length})</span>}
+              </dt>
+              <dd className="truncate text-white">
+                {creative.ads.map((ad) => ad.name ?? ad.external_id).join(' · ')}
+              </dd>
+            </div>
+          )}
         </dl>
       </Section>
 
