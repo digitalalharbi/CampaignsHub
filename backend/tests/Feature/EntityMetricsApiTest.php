@@ -6,6 +6,8 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
@@ -216,10 +218,10 @@ final class EntityMetricsApiTest extends TestCase
      */
     public function test_an_objective_family_expands_to_its_member_objectives(): void
     {
-        $awareness = \App\Domains\Campaigns\Enums\ObjectiveFamily::Awareness;
+        $awareness = ObjectiveFamily::Awareness;
 
         $members = array_values(array_filter(
-            \App\Domains\Campaigns\Enums\CampaignObjective::cases(),
+            CampaignObjective::cases(),
             static fn ($o): bool => $o->family() === $awareness,
         ));
 
