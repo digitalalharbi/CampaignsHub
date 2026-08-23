@@ -370,7 +370,20 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                          * message names the fault precisely, and a row count never could.
                          */
                         $this->url("adaccounts/{$adAccountId}/get_media_by_ids"),
-                        ['media_ids' => $chunk],
+                        /*
+                         * SNAP-MEDIA-BODY-001 — `entity_ids`, and each entry is an OBJECT.
+                         *
+                         * This sent `{"media_ids": ["a", "b"]}`. The documented body is
+                         * `{"entity_ids": [{"id": "a"}, {"id": "b"}]}` — a different key AND a
+                         * different element shape, so the request was wrong twice over.
+                         *
+                         * Production named this the moment the URL was fixed: the refusal changed
+                         * from «Request URL can not be correctly processed» to «Request BODY can not
+                         * be correctly processed». One word, and it moved the search from the route
+                         * to the payload. That is the entire argument for recording a provider's own
+                         * message instead of a row count.
+                         */
+                        ['entity_ids' => array_map(static fn (string $id): array => ['id' => $id], $chunk)],
                     ),
                     'media',
                 );

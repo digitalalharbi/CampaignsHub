@@ -168,6 +168,42 @@ final class SnapchatCreativeAssetsTest extends TestCase
         Http::assertNotSent(fn ($request): bool => str_contains($request->url(), 'adaccounts/get_media_by_ids'));
     }
 
+    /**
+     * SNAP-MEDIA-BODY-001 — the body is `entity_ids`, and each entry is an OBJECT.
+     *
+     * This sent `{"media_ids": ["a"]}`; the documented shape is
+     * `{"entity_ids": [{"id": "a"}]}` — a different key AND a different element shape, wrong twice.
+     *
+     * Production named it: with the URL corrected, the refusal changed from «Request URL can not be
+     * correctly processed» to «Request BODY can not be correctly processed». Asserting the payload
+     * rather than the outcome, for the same reason the URL is asserted — a fake accepts anything, so
+     * only the shape we SEND can catch this before a deploy does.
+     */
+    public function test_the_media_request_sends_the_documented_body(): void
+    {
+        $this->fakeApi([
+            'cr-1' => ['media' => 'me-1', 'type' => 'WEB_VIEW'],
+        ], [
+            'me-1' => ['type' => 'IMAGE', 'download_link' => 'https://cf.snapchat.com/media/me-1.jpg'],
+        ]);
+
+        $this->creatives();
+
+        Http::assertSent(function ($request): bool {
+            if (! str_contains($request->url(), 'get_media_by_ids')) {
+                return false;
+            }
+
+            $body = $request->data();
+
+            return array_key_exists('entity_ids', $body)
+                && $body['entity_ids'] === [['id' => 'me-1']];
+        });
+
+        // ...and never the flat array of bare ids the platform refuses.
+        Http::assertNotSent(fn ($request): bool => array_key_exists('media_ids', (array) $request->data()));
+    }
+
     /** @return array<string, array<string, mixed>> */
     private function creatives(): array
     {
