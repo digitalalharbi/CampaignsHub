@@ -220,9 +220,21 @@ final class CreativeAdRelationTest extends TestCase
 
         $this->assertSame(
             ['ad-1', 'ad-2', 'ad-3', 'ad-4'],
-            $options['ads'],
+            array_column($options['ads'], 'value'),
             'The option list read `distinct(external_ad_id)`, which offers one ad per creative — so '
             .'three of these four were unselectable and the control looked like a complete list.',
+        );
+
+        /*
+         * CREATIVE-FRONTEND-ADS-001 — the option now carries a LABEL beside its value.
+         *
+         * The select rendered these ids as their own labels, so narrowing the library by ad meant
+         * choosing between provider ids that say nothing about which ad they are. The id stays the
+         * value — names are not unique and a name is not an address — and the name is what is read.
+         */
+        $this->assertNotEmpty(
+            array_column($options['ads'], 'label'),
+            'An ad filter that offers ids is not a control somebody can use.',
         );
     }
 

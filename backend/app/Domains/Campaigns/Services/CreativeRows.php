@@ -375,7 +375,7 @@ final class CreativeRows
      * ads exist, with every ad but the last of each creative unselectable.
      *
      * @param  Closure(): Builder  $base  a fresh bounded query, same contract as `filterOptions`
-     * @return list<string>
+     * @return list<array{value:string,label:string}> the ad ids to filter by, each with the name a person reads
      */
     private function adExternalIds(Closure $base): array
     {
@@ -385,12 +385,29 @@ final class CreativeRows
             return [];
         }
 
+        /*
+         * CREATIVE-FRONTEND-ADS-001 — an ad filter that offers ids is not a control.
+         *
+         * This returned bare `external_id` strings and the select rendered them as their own
+         * labels, so narrowing the library by ad meant choosing between a column of provider ids
+         * that say nothing about which ad they are. The NAME is what somebody recognises; the id is
+         * what the filter must send, and both fit in one option.
+         *
+         * The id remains the value, deliberately: names are not unique and a name is not an
+         * address. An ad the platform left unnamed falls back to its id rather than to an empty row.
+         */
         return ExternalAd::query()
             ->whereIn('creative_id', $creativeIds)
-            ->distinct()
             ->orderBy('external_id')
-            ->pluck('external_id')
-            ->map(static fn ($v): string => (string) $v)
+            ->get(['external_id', 'name'])
+            ->unique('external_id')
+            ->map(static fn (ExternalAd $ad): array => [
+                'value' => (string) $ad->external_id,
+                'label' => $ad->name !== null && $ad->name !== ''
+                    ? (string) $ad->name
+                    : (string) $ad->external_id,
+            ])
+            ->values()
             ->all();
     }
 

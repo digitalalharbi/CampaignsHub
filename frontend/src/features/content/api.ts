@@ -110,6 +110,15 @@ export interface CreativeCard {
   /** The two rungs between the campaign and the creative — the dashboard's drill-down needs both. */
   ad_set_id: string | null
   ad_id: string | null
+  /**
+   * CREATIVE-FRONTEND-ADS-001 — every ad running this creative, not just the first one found.
+   *
+   * `ad_id` is one ad chosen from many by row order; the canonical relation is `external_ads
+   * .creative_id`, and one asset is routinely placed by several ads across squads. The backend has
+   * sent this array since the presenter was fixed; nothing consumed it, so the library kept
+   * implying each creative belonged to exactly one ad.
+   */
+  ads: CreativeAd[]
   preview: CreativePreview
   aspect_ratio: string | null
   duration_seconds: number | null
@@ -141,12 +150,23 @@ export interface LibraryFilterOptions {
   kinds: string[]
   campaigns: Array<{ id: string; name: string; objective: string | null }>
   ad_sets: string[]
-  ads: string[]
+  /** Labelled, because a select of provider ids is not a control somebody can use. */
+  ads: Array<{ value: string; label: string }>
   objectives: string[]
   paths: string[]
   projects: Array<{ id: string; name: string; client_id: string | null }>
   clients: Array<{ id: string; name: string }>
   health: FatigueStatus[]
+}
+
+/** One ad placing a creative. The id is the address; the name is what a person recognises. */
+export interface CreativeAd {
+  id: string
+  external_id: string
+  name: string | null
+  status: string | null
+  external_ad_set_id: string | null
+  external_campaign_id: string | null
 }
 
 export interface LibraryPage {
