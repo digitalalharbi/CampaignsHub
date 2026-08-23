@@ -593,4 +593,37 @@ final class CreativeLibraryApiTest extends TestCase
             ->postJson($this->url('/group'), ['creative_ids' => [(string) $a->getKey(), (string) $b->getKey()]])
             ->assertForbidden();
     }
+
+    /**
+     * SNAP-CREATIVE-METRICS-LIVE-001 — the library must open on the creatives that ran.
+     *
+     * PostgreSQL sorts NULLs FIRST under `DESC`, and `last_active_at` is null for every creative
+     * that has never delivered. With the column finally being written, a plain `DESC` would have
+     * opened the page on the creatives with no numbers and pushed the delivering ones underneath —
+     * reproducing the empty first page by the opposite route.
+     */
+    public function test_creatives_that_delivered_sort_above_those_that_never_did(): void
+    {
+        $neverRan = $this->creative(['name' => 'Never ran', 'last_active_at' => null]);
+        $ranOnce = $this->creative(['name' => 'Ran a while ago', 'last_active_at' => now()->subDays(20)]);
+        $ranToday = $this->creative(['name' => 'Ran today', 'last_active_at' => now()]);
+
+        $names = collect($this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url($this->window()))
+            ->assertOk()
+            ->json('data.creatives'))
+            ->pluck('name')
+            ->all();
+
+        $this->assertSame(
+            ['Ran today', 'Ran a while ago', 'Never ran'],
+            $names,
+            'A creative with no delivery must never outrank one that ran.',
+        );
+
+        // Guard the fixture itself: the assertion above is only meaningful if the null is real.
+        $this->assertNull($neverRan->fresh()?->last_active_at);
+        $this->assertNotNull($ranOnce->fresh()?->last_active_at);
+        $this->assertNotNull($ranToday->fresh()?->last_active_at);
+    }
 }

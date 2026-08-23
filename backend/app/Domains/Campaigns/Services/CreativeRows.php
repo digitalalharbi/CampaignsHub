@@ -276,12 +276,21 @@ final class CreativeRows
         return match ($sort) {
             'name' => $query->orderBy('name')->orderBy('id'),
             'oldest' => $query->orderBy('first_seen_at')->orderBy('id'),
+            /*
+             * SNAP-CREATIVE-METRICS-LIVE-001 — NULLS LAST, and it is not a refinement.
+             *
+             * PostgreSQL sorts NULLs FIRST under `DESC`. `last_active_at` is null for every creative
+             * that has never delivered, so the moment `UpsertCreativeDailyMetrics` began writing the
+             * column, the default order would have opened the library on the creatives with no
+             * delivery and pushed the ones that ran below them — the same empty first page, arrived
+             * at by the opposite route.
+             */
             default => $query
-                ->orderByDesc('last_active_at')
-                ->orderByDesc('last_synced_at')
+                ->orderByRaw('external_creatives.last_active_at DESC NULLS LAST')
+                ->orderByRaw('external_creatives.last_synced_at DESC NULLS LAST')
                 // `id` last, always: the first two tie freely across a batch synced in one run, and
                 // an ordering with ties repeats and skips rows across pages.
-                ->orderBy('id'),
+                ->orderBy('external_creatives.id'),
         };
     }
 
