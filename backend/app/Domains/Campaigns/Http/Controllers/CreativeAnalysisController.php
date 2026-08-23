@@ -14,6 +14,7 @@ use App\Domains\Campaigns\Services\CreativeFatigue;
 use App\Domains\Campaigns\Services\CreativeFunnel;
 use App\Domains\Campaigns\Services\CreativeInsights;
 use App\Domains\Campaigns\Services\CreativeMetrics;
+use App\Domains\Campaigns\Services\CreativeMetricsAvailability;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
@@ -113,6 +114,15 @@ final class CreativeAnalysisController extends Controller
             'per_page' => $perPage,
             'total' => $health === '' ? $total : count($rows),
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            /*
+             * CONTENT-STATE-SEMANTICS-001 — why an empty card is empty, per provider.
+             *
+             * Without this the page can only say «لا توجد بيانات», which is simultaneously the
+             * message for a creative that did not run, a provider that has no creative-level
+             * reporting at all, and a fetch that failed. Read from the sync run rather than
+             * inferred from an absent value: an empty metrics object looks identical in all three.
+             */
+            'metrics_availability' => app(CreativeMetricsAvailability::class)->forCreatives($creatives),
             'filters' => $this->filterOptions($request, $project),
         ], 'Creative library.');
     }

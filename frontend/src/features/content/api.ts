@@ -155,6 +155,13 @@ export interface LibraryPage {
   per_page: number
   total: number
   period: { from: string; to: string }
+  /**
+   * CONTENT-STATE-SEMANTICS-001 — why an empty card is empty, keyed by provider.
+   *
+   * Written by the sync at the moment it knew, because an absent metrics object looks identical
+   * whether the platform was never asked, the request failed, or the creative did not run.
+   */
+  metrics_availability: Record<string, import('./availability').MetricsAvailability>
   filters: LibraryFilterOptions
 }
 
