@@ -134,7 +134,7 @@ describe('derived money and timeseries provenance', () => {
   })
 })
 
-import { rowCostPer, rowMoney, rowRoas } from './format'
+import { money, rowCostPer, rowMoney, rowRoas } from './format'
 
 /**
  * MONEY-TRUTH-002 — breakdown rows obey the same contract as the summary cards.
@@ -179,5 +179,39 @@ describe('breakdown rows', () => {
   /** A row that genuinely spent nothing must still say zero — this is a measurement. */
   it('a row that spent nothing still reads zero', () => {
     expect(rowMoney({ spend: 0, spend_withheld_rows: 0 }, 'spend')).toBe('0 SAR')
+  })
+})
+
+/**
+ * MONEY-TRUTH-003 — campaign details read the same contract, and budget deliberately does not.
+ */
+describe('campaign detail money', () => {
+  const k = {
+    spend: 0, revenue: 0, roas: 0, cpa: 0, cpc: 0, cpm: 0,
+    conversions: 102, clicks: 21802, impressions: 2884062,
+    spend_original: 4128.93, spend_withheld_rows: 262,
+    revenue_original: 12969.03, revenue_withheld_rows: 262,
+    money_original_currency: 'USD', money_original_currencies: 1,
+  }
+
+  it('spend, CPA, CPC and CPM all follow the withheld provenance', () => {
+    expect(rowMoney(k, 'spend', 'SAR')).toBe('4,128.93 USD')
+    expect(rowCostPer(k, 'cpa', 'conversions', 'SAR')).toContain('USD')
+    expect(rowCostPer(k, 'cpc', 'clicks', 'SAR')).toContain('USD')
+
+    // CPM divides by impressions per THOUSAND — 4128.93 / 2884.062 ≈ 1.43
+    const cpm = rowCostPer(k, 'cpm', k.impressions / 1000, 'SAR')
+    expect(cpm).toContain('USD')
+    expect(cpm).toMatch(/1\.4/)
+  })
+
+  /**
+   * A campaign BUDGET is set by the advertiser in the campaign's own currency and is never withheld.
+   * Routing it through the provider-money contract would invent a provenance question it does not
+   * have — so it must keep reading as an ordinary amount.
+   */
+  it('budget is not a provider figure and keeps its own currency', () => {
+    expect(money(50000, 'SAR')).toContain('SAR')
+    expect(money(50000, 'SAR')).not.toContain('USD')
   })
 })

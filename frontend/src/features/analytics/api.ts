@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getData } from '@/lib/api/client'
 
 /** KPI bundle returned by every aggregation (base sums + derived ratios; nulls when undefined). */
-export interface MetricTotals {
+export interface MetricTotals extends MoneyProvenance {
   impressions: number
   clicks: number
   conversions: number

@@ -86,7 +86,7 @@ export function trend(delta: number | null | undefined): Trend {
 export type MoneyReading = { text: string; withheld: boolean; note: string | null }
 
 export function moneyFromTotals(
-  totals: Record<string, unknown> | undefined,
+  totals: MoneyTotals,
   key: 'spend' | 'revenue',
   ar: boolean,
   reportingCurrency: string | null = null,
@@ -120,7 +120,7 @@ export function rowMoney(row: MoneyTotals, key: 'spend' | 'revenue', currency: s
 export function rowCostPer(
   row: MoneyTotals,
   key: string,
-  denominator: string,
+  denominator: string | number,
   currency: string | null = null,
 ): string {
   return formatMoneyReading(readCostPer(row, key, denominator, currency, true), money)
