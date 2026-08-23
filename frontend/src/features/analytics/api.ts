@@ -138,6 +138,13 @@ export interface Summary {
    * surface reads this instead of assuming a market's currency.
    */
   currency: string | null
+  /**
+   * ANALYTICS-PROVENANCE-001 — whether these figures are real, seeded, or both.
+   *
+   * Derived by the backend from `is_demo` on the rows actually in scope. The frontend must not infer
+   * it from the environment or a constant: neither knows whose rows these are.
+   */
+  provenance: { source: 'live' | 'demo' | 'mixed' | 'none'; live_rows: number; demo_rows: number }
 }
 export interface TimePoint extends MetricTotals {
   date: string

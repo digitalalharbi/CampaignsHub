@@ -15,7 +15,7 @@ import { EmptyState, Skeleton } from '@/components/ui/States'
 import { ChartCard, PlatformDonutChart, ProgressRing, RankingBarChart, SpendRevenueAreaChart } from '@/features/analytics/charts'
 import { useBudget, useCampaigns, usePlatforms, useSummary, useTimeseries } from '@/features/analytics/api'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
-import { DemoBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
+import { ProvenanceBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
 import { compact, money, num, ratio } from '@/features/analytics/format'
 import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
@@ -149,7 +149,7 @@ export function CampaignsPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{ar ? 'الحملات' : 'Campaigns'}</h1>
-            <DemoBadge />
+            <ProvenanceBadge provenance={summary.data?.provenance} />
           </div>
           <p className="mt-1 text-sm text-text-secondary">
             <span className="tnum font-semibold text-text-primary">{counts.total}</span>{ar ? ' حملة في المشروع الحالي — كل مشروع معزول عن غيره.' : ' campaigns in the current project — each project is isolated from the others.'}

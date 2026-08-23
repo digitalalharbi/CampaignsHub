@@ -38,7 +38,7 @@ import {
   emptyCreativeSharing,
   type CreativeSharing,
 } from './ShareCreativeControls'
-import { DemoBadge } from '@/features/analytics/components'
+import { ProvenanceBadge, type Provenance } from '@/features/analytics/components'
 import { InteractiveReport } from './InteractiveReport'
 import { AnnotationsPanel } from './AnnotationsPanel'
 import { useProject } from '@/stores/project'
@@ -137,13 +137,29 @@ export function ReportsPage() {
 
   const s = list.data?.summary
 
+  /*
+   * ANALYTICS-PROVENANCE-001 — this page used to print «Demo» beside its title unconditionally, even
+   * for a project whose every report was generated from live Snapchat spend.
+   *
+   * The rows already know: each report carries `is_demo`. Derive from ALL of them, not the filtered
+   * view, so narrowing by type cannot change what the project is said to be.
+   */
+  const demoReports = allRows.filter((r) => r.is_demo).length
+  const provenance: Provenance | undefined = allRows.length === 0
+    ? undefined
+    : {
+        source: demoReports > 0 && demoReports < allRows.length ? 'mixed' : demoReports > 0 ? 'demo' : 'live',
+        live_rows: allRows.length - demoReports,
+        demo_rows: demoReports,
+      }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{ar ? 'التقارير' : 'Reports'}</h1>
-            <DemoBadge />
+            <ProvenanceBadge provenance={provenance} />
           </div>
           <p className="mt-1 text-sm text-text-secondary">{ar ? 'مستندات محفوظة قابلة للإنشاء والتصدير والإرسال' : 'Saved documents you can generate, export and send'}</p>
         </div>
