@@ -129,7 +129,11 @@ Measured across three branches this session, each failing a different, unrelated
 |---|---|---|
 | #73 | `client-portal.spec.ts:53` | **webkit only**, passed locally on webkit; post-reload assertion at a 15s timeout |
 | #76 | `registration-onboarding.spec.ts:191` | **passed chromium in 7.0s, failed firefox in 29.3s — same run**. A timeout |
+| #77 | `simplification-agency.spec.ts:40` | **webkit only**, 25.6s. A timeout |
 | #75 | `expansion-surfaces.spec.ts` `/app/integrations` | **HTTP 500**. Not a timeout |
+
+**#73's failure cleared on re-run with no code change**, and its gate then passed in 1h2m. That is
+direct evidence for the flakiness reading of the three timeout-shaped failures.
 
 The first two are one browser failing what another passed in the same run, at durations that say
 timeout. `playwright.config.ts` sets `workers: 1`, so the gate runs 144 tests × 3 browsers serially
