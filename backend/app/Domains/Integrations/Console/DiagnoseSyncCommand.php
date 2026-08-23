@@ -455,6 +455,30 @@ final class DiagnoseSyncCommand extends Command
         $this->line('  creatives with any figure   : '.$withMetrics.' of '.$creativeIds->count());
         $this->line('  latest metric_date          : '.($latest ?? '—'));
 
+        /*
+         * SNAP-CREATIVE-METRICS-LIVE-001 — the column that decides what the library OPENS on.
+         *
+         * The counts above were both true and useless for the actual defect: 814 rows existed and
+         * the library still read as empty, because its default order is `last_active_at DESC` and
+         * nothing in the pipeline had ever written that column. Counting metric rows could not
+         * distinguish «the numbers are missing» from «the numbers are on page 47».
+         *
+         * So this is the number to read after a deploy: if delivering creatives have no last active
+         * day, the sort has nothing to work with and the first page is arbitrary again.
+         */
+        $active = $creativeIds->isEmpty() ? 0 : ExternalCreative::withoutGlobalScopes()
+            ->whereIn('id', $creativeIds->all())
+            ->whereNotNull('last_active_at')
+            ->count();
+
+        $this->line('  creatives with a last active day : '.$active.' of '.$creativeIds->count()
+            .'  ← the library sorts on this; 0 means the first page is arbitrary');
+
+        if ($withMetrics > 0 && $active === 0) {
+            $this->warn('  Creatives HAVE figures but none has a last active day. The delivering ones are '
+                .'scattered through the pager and the library will look empty — run the backfill.');
+        }
+
         if ($metricRows === 0 && $creativeIds->isNotEmpty()) {
             $this->warn('  No creative-level figures at all. Every creative will read «لا توجد بيانات» — '
                 .'correctly, because nothing has been fetched for them.');
