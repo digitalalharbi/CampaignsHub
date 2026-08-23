@@ -272,7 +272,7 @@ function Title({ platform, children, sub }: { platform?: string; children: React
   )
 }
 
-function Kpi({ label, value, exact, delta, invert, spark, accent }: { label: string; value: string; exact?: string; delta?: number | null; invert?: boolean; spark?: number[]; accent?: string }) {
+function Kpi({ label, value, exact, note, delta, invert, spark, accent }: { label: string; value: string; exact?: string; note?: string | null; delta?: number | null; invert?: boolean; spark?: number[]; accent?: string }) {
   return (
     <div className="rounded-2xl border border-border bg-surface-secondary p-3">
       <div className="flex items-center justify-between">
@@ -282,6 +282,8 @@ function Kpi({ label, value, exact, delta, invert, spark, accent }: { label: str
       <div className="tnum mt-1 text-[24px] font-extrabold leading-none tracking-tight text-text-primary">{value}</div>
       {/* Exact value under the (possibly compact) headline, so the precise figure is always in the PDF. */}
       {exact && exact !== value && <div className="tnum mt-0.5 text-[11px] text-text-muted" data-exact>{exact}</div>}
+      {/* Why a figure is not in the project's currency — the reader of a report has no other screen. */}
+      {note && <div className="mt-0.5 text-[11px] leading-tight text-text-muted">{note}</div>}
       {spark && spark.length > 1 && <div className="mt-1"><KpiSparkline points={spark} color={accent} height={22} /></div>}
     </div>
   )
@@ -302,13 +304,39 @@ const seriesOf = (rows: Row[], k: string | null): number[] | undefined => {
 const pRow = (data: ReportData, p: string) => data.platforms.find((r) => r.provider === p) as Record<string, number> | undefined
 
 /** How an absent reading is written on a card — the same two states the dashboard uses. */
+/**
+ * MONEY-TRUTH-004 — a report must never say «لا توجد بيانات» over money that exists.
+ *
+ * This predates the `withheld` variant, so it fell through the final `:` and a client report printed
+ * «لا توجد بيانات» for spend the platform really reported — the same figure Analytics shows in full.
+ * A shared report contradicting the dashboard is the worst place for this to surface, because the
+ * reader has no other screen to check it against.
+ */
 const readingText = (r: MetricReading): string =>
-  r.kind === 'value' ? r.text : r.kind === 'not_provided' ? 'لم ترسله المنصة' : 'لا توجد بيانات'
+  r.kind === 'value' ? r.text
+    : r.kind === 'withheld' ? r.original
+      : r.kind === 'not_provided' ? 'لم ترسله المنصة'
+        : 'لا توجد بيانات'
+
+/** The reason a withheld figure is not in the project's currency, for the reader of a report. */
+const readingNote = (r: MetricReading): string | null =>
+  r.kind === 'withheld' ? 'التحويل إلى عملة المشروع غير متاح حاليًا' : null
 
 /** The un-abbreviated figure for the selectable strip under the cards. */
 const exactOf = (m: ReportMetric, data: ReportData): string => {
   const direct = data.objective_performance?.direct
   const value = direct && (m.key === 'cpa' || m.key === 'roas') ? direct[m.key] : data.kpis[m.key]
+
+  /*
+   * The READING decides first, before the raw value is consulted.
+   *
+   * A withheld figure is already exact and already carries its own currency, so `moneyExact` would
+   * relabel it with the project's — and this strip is what a PDF extracts, which would put the wrong
+   * unit into a document a client keeps. Checking it before the null guard also means a payload that
+   * sends null rather than a coalesced 0 still renders the real amount instead of «—».
+   */
+  if (m.reading.kind === 'withheld') return m.reading.original
+
   if (value === null || value === undefined) return '—'
 
   return SPECS[m.key]?.format === money ? moneyExact(value, data.currency) : (m.reading.kind === 'value' ? m.reading.text : '—')
@@ -429,7 +457,8 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
             key={m.key}
             label={m.label}
             value={readingText(m.reading)}
-            delta={m.delta ?? undefined}
+            note={readingNote(m.reading)}
+            delta={m.reading.kind === 'withheld' ? undefined : (m.delta ?? undefined)}
             invert={m.invertGood}
             spark={m.reading.kind === 'value' ? seriesOf(data.timeseries, m.series) : undefined}
             accent={ACCENTS[m.key] ?? 'var(--brand-600)'}
@@ -544,6 +573,7 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
             key={m.key}
             label={m.label}
             value={readingText(m.reading)}
+            note={readingNote(m.reading)}
             spark={m.reading.kind === 'value' ? seriesOf(series, m.series) : undefined}
             accent={ACCENTS[m.key] ?? 'var(--brand-600)'}
           />
