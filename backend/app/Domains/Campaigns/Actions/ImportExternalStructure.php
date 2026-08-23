@@ -176,6 +176,20 @@ final class ImportExternalStructure
                 'format' => (string) ($creative['format'] ?? 'image'),
                 'thumbnail_url' => $creative['thumbnail_url'] ?? null,
                 'preview_url' => $creative['preview_url'] ?? null,
+                /*
+                 * SNAP-CREATIVE-ASSETS-001 — the file itself, when the connector resolved one.
+                 *
+                 * These two columns existed, were fillable, were read by `CreativePresenter`, and
+                 * nothing had ever written them. A connector could fetch an asset perfectly and the
+                 * row would still come out empty, so the card said «this platform does not expose
+                 * the creative's asset» — a claim about the provider that was really a gap here.
+                 *
+                 * Null-coalesced rather than omitted: a provider that sends no asset must not have
+                 * a previously-stored one silently kept alive under a new sync.
+                 */
+                'asset_url' => $creative['asset_url'] ?? null,
+                'video_url' => $creative['video_url'] ?? null,
+                'asset_expires_at' => $this->time($creative['asset_expires_at'] ?? null),
                 'destination_url' => $creative['destination_url'] ?? null,
                 'source_type' => 'api',
                 'is_demo' => false,

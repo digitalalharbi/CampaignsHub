@@ -124,7 +124,7 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
      * is passed through or left null — never constructed, because a fabricated preview is indist-
      * inguishable from a real one at a glance and wrong in a way nobody checks.
      *
-     * @return list<array{external_id:string,ad_set_external_id:?string,campaign_external_id:?string,name:string,status:string,review_status?:?string,destination_url?:?string,creative?:array{external_id:string,name?:?string,format?:?string,thumbnail_url?:?string,preview_url?:?string},raw:array<string,mixed>}>
+     * @return list<array{external_id:string,ad_set_external_id:?string,campaign_external_id:?string,name:string,status:string,review_status?:?string,destination_url?:?string,creative?:array{external_id:string,name?:?string,format?:?string,thumbnail_url?:?string,preview_url?:?string,asset_url?:?string,video_url?:?string,asset_expires_at?:?string,media_id?:?string,source_updated_at?:?string},raw:array<string,mixed>}>
      */
     abstract protected function fetchAds(OAuthTokens $tokens, string $adAccountId): array;
 
