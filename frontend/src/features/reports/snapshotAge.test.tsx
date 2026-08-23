@@ -54,4 +54,44 @@ describe('a report states how current it is', () => {
 
     expect(screen.getByTestId('report-snapshot-age')).toHaveTextContent('swipe_28d')
   })
+
+  /*
+   * REPORTS-RECONCILIATION-001 — a snapshot computed under older rules cannot reconcile with
+   * today's Analytics, and saying «stale» is not the same as saying «incomparable».
+   */
+  it('warns when the snapshot predates the current aggregation contract', () => {
+    render(
+      <InteractiveReport
+        data={{ ...(base as object), mode: 'snapshot', generated_at: '2026-07-01T09:00:00Z', data_version: 1 } as never}
+        meta={meta}
+      />,
+    )
+
+    expect(screen.getByTestId('report-stale-contract')).toBeInTheDocument()
+  })
+
+  /** A current snapshot says nothing extra — the warning must mean something when it appears. */
+  it('says nothing extra when the snapshot is on the current contract', () => {
+    render(
+      <InteractiveReport
+        data={{ ...(base as object), mode: 'snapshot', generated_at: '2026-07-01T09:00:00Z', data_version: 2 } as never}
+        meta={meta}
+      />,
+    )
+
+    expect(screen.queryByTestId('report-stale-contract')).not.toBeInTheDocument()
+  })
+
+  /** A live report recomputes, so the contract question does not arise. */
+  it('does not warn a live report about an old contract', () => {
+    render(
+      <InteractiveReport
+        data={{ ...(base as object), mode: 'live', generated_at: '2026-07-01T09:00:00Z', data_version: 1 } as never}
+        meta={meta}
+      />,
+    )
+
+    expect(screen.queryByTestId('report-stale-contract')).not.toBeInTheDocument()
+  })
+
 })
