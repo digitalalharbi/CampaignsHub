@@ -68,6 +68,14 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/timeseries', [MetricsController::class, 'timeseries'])->name('metrics.timeseries');
     Route::get('metrics/platforms', [MetricsController::class, 'platforms'])->name('metrics.platforms');
     Route::get('metrics/campaigns', [MetricsController::class, 'campaigns'])->name('metrics.campaigns');
+    /*
+     * ANALYTICS-DRILLDOWN-001 — the two rungs beneath a campaign.
+     *
+     * `{level}` is `ad_set` or `ad`; anything else is refused in the controller rather than
+     * answered emptily, because an empty list reads as «this level has no data» and that is a
+     * different statement from «there is no such level».
+     */
+    Route::get('metrics/entities/{level}', [MetricsController::class, 'entities'])->name('metrics.entities');
     // CAMPAIGN-020: side-by-side comparison of 2–5 campaigns of this project.
     Route::get('metrics/compare', [MetricsController::class, 'compare'])->name('metrics.compare');
     Route::get('metrics/funnel', [MetricsController::class, 'funnel'])->name('metrics.funnel');

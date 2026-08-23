@@ -474,6 +474,66 @@ final class DiagnoseSyncCommand extends Command
         $this->line('  creatives with a last active day : '.$active.' of '.$creativeIds->count()
             .'  ← the library sorts on this; 0 means the first page is arbitrary');
 
+        /*
+         * METRICS-BACKBONE-001 — whether the two new rungs actually have numbers in them.
+         *
+         * `entity_daily_metrics` was created, its ingest written, its aggregator built and its API
+         * exposed — and for a while nothing called any of it, so the table sat empty in production
+         * while every test passed. There is no way to tell «wired but not yet swept» from «wired and
+         * broken» without asking the table, and this is the line that asks.
+         *
+         * Counted per grain because they fail independently: `breakdown=adsquad` is a different call
+         * to a different endpoint from `breakdown=ad`, and one can work while the other is refused.
+         */
+        $entityRows = DB::table('entity_daily_metrics')
+            ->where('project_id', $projectId)
+            ->selectRaw('COUNT(*) AS total')
+            ->selectRaw("COUNT(*) FILTER (WHERE entity_type = 'ad_set') AS ad_sets")
+            ->selectRaw("COUNT(*) FILTER (WHERE entity_type = 'ad') AS ads")
+            ->selectRaw('COUNT(DISTINCT entity_id) FILTER (WHERE entity_type = \'ad_set\') AS distinct_ad_sets')
+            ->selectRaw('COUNT(DISTINCT entity_id) FILTER (WHERE entity_type = \'ad\') AS distinct_ads')
+            ->selectRaw('MAX(metric_date) AS latest')
+            ->first();
+
+        $this->line('');
+        $this->line('  AD SET / AD METRICS — the rungs Analytics could not show before');
+        $this->line('  entity_daily_metrics rows : '.(int) ($entityRows->total ?? 0));
+        $this->line('  ad_set rows / entities    : '.(int) ($entityRows->ad_sets ?? 0).' / '.(int) ($entityRows->distinct_ad_sets ?? 0));
+        $this->line('  ad rows / entities        : '.(int) ($entityRows->ads ?? 0).' / '.(int) ($entityRows->distinct_ads ?? 0));
+        $this->line('  latest metric_date        : '.($entityRows->latest ?? '—'));
+
+        /*
+         * What the last sweep RECORDED about these grains — the answer the row count cannot give.
+         *
+         * `entity_failure` is the first refusal the connector met while sweeping; `entity_ad_sets`
+         * and `entity_ads` are what it managed to write. Together they separate «never swept» from
+         * «swept and refused», which a count of zero cannot.
+         */
+        $lastMeta = MetricSyncRun::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->whereNotNull('meta')
+            ->orderByDesc('started_at')
+            ->value('meta');
+
+        $meta = is_array($lastMeta) ? $lastMeta : (array) json_decode((string) $lastMeta, true);
+
+        if (array_key_exists('entity_ad_sets', $meta)) {
+            $this->line('  last sweep wrote          : '.(int) $meta['entity_ad_sets'].' ad-set row(s), '
+                .(int) ($meta['entity_ads'] ?? 0).' ad row(s)');
+
+            if (($meta['entity_failure'] ?? null) !== null) {
+                $this->warn('  the platform refused     : '.$meta['entity_failure']);
+            }
+        } else {
+            $this->line('  last sweep wrote          : nothing recorded — no sweep has run since the '
+                .'ingest was wired');
+        }
+
+        if ((int) ($entityRows->total ?? 0) === 0) {
+            $this->warn('  Empty. Read the two lines above: «nothing recorded» means no sweep has run '
+                .'since the ingest shipped; a refusal names what the platform said.');
+        }
+
         if ($withMetrics > 0 && $active === 0) {
             $this->warn('  Creatives HAVE figures but none has a last active day. The delivering ones are '
                 .'scattered through the pager and the library will look empty — run the backfill.');

@@ -663,6 +663,15 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         }
     }
 
+    /** The first refusal seen while sweeping a grain, kept so the caller can record WHY it is empty. */
+    private ?string $entityFailure = null;
+
+    /** The first refusal from the last sweep, or null when every parent answered. */
+    public function lastEntityFailure(): ?string
+    {
+        return $this->entityFailure;
+    }
+
     public function fetchEntityInsights(
         OAuthTokens $tokens,
         string $adAccountId,
@@ -674,6 +683,7 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
     ): array {
         $window = ReportingWindow::localDays($this->accountTimezone($adAccountId), $from, $to);
         $rows = [];
+        $this->entityFailure = null;
 
         foreach ($parentIds as $parentId) {
             foreach ($window->chunked($this->maxDaysPerRequest()) as $chunk) {
@@ -687,7 +697,17 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                     foreach ($this->fetchEntityWindow($parentPath, $parentId, $tokens, $chunk, $breakdown) as $row) {
                         $rows[] = $row;
                     }
-                } catch (\Throwable) {
+                } catch (\Throwable $e) {
+                    /*
+                     * Contained, but no longer silent.
+                     *
+                     * Swallowing this is what made an empty `entity_daily_metrics` unexplainable:
+                     * «the sweep has not run yet» and «the platform refused every call» produced the
+                     * identical empty table. The first message is kept — the rest are almost always
+                     * the same refusal repeated once per parent, and 187 copies is not evidence.
+                     */
+                    $this->entityFailure ??= $e->getMessage();
+
                     continue;
                 }
             }

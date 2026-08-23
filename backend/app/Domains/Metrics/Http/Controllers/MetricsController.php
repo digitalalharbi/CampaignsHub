@@ -4,12 +4,18 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Http\Controllers;
 
+use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
+use App\Domains\Campaigns\Models\ExternalAd;
+use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricDefinition;
 use App\Domains\Metrics\Services\AttributionTransparency;
 use App\Domains\Metrics\Services\DataFreshnessService;
+use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Projects\Context\ProjectContext;
@@ -609,6 +615,130 @@ final class MetricsController extends Controller
 
     // ---- helpers ----------------------------------------------------------------------------------
 
+    /**
+     * ANALYTICS-DRILLDOWN-001 — the ad-squad and ad rungs, for the Analytics tabs that had no data.
+     *
+     * ## Why this endpoint exists
+     *
+     * Analytics could show Overview, Platform and Campaign because `daily_metrics` answers at the
+     * campaign grain. It had no Ad Set tab and no Ads tab because there was no table beneath that —
+     * 187 ad squads and 5,706 ads on the live account with nowhere to read a number from.
+     * `entity_daily_metrics` now holds them and `EntityMetricsAggregator` reads them; this is the
+     * only thing between that data and a screen.
+     *
+     * ## Filters narrow the QUERY, never the response
+     *
+     * `parent` is applied inside the aggregator's SQL, not by filtering rows after the fact. The
+     * difference matters on an account with 5,706 ads: post-filtering means fetching all of them to
+     * show twenty, and it means a paginated total that lies about how many there are.
+     *
+     * The window, provider, objective and attribution basis all come from the same request helpers
+     * every other metric endpoint uses, so a drill-down cannot silently change basis as it descends.
+     */
+    public function entities(Request $request, string $project, string $level): JsonResponse
+    {
+        $this->authorizeView($request);
+
+        /*
+         * Only the two rungs this table holds. An unknown grain is refused rather than answered
+         * emptily — an empty list reads as «this ad set has no data», which is a different and
+         * wrong statement from «there is no such level».
+         */
+        // $project is the group's own {project} binding and is named here only so $level lands on
+        // the right argument — Laravel passes route parameters positionally to a controller action.
+        unset($project);
+
+        abort_unless(
+            in_array($level, [EntityDailyMetric::AD_SET, EntityDailyMetric::AD], true),
+            404,
+            'Unknown entity level.',
+        );
+
+        [$from, $to] = $this->range($request);
+
+        $projectId = app(ProjectContext::class)->projectId();
+        abort_if($projectId === null, 400, 'A project is required to read entity metrics.');
+
+        $parents = $this->parentFilter($request);
+
+        $rows = app(EntityMetricsAggregator::class)->byEntity(
+            (string) $projectId,
+            $level,
+            $from,
+            $to,
+            $parents,
+            $request->filled('attribution_window') ? $request->string('attribution_window')->toString() : null,
+        );
+
+        return ApiResponse::success([
+            'entities' => $this->nameEntities($level, $rows),
+            'entity_type' => $level,
+            'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            // What the money on these rows is IN — the same statement every other surface makes.
+            'currency' => $this->rangeCurrency($from, $to),
+            'attribution_window' => $request->string('attribution_window')->toString() ?: null,
+        ], 'Entity metrics.');
+    }
+
+    /**
+     * The parents to narrow to, or null for «every entity of this grain».
+     *
+     * An EXPLICITLY EMPTY `parent=` is not the same as an absent one: it means «the parent I chose
+     * has no children», and answering it with everything in the project is how a drill-down stops
+     * being a drill-down.
+     *
+     * @return list<string>|null
+     */
+    private function parentFilter(Request $request): ?array
+    {
+        if (! $request->has('parent')) {
+            return null;
+        }
+
+        $raw = $request->string('parent')->toString();
+
+        return $raw === '' ? [] : array_values(array_filter(explode(',', $raw)));
+    }
+
+    /**
+     * Put a NAME on each row — a drill-down of provider ids is not a screen anybody can use.
+     *
+     * The figures come from `entity_daily_metrics` and the identity from the structure tables, joined
+     * here rather than denormalised into the metrics rows: a renamed ad squad must not need its
+     * metrics rewritten, and the metrics table has no business holding a name that can change.
+     *
+     * @param  list<array<string,mixed>>  $rows
+     * @return list<array<string,mixed>>
+     */
+    private function nameEntities(string $entityType, array $rows): array
+    {
+        $ids = array_values(array_filter(array_column($rows, 'entity_id')));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $named = $entityType === EntityDailyMetric::AD
+            ? ExternalAd::withoutGlobalScopes()->whereIn('id', $ids)
+                ->get(['id', 'name', 'status', 'external_id', 'external_ad_set_id', 'external_campaign_id'])
+            : ExternalAdSet::withoutGlobalScopes()->whereIn('id', $ids)
+                ->get(['id', 'name', 'status', 'external_id', 'external_campaign_id']);
+
+        $byId = $named->keyBy(fn ($m): string => (string) $m->getKey());
+
+        return array_map(static function (array $row) use ($byId): array {
+            $entity = $byId->get((string) $row['entity_id']);
+
+            return [
+                ...$row,
+                // Null rather than a placeholder: a row whose entity the structure sweep has since
+                // removed is a real state, and inventing «Unknown ad set» would hide it.
+                'name' => $entity?->name,
+                'status' => $entity?->status,
+            ];
+        }, $rows);
+    }
+
     private function authorizeView(Request $request): void
     {
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
@@ -631,7 +761,36 @@ final class MetricsController extends Controller
     /** The objective filter from the request (?objective=sales,leads). Empty when absent. @return list<string> */
     private function objectiveFilter(Request $request): array
     {
-        return $this->listFilter($request, 'objective');
+        $objectives = $this->listFilter($request, 'objective');
+
+        /*
+         * ANALYTICS-OBJECTIVE-FILTERS-001 — a FAMILY narrows the query, not just the KPI order.
+         *
+         * `?objective=` takes exact objective values, which is right for a precise filter and wrong
+         * for the control an operator actually wants: «show me the awareness work» means awareness
+         * AND reach, and «sales» means sales, conversions, purchases and add-to-cart. Making the
+         * user tick four boxes to mean one thing is how a filter stops being used.
+         *
+         * Expanded to member objectives HERE, so the narrowing happens in the aggregator's SQL. A
+         * family resolved in the frontend would filter rows already aggregated across every
+         * objective — the totals would still be the unfiltered ones, and the page would look
+         * filtered while telling the truth about nothing.
+         */
+        foreach ($this->listFilter($request, 'objective_family') as $family) {
+            $case = ObjectiveFamily::tryFrom($family);
+
+            if ($case === null) {
+                continue;
+            }
+
+            foreach (CampaignObjective::cases() as $objective) {
+                if ($objective->family() === $case) {
+                    $objectives[] = $objective->value;
+                }
+            }
+        }
+
+        return array_values(array_unique($objectives));
     }
 
     /**

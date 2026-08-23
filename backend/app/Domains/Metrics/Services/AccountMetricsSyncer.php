@@ -417,14 +417,24 @@ final class AccountMetricsSyncer
             ];
         }
 
-        app(UpsertEntityDailyMetrics::class)->execute(
+        $squadResult = app(UpsertEntityDailyMetrics::class)->execute(
             $account, EntityDailyMetric::AD_SET, $squadRows, $knownSquads, (string) $run->getKey(),
         );
 
         $adRows = $this->grain(
+            /*
+             * Ads come from the CAMPAIGN endpoint, not the ad-squad one.
+             *
+             * The current API documents both `breakdown=ad` and `breakdown=adsquad` on
+             * `campaigns/{id}/stats`; the ad-squad endpoint documents no breakdown at all. Sweeping
+             * ads from their squads therefore asked 187 times for something that endpoint does not
+             * offer — which is exactly the shape of «every call refused, table silently empty».
+             *
+             * Asking campaigns for both grains is also 89 calls instead of 187 + 89.
+             */
             fn (): array => $connector->syncEntityInsights(
-                $account->external_id, 'adsquads', 'ad',
-                $squads->pluck('external_id')->map(static fn ($v): string => (string) $v)->all(),
+                $account->external_id, 'campaigns', 'ad',
+                $campaigns->values()->all(),
                 $from->toDateString(), $to->toDateString(),
             )->records,
         );
@@ -444,9 +454,26 @@ final class AccountMetricsSyncer
             ];
         }
 
-        app(UpsertEntityDailyMetrics::class)->execute(
+        $adResult = app(UpsertEntityDailyMetrics::class)->execute(
             $account, EntityDailyMetric::AD, $adRows, $knownAds, (string) $run->getKey(),
         );
+
+        /*
+         * Record WHY the grains are empty, when they are.
+         *
+         * An empty `entity_daily_metrics` has two completely different causes — no sweep has run
+         * since the ingest was wired, or the platform refused every call — and a row count cannot
+         * tell them apart. The run already carries a `meta` column; putting the first refusal there
+         * costs no migration and makes the next diagnostic explain itself instead of guessing.
+         */
+        $run->forceFill([
+            'meta' => [
+                ...(array) ($run->meta ?? []),
+                'entity_ad_sets' => $squadResult['upserted'],
+                'entity_ads' => $adResult['upserted'],
+                'entity_failure' => $connector->lastEntityFailure(),
+            ],
+        ])->save();
     }
 
     /**
