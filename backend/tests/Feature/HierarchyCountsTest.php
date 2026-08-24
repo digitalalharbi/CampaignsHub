@@ -307,6 +307,53 @@ final class HierarchyCountsTest extends TestCase
             ->assertSuccessful();
     }
 
+    /**
+     * DIAGNOSE-LATEST-RECORDED-001 — a newer run that answers a DIFFERENT question must not silence
+     * the one that answered this one.
+     *
+     * The entity and creative blocks read the newest `meta` and said «nothing recorded» when their
+     * key was absent from it. On production a structure sweep wrote a run whose meta carries its own
+     * keys, and a diagnosis that had been printing the ad-stats REFUSAL went silent — which looks
+     * exactly like the refusal having been fixed.
+     *
+     * A diagnosis that can turn a symptom off by accident is worse than one that says nothing.
+     */
+    public function test_a_newer_unrelated_run_does_not_hide_what_an_older_one_recorded(): void
+    {
+        $campaign = $this->campaign('cmp-1');
+        $adSet = $this->adSet('sq-1', $campaign);
+        $ad = $this->ad('ad-1', $adSet, $campaign);
+        $this->creative('cr-1', $ad, $campaign);
+
+        // The sweep that recorded the grains, and the refusal beside them.
+        $this->metricRun(Carbon::now()->subHour(), [
+            'entity_ad_sets' => 172,
+            'entity_ads' => 1165,
+            'entity_failure' => 'Snapchat Marketing API could not return ad stats: Request URL can not be correctly processed',
+        ]);
+
+        // A LATER run, about something else entirely.
+        $this->metricRun(Carbon::now(), ['media_asked' => 10, 'media_resolved' => 9]);
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('last sweep wrote          : 172 ad-set row(s), 1165 ad row(s)')
+            ->expectsOutputToContain('Request URL can not be correctly processed')
+            ->assertSuccessful();
+    }
+
+    /** And with nothing ever recorded, it still says so rather than inventing a figure. */
+    public function test_it_still_reports_nothing_when_no_run_ever_carried_the_key(): void
+    {
+        $campaign = $this->campaign('cmp-1');
+        $this->creative('cr-1', null, $campaign);
+
+        $this->metricRun(Carbon::now(), ['media_asked' => 1]);
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('no sweep has run since the ingest was wired')
+            ->assertSuccessful();
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────────────────────
 
     private function campaign(string $externalId): ExternalCampaign
@@ -422,6 +469,27 @@ final class HierarchyCountsTest extends TestCase
             'provider' => 'snapchat',
             'metric_date' => $date->toDateString(),
             'impressions' => 100,
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
+        ]);
+    }
+
+    /** One recorded metrics run, with whatever meta the test needs it to carry. */
+    private function metricRun(Carbon $startedAt, array $meta): void
+    {
+        DB::table('metric_sync_runs')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $this->account->getKey(),
+            'provider' => 'snapchat',
+            'status' => 'success',
+            // NOT NULL on this table — a run is always ABOUT a window.
+            'window_start' => $startedAt->toDateString(),
+            'window_end' => $startedAt->toDateString(),
+            'started_at' => $startedAt,
+            'finished_at' => $startedAt,
+            'meta' => json_encode($meta),
             'created_at' => Carbon::now(),
             'updated_at' => Carbon::now(),
         ]);
