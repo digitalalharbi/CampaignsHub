@@ -113,6 +113,23 @@ final class PlatformObjectiveMap
             'APP_INSTALLS' => CampaignObjective::AppInstalls,
             'APP_CONVERSIONS' => CampaignObjective::Conversions,
             'WEBSITE_CONVERSIONS' => CampaignObjective::Conversions,
+            /*
+             * OBJECTIVE-NORMALIZATION-004 — the two words the live account actually sends.
+             *
+             * `integrations:diagnose` was asked why 71 of 87 campaigns sat unclassified, and it
+             * answered with the words themselves: `WEB_CONVERSION` and `WEB_VIEW`. Neither is a
+             * guess at Snapchat's vocabulary — they are what this account's campaigns carry in
+             * `objective_platform_value`, read back out of production.
+             *
+             * The table already held `WEBSITE_CONVERSIONS`, which is the older, longer spelling and
+             * not what the API returns. One missing letter-for-letter match left every conversion
+             * campaign on the account judged by the Unknown family.
+             *
+             * `WEB_VIEW` is a traffic buy — a swipe to a page — and is mapped to Traffic rather than
+             * to Conversions, because a view is not an outcome somebody purchased.
+             */
+            'WEB_CONVERSION' => CampaignObjective::Conversions,
+            'WEB_VIEW' => CampaignObjective::Traffic,
             'CATALOG_SALES' => CampaignObjective::Sales,
         ],
 
