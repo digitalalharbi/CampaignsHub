@@ -117,15 +117,33 @@ final class ObjectiveAwareKpiTest extends TestCase
         $this->assertNotSame('ctr', $headline[1], 'A sales campaign is not judged primarily on CTR.');
     }
 
-    /** Awareness is reach and frequency, never a return on spend it did not chase. */
+    /** Awareness is reach and the cost of reaching, never a return on spend it did not chase. */
     public function test_an_awareness_campaign_is_never_judged_on_roas(): void
     {
         $headline = $this->metrics->headline('awareness');
 
         $this->assertContains('reach', $headline);
-        $this->assertContains('frequency', $headline);
         $this->assertContains('cpm', $headline);
         $this->assertNotContains('roas', $headline);
+    }
+
+    /**
+     * CONTENT-KPI-AVAILABILITY-001 — the awareness card stops promising a cell nothing can fill.
+     *
+     * The FAMILY still names frequency; that is the definition of what an awareness buy is judged on
+     * and it has not changed. What changed is that `frequency` is no longer misfiled as DERIVED —
+     * nothing in `derive()` has ever computed it — so the PIPELINE filter now sees it for what it is:
+     * a column, which Snapchat's creative-grain stats call does not ask for.
+     *
+     * Deriving it was refused rather than overlooked. Frequency is impressions ÷ reach, and reach is
+     * summed across days, so daily uniques added together over-count the people actually reached and
+     * the quotient would be a lower bound presented as a measurement.
+     */
+    public function test_the_awareness_creative_headline_does_not_promise_frequency(): void
+    {
+        $this->assertContains('frequency', ObjectiveFamily::Awareness->headlineMetrics(), 'The family definition is untouched.');
+
+        $this->assertNotContains('frequency', $this->metrics->headline('awareness'));
     }
 
     /**
