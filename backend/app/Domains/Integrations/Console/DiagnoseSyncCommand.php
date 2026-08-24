@@ -24,6 +24,7 @@ use App\Domains\Metrics\Services\InsightPayloadRows;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -398,10 +399,33 @@ final class DiagnoseSyncCommand extends Command
          * across every project — a different question from the one the dashboard asks, and the first
          * version of this diagnostic asked it without noticing.
          */
+        /*
+         * DIAGNOSE-TENANT-SCOPE-001 — the TENANT, which a console command does not have.
+         *
+         * `DailyMetric` uses `BelongsToTenant`, so every Eloquent read of it carries a global tenant
+         * scope. A request has a tenant; `artisan` does not. So this block asked the aggregator the
+         * dashboard's question with no tenant in context, the scope matched nothing, and it printed
+         *
+         *     impressions (control)  : 0
+         *     spend                  : 0
+         *     live rows  : 0   demo rows  : 0
+         *
+         * for a project that holds 1,848 `daily_metrics` rows dated to today — a figure the
+         * `--downstream` block on the same run prints correctly, because it counts without the
+         * scope.
+         *
+         * Read plainly, that said «the production dashboard shows zero». It does not. The dashboard
+         * runs inside an authenticated request where the scope resolves, and this diagnostic was
+         * about to accuse a healthy surface — the third time this instrument has produced a false
+         * negative by reading through a blind spot of its own.
+         *
+         * The tenant comes from the ACCOUNT being diagnosed, which is the same tenant the request
+         * would carry, and is forgotten again beside the project context.
+         */
+        app(TenantContext::class)->setTenantId((string) $account->tenant_id);
         $agg = app(MetricsAggregator::class)->forProjects([(string) $projectId]);
         app(ProjectContext::class)->setProjectId((string) $projectId);
         $totals = $agg->totals(Carbon::now()->subDays(29)->startOfDay(), Carbon::now()->endOfDay());
-        app(ProjectContext::class)->forget();
 
         $this->line('');
         $this->line('  WHAT THE DASHBOARD CARD READS (MetricsAggregator::totals, last 30 days)');
@@ -452,6 +476,16 @@ final class DiagnoseSyncCommand extends Command
             $this->warn('  Demo rows are sitting inside a project that also holds real ones. The badge '
                 .'says so, but the TOTALS above add them together — run `demo:remove` for this tenant.');
         }
+
+        /*
+         * Both contexts released together, after the LAST scoped read.
+         *
+         * `totals()` and `provenance()` both need them; releasing between the two would make the
+         * badge report on a scope the figures above it were not read under, which is the same class
+         * of quiet disagreement this block exists to catch.
+         */
+        app(ProjectContext::class)->forget();
+        app(TenantContext::class)->forget();
 
         $this->line('');
         $this->line('  CREATIVE METRICS — whether the numbers exist, not just the creatives');
