@@ -743,13 +743,9 @@ final class DiagnoseSyncCommand extends Command
          * creative ids — the thing somebody pastes into Snapchat's own interface to check — and it is
          * an id, not a credential.
          */
-        $creativeMeta = MetricSyncRun::withoutGlobalScopes()
-            ->where('project_id', $projectId)
-            ->whereNotNull('meta')
-            ->orderByDesc('started_at')
-            ->value('meta');
+        $creativeMeta = $this->latestMetaCarrying($projectId, 'creative_ids_received');
 
-        $cm = is_array($creativeMeta) ? $creativeMeta : (array) json_decode((string) $creativeMeta, true);
+        $cm = $creativeMeta;
 
         $this->line('');
         $this->line('  CREATIVE SWEEP — what the platform sent, and what could be placed');
@@ -930,13 +926,9 @@ final class DiagnoseSyncCommand extends Command
          * and `entity_ads` are what it managed to write. Together they separate «never swept» from
          * «swept and refused», which a count of zero cannot.
          */
-        $lastMeta = MetricSyncRun::withoutGlobalScopes()
-            ->where('project_id', $projectId)
-            ->whereNotNull('meta')
-            ->orderByDesc('started_at')
-            ->value('meta');
+        $lastMeta = $this->latestMetaCarrying($projectId, 'entity_ad_sets');
 
-        $meta = is_array($lastMeta) ? $lastMeta : (array) json_decode((string) $lastMeta, true);
+        $meta = $lastMeta;
 
         if (array_key_exists('entity_ad_sets', $meta)) {
             $this->line('  last sweep wrote          : '.(int) $meta['entity_ad_sets'].' ad-set row(s), '
@@ -985,6 +977,39 @@ final class DiagnoseSyncCommand extends Command
      * What this deliberately does NOT claim is that a screen rendered. That is a different assertion,
      * held by the end-to-end suite, and a console cannot make it.
      */
+    /**
+     * The most recent run that RECORDED a given key — not simply the most recent run.
+     *
+     * Both blocks below used to read the newest `meta` and report «nothing recorded» when the key
+     * was absent from it. That reads as «no sweep has ever run», and it is a different statement.
+     *
+     * It was wrong on production within an hour of shipping: a structure sweep wrote a run whose
+     * meta carries its own keys and not the metrics sweep's, so a diagnosis that had been printing
+     * «last sweep wrote 172 ad-set row(s), 1165 ad row(s)» — and, crucially, the ad-stats refusal
+     * beside it — went silent. Nothing had changed about the sweep. The newest row simply answered
+     * a different question, and the refusal being missing looked exactly like the refusal being
+     * fixed.
+     *
+     * A diagnosis that can turn a symptom off by accident is worse than one that says nothing, so
+     * this asks for the newest run that actually holds the key.
+     *
+     * @return array<string, mixed>
+     */
+    private function latestMetaCarrying(string $projectId, string $key): array
+    {
+        $meta = MetricSyncRun::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->whereNotNull('meta->'.$key)
+            ->orderByDesc('started_at')
+            ->value('meta');
+
+        if (is_array($meta)) {
+            return $meta;
+        }
+
+        return (array) json_decode((string) $meta, true);
+    }
+
     private function reportDownstream(ExternalAccount $account, ?string $projectId, ?string $projectName): void
     {
         $this->line('');
