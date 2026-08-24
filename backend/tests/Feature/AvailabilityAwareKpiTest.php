@@ -48,11 +48,16 @@ final class AvailabilityAwareKpiTest extends TestCase
             'spend' => null,
             'spend_original' => 79.614004,
             'spend_withheld_rows' => 11,
-            // Reported as a measured zero, in the same unconvertible currency.
+            /*
+             * Revenue was NOT established by the production trace. `revenue_original` sums to zero,
+             * and a sum of zero is what an empty set produces — it is not the platform reporting a
+             * monetary zero. Treating it as one is what put «0.00 USD» on a sales card.
+             */
             'revenue' => null,
             'revenue_original' => 0.0,
             'revenue_withheld_rows' => 11,
             'money_original_currency' => 'USD',
+            'money_original_currencies' => 1,
 
             'impressions' => 33967.0,
             'clicks' => 546.0,
@@ -124,31 +129,30 @@ final class AvailabilityAwareKpiTest extends TestCase
     {
         $headline = array_slice($this->metrics->headline('sales', $this->productionRow()), 0, 4);
 
-        $this->assertSame('spend', $headline[0], 'Spend is the question whatever the campaign was bought to do.');
-        $this->assertSame('orders', $headline[1], 'The verdict comes second, and for a sales buy it is orders.');
+        // The exact card for production creative 81632089.
+        $this->assertSame(['spend', 'orders', 'conversion_rate', 'impressions'], $headline);
 
-        // Unanswerable for this row, and therefore absent — not blank.
+        // Unanswerable for this row, and therefore absent — not blank, and not invented.
         $this->assertNotContains('cpa', $headline);
         $this->assertNotContains('roas', $headline);
         $this->assertNotContains('aov', $headline);
-
-        $this->assertCount(4, $headline, 'The grid renders four; this row can answer four.');
+        $this->assertNotContains('revenue', $headline);
     }
 
     /**
-     * A ZERO is an answer.
+     * A measured ZERO is an answer; a summed original of zero is not.
      *
-     * `orders` here is a measured 0 and `revenue` a measured 0 the platform sent in a currency with
-     * no rate. Both are facts about a sales creative, and dropping them would be the old defect in
-     * reverse — hiding what the platform did say because it happens to be nothing.
+     * `orders` is a genuine 0 the platform reported and belongs on a sales card. `revenue` is not:
+     * its original sums to zero, which is what an empty set sums to, and no part of the trace
+     * established that Snapchat reported revenue for this creative at all.
      */
-    public function test_a_measured_zero_and_a_withheld_original_both_count_as_answered(): void
+    public function test_a_measured_zero_counts_but_a_zero_original_does_not(): void
     {
         $headline = $this->metrics->headline('sales', $this->productionRow());
 
-        $this->assertContains('orders', $headline);
-        $this->assertContains('revenue', $headline, 'Revenue was reported as 0 USD — withheld, not missing.');
-        $this->assertContains('spend', $headline, 'Spend is withheld with its original preserved.');
+        $this->assertContains('orders', $headline, 'A reported zero is a fact about a sales creative.');
+        $this->assertContains('spend', $headline, 'Spend is withheld with a POSITIVE original and one currency.');
+        $this->assertNotContains('revenue', $headline, 'A zero original is not proof the provider reported a zero.');
     }
 
     /** The same row with revenue never sent at all: it goes, and a real figure takes the cell. */
@@ -167,6 +171,102 @@ final class AvailabilityAwareKpiTest extends TestCase
         $this->assertNotContains('revenue', $headline);
         $this->assertContains('impressions', $headline, 'The cell is filled from what this row really holds.');
         $this->assertCount(4, $headline);
+    }
+
+    // ── the money contract, case by case (CONTENT-KPI-MONEY-PROVENANCE-001) ────────────────────
+
+    /** A — a converted figure answers, and a converted ZERO answers too: the rate existed. */
+    public function test_a_converted_zero_is_answerable(): void
+    {
+        $headline = $this->metrics->headline('sales', $this->productionRow([
+            'spend' => 0.0,
+            'spend_original' => null,
+            'spend_withheld_rows' => 0,
+        ]));
+
+        $this->assertContains('spend', $headline);
+    }
+
+    /** B — a withheld amount answers only when every part of the claim it makes is true. */
+    public function test_a_positive_withheld_original_in_one_currency_is_answerable(): void
+    {
+        $this->assertContains('spend', $this->metrics->headline('sales', $this->productionRow()));
+    }
+
+    /** C — nothing converted and nothing preserved is nothing to show. */
+    public function test_money_with_neither_a_value_nor_an_original_is_not_answerable(): void
+    {
+        $headline = $this->metrics->headline('sales', $this->productionRow([
+            'spend' => null,
+            'spend_original' => null,
+            'spend_withheld_rows' => 0,
+        ]));
+
+        $this->assertNotContains('spend', $headline);
+    }
+
+    /**
+     * D — a zero original is not evidence of a reported zero.
+     *
+     * `SUM(...) FILTER (...)` returns zero for an empty set as readily as for a set of zeros, and
+     * the card cannot tell them apart. The one that would be wrong is the one it must not print.
+     */
+    public function test_a_zero_original_is_not_answerable_on_its_own(): void
+    {
+        $headline = $this->metrics->headline('sales', $this->productionRow([
+            'spend' => null,
+            'spend_original' => 0.0,
+            'spend_withheld_rows' => 11,
+        ]));
+
+        $this->assertNotContains('spend', $headline);
+    }
+
+    /**
+     * D again, from the other side: rows must actually have been withheld.
+     *
+     * An original with no withheld rows behind it is not the sync saying «I had an amount and
+     * refused to convert it» — and that sentence is the entire basis for showing the original.
+     */
+    public function test_an_original_with_no_withheld_rows_is_not_answerable(): void
+    {
+        $headline = $this->metrics->headline('sales', $this->productionRow([
+            'spend' => null,
+            'spend_original' => 50.0,
+            'spend_withheld_rows' => 0,
+        ]));
+
+        $this->assertNotContains('spend', $headline);
+    }
+
+    /**
+     * E — two unconvertible currencies cannot be added into one amount.
+     *
+     * The reader already refuses to NAME a currency when this is not exactly 1; the headline must
+     * refuse to offer the cell at all, rather than present a sum under a label that is wrong.
+     */
+    public function test_mixed_original_currencies_are_not_answerable(): void
+    {
+        $headline = $this->metrics->headline('sales', $this->productionRow([
+            'money_original_currencies' => 2,
+        ]));
+
+        $this->assertNotContains('spend', $headline);
+        // And the card is still filled from what the row really holds.
+        $this->assertContains('orders', $headline);
+        $this->assertContains('impressions', $headline);
+    }
+
+    /** A currency count of one but no name is the same refusal — a label nobody can print. */
+    public function test_a_withheld_amount_with_no_currency_name_is_not_answerable(): void
+    {
+        $this->assertNotContains('spend', $this->metrics->headline('sales', $this->productionRow([
+            'money_original_currency' => null,
+        ])));
+
+        $this->assertNotContains('spend', $this->metrics->headline('sales', $this->productionRow([
+            'money_original_currency' => '   ',
+        ])));
     }
 
     /**

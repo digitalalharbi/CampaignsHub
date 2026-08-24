@@ -462,10 +462,56 @@ final class CreativeMetrics
     private function answerable(array $figures, string $key): bool
     {
         if (in_array($key, self::MONEY, true)) {
-            return ($figures[$key] ?? null) !== null || ($figures[$key.'_original'] ?? null) !== null;
+            return $this->moneyAnswerable($figures, $key);
         }
 
         return ($figures[$key] ?? null) !== null;
+    }
+
+    /**
+     * CONTENT-KPI-MONEY-PROVENANCE-001 — money is answerable on PROVENANCE, not on non-nullness.
+     *
+     * The first version of this asked «is the value or its original non-null», and that is not the
+     * money contract. It let `revenue_original = 0` put «0.00 USD» on a sales card as though the
+     * platform had reported a monetary zero, when a summed original of zero is not evidence of
+     * anything having been reported at all. Production creative `81632089` established a spend of
+     * 79.61 USD across 11 withheld rows; it established NO revenue, and the card was about to claim
+     * one.
+     *
+     * A withheld figure is displayable only when every part of the claim it makes is true:
+     *
+     *   · the converted value is genuinely absent (otherwise case A already answered)
+     *   · rows were actually withheld — `*_withheld_rows > 0` is the sync saying «I had an amount
+     *     and refused to convert it», which a summed original alone never says
+     *   · the original is POSITIVE. Zero is the value a sum takes when there was nothing to add.
+     *   · exactly one original currency, and a real one. Two unconvertible currencies cannot be
+     *     added into one amount, and a label over their sum would be a wrong label — the same rule
+     *     `money_original_currencies` already enforces for the reader.
+     *
+     * A converted value of 0.0 is a different thing entirely and stays answerable: the rate existed,
+     * the conversion happened, and the answer was zero.
+     *
+     * @param  array<string, mixed>  $figures
+     */
+    private function moneyAnswerable(array $figures, string $key): bool
+    {
+        // A — converted, including a measured zero.
+        if (($figures[$key] ?? null) !== null) {
+            return true;
+        }
+
+        // B — withheld, and every part of the claim holds.
+        $withheldRows = (int) ($figures[$key.'_withheld_rows'] ?? 0);
+        $original = $figures[$key.'_original'] ?? null;
+        $currency = $figures['money_original_currency'] ?? null;
+        $currencies = (int) ($figures['money_original_currencies'] ?? 0);
+
+        return $withheldRows > 0
+            && is_numeric($original)
+            && (float) $original > 0.0
+            && $currencies === 1
+            && is_string($currency)
+            && trim($currency) !== '';
     }
 
     /**
