@@ -13,11 +13,41 @@ import { AUTH, switchToEnglish } from './helpers'
  * Also asserts the consolidation redirects still land on the canonical routes.
  */
 
-/** One surface check, reused by both portals. */
+/**
+ * One surface check, reused by both portals.
+ *
+ * ## Why the failures also record the REQUEST
+ *
+ * Chrome's console message for a failed fetch is the string «Failed to load resource: the server
+ * responded with a status of 500» and nothing else — no URL, no body. `/app/integrations` has now
+ * failed this check three times across different pull requests, and every one of those failures
+ * produced that single sentence: enough to fail a gate, not enough to fix anything. Twice it was
+ * dismissed as flake because there was no way to tell otherwise.
+ *
+ * So the response listener runs beside the console one. The console still decides PASS or FAIL —
+ * this changes no verdict — but a 5xx now carries the method, the URL and the first of the body,
+ * which is the difference between «something 500ed» and a defect somebody can go and fix.
+ *
+ * The body is truncated and comes from this suite's own throwaway server. It holds no credential:
+ * `X-XSRF-TOKEN` and the session cookie travel in headers, and neither is read here.
+ */
 async function surfaceRenders(page: Page, path: string) {
   const errors: string[] = []
+  const failedRequests: string[] = []
+
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
   page.on('pageerror', (e) => errors.push(String(e)))
+
+  page.on('response', (r) => {
+    if (r.status() < 500) return
+
+    failedRequests.push(`${r.request().method()} ${r.url()} → ${r.status()}`)
+
+    // Best effort: a body that cannot be read must not fail the run before the assertion does.
+    r.text()
+      .then((body) => failedRequests.push(`    body: ${body.slice(0, 400)}`))
+      .catch(() => undefined)
+  })
 
   await page.goto(path)
   await switchToEnglish(page)
@@ -25,7 +55,12 @@ async function surfaceRenders(page: Page, path: string) {
   await expect(page.getByRole('heading').first()).toBeVisible({ timeout: 10_000 })
 
   const unexpected = errors.filter((e) => !/401|403|favicon|Unauthorized/i.test(e))
-  expect(unexpected, `console errors on ${path}:\n${unexpected.join('\n')}`).toHaveLength(0)
+
+  const detail = failedRequests.length > 0
+    ? `\n\nserver errors seen while loading this page:\n${failedRequests.join('\n')}`
+    : ''
+
+  expect(unexpected, `console errors on ${path}:\n${unexpected.join('\n')}${detail}`).toHaveLength(0)
 }
 
 test.describe('the advertiser portal', () => {

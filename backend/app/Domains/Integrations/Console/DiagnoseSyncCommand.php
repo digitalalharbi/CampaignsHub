@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Console;
 
 use App\Domains\Campaigns\Actions\StampHistoricalUnlinks;
+use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CreativeMetrics;
+use App\Domains\Campaigns\Services\PlatformObjectiveMap;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
@@ -562,7 +564,20 @@ final class DiagnoseSyncCommand extends Command
                     : UnifiedCampaign::withoutGlobalScopes()->find($creative->campaign_id, ['objective']);
 
                 $objective = $campaign?->objective;
-                $headline = app(CreativeMetrics::class)->headline($objective);
+
+                /*
+                 * The figures are passed, because the CARD passes them.
+                 *
+                 * `headline($objective)` alone returns what the objective's FAMILY wants, and since
+                 * CONTENT-KPI-AVAILABILITY-001 that is not what a creative is headlined on — the
+                 * row's own availability decides which of those survive. Asking without figures made
+                 * this line report `spend, orders, cpa, revenue` for a creative whose card shows
+                 * `spend, orders, conversion_rate, impressions`, which is exactly the kind of
+                 * diagnosis that sends somebody to fix a defect that is not there.
+                 *
+                 * The diagnosis and the product must never run different algorithms.
+                 */
+                $headline = app(CreativeMetrics::class)->headline($objective, $m);
 
                 $this->line('  · '.Str::limit((string) $creative->name, 34).'  ['.$creative->external_creative_id.']');
 
@@ -574,7 +589,9 @@ final class DiagnoseSyncCommand extends Command
                  * row underneath is full.
                  */
                 $this->line('      objective  : '.($objective ?? 'none')
-                    .'   card shows: '.implode(', ', array_slice($headline, 0, 4)));
+                    .'   card shows: '.($headline === []
+                        ? '(nothing — «لا توجد مؤشرات أداء قابلة للعرض», not «لم يعمل»)'
+                        : implode(', ', array_slice($headline, 0, 4))));
 
                 if ($m === null) {
                     $this->warn('      no figures returned for the library window — the row exists but the read gave nothing');
@@ -711,6 +728,157 @@ final class DiagnoseSyncCommand extends Command
         if ($accounted !== $totalCreatives) {
             $this->warn('  the buckets total '.$accounted.', not '.$totalCreatives
                 .' — they are not a partition and should not be read as one');
+        }
+
+        /*
+         * CONTENT-KPI-COVERAGE-002 — what the creative sweep RECEIVED, beside what it wrote.
+         *
+         * The census above says 34 creatives have no figures while their AD demonstrably ran in the
+         * same window. Stored rows cannot say why: «the platform returned no creative-grain row for
+         * it», «it returned one under an id this project could not resolve» and «the id resolved to
+         * two rows and failed closed» all leave the identical empty table, and each is fixed
+         * somewhere different.
+         *
+         * These come from the sweep's own record. `unmapped_sample` is a handful of the PROVIDER's
+         * creative ids — the thing somebody pastes into Snapchat's own interface to check — and it is
+         * an id, not a credential.
+         */
+        $creativeMeta = MetricSyncRun::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->whereNotNull('meta')
+            ->orderByDesc('started_at')
+            ->value('meta');
+
+        $cm = is_array($creativeMeta) ? $creativeMeta : (array) json_decode((string) $creativeMeta, true);
+
+        $this->line('');
+        $this->line('  CREATIVE SWEEP — what the platform sent, and what could be placed');
+
+        if (! array_key_exists('creative_ids_received', $cm)) {
+            $this->line('  nothing recorded — no sweep has run since this was wired');
+        } else {
+            $received = (int) $cm['creative_ids_received'];
+            $mapped = (int) ($cm['creative_ids_mapped'] ?? 0);
+            $unmapped = (int) ($cm['creative_ids_unmapped'] ?? 0);
+
+            $this->line('  provider rows received     : '.(int) ($cm['creative_rows_received'] ?? 0));
+            $this->line('  distinct creative ids sent : '.$received);
+            $this->line('  ids we could place         : '.$mapped);
+            $this->line('  ids we could NOT place     : '.$unmapped
+                .($unmapped > 0 ? '  ← the platform named these and this project has no such creative' : ''));
+            $this->line('  ids that resolved twice    : '.(int) ($cm['creative_ids_ambiguous'] ?? 0)
+                .'  ← failed closed on purpose; picking one would be a coin toss');
+            $this->line('  rows written / skipped     : '.(int) ($cm['creative_rows'] ?? 0)
+                .' / '.(int) ($cm['creative_rows_skipped'] ?? 0));
+
+            $sample = (array) ($cm['creative_unmapped_sample'] ?? []);
+
+            if ($sample !== []) {
+                $this->line('  a few unplaceable ids      : '.implode(', ', array_map(strval(...), $sample)));
+            }
+
+            /*
+             * The subtraction that actually answers the question. If the platform never NAMED the
+             * creatives in bucket 3, no amount of mapping work will produce their figures — the
+             * request or the platform's own coverage is where to look next.
+             */
+            $this->line('  → of the creatives whose ad ran but which carry no figure, the ones the '
+                .'platform never named are '.($unmapped === 0 ? 'ALL of them' : 'all but at most '.$unmapped));
+        }
+
+        /*
+         * OBJECTIVE-NORMALIZATION-003 — why 71 of 87 campaigns could not be classified.
+         *
+         * The repair migration reported «87 examined, 16 reclassified, 71 left unclassified», and
+         * that second number is not objective coverage complete. `other` is a valid canonical value
+         * and the platform's own word is preserved beside it, so nothing was lost — but 71 of 87 is
+         * most of the account, and a resolver that declines that often is either meeting words
+         * nobody has mapped or meeting no words at all. Those are different problems.
+         *
+         * Read-only, and counted rather than sampled into a guess. Nothing here changes a mapping.
+         */
+        $unclassified = UnifiedCampaign::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->where('objective', CampaignObjective::Other->value)
+            ->get(['id', 'objective_platform_value', 'objective_source']);
+
+        $this->line('');
+        $this->line('  UNCLASSIFIED OBJECTIVES — why the resolver declined');
+
+        if ($unclassified->isEmpty()) {
+            $this->line('  none — every campaign in this project carries a classified objective');
+        } else {
+            $map = app(PlatformObjectiveMap::class);
+
+            $noRaw = 0;          // the platform stated nothing at all
+            $unmapped = 0;       // it stated a word this product does not know
+            $conflicting = 0;    // its linked campaigns disagree
+            $noLinks = 0;        // nothing linked, so there was nothing to read
+            $resolvable = 0;     // it WOULD resolve now — a repair that has not been re-run
+
+            foreach ($unclassified as $campaign) {
+                $externals = ExternalCampaign::withoutGlobalScopes()
+                    ->where('unified_campaign_id', $campaign->id)
+                    ->get(['provider', 'objective']);
+
+                if ($externals->isEmpty()) {
+                    $noLinks++;
+
+                    continue;
+                }
+
+                $resolved = [];
+                $stated = 0;
+
+                foreach ($externals as $external) {
+                    if (trim((string) $external->objective) !== '') {
+                        $stated++;
+                    }
+
+                    $case = $map->resolve((string) $external->provider, $external->objective);
+
+                    if ($case !== null) {
+                        $resolved[$case->value] = true;
+                    }
+                }
+
+                if ($stated === 0) {
+                    $noRaw++;
+                } elseif ($resolved === []) {
+                    $unmapped++;
+                } elseif (count($resolved) > 1) {
+                    $conflicting++;
+                } else {
+                    // One agreed answer, and the campaign still sits at `other` — the repair simply
+                    // has not been run since the mapping learned this word.
+                    $resolvable++;
+                }
+            }
+
+            $this->line('  campaigns at «other»            : '.$unclassified->count());
+            $this->line('  the platform stated nothing     : '.$noRaw);
+            $this->line('  it stated a word we do not know : '.$unmapped
+                .($unmapped > 0 ? '  ← a mapping question, not a bug' : ''));
+            $this->line('  its linked campaigns disagree   : '.$conflicting
+                .'  ← left for a person on purpose');
+            $this->line('  nothing linked to read from     : '.$noLinks);
+            $this->line('  would resolve if repaired again : '.$resolvable
+                .($resolvable > 0 ? '  ← re-run the repair' : ''));
+
+            /*
+             * The words themselves, deduplicated and capped. A count of «unmapped» tells nobody
+             * WHICH word to add, and the word is the entire content of that question.
+             */
+            $words = $unclassified
+                ->pluck('objective_platform_value')
+                ->filter(static fn (mixed $v): bool => is_string($v) && trim($v) !== '')
+                ->unique()
+                ->take(12)
+                ->values();
+
+            if ($words->isNotEmpty()) {
+                $this->line('  the words they carry            : '.$words->implode(', '));
+            }
         }
 
         $this->line('');
