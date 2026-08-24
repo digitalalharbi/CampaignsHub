@@ -594,9 +594,27 @@ final class DiagnoseSyncCommand extends Command
                 $this->line('      impressions: '.($m['impressions'] ?? 'null')
                     .'   clicks '.($m['clicks'] ?? 'null')
                     .'   ctr '.($m['ctr'] ?? 'null'));
+                $this->line('      efficiency : cpc '.($m['cpc'] ?? 'null')
+                    .'   cpm '.($m['cpm'] ?? 'null')
+                    .'   frequency '.($m['frequency'] ?? 'null'));
                 $this->line('      reach      : '.($m['reach'] ?? 'null')
                     .'   video_views '.($m['video_views'] ?? 'null')
-                    .'   conversions '.($m['conversions'] ?? 'null'));
+                    .'   p100 '.($m['video_p100'] ?? 'null'));
+                $this->line('      results    : conversions '.($m['conversions'] ?? 'null')
+                    .'   revenue '.($m['revenue'] ?? 'null')
+                    .'   original '.($m['revenue_original'] ?? 'null')
+                    .'   roas '.($m['roas'] ?? 'null'));
+
+                /*
+                 * `reported` is the map the card uses to tell a measured zero from a metric the
+                 * platform never sent — the distinction the whole contract rests on. Printing WHICH
+                 * keys came back separates «Snapchat reports no conversions for this buy» from «the
+                 * read lost them», and those two have nothing in common except how they look.
+                 */
+                $sent = array_keys(array_filter((array) ($m['reported'] ?? [])));
+                sort($sent);
+                $this->line('      reported by the platform: '
+                    .($sent === [] ? 'nothing' : implode(', ', $sent)));
                 $this->line('      active_days: '.($m['active_days'] ?? 0));
             }
         }
