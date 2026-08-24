@@ -428,7 +428,10 @@ export function PublicHomePage() {
             {/* The four ways in, restated — each going to its OWN destination from the shared journey
                 table, never back to the top of this page. */}
             <ul data-testid="closing-journeys" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-              {c.start.paths.map((p) => (
+              {/* An ANNOUNCED path has no destination, so it is not restated here: `journeyTo` would
+                  resolve it to the influencer intake and hand out the exact route the announcement
+                  exists to withhold (MKT-UGC-002). This list is links only. */}
+              {c.start.paths.filter((p) => p.soon !== true).map((p) => (
                 <li key={p.key}>
                   <Link
                     to={journeyTo(p.key)}
