@@ -342,7 +342,12 @@ final class CreativeRows
             $row = $this->presenter->card($creative, $campaign);
             $row['objective'] = $objective;
             $row['path'] = $this->metrics->pathFor($objective)->value;
-            $row['headline_metrics'] = $this->metrics->headline($objective);
+            /*
+             * CONTENT-KPI-AVAILABILITY-001 — the row's OWN figures decide which of the family's
+             * metrics the card promises. A sales creative whose platform reports no revenue at
+             * creative grain is not helped by a cell reserved for revenue.
+             */
+            $row['headline_metrics'] = $this->metrics->headline($objective, $figures[$id] ?? null);
             $row['metrics'] = $figures[$id] ?? null;
 
             if ($withFatigue) {

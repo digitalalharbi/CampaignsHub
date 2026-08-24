@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Enums\CampaignStatus;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CampaignObjectiveResolver;
+use App\Domains\Campaigns\Services\PlatformObjectiveMap;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Services\ReportingCurrency;
@@ -177,15 +178,13 @@ final class ImportExternalCampaigns
             'client_workspace_id' => $campaign->client_workspace_id,
             'name' => $this->availableName($campaign),
             /*
-             * `other` when the platform reported no objective — never a guess at one.
+             * A CANONICAL objective, or `other` — never the platform's own word.
              *
-             * The column is NOT NULL and `CampaignObjectiveResolver` runs immediately after this
-             * import, so the value here is a starting point rather than a verdict: it re-derives from
-             * the platform's own field and refuses to touch an objective a person has set by hand.
-             * `other` is the resolver's own «not classified» value, and objective-based reporting
-             * already keeps such spend out of a cost-per-order it cannot honestly attribute.
+             * See `seedObjective()`. This line used to be `$campaign->objective ?? other`, which
+             * wrote the provider's raw string into the column that is supposed to hold a
+             * {@see CampaignObjective} value.
              */
-            'objective' => $campaign->objective ?? CampaignObjective::Other->value,
+            'objective' => $this->seedObjective($campaign),
             'status' => $campaign->status,
             'total_budget' => $campaign->lifetime_budget,
             /*
@@ -228,6 +227,39 @@ final class ImportExternalCampaigns
      * decision the customer can take; guessing that the two are the same campaign is not one we may
      * take for them.
      */
+    /**
+     * OBJECTIVE-NORMALIZATION-002 — the canonical column may only ever hold a canonical value.
+     *
+     * This line used to be `$campaign->objective ?? CampaignObjective::Other->value`: the platform's
+     * OWN string, written straight into the column that is supposed to hold a {@see CampaignObjective}
+     * case. The comment beside it argued the value was only a starting point, because
+     * `CampaignObjectiveResolver` runs immediately afterwards and re-derives it.
+     *
+     * That argument holds only while the resolver can classify. It bails when the platform's word is
+     * not in `PlatformObjectiveMap` — which is exactly the case where the raw string got written —
+     * so the unrecognised value was not a starting point at all. It was the final state.
+     *
+     * Production shows what that costs. Every campaign on this account carries `SALES`, Snapchat's
+     * own word, in the canonical column; `CampaignObjective::tryFrom('SALES')` fails; every creative
+     * therefore resolves to `ObjectiveFamily::Unknown`, and objective-aware KPI selection has been
+     * silently off for the whole account.
+     *
+     * The raw value is not lost. `objective_platform_value` is where the platform's own word belongs,
+     * and `CampaignObjectiveResolver` writes it there whether or not it could classify — including,
+     * deliberately, when it could not.
+     */
+    private function seedObjective(ExternalCampaign $campaign): string
+    {
+        // `app()` rather than a constructor, matching how this action already reaches
+        // `CampaignObjectiveResolver` a few lines below.
+        $resolved = app(PlatformObjectiveMap::class)->resolve(
+            (string) $campaign->provider,
+            $campaign->objective,
+        );
+
+        return ($resolved ?? CampaignObjective::Other)->value;
+    }
+
     private function availableName(ExternalCampaign $campaign): string
     {
         $name = (string) $campaign->name;
