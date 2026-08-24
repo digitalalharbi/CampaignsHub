@@ -194,6 +194,27 @@ final class AccountMetricsSyncer
                         'creative_status' => 'success',
                         'creative_rows' => $written['upserted'],
                         'creative_error' => null,
+                        /*
+                         * CONTENT-KPI-COVERAGE-002 — what the sweep received, beside what it wrote.
+                         *
+                         * `creative_rows` alone cannot explain a creative with no figures whose ad
+                         * demonstrably ran: «the platform returned nothing for it» and «the platform
+                         * named it and this project could not resolve the id» produce the identical
+                         * empty table, and they are fixed in different places.
+                         *
+                         * Merged into the existing meta rather than replacing it — the media sweep
+                         * and the entity sweep write their own keys here.
+                         */
+                        'meta' => [
+                            ...(array) ($run->meta ?? []),
+                            'creative_rows_received' => $written['rows_received'],
+                            'creative_ids_received' => $written['ids_received'],
+                            'creative_ids_mapped' => $written['ids_mapped'],
+                            'creative_ids_unmapped' => $written['ids_unmapped'],
+                            'creative_ids_ambiguous' => $written['ambiguous'],
+                            'creative_rows_skipped' => $written['skipped'],
+                            'creative_unmapped_sample' => $written['unmapped_sample'],
+                        ],
                     ])->save();
                 } else {
                     $run->forceFill([
