@@ -137,6 +137,18 @@ export interface HomeCopy {
     tagline: string
     contactLabel: string
     email: string
+    /**
+     * The contact block at the bottom of the public site (MKT-CONTACT-001).
+     *
+     * `phone` is what a person READS and `phoneHref` is what the device DIALS — they are different
+     * strings on purpose. The readable form is spaced for a Saudi mobile; `tel:` refuses spaces in
+     * some dialers, so the href keeps the unbroken E.164 number.
+     */
+    contactTitle: string
+    emailLabel: string
+    phoneLabel: string
+    phone: string
+    phoneHref: string
     /** Grouped footer navigation — product, company and legal each get their own column. */
     groups: { title: string; links: { label: string; to: string }[] }[]
     rights: string
@@ -415,6 +427,11 @@ const ar: HomeCopy = {
     legal: ['الخصوصية', 'الشروط', 'الدعم'],
     contactLabel: 'للتواصل',
     email: 'info@campaignshub.io',
+    contactTitle: 'تواصل معنا',
+    emailLabel: 'البريد الإلكتروني',
+    phoneLabel: 'الجوال',
+    phone: '+966 53 211 5582',
+    phoneHref: '+966532115582',
     groups: [
       {
         title: 'المنتج',
@@ -726,6 +743,11 @@ const en: HomeCopy = {
     legal: ['Privacy', 'Terms', 'Support'],
     contactLabel: 'Contact',
     email: 'info@campaignshub.io',
+    contactTitle: 'Contact us',
+    emailLabel: 'Email',
+    phoneLabel: 'Phone',
+    phone: '+966 53 211 5582',
+    phoneHref: '+966532115582',
     groups: [
       {
         title: 'Product',
