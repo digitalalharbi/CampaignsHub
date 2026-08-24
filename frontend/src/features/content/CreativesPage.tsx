@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { FilterBar, FilterMulti, FilterSearch, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
+import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
@@ -620,7 +621,16 @@ export function CreativesPage() {
           <>
             {multi('client_ids', t.client, options.clients.map((c) => ({ value: c.id, label: c.name })))}
             {multi('project_ids', t.project, options.projects.map((p) => ({ value: p.id, label: p.name })))}
-            {multi('providers', t.platform, options.providers.map((p) => ({ value: p, label: providerLabel(p, locale) })))}
+            {/* UX-FILTERS-001 — platforms as visible chips here too, so the library filters the
+                same way the dashboard and analytics do. */}
+            <FilterPlatforms
+              label={t.platform}
+              allLabel={ar ? 'الكل' : 'All'}
+              values={axes.providers ?? []}
+              testid="content-providers"
+              options={options.providers.map((p) => ({ value: p, label: providerLabel(p, locale) }))}
+              onChange={(next) => setAxis('providers', next)}
+            />
             {multi('campaign_ids', t.campaign, options.campaigns.map((c) => ({ value: c.id, label: c.name })))}
             {multi('objectives', t.objective, options.objectives.map((o) => ({ value: o, label: objectiveLabel(o, locale) })))}
             {multi('paths', t.path, options.paths.map((p) => ({ value: p, label: marketingPathLabel(p, locale) })))}

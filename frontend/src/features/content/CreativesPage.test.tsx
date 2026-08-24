@@ -156,8 +156,8 @@ describe('CreativesPage', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     // The values come from the rows the server returned, not from a hardcoded list.
-    fireEvent.click(screen.getByTestId('content-providers'))
-    expect(screen.getByRole('option', { name: 'TikTok' })).toBeInTheDocument()
+    // Visible without opening anything — that IS the requirement now.
+    expect(screen.getByTestId('content-providers-tiktok')).toBeInTheDocument()
   })
 
   /** The rare axes still fold — that is what «More filters» is for. */
@@ -186,9 +186,11 @@ describe('CreativesPage', () => {
 
     expect(screen.queryByTestId('content-applied')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByTestId('content-providers'))
-    fireEvent.click(screen.getByRole('option', { name: 'TikTok' }))
-    fireEvent.click(screen.getByRole('option', { name: 'Meta' }))
+    // UX-FILTERS-001 — the platforms are visible chips now, so choosing one is a single press
+    // rather than «open the popover, then pick». The assertion below is unchanged: what matters is
+    // that the choice reaches the SERVER, not how the control is shaped.
+    fireEvent.click(screen.getByTestId('content-providers-tiktok'))
+    fireEvent.click(screen.getByTestId('content-providers-meta'))
 
     await waitFor(() => expect(screen.getByTestId('content-applied-providers:tiktok')).toBeInTheDocument())
     expect(screen.getByTestId('content-applied-providers:meta')).toBeInTheDocument()
@@ -204,8 +206,10 @@ describe('CreativesPage', () => {
     renderWithProviders(<CreativesPage />, { locale: 'en' })
     await screen.findByRole('article')
 
-    fireEvent.click(screen.getByTestId('content-providers'))
-    fireEvent.click(screen.getByRole('option', { name: 'TikTok' }))
+    // UX-FILTERS-001 — the platforms are visible chips now, so choosing one is a single press
+    // rather than «open the popover, then pick». The assertion below is unchanged: what matters is
+    // that the choice reaches the SERVER, not how the control is shaped.
+    fireEvent.click(screen.getByTestId('content-providers-tiktok'))
     await waitFor(() => expect(screen.getByTestId('content-applied-providers:tiktok')).toBeInTheDocument())
 
     fireEvent.click(screen.getByTestId('content-reset'))
@@ -224,8 +228,10 @@ describe('CreativesPage', () => {
     renderWithProviders(<CreativesPage />, { locale: 'en' })
     await screen.findByRole('article')
 
-    fireEvent.click(screen.getByTestId('content-providers'))
-    fireEvent.click(screen.getByRole('option', { name: 'TikTok' }))
+    // UX-FILTERS-001 — the platforms are visible chips now, so choosing one is a single press
+    // rather than «open the popover, then pick». The assertion below is unchanged: what matters is
+    // that the choice reaches the SERVER, not how the control is shaped.
+    fireEvent.click(screen.getByTestId('content-providers-tiktok'))
 
     await waitFor(() => {
       const calls = vi.mocked(listCreatives).mock.calls

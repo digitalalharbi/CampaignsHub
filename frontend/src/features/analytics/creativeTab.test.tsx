@@ -46,7 +46,7 @@ function route(creatives: unknown[]) {
 
 async function openCreative() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-  fireEvent.click(await screen.findByText('Creative analysis'))
+  fireEvent.click(await screen.findByRole('tab', { name: 'Creative' }))
 }
 
 describe('the creative analysis tab', () => {
