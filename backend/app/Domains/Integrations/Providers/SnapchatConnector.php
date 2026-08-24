@@ -756,6 +756,28 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         $this->entityFailure = null;
 
         foreach ($parentIds as $parentId) {
+            /*
+             * SNAP-AD-STATS-ROUTE-001 — a parent with no provider id must never become a request.
+             *
+             * `url("campaigns/{$parentId}/stats")` with an empty id builds `campaigns//stats`, and
+             * Snapchat answers that with «Request URL can not be correctly processed» — the exact
+             * refusal production recorded while the SAME sweep wrote 1,165 ad rows. Most calls were
+             * fine and some were not, which is the signature of a URL built from a value that is
+             * sometimes wrong rather than a route that is always wrong.
+             *
+             * The id comes from `external_campaigns.external_id`. A row the structure sweep stored
+             * without the provider's own id cannot be asked about, and asking anyway costs an
+             * unexplained refusal in the run log that outlives every attempt to read it.
+             *
+             * Skipped rather than failed: this is one parent's children, and the sweep already
+             * treats a single parent's loss as containable.
+             */
+            if (trim($parentId) === '') {
+                $this->entityFailure ??= "A {$breakdown} parent was stored with no provider id, so it could not be asked for stats.";
+
+                continue;
+            }
+
             foreach ($window->chunked($this->maxDaysPerRequest()) as $chunk) {
                 /*
                  * One parent's failure costs that parent's children and nothing else. A sweep of 187
@@ -776,7 +798,18 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                      * identical empty table. The first message is kept — the rest are almost always
                      * the same refusal repeated once per parent, and 187 copies is not evidence.
                      */
-                    $this->entityFailure ??= $e->getMessage();
+                    /*
+                     * The PATH is recorded beside the message, and only the path.
+                     *
+                     * «Request URL can not be correctly processed» says nothing about WHICH url, and
+                     * the whole cost of that refusal was three days of not knowing whether the route
+                     * was wrong, a segment was empty, or a paging link came back malformed. The query
+                     * string is dropped — it carries the window and the field list, neither of which
+                     * is needed to read the shape — and no platform here authenticates in a URL, so
+                     * a path is not a credential.
+                     */
+                    $this->entityFailure ??= $e->getMessage()
+                        .' [path: '.($this->entityPath($parentPath, $parentId)).']';
 
                     continue;
                 }
@@ -784,6 +817,12 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         }
 
         return $rows;
+    }
+
+    /** The path a stats call for this parent goes to — no query, no host, no credential. */
+    private function entityPath(string $parentPath, string $parentId): string
+    {
+        return (string) parse_url($this->url("{$parentPath}/{$parentId}/stats"), PHP_URL_PATH);
     }
 
     /** @return list<array<string,mixed>> */

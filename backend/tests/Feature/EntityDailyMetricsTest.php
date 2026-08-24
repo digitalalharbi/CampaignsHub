@@ -240,6 +240,78 @@ final class EntityDailyMetricsTest extends TestCase
         $this->assertArrayNotHasKey('sign_ups', $row);
     }
 
+    /**
+     * SNAP-AD-STATS-ROUTE-001 — the exact URL that leaves the connector for the ad grain.
+     *
+     * Production recorded `Snapchat Marketing API could not return ad stats: Request URL can not be
+     * correctly processed` while the same sweep wrote 1,165 ad rows — so most calls were fine and
+     * some were not, which is the signature of a URL built from a value that is sometimes wrong
+     * rather than a route that is always wrong.
+     *
+     * The media defect earlier in this file shipped through a green gate because its test faked ANY
+     * url and asserted only the outcome. This asserts the SHAPE that goes out, so a route that
+     * silently changes is a failing test rather than a refusal in production three days later.
+     */
+    public function test_the_ad_grain_asks_the_campaign_endpoint_with_the_ad_breakdown(): void
+    {
+        Http::fake(['*' => Http::response(['timeseries_stats' => []], 200)]);
+
+        $this->connector()->fetchEntityInsights(
+            new OAuthTokens('AT', 'RT', Carbon::now()->addDay()),
+            'act-1',
+            'campaigns',
+            'ad',
+            ['cmp-1'],
+            '2026-08-01',
+            '2026-08-01',
+        );
+
+        Http::assertSent(function ($request): bool {
+            $url = $request->url();
+            $path = parse_url($url, PHP_URL_PATH) ?? '';
+
+            // The route: ads are broken down on the CAMPAIGN endpoint, never the ad-squad one.
+            $this->assertStringEndsWith('/campaigns/cmp-1/stats', (string) $path);
+            // Never a doubled or empty segment — `campaigns//stats` is the exact shape the platform
+            // answers with «Request URL can not be correctly processed».
+            $this->assertStringNotContainsString('//stats', (string) $path);
+            $this->assertStringNotContainsString('campaigns//', (string) $path);
+
+            parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+            $this->assertSame('ad', $query['breakdown'] ?? null);
+            $this->assertSame('DAY', $query['granularity'] ?? null);
+
+            return true;
+        });
+    }
+
+    /**
+     * A parent with no provider id must never become a request.
+     *
+     * `campaigns//stats` is a URL the platform cannot route, and it is what this connector builds
+     * from an empty `external_id` — a row the structure sync stored without the provider's own id.
+     * Skipping it costs that one parent; sending it costs an unexplained refusal in the run log.
+     */
+    public function test_a_parent_with_no_provider_id_is_skipped_rather_than_requested(): void
+    {
+        Http::fake(['*' => Http::response(['timeseries_stats' => []], 200)]);
+
+        $rows = $this->connector()->fetchEntityInsights(
+            new OAuthTokens('AT', 'RT', Carbon::now()->addDay()),
+            'act-1',
+            'campaigns',
+            'ad',
+            ['', '   ', 'cmp-1'],
+            '2026-08-01',
+            '2026-08-01',
+        );
+
+        $this->assertSame([], $rows);
+
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($request): bool => str_contains($request->url(), '/campaigns/cmp-1/stats'));
+    }
+
     /** One parent failing costs its own children, not the whole sweep. */
     public function test_a_failing_parent_does_not_lose_the_others(): void
     {

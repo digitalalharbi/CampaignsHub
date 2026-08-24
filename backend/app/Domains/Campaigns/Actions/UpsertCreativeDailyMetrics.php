@@ -69,12 +69,16 @@ final class UpsertCreativeDailyMetrics
 
     /**
      * @param  list<array<string,mixed>>  $rows  canonical rows; the provider creative id is in `campaign_id`
-     * @return array{upserted:int,skipped:int,ambiguous:int}
+     * @return array{upserted:int,skipped:int,ambiguous:int,rows_received:int,ids_received:int,ids_mapped:int,ids_unmapped:int,unmapped_sample:list<string>}
      */
     public function execute(ExternalAccount $account, array $rows): array
     {
         if ($rows === []) {
-            return ['upserted' => 0, 'skipped' => 0, 'ambiguous' => 0];
+            return [
+                'upserted' => 0, 'skipped' => 0, 'ambiguous' => 0,
+                'rows_received' => 0, 'ids_received' => 0, 'ids_mapped' => 0,
+                'ids_unmapped' => 0, 'unmapped_sample' => [],
+            ];
         }
 
         /*
@@ -225,7 +229,34 @@ final class UpsertCreativeDailyMetrics
 
         $this->recordDelivery(array_values(array_unique(array_column($payload, 'creative_id'))));
 
-        return ['upserted' => $upserted, 'skipped' => $skipped, 'ambiguous' => count($ambiguous)];
+        /*
+         * CONTENT-KPI-COVERAGE-002 — what the sweep RECEIVED, not only what it wrote.
+         *
+         * Production has 34 creatives with no figures whose linked AD demonstrably ran in the same
+         * window. That has several possible causes and the stored rows separate none of them: the
+         * platform may not have returned a creative-grain row at all, or it returned one under an id
+         * this project cannot resolve, or the id resolved to two rows and failed closed.
+         *
+         * Only `upserted` used to leave this method, so every one of those looked identical from the
+         * outside — an empty table. The distinct-id counts are what tell «the platform said nothing
+         * about this creative» apart from «the platform named it and we could not find it».
+         *
+         * Counts and ids only. `unmapped_sample` is a handful of the PROVIDER's own creative ids,
+         * which is what somebody has to paste into Snapchat's own interface to check; it is capped so
+         * a broken account cannot write a thousand ids into a run record.
+         */
+        $unmapped = array_values(array_diff($ids, array_keys($byProviderId)));
+
+        return [
+            'upserted' => $upserted,
+            'skipped' => $skipped,
+            'ambiguous' => count($ambiguous),
+            'rows_received' => count($rows),
+            'ids_received' => count($ids),
+            'ids_mapped' => count($byProviderId),
+            'ids_unmapped' => count($unmapped),
+            'unmapped_sample' => array_slice($unmapped, 0, 10),
+        ];
     }
 
     /**

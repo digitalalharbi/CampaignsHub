@@ -713,6 +713,62 @@ final class DiagnoseSyncCommand extends Command
                 .' — they are not a partition and should not be read as one');
         }
 
+        /*
+         * CONTENT-KPI-COVERAGE-002 — what the creative sweep RECEIVED, beside what it wrote.
+         *
+         * The census above says 34 creatives have no figures while their AD demonstrably ran in the
+         * same window. Stored rows cannot say why: «the platform returned no creative-grain row for
+         * it», «it returned one under an id this project could not resolve» and «the id resolved to
+         * two rows and failed closed» all leave the identical empty table, and each is fixed
+         * somewhere different.
+         *
+         * These come from the sweep's own record. `unmapped_sample` is a handful of the PROVIDER's
+         * creative ids — the thing somebody pastes into Snapchat's own interface to check — and it is
+         * an id, not a credential.
+         */
+        $creativeMeta = MetricSyncRun::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->whereNotNull('meta')
+            ->orderByDesc('started_at')
+            ->value('meta');
+
+        $cm = is_array($creativeMeta) ? $creativeMeta : (array) json_decode((string) $creativeMeta, true);
+
+        $this->line('');
+        $this->line('  CREATIVE SWEEP — what the platform sent, and what could be placed');
+
+        if (! array_key_exists('creative_ids_received', $cm)) {
+            $this->line('  nothing recorded — no sweep has run since this was wired');
+        } else {
+            $received = (int) $cm['creative_ids_received'];
+            $mapped = (int) ($cm['creative_ids_mapped'] ?? 0);
+            $unmapped = (int) ($cm['creative_ids_unmapped'] ?? 0);
+
+            $this->line('  provider rows received     : '.(int) ($cm['creative_rows_received'] ?? 0));
+            $this->line('  distinct creative ids sent : '.$received);
+            $this->line('  ids we could place         : '.$mapped);
+            $this->line('  ids we could NOT place     : '.$unmapped
+                .($unmapped > 0 ? '  ← the platform named these and this project has no such creative' : ''));
+            $this->line('  ids that resolved twice    : '.(int) ($cm['creative_ids_ambiguous'] ?? 0)
+                .'  ← failed closed on purpose; picking one would be a coin toss');
+            $this->line('  rows written / skipped     : '.(int) ($cm['creative_rows'] ?? 0)
+                .' / '.(int) ($cm['creative_rows_skipped'] ?? 0));
+
+            $sample = (array) ($cm['creative_unmapped_sample'] ?? []);
+
+            if ($sample !== []) {
+                $this->line('  a few unplaceable ids      : '.implode(', ', array_map(strval(...), $sample)));
+            }
+
+            /*
+             * The subtraction that actually answers the question. If the platform never NAMED the
+             * creatives in bucket 3, no amount of mapping work will produce their figures — the
+             * request or the platform's own coverage is where to look next.
+             */
+            $this->line('  → of the creatives whose ad ran but which carry no figure, the ones the '
+                .'platform never named are '.($unmapped === 0 ? 'ALL of them' : 'all but at most '.$unmapped));
+        }
+
         $this->line('');
         $this->line('  CREATIVE MEDIA — whether the asset ever reached the row');
         $this->line('  creatives            : '.(int) ($media->total ?? 0));
