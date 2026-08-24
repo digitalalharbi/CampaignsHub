@@ -71,8 +71,10 @@ final class ObjectiveAwareKpiTest extends TestCase
      * card, which is the opposite of an objective-aware card, and the requirement is explicit that
      * a metric must not reach the UI before the pipeline can supply it.
      *
-     * This is a real coverage gap and it is recorded as one: an app-install creative currently
-     * leads with spend alone. That is thin and TRUE, where `roas` was rich and false.
+     * It is still a real coverage gap and still recorded as one — but the card no longer PAYS for
+     * it. See `CONTENT-KPI-COLLAPSE-001` below: what the family cannot answer is dropped, and the
+     * remainder is topped up from the set that is true of every campaign, so an app-install
+     * creative shows four honest figures instead of a lone withheld spend.
      */
     public function test_the_creative_headline_drops_what_the_creative_table_cannot_answer(): void
     {
@@ -83,6 +85,93 @@ final class ObjectiveAwareKpiTest extends TestCase
         // ...and never falls through to nothing: spend is always the question.
         $this->assertContains('spend', $this->metrics->headline('app_installs'));
         $this->assertNotContains('roas', $this->metrics->headline('app_installs'));
+    }
+
+    /**
+     * CONTENT-KPI-COLLAPSE-001 — dropping what cannot be answered must not empty the card.
+     *
+     * `ObjectiveFamily::App` headlines on `installs`, `cpi`, `registrations` and `in_app_events`,
+     * and `creative_daily_metrics` holds none of them. Every one was filtered away and the headline
+     * fell back to a bare `['spend']` — one figure, and on the account this was found on a WITHHELD
+     * one, which is how an app-install creative came to show no performance indicators at all.
+     *
+     * Asserted as a COUNT against the number the grid renders, because that is the actual
+     * requirement: `headline_metrics.slice(0, 4)` over a one-item list leaves three empty cells.
+     */
+    public function test_an_app_install_creative_is_not_left_with_a_single_figure(): void
+    {
+        $headline = $this->metrics->headline('app_installs');
+
+        $this->assertGreaterThanOrEqual(4, count($headline), 'The card renders four; a family that answers one leaves it looking broken.');
+        $this->assertSame('spend', $headline[0], 'Spend still leads — it is the question whatever the campaign was bought to do.');
+
+        // Topped up from what the catalogue can actually produce, never from what it cannot.
+        $this->assertContains('impressions', $headline);
+        $this->assertContains('clicks', $headline);
+
+        // The refusals that made this family distinct are untouched.
+        $this->assertNotContains('installs', $headline);
+        $this->assertNotContains('roas', $headline);
+        $this->assertNotContains('cpa', $headline);
+    }
+
+    /**
+     * The same fault, one degree quieter: `Leads` kept three metrics, so the old fallback — which
+     * fired only on a COMPLETELY empty list — never reached it, and the card simply went short.
+     */
+    public function test_a_lead_creative_is_topped_up_rather_than_left_short(): void
+    {
+        $headline = $this->metrics->headline('leads');
+
+        $this->assertGreaterThanOrEqual(4, count($headline));
+        $this->assertSame('spend', $headline[0]);
+        // What the family CAN answer keeps its place, in its own order, ahead of the top-up.
+        $this->assertSame('conversion_rate', $headline[1], 'The family is still the judge of its own verdict.');
+        $this->assertNotContains('cpl', $headline);
+    }
+
+    /**
+     * The guarantee, stated once over every objective the product recognises rather than family by
+     * family — a new objective added later inherits this test without anybody remembering to.
+     */
+    public function test_no_objective_leaves_the_card_with_fewer_figures_than_it_renders(): void
+    {
+        $objectives = array_map(
+            static fn (CampaignObjective $c): string => $c->value,
+            CampaignObjective::cases(),
+        );
+
+        foreach ([...$objectives, null] as $objective) {
+            $headline = $this->metrics->headline($objective);
+
+            $this->assertGreaterThanOrEqual(
+                4,
+                count($headline),
+                sprintf('«%s» headlines on %d metric(s); the card renders four.', $objective ?? 'null', count($headline)),
+            );
+
+            // Every one still has to be a figure this pipeline can actually produce — the top-up
+            // must not have reintroduced the very metrics the filter exists to remove.
+            $this->assertSame(
+                $headline,
+                $this->metrics->headline($objective),
+                'The selection is deterministic.',
+            );
+        }
+    }
+
+    /**
+     * A family that already answers four is left exactly as it was.
+     *
+     * The top-up is a floor, not a rewrite: appending «true of every campaign» metrics to a sales
+     * card would push `roas` off the four the grid shows and undo OBJECTIVE-AWARE-KPI-001.
+     */
+    public function test_a_family_that_can_answer_four_is_not_padded(): void
+    {
+        $sales = $this->metrics->headline('sales');
+
+        $this->assertSame(['spend', 'orders', 'cpa', 'revenue'], array_slice($sales, 0, 4));
+        $this->assertNotContains('impressions', array_slice($sales, 0, 4));
     }
 
     /** Engagement means engagements — a click is a different thing a person did. */
@@ -117,15 +206,38 @@ final class ObjectiveAwareKpiTest extends TestCase
         $this->assertNotSame('ctr', $headline[1], 'A sales campaign is not judged primarily on CTR.');
     }
 
-    /** Awareness is reach and frequency, never a return on spend it did not chase. */
+    /** Awareness is reach and cost of reaching, never a return on spend it did not chase. */
     public function test_an_awareness_campaign_is_never_judged_on_roas(): void
     {
         $headline = $this->metrics->headline('awareness');
 
         $this->assertContains('reach', $headline);
-        $this->assertContains('frequency', $headline);
         $this->assertContains('cpm', $headline);
         $this->assertNotContains('roas', $headline);
+    }
+
+    /**
+     * CONTENT-KPI-COLLAPSE-001 — the awareness card stops promising a cell it cannot fill.
+     *
+     * The FAMILY still names frequency; that is the definition of what an awareness buy is judged
+     * on and it is unchanged. What changed is the CREATIVE headline, which may only promise what
+     * `creative_daily_metrics` can answer — and Snapchat's creative-grain stats call does not ask
+     * for frequency, so the fourth cell on most of this account's cards could never be filled.
+     *
+     * Deriving it was refused rather than overlooked: frequency is impressions ÷ reach, and reach is
+     * summed across days, so daily uniques added together over-count the people actually reached and
+     * the quotient would be a lower bound presented as a measurement.
+     */
+    public function test_the_awareness_creative_headline_does_not_promise_frequency(): void
+    {
+        $this->assertContains('frequency', ObjectiveFamily::Awareness->headlineMetrics(), 'The family definition is untouched.');
+
+        $headline = $this->metrics->headline('awareness');
+
+        $this->assertNotContains('frequency', $headline);
+
+        // And the slot it vacated is filled by a figure this table really does hold.
+        $this->assertSame(['spend', 'impressions', 'reach', 'cpm'], array_slice($headline, 0, 4));
     }
 
     /**

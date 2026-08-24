@@ -47,8 +47,43 @@ final class CreativeMetrics
     private const DERIVED = [
         'ctr', 'cpc', 'cpm', 'cpa', 'roas', 'conversion_rate', 'aov', 'cost_per_view',
         'view_rate', 'completion_rate', 'hook_rate', 'cost_per_lpv', 'engagement_rate',
-        'cpe', 'orders', 'frequency', 'video_avg_watch_seconds',
+        'cpe', 'orders',
     ];
+
+    /**
+     * CONTENT-KPI-COLLAPSE-001 — averaged columns, which are NOT derived.
+     *
+     * `frequency` and `video_avg_watch_seconds` sat in {@see self::DERIVED}, and nothing in
+     * {@see self::derive()} has ever computed either. They are columns, read as an AVG rather than a
+     * SUM because a frequency added across days grows with the length of the window and means
+     * nothing.
+     *
+     * The distinction is not bookkeeping. `supportable()` treats DERIVED as «the pipeline can always
+     * answer this», so `frequency` passed the filter that exists to keep unanswerable metrics off
+     * the card — and Snapchat's creative-grain stats call does not ask for it. The result was that
+     * an awareness creative, which is most of this account, headlined on spend, impressions, reach
+     * and a fourth cell that could never be filled.
+     *
+     * They stay in the payload: `shape()` still reads both, so a provider that DOES report them at
+     * creative grain is not thrown away, and the detail page shows what arrives. What stops is the
+     * headline PROMISING them.
+     *
+     * Deriving frequency here instead was considered and refused. Frequency is impressions ÷ reach,
+     * and `reach` is summed across days — daily uniques added together over-count the unique people
+     * reached, so the quotient would be a lower bound presented as a measurement. The brief says not
+     * to infer, and a number that is quietly wrong is worse than an absent one.
+     *
+     * @var list<string>
+     */
+    private const AVERAGED = ['frequency', 'video_avg_watch_seconds'];
+
+    /**
+     * How many headline metrics a card is entitled to before it reads as broken.
+     *
+     * The grid renders `headline_metrics.slice(0, 4)`, so four is not a preference — it is the
+     * number the surface asks for, and a family that can answer fewer leaves visible gaps.
+     */
+    private const HEADLINE_MINIMUM = 4;
 
     private const SUMS = [
         'spend' => 'spend',
@@ -152,8 +187,9 @@ final class CreativeMetrics
             $figures[$key] = $num($key);
         }
 
-        $figures['frequency'] = $num('frequency');
-        $figures['video_avg_watch_seconds'] = $num('video_avg_watch_seconds');
+        foreach (self::AVERAGED as $key) {
+            $figures[$key] = $num($key);
+        }
         $figures['active_days'] = (int) ($row['active_days'] ?? 0);
 
         $figures = $this->derive($figures);
@@ -172,8 +208,9 @@ final class CreativeMetrics
         foreach (array_keys(self::SUMS) as $key) {
             $figures['reported'][$key] = $row[$key] !== null;
         }
-        $figures['reported']['frequency'] = $row['frequency'] !== null;
-        $figures['reported']['video_avg_watch_seconds'] = $row['video_avg_watch_seconds'] !== null;
+        foreach (self::AVERAGED as $key) {
+            $figures['reported'][$key] = $row[$key] !== null;
+        }
 
         /*
          * Carried AFTER `reported` is built, and never inside it.
@@ -417,12 +454,49 @@ final class CreativeMetrics
      */
     private function supportable(array $metrics): array
     {
-        $kept = array_values(array_filter(
-            $metrics,
-            fn (string $key): bool => array_key_exists($key, self::SUMS) || in_array($key, self::DERIVED, true),
-        ));
+        $supported = fn (string $key): bool => array_key_exists($key, self::SUMS) || in_array($key, self::DERIVED, true);
 
-        return $kept === [] ? ['spend'] : $kept;
+        $kept = array_values(array_filter($metrics, $supported));
+
+        /*
+         * CONTENT-KPI-COLLAPSE-001 — a family whose metrics this pipeline cannot produce must not
+         * leave the card with nothing on it.
+         *
+         * The filter above is right: a headline metric the catalogue cannot supply would render as
+         * «not reported» in the most prominent position on the card, which is worse than not
+         * offering it. What was wrong is what happened AFTER it removed too much.
+         *
+         * `ObjectiveFamily::App` headlines on `installs`, `cpi`, `registrations` and
+         * `in_app_events`. `creative_daily_metrics` holds none of them — Snapchat's creative-grain
+         * stats call does not ask for `total_installs`, and no other provider fills those columns
+         * either. So every one was filtered away and the card fell back to a bare `['spend']`: one
+         * figure, and on this account a WITHHELD one, which is how an app-install creative came to
+         * show no performance indicators at all. `Leads` loses `leads` and `cpl` the same way.
+         *
+         * The old fallback only fired when the list emptied completely, so `Leads` — left with
+         * three — never reached it and simply went short.
+         *
+         * Topping up rather than replacing: whatever the family CAN answer stays, in its own order,
+         * because the first metric is the verdict and the family is still the best judge of it.
+         * What follows is the set that is true of every campaign whatever it was bought to do, and
+         * every key in it is one the catalogue produces. Nothing here is inferred and nothing is
+         * projected down from the campaign — these are the creative's own columns, or ratios of
+         * them, and a creative the platform reported nothing for still renders as «not reported»
+         * rather than as a zero.
+         *
+         * Four, because the card shows four.
+         */
+        foreach (ObjectiveFamily::Unknown->headlineMetrics() as $universal) {
+            if (count($kept) >= self::HEADLINE_MINIMUM) {
+                break;
+            }
+
+            if (! in_array($universal, $kept, true) && $supported($universal)) {
+                $kept[] = $universal;
+            }
+        }
+
+        return $kept;
     }
 
     /** The family whose KPIs this objective is judged by — see {@see CampaignObjective::family()}. */
