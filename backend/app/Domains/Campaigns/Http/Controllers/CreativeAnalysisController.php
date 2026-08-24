@@ -293,7 +293,9 @@ final class CreativeAnalysisController extends Controller
             'previous_period' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()],
             'metrics' => $current,
             'previous' => $previous,
-            'headline_metrics' => $this->metrics->headline($objective),
+            // The detail page is looking at ONE creative's window, so `$current` is exactly the
+            // availability this creative has (CONTENT-KPI-AVAILABILITY-001).
+            'headline_metrics' => $this->metrics->headline($objective, $current),
             'path' => $this->metrics->pathFor($objective)->value,
             'fatigue' => $this->fatigue->assess($current ?? ['active_days' => 0], $previous),
             // The funnel is a reshaping of `metrics` above — same figures, no second query, and only
@@ -1111,6 +1113,13 @@ final class CreativeAnalysisController extends Controller
             static fn (?string $o): bool => $o !== null && $o !== '',
         )));
         $paths = array_values(array_unique(array_map(static fn (array $r): string => (string) ($r['path'] ?? ''), $rows)));
+
+        // Aggregated once: the group's headline now depends on what the group can actually answer,
+        // and computing it twice would let the payload and the selection drift apart.
+        $groupFigures = $this->metrics->aggregate(array_map(
+            static fn (array $r): mixed => $r['metrics'] ?? null,
+            $rows,
+        ));
         $shared = count($objectives) === 1 ? $objectives[0] : null;
         $mixed = count($objectives) > 1 || count($paths) > 1;
 
@@ -1130,11 +1139,8 @@ final class CreativeAnalysisController extends Controller
             'paths' => $paths,
             'objective' => $shared,
             'mixed_objectives' => $mixed,
-            'headline_metrics' => $mixed ? [] : $this->metrics->headline($shared),
-            'metrics' => $this->metrics->aggregate(array_map(
-                static fn (array $r): mixed => $r['metrics'] ?? null,
-                $rows,
-            )),
+            'headline_metrics' => $mixed ? [] : $this->metrics->headline($shared, $groupFigures),
+            'metrics' => $groupFigures,
             'mixed_reason_ar' => $mixed
                 ? 'أعضاء هذه المجموعة لا يشتركون في هدف واحد، فلا يُعلن رقم موحّد للتكلفة أو العائد.'
                 : null,

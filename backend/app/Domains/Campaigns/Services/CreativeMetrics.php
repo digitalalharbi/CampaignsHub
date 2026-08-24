@@ -47,8 +47,49 @@ final class CreativeMetrics
     private const DERIVED = [
         'ctr', 'cpc', 'cpm', 'cpa', 'roas', 'conversion_rate', 'aov', 'cost_per_view',
         'view_rate', 'completion_rate', 'hook_rate', 'cost_per_lpv', 'engagement_rate',
-        'cpe', 'orders', 'frequency', 'video_avg_watch_seconds',
+        'cpe', 'orders',
     ];
+
+    /**
+     * Averaged COLUMNS, which are not derived — carried over from CONTENT-KPI-COLLAPSE-001.
+     *
+     * `frequency` and `video_avg_watch_seconds` sat in {@see self::DERIVED}, and nothing in
+     * {@see self::derive()} has ever computed either. They are columns, read as an AVG rather than a
+     * SUM because a frequency added across days grows with the length of the window and means nothing.
+     *
+     * The misfiling still matters even now that selection is availability-aware. `DERIVED` is the
+     * PIPELINE filter's answer to «can this service produce the metric at all», and for these two the
+     * honest answer is «only if a provider sends the column». Snapchat's creative-grain stats call
+     * does not ask for frequency, so the awareness family — most of this account — was promising a
+     * cell that could never be filled. Availability now catches that per row; the classification is
+     * corrected so the SHAPE is right when no row is in hand.
+     *
+     * Deriving frequency instead was considered and refused: it is impressions ÷ reach, and `reach`
+     * is summed across days, so daily uniques added together over-count the people actually reached
+     * and the quotient would be a lower bound presented as a measurement.
+     *
+     * Both stay in the payload — `shape()` still reads them — so a provider that DOES report them at
+     * creative grain is not thrown away. What stops is the headline PROMISING them.
+     *
+     * @var list<string>
+     */
+    private const AVERAGED = ['frequency', 'video_avg_watch_seconds'];
+
+    /**
+     * How many headline metrics a card is entitled to before it reads as broken.
+     *
+     * The grid renders `headline_metrics.slice(0, 4)`, so four is not a preference — it is the number
+     * the surface asks for, and a family that can answer fewer leaves visible gaps.
+     */
+    private const HEADLINE_MINIMUM = 4;
+
+    /**
+     * The keys whose absence may still be answerable, because FX-001 preserves an original beside a
+     * figure it refused to convert.
+     *
+     * @var list<string>
+     */
+    private const MONEY = ['spend', 'revenue'];
 
     private const SUMS = [
         'spend' => 'spend',
@@ -152,8 +193,9 @@ final class CreativeMetrics
             $figures[$key] = $num($key);
         }
 
-        $figures['frequency'] = $num('frequency');
-        $figures['video_avg_watch_seconds'] = $num('video_avg_watch_seconds');
+        foreach (self::AVERAGED as $key) {
+            $figures[$key] = $num($key);
+        }
         $figures['active_days'] = (int) ($row['active_days'] ?? 0);
 
         $figures = $this->derive($figures);
@@ -172,8 +214,9 @@ final class CreativeMetrics
         foreach (array_keys(self::SUMS) as $key) {
             $figures['reported'][$key] = $row[$key] !== null;
         }
-        $figures['reported']['frequency'] = $row['frequency'] !== null;
-        $figures['reported']['video_avg_watch_seconds'] = $row['video_avg_watch_seconds'] !== null;
+        foreach (self::AVERAGED as $key) {
+            $figures['reported'][$key] = $row[$key] !== null;
+        }
 
         /*
          * Carried AFTER `reported` is built, and never inside it.
@@ -367,7 +410,11 @@ final class CreativeMetrics
      *
      * @return list<string>
      */
-    public function headline(?string $objective): array
+    /**
+     * @param  array<string, mixed>|null  $figures  this creative's own figures for the window, when
+     *                                              known; null asks only what the FAMILY wants
+     */
+    public function headline(?string $objective, ?array $figures = null): array
     {
         /*
          * OBJECTIVE-AWARE-KPI-001 — chosen by the objective's FAMILY, not by its marketing path.
@@ -393,7 +440,32 @@ final class CreativeMetrics
             ? array_values(array_unique([...$metrics, 'video_views', 'view_rate', 'completion_rate', 'cost_per_view']))
             : $metrics;
 
-        return $this->supportable($metrics);
+        return $this->supportable($metrics, $figures);
+    }
+
+    /**
+     * Whether THIS row can answer a given metric — the question `supportable()` cannot ask alone.
+     *
+     * Three states count as answerable, and the third is the one that has been getting this wrong:
+     *
+     *   REPORTED  a value came back, including a measured zero. `0 orders` is a fact about a sales
+     *             creative and belongs on its card.
+     *   DERIVED   a ratio this service computed from figures that were reported. Null when its
+     *             denominator was missing, which is «there was nothing to divide», not «zero».
+     *   WITHHELD  money with no conversion rate. `value` is null by FX-001's design and the ORIGINAL
+     *             amount is preserved beside it, so the cell renders «79.61 USD» and is answerable.
+     *             Treating this as unanswerable would drop spend off the card of every creative on an
+     *             account with no rate — which is every creative on the account this was found on.
+     *
+     * @param  array<string, mixed>  $figures
+     */
+    private function answerable(array $figures, string $key): bool
+    {
+        if (in_array($key, self::MONEY, true)) {
+            return ($figures[$key] ?? null) !== null || ($figures[$key.'_original'] ?? null) !== null;
+        }
+
+        return ($figures[$key] ?? null) !== null;
     }
 
     /**
@@ -415,14 +487,79 @@ final class CreativeMetrics
      * @param  list<string>  $metrics
      * @return list<string>
      */
-    private function supportable(array $metrics): array
+    /**
+     * CONTENT-KPI-AVAILABILITY-001 — objective-aware AND availability-aware, in that order.
+     *
+     * Two filters, and they answer different questions. The first is about the PIPELINE: can this
+     * service produce the metric at all? `ObjectiveFamily::App` names `installs` and `cpi`, and
+     * `creative_daily_metrics` has no column for either — no creative will ever answer them, so a
+     * card that promises one is promising an empty cell forever.
+     *
+     * The second is about THIS ROW: did the platform answer it, for this creative, in this window? A
+     * sales creative whose family wants `revenue` and `roas` is not helped by two blank cells when
+     * Snapchat reports neither at creative grain — and the same creative reports impressions, clicks
+     * and CTR that the card had room to show.
+     *
+     * Order matters, and it is the whole design. The family's OWN metrics are kept first and in the
+     * family's own order, because the first cell is the verdict and the objective is the only thing
+     * that knows which figure that is. Only then is the remainder topped up, from the metrics that
+     * are true of any campaign whatever it was bought for. A sales creative that CAN answer `orders`
+     * still leads with `orders`; one that cannot does not get a blank where its verdict should be.
+     *
+     * Nothing here invents a value, and nothing is projected from another grain. A metric survives
+     * only by being present in this row.
+     *
+     * With `$figures` null — a group with no aggregate, a card being described rather than rendered —
+     * only the pipeline filter applies, which is the behaviour every caller had before.
+     *
+     * @param  list<string>  $metrics
+     * @param  array<string, mixed>|null  $figures
+     * @return list<string>
+     */
+    private function supportable(array $metrics, ?array $figures = null): array
     {
-        $kept = array_values(array_filter(
-            $metrics,
-            fn (string $key): bool => array_key_exists($key, self::SUMS) || in_array($key, self::DERIVED, true),
-        ));
+        $producible = fn (string $key): bool => array_key_exists($key, self::SUMS)
+            || in_array($key, self::DERIVED, true);
 
-        return $kept === [] ? ['spend'] : $kept;
+        $kept = array_values(array_filter($metrics, $producible));
+
+        if ($figures !== null) {
+            $kept = array_values(array_filter($kept, fn (string $k): bool => $this->answerable($figures, $k)));
+        }
+
+        /*
+         * Top up to the number of cells the card renders.
+         *
+         * `Unknown`'s metrics are the ones true of every campaign whatever it was bought to do, which
+         * is exactly what a family that has run out of answerable figures needs. When `$figures` is
+         * given these are held to the same availability test as the family's own — so a creative that
+         * genuinely reported four figures shows four, and one that reported two shows two rather than
+         * two figures and two apologies.
+         */
+        foreach (ObjectiveFamily::Unknown->headlineMetrics() as $universal) {
+            if (count($kept) >= self::HEADLINE_MINIMUM) {
+                break;
+            }
+
+            if (in_array($universal, $kept, true) || ! $producible($universal)) {
+                continue;
+            }
+
+            if ($figures === null || $this->answerable($figures, $universal)) {
+                $kept[] = $universal;
+            }
+        }
+
+        /*
+         * `spend` is the last resort and only when nothing at all survived — it is the one question
+         * asked of every campaign. It is NOT added when figures were supplied and spend is not among
+         * them: a card is better with three honest cells than four where the fourth is «no data».
+         */
+        if ($kept === []) {
+            return $figures === null || $this->answerable($figures, 'spend') ? ['spend'] : [];
+        }
+
+        return $kept;
     }
 
     /** The family whose KPIs this objective is judged by — see {@see CampaignObjective::family()}. */
