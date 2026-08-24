@@ -1057,7 +1057,15 @@ function CreativeGridCard({
           * hid the only fact that mattered: whether the platform was asked, answered, or refused.
           * A creative that has figures keeps the grid; one that has none gets the reason instead.
           */}
-        {creative.metrics === null ? (
+        {creative.metrics === null || creative.headline_metrics.length === 0 ? (
+          /*
+             CONTENT-KPI-AVAILABILITY-001 — an empty headline gets the reason, never an empty grid.
+
+             Selection is now availability-aware, so a row the platform answered nothing for returns
+             NO headline metrics rather than four it cannot fill. Mapping over that list would render
+             a `<dl>` with nothing in it: a KPI area that has silently disappeared, which is the one
+             outcome this whole change exists to prevent. The reason panel says why instead.
+          */
           <CardEmptyReason availability={availability} locale={locale} />
         ) : (
           /* The creative's OWN headline metrics — chosen by its objective, so an awareness video is
