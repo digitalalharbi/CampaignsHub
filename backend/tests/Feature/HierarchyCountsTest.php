@@ -265,6 +265,48 @@ final class HierarchyCountsTest extends TestCase
             ->assertSuccessful();
     }
 
+    /**
+     * CONTENT-KPI-COVERAGE-001 — one creative planted in each bucket, so none can report a lazy zero.
+     *
+     * «86 of 1456 creatives carry a figure» is one number covering at least five situations that
+     * call for different fixes, or for none. This plants a creative in every one of them at once
+     * and asserts the census separates them — a report that could only ever print zeros in four
+     * buckets would look identical to a healthy account.
+     */
+    public function test_the_coverage_census_separates_the_reasons_a_creative_has_no_figures(): void
+    {
+        $campaign = $this->campaign('cmp-1');
+        $adSet = $this->adSet('sq-1', $campaign);
+
+        // 1 — delivered inside the window.
+        $inWindow = $this->creative('cr-window', $this->ad('ad-1', $adSet, $campaign), $campaign);
+        $this->figures($inWindow, Carbon::today(), spend: 10.0, impressions: 100, clicks: 5);
+
+        // 2 — has rows, but every one of them predates the thirty days the library asks for.
+        $outside = $this->creative('cr-outside', $this->ad('ad-2', $adSet, $campaign), $campaign);
+        $this->figures($outside, Carbon::today()->subDays(120), spend: 10.0, impressions: 100, clicks: 5);
+
+        // 3 — no creative row, but the AD carrying it demonstrably ran in the same window.
+        $adRan = $this->ad('ad-3', $adSet, $campaign);
+        $this->creative('cr-ad-ran', $adRan, $campaign);
+        $this->adFigures($adRan, Carbon::today());
+
+        // 4 — no creative row and its ad was equally silent: it did not deliver.
+        $this->creative('cr-silent', $this->ad('ad-4', $adSet, $campaign), $campaign);
+
+        // 5 — referenced by no ad at all.
+        $this->creative('cr-orphan', null, $campaign);
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('CREATIVE KPI COVERAGE')
+            ->expectsOutputToContain('figures inside the library window   : 1 of 5')
+            ->expectsOutputToContain('rows exist but ALL outside it       : 1')
+            ->expectsOutputToContain('no rows; its ad DID run in window   : 1')
+            ->expectsOutputToContain('no rows; its ad did not run either  : 1')
+            ->expectsOutputToContain('no rows; referenced by no ad at all : 1')
+            ->assertSuccessful();
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────────────────────
 
     private function campaign(string $externalId): ExternalCampaign
@@ -359,5 +401,29 @@ final class HierarchyCountsTest extends TestCase
         ]);
 
         $creative->forceFill(['last_active_at' => $date])->save();
+    }
+
+    /**
+     * A day of AD-grain figures — the evidence that the platform reported the ad.
+     *
+     * Deliberately NOT copied down onto the creative: the census counts this as a fact about the ad,
+     * and projecting it would manufacture exactly the creative figures this whole investigation is
+     * trying to find honestly.
+     */
+    private function adFigures(ExternalAd $ad, Carbon $date): void
+    {
+        DB::table('entity_daily_metrics')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'entity_type' => 'ad',
+            'entity_id' => $ad->getKey(),
+            'external_entity_id' => $ad->external_id,
+            'provider' => 'snapchat',
+            'metric_date' => $date->toDateString(),
+            'impressions' => 100,
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
+        ]);
     }
 }

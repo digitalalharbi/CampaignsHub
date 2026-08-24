@@ -619,6 +619,100 @@ final class DiagnoseSyncCommand extends Command
             }
         }
 
+        /*
+         * CONTENT-KPI-COVERAGE-001 — why only a fraction of the creatives carry any figure.
+         *
+         * «86 of 1456» is a single number covering at least five different situations, and they call
+         * for five different fixes — or, in two cases, for none at all. A creative that never ran in
+         * the window it is being asked about is not a defect; a creative whose AD demonstrably ran in
+         * that same window while the creative row stayed empty is either a platform that does not
+         * break that result down per creative, or a row this product lost.
+         *
+         * Every bucket below is counted from rows this database already holds. Nothing is asked of
+         * the provider, nothing is inferred, and — this is the one that matters — no campaign or ad
+         * figure is projected downwards onto a creative. A creative appears in the «its ad ran»
+         * bucket because its AD has rows, and that is reported as a fact about the ad.
+         */
+        $inWindow = DB::table('creative_daily_metrics')
+            ->where('project_id', $projectId)
+            ->whereBetween('metric_date', [
+                Carbon::now()->subDays(29)->toDateString(),
+                Carbon::now()->toDateString(),
+            ])
+            ->distinct()
+            ->pluck('creative_id');
+
+        $everRows = DB::table('creative_daily_metrics')
+            ->where('project_id', $projectId)
+            ->distinct()
+            ->pluck('creative_id');
+
+        $creativesInProject = DB::table('external_creatives')
+            ->where('project_id', $projectId)
+            ->pluck('id');
+
+        $totalCreatives = $creativesInProject->count();
+        $haveWindow = $inWindow->intersect($creativesInProject)->count();
+        // Rows exist, but every one of them falls outside the thirty days the library asks for.
+        $onlyOutside = $everRows->intersect($creativesInProject)->diff($inWindow)->count();
+
+        $silent = $creativesInProject->diff($everRows);
+
+        /*
+         * Of the creatives with no row of their own: which are carried by an ad that DID deliver?
+         *
+         * `external_ads.creative_id` is the canonical link. An ad with `entity_daily_metrics` rows in
+         * the same window is an ad the platform reported on — so its creative being empty is a
+         * genuine question, and the ones whose ads were equally silent are simply creatives that did
+         * not run.
+         */
+        $deliveringAdCreatives = DB::table('external_ads')
+            ->where('project_id', $projectId)
+            ->whereNotNull('creative_id')
+            ->whereIn('id', function ($sub) use ($projectId): void {
+                $sub->select('entity_id')
+                    ->from('entity_daily_metrics')
+                    ->where('project_id', $projectId)
+                    ->where('entity_type', 'ad')
+                    ->whereBetween('metric_date', [
+                        Carbon::now()->subDays(29)->toDateString(),
+                        Carbon::now()->toDateString(),
+                    ]);
+            })
+            ->distinct()
+            ->pluck('creative_id');
+
+        $linkedCreatives = DB::table('external_ads')
+            ->where('project_id', $projectId)
+            ->whereNotNull('creative_id')
+            ->distinct()
+            ->pluck('creative_id');
+
+        $silentButAdRan = $silent->intersect($deliveringAdCreatives)->count();
+        $silentAdAlsoSilent = $silent->intersect($linkedCreatives)->diff($deliveringAdCreatives)->count();
+        $silentUnlinked = $silent->diff($linkedCreatives)->count();
+
+        $this->line('');
+        $this->line('  CREATIVE KPI COVERAGE — the same creatives, split by WHY they carry no figure');
+        $this->line('  figures inside the library window   : '.$haveWindow.' of '.$totalCreatives);
+        $this->line('  rows exist but ALL outside it       : '.$onlyOutside
+            .($onlyOutside > 0 ? '  ← the page asks for the wrong days' : ''));
+        $this->line('  no rows; its ad DID run in window   : '.$silentButAdRan
+            .($silentButAdRan > 0 ? '  ← the platform reported the ad and not the creative' : ''));
+        $this->line('  no rows; its ad did not run either  : '.$silentAdAlsoSilent
+            .'  ← did not deliver; an empty card here is correct');
+        $this->line('  no rows; referenced by no ad at all : '.$silentUnlinked
+            .($silentUnlinked > 0 ? '  ← structurally invisible to any downward walk' : ''));
+
+        $accounted = $haveWindow + $onlyOutside + $silentButAdRan + $silentAdAlsoSilent + $silentUnlinked;
+
+        // The buckets are built from set operations that could silently overlap or miss. Saying so
+        // out loud is cheaper than trusting five counts that happen to look plausible.
+        if ($accounted !== $totalCreatives) {
+            $this->warn('  the buckets total '.$accounted.', not '.$totalCreatives
+                .' — they are not a partition and should not be read as one');
+        }
+
         $this->line('');
         $this->line('  CREATIVE MEDIA — whether the asset ever reached the row');
         $this->line('  creatives            : '.(int) ($media->total ?? 0));
