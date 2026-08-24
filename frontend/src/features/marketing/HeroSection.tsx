@@ -149,6 +149,47 @@ export function HeroSection({
             {c.start.paths.map((opt) => {
               const Icon = PATH_ICON[opt.key] ?? Building2
               const on = opt.key === pathKey
+
+              /*
+               * MKT-UGC-002 — an ANNOUNCED path is not a control.
+               *
+               * Rendered as a `div` rather than a disabled `button`, because there is no action to
+               * disable: it has no destination, no reveal, and no place in the radio group. A
+               * disabled button would still be in the accessibility tree as something that could
+               * have been pressed, and `aria-pressed` on it would claim membership of a selection
+               * this card can never join. `aria-disabled` states the fact instead.
+               *
+               * It keeps the geometry of the three real cards — same padding, same icon well, same
+               * two lines — so the chooser reads as one list, and differs where the difference is
+               * the point: the badge, the muted ground, and no radio mark.
+               */
+              if (opt.soon === true) {
+                return (
+                  <div
+                    key={opt.key}
+                    data-testid={`hero-path-soon-${opt.key}`}
+                    aria-disabled="true"
+                    className="flex items-start gap-2.5 rounded-xl border border-dashed border-border bg-surface-secondary/50 p-2.5 text-start"
+                  >
+                    {/* Where the radio mark sits on a selectable card — held empty, so the four
+                        titles stay on one vertical line instead of the fourth stepping inwards. */}
+                    <span className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <span className="block text-[13px] font-bold leading-tight text-text-secondary">{opt.title}</span>
+                        <span className="rounded bg-brand-primary-soft px-1.5 py-0.5 text-[10px] font-bold leading-none text-brand-600">
+                          {opt.badge}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 block text-[11.5px] leading-snug text-text-muted">{opt.desc}</span>
+                    </span>
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-secondary text-text-muted">
+                      <Icon size={15} />
+                    </span>
+                  </div>
+                )
+              }
+
               return (
                 <button
                   key={opt.key}
@@ -221,7 +262,9 @@ export function HeroSection({
               {/* Every journey stays a real link, not only a selection — a visitor who never clicks a
                   path (and any crawler) still finds all four routes. */}
               <nav aria-label={c.options.title} className="flex flex-wrap gap-x-3 gap-y-1 pt-1 text-[10.5px]">
-                {c.start.paths.filter((o) => o.key !== pathKey).map((o) => (
+                {/* `soon` excluded: `journeyTo` would resolve it to the influencer intake, which is
+                    exactly the route the announcement exists to NOT hand out (MKT-UGC-002). */}
+                {c.start.paths.filter((o) => o.key !== pathKey && o.soon !== true).map((o) => (
                   <Link key={o.key} to={journeyTo(o.key)} data-testid={`hero-journey-link-${o.key}`} className="text-text-muted hover:text-brand-600 hover:underline">{o.title}</Link>
                 ))}
               </nav>

@@ -84,6 +84,16 @@ export interface HomeCopy {
       cta: string
       to?: string
       action?: 'reveal-services'
+      /**
+       * An ANNOUNCEMENT, not an offer (MKT-UGC-002).
+       *
+       * A path carrying this has no destination and no action, and the chooser renders it as a
+       * card that cannot be selected. It exists so the visitor learns the service is coming
+       * without being handed a route into a sub-system that is switched off — the two things
+       * that «show it as coming soon» has to mean at once.
+       */
+      soon?: true
+      badge?: string
     }[]
   }
 
@@ -768,7 +778,38 @@ function offeredCopy(copy: HomeCopy): HomeCopy {
     ...copy,
     start: {
       ...copy.start,
-      paths: copy.start.paths.filter((p) => p.key !== 'influencer'),
+      /*
+       * MKT-UGC-002 — ANNOUNCED where it used to be REMOVED.
+       *
+       * Filtering the card out entirely is why the service is invisible on the homepage: a visitor
+       * who wants influencer or UGC work reads three options, none of which is theirs, and leaves
+       * believing the product does not do it. Announcing it answers that without reopening
+       * anything — the replacement has no `to` and no `action`, so there is no route to a
+       * sub-system `features.influencersUgc` has switched off.
+       *
+       * The wording is READ from `serviceAreas.soon`, the string this page already announces the
+       * same service with further down. Writing it again here would give the product two Arabic
+       * sentences for one thing, and they would drift the first time either is edited.
+       *
+       * Position is inherited, not chosen: the influencer path is already last in `paths`, so
+       * mapping in place puts the announcement directly below «أحتاج خدمات إعلانية».
+       */
+      paths: copy.start.paths.map((p) =>
+        p.key === 'influencer'
+          ? {
+              key: p.key,
+              title: copy.serviceAreas.soon.title,
+              kicker: copy.serviceAreas.soon.badge,
+              desc: copy.serviceAreas.soon.desc,
+              badge: copy.serviceAreas.soon.badge,
+              // Nothing to include yet, and nothing to click: an empty list keeps the shape without
+              // promising features the closed sub-system would have to deliver.
+              includes: [],
+              cta: copy.serviceAreas.soon.badge,
+              soon: true as const,
+            }
+          : p,
+      ),
     },
     options: {
       ...copy.options,
