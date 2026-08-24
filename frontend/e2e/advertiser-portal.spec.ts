@@ -88,13 +88,52 @@ test.describe('the advertiser portal', () => {
      * Naming the objective keeps the test about what it was always about: the labels re-render in
      * the reader's language rather than freezing in whichever one loaded first.
      */
-    await page.getByTestId('dashboard-objective').selectOption('awareness')
-    await expect(page.getByText('الوصول').first()).toBeVisible({ timeout: 20000 })
+    /*
+     * `sales`, not `awareness` — the objective this account's seeded campaigns actually carry.
+     *
+     * The awareness scope holds NO rows here, and since METRICS-EMPTY-SCOPE-001 an empty scope
+     * renders one sentence about the filter rather than a row of cards each reading «لم ترسله
+     * المنصة». A scope with nothing in it has no standing to say what a platform reports.
+     *
+     * And the assertion is scoped by TESTID rather than by page text, which is the other half of
+     * what went wrong: `getByText('الوصول')` also matches the objective SELECT's own «الوصول»
+     * option, so the Arabic half used to be satisfied by the dropdown without ever touching a KPI
+     * card. Only the English half ever reached the strip — which is why this failed on one language
+     * and not the other. Asking the card directly cannot be answered by a control that happens to
+     * share a word.
+     */
+    await page.getByTestId('dashboard-objective').selectOption('sales')
+
+    const roas = page.getByTestId('metric-roas')
+
+    await expect(roas).toContainText('العائد على الإنفاق', { timeout: 20000 })
 
     await toggleLanguage(page)
-    await expect(page.getByText('Reach').first()).toBeVisible({ timeout: 20000 })
-    await expect(page.getByText('الوصول')).toHaveCount(0)
+    await expect(roas).toContainText('Return on ad spend', { timeout: 20000 })
+    await expect(roas).not.toContainText('العائد على الإنفاق')
   })
+
+  /**
+   * METRICS-EMPTY-SCOPE-001 — a filter matching nothing speaks about the FILTER, in either language.
+   *
+   * Narrowing to an objective this account never bought used to produce a row of cards each saying
+   * «لم ترسله المنصة» — a claim about Meta and Snapchat derived from an absence of CAMPAIGNS.
+   */
+  test('an objective with no campaigns says so, and says nothing about the platform', async ({ page }) => {
+    await page.goto('/app/dashboard')
+    await expect(page.locator('main')).toBeVisible()
+
+    await page.getByTestId('dashboard-objective').selectOption('awareness')
+
+    const panel = page.getByTestId('dashboard-metrics-empty-scope')
+
+    await expect(panel).toBeVisible({ timeout: 20000 })
+    await expect(panel).toContainText('لا توجد بيانات ضمن هذه الفلاتر')
+
+    await toggleLanguage(page)
+    await expect(panel).toContainText('No data matches these filters')
+  })
+
 
   /** Every rail link opens a page with content — the advertiser's own sections, not the agency's. */
   test('every rail link opens a page that is not empty', async ({ page }) => {

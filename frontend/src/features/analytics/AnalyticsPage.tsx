@@ -336,7 +336,7 @@ export function AnalyticsPage() {
       {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}
       {tab === 'ads' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />}
       {tab === 'objective' && <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />}
-      {tab === 'creative' && <CreativeTab projectId={currentProjectId} range={range} />}
+      {tab === 'creative' && <CreativeTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'store' && <StoreFunnelTab projectId={currentProjectId} range={range} />}
       {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} filters={filters} />}
@@ -1220,12 +1220,35 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
  * the ad: a creative that the platform does not break out shows «—», because inventing its share of
  * a campaign total would be a number nobody measured.
  */
-function CreativeTab({ projectId, range }: { projectId: string | null; range: TabProps['range'] }) {
+function CreativeTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
 
+  /*
+   * ANALYTICS-CREATIVE-SCOPE-001 — this tab ignored the filter bar entirely.
+   *
+   * It took only `projectId` and `range`, so selecting TikTok left it listing Meta creatives with
+   * Meta's figures under a bar that said TikTok. The filter was not weak here, it was decorative —
+   * and a table that contradicts the control above it is worse than an empty one, because the
+   * reader has no way to know which of the two is lying.
+   *
+   * The library speaks a different dialect for the same axes — `providers` and `campaign_ids`
+   * against the metrics API's `provider` and `campaign` — so they are translated here rather than
+   * passed through. `objective` is deliberately not forwarded: the library filters objectives by
+   * the CAMPAIGN's objective through its own axis, and mapping the metric filter onto it would
+   * narrow twice for one choice.
+   */
   const q = useQuery({
-    queryKey: ['analytics', 'creatives', projectId, range.from, range.to],
-    queryFn: () => listCreatives({ from: range.from, to: range.to, per_page: 24 }, projectId),
+    queryKey: ['analytics', 'creatives', projectId, range.from, range.to, filters.provider, filters.campaign],
+    queryFn: () => listCreatives(
+      {
+        from: range.from,
+        to: range.to,
+        per_page: 24,
+        providers: filters.provider?.length ? filters.provider : undefined,
+        campaign_ids: filters.campaign?.length ? filters.campaign : undefined,
+      },
+      projectId,
+    ),
     enabled: Boolean(projectId),
   })
 
