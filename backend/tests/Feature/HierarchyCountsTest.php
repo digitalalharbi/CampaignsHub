@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
@@ -351,6 +352,56 @@ final class HierarchyCountsTest extends TestCase
 
         $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
             ->expectsOutputToContain('no sweep has run since the ingest was wired')
+            ->assertSuccessful();
+    }
+
+    /**
+     * DIAGNOSE-TENANT-SCOPE-001 — the dashboard block must read what the DASHBOARD reads.
+     *
+     * `DailyMetric` carries a tenant global scope. A request has a tenant; `artisan` does not. So
+     * this block asked the aggregator the dashboard's question with no tenant in context, matched
+     * nothing, and printed «impressions (control) : 0» for a project holding real rows — which
+     * reads as «the production dashboard shows zero» when the dashboard is fine.
+     *
+     * The control metric is the assertion: impressions are never withheld and never converted, so a
+     * non-zero here is proof the scope resolved.
+     */
+    public function test_the_dashboard_block_reads_through_the_tenant_scope(): void
+    {
+        $campaign = $this->campaign('cmp-1');
+
+        $unified = UnifiedCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'name' => 'Unified',
+            'objective' => 'awareness',
+            'status' => 'active',
+            'budget_currency' => 'USD',
+            'platforms' => ['snapchat'],
+        ]);
+
+        $campaign->forceFill(['unified_campaign_id' => $unified->getKey()])->save();
+
+        DB::table('daily_metrics')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $this->account->getKey(),
+            'unified_campaign_id' => $unified->getKey(),
+            // NOT NULL — a metric row always names the platform campaign it came from.
+            'external_campaign_id' => $campaign->getKey(),
+            'provider' => 'snapchat',
+            'metric_date' => Carbon::today()->toDateString(),
+            // `daily_metrics` is key/value shaped — one row per metric, not one column per metric.
+            'metric_key' => 'impressions',
+            'value' => 4242,
+            'is_demo' => false,
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
+        ]);
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('impressions (control)  : 4242')
             ->assertSuccessful();
     }
 
