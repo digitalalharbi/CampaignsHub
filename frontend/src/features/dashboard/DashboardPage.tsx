@@ -527,6 +527,13 @@ export function DashboardPage() {
         secondary={metrics.secondary}
         comparisonLabel={t.previous(days)}
         note={objective === 'all' && path === 'all' ? t.mixedNote : undefined}
+        /*
+          METRICS-EMPTY-SCOPE-001 — a filter that matches nothing says so ONCE, about the filter.
+          Without this every card reads its absence from `reported`, which over an empty scope
+          answers every key false — so narrowing to an objective this project never bought made the
+          dashboard claim the platform sends no impressions.
+        */
+        hasRows={summary.data === undefined ? undefined : summary.data.rows_in_scope}
       />
 
       {/* The analysis: what happened day by day, and where people stopped. */}

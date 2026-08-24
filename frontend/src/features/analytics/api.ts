@@ -129,6 +129,19 @@ export interface Summary {
    * sent, and their own `null` already says «there was no denominator».
    */
   reported: Record<string, boolean>
+  /**
+   * METRICS-EMPTY-SCOPE-001 — whether this SCOPE holds any row at all.
+   *
+   * `reported` answers «which metric keys are present», which is a question about the platform —
+   * and over an empty scope it answers every key false, so the strip renders «لم ترسله المنصة»
+   * under each one. Narrow the objective to a family this project never bought and the dashboard
+   * states the platform sends no impressions: a claim about a connector, derived from an absence of
+   * campaigns.
+   *
+   * An empty scope has no standing to say anything about a connector. When this is false the reader
+   * says one true thing about the FILTER instead.
+   */
+  rows_in_scope: boolean
   commerce: CommerceSummary | null
   conversions_basis: ConversionsBasis
   /**

@@ -220,6 +220,47 @@ final class MetricsTest extends TestCase
         $this->assertEquals(300.0, $summary['current']['spend']);
     }
 
+    /**
+     * METRICS-EMPTY-SCOPE-001 — «no rows here» must not be reported as «the platform sends nothing».
+     *
+     * `reportedKeys()` answers by asking which metric keys are PRESENT in the scope, so an empty
+     * scope answers every key false — and the strip renders «لم ترسله المنصة» under each card.
+     * Narrow the objective to a family this project never bought and the dashboard states the
+     * platform reports no impressions: a claim about a connector, derived from an absence of
+     * campaigns.
+     *
+     * The window with rows is asserted in the same test, because a flag that is always false would
+     * pass a test that only ever looks at the empty case.
+     */
+    public function test_the_summary_says_whether_the_scope_holds_anything_at_all(): void
+    {
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'spend', 100, '2026-06-01'),
+            $this->metric($this->projectA->id, 'impressions', 5000, '2026-06-01'),
+        ]);
+
+        $withRows = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/summary?from=2026-06-01&to=2026-06-02")
+            ->assertOk()->json('data');
+
+        $this->assertTrue($withRows['rows_in_scope']);
+        $this->assertTrue($withRows['reported']['impressions'], 'The platform did report impressions here.');
+
+        // A window this project has no rows for at all.
+        $empty = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/summary?from=2020-01-01&to=2020-01-02")
+            ->assertOk()->json('data');
+
+        $this->assertFalse($empty['rows_in_scope'], 'Nothing is in scope, and the payload says so.');
+
+        /*
+         * `reported` is still all-false here — that is what it means, and it is not being changed.
+         * What changed is that a reader now knows not to speak for the platform on the strength of
+         * it.
+         */
+        $this->assertFalse($empty['reported']['impressions']);
+    }
+
     public function test_summary_api_requires_permission_and_returns_shape(): void
     {
         app(UpsertDailyMetrics::class)->handle([
