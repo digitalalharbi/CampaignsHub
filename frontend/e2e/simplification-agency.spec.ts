@@ -92,19 +92,17 @@ test.describe('agency filters are on the page, and name what they narrow', () =>
   type Bar = import('@playwright/test').Locator
 
   /*
-   * Open a multi-select, take its first value, and SHUT it again.
+   * `pickOption` lived here — open a popover multi-select, take its first value, press Escape.
    *
-   * The shutting is not tidiness. The popover is `absolute` under its trigger, so it covers the
-   * applied-filters row that the selection just created — and the gate caught a click on «إعادة
-   * ضبط» landing on «سناب شات» instead. That is how a dropdown behaves everywhere; a person presses
-   * Escape or clicks away before reaching for what is underneath, so the test does too.
+   * The Escape was load-bearing: the popover is `absolute` under its trigger and covered the
+   * applied-filters row the selection had just created, so the gate once caught a click on «إعادة
+   * ضبط» landing on «سناب شات» instead.
+   *
+   * It is gone because none of these pages has a popover axis any more. Content's platform filter
+   * is visible chips (UX-FILTERS-001), Clients drives its folded dialog, and Tasks and Alerts are
+   * native selects. Kept as a note rather than as dead code: if a popover axis returns, so does the
+   * Escape, and the reason is written down.
    */
-  const pickOption = async (bar: Bar, testid: string) => {
-    await bar.getByTestId(testid).click()
-    await bar.getByTestId(`${testid}-options`).getByRole('option').first().click()
-    await bar.page().keyboard.press('Escape')
-    await expect(bar.getByTestId(`${testid}-options`)).toHaveCount(0)
-  }
 
   const PAGES = [
     {
@@ -143,7 +141,14 @@ test.describe('agency filters are on the page, and name what they narrow', () =>
     {
       id: 'content',
       path: '/agency/content',
-      narrow: (bar: Bar) => pickOption(bar, 'content-providers'),
+      /*
+       * The platform axis is visible chips now (UX-FILTERS-001), so it is pressed rather than
+       * opened. `pickOption` still drives the pages whose axes ARE popovers.
+       */
+      narrow: async (bar: Bar) => {
+        // Index 0 is «الكل», which clears; index 1 is the first platform.
+        await bar.getByTestId('content-providers').getByRole('button').nth(1).click()
+      },
     },
   ] as const
 
