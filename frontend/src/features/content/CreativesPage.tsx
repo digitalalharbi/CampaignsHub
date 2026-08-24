@@ -5,9 +5,10 @@ import { GitCompare, Layers, LayoutGrid, Rows3 } from 'lucide-react'
 import { CreativeViewer } from './CreativeViewer'
 import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
-import { emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
+import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
 import { imageLoading } from './format'
 import { creativeMoney } from './creativeMoney'
+import { VideoPoster } from './VideoPoster'
 import {
   groupCreatives,
   libraryQueryString,
@@ -818,14 +819,10 @@ export function CreativesPage() {
                          * `muted` and `playsInline` so the frame renders on iOS without asking to
                          * play; `#t=0.1` because some browsers draw nothing at exactly zero.
                          */
-                        <video
-                          src={`${video}#t=0.1`}
-                          preload="metadata"
-                          muted
-                          playsInline
-                          controls={false}
+                        <VideoPoster
+                          src={video}
                           className="h-10 w-16 rounded object-cover"
-                          data-testid="creative-video-poster"
+                          onUnavailable={() => undefined}
                         />
                       ) : (
                         <span className="flex h-10 w-16 items-center justify-center rounded bg-surface-hover text-[10px] text-text-muted">
@@ -966,7 +963,15 @@ function CreativeGridCard({
    * Snapchat returns a video creative's file as `video_url` and often supplies no separate
    * thumbnail, so this card said «لا توجد معاينة» while holding the asset itself.
    */
-  const video = poster === null ? preview.video_url : null
+  /*
+   * CONTENT-VIDEO-POSTER-001 — a video that will not decode is «no preview», not a black box.
+   *
+   * An expired signed link, a CDN that refuses the range request, a codec the browser declines:
+   * each leaves a `<video>` that paints nothing and keeps its space. The card falls back to the
+   * sentence it already has for an absent asset, so one fact gets one statement.
+   */
+  const [brokenVideo, setBrokenVideo] = useState(false)
+  const video = poster === null && !brokenVideo ? preview.video_url : null
   const note = ar ? preview.note_ar : preview.note_en
 
   return (
@@ -995,15 +1000,13 @@ function CreativeGridCard({
              * first frame and stops, and nothing autoplays. Twenty `preload="auto"` videos on one
              * grid would cost a phone tens of megabytes to open the page — which is the reason
              * cards never mounted a player, and the reason this one is deliberately inert.
+             *
+             * CONTENT-VIDEO-POSTER-001 — the seek is PERFORMED, not requested. See `VideoPoster`.
              */
-            <video
-              src={`${video}#t=0.1`}
-              preload="metadata"
-              muted
-              playsInline
-              controls={false}
+            <VideoPoster
+              src={video}
               className="h-full w-full object-cover"
-              data-testid="creative-video-poster"
+              onUnavailable={() => setBrokenVideo(true)}
             />
           ) : (
             <span className="flex h-full flex-col items-center justify-center gap-1 p-3 text-center text-xs text-text-secondary">
@@ -1068,7 +1071,19 @@ function CreativeGridCard({
           * A creative that has figures keeps the grid; one that has none gets the reason instead.
           */}
         {creative.metrics === null ? (
-          <CardEmptyReason availability={availability} locale={locale} />
+          /*
+             CONTENT-AD-DELIVERED-001 — three absences, three sentences.
+
+             `metrics_availability` answers what happened to the REQUEST, and when the request
+             succeeded it says «لم يعمل خلال هذه الفترة». That is true of a creative that did not
+             deliver and FALSE of one whose ad ran while the platform declined to break the result
+             down per creative — 35 creatives on this account. The ad-level fact decides which.
+          */
+          creative.ad_delivered ? (
+            <EmptyReasonPanel reason={creativeGrainMissing(locale)} />
+          ) : (
+            <CardEmptyReason availability={availability} locale={locale} />
+          )
         ) : creative.headline_metrics.length === 0 ? (
           /*
              CONTENT-KPI-EMPTY-STATE-001 — «it ran and we cannot headline it» is its OWN sentence.

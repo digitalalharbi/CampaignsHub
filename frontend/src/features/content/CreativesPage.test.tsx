@@ -100,6 +100,7 @@ const card = (over: Partial<CreativeCard> = {}): CreativeCard =>
     objective: 'sales',
     path: 'sales',
     headline_metrics: ['spend', 'revenue', 'video_views', 'completion_rate'],
+    ad_delivered: false,
     metrics: metrics(),
     fatigue: { status: 'stable', signals: [], reason_ar: '', reason_en: '' },
     ...over,

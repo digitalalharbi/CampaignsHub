@@ -49,6 +49,7 @@ const CARD: CreativeCard = {
   path: 'sales',
   // The row exists and the platform answered — but nothing survived availability.
   headline_metrics: [],
+  ad_delivered: false,
   metrics: { active_days: 3, reported: {} },
   fatigue: { status: 'stable', signals: [], reason_ar: '', reason_en: '' },
 } as unknown as CreativeCard
@@ -126,6 +127,45 @@ describe('a creative that ran but has no displayable metric', () => {
     const row = await screen.findByTestId(`content-row-${CARD.id}`)
     expect(within(row).queryByText('لم يعمل خلال هذه الفترة')).not.toBeInTheDocument()
     expect(row.textContent).toContain('—')
+  })
+})
+
+/**
+ * CONTENT-AD-DELIVERED-001 — the ad ran; the platform named no creative-level figures.
+ *
+ * 35 creatives on production are in exactly this state. `metrics_availability` says the request
+ * SUCCEEDED, so the availability path returns «لم يعمل خلال هذه الفترة» — a false statement about a
+ * creative that was live, and false in the direction that costs money.
+ */
+describe('a creative whose ad ran but which the platform never named', () => {
+  beforeEach(() => {
+    useAuth.setState({
+      user: { id: '1', name: 'Op', permissions: ['campaigns.view'], is_platform_admin: false } as unknown as AuthUser,
+      status: 'authenticated',
+    })
+    vi.mocked(listCreatives).mockResolvedValue({
+      ...PAGE,
+      creatives: [{ ...CARD, id: 'cr-ad-ran', name: 'Ad ran, creative unnamed', metrics: null, ad_delivered: true }],
+    } as unknown as LibraryPage)
+  })
+
+  it('says the platform did not return creative-level metrics, not that it did not run', async () => {
+    renderWithProviders(<CreativesPage />, { locale: 'ar' })
+    await waitFor(() => expect(screen.getByText('Ad ran, creative unnamed')).toBeInTheDocument())
+
+    expect(screen.getByTestId('creative-empty-creative_grain_missing'))
+      .toHaveTextContent('المنصة لم تُرجع مؤشرات على مستوى هذا المحتوى لهذه الفترة')
+
+    expect(screen.queryByTestId('creative-empty-did_not_run')).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('لم يعمل خلال هذه الفترة')
+  })
+
+  it('and says it in English too', async () => {
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+    await waitFor(() => expect(screen.getByText('Ad ran, creative unnamed')).toBeInTheDocument())
+
+    expect(screen.getByTestId('creative-empty-creative_grain_missing'))
+      .toHaveTextContent('The platform did not return creative-level metrics for this period')
   })
 })
 

@@ -62,6 +62,7 @@ const card = (over: Record<string, unknown> = {}) => ({
   objective: 'sales',
   path: 'conversion',
   headline_metrics: ['spend', 'impressions'],
+  ad_delivered: false,
   metrics: WITHHELD,
   fatigue: { status: 'stable', signals: [], reason_ar: '', reason_en: '' },
   ...over,

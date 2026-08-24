@@ -119,6 +119,7 @@ const PRODUCTION_CARD: CreativeCard = {
   path: 'awareness',
   // What the deployed backend chose for it, verbatim from the trace.
   headline_metrics: ['spend', 'impressions', 'clicks', 'ctr', 'cpm'],
+  ad_delivered: false,
   metrics: PRODUCTION_METRICS,
   fatigue: { status: 'stable', signals: [], reason_ar: '', reason_en: '' },
 } as unknown as CreativeCard

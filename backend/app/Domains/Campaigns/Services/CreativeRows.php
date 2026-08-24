@@ -333,6 +333,35 @@ final class CreativeRows
          */
         $creatives->loadMissing('ads');
 
+        /*
+         * CONTENT-AD-DELIVERED-001 — did this creative's AD run, even though the creative has no
+         * figures of its own?
+         *
+         * Production has 35 creatives in exactly that state: the platform reports the ad and never
+         * names the creative. Without this the card falls to «لم يعمل خلال هذه الفترة», which is a
+         * false statement about a creative that was live — and false in the expensive direction,
+         * because an operator reads it and leaves a running creative alone.
+         *
+         * One query for the page, not one per row. It answers a question about the AD and is
+         * reported as such: no ad figure is copied onto the creative, and nothing here reaches the
+         * KPI grid. It only decides WHICH SENTENCE an empty card gets.
+         */
+        $adDelivered = array_fill_keys(
+            DB::table('external_ads')
+                ->whereIn('creative_id', $ids)
+                ->whereIn('id', function ($sub) use ($from, $to): void {
+                    $sub->select('entity_id')
+                        ->from('entity_daily_metrics')
+                        ->where('entity_type', 'ad')
+                        ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+                })
+                ->distinct()
+                ->pluck('creative_id')
+                ->map(static fn (mixed $v): string => (string) $v)
+                ->all(),
+            true,
+        );
+
         $out = [];
         foreach ($creatives as $creative) {
             $id = (string) $creative->getKey();
@@ -349,6 +378,8 @@ final class CreativeRows
              */
             $row['headline_metrics'] = $this->metrics->headline($objective, $figures[$id] ?? null);
             $row['metrics'] = $figures[$id] ?? null;
+            // A fact about the AD, named as one — see CONTENT-AD-DELIVERED-001.
+            $row['ad_delivered'] = isset($adDelivered[$id]);
 
             if ($withFatigue) {
                 $row['fatigue'] = $this->fatigue->assess($figures[$id] ?? ['active_days' => 0], $previous[$id] ?? null);

@@ -37,6 +37,15 @@ export type EmptyReason =
    * a creative that is actually running.
    */
   | { kind: 'no_displayable'; text: string; tone: 'muted' }
+  /**
+   * CONTENT-AD-DELIVERED-001 — the AD ran; the platform named no figures for THIS creative.
+   *
+   * Production holds 35 creatives in exactly this state, and `did_not_run` is a false statement
+   * about every one of them — false in the direction that costs money, because an operator reads it
+   * and leaves a live creative alone. The platform reported the ad and simply does not break that
+   * result down to the creative.
+   */
+  | { kind: 'creative_grain_missing'; text: string; tone: 'muted' }
 
 const COPY = {
   did_not_run: {
@@ -58,6 +67,10 @@ const COPY = {
   no_displayable: {
     ar: 'لا توجد مؤشرات أداء قابلة للعرض لهذه الفترة',
     en: 'No displayable performance metrics for this period',
+  },
+  creative_grain_missing: {
+    ar: 'المنصة لم تُرجع مؤشرات على مستوى هذا المحتوى لهذه الفترة',
+    en: 'The platform did not return creative-level metrics for this period',
   },
 } as const
 
@@ -113,6 +126,21 @@ export function noDisplayableMetrics(locale: Locale): EmptyReason {
   return {
     kind: 'no_displayable',
     text: locale === 'ar' ? COPY.no_displayable.ar : COPY.no_displayable.en,
+    tone: 'muted',
+  }
+}
+
+/**
+ * The creative's own figures are absent, but its AD delivered in this window.
+ *
+ * Chosen ahead of `metrics_availability` on purpose. That record answers «what happened to the
+ * REQUEST for this provider», and the request succeeded — so it would return `did_not_run`, which is
+ * the one sentence this state must never print.
+ */
+export function creativeGrainMissing(locale: Locale): EmptyReason {
+  return {
+    kind: 'creative_grain_missing',
+    text: locale === 'ar' ? COPY.creative_grain_missing.ar : COPY.creative_grain_missing.en,
     tone: 'muted',
   }
 }
