@@ -5,7 +5,7 @@ import { GitCompare, Layers, LayoutGrid, Rows3 } from 'lucide-react'
 import { CreativeViewer } from './CreativeViewer'
 import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
-import { emptyReason, type MetricsAvailability } from './availability'
+import { emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
 import { imageLoading } from './format'
 import { creativeMoney } from './creativeMoney'
 import {
@@ -1057,16 +1057,22 @@ function CreativeGridCard({
           * hid the only fact that mattered: whether the platform was asked, answered, or refused.
           * A creative that has figures keeps the grid; one that has none gets the reason instead.
           */}
-        {creative.metrics === null || creative.headline_metrics.length === 0 ? (
-          /*
-             CONTENT-KPI-AVAILABILITY-001 — an empty headline gets the reason, never an empty grid.
-
-             Selection is now availability-aware, so a row the platform answered nothing for returns
-             NO headline metrics rather than four it cannot fill. Mapping over that list would render
-             a `<dl>` with nothing in it: a KPI area that has silently disappeared, which is the one
-             outcome this whole change exists to prevent. The reason panel says why instead.
-          */
+        {creative.metrics === null ? (
           <CardEmptyReason availability={availability} locale={locale} />
+        ) : creative.headline_metrics.length === 0 ? (
+          /*
+             CONTENT-KPI-EMPTY-STATE-001 — «it ran and we cannot headline it» is its OWN sentence.
+             
+             This branch used to share the one above, and that was a false statement. A creative with
+             a metrics object HAS figures — the platform answered for it — so printing
+             «لم يعمل خلال هذه الفترة» over it tells the operator to leave alone a creative that is
+             actually running. `metrics_availability` cannot answer this either: it records what
+             happened to the REQUEST, and the request succeeded.
+             
+             Still not an empty grid: mapping over an empty list would render a `<dl>` with nothing
+             in it, which reads as a broken card rather than as a true statement.
+          */
+          <EmptyReasonPanel reason={noDisplayableMetrics(locale)} />
         ) : (
           /* The creative's OWN headline metrics — chosen by its objective, so an awareness video is
              never asked for a cost per order it was not bought to produce. */
@@ -1136,8 +1142,20 @@ function CardEmptyReason({
   availability: MetricsAvailability | undefined
   locale: 'ar' | 'en'
 }) {
-  const reason = emptyReason(availability, locale)
+  return <EmptyReasonPanel reason={emptyReason(availability, locale)} />
+}
 
+/**
+ * One panel, several sentences — the sentence is the whole difference.
+ *
+ * Extracted so «this creative did not run» and «this creative ran and none of its figures can be
+ * headlined» look identical and READ differently. They were briefly the same branch, and a shared
+ * branch is how the second came to print the first's words over a creative that was delivering.
+ *
+ * `data-testid` carries the kind, so a test can assert WHICH sentence rendered rather than that
+ * something grey appeared.
+ */
+function EmptyReasonPanel({ reason }: { reason: EmptyReason }) {
   return (
     <div
       className={`rounded-md px-2 py-1.5 text-xs ${
