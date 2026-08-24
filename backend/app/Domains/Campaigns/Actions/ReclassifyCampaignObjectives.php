@@ -56,22 +56,50 @@ final class ReclassifyCampaignObjectives
         $reclassified = 0;
         $unclassified = 0;
 
+        /*
+         * OBJECTIVE-NORMALIZATION-004 — «other» is examined too, and the guard is still self-limiting.
+         *
+         * The first pass ran against a map that did not know `WEB_CONVERSION` or `WEB_VIEW`, so 71
+         * campaigns could not be classified and were set to `other` — a VALID canonical value, which
+         * is exactly what the original guard («not a valid value») was written to skip. Left as it
+         * was, the mapping fix in this same change would have reached no existing row.
+         *
+         * `other` is included, and the pass still cannot loop: a campaign only leaves `other` when
+         * the resolver returns something else, and one that stays there is written back to the value
+         * it already had. What stops a second run doing work is not the guard alone but the
+         * resolver — it reads the same rows and returns the same answer.
+         *
+         * A `manual` objective is still never touched, and `other` set BY A PERSON is protected by
+         * that same rule rather than by this one.
+         */
         UnifiedCampaign::withoutGlobalScopes()
             ->where('objective_source', '!=', 'manual')
-            ->whereNotIn('objective', $valid)
+            ->where(function ($q) use ($valid): void {
+                $q->whereNotIn('objective', $valid)
+                    ->orWhere('objective', CampaignObjective::Other->value);
+            })
             ->chunkById(200, function ($campaigns) use (&$examined, &$reclassified, &$unclassified): void {
                 foreach ($campaigns as $campaign) {
                     $examined++;
 
                     $raw = (string) $campaign->objective;
+                    $before = (string) $campaign->objective;
 
                     // The live path: read the linked external campaigns and adopt their objective when
                     // they agree. This is what should have happened at import.
                     $this->resolver->sync($campaign);
                     $campaign->refresh();
 
-                    if (CampaignObjective::tryFrom((string) $campaign->objective) !== null) {
-                        $reclassified++;
+                    $now = (string) $campaign->objective;
+
+                    if (CampaignObjective::tryFrom($now) !== null) {
+                        // A row that was already `other` and is still `other` was examined, not
+                        // repaired — counting it as reclassified would report work nobody did.
+                        if ($now !== $before) {
+                            $reclassified++;
+                        } else {
+                            $unclassified++;
+                        }
 
                         continue;
                     }
