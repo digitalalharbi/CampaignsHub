@@ -18,6 +18,8 @@ use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -217,6 +219,52 @@ final class HierarchyCountsTest extends TestCase
             ->assertSuccessful();
     }
 
+    /**
+     * CONTENT-KPI-TRACE-001 — the trace prints the figures the first card would carry.
+     *
+     * The library's first page is ordered by last active day, so these three creatives ARE the
+     * cards the owner is looking at. If the trace shows figures for them and the screen shows none,
+     * the break is downstream of the API; if the trace shows none, it is here. A diagnosis that
+     * could only ever print «no figures» would settle nothing, so this plants a real row and
+     * asserts the number reaches the output.
+     */
+    public function test_the_kpi_trace_prints_real_figures_for_the_first_page_of_cards(): void
+    {
+        $campaign = $this->campaign('cmp-1');
+        $adSet = $this->adSet('sq-1', $campaign);
+        $ad = $this->ad('ad-1', $adSet, $campaign);
+        $creative = $this->creative('cr-1', $ad, $campaign);
+
+        $this->figures($creative, Carbon::today(), spend: 1234.0, impressions: 5000, clicks: 250);
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('CREATIVE KPI TRACE')
+            ->expectsOutputToContain('cr-1')
+            ->expectsOutputToContain('impressions: 5000')
+            ->assertSuccessful();
+    }
+
+    /**
+     * The other half of the same question: a creative that HAS a last active day but whose figures
+     * fall outside the library's window must say so, rather than printing a silent blank. That is
+     * the case the counts cannot see — the rows exist, and the page still shows nothing.
+     */
+    public function test_the_kpi_trace_names_a_creative_whose_figures_fall_outside_the_window(): void
+    {
+        $campaign = $this->campaign('cmp-1');
+        $adSet = $this->adSet('sq-1', $campaign);
+        $ad = $this->ad('ad-1', $adSet, $campaign);
+        $creative = $this->creative('cr-1', $ad, $campaign);
+
+        // Older than the thirty days the library asks for, but recent enough to set the sort column.
+        $this->figures($creative, Carbon::today()->subDays(120), spend: 10.0, impressions: 10, clicks: 1);
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('CREATIVE KPI TRACE')
+            ->expectsOutputToContain('no figures returned for the library window')
+            ->assertSuccessful();
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────────────────────
 
     private function campaign(string $externalId): ExternalCampaign
@@ -282,5 +330,34 @@ final class HierarchyCountsTest extends TestCase
         $ad?->forceFill(['creative_id' => $creative->getKey()])->save();
 
         return $creative;
+    }
+
+    /**
+     * One real day of creative figures, plus the sort column the library orders on.
+     *
+     * `last_active_at` is written here rather than derived, because the ingest that normally sets it
+     * is not what these tests are exercising — the read is.
+     */
+    private function figures(
+        ExternalCreative $creative,
+        Carbon $date,
+        float $spend,
+        int $impressions,
+        int $clicks,
+    ): void {
+        DB::table('creative_daily_metrics')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'creative_id' => $creative->getKey(),
+            'metric_date' => $date->toDateString(),
+            'spend' => $spend,
+            'impressions' => $impressions,
+            'clicks' => $clicks,
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
+        ]);
+
+        $creative->forceFill(['last_active_at' => $date])->save();
     }
 }
