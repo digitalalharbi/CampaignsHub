@@ -562,19 +562,33 @@ final class DiagnoseSyncCommand extends Command
                     : UnifiedCampaign::withoutGlobalScopes()->find($creative->campaign_id, ['objective']);
 
                 $objective = $campaign?->objective;
-                $headline = app(CreativeMetrics::class)->headline($objective);
+
+                /*
+                 * The figures are passed, because the CARD passes them.
+                 *
+                 * `headline($objective)` alone returns what the objective's FAMILY wants, and since
+                 * CONTENT-KPI-AVAILABILITY-001 that is no longer what a creative is headlined on —
+                 * the row's own availability decides which of those survive. Asking without figures
+                 * made this line report `spend, orders, cpa, revenue` for a creative whose card
+                 * actually shows `spend, orders, revenue, conversion_rate`, which is precisely the
+                 * kind of diagnosis that sends somebody to fix a defect that is not there.
+                 */
+                $headline = app(CreativeMetrics::class)->headline($objective, $m);
 
                 $this->line('  · '.Str::limit((string) $creative->name, 34).'  ['.$creative->external_creative_id.']');
 
                 /*
-                 * The card does not render every figure it holds — it renders the FOUR its objective
-                 * chose. So the objective is part of the evidence: a creative whose campaign carries
-                 * no objective is headlined on the conversion set, and a Snapchat awareness buy has
-                 * no conversions to show there. That reads as «no indicators» on screen while the
-                 * row underneath is full.
+                 * The card does not render every figure it holds — it renders the four its objective
+                 * chose AND this row can answer. So both halves are evidence: an objective the
+                 * column never held canonically sends the creative to the Unknown family whatever it
+                 * was bought for, and a family metric this row cannot answer is dropped rather than
+                 * rendered as an empty cell.
+                 *
+                 * An empty list is the meaningful case: the card then shows the reason panel, not a
+                 * grid, and that is the true statement rather than four apologies.
                  */
                 $this->line('      objective  : '.($objective ?? 'none')
-                    .'   card shows: '.implode(', ', array_slice($headline, 0, 4)));
+                    .'   card shows: '.($headline === [] ? '(nothing — the reason panel)' : implode(', ', array_slice($headline, 0, 4))));
 
                 if ($m === null) {
                     $this->warn('      no figures returned for the library window — the row exists but the read gave nothing');
