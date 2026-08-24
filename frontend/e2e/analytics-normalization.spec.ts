@@ -24,7 +24,14 @@ test.describe('the analytics page explains its own figures', () => {
   async function openQualityTab(page: import('@playwright/test').Page) {
     await page.goto('/app/analytics')
     await expect(page.locator('main')).toBeVisible()
-    await page.getByRole('button', { name: /جودة البيانات والإسناد|Data quality & attribution/ }).click()
+    /*
+     * `role="tab"`, not `button` — UX-ANALYTICS-TABS-001.
+     *
+     * The tab bar was a row of bare buttons and is now a real tablist: the labels are grouped by the
+     * question they answer, and each carries `aria-selected`. Querying by role is what this should
+     * always have done — it survives a label being shortened, which is exactly what happened here.
+     */
+    await page.getByRole('tab', { name: /جودة البيانات والإسناد|Data quality & attribution/ }).click()
     await expect(page.getByTestId('normalization')).toBeVisible({ timeout: 20000 })
   }
 

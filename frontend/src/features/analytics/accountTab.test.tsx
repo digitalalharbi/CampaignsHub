@@ -42,7 +42,7 @@ function route(accounts: unknown[]) {
 
 async function openAccounts() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-  fireEvent.click(await screen.findByText('Account analysis'))
+  fireEvent.click(await screen.findByRole('tab', { name: 'Accounts' }))
 }
 
 describe('the account analysis tab', () => {

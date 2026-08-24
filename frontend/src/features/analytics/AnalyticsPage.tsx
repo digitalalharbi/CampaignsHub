@@ -33,6 +33,7 @@ import { compact, money, moneyFromTotals, num, percent, ratio, rowCostPer, rowMo
 import { formatMoneyReading, readCostPer, readRoas } from '@/lib/money/contract'
 import { funnelStageLabel } from './metricLabels'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
+import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { listProjects } from '@/features/projects/api'
 import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
@@ -58,25 +59,67 @@ import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
 import { AttributionPanel } from './AttributionPanel'
 
-const TABS = [
-  { id: 'performance', ar: 'نظرة عامة على الأداء', en: 'Performance overview' },
-  { id: 'platforms', ar: 'تحليل المنصات', en: 'Platform analysis' },
-  // ANALYTICS-DRILLDOWN-001 — the rung an operator actually manages, between platform and campaign.
-  { id: 'accounts', ar: 'تحليل الحسابات', en: 'Account analysis' },
-  { id: 'campaigns', ar: 'تحليل الحملات', en: 'Campaign analysis' },
-  // ANALYTICS-DRILLDOWN-001 — the two rungs that had no table beneath them until now.
-  { id: 'ad_sets', ar: 'تحليل المجموعات الإعلانية', en: 'Ad set analysis' },
-  { id: 'ads', ar: 'تحليل الإعلانات', en: 'Ads analysis' },
-  // ANALYTICS-OBJECTIVE-VISIBLE-001 — campaigns grouped by what they were bought to do.
-  { id: 'objective', ar: 'تحليل الأهداف', en: 'Objective analysis' },
-  // The creative rung — the last level of the drill-down, reading `creative_daily_metrics`.
-  { id: 'creative', ar: 'تحليل المحتوى', en: 'Creative analysis' },
-  { id: 'funnel', ar: 'التحويلات والقمع', en: 'Conversions & funnel' },
-  // FUNNEL-001 — the ad funnel and the STORE funnel in one place, with the source of every number.
-  { id: 'store', ar: 'الفانل والمتجر', en: 'Funnel & store' },
-  { id: 'budget', ar: 'تحليل الميزانية', en: 'Budget analysis' },
-  { id: 'quality', ar: 'جودة البيانات والإسناد', en: 'Data quality & attribution' },
+/*
+ * UX-ANALYTICS-TABS-001 — twelve tabs on one line, and six of them began with the same word.
+ *
+ * «تحليل المنصات · تحليل الحسابات · تحليل الحملات · تحليل المجموعات الإعلانية · تحليل الإعلانات ·
+ * تحليل الأهداف · تحليل المحتوى». The repeated «تحليل» is on a page already titled «التحليلات», so
+ * it carried no information and cost roughly a third of the bar's width — which is why the row
+ * wrapped and every label competed with every other.
+ *
+ * Two changes, and neither removes a tab: the noun stands alone, and the tabs are grouped by the
+ * QUESTION they answer. The groups matter more than the shortening — five of these tabs are one
+ * hierarchy (platform → account → campaign → ad set → ad → creative), and a flat row gave a reader
+ * no way to see that the thing they wanted was one level up from where they were looking.
+ */
+const TAB_GROUPS = [
+  {
+    key: 'overview',
+    ar: 'الأداء', en: 'Performance',
+    tabs: [
+      { id: 'performance', ar: 'نظرة عامة', en: 'Overview' },
+      { id: 'objective', ar: 'الأهداف', en: 'Objectives' },
+      { id: 'budget', ar: 'الميزانية', en: 'Budget' },
+    ],
+  },
+  {
+    // The drill-down, in the order the platforms themselves nest it.
+    key: 'breakdown',
+    ar: 'التفصيل', en: 'Breakdown',
+    tabs: [
+      { id: 'platforms', ar: 'المنصات', en: 'Platforms' },
+      { id: 'accounts', ar: 'الحسابات', en: 'Accounts' },
+      { id: 'campaigns', ar: 'الحملات', en: 'Campaigns' },
+      { id: 'ad_sets', ar: 'المجموعات', en: 'Ad sets' },
+      { id: 'ads', ar: 'الإعلانات', en: 'Ads' },
+      { id: 'creative', ar: 'المحتوى', en: 'Creative' },
+    ],
+  },
+  {
+    key: 'conversion',
+    ar: 'التحويل', en: 'Conversion',
+    tabs: [
+      { id: 'funnel', ar: 'القمع', en: 'Funnel' },
+      { id: 'store', ar: 'المتجر', en: 'Store' },
+    ],
+  },
+  {
+    key: 'trust',
+    ar: 'الجودة', en: 'Quality',
+    tabs: [{ id: 'quality', ar: 'جودة البيانات والإسناد', en: 'Data quality & attribution' }],
+  },
 ] as const
+
+/**
+ * Flattened, so nothing that had a tab before has lost one — asserted in the test.
+ *
+ * Typed through a widening alias rather than inferred: `flatMap` over a `readonly` tuple of tuples
+ * infers each group's own tuple type, and TypeScript will not union six of those into one element
+ * type on its own.
+ */
+type AnalyticsTab = { readonly id: string; readonly ar: string; readonly en: string }
+
+const TABS: readonly AnalyticsTab[] = TAB_GROUPS.flatMap((g) => g.tabs as readonly AnalyticsTab[])
 
 const axis = { stroke: 'var(--text-muted)', fontSize: 12 }
 
@@ -206,12 +249,14 @@ export function AnalyticsPage() {
           onChange={setCurrentProjectId}
         />
 
-        <FilterMulti
+        {/* UX-FILTERS-001 — the same visible chips the dashboard uses, and the same colours the
+            charts below key off. One filter bar, one vocabulary, across both pages. */}
+        <FilterPlatforms
           label={ar ? 'المنصة' : 'Platform'}
-          ar={ar}
+          allLabel={ar ? 'الكل' : 'All'}
           values={providers}
           testid="analytics-platform"
-          options={ANALYTICS_PLATFORMS.map((key) => ({ value: key, label: providerLabel(canonicalPlatform(key), ar ? 'ar' : 'en') }))}
+          options={ANALYTICS_PLATFORMS.map((key) => ({ value: canonicalPlatform(key), label: providerLabel(canonicalPlatform(key), ar ? 'ar' : 'en') }))}
           onChange={setProviders}
         />
 
@@ -250,18 +295,37 @@ export function AnalyticsPage() {
         />
       </FilterBar>
 
-      <div className="flex flex-wrap gap-1.5 border-b border-border">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`relative rounded-t-lg px-3 py-2 text-sm font-semibold transition-colors ${
-              tab === t.id ? 'text-brand-600' : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {ar ? t.ar : t.en}
-            {tab === t.id && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-600" />}
-          </button>
+      {/*
+        The groups are separated by a rule rather than by a heading — a heading over each cluster
+        would add four more lines of text to a bar whose problem was too much text. The gap plus the
+        divider is enough to read them as clusters, and the labels stay the only words in the row.
+      */}
+      <div
+        role="tablist"
+        aria-label={ar ? 'أقسام التحليلات' : 'Analytics sections'}
+        className="flex flex-wrap items-end gap-x-1 gap-y-1.5 overflow-x-auto border-b border-border pb-px"
+      >
+        {TAB_GROUPS.map((group, index) => (
+          <div key={group.key} className="flex items-end">
+            {index > 0 && <span aria-hidden className="mx-2 mb-2 h-4 w-px shrink-0 bg-border" />}
+            <div className="flex items-end gap-0.5">
+              {group.tabs.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`relative whitespace-nowrap rounded-t-lg px-2.5 py-2 text-sm font-semibold transition-colors ${
+                    tab === t.id ? 'text-brand-600' : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  {ar ? t.ar : t.en}
+                  {tab === t.id && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-600" />}
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
 

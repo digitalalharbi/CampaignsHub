@@ -42,7 +42,7 @@ function route(campaigns: unknown[]) {
 
 async function openObjective() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-  fireEvent.click(await screen.findByText('Objective analysis'))
+  fireEvent.click(await screen.findByRole('tab', { name: 'Objectives' }))
 }
 
 describe('the objective analysis tab', () => {

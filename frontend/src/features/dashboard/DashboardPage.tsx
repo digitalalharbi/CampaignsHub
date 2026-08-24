@@ -30,6 +30,7 @@ import { useSavedViews, type SavedView } from './savedViews'
 import { dashboardMetrics } from '@/features/analytics/metricCatalog'
 import { dash, funnelStageLabel } from '@/features/analytics/metricLabels'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
+import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { MetricStrip } from '@/components/ui/MetricStrip'
 import { DataFreshness, PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
@@ -74,6 +75,7 @@ const COPY = {
     path: 'المسار التسويقي',
     objective: 'الهدف',
     allClients: 'كل العملاء',
+    allPlatforms: 'الكل',
     allPaths: 'كل المسارات',
     allObjectives: 'كل الأهداف',
     noProject: 'لم يُختر مشروع',
@@ -109,6 +111,7 @@ const COPY = {
     path: 'Marketing path',
     objective: 'Objective',
     allClients: 'All clients',
+    allPlatforms: 'All',
     allPaths: 'All paths',
     allObjectives: 'All objectives',
     noProject: 'No project selected',
@@ -463,9 +466,14 @@ export function DashboardPage() {
           onChange={setCurrentProjectId}
         />
 
-        <FilterMulti
+        {/*
+          UX-FILTERS-001 — six platforms are not a long enough list to hide behind a click.
+          The chips carry the same colours the charts below use, so switching one off and watching
+          its arc leave the donut is one recognisable action rather than two unrelated ones.
+        */}
+        <FilterPlatforms
           label={t.platform}
-          ar={ar}
+          allLabel={t.allPlatforms}
           values={providers}
           testid="dashboard-platform"
           options={PLATFORM_KEYS.map((key) => ({ value: key, label: providerName(key) }))}
