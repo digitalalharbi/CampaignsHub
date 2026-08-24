@@ -86,7 +86,9 @@ final class CreativeDailyMetricsTest extends TestCase
             ['campaign_id' => 'cr-1', 'date' => '2026-08-01', 'spend' => 12.5, 'impressions' => 300],
         ]);
 
-        $this->assertSame(['upserted' => 1, 'skipped' => 0, 'ambiguous' => 0], $result);
+        $this->assertSame(1, $result['upserted']);
+        $this->assertSame(0, $result['skipped']);
+        $this->assertSame(0, $result['ambiguous']);
 
         $row = DB::table('creative_daily_metrics')->where('creative_id', $creative->id)->first();
 
@@ -132,9 +134,56 @@ final class CreativeDailyMetricsTest extends TestCase
             ['campaign_id' => 'cr-unknown', 'date' => '2026-08-01', 'spend' => 99.0],
         ]);
 
-        $this->assertSame(['upserted' => 1, 'skipped' => 1, 'ambiguous' => 0], $result);
+        $this->assertSame(1, $result['upserted']);
+        $this->assertSame(1, $result['skipped']);
+        $this->assertSame(0, $result['ambiguous']);
         $this->assertSame(1, ExternalCreative::withoutGlobalScopes()->count(), 'No creative may be invented from a stats row.');
         $this->assertSame(1, DB::table('creative_daily_metrics')->count());
+    }
+
+    /**
+     * CONTENT-KPI-COVERAGE-002 — «the platform never named it» is not «we could not place it».
+     *
+     * Production has 34 creatives with no figures whose linked AD demonstrably ran in the same
+     * window, and the stored rows separate none of the possible causes: a platform that returned no
+     * creative-grain row, an id this project cannot resolve, and an id that resolved twice all leave
+     * the identical empty table, and each is fixed somewhere different.
+     *
+     * Only `upserted` used to leave this action, so all three looked the same from outside. These
+     * counts are what a diagnosis reads to tell them apart, and `unmapped_sample` carries the
+     * PROVIDER's own ids — the thing somebody pastes into Snapchat's interface to check.
+     */
+    public function test_the_sweep_records_which_provider_ids_it_could_not_place(): void
+    {
+        $this->creative('cr-1');
+
+        $result = app(UpsertCreativeDailyMetrics::class)->execute($this->account, [
+            ['campaign_id' => 'cr-1', 'date' => '2026-08-01', 'spend' => 5.0],
+            ['campaign_id' => 'cr-1', 'date' => '2026-08-02', 'spend' => 6.0],
+            ['campaign_id' => 'cr-ghost-a', 'date' => '2026-08-01', 'spend' => 99.0],
+            ['campaign_id' => 'cr-ghost-b', 'date' => '2026-08-01', 'spend' => 98.0],
+        ]);
+
+        $this->assertSame(4, $result['rows_received'], 'What the platform sent, before anything is placed.');
+        $this->assertSame(3, $result['ids_received']);
+        $this->assertSame(1, $result['ids_mapped']);
+        $this->assertSame(2, $result['ids_unmapped']);
+        $this->assertSame(2, $result['upserted']);
+        $this->assertSame(2, $result['skipped']);
+
+        // The provider's own ids, so the gap can be checked on the platform's side.
+        $this->assertEqualsCanonicalizing(['cr-ghost-a', 'cr-ghost-b'], $result['unmapped_sample']);
+    }
+
+    /** A sweep the platform answered with nothing reports zeros, not absent keys. */
+    public function test_an_empty_sweep_still_reports_every_count(): void
+    {
+        $result = app(UpsertCreativeDailyMetrics::class)->execute($this->account, []);
+
+        $this->assertSame(0, $result['rows_received']);
+        $this->assertSame(0, $result['ids_received']);
+        $this->assertSame(0, $result['ids_unmapped']);
+        $this->assertSame([], $result['unmapped_sample']);
     }
 
     /**

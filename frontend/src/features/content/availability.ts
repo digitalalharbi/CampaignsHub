@@ -28,6 +28,15 @@ export type EmptyReason =
   | { kind: 'failed'; text: string; detail: string | null; tone: 'warning' }
   /** No recorded attempt — a run predating the record, or a project that has never synced. */
   | { kind: 'unknown'; text: string; tone: 'muted' }
+  /**
+   * CONTENT-KPI-EMPTY-STATE-001 — the creative DID run; none of its figures can be headlined.
+   *
+   * Distinct from `did_not_run`, and the distinction is not cosmetic. A creative with a metrics
+   * object delivered — the platform answered for it — and saying «لم يعمل خلال هذه الفترة» over
+   * that is a false statement about the campaign, which an operator would act on by leaving alone
+   * a creative that is actually running.
+   */
+  | { kind: 'no_displayable'; text: string; tone: 'muted' }
 
 const COPY = {
   did_not_run: {
@@ -45,6 +54,10 @@ const COPY = {
   unknown: {
     ar: 'لا تتوفر بيانات أداء',
     en: 'No performance data available',
+  },
+  no_displayable: {
+    ar: 'لا توجد مؤشرات أداء قابلة للعرض لهذه الفترة',
+    en: 'No displayable performance metrics for this period',
   },
 } as const
 
@@ -84,5 +97,22 @@ export function emptyReason(
     default:
       // `skipped`, `unknown`, or no record at all. Do not invent a reason we were not told.
       return { kind: 'unknown', text: text('unknown'), tone: 'muted' }
+  }
+}
+
+/**
+ * The creative ran and reported something, but nothing its objective can be headlined on.
+ *
+ * Deliberately NOT derived from `metrics_availability`: that record answers «what happened to the
+ * REQUEST for this provider», and here the request succeeded. The question this answers is about one
+ * creative's figures, so routing it through the availability switch would borrow a sentence written
+ * for a different question — which is exactly how «did not run» came to be printed over a creative
+ * that did.
+ */
+export function noDisplayableMetrics(locale: Locale): EmptyReason {
+  return {
+    kind: 'no_displayable',
+    text: locale === 'ar' ? COPY.no_displayable.ar : COPY.no_displayable.en,
+    tone: 'muted',
   }
 }
