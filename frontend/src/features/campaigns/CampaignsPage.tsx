@@ -17,7 +17,7 @@ import { useBudget, useCampaigns, usePlatforms, useSummary, useTimeseries } from
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { ProvenanceBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
 import { compact, money, num, rowCostPer, rowRoas } from '@/features/analytics/format'
-import { readMoney } from '@/lib/money/contract'
+import { rankableMoney, type MoneyTotals } from '@/lib/money/contract'
 import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
@@ -98,44 +98,37 @@ export function CampaignsPage() {
     const b = budget.data ?? []
 
     const currencies = new Set(b.map((r) => r.budget_currency).filter((c): c is string => typeof c === 'string' && c !== ''))
-
-    /*
-     * PARTIAL-WITHHELD-001 — a withheld spend is not a zero, so it must not be summed as one.
-     *
-     * `spent` is nullable now, and `spend_withheld` marks a row whose spend is the platform's own
-     * figure in another currency because no rate exists to convert it. `reduce(... Number(r.spent ?? 0))`
-     * coalesced both cases to 0, so a campaign that really spent silently vanished from the total and
-     * the card read a confident, short number. Only rows whose spend is a real converted figure are
-     * summed; the rest are COUNTED, and the caption says how many were left out rather than hiding them
-     * inside a smaller total.
-     */
-    const converted = b.filter((r) => !r.spend_withheld && typeof r.spent === 'number')
-    const spentWithheldCount = b.length - converted.length
-    const spentCurrencies = new Set(converted.map((r) => r.spent_currency).filter((c): c is string => typeof c === 'string' && c !== ''))
+    const spentCurrencies = new Set(b.filter((r) => r.spent !== null).map((r) => r.spent_currency).filter((c): c is string => typeof c === 'string' && c !== ''))
 
     const total = b.reduce((a, r) => a + Number(r.budget ?? 0), 0)
-    const spent = converted.reduce((a, r) => a + Number(r.spent ?? 0), 0)
+
+    /*
+     * PARTIAL-WITHHELD-001 — an aggregate spend exists only when EVERY campaign is a single spend
+     * figure (a partial or mixed row carries `spent: null`) AND they all agree on one currency. A
+     * partial campaign is not 0, and summing only the convertible subset states less than was spent
+     * as though it were the whole. Any of those ⇒ unavailable, never `Number(r.spent ?? 0)`.
+     *
+     * A TOTAL fails closed. The two spend CHARTS below deliberately do not: see `rankableMoney`.
+     */
+    const spendComplete = b.length > 0 && b.every((r) => r.spent !== null) && spentCurrencies.size <= 1
+    const spent = spendComplete ? b.reduce((a, r) => a + Number(r.spent ?? 0), 0) : null
+
+    const budgetCurrency = currencies.size === 1 ? [...currencies][0] : null
+    const spentCurrency = spentCurrencies.size === 1 ? [...spentCurrencies][0] : null
+    // remaining/consumed compare spend to budget, so both must be one figure in the SAME currency.
+    const comparable = spent !== null && total > 0
+      && budgetCurrency !== null && spentCurrency !== null
+      && budgetCurrency.toUpperCase() === spentCurrency.toUpperCase()
 
     return {
       total,
       spent,
-      remaining: spentWithheldCount === 0 ? total - spent : null,
-      /*
-       * Null when any row's spend could not be summed — the ratio would mix two populations.
-       *
-       * `total` is every campaign's budget; `spent` is now only the campaigns whose spend is a real
-       * converted figure. Dividing one by the other with a withheld row present understates
-       * consumption and overstates what is left, which is the same refusal `comparableSpend()` makes
-       * on the campaign command centre: a budget is not paced against a partial spend.
-       */
-      consumed: spentWithheldCount === 0 && total > 0 ? spent / total : null,
+      remaining: comparable ? total - (spent as number) : null,
+      consumed: comparable ? (spent as number) / total : null,
       /** Null when the campaigns disagree — then no single figure can be stated. */
-      currency: currencies.size === 1 ? [...currencies][0] : null,
-      spentCurrency: spentCurrencies.size === 1 ? [...spentCurrencies][0] : null,
+      currency: budgetCurrency,
+      spentCurrency,
       currencyCount: currencies.size,
-      /** How many campaigns' spend could not be summed (withheld / unconvertible), and how many could. */
-      spentWithheldCount,
-      spentKnownRows: converted.length,
       /*
        * Whether there is a budget to speak about at all.
        *
@@ -146,46 +139,40 @@ export function CampaignsPage() {
       known: b.length > 0,
     }
   }, [budget.data])
-  const topCampaigns = useMemo(
-    () =>
-      (metricCampaigns.data ?? [])
-        /*
-         * PARTIAL-WITHHELD-001 — rank by a real converted figure, never the coalesced zero.
-         *
-         * `Number(c.spend ?? 0)` gave a withheld campaign a spend of 0 and a partial one its converted
-         * subset, so the «best by spend» chart ordered them by a number that is not their spend. A
-         * campaign whose spend cannot be stated in the reporting currency has no comparable magnitude
-         * on this axis, so it is left off this ranking rather than drawn at zero.
-         */
-        .map((c) => {
-          const r = readMoney(c, 'spend', null, false)
-          const spend = r.kind === 'converted' || r.kind === 'zero' ? r.amount : null
-          return { label: String(c.campaign_name ?? '—'), spend, platform: String(c.provider ?? '') }
-        })
-        .filter((c): c is { label: string; spend: number; platform: string } => c.spend != null)
-        .slice(0, 6),
-    [metricCampaigns.data],
-  )
   /*
-   * PARTIAL-WITHHELD-001 — the donut sizes slices by a real converted figure, or leaves them out.
+   * PARTIAL-WITHHELD-001 — the spend CHARTS drop and disclose, where the totals above fail closed.
    *
-   * The same chart, and the same defect, as the client link's «توزيع الإنفاق» (LiveSharedReport):
-   * `Number(p.spend ?? 0)` draws a platform whose spend was withheld as a slice of ZERO — the reader
-   * sees a platform that spent nothing, and a centre total short by exactly that spend. A slice is a
-   * magnitude on one currency axis, so a platform with no comparable magnitude has no honest size
-   * there. Those platforms are left off and COUNTED, and the card's subtitle says how many, rather
-   * than a chart that quietly describes less spend than the account made.
+   * A donut and a ranking are not a total. Refusing all six platforms because one is withheld hides
+   * five that are perfectly known, so `rankableMoney` keeps every row that has a comparable
+   * magnitude in one currency, leaves the rest off, and reports how many it left — which each card's
+   * subtitle then states. A chart quietly showing fewer rows than the account has would be the same
+   * lie in another shape, so the count is never dropped on the floor.
    */
+  const topCampaigns = useMemo(() => {
+    const rows = (metricCampaigns.data ?? []).slice(0, 6)
+    const r = rankableMoney(rows as MoneyTotals[], 'spend', summary.data?.currency ?? null)
+    if (r === null) return null
+    return {
+      data: rows.flatMap((c, i) => {
+        const spend = r.values[i]
+        return spend === null ? [] : [{ label: String(c.campaign_name ?? '—'), spend, platform: String(c.provider ?? '') }]
+      }),
+      dropped: r.dropped,
+    }
+  }, [metricCampaigns.data, summary.data?.currency])
+
   const platformSpend = useMemo(() => {
-    const rows = (platforms.data ?? []).map((p) => {
-      const r = readMoney(p, 'spend', null, false)
-      const value = r.kind === 'converted' || r.kind === 'zero' ? r.amount : null
-      return { name: String(p.provider), value }
-    })
-    const data = rows.filter((r): r is { name: string; value: number } => r.value != null)
-    return { data, withheldCount: rows.length - data.length }
-  }, [platforms.data])
-  const platformDonut = platformSpend.data
+    const rows = platforms.data ?? []
+    const r = rankableMoney(rows as MoneyTotals[], 'spend', summary.data?.currency ?? null)
+    if (r === null) return null
+    return {
+      data: rows.flatMap((pl, i) => {
+        const value = r.values[i]
+        return value === null ? [] : [{ name: String(pl.provider), value }]
+      }),
+      dropped: r.dropped,
+    }
+  }, [platforms.data, summary.data?.currency])
 
   // Per-campaign metric slice, keyed by campaign id — the needs-attention rules read from this and
   // report "no data" rather than assuming a campaign without metrics is healthy.
@@ -302,11 +289,11 @@ export function CampaignsPage() {
             ? (ar ? 'لم تُحدَّد ميزانية لأي حملة' : 'No campaign has a budget set')
             : budgetTotals.currencyCount > 1
               ? (ar ? 'ميزانيات بعملات مختلفة — لا تُجمع' : 'Budgets in different currencies — not summed')
-              : budgetTotals.spentKnownRows === 0
-                ? (ar ? 'الإنفاق بعملة لا سعر صرف لها — لا يُجمع' : 'Spend is in an unconvertible currency — not summed')
+              : budgetTotals.spent === null
+                ? (ar ? 'المصروف غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend unavailable — partial or multi-currency')
                 : ar
-                  ? `مصروف ${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)}${budgetTotals.spentWithheldCount > 0 ? ` (+${budgetTotals.spentWithheldCount} غير محتسَبة)` : ''}`
-                  : `${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)} spent${budgetTotals.spentWithheldCount > 0 ? ` (+${budgetTotals.spentWithheldCount} withheld)` : ''}`}
+                  ? `مصروف ${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)}`
+                  : `${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)} spent`}
         />
         <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
         <StatCard label="CPA" value={cpaText} delta={cmp(d.cpa)} invert />
@@ -347,27 +334,38 @@ export function CampaignsPage() {
             <ChartCard
               title={ar ? 'توزيع الإنفاق' : 'Where the spend went'}
               subtitle={
-                platformSpend.withheldCount > 0
-                  ? (ar
-                      ? `حسب المنصة — ${platformSpend.withheldCount} غير محتسَبة`
-                      : `By platform — ${platformSpend.withheldCount} withheld`)
+                platformSpend !== null && platformSpend.dropped > 0
+                  ? (ar ? `حسب المنصة — ${platformSpend.dropped} غير محتسَبة` : `By platform — ${platformSpend.dropped} withheld`)
                   : (ar ? 'حسب المنصة' : 'By platform')
               }
             >
-              {platforms.isLoading ? <Skeleton className="h-[200px]" /> : <PlatformDonutChart data={platformDonut} centerLabel={ar ? 'الإجمالي' : 'Total'} centerValue={compact(platformDonut.reduce((a, b) => a + b.value, 0))} height={200} />}
+              {platforms.isLoading
+                ? <Skeleton className="h-[200px]" />
+                : platformSpend === null
+                  ? <div className="flex h-[200px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'توزيع الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة لا تُجمع' : 'Spend share unavailable — partial or multi-currency amounts'}</div>
+                  : <PlatformDonutChart data={platformSpend.data} centerLabel={ar ? 'الإجمالي' : 'Total'} centerValue={compact(platformSpend.data.reduce((a, b) => a + b.value, 0))} height={200} />}
             </ChartCard>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
             <ChartCard title={ar ? 'حالات الحملات' : 'Campaign statuses'} subtitle={ar ? 'توزيع الحالة' : 'How they break down'}>
               {statusDonut.length ? <PlatformDonutChart data={statusDonut} colorBy="series" centerLabel={ar ? 'الحملات' : 'Campaigns'} centerValue={String(counts.total)} height={190} /> : <EmptyState title={ar ? 'لا حملات' : 'No campaigns'} />}
             </ChartCard>
-            <ChartCard title={ar ? 'أفضل الحملات' : 'Best campaigns'} subtitle={ar ? 'حسب الإنفاق' : 'By spend'} className="lg:col-span-2">
-              {topCampaigns.length >= 2
-                ? <RankingBarChart data={topCampaigns} bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]} horizontal height={190} colorByPlatform />
-                : budgetTotals.consumed != null
-                  ? <div className="flex h-[190px] items-center justify-center"><ProgressRing value={budgetTotals.consumed} sublabel={`${compact(budgetTotals.spent)} / ${compact(budgetTotals.total)}`} size={140} tone={budgetTotals.consumed > 0.95 ? 'danger' : 'brand'} /></div>
-                  /* No comparable spend for every campaign — a ring drawn anyway would read as «barely spent». */
-                  : <div className="flex h-[190px] items-center justify-center"><EmptyState title={ar ? 'لا يمكن حساب الاستهلاك' : 'Consumption cannot be computed'} description={ar ? 'إنفاق بعض الحملات بعملة لا سعر صرف لها، فلا يُقارَن بالميزانية.' : 'Some campaigns spent in a currency with no rate available, so it cannot be paced against the budget.'} /></div>}
+            <ChartCard
+              title={ar ? 'أفضل الحملات' : 'Best campaigns'}
+              subtitle={
+                topCampaigns !== null && topCampaigns.dropped > 0
+                  ? (ar ? `حسب الإنفاق — ${topCampaigns.dropped} غير محتسَبة` : `By spend — ${topCampaigns.dropped} withheld`)
+                  : (ar ? 'حسب الإنفاق' : 'By spend')
+              }
+              className="lg:col-span-2"
+            >
+              {topCampaigns === null
+                ? <div className="flex h-[190px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'ترتيب الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend ranking unavailable — partial or multi-currency amounts'}</div>
+                : topCampaigns.data.length >= 2
+                  ? <RankingBarChart data={topCampaigns.data} bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]} horizontal height={190} colorByPlatform />
+                  : budgetTotals.consumed !== null && budgetTotals.spent !== null
+                    ? <div className="flex h-[190px] items-center justify-center"><ProgressRing value={budgetTotals.consumed} sublabel={`${compact(budgetTotals.spent)} / ${compact(budgetTotals.total)}`} size={140} tone={budgetTotals.consumed > 0.95 ? 'danger' : 'brand'} /></div>
+                    : <div className="flex h-[190px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'استهلاك الميزانية غير متاح — المصروف بمبالغ جزئية أو بعملة مختلفة عن الميزانية' : 'Budget consumption unavailable — spend is partial or in a different currency'}</div>}
             </ChartCard>
           </div>
           {attention.length > 0 && (

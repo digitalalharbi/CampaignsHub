@@ -20,9 +20,14 @@ import { getData } from '@/lib/api/client'
  * PARTIAL-WITHHELD-001 — the project budget card must not sum a withheld spend as a zero.
  *
  * `budgetPacing` marks a row `spend_withheld` when its spend is the platform's own figure in a
- * currency no rate could convert. Summed with `Number(r.spent ?? 0)` that campaign contributed 0 and
- * vanished from the total, so a project that really spent read a smaller, confident number. The card
- * now sums only the convertible rows and SAYS how many it left out.
+ * currency no rate could convert, and leaves `spent` null when the row is partial or mixed. Summed
+ * with `Number(r.spent ?? 0)` that campaign contributed 0 and vanished from the total, so a project
+ * that really spent read a smaller, confident number.
+ *
+ * A TOTAL fails closed: it exists only when every campaign is a single figure and they agree on one
+ * currency. Summing the convertible subset instead would state less than was spent as though it were
+ * the whole — the same defect one step smaller. (The spend CHARTS drop and disclose instead; see
+ * `campaignsSpendCharts.test.tsx`.)
  */
 const SUMMARY = {
   current: { conversions: 40, spend: 1000, revenue: 0, roas: 0, cpa: 0 },
@@ -78,29 +83,29 @@ describe('the project budget card over withheld spend', () => {
     useProject.getState().setCurrentProjectId(null)
   })
 
-  it('sums only the convertible spend and names the campaigns it could not include', async () => {
+  it('refuses a project spend total when the campaigns are not in one currency', async () => {
     routeBudget([
       budgetRow({ campaign_id: 'c1', spent: 1000, spent_currency: 'SAR', spend_withheld: false }),
-      // 500 USD the platform reported, no rate — must NOT be added as 0 and must not vanish.
+      // 500 USD the platform reported, no rate. Real money, and not addable to riyals.
       budgetRow({ campaign_id: 'c2', spent: 500, spent_currency: 'USD', spend_withheld: true }),
     ])
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
 
-    // The convertible 1,000 SAR is stated and the withheld campaign is COUNTED, not summed to 0.
-    // (The label renders before the budget query resolves, so this awaits the resolved caption.)
-    expect(await screen.findByText(/1\.0K SAR spent \(\+1 withheld\)/)).toBeInTheDocument()
-    // The wrong answers: the withheld 500 neither swelled the total (1.5K) nor collapsed it to «0 SAR».
+    expect(await screen.findByText(/Spend unavailable — partial or multi-currency/)).toBeInTheDocument()
+    // Every wrong answer: the subset as the whole, the naive sum, and the coalesced zero.
+    expect(screen.queryByText(/1\.0K SAR spent/)).not.toBeInTheDocument()
     expect(screen.queryByText(/1\.5K SAR/)).not.toBeInTheDocument()
     expect(screen.queryByText(/0 SAR spent/)).not.toBeInTheDocument()
   })
 
-  it('states spend is unconvertible rather than «0 spent» when every row is withheld', async () => {
+  it('states the platform figure in its own currency when every row is withheld and agrees', async () => {
     routeBudget([
       budgetRow({ campaign_id: 'c1', spent: 500, spent_currency: 'USD', spend_withheld: true }),
     ])
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
 
-    expect(await screen.findByText(/unconvertible currency/i)).toBeInTheDocument()
+    // One currency, one figure: nameable, exact, and checkable against the platform.
+    expect(await screen.findByText(/USD spent/)).toBeInTheDocument()
     // «0 SAR spent» is exactly the lie this branch replaces.
     expect(screen.queryByText(/SAR spent/)).not.toBeInTheDocument()
   })

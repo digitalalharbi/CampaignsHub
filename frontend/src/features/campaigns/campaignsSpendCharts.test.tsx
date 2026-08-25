@@ -139,7 +139,7 @@ describe('the spend charts over withheld money', () => {
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
     await openOverview()
 
-    expect(await screen.findByText(/Consumption cannot be computed/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Budget consumption unavailable/i)).toBeInTheDocument()
   })
 
   it('still draws the ring when every campaign spend is comparable', async () => {
@@ -151,6 +151,6 @@ describe('the spend charts over withheld money', () => {
 
     // The ring states the real ratio; the refusal is for the withheld case alone.
     expect(await screen.findByText('1.0K / 5.0K')).toBeInTheDocument()
-    expect(screen.queryByText(/Consumption cannot be computed/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Budget consumption unavailable/i)).not.toBeInTheDocument()
   })
 })

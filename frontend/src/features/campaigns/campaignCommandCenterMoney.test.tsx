@@ -18,8 +18,12 @@ import { getData } from '@/lib/api/client'
  * The spend KPI already read the contract, but «المتبقي», «استهلاك» and the whole budget tab were
  * computed from `k.spend` — which is 1,000 (the converted SUBSET) here, or 0 on a fully-withheld
  * scope, and was rendered under the BUDGET's currency. The fixture below is 1,000 converted plus
- * 500 USD the platform reported and no rate could convert: the spend is 500 USD, not a SAR figure,
- * and nothing may be paced against the plan from it.
+ * 500 USD the platform reported and no rate could convert.
+ *
+ * That scope is `partial`, and a partial scope has NO single spend figure: 1,000 SAR is not the
+ * spend (it omits the 500) and 500 USD is not the spend either (it omits the 1,000), and the two
+ * cannot be added without a rate. A total fails closed — «—» — and nothing may be paced from it.
+ * Stating either half would be the same defect wearing the other half's clothes.
  */
 const PARTIAL_WITHHELD = {
   impressions: 50_000, clicks: 800, conversions: 40,
@@ -56,11 +60,15 @@ describe('the campaign command centre over a partially-withheld spend', () => {
   })
   afterEach(() => signOut())
 
-  it('KPIs: shows the withheld spend in its own currency, and refuses to pace remaining/utilisation', async () => {
+  it('KPIs: refuses a single spend figure for a partial scope, and paces nothing from it', async () => {
     renderWithProviders(<CampaignKpis campaign={campaign} projectId="p1" range={range} />)
 
-    // The spend the platform actually reported — 500 USD — never the converted subset (1,000) or a zero.
-    expect(await screen.findByText('500.00 USD')).toBeInTheDocument()
+    // Neither half may be printed as the spend: not the converted subset in SAR, not the withheld
+    // original in USD, and certainly not the coalesced zero.
+    const spend = (await screen.findByText('المصروف')).parentElement as HTMLElement
+    expect(within(spend).getByText('—')).toBeInTheDocument()
+    expect(screen.queryByText('500.00 USD')).not.toBeInTheDocument()
+    expect(screen.queryByText(/1,000/)).not.toBeInTheDocument()
 
     // Utilisation cannot be drawn from a withheld spend, so its «استهلاك …%» caption is absent entirely
     // rather than «استهلاك 125%» (800 vs the 1,000 subset) or «استهلاك 0%» (the coalesced zero).
@@ -71,11 +79,13 @@ describe('the campaign command centre over a partially-withheld spend', () => {
     expect(within(remaining).getByText('—')).toBeInTheDocument()
   })
 
-  it('Budget tab: «المصروف» states the withheld figure and the forecast it would drive reads «—»', async () => {
+  it('Budget tab: «المصروف» refuses a partial figure, and the forecast it would drive reads «—»', async () => {
     renderWithProviders(<CampaignBudgetTab campaign={campaign} projectId="p1" range={range} locale="ar" />)
 
-    // «المصروف» is the withheld original in USD — not «0 SAR» and not the SAR-labelled subset.
-    expect(await screen.findByText('500.00 USD')).toBeInTheDocument()
+    // «المصروف» is «—» — not «0 SAR», not the SAR-labelled subset, not the USD half on its own.
+    const spent = (await screen.findByText('المصروف')).parentElement as HTMLElement
+    expect(within(spent).getByText('—')).toBeInTheDocument()
+    expect(screen.queryByText('500.00 USD')).not.toBeInTheDocument()
 
     // The forecast is a projection off spend; with no comparable spend it is «—», not a SAR number.
     const forecast = screen.getByText('توقع نهاية الحملة').parentElement as HTMLElement

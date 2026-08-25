@@ -33,7 +33,7 @@ import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, Platfo
  * rather than reintroducing a second multiplication here.
  */
 import { compact, money, moneyFromTotals, num, percent, ratio, rowCostPer, rowMoney, rowRoas, trend } from '@/features/analytics/format'
-import { readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
+import { moneyState, rankableMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { providerLabel } from './labels'
@@ -41,26 +41,28 @@ import type { Locale } from '@/stores/ui'
 
 type Sparkable = keyof MetricTotals
 
-/**
- * MONEY-TRUTH / PARTIAL-WITHHELD-001 — a spend figure that may honestly be paced against a budget.
- *
- * `budget − spend` and `spend ÷ budget` are only meaningful when spend is a single real number in the
- * budget's own currency. Read raw, `k.spend` is the aggregator's coalesced 0 on a withheld scope
- * («we could not convert», not «nothing spent») and the converted SUBSET on a partial one — either
- * one drawn against a budget states a remaining and a utilisation that are simply wrong, and prints
- * them under the budget's currency. So this returns a number only for a `converted` or `zero` reading
- * (a real figure in the reporting currency); a withheld, mixed or absent spend returns null and the
- * caller renders «—» rather than a budget that looks fully available. It never invents a ratio the
- * money cannot support.
- */
-function comparableSpend(totals: MoneyTotals, reportingCurrency: string): number | null {
-  const r = readMoney(totals, 'spend', reportingCurrency, true)
-  return r.kind === 'converted' || r.kind === 'zero' ? r.amount : null
-}
-
 /** Objective → the primary cost metric the client cares about (CPA vs CPL). */
 function costLabel(objective: string): string {
   return objective === 'leads' ? 'CPL' : 'CPA'
+}
+
+/**
+ * PARTIAL-WITHHELD-001 — spend as ONE figure in the budget's currency, or null.
+ *
+ * Budget-vs-spend derivations (remaining, utilization, budget-risk) need a single spend total in the
+ * same currency as the budget. A partial or mixed scope has no single figure, and a withheld spend
+ * is in the platform's own currency — comparing it to a riyal budget is riyals-minus-dollars. Any of
+ * those ⇒ null, and every caller must render «unavailable» rather than pace against a subset or a 0.
+ */
+function spendInBudgetCurrency(totals: MoneyTotals | undefined, budgetCurrency: string): number | null {
+  const s = moneyState(totals, 'spend')
+  if (s.state === 'zero') return 0
+  // A converted total is in the project's reporting currency, which this card states in `budgetCurrency`.
+  if (s.state === 'complete_converted') return s.converted ?? 0
+  if (s.state === 'complete_withheld') {
+    return s.originalCurrency !== null && s.originalCurrency.toUpperCase() === budgetCurrency.toUpperCase() ? s.original : null
+  }
+  return null // partial, mixed_currency, absent
 }
 
 function deltaTone(key: Sparkable, delta: number | null | undefined): 'up' | 'down' | 'flat' {
@@ -108,12 +110,15 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
   const k = summary.data?.current
   const d = summary.data?.delta ?? {}
   const budget = campaign.total_budget ?? null
-  const cur = campaign.budget_currency || 'SAR'
-  // Only a real single spend figure may be drawn against the budget — see comparableSpend.
-  const spend = comparableSpend(k, cur)
-  const remaining = budget != null && spend != null ? budget - spend : null
-  const utilization = budget && budget > 0 && spend != null ? spend / budget : null
   const convRate = k && k.clicks > 0 ? k.conversions / k.clicks : null
+  const cur = campaign.budget_currency || 'SAR'
+
+  // PARTIAL-WITHHELD-001 — المتبقي/الاستهلاك يقارنان المصروف بالميزانية، فيلزمهما رقم مصروف
+  // واحد بعملة الميزانية. سياق جزئي/مختلط، أو مصروف محتجَز بعملة أخرى، لا يوفّره ⇒ كلاهما غير
+  // متاح (لا «الميزانية − الجزء المحوَّل» ولا «الميزانية − صفر»).
+  const spendVsBudget = spendInBudgetCurrency(k, cur)
+  const remaining = budget != null && spendVsBudget != null ? budget - spendVsBudget : null
+  const utilization = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
 
   /*
    * MONEY-TRUTH-003 — the same contract the dashboard and Analytics use.
@@ -161,10 +166,11 @@ export function CampaignExecutiveSummary({ campaign, projectId, range, locale }:
     const plats = platforms.data ?? []
     const byRoas = [...plats].filter((p) => p.roas != null).sort((a, b) => (b.roas ?? 0) - (a.roas ?? 0))
     const budget = campaign.total_budget ?? null
-    // Withheld/partial spend cannot pace a budget, so «الميزانية شارفت على النفاد» falls through to
-    // the conversions-based risk rather than firing on a coalesced zero.
-    const spend = comparableSpend(k, campaign.budget_currency || 'SAR')
-    const util = budget && budget > 0 && spend != null ? spend / budget : null
+    // PARTIAL-WITHHELD-001 — budget risk must not read a partial/withheld spend as a low utilization.
+    // No single spend figure in the budget currency ⇒ util is null and the «almost exhausted» claim
+    // simply cannot fire, rather than firing wrong or staying silent because a subset looked small.
+    const spendVsBudget = spendInBudgetCurrency(k as MoneyTotals | undefined, campaign.budget_currency || 'SAR')
+    const util = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
     return {
       topResult: k ? `${num(k.conversions)} نتيجة · ${ratio(k.roas)} ROAS` : '—',
       bestPlatform: byRoas[0] ? `${providerLabel(byRoas[0].provider, locale)} (${ratio(byRoas[0].roas)})` : '—',
@@ -206,7 +212,21 @@ export function CampaignPerformanceTab({ campaign, projectId, range, locale }: {
     return { best: sorted[0], worst: sorted[sorted.length - 1] }
   }, [series])
 
-  const platformDonut = (platforms.data ?? []).map((p) => ({ name: providerLabel(p.provider, locale), value: Number(p.spend ?? 0) }))
+  // PARTIAL-WITHHELD-001 — spend share per platform, only when comparable in one currency (else null).
+  const platformDonutRank = rankableMoney((platforms.data ?? []) as MoneyTotals[], 'spend', cur)
+  /*
+   * A donut drops and discloses; only a TOTAL fails closed (PARTIAL-WITHHELD-001). A platform with no
+   * comparable magnitude is left off and counted, so the platforms that ARE known still draw.
+   */
+  const platformDonut = platformDonutRank === null
+    ? null
+    : {
+        data: (platforms.data ?? []).flatMap((p, i) => {
+          const value = platformDonutRank.values[i]
+          return value === null ? [] : [{ name: providerLabel(p.provider, locale), value }]
+        }),
+        dropped: platformDonutRank.dropped,
+      }
 
   if (perf.isLoading) return <div className="space-y-4"><Skeleton className="h-[240px]" /><div className="grid gap-4 lg:grid-cols-2"><Skeleton className="h-[200px]" /><Skeleton className="h-[200px]" /></div></div>
 
@@ -240,7 +260,14 @@ export function CampaignPerformanceTab({ campaign, projectId, range, locale }: {
           <MetricLineChart data={series as unknown as Array<Record<string, unknown>>} series={[{ key: 'cpa', name: 'CPA' }, { key: 'cpc', name: 'CPC' }]} height={190} />
         </ChartCard>
         <ChartCard title={ar ? 'مساهمة المنصات' : 'Platform contribution'} subtitle={ar ? 'حسب الإنفاق' : 'By spend'}>
-          {platformDonut.length ? <PlatformDonutChart data={platformDonut} centerLabel={ar ? 'الإنفاق' : 'Spend'} centerValue={compact(platformDonut.reduce((a, b) => a + b.value, 0))} height={190} /> : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">{ar ? 'لا بيانات منصات' : 'No platform data'}</div>}
+          {platformDonut === null
+            ? <div className="flex h-[190px] items-center justify-center text-center text-sm text-text-muted">{ar ? 'توزيع الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend share unavailable — partial or multi-currency'}</div>
+            : platformDonut.data.length
+              ? <>
+                  <PlatformDonutChart data={platformDonut.data} centerLabel={ar ? 'الإنفاق' : 'Spend'} centerValue={compact(platformDonut.data.reduce((a, b) => a + b.value, 0))} height={190} />
+                  {platformDonut.dropped > 0 && <p className="mt-1 text-center text-[11px] text-text-muted">{ar ? `${platformDonut.dropped} منصة غير مُدرجة — مبالغ جزئية أو بعملات متعددة` : `${platformDonut.dropped} platform(s) not included — partial or multi-currency`}</p>}
+                </>
+              : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">{ar ? 'لا بيانات منصات' : 'No platform data'}</div>}
         </ChartCard>
       </div>
       {bestWorst && (
@@ -262,22 +289,13 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
   const activity = useCampaignActivity(projectId, campaign.id)
   const cur = campaign.budget_currency || 'SAR'
 
-  const k = summary.data?.current
   const budget = campaign.total_budget ?? null
-  /*
-   * MONEY-TRUTH / PARTIAL-WITHHELD-001 — «المصروف» and everything paced from it read the contract.
-   *
-   * `summary.current.spend` is the aggregator's coalesced figure: 0 when the spend was withheld, and
-   * the converted subset when it was partial. Rendered raw with `money(spend, cur)` this tab printed
-   * that number under the BUDGET's currency — a foreign spend labelled SAR, or «0 SAR» over money the
-   * platform really spent. `spendRead.text` states a withheld figure in its own currency (or «—»);
-   * `spend` is the single real number pacing may use, and is null when there is none, so remaining,
-   * utilisation, current pace and forecast become «—» instead of a confident wrong figure.
-   */
-  const spendRead = moneyFromTotals(k, 'spend', true, cur)
-  const spend = comparableSpend(k, cur)
-  const remaining = budget != null && spend != null ? budget - spend : null
-  const util = budget && budget > 0 && spend != null ? spend / budget : null
+  // PARTIAL-WITHHELD-001 — DISPLAY the spend through the contract (partial ⇒ «—», withheld ⇒ its own
+  // currency), and do the budget MATH only from a single spend figure in the budget currency.
+  const spendRead = moneyFromTotals(summary.data?.current, 'spend', true, cur)
+  const spendVsBudget = spendInBudgetCurrency(summary.data?.current, cur)
+  const remaining = budget != null && spendVsBudget != null ? budget - spendVsBudget : null
+  const util = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
 
   const pacing = useMemo(() => {
     if (!campaign.starts_on || !campaign.ends_on || budget == null) return null
@@ -288,17 +306,32 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
     const elapsed = Math.min(totalDays, Math.max(0, Math.round((now - start) / 86400000)))
     const remainingDays = Math.max(0, totalDays - elapsed)
     const requiredPace = budget / totalDays
-    // No comparable spend → no current pace, and therefore no forecast: «—», not a projection off zero.
-    const currentPace = spend != null && elapsed > 0 ? spend / elapsed : null
-    const forecast = currentPace != null ? currentPace * totalDays : null
+    // currentPace/forecast need the spend as a single budget-currency figure — null when it is not.
+    const currentPace = spendVsBudget != null && elapsed > 0 ? spendVsBudget / elapsed : null
+    const forecast = spendVsBudget != null ? (currentPace ?? 0) * totalDays : null
     return { totalDays, elapsed, remainingDays, requiredPace, currentPace, forecast }
-  }, [campaign.starts_on, campaign.ends_on, budget, spend])
+  }, [campaign.starts_on, campaign.ends_on, budget, spendVsBudget])
 
   const budgetChanges = useMemo(
     () => (activity.data ?? []).filter((e) => e.action === 'campaign.updated' && (e.before?.total_budget ?? null) !== (e.after?.total_budget ?? null) && e.after && 'total_budget' in e.after),
     [activity.data],
   )
-  const platformAlloc = (platforms.data ?? []).map((p) => ({ name: providerLabel(p.provider, locale), value: Number(p.spend ?? 0) }))
+  // PARTIAL-WITHHELD-001 — a budget-allocation donut is a spend share; real only when the platforms
+  // are comparable in one currency. Null (chart shows «unavailable») otherwise, never fake shares.
+  const platformAllocRank = rankableMoney((platforms.data ?? []) as MoneyTotals[], 'spend', cur)
+  /*
+   * A donut drops and discloses; only a TOTAL fails closed (PARTIAL-WITHHELD-001). A platform with no
+   * comparable magnitude is left off and counted, so the platforms that ARE known still draw.
+   */
+  const platformAlloc = platformAllocRank === null
+    ? null
+    : {
+        data: (platforms.data ?? []).flatMap((p, i) => {
+          const value = platformAllocRank.values[i]
+          return value === null ? [] : [{ name: providerLabel(p.provider, locale), value }]
+        }),
+        dropped: platformAllocRank.dropped,
+      }
 
   if (summary.isLoading) return <Skeleton className="h-64" />
   if (summary.isError) return <ErrorState error={summary.error} title="تعذّر تحميل الميزانية" onRetry={() => summary.refetch()} />
@@ -324,12 +357,20 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
         <Fact label="أيام متبقية" value={pacing ? String(pacing.remainingDays) : '—'} />
         <Fact label="السرعة الحالية/المطلوبة" value={pacing ? `${pacing.currentPace != null ? money(pacing.currentPace, cur) : '—'} / ${money(pacing.requiredPace, cur)}` : '—'} />
         <Fact label="توقع نهاية الحملة" value={pacing && pacing.forecast != null ? money(pacing.forecast, cur) : '—'} tone={pacing && pacing.forecast != null && budget != null && pacing.forecast > budget * 1.05 ? 'danger' : undefined} />
-        <Fact label="خطر الميزانية" value={util != null && util > 0.95 ? 'مرتفع' : pacing && pacing.forecast != null && budget != null && pacing.forecast > budget * 1.05 ? 'تجاوز متوقع' : 'ضمن الحدود'} tone={util != null && util > 0.95 ? 'danger' : undefined} />
+        {/* PARTIAL-WITHHELD-001 — budget risk cannot be judged without a real spend figure. */}
+        <Fact label="خطر الميزانية" value={util != null && util > 0.95 ? 'مرتفع' : pacing && pacing.forecast != null && budget != null && pacing.forecast > budget * 1.05 ? 'تجاوز متوقع' : util != null || (pacing && pacing.forecast != null) ? 'ضمن الحدود' : 'غير متاح'} tone={util != null && util > 0.95 ? 'danger' : undefined} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard title="توزيع الميزانية" subtitle="حسب المنصة">
-          {platformAlloc.length ? <PlatformDonutChart data={platformAlloc} centerLabel="الإنفاق" centerValue={compact(platformAlloc.reduce((a, b) => a + b.value, 0))} height={190} /> : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">لا بيانات منصات</div>}
+          {platformAlloc === null
+            ? <div className="flex h-[190px] items-center justify-center text-center text-sm text-text-muted">توزيع الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة</div>
+            : platformAlloc.data.length
+              ? <>
+                  <PlatformDonutChart data={platformAlloc.data} centerLabel="الإنفاق" centerValue={compact(platformAlloc.data.reduce((a, b) => a + b.value, 0))} height={190} />
+                  {platformAlloc.dropped > 0 && <p className="mt-1 text-center text-[11px] text-text-muted">{`${platformAlloc.dropped} منصة غير مُدرجة — مبالغ جزئية أو بعملات متعددة`}</p>}
+                </>
+              : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">لا بيانات منصات</div>}
         </ChartCard>
         <ChartCard title="سجل تعديلات الميزانية" subtitle="من سجل التدقيق">
           {budgetChanges.length ? (

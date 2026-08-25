@@ -11,7 +11,8 @@ import {
   RankingBarChart,
 } from '@/features/analytics/charts'
 import { KpiCard, platformColor } from '@/features/analytics/components'
-import { formatMoneyReading, readCostPer, readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
+import { moneyFromTotals } from '@/features/analytics/format'
+import { formatMoneyReading, moneyState, rankableMoney, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { fetchLiveShared, type LivePayload } from './api'
 import { useUi } from '@/stores/ui'
 
@@ -117,27 +118,6 @@ export function LiveSharedReport({
     v === null || v === undefined ? '—' : new Intl.NumberFormat('en-US').format(Math.round(v))
 
   /*
-   * PARTIAL-WITHHELD-001 — the client link reads the same money contract the operator's board does.
-   *
-   * `totals`, `platforms` and `campaigns` carry the aggregator's withheld-money provenance, but a raw
-   * `money(t.spend)` read its coalesced 0 and printed it in the report currency: on a withheld window
-   * the client saw «0», and on a partial one the converted SUBSET, as though either were the whole
-   * spend — with no second view of their own account to catch it. Routed through the contract, a
-   * withheld figure states its own currency (exact, so it is checkable against the platform), a mixed
-   * one says «—», and a real converted figure keeps the report's own currency formatting.
-   */
-  const readMoneyText = useCallback(
-    (totals: Record<string, unknown>, key: 'spend' | 'revenue'): string =>
-      formatMoneyReading(readMoney(totals as MoneyTotals, key, currency, ar), (n) => money(n)),
-    [currency, ar, money],
-  )
-  const readCostPerText = useCallback(
-    (totals: Record<string, unknown>, key: string, denominator: string | number): string =>
-      formatMoneyReading(readCostPer(totals as MoneyTotals, key, denominator, currency, ar), (n) => money(n)),
-    [currency, ar, money],
-  )
-
-  /*
    * How each chosen metric is rendered.
    *
    * A table rather than a chain of conditionals, because the SET is chosen by the operator at link
@@ -156,7 +136,10 @@ export function LiveSharedReport({
       count: (v: number | null | undefined) => string,
     ) => string
   }> = {
-    spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, spark: true, format: (t) => readMoneyText(t, 'spend') },
+    // PARTIAL-WITHHELD-001 — a client link is the one place the reader has no other view, so money
+    // goes through the contract: partial/mixed ⇒ «—», withheld ⇒ the original in its own currency,
+    // never the coalesced 0 or the converted subset.
+    spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, spark: true, format: (t, p) => moneyFromTotals(t as MoneyTotals, 'spend', ar, p.currency).text },
     impressions: { ar: 'الظهور', en: 'Impressions', spark: true, format: (t, _p, _m, count) => count(t.impressions) },
     clicks: { ar: 'النقرات', en: 'Clicks', spark: true, format: (t, _p, _m, count) => count(t.clicks) },
     ctr: { ar: 'نسبة النقر', en: 'CTR', format: (t) => (t.ctr === null || t.ctr === undefined ? '—' : `${(t.ctr * 100).toFixed(2)}%`) },
@@ -164,9 +147,9 @@ export function LiveSharedReport({
     // Add-to-cart is a funnel stage rather than a total, so it is read from where it actually lives.
     add_to_cart: { ar: 'الإضافات للسلة', en: 'Add to cart', format: (_t, p, _m, count) => count(p.funnel.find((f) => f.stage === 'add_to_cart')?.count) },
     purchases: { ar: 'المشتريات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
-    revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t) => readMoneyText(t, 'revenue') },
+    revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => moneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency).text },
     roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return r.value === null ? '—' : `${r.value.toFixed(2)}×` } },
-    cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t) => readCostPerText(t, 'cpa', 'conversions') },
+    cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t, p, money) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpa', 'conversions', p.currency, ar), (v) => money(v)) },
   }
 
   const DEFAULT_METRICS = ['spend', 'impressions', 'clicks', 'conversions', 'add_to_cart', 'purchases', 'revenue', 'roas']
@@ -188,25 +171,22 @@ export function LiveSharedReport({
   const series = (key: string) => payload.timeseries.map((r) => Number(r[key] ?? 0))
 
   /*
-   * PARTIAL-WITHHELD-001 — the spend charts size and rank by a real converted figure only.
+   * PARTIAL-WITHHELD-001 (client charts) — a money chart is a claim in the report's currency, so it
+   * may only be drawn from money that IS in that currency. A withheld/partial/mixed spend line
+   * labelled in the report currency, or a spend-share donut summed across currencies, is a fabricated
+   * figure on the one page the client cannot cross-check.
    *
-   * A donut slice and a ranking bar are magnitudes on one currency axis. A platform or campaign whose
-   * spend was withheld (a foreign figure) or is partial has no comparable magnitude there, so drawing
-   * it from `Number(p.spend ?? 0)` either sized it at the coalesced 0 or ranked it by a number in the
-   * wrong currency. Such rows are left off these two charts; the KPI strip above still states their
-   * spend honestly, in its own currency.
+   * The two BREAKDOWN charts drop and disclose rather than refuse outright: a client whose account
+   * runs on four platforms is better served by the three that are known plus «1 not included» than by
+   * a blank panel. `rankableMoney` keeps only rows comparable in one currency and reports how many it
+   * left off, and the count is printed beneath the chart — never silently swallowed. The spend LINE
+   * is different: it is one series claiming to be the scope's spend, so it fails closed.
    */
-  const convertedSpend = (row: Record<string, unknown>): number | null => {
-    const r = readMoney(row as MoneyTotals, 'spend', currency, ar)
-    return r.kind === 'converted' || r.kind === 'zero' ? r.amount : null
-  }
-  const platformSpend = payload.platforms
-    .map((p) => ({ name: p.provider, value: convertedSpend(p) }))
-    .filter((s): s is { name: string; value: number } => s.value != null)
-  const campaignSpend = payload.campaigns
-    .map((c) => ({ name: c.campaign_name ?? '—', provider: c.provider, spend: convertedSpend(c) }))
-    .filter((c): c is { name: string; provider: string | null; spend: number } => c.spend != null)
-    .slice(0, 8)
+  const spendState = moneyState(t as MoneyTotals, 'spend').state
+  const spendChartable = spendState === 'complete_converted' || spendState === 'zero'
+  const platformSpendRank = rankableMoney(payload.platforms as MoneyTotals[], 'spend', currency)
+  const topCampaignRows = payload.campaigns.slice(0, 8)
+  const campaignSpendRank = rankableMoney(topCampaignRows as MoneyTotals[], 'spend', currency)
 
   return (
     /*
@@ -331,31 +311,66 @@ export function LiveSharedReport({
               currency={currency}
               height={220}
               series={[
-                { key: 'spend', name: ar ? 'الإنفاق' : 'Spend', color: 'var(--brand-600)', kind: 'money' },
-                { key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' },
-                { key: 'conversions', name: ar ? 'النتائج' : 'Results', color: 'var(--purple)', kind: 'num' },
+                // The spend line is drawn only when spend is in the report currency; otherwise it would
+                // label a withheld/partial figure with a currency it is not in.
+                ...(spendChartable ? [{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', color: 'var(--brand-600)', kind: 'money' as const }] : []),
+                { key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' as const },
+                { key: 'conversions', name: ar ? 'النتائج' : 'Results', color: 'var(--purple)', kind: 'num' as const },
               ]}
             />
+            {!spendChartable && (
+              <p className="mt-1 text-center text-[11px] text-text-muted">{ar ? 'خط الإنفاق غير معروض: المبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend line hidden: amounts await an exchange rate or span currencies'}</p>
+            )}
           </ChartCard>
           <ChartCard title={ar ? 'توزيع الإنفاق' : 'Spend by platform'}>
-            <PlatformDonutChart
-              data={platformSpend}
-              currency={currency}
-              height={220}
-            />
+            {platformSpendRank === null ? (
+              <p className="flex h-[220px] items-center justify-center text-center text-sm text-text-muted">{ar ? 'توزيع الإنفاق غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة لا تُجمع' : 'Spend share unavailable — amounts await a rate or span currencies'}</p>
+            ) : (
+              <>
+                <PlatformDonutChart
+                  data={payload.platforms.flatMap((p, i) => {
+                    const value = platformSpendRank.values[i]
+                    return value === null ? [] : [{ name: p.provider, value }]
+                  })}
+                  currency={platformSpendRank.currency ?? currency}
+                  height={220}
+                />
+                {platformSpendRank.dropped > 0 && (
+                  <p className="mt-1 text-center text-[11px] text-text-muted">
+                    {ar
+                      ? `${platformSpendRank.dropped} منصة غير مُدرجة: مبالغ بانتظار سعر صرف أو بعملات متعددة`
+                      : `${platformSpendRank.dropped} platform(s) not included: amounts await a rate or span currencies`}
+                  </p>
+                )}
+              </>
+            )}
           </ChartCard>
         </div>
 
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
           <ChartCard title={ar ? 'الحملات' : 'Campaigns'}>
-            {campaignSpend.length > 0 ? (
-              <RankingBarChart
-                data={campaignSpend}
-                bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]}
-                horizontal
-                height={220}
-                colorByPlatform
-              />
+            {payload.campaigns.length > 0 && campaignSpendRank === null ? (
+              <p className="py-10 text-center text-sm text-text-muted">{ar ? 'ترتيب الإنفاق غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend ranking unavailable — amounts await a rate or span currencies'}</p>
+            ) : payload.campaigns.length > 0 && campaignSpendRank !== null ? (
+              <>
+                <RankingBarChart
+                  data={topCampaignRows.flatMap((c, i) => {
+                    const spend = campaignSpendRank.values[i]
+                    return spend === null ? [] : [{ name: c.campaign_name ?? '—', provider: c.provider, spend }]
+                  })}
+                  bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]}
+                  horizontal
+                  height={220}
+                  colorByPlatform
+                />
+                {campaignSpendRank.dropped > 0 && (
+                  <p className="mt-1 text-center text-[11px] text-text-muted">
+                    {ar
+                      ? `${campaignSpendRank.dropped} حملة غير مُدرجة: مبالغ بانتظار سعر صرف أو بعملات متعددة`
+                      : `${campaignSpendRank.dropped} campaign(s) not included: amounts await a rate or span currencies`}
+                  </p>
+                )}
+              </>
             ) : (
               <p className="py-10 text-center text-sm text-text-muted">
                 {ar ? 'لا توجد حملات في هذه الفترة.' : 'No campaigns in this period.'}
