@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { creativeKindLabel } from './CreativesPage'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Maximize2, Minus, Plus, RotateCcw } from 'lucide-react'
@@ -442,7 +443,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           <Fact k={t.ad} v={creative.external_ids.ad ?? t.notProvided} block ltr />
           <Fact k={t.objective} v={creative.objective ? objectiveLabel(creative.objective, locale) : t.notProvided} block />
           <Fact k={t.path} v={marketingPathLabel(data.path, locale)} block />
-          <Fact k={t.kind} v={preview.kind} block />
+          <Fact k={t.kind} v={creativeKindLabel(preview.kind, ar)} block />
           <Fact k={t.firstSeen} v={creative.freshness.first_seen_at?.slice(0, 10) ?? t.notProvided} block ltr />
           <Fact k={t.lastActive} v={creative.freshness.last_active_at?.slice(0, 10) ?? t.notProvided} block ltr />
           <Fact k={t.lastSync} v={creative.freshness.last_synced_at?.slice(0, 16).replace('T', ' ') ?? t.notProvided} block ltr />
