@@ -275,9 +275,55 @@ export function UnifiedCampaignOverview({
       </div>
       )}
 
+      {/*
+        DASH-BAND-001 — «أي حملة» و«أي منصة» و«أين ذهب المال» في شريط واحد.
+
+        The campaign table sat a band below the two charts, so the three questions an operator opens
+        this page with were answered in two places and compared by scrolling. They share a row now.
+
+        The marketing preview keeps its old shape — comparison across two columns, table on a full
+        row beneath — because that variant is a narrow teaser with no room for a table beside two
+        charts.
+      */}
       <div className={`grid gap-3 ${isMarketing ? 'sm:grid-cols-3' : compact ? '' : 'lg:grid-cols-3'}`}>
+        {/* Top campaigns */}
+        <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${isMarketing ? 'sm:col-span-3' : ''}`}>
+          <div className={`mb-1 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.topCampaigns}</div>
+          <div className="overflow-x-auto">
+            <table className={`w-full min-w-[420px] ${lg ? 'text-sm' : 'text-xs'}`}>
+              <thead>
+                <tr className={`border-b ${c.rowBorder} ${c.muted}`}>
+                  <th className="py-1.5 text-start font-semibold">{w.campaign}</th>
+                  <th className="py-1.5 text-start font-semibold">{w.platform}</th>
+                  <th className="py-1.5 text-end font-semibold">{w.spend}</th>
+                  <th className="py-1.5 text-end font-semibold">{w.results}</th>
+                  <th className="py-1.5 text-end font-semibold">{w.cost}</th>
+                  <th className="py-1.5 text-end font-semibold">ROAS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vm.topCampaigns.slice(0, topN).map((cp) => (
+                  <tr key={cp.id} className={`border-b last:border-0 ${c.rowBorder}`}>
+                    <td className={`py-1.5 pe-2 font-semibold ${c.value}`}>{cp.name}</td>
+                    <td className="py-1.5">
+                      <span className={`inline-flex items-center gap-1.5 ${c.sub}`}>
+                        <span className="h-2 w-2 rounded-full" style={{ background: providerColor(cp.provider) }} />
+                        {providerName(cp.provider)}
+                      </span>
+                    </td>
+                    <td className={`tnum py-1.5 text-end ${c.sub}`}>{money(cp.spend, currency)}</td>
+                    <td className={`tnum py-1.5 text-end ${c.sub}`}>{num(cp.results)}</td>
+                    <td className={`tnum py-1.5 text-end ${c.sub}`}>{cp.cpa === null ? '—' : money(cp.cpa, currency)}</td>
+                    <td className={`tnum py-1.5 text-end font-semibold ${c.value}`}>{cp.roas === null ? '—' : ratio(cp.roas)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         {/* Platform comparison (spend bars + ROAS) */}
-        <div className={`rounded-xl border p-3 ${c.card} ${isMarketing ? 'sm:col-span-2' : compact ? '' : 'lg:col-span-2'}`}>
+        <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${isMarketing ? 'sm:col-span-2' : ''}`}>
           <div className={`mb-2 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.platformComparison}</div>
           <div className="space-y-2">
             {vm.platforms.map((p) => (
@@ -351,43 +397,7 @@ export function UnifiedCampaignOverview({
         two panels beside it were dragged along, which is why the offending element looked like a
         title rather than a table.
       */}
-      <div className={`grid gap-3 ${compact ? '' : 'lg:grid-cols-3'}`}>
-        {/* Top campaigns */}
-        <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:col-span-2'}`}>
-          <div className={`mb-1 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.topCampaigns}</div>
-          <div className="overflow-x-auto">
-            <table className={`w-full min-w-[420px] ${lg ? 'text-sm' : 'text-xs'}`}>
-              <thead>
-                <tr className={`border-b ${c.rowBorder} ${c.muted}`}>
-                  <th className="py-1.5 text-start font-semibold">{w.campaign}</th>
-                  <th className="py-1.5 text-start font-semibold">{w.platform}</th>
-                  <th className="py-1.5 text-end font-semibold">{w.spend}</th>
-                  <th className="py-1.5 text-end font-semibold">{w.results}</th>
-                  <th className="py-1.5 text-end font-semibold">{w.cost}</th>
-                  <th className="py-1.5 text-end font-semibold">ROAS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vm.topCampaigns.slice(0, topN).map((cp) => (
-                  <tr key={cp.id} className={`border-b last:border-0 ${c.rowBorder}`}>
-                    <td className={`py-1.5 pe-2 font-semibold ${c.value}`}>{cp.name}</td>
-                    <td className="py-1.5">
-                      <span className={`inline-flex items-center gap-1.5 ${c.sub}`}>
-                        <span className="h-2 w-2 rounded-full" style={{ background: providerColor(cp.provider) }} />
-                        {providerName(cp.provider)}
-                      </span>
-                    </td>
-                    <td className={`tnum py-1.5 text-end ${c.sub}`}>{money(cp.spend, currency)}</td>
-                    <td className={`tnum py-1.5 text-end ${c.sub}`}>{num(cp.results)}</td>
-                    <td className={`tnum py-1.5 text-end ${c.sub}`}>{cp.cpa === null ? '—' : money(cp.cpa, currency)}</td>
-                    <td className={`tnum py-1.5 text-end font-semibold ${c.value}`}>{cp.roas === null ? '—' : ratio(cp.roas)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
+      <div className={`grid gap-3 ${compact ? '' : 'lg:grid-cols-2'}`}>
         {/* Needs attention + key alerts + top creatives — dashboard detail only (hidden on the compact marketing preview) */}
         {!isMarketing && (
         <div className="space-y-3">
