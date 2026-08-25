@@ -33,12 +33,17 @@ import { listCreatives } from '@/features/content/api'
 import { compact, money, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { plotSeries } from './timeseriesMoney'
+import { familyMoney, familyTotal, type FamilyRow } from './familyTotals'
+import { readMoney } from '@/lib/money/contract'
+
+/** The two KPI keys that are money rather than a quantity or a rate. */
+const MONEY_KPIS = new Set(['spend', 'revenue'])
 import { SavedViewsBar } from '@/features/dashboard/SavedViewsBar'
 import { useSavedViews, type SavedView } from '@/features/dashboard/savedViews'
 import { MetricStrip } from '@/components/ui/MetricStrip'
 import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import { useOverviewVm } from '@/features/campaigns/overview/useOverviewVm'
-import { dashboardMetrics } from './metricCatalog'
+import { SPECS, dashboardMetrics } from './metricCatalog'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -256,12 +261,23 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
 
   return (
     <div className="space-y-5">
+      {/*
+        The page names the surface the reader arrived at, not the file it lives in.
+
+        One component now answers both «لوحة التحكم» and «التحليلات». Left as it was, clicking the
+        first rail item — the one most people open first — landed on a heading saying «التحليلات»,
+        which reads as a mis-click. Same board, two doors, and each door says where it went.
+      */}
       <PageIntro
-        testid="analytics-intro"
-        title={ar ? 'التحليلات' : 'Analytics'}
-        purpose={ar
-          ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
-          : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
+        testid={`${surface}-intro`}
+        title={surface === 'dashboard' ? (ar ? 'لوحة التحكم' : 'Dashboard') : (ar ? 'التحليلات' : 'Analytics')}
+        purpose={surface === 'dashboard'
+          ? (ar
+              ? 'حالة الحساب الآن: الإنفاق والنتائج والعائد، ثم المنصات والحملات والقمع — كل رقم بأساسه.'
+              : 'Where the account stands: spend, results and return, then platforms, campaigns and the funnel — every figure with its basis.')
+          : ar
+            ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
+            : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
         badges={<ProvenanceBadge provenance={provenanceSummary.data?.provenance} />}
       />
 
@@ -643,7 +659,8 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
             rowCostPer(r, 'cpa', 'conversions'),
             rowRoas(r),
             percent(r.ctr, 2),
-            money(r.cpm),
+            // Derived from spend, so it carried spend's withholding — missed when this row was fixed.
+            rowCostPer(r, 'cpm', Number(r.impressions ?? 0) / 1000),
             percent(r.spend_share, 1),
           ])}
         />
@@ -688,11 +705,18 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
           rows={rows.map((r) => [
             <span key="n" className="font-semibold text-text-primary">{r.campaign_name ?? '—'}</span>,
             <PlatformCell key="p" provider={r.provider} />,
-            money(r.spend),
-            money(r.revenue),
+            /*
+             * MONEY-TRUTH-002, continued — this table sits directly beneath the platform table that
+             * was fixed for exactly this, and was left reading the raw fields. On an account whose
+             * money is withheld every campaign ranked as having spent 0 with a 0.00× return, in a
+             * ranking ordered BY spend, under a card stating the real total. Same rows, same
+             * provenance fields, same readers.
+             */
+            rowMoney(r, 'spend'),
+            rowMoney(r, 'revenue'),
             num(r.conversions),
-            money(r.cpa),
-            <span key="ro" className="tnum font-semibold">{ratio(r.roas)}</span>,
+            rowCostPer(r, 'cpa', 'conversions'),
+            <span key="ro" className="tnum font-semibold">{rowRoas(r)}</span>,
           ])}
         />
       </Panel>
@@ -704,6 +728,23 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const f = useFunnel(projectId, range, filters)
   const rows = f.data ?? []
+
+  /*
+   * FUNNEL-WITHHELD-001 (frontend half) — the unit the stage costs are in.
+   *
+   * Every `cost_per` divides the window's spend, and that spend is not always in the project's
+   * currency: when no rate exists it is the platform's own. `money()` defaults to SAR, so «تكلفة
+   * 22.03 SAR» appeared against dollars.
+   *
+   * Read from the summary rather than plumbed through the funnel's `meta`, because it is the same
+   * spend over the same window and the money contract already answers «what currency is this
+   * project's spend actually in» — a second path to the same answer is how two surfaces come to
+   * disagree.
+   */
+  // Named `summary`, not `s`: the stage rows below are mapped as `s`, and the shadow compiles.
+  const summary = useSummary(projectId, range, filters)
+  const spendReading = readMoney(summary.data?.current as Record<string, unknown> | undefined, 'spend', summary.data?.currency ?? null, ar)
+  const costCurrency = spendReading.currency ?? summary.data?.currency ?? undefined
   /*
    * FUNNEL-NULL-001 — scaled against the largest REPORTED count, not `rows[0].count`.
    *
@@ -737,7 +778,7 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
             )}
             <div className="w-40 shrink-0 text-end text-xs text-text-muted">
               {s.step_rate !== null && <span>{ar ? 'انتقال' : 'step'} {percent(s.step_rate, 0)}</span>}
-              {s.cost_per !== null && <span className="ms-2">{ar ? 'تكلفة' : 'cost'} {money(s.cost_per)}</span>}
+              {s.cost_per !== null && <span className="ms-2">{ar ? 'تكلفة' : 'cost'} {money(s.cost_per, costCurrency)}</span>}
             </div>
           </div>
         ))}
@@ -761,24 +802,58 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
   const rows = b.data ?? []
   return (
     <Panel title={ar ? 'تحليل الميزانية' : 'Budget analysis'} description={ar ? 'المخطط مقابل المصروف وسرعة الصرف (Pacing)' : 'Planned against spent, and how fast it is going (pacing)'} loading={b.isLoading} error={b.isError} empty={!b.isLoading && rows.length === 0}>
+      {/*
+        BUDGET-WITHHELD-001 — every figure here is now stated in the unit it is actually in.
+
+        `money()` defaults to SAR, and the row carried no currency, so a campaign budgeted in USD
+        read «80K SAR». Worse, `spent` was the aggregator's coalesced zero: on an account whose money
+        awaits a rate — production's, every row of it — this table reported 0 spent, 0% consumed and
+        pacing 0.00× against real spend. That is the one wrong number on this product somebody acts
+        on, because a campaign that has spent nothing and is pacing at zero is one they top up.
+
+        Pacing is blank rather than wrong when the plan and the spend are denominated differently,
+        and the row says which case it is instead of leaving a reader to guess at an empty cell.
+      */}
       <MetricTable
         head={ar ? ['الحملة', 'الميزانية', 'المصروف', 'المتبقي', 'الاستهلاك', 'السرعة', 'المتوقع'] : ['Campaign', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Pace', 'Projected']}
-        rows={rows.map((r) => [
-          <span key="n" className="font-semibold text-text-primary">{r.campaign_name}</span>,
-          money(r.budget),
-          money(r.spent),
-          money(r.remaining),
-          <div key="c" className="flex items-center gap-2">
-            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-secondary">
-              <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.min(100, (r.consumed_pct ?? 0) * 100)}%` }} />
-            </div>
-            <span className="tnum text-xs">{percent(r.consumed_pct, 0)}</span>
-          </div>,
-          <span key="p" className={`tnum font-semibold ${(r.pace ?? 0) > 1.2 ? 'text-danger' : (r.pace ?? 0) < 0.8 ? 'text-warning' : 'text-success'}`}>
-            {ratio(r.pace, '×')}
-          </span>,
-          money(r.projected_spend),
-        ])}
+        rows={rows.map((r) => {
+          const basisNote = r.pacing_basis === 'currency_mismatch'
+            ? (ar
+                ? `المصروف بعملة ${r.spent_currency ?? '—'} والميزانية بعملة ${r.budget_currency ?? '—'} — لا تُقارَنان`
+                : `Spent in ${r.spent_currency ?? '—'}, budgeted in ${r.budget_currency ?? '—'} — not comparable`)
+            : r.pacing_basis === 'no_budget'
+              ? (ar ? 'لا توجد ميزانية محددة لهذه الحملة' : 'No budget was set for this campaign')
+              : undefined
+
+          return [
+            <span key="n" className="font-semibold text-text-primary">{r.campaign_name}</span>,
+            money(r.budget, r.budget_currency ?? undefined),
+            <span key="s" title={r.spend_withheld ? (ar ? 'بعملة المنصة — التحويل غير متاح' : "In the platform's own currency — conversion unavailable") : undefined}>
+              {money(r.spent, r.spent_currency ?? undefined)}
+            </span>,
+            r.remaining === null
+              ? <span key="rm" className="text-text-muted" title={basisNote}>—</span>
+              : money(r.remaining, r.budget_currency ?? undefined),
+            r.consumed_pct === null
+              ? <span key="c" className="text-text-muted" title={basisNote}>—</span>
+              : (
+                <div key="c" className="flex items-center gap-2">
+                  <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-secondary">
+                    <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.min(100, r.consumed_pct * 100)}%` }} />
+                  </div>
+                  <span className="tnum text-xs">{percent(r.consumed_pct, 0)}</span>
+                </div>
+              ),
+            r.pace === null
+              ? <span key="p" className="text-text-muted" title={basisNote}>—</span>
+              : (
+                <span key="p" className={`tnum font-semibold ${r.pace > 1.2 ? 'text-danger' : r.pace < 0.8 ? 'text-warning' : 'text-success'}`}>
+                  {ratio(r.pace, '×')}
+                </span>
+              ),
+            money(r.projected_spend, r.spent_currency ?? undefined),
+          ]
+        })}
       />
     </Panel>
   )
@@ -1206,7 +1281,13 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
     { key: 'awareness', ar: 'الوعي', en: 'Awareness', kpis: ['impressions', 'reach', 'frequency', 'cpm'] },
     { key: 'traffic', ar: 'الزيارات', en: 'Traffic', kpis: ['clicks', 'ctr', 'cpc'] },
     { key: 'engagement', ar: 'التفاعل', en: 'Engagement', kpis: ['engagements', 'engagement_rate'] },
-    { key: 'video', ar: 'المشاهدات', en: 'Video', kpis: ['video_views', 'completion_rate'] },
+    /*
+      `completion_rate` is not a metric this product has. The catalogue and the aggregator both call
+      it `video_completion_rate`, so this family's second KPI has always rendered «—» beneath the
+      key itself — a metric that looked unreported when it was only misspelt. `objectiveFamilies`
+      in `familyTotals.test.ts` now asserts every family names a key the catalogue defines.
+    */
+    { key: 'video', ar: 'المشاهدات', en: 'Video', kpis: ['video_views', 'video_completion_rate'] },
     { key: 'leads', ar: 'العملاء المحتملون', en: 'Leads', kpis: ['leads', 'conversion_rate'] },
     { key: 'sales', ar: 'المبيعات', en: 'Sales', kpis: ['conversions', 'revenue', 'roas'] },
     { key: 'app', ar: 'التطبيق', en: 'App', kpis: ['installs'] },
@@ -1253,19 +1334,49 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                 </div>
 
                 {/* The verdict metrics for THIS family — not the same row of KPIs for every objective. */}
+                {/*
+                  OBJECTIVE-TOTALS-001 — three defects in one reduce.
+
+                  It added every KPI together. Correct for a count and meaningless for a rate, and
+                  every family's list holds one: two sales campaigns returning 3× and 5× printed
+                  «8», and two at 1.2% CTR printed «2.4%». `familyTotal` rebuilds a rate from the
+                  summed bases, which is the rule `MetricsAggregator::withDerived()` already states
+                  on the server and this was the one place re-aggregating without it.
+
+                  It printed the metric KEY as the label, so the row read «conversions 176 revenue
+                  56,320 roas 15.36» in an Arabic page.
+
+                  And it formatted money with `toLocaleString` and no currency — «56,320» of
+                  nothing — over `spend`, which is the coalesced 0 on a withheld row. So a family
+                  whose money awaits a rate would have shown a confident zero next to a revenue the
+                  KPI strip states correctly.
+                */}
                 <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
                   {f.kpis.map((k) => {
-                    const total = f.campaigns.reduce<number | null>((t, r) => {
-                      const v = (r as unknown as Record<string, unknown>)[k]
-                      return typeof v === 'number' ? (t ?? 0) + v : t
-                    }, null)
+                    const rows = f.campaigns as unknown as FamilyRow[]
+                    const spec = SPECS[k]
+                    const money = MONEY_KPIS.has(k)
+                    const total = money
+                      ? readMoney(familyMoney(rows), k as 'spend' | 'revenue', currency, ar).amount
+                      : familyTotal(rows, k)
+                    const unit = money
+                      ? (readMoney(familyMoney(rows), k as 'spend' | 'revenue', currency, ar).currency ?? currency ?? '')
+                      : ''
 
                     return (
                       <div key={k} className="flex flex-col">
-                        <dt className="text-text-secondary">{k}</dt>
+                        <dt className="text-text-secondary">
+                          {spec ? (ar ? spec.label.ar : spec.label.en) : k}
+                        </dt>
                         <dd className="tnum text-text-primary" dir="ltr">
                           {/* Null stays «—»: an unavailable figure is not a figure of zero. */}
-                          {total === null ? '—' : total.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                          {total === null
+                            ? '—'
+                            : money
+                              ? `${total.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${unit}`.trim()
+                              : spec
+                                ? spec.format(total)
+                                : total.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                         </dd>
                       </div>
                     )

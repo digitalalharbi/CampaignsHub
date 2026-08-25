@@ -346,6 +346,94 @@ final class MetricsTest extends TestCase
         $this->assertSame(['awareness', 'sales'], $families, 'Two families in scope stays a mixed scope.');
     }
 
+    /**
+     * BUDGET-WITHHELD-001 — «0 spent, pacing 0.00×» against money that was actually spent.
+     *
+     * `spent` was `COALESCE(SUM(value) FILTER (spend), 0)`, and FX-001 stores null when no rate
+     * exists — so an account whose money is entirely withheld read as having spent nothing, with the
+     * full budget remaining. It is the one wrong figure on this product somebody acts on: a campaign
+     * that has spent nothing and paces at zero is a campaign they top up.
+     */
+    public function test_budget_pacing_states_withheld_spend_rather_than_a_zero(): void
+    {
+        $campaign = UnifiedCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'name' => 'Always-On', 'objective' => 'sales', 'status' => 'active',
+            'total_budget' => 10000, 'budget_currency' => 'USD',
+        ]);
+
+        // A day the platform reported and no USD→project rate could convert.
+        DailyMetric::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->projectA->id,
+            'unified_campaign_id' => $campaign->id,
+            'external_account_id' => $this->uid('acc-budget'),
+            'external_campaign_id' => $this->uid('ext-budget'),
+            'provider' => 'snapchat',
+            'metric_key' => 'spend',
+            'metric_date' => '2026-06-15',
+            'value' => null,
+            'original_amount' => 2500,
+            'original_currency' => 'USD',
+        ]);
+
+        $rows = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/budget?from=2026-06-01&to=2026-06-30")
+            ->assertOk()->json('data');
+
+        $this->assertCount(1, $rows);
+        $row = $rows[0];
+
+        $this->assertSame(2500.0, (float) $row['spent'], 'The platform reported 2,500 and it is not zero.');
+        $this->assertTrue($row['spend_withheld']);
+        $this->assertSame('USD', $row['spent_currency']);
+        $this->assertSame('USD', $row['budget_currency']);
+
+        // Budget and spend agree on a currency, so pacing IS computable here.
+        $this->assertSame('comparable', $row['pacing_basis']);
+        $this->assertSame(0.25, (float) $row['consumed_pct']);
+        $this->assertSame(7500.0, (float) $row['remaining']);
+        $this->assertNotNull($row['pace']);
+    }
+
+    /** A ratio between two currencies is not a ratio — it is withheld, and it says why. */
+    public function test_budget_pacing_refuses_to_pace_a_spend_against_a_budget_in_another_currency(): void
+    {
+        $campaign = UnifiedCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'name' => 'Riyal-budgeted', 'objective' => 'sales', 'status' => 'active',
+            'total_budget' => 10000, 'budget_currency' => 'SAR',
+        ]);
+
+        DailyMetric::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->projectA->id,
+            'unified_campaign_id' => $campaign->id,
+            'external_account_id' => $this->uid('acc-budget'),
+            'external_campaign_id' => $this->uid('ext-mismatch'),
+            'provider' => 'snapchat',
+            'metric_key' => 'spend',
+            'metric_date' => '2026-06-15',
+            'value' => null,
+            'original_amount' => 2500,
+            'original_currency' => 'USD',
+        ]);
+
+        $row = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/budget?from=2026-06-01&to=2026-06-30")
+            ->assertOk()->json('data')[0];
+
+        // What was spent is a fact and is still stated, in its own currency.
+        $this->assertSame(2500.0, (float) $row['spent']);
+        $this->assertSame('USD', $row['spent_currency']);
+
+        // What it cannot be compared against is refused rather than guessed.
+        $this->assertSame('currency_mismatch', $row['pacing_basis']);
+        $this->assertNull($row['consumed_pct']);
+        $this->assertNull($row['pace']);
+        $this->assertNull($row['remaining']);
+    }
+
     public function test_the_summary_says_whether_the_scope_holds_anything_at_all(): void
     {
         app(UpsertDailyMetrics::class)->handle([

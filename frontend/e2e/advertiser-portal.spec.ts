@@ -189,6 +189,81 @@ test.describe('the advertiser portal', () => {
     expect(stillArabic, `these sections are still Arabic under dir=ltr:\n${stillArabic.join('\n')}`).toEqual([])
   })
 
+  /**
+   * LABEL-LEAK-001 — the mirror of the walk above: no section shows the database's own words.
+   *
+   * Three screens shipped with label maps written against a guessed subset of their key sets, and
+   * every one of them falls back to printing the key: the settings dropdown offered `in_house_team`
+   * and `self_serve_company`; the projects filter row read «الكل draft onboarding active paused
+   * completed archived»; the subscriptions page — the one somebody reads before paying — showed
+   * «clients 1 4 5» and «الدعم community».
+   *
+   * None of those was a broken query. Each was a map that drifted from a PHP enum or a seeder, and
+   * silently. So this walks the rail the same way and asserts that no visible text is a bare
+   * lowercase identifier, which is what every one of them looked like.
+   *
+   * The allow-list is words that are legitimately Latin in an Arabic page — file formats, metric
+   * abbreviations, platform names. Anything else that renders as `snake_case` or a lone English
+   * word is a label nobody wrote.
+   */
+  test('no section shows a raw identifier where a label belongs', async ({ page }) => {
+    const ALLOWED = new Set([
+      'pdf', 'xlsx', 'csv', 'roas', 'ctr', 'cpa', 'cpc', 'cpm', 'aov', 'api', 'url', 'id', 'ai',
+      'meta', 'google', 'tiktok', 'snapchat', 'linkedin', 'x', 'salla', 'zid',
+      'sar', 'usd', 'aed', 'demo', 'all', 'none', 'beta', 'utc', 'vat', 'ok',
+    ])
+
+    await page.goto('/app/dashboard')
+    await expect(page.getByRole('navigation').first()).toBeVisible()
+
+    const hrefs = await page.getByRole('navigation').first().locator('a[href^="/app"]')
+      .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href')!))])
+
+    const leaks: string[] = []
+    for (const href of hrefs) {
+      await openSection(page, href)
+      await expect(page.locator('main')).toBeVisible({ timeout: 20000 })
+
+      /*
+       * Wait for the section to SETTLE, not merely to be non-empty.
+       *
+       * The first version of this test polled for «any text at all», which a heading satisfies
+       * instantly — so it read `main` before the section's queries resolved, found the header and
+       * nothing else, and passed. Reintroducing a known leak on purpose did not fail it, which is
+       * how that was discovered: a guard that cannot fail is not a guard.
+       *
+       * Two identical consecutive reads means the content has stopped arriving. That is a fact about
+       * this page rather than a sleep long enough to usually work.
+       */
+      let previous = ''
+      await expect.poll(async () => {
+        const current = (await page.locator('main').innerText()).trim()
+        const settled = current.length > 0 && current === previous
+        previous = current
+        return settled
+      }, { timeout: 20000, intervals: [250] }).toBe(true)
+
+      const found = await page.locator('main').evaluate((root, allowed) => {
+        const out = new Set<string>()
+        const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+        let node: Node | null
+        while ((node = walk.nextNode())) {
+          const text = (node.textContent ?? '').trim()
+          if (!text || text.length > 28) continue
+          // A lone lowercase word, or snake_case — the shape every leaked key had.
+          if (!/^[a-z][a-z0-9]*([_-][a-z0-9]+)*$/.test(text)) continue
+          if ((allowed as string[]).includes(text.toLowerCase())) continue
+          out.add(text)
+        }
+        return [...out]
+      }, [...ALLOWED])
+
+      if (found.length > 0) leaks.push(`${href}: ${found.join(' ')}`)
+    }
+
+    expect(leaks, `these sections render identifiers instead of labels:\n${leaks.join('\n')}`).toEqual([])
+  })
+
   test('the dashboard holds together on a phone', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
     await page.goto('/app/dashboard')

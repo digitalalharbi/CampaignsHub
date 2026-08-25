@@ -329,7 +329,18 @@ final class MetricsController extends Controller
         return ApiResponse::success(
             $funnel['stages'],
             'Conversion funnel.',
-            meta: $this->meta($from, $to) + ['spend' => $funnel['spend']],
+            /*
+             * FUNNEL-WITHHELD-001 — the unit travels with the figure.
+             *
+             * `spend` here is what every `cost_per` on the chart divides, and it is not always in
+             * the project's currency: when no rate exists it is the platform's own. A reader shown
+             * «تكلفة 22.03» with no unit beside a project reporting in SAR reads riyals.
+             */
+            meta: $this->meta($from, $to) + [
+                'spend' => $funnel['spend'],
+                'spend_currency' => $funnel['spend_currency'],
+                'spend_withheld' => $funnel['spend_withheld'],
+            ],
         );
     }
 

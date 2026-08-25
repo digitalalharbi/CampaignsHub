@@ -26,7 +26,21 @@ export interface CompareCampaign {
   budget_currency: string | null
   totals: Record<string, number | null>
   series: Array<Record<string, number | null | string>>
-  platforms: Array<{ provider: string; spend: number; conversions: number }>
+  /**
+   * MONEY-TRUTH-002 — the split carries its provenance, because `spend` alone cannot state itself.
+   *
+   * On a withheld row `spend` is the aggregator's coalesced 0, so a comparison of two campaigns
+   * whose money awaits a rate showed both at nothing and divided by that zero to draw the bar.
+   */
+  platforms: Array<{
+    provider: string
+    spend: number
+    conversions: number
+    spend_withheld_rows?: number | null
+    spend_original?: number | null
+    money_original_currency?: string | null
+    money_original_currencies?: number | null
+  }>
   creatives: CompareCreative[]
 }
 
