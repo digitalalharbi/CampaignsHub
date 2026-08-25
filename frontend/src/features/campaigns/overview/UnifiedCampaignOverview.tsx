@@ -397,11 +397,20 @@ export function UnifiedCampaignOverview({
         two panels beside it were dragged along, which is why the offending element looked like a
         title rather than a table.
       */}
-      <div className={`grid gap-3 ${compact ? '' : 'lg:grid-cols-2'}`}>
+      {/*
+        DASH-BAND-001 — a row, not a column.
+
+        These panels were stacked in one column beside the campaign table. The table moved up into
+        the band above, which left them alone in a two-column grid with one column blank. A flex row
+        instead of a fixed column count keeps the row full whether the creatives panel renders or
+        not — `topCreatives` is conditional, so a `grid-cols-3` here would blank a third of the row
+        on every project without creative-grain data.
+      */}
+      <div>
         {/* Needs attention + key alerts + top creatives — dashboard detail only (hidden on the compact marketing preview) */}
         {!isMarketing && (
-        <div className="space-y-3">
-          <div className={`rounded-xl border p-3 ${c.card}`}>
+        <div className={`flex flex-col gap-3 ${compact ? '' : 'lg:flex-row lg:items-start'}`}>
+          <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:flex-1'}`}>
             <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.needsAttention}</div>
             {vm.needsAttention.length === 0 ? (
               <p className={`text-xs ${c.muted}`}>{w.nothingNeedsAttention}</p>
@@ -416,7 +425,7 @@ export function UnifiedCampaignOverview({
               </ul>
             )}
           </div>
-          <div className={`rounded-xl border p-3 ${c.card}`}>
+          <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:flex-1'}`}>
             <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.topAlerts}</div>
             {vm.alerts.length === 0 ? (
               <p className={`text-xs ${c.muted}`}>{w.noCriticalAlerts}</p>
@@ -432,7 +441,7 @@ export function UnifiedCampaignOverview({
             )}
           </div>
           {vm.topCreatives && vm.topCreatives.length > 0 && (
-            <div className={`rounded-xl border p-3 ${c.card}`}>
+            <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:flex-1'}`}>
               <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.topCreatives}</div>
               <ul className="space-y-1.5">
                 {vm.topCreatives.slice(0, 3).map((cr) => (
