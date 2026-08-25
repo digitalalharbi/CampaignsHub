@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { metricSourceLabel } from './metricSource'
+import { creativeKindLabel } from './CreativesPage'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Maximize2, Minus, Plus, RotateCcw } from 'lucide-react'
@@ -442,7 +444,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           <Fact k={t.ad} v={creative.external_ids.ad ?? t.notProvided} block ltr />
           <Fact k={t.objective} v={creative.objective ? objectiveLabel(creative.objective, locale) : t.notProvided} block />
           <Fact k={t.path} v={marketingPathLabel(data.path, locale)} block />
-          <Fact k={t.kind} v={preview.kind} block />
+          <Fact k={t.kind} v={creativeKindLabel(preview.kind, ar)} block />
           <Fact k={t.firstSeen} v={creative.freshness.first_seen_at?.slice(0, 10) ?? t.notProvided} block ltr />
           <Fact k={t.lastActive} v={creative.freshness.last_active_at?.slice(0, 10) ?? t.notProvided} block ltr />
           <Fact k={t.lastSync} v={creative.freshness.last_synced_at?.slice(0, 16).replace('T', ' ') ?? t.notProvided} block ltr />
@@ -602,7 +604,13 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
                         {formatMetric(metricState(row.metrics, k), k, locale, currency)}
                       </td>
                     ))}
-                    <td className="p-2 text-xs text-text-secondary">{row.source}</td>
+                    {/*
+                      CONTENT-SOURCE-LABEL-001 — the «المصدر» column printed `platform_reported`.
+                      
+                      That column answers «where did this row come from», which is the question a
+                      reader checking a figure asks first — and it answered in the database's words.
+                    */}
+                    <td className="p-2 text-xs text-text-secondary">{metricSourceLabel(row.source, locale === 'ar')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -740,6 +748,9 @@ function Fact({ k, v, ltr = false, block = false }: { k: string; v: string; ltr?
  * The change is shown only when BOTH sides are real numbers. A «+100%» computed against a previous
  * period the platform did not report is not a rise; it is an artefact of treating silence as zero.
  */
+/** Ratios that are normally a share of a whole, so exceeding it needs saying rather than printing. */
+const RATE_KEYS = new Set(['conversion_rate', 'view_rate', 'completion_rate', 'video_completion_rate', 'engagement_rate', 'ctr'])
+
 function MetricBlock({
   metricKey,
   metrics,
@@ -762,11 +773,35 @@ function MetricBlock({
       ? (now.value - then.value) / Math.abs(then.value)
       : null
 
+  /*
+   * RATE-OVER-WHOLE-001 — «معدل التحويل 136.51%», printed flat.
+   *
+   * 172 orders against 126 clicks. Both figures are real and the ratio is arithmetically right: a
+   * view-through conversion needs no click, and the two are counted on different attribution
+   * windows, so conversions genuinely can exceed clicks. Printed without a word, «136.51%» reads as
+   * a bug in the product and teaches the reader to distrust the whole panel.
+   *
+   * This is the treatment FUNNEL-NOT-NESTED-001 established for «166%» one screen over: the figure
+   * is not hidden, corrected or clamped — nothing here knows which side is wrong — it is marked, and
+   * the marker explains itself on hover.
+   */
+  const overWhole = RATE_KEYS.has(metricKey) && now.kind === 'value' && now.value > 1
+
   return (
     <div className="rounded-md border border-border p-3">
       <p className="text-xs text-text-secondary">{metricLabel(metricKey, locale)}</p>
       <p className="mt-1 text-lg font-semibold tabular-nums text-text-primary" dir="ltr">
         {formatMetric(now, metricKey, locale, currency)}
+        {overWhole && (
+          <span
+            className="ms-1 cursor-help text-xs font-normal text-text-muted"
+            title={locale === 'ar'
+              ? 'أكبر من 100% لأن التحويلات لا تتطلب نقرة — تُحتسب مشاهدات الإعلان أيضًا، وبنافذة إسناد مختلفة عن النقرات.'
+              : 'Above 100% because a conversion does not require a click — view-throughs count too, on a different attribution window from clicks.'}
+          >
+            ⓘ
+          </span>
+        )}
       </p>
       {change !== null && (
         <p
