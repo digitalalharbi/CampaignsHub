@@ -8,6 +8,9 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Metrics\Models\CurrencyRate;
@@ -25,6 +28,8 @@ use Database\Seeders\MetricDefinitionSeeder;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
 use Tests\TestCase;
 
@@ -432,6 +437,138 @@ final class MetricsTest extends TestCase
         $this->assertNull($row['consumed_pct']);
         $this->assertNull($row['pace']);
         $this->assertNull($row['remaining']);
+    }
+
+    /** A real account chain — `external_campaigns.external_account_id` is a foreign key. */
+    private function adAccount(string $provider, string $externalId, string $name, string $currency): ExternalAccount
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $credential = new IntegrationCredential(['provider' => $provider, 'credential_scope' => 'project_only', 'credential_type' => 'oauth', 'status' => 'active']);
+        $credential->setPayload('token-'.$provider);
+        $credential->save();
+
+        $connection = ProviderConnection::create([
+            'credential_id' => $credential->id, 'provider' => $provider,
+            'connection_name' => $provider.' connection', 'scope' => 'project_only', 'status' => 'connected',
+        ]);
+
+        $account = ExternalAccount::create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id, 'provider' => $provider,
+            'account_type' => 'ad_account', 'external_id' => $externalId, 'name' => $name,
+            'status' => 'active', 'currency' => $currency,
+        ]);
+
+        app(TenantContext::class)->forget();
+
+        return $account;
+    }
+
+    /**
+     * BUDGET-ACCOUNTS-001 — spend per ad account against the ceiling the PLATFORM enforces.
+     *
+     * The budget screen only ever compared spend to a plan typed into this product. The figure that
+     * actually stops delivery is the platform's own cap, which arrives on `external_campaigns` and
+     * was never read.
+     */
+    public function test_account_budgets_measure_spend_against_the_platform_cap(): void
+    {
+        $account = $this->adAccount('snapchat', 'acct-cap-1', 'Razzah Self Serve', 'USD');
+
+        // One campaign with a lifetime cap, one with only a daily cap, one with neither.
+        foreach ([['ext-cap-a', 1000.0, null], ['ext-cap-b', null, 100.0], ['ext-cap-c', null, null]] as [$ext, $life, $daily]) {
+            DB::table('external_campaigns')->insert([
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $this->tenant->id,
+                'project_id' => $this->projectA->id,
+                'external_account_id' => $account->id,
+                'provider' => 'snapchat',
+                'external_id' => $ext,
+                'name' => $ext,
+                'lifetime_budget' => $life,
+                'daily_budget' => $daily,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        DailyMetric::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->projectA->id,
+            'external_account_id' => $account->id,
+            'external_campaign_id' => $this->uid('ext-cap-a'),
+            'provider' => 'snapchat',
+            'metric_key' => 'spend',
+            'metric_date' => '2026-06-02',
+            'value' => null,
+            'original_amount' => 600,
+            'original_currency' => 'USD',
+        ]);
+
+        $rows = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/budget-accounts?from=2026-06-01&to=2026-06-02")
+            ->assertOk()->json('data');
+
+        $this->assertCount(1, $rows);
+        $row = $rows[0];
+
+        $this->assertSame('Razzah Self Serve', $row['account_name']);
+
+        // The withheld original, not the coalesced zero.
+        $this->assertSame(600.0, (float) $row['spent']);
+        $this->assertTrue($row['spend_withheld']);
+        $this->assertSame('USD', $row['spent_currency']);
+
+        // 1,000 lifetime + (100 daily × 2 days) = 1,200. The uncapped campaign adds nothing.
+        $this->assertSame(1200.0, (float) $row['cap']);
+        $this->assertSame(600.0, (float) $row['remaining']);
+        $this->assertSame(0.5, (float) $row['consumed_pct']);
+
+        // Two of three campaigns state a cap, so the ceiling is partial and says so.
+        $this->assertSame(3, $row['campaigns']);
+        $this->assertSame(2, $row['capped_campaigns']);
+    }
+
+    /** A ceiling nobody stated is null, never zero — zero reads as «nothing left to spend». */
+    public function test_account_budgets_state_no_cap_rather_than_a_zero_one(): void
+    {
+        $account = $this->adAccount('meta', 'acct-nocap', 'No cap', 'SAR');
+
+        DB::table('external_campaigns')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->projectA->id,
+            'external_account_id' => $account->id,
+            'provider' => 'meta',
+            'external_id' => 'ext-nocap',
+            'name' => 'ext-nocap',
+            'lifetime_budget' => null,
+            'daily_budget' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DailyMetric::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->projectA->id,
+            'external_account_id' => $account->id,
+            'external_campaign_id' => $this->uid('ext-nocap'),
+            'provider' => 'meta',
+            'metric_key' => 'spend',
+            'metric_date' => '2026-06-02',
+            'value' => 250,
+        ]);
+
+        $row = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/budget-accounts?from=2026-06-01&to=2026-06-02")
+            ->assertOk()->json('data')[0];
+
+        $this->assertSame(250.0, (float) $row['spent']);
+        $this->assertNull($row['cap'], 'No campaign stated a ceiling, so there is none to state.');
+        $this->assertNull($row['consumed_pct']);
+        $this->assertNull($row['remaining']);
+        $this->assertNull($row['pace']);
+        $this->assertSame(0, $row['capped_campaigns']);
     }
 
     public function test_the_summary_says_whether_the_scope_holds_anything_at_all(): void
