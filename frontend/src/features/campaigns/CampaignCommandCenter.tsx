@@ -33,13 +33,30 @@ import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, Platfo
  * rather than reintroducing a second multiplication here.
  */
 import { compact, money, moneyFromTotals, num, percent, ratio, rowCostPer, rowMoney, rowRoas, trend } from '@/features/analytics/format'
-import { readRoas } from '@/lib/money/contract'
+import { readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { providerLabel } from './labels'
 import type { Locale } from '@/stores/ui'
 
 type Sparkable = keyof MetricTotals
+
+/**
+ * MONEY-TRUTH / PARTIAL-WITHHELD-001 — a spend figure that may honestly be paced against a budget.
+ *
+ * `budget − spend` and `spend ÷ budget` are only meaningful when spend is a single real number in the
+ * budget's own currency. Read raw, `k.spend` is the aggregator's coalesced 0 on a withheld scope
+ * («we could not convert», not «nothing spent») and the converted SUBSET on a partial one — either
+ * one drawn against a budget states a remaining and a utilisation that are simply wrong, and prints
+ * them under the budget's currency. So this returns a number only for a `converted` or `zero` reading
+ * (a real figure in the reporting currency); a withheld, mixed or absent spend returns null and the
+ * caller renders «—» rather than a budget that looks fully available. It never invents a ratio the
+ * money cannot support.
+ */
+function comparableSpend(totals: MoneyTotals, reportingCurrency: string): number | null {
+  const r = readMoney(totals, 'spend', reportingCurrency, true)
+  return r.kind === 'converted' || r.kind === 'zero' ? r.amount : null
+}
 
 /** Objective → the primary cost metric the client cares about (CPA vs CPL). */
 function costLabel(objective: string): string {
@@ -91,11 +108,12 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
   const k = summary.data?.current
   const d = summary.data?.delta ?? {}
   const budget = campaign.total_budget ?? null
-  const spend = k?.spend ?? 0
-  const remaining = budget != null ? budget - spend : null
-  const utilization = budget && budget > 0 ? spend / budget : null
-  const convRate = k && k.clicks > 0 ? k.conversions / k.clicks : null
   const cur = campaign.budget_currency || 'SAR'
+  // Only a real single spend figure may be drawn against the budget — see comparableSpend.
+  const spend = comparableSpend(k, cur)
+  const remaining = budget != null && spend != null ? budget - spend : null
+  const utilization = budget && budget > 0 && spend != null ? spend / budget : null
+  const convRate = k && k.clicks > 0 ? k.conversions / k.clicks : null
 
   /*
    * MONEY-TRUTH-003 — the same contract the dashboard and Analytics use.
@@ -143,7 +161,10 @@ export function CampaignExecutiveSummary({ campaign, projectId, range, locale }:
     const plats = platforms.data ?? []
     const byRoas = [...plats].filter((p) => p.roas != null).sort((a, b) => (b.roas ?? 0) - (a.roas ?? 0))
     const budget = campaign.total_budget ?? null
-    const util = budget && budget > 0 ? (k?.spend ?? 0) / budget : null
+    // Withheld/partial spend cannot pace a budget, so «الميزانية شارفت على النفاد» falls through to
+    // the conversions-based risk rather than firing on a coalesced zero.
+    const spend = comparableSpend(k, campaign.budget_currency || 'SAR')
+    const util = budget && budget > 0 && spend != null ? spend / budget : null
     return {
       topResult: k ? `${num(k.conversions)} نتيجة · ${ratio(k.roas)} ROAS` : '—',
       bestPlatform: byRoas[0] ? `${providerLabel(byRoas[0].provider, locale)} (${ratio(byRoas[0].roas)})` : '—',
@@ -151,7 +172,7 @@ export function CampaignExecutiveSummary({ campaign, projectId, range, locale }:
       risk: util != null && util > 0.95 ? 'الميزانية شارفت على النفاد' : (k && k.conversions === 0 ? 'لا نتائج في الفترة' : 'ضمن الحدود'),
       nextStep: byRoas[0] ? `إعادة توزيع الميزانية نحو ${providerLabel(byRoas[0].provider, locale)}` : 'مراجعة الاستهداف',
     }
-  }, [summary.data, platforms.data, campaign.total_budget, locale])
+  }, [summary.data, platforms.data, campaign.total_budget, campaign.budget_currency, locale])
 
   const Item = ({ label, value }: { label: string; value: string }) => (
     <div className="flex flex-col gap-0.5 rounded-lg border border-border bg-surface-secondary p-2.5">
@@ -241,10 +262,22 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
   const activity = useCampaignActivity(projectId, campaign.id)
   const cur = campaign.budget_currency || 'SAR'
 
+  const k = summary.data?.current
   const budget = campaign.total_budget ?? null
-  const spend = summary.data?.current.spend ?? 0
-  const remaining = budget != null ? budget - spend : null
-  const util = budget && budget > 0 ? spend / budget : null
+  /*
+   * MONEY-TRUTH / PARTIAL-WITHHELD-001 — «المصروف» and everything paced from it read the contract.
+   *
+   * `summary.current.spend` is the aggregator's coalesced figure: 0 when the spend was withheld, and
+   * the converted subset when it was partial. Rendered raw with `money(spend, cur)` this tab printed
+   * that number under the BUDGET's currency — a foreign spend labelled SAR, or «0 SAR» over money the
+   * platform really spent. `spendRead.text` states a withheld figure in its own currency (or «—»);
+   * `spend` is the single real number pacing may use, and is null when there is none, so remaining,
+   * utilisation, current pace and forecast become «—» instead of a confident wrong figure.
+   */
+  const spendRead = moneyFromTotals(k, 'spend', true, cur)
+  const spend = comparableSpend(k, cur)
+  const remaining = budget != null && spend != null ? budget - spend : null
+  const util = budget && budget > 0 && spend != null ? spend / budget : null
 
   const pacing = useMemo(() => {
     if (!campaign.starts_on || !campaign.ends_on || budget == null) return null
@@ -255,8 +288,9 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
     const elapsed = Math.min(totalDays, Math.max(0, Math.round((now - start) / 86400000)))
     const remainingDays = Math.max(0, totalDays - elapsed)
     const requiredPace = budget / totalDays
-    const currentPace = elapsed > 0 ? spend / elapsed : 0
-    const forecast = currentPace * totalDays
+    // No comparable spend → no current pace, and therefore no forecast: «—», not a projection off zero.
+    const currentPace = spend != null && elapsed > 0 ? spend / elapsed : null
+    const forecast = currentPace != null ? currentPace * totalDays : null
     return { totalDays, elapsed, remainingDays, requiredPace, currentPace, forecast }
   }, [campaign.starts_on, campaign.ends_on, budget, spend])
 
@@ -272,7 +306,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-3">
-        <ChartCard title="استهلاك الميزانية" subtitle={budget != null ? `${money(spend, cur)} من ${money(budget, cur)}` : 'لا ميزانية محددة'}>
+        <ChartCard title="استهلاك الميزانية" subtitle={budget != null ? `${spendRead.text} من ${money(budget, cur)}` : 'لا ميزانية محددة'}>
           <div className="flex h-[190px] items-center justify-center">
             <ProgressRing value={util ?? 0} sublabel={util != null ? percent(util, 0) : '—'} size={150} tone={util != null && util > 0.95 ? 'danger' : util != null && util > 0.8 ? 'warning' : 'brand'} />
           </div>
@@ -284,13 +318,13 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
         <Fact label="الميزانية" value={budget != null ? money(budget, cur) : '—'} />
-        <Fact label="المصروف" value={money(spend, cur)} />
+        <Fact label="المصروف" value={spendRead.text} />
         <Fact label="المتبقي" value={remaining != null ? money(remaining, cur) : '—'} />
         <Fact label="أيام منقضية" value={pacing ? String(pacing.elapsed) : '—'} />
         <Fact label="أيام متبقية" value={pacing ? String(pacing.remainingDays) : '—'} />
-        <Fact label="السرعة الحالية/المطلوبة" value={pacing ? `${money(pacing.currentPace, cur)} / ${money(pacing.requiredPace, cur)}` : '—'} />
-        <Fact label="توقع نهاية الحملة" value={pacing ? money(pacing.forecast, cur) : '—'} tone={pacing && budget != null && pacing.forecast > budget * 1.05 ? 'danger' : undefined} />
-        <Fact label="خطر الميزانية" value={util != null && util > 0.95 ? 'مرتفع' : pacing && budget != null && pacing.forecast > budget * 1.05 ? 'تجاوز متوقع' : 'ضمن الحدود'} tone={util != null && util > 0.95 ? 'danger' : undefined} />
+        <Fact label="السرعة الحالية/المطلوبة" value={pacing ? `${pacing.currentPace != null ? money(pacing.currentPace, cur) : '—'} / ${money(pacing.requiredPace, cur)}` : '—'} />
+        <Fact label="توقع نهاية الحملة" value={pacing && pacing.forecast != null ? money(pacing.forecast, cur) : '—'} tone={pacing && pacing.forecast != null && budget != null && pacing.forecast > budget * 1.05 ? 'danger' : undefined} />
+        <Fact label="خطر الميزانية" value={util != null && util > 0.95 ? 'مرتفع' : pacing && pacing.forecast != null && budget != null && pacing.forecast > budget * 1.05 ? 'تجاوز متوقع' : 'ضمن الحدود'} tone={util != null && util > 0.95 ? 'danger' : undefined} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

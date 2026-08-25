@@ -11,6 +11,7 @@ import {
   RankingBarChart,
 } from '@/features/analytics/charts'
 import { KpiCard, platformColor } from '@/features/analytics/components'
+import { formatMoneyReading, readCostPer, readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { fetchLiveShared, type LivePayload } from './api'
 import { useUi } from '@/stores/ui'
 
@@ -116,6 +117,27 @@ export function LiveSharedReport({
     v === null || v === undefined ? '—' : new Intl.NumberFormat('en-US').format(Math.round(v))
 
   /*
+   * PARTIAL-WITHHELD-001 — the client link reads the same money contract the operator's board does.
+   *
+   * `totals`, `platforms` and `campaigns` carry the aggregator's withheld-money provenance, but a raw
+   * `money(t.spend)` read its coalesced 0 and printed it in the report currency: on a withheld window
+   * the client saw «0», and on a partial one the converted SUBSET, as though either were the whole
+   * spend — with no second view of their own account to catch it. Routed through the contract, a
+   * withheld figure states its own currency (exact, so it is checkable against the platform), a mixed
+   * one says «—», and a real converted figure keeps the report's own currency formatting.
+   */
+  const readMoneyText = useCallback(
+    (totals: Record<string, unknown>, key: 'spend' | 'revenue'): string =>
+      formatMoneyReading(readMoney(totals as MoneyTotals, key, currency, ar), (n) => money(n)),
+    [currency, ar, money],
+  )
+  const readCostPerText = useCallback(
+    (totals: Record<string, unknown>, key: string, denominator: string | number): string =>
+      formatMoneyReading(readCostPer(totals as MoneyTotals, key, denominator, currency, ar), (n) => money(n)),
+    [currency, ar, money],
+  )
+
+  /*
    * How each chosen metric is rendered.
    *
    * A table rather than a chain of conditionals, because the SET is chosen by the operator at link
@@ -134,7 +156,7 @@ export function LiveSharedReport({
       count: (v: number | null | undefined) => string,
     ) => string
   }> = {
-    spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, spark: true, format: (t, _p, money) => money(t.spend) },
+    spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, spark: true, format: (t) => readMoneyText(t, 'spend') },
     impressions: { ar: 'الظهور', en: 'Impressions', spark: true, format: (t, _p, _m, count) => count(t.impressions) },
     clicks: { ar: 'النقرات', en: 'Clicks', spark: true, format: (t, _p, _m, count) => count(t.clicks) },
     ctr: { ar: 'نسبة النقر', en: 'CTR', format: (t) => (t.ctr === null || t.ctr === undefined ? '—' : `${(t.ctr * 100).toFixed(2)}%`) },
@@ -142,9 +164,9 @@ export function LiveSharedReport({
     // Add-to-cart is a funnel stage rather than a total, so it is read from where it actually lives.
     add_to_cart: { ar: 'الإضافات للسلة', en: 'Add to cart', format: (_t, p, _m, count) => count(p.funnel.find((f) => f.stage === 'add_to_cart')?.count) },
     purchases: { ar: 'المشتريات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
-    revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, _p, money) => money(t.revenue) },
-    roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => (t.roas === null || t.roas === undefined ? '—' : `${t.roas.toFixed(2)}×`) },
-    cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t, _p, money) => money(t.cpa) },
+    revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t) => readMoneyText(t, 'revenue') },
+    roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return r.value === null ? '—' : `${r.value.toFixed(2)}×` } },
+    cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t) => readCostPerText(t, 'cpa', 'conversions') },
   }
 
   const DEFAULT_METRICS = ['spend', 'impressions', 'clicks', 'conversions', 'add_to_cart', 'purchases', 'revenue', 'roas']
@@ -164,6 +186,27 @@ export function LiveSharedReport({
   const t = payload.totals
   const d = payload.deltas
   const series = (key: string) => payload.timeseries.map((r) => Number(r[key] ?? 0))
+
+  /*
+   * PARTIAL-WITHHELD-001 — the spend charts size and rank by a real converted figure only.
+   *
+   * A donut slice and a ranking bar are magnitudes on one currency axis. A platform or campaign whose
+   * spend was withheld (a foreign figure) or is partial has no comparable magnitude there, so drawing
+   * it from `Number(p.spend ?? 0)` either sized it at the coalesced 0 or ranked it by a number in the
+   * wrong currency. Such rows are left off these two charts; the KPI strip above still states their
+   * spend honestly, in its own currency.
+   */
+  const convertedSpend = (row: Record<string, unknown>): number | null => {
+    const r = readMoney(row as MoneyTotals, 'spend', currency, ar)
+    return r.kind === 'converted' || r.kind === 'zero' ? r.amount : null
+  }
+  const platformSpend = payload.platforms
+    .map((p) => ({ name: p.provider, value: convertedSpend(p) }))
+    .filter((s): s is { name: string; value: number } => s.value != null)
+  const campaignSpend = payload.campaigns
+    .map((c) => ({ name: c.campaign_name ?? '—', provider: c.provider, spend: convertedSpend(c) }))
+    .filter((c): c is { name: string; provider: string | null; spend: number } => c.spend != null)
+    .slice(0, 8)
 
   return (
     /*
@@ -296,7 +339,7 @@ export function LiveSharedReport({
           </ChartCard>
           <ChartCard title={ar ? 'توزيع الإنفاق' : 'Spend by platform'}>
             <PlatformDonutChart
-              data={payload.platforms.map((p) => ({ name: p.provider, value: Number(p.spend ?? 0) }))}
+              data={platformSpend}
               currency={currency}
               height={220}
             />
@@ -305,13 +348,9 @@ export function LiveSharedReport({
 
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
           <ChartCard title={ar ? 'الحملات' : 'Campaigns'}>
-            {payload.campaigns.length > 0 ? (
+            {campaignSpend.length > 0 ? (
               <RankingBarChart
-                data={payload.campaigns.slice(0, 8).map((c) => ({
-                  name: c.campaign_name ?? '—',
-                  provider: c.provider,
-                  spend: Number(c.spend ?? 0),
-                }))}
+                data={campaignSpend}
                 bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]}
                 horizontal
                 height={220}

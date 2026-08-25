@@ -94,6 +94,57 @@ describe('needs-attention rules', () => {
     expect(attentionFlags(campaign(), { spend: 400, conversions: 25 })).toEqual([])
   })
 
+  /**
+   * PARTIAL-WITHHELD-001 — a withheld spend is money spent, not «spent nothing» and not a budget check.
+   *
+   * The fixture is the shape that broke every rule at once: 1,000 converted in the reporting currency
+   * PLUS 500 USD the platform reported but no rate could convert. Read raw the aggregator coalesces the
+   * withheld half to 0 and the surface sees a spend of 1,000 (the subset) — or, on a fully-withheld
+   * scope, 0. The contract instead reads the withheld original, so `spend` is neither number.
+   */
+  const partialWithheld: Parameters<typeof attentionFlags>[1] = {
+    spend: 1000, conversions: 0,
+    spend_original: 500, spend_withheld_rows: 3,
+    money_original_currency: 'USD', money_original_currencies: 1,
+  }
+
+  it('does not call a campaign with withheld spend «active but spent nothing»', () => {
+    // Active + coalesced-0 used to fire active_no_spend over money the platform really spent.
+    const codes = attentionFlags(campaign({ status: 'active' }), {
+      spend: 0, conversions: 0,
+      spend_original: 500, spend_withheld_rows: 3,
+      money_original_currency: 'USD', money_original_currencies: 1,
+    }).map((f) => f.code)
+
+    expect(codes).not.toContain('active_no_spend')
+  })
+
+  it('still flags spend-with-no-results when the spend was withheld, not just when it converted', () => {
+    // The converted 1,000 is not what fires this — a fully-withheld spend with no results fires it too.
+    const codes = attentionFlags(campaign({ status: 'active' }), partialWithheld).map((f) => f.code)
+
+    expect(codes).toContain('spend_no_results')
+    expect(codes).not.toContain('active_no_spend')
+  })
+
+  it('flags a paused campaign whose only recorded spend is withheld', () => {
+    const codes = attentionFlags(campaign({ status: 'paused' }), {
+      conversions: 2,
+      spend_original: 500, spend_withheld_rows: 3,
+      money_original_currency: 'USD', money_original_currencies: 1,
+    }).map((f) => f.code)
+
+    expect(codes).toContain('paused_with_spend')
+  })
+
+  it('never draws over-budget from a withheld or partial spend', () => {
+    // budget 800, converted subset 1,000 would read as 125% over — but the spend is not a comparable
+    // figure, so the maths must not run against the plan at all.
+    const codes = attentionFlags(campaign({ total_budget: 800 }), partialWithheld).map((f) => f.code)
+
+    expect(codes).not.toContain('over_budget')
+  })
+
   it('ranks high-severity problems above a pile of minor ones', () => {
     /*
       A campaign spending with nothing to show for it — high severity on its own merits.

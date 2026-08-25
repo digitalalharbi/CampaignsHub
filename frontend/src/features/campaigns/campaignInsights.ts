@@ -1,4 +1,5 @@
 import type { UnifiedCampaign } from './types'
+import { readMoney, type MoneyFields } from '@/lib/money/contract'
 
 /**
  * Objective-aware "result" model + the needs-attention rules, kept as pure functions so both the
@@ -53,8 +54,15 @@ export interface AttentionFlag {
   en: string
 }
 
-/** Per-campaign metric slice the rules need. Everything is optional — a missing figure is never a flag. */
-export interface AttentionMetrics {
+/**
+ * Per-campaign metric slice the rules need. Everything is optional — a missing figure is never a flag.
+ *
+ * Extends `MoneyFields` so the withheld-money provenance (`spend_withheld_rows`, `spend_original`,
+ * `money_original_currency`, …) travels with the slice: the aggregator coalesces a withheld spend to
+ * 0, and without these fields a rule reading `spend` alone cannot tell «spent nothing» from «spent
+ * money we cannot convert» — the exact confusion that mis-drove these flags.
+ */
+export interface AttentionMetrics extends MoneyFields {
   spend?: number | null
   conversions?: number | null
   leads?: number | null
@@ -75,7 +83,21 @@ const MEASURABLE_KEYS = ['spend', 'conversions', 'leads', 'installs', 'clicks', 
  */
 export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefined): AttentionFlag[] {
   const flags: AttentionFlag[] = []
-  const spend = Number(m?.spend ?? 0)
+  /*
+   * PARTIAL-WITHHELD-001 — read spend through the contract, not the coalesced field.
+   *
+   * `Number(m?.spend ?? 0)` turned a withheld spend into 0, which fired «نشطة بلا إنفاق» over money the
+   * platform really spent and silenced «إنفاق بلا نتائج» and «متوقفة رغم الإنفاق» that were true. Two
+   * distinct questions the rules actually ask are separated here:
+   *   • `knownSpend` — a single real figure in the reporting currency (a measured zero counts), the
+   *     only thing that may be compared against the planned budget; null for a withheld/mixed spend.
+   *   • `spentPositive` — whether real money was spent at all, converted OR withheld/mixed.
+   * A withheld spend is money spent (so the spend-based problems still fire) but not a number we can
+   * pace against a budget (so the over-budget maths does not run on it).
+   */
+  const spendReading = readMoney(m, 'spend', null, true)
+  const knownSpend = spendReading.kind === 'converted' || spendReading.kind === 'zero' ? (spendReading.amount ?? 0) : null
+  const spentPositive = spendReading.kind === 'converted' || spendReading.kind === 'withheld' || spendReading.kind === 'unavailable'
   const model = resultModel(c.objective)
   const results = model ? Number(m?.[model.metric] ?? 0) : null
 
@@ -93,7 +115,8 @@ export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefin
    * Saying the second as though it were the first teaches readers to disbelieve the flag.
    */
   if ((c.external_campaigns_count ?? 0) === 0) {
-    const measured = MEASURABLE_KEYS.some((k) => {
+    // A withheld spend IS figures arriving — count it as measured even though its coalesced value is 0.
+    const measured = spentPositive || MEASURABLE_KEYS.some((k) => {
       const v = m?.[k]
       return typeof v === 'number' && v > 0
     })
@@ -111,7 +134,8 @@ export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefin
         })
   }
 
-  if (c.status === 'active' && spend === 0) {
+  // Only a MEASURED zero is «spent nothing». A withheld spend (kind !== 'zero') is not this flag.
+  if (c.status === 'active' && spendReading.kind === 'zero') {
     flags.push({
       code: 'active_no_spend', severity: 'high',
       ar: 'نشطة بلا إنفاق في الفترة المحددة',
@@ -119,7 +143,7 @@ export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefin
     })
   }
 
-  if (spend > 0 && results !== null && results === 0) {
+  if (spentPositive && results !== null && results === 0) {
     flags.push({
       code: 'spend_no_results', severity: 'high',
       ar: `إنفاق بلا ${model?.labelAr ?? 'نتائج'}`,
@@ -127,7 +151,7 @@ export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefin
     })
   }
 
-  if (c.status === 'paused' && spend > 0) {
+  if (c.status === 'paused' && spentPositive) {
     flags.push({
       code: 'paused_with_spend', severity: 'medium',
       ar: 'متوقفة رغم وجود إنفاق مسجَّل في الفترة',
@@ -135,12 +159,14 @@ export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefin
     })
   }
 
+  // Over-budget is a subtraction, so it needs a real single spend figure — a withheld/foreign amount
+  // cannot be compared to the plan, and a coalesced 0 never exceeds it. Only `knownSpend` is drawn here.
   const budget = Number(c.total_budget ?? 0)
-  if (budget > 0 && spend > budget) {
+  if (budget > 0 && knownSpend != null && knownSpend > budget) {
     flags.push({
       code: 'over_budget', severity: 'high',
-      ar: `تجاوزت الميزانية المخططة (${Math.round((spend / budget) * 100)}%)`,
-      en: `Over its planned budget (${Math.round((spend / budget) * 100)}%)`,
+      ar: `تجاوزت الميزانية المخططة (${Math.round((knownSpend / budget) * 100)}%)`,
+      en: `Over its planned budget (${Math.round((knownSpend / budget) * 100)}%)`,
     })
   }
 
