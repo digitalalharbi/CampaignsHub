@@ -28,6 +28,35 @@ import { useUi } from '@/stores/ui'
 
 const STATUSES = ['draft', 'onboarding', 'active', 'paused', 'completed', 'archived']
 
+/**
+ * PROJECTS-STATUS-LABEL-001 — the status chips and badges were the database's own words.
+ *
+ * The filter row read «الكل draft onboarding active paused completed archived» — one translated
+ * chip followed by six column values — and every project's badge said `active` in an otherwise
+ * Arabic page. Nothing was wrong with the data; the labels had simply never been written, and
+ * `{f}` / `{p.status}` render whatever arrives.
+ *
+ * Keys are the values `projects.status` holds, and `projectStatus.test.ts` asserts this map covers
+ * `STATUSES` exactly — so a status added to one and not the other fails a test instead of appearing
+ * to a customer as an identifier.
+ */
+export const PROJECT_STATUS_LABELS: Record<string, { ar: string; en: string }> = {
+  draft: { ar: 'مسودة', en: 'Draft' },
+  onboarding: { ar: 'قيد الإعداد', en: 'Onboarding' },
+  active: { ar: 'نشط', en: 'Active' },
+  paused: { ar: 'متوقف', en: 'Paused' },
+  completed: { ar: 'مكتمل', en: 'Completed' },
+  archived: { ar: 'مؤرشف', en: 'Archived' },
+}
+
+export function projectStatusLabel(status: string, ar: boolean): string {
+  const label = PROJECT_STATUS_LABELS[status]
+
+  // An unknown status is shown as itself rather than hidden: a value the product does not recognise
+  // is a fact about the data, and swallowing it would make a broken row look like a normal one.
+  return label ? (ar ? label.ar : label.en) : status
+}
+
 /** Error-summary title — local bilingual copy (shared i18n dictionary is untouched). */
 const PROJ_ERR_TITLE = { ar: 'يرجى تصحيح الأخطاء التالية', en: 'Please fix the following errors' } as const
 /** Summary/toolbar copy — local bilingual (shared i18n dictionary is untouched). */
@@ -177,7 +206,7 @@ export function ProjectsPage() {
                   statusFilter === f ? 'bg-brand-500 text-white' : 'bg-surface-hover text-text-secondary hover:text-text-primary'
                 }`}
               >
-                {f === 'all' ? pc.all : f}
+                {f === 'all' ? pc.all : projectStatusLabel(f, locale === 'ar')}
               </button>
             ))}
           </div>
@@ -207,7 +236,7 @@ export function ProjectsPage() {
                     <FolderKanban size={18} className="text-brand-600" />
                     <span className="text-sm font-bold">{p.name}</span>
                   </div>
-                  <Badge tone={p.status === 'active' ? 'success' : archived ? 'neutral' : 'warning'}>{p.status}</Badge>
+                  <Badge tone={p.status === 'active' ? 'success' : archived ? 'neutral' : 'warning'}>{projectStatusLabel(p.status, locale === 'ar')}</Badge>
                 </div>
                 <p className="mt-2 text-xs text-text-secondary">{ws?.name ?? '—'}</p>
                 <span className="mt-1 block text-xs text-text-muted">
