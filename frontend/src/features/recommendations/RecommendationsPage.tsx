@@ -48,7 +48,7 @@ export function RecommendationsPage() {
         emptyFiltered: 'لا توجد توصيات تطابق هذه الفلاتر.',
         noProject: 'اختر مشروعًا', noProjectBody: 'التوصيات مرتبطة بحملات المشروع — اختر مشروعًا لعرضها.',
         evidence: 'المستند', noEvidence: 'لم يُذكر ما بُنيت عليه', action: 'الإجراء المقترح',
-        due: 'الاستحقاق', campaign: 'الحملة', noPriority: 'بلا أولوية',
+        due: 'الاستحقاق', campaign: 'الحملة',
         statuses: { draft: 'مسودة', reviewed: 'مراجَعة', approved: 'معتمدة', hidden: 'مخفية', rejected: 'مرفوضة' } as Record<string, string>,
         priorities: { critical: 'حرجة', high: 'عالية', medium: 'متوسطة', low: 'منخفضة' } as Record<string, string>,
       }
@@ -60,7 +60,7 @@ export function RecommendationsPage() {
         emptyFiltered: 'No recommendations match these filters.',
         noProject: 'Select a project', noProjectBody: 'Recommendations belong to a project’s campaigns — pick one to see them.',
         evidence: 'Based on', noEvidence: 'No basis was recorded', action: 'Proposed action',
-        due: 'Due', campaign: 'Campaign', noPriority: 'No priority',
+        due: 'Due', campaign: 'Campaign',
         statuses: { draft: 'Draft', reviewed: 'Reviewed', approved: 'Approved', hidden: 'Hidden', rejected: 'Rejected' } as Record<string, string>,
         priorities: { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' } as Record<string, string>,
       }
@@ -163,12 +163,14 @@ function RecommendationRow({ rec, t }: { rec: Recommendation; t: Record<string, 
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {/*
-            A recommendation with no priority is not a low-priority one. Saying «bلا أولوية» keeps
-            the difference between «nobody ranked this» and «somebody ranked it last», which is the
-            difference between a backlog and a to-do list.
+            `priority` is NOT NULL DEFAULT 'medium' on `campaign_annotations`, so «nobody ranked
+            this» reaches the reader as «medium» and there is no null to distinguish. An earlier
+            draft of this row rendered a «no priority» state and explained why it mattered — a
+            branch the schema makes unreachable, under a comment asserting a rule the database does
+            not keep. The fallback stays as a guard and says nothing the data cannot support.
           */}
           <Badge tone={rec.priority ? PRIORITY_TONE[rec.priority] : 'neutral'}>
-            {rec.priority ? t.priorities[rec.priority] : t.noPriority}
+            {rec.priority ? t.priorities[rec.priority] : rec.priority ?? '—'}
           </Badge>
           <Badge tone={rec.status === 'approved' ? 'success' : 'neutral'}>{t.statuses[rec.status] ?? rec.status}</Badge>
         </div>
