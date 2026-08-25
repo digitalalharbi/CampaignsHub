@@ -114,3 +114,45 @@ describe('objective-aware layouts', () => {
     }
   })
 })
+
+/**
+ * HEADLINE-SCOPE-001 — a single-objective scope is headlined by that objective.
+ *
+ * The families are the backend's `ObjectiveFamily` cases, listed here in full so that a family added
+ * to the enum without a layout fails HERE rather than silently falling through to the operational
+ * row on somebody's dashboard.
+ */
+describe('the headline follows what is in scope, not what the filter says', () => {
+  const FAMILIES = ['awareness', 'traffic', 'engagement', 'video', 'leads', 'sales', 'app', 'unknown']
+
+  it('headlines a scope holding only sales campaigns with return and cost per order', () => {
+    const keys = layoutFor('all', 'all', ['sales']).primary
+
+    expect(keys).toContain('roas')
+    expect(keys).toContain('cpa')
+  })
+
+  it('keeps the operational row when the scope really does mix objectives', () => {
+    const keys = layoutFor('all', 'all', ['sales', 'awareness']).primary
+
+    for (const forbidden of ['cpa', 'roas', 'revenue']) {
+      expect(keys).not.toContain(forbidden)
+    }
+  })
+
+  it('gives every classified family its own headline, including the ones named differently', () => {
+    for (const family of FAMILIES.filter((f) => f !== 'unknown')) {
+      const keys = layoutFor('all', 'all', [family]).primary
+
+      expect(keys, `${family} fell through to the operational row`).not.toEqual(layoutFor('all', 'all').primary)
+    }
+  })
+
+  it('leaves an unclassified scope on the operational row, which is the honest answer for it', () => {
+    expect(layoutFor('all', 'all', ['unknown']).primary).toEqual(layoutFor('all', 'all').primary)
+  })
+
+  it('ignores the scope entirely once the reader has chosen an objective', () => {
+    expect(layoutFor('awareness', 'all', ['sales']).primary).toEqual(layoutFor('awareness', 'all').primary)
+  })
+})

@@ -1,4 +1,4 @@
-import { formatMoneyReading, readMoney } from '@/lib/money/contract'
+import { formatMoneyReading, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
 import type { MetricItem, MetricReading } from '@/components/ui/MetricStrip'
 import type { MetricTotals, Summary } from '@/features/analytics/api'
 import { money, num, percent, ratio } from '@/features/analytics/format'
@@ -249,6 +249,22 @@ export const SPECS: Record<string, Spec> = {
  */
 export type Layout = { primary: string[]; secondary: string[] }
 
+/**
+ * HEADLINE-SCOPE-001 — `ObjectiveFamily`'s names, where they differ from this file's layout keys.
+ *
+ * The backend enum says `app`; the layout beneath is keyed `app_installs`. Left to a bare lookup
+ * that is a silent miss — an app project falls through to the operational row and simply never gets
+ * its own headline, with nothing on screen or in a log to say why. Written down, and asserted in
+ * `metricCatalog.test.ts` against the full list of families, so a family added later fails a test
+ * instead of quietly losing its metrics.
+ *
+ * `unknown` is absent deliberately: a scope whose objectives were never classified has no verdict to
+ * be headlined by, and the operational row is the right answer for it.
+ */
+const FAMILY_LAYOUT_KEY: Record<string, string> = {
+  app: 'app_installs',
+}
+
 const OBJECTIVE_LAYOUTS: Record<string, Layout> = {
   awareness: {
     primary: ['reach', 'impressions', 'frequency', 'cpm'],
@@ -340,9 +356,26 @@ const OBJECTIVE_LABELS: Record<string, Record<string, { ar: string; en: string }
   sales: { cpa: { ar: 'تكلفة الطلب', en: 'Cost per order' }, conversions: { ar: 'الطلبات', en: 'Orders' } },
 }
 
-export function layoutFor(objective: string, path: string): Layout {
+export function layoutFor(objective: string, path: string, familiesInScope?: string[]): Layout {
   if (objective !== 'all' && OBJECTIVE_LAYOUTS[objective]) return OBJECTIVE_LAYOUTS[objective]
   if (path !== 'all' && PATH_LAYOUTS[path]) return PATH_LAYOUTS[path]
+
+  /*
+   * HEADLINE-SCOPE-001 — «كل الأهداف» is a statement about the filter, not about the data.
+   *
+   * `MIXED_LAYOUT` withholds cost-per and return for a good reason: a CPA spanning a brand budget
+   * and a sales budget divides one objective's money by another objective's events. But that reason
+   * only applies when the scope really is mixed. A project whose campaigns are ALL sales has exactly
+   * one objective in scope whether or not the reader narrowed to it — and the board was refusing to
+   * headline it with return on ad spend on the grounds that it might be something else.
+   *
+   * So a scope the backend reports as a single family is headlined by that family. Two or more, and
+   * the operational row stands, unchanged and for the original reason.
+   */
+  if (familiesInScope?.length === 1) {
+    const layout = OBJECTIVE_LAYOUTS[FAMILY_LAYOUT_KEY[familiesInScope[0]] ?? familiesInScope[0]]
+    if (layout) return layout
+  }
 
   return MIXED_LAYOUT
 }
@@ -395,9 +428,59 @@ export function readMetric(
     if (m.kind === 'unavailable') return { kind: 'no_data' }
   }
 
+  /*
+   * MONEY-TRUTH-003 — the DERIVED money was still reading the aggregator's zero.
+   *
+   * `spend` and `revenue` were delegated above; `roas`, `cpa` and the rest of the cost-per family
+   * were not, so they fell through to `spec.format(0)` and printed «0 SAR» and «0.00×» beside a
+   * revenue card correctly reading «12,969.03 USD». Every one of them is spend divided by a count,
+   * and spend is exactly the figure that was coalesced — so they were the original lie, one
+   * derivation down, on the same row.
+   *
+   * It stayed hidden because the mixed-scope layout shows neither: only a scope with a single
+   * objective headlines cost-per and return, and until HEADLINE-SCOPE-001 no scope ever did.
+   *
+   * The denominator is named per metric rather than inferred, because CPM's is impressions per
+   * THOUSAND — not a stored field — and a helper that guessed would silently answer «unavailable»
+   * for a typo and look like a provenance decision.
+   */
+  if (key === 'roas') {
+    const r = readRoas(totals as Record<string, unknown> | undefined, true)
+
+    if (r.kind === 'withheld' && r.value !== null) return { kind: 'value', text: spec.format(r.value) }
+    if (r.kind === 'unavailable') return { kind: 'no_data' }
+  }
+
+  const denominator = COST_PER_DENOMINATOR[key]
+  if (denominator !== undefined) {
+    const d = typeof denominator === 'function' ? denominator(totals) : denominator
+    const m = readCostPer(totals as Record<string, unknown> | undefined, key, d, reportingCurrency ?? null, true)
+
+    if (m.kind === 'withheld' && m.amount !== null) {
+      return { kind: 'withheld', original: formatMoneyReading(m, (n, c) => `${n} ${c ?? ''}`.trim()) }
+    }
+    if (m.kind === 'unavailable') return { kind: 'no_data' }
+  }
+
   if (value === null || value === undefined) return { kind: 'no_data' }
 
   return { kind: 'value', text: spec.format(value) }
+}
+
+/**
+ * What each cost-per metric divides BY — MONEY-TRUTH-003.
+ *
+ * A field name where one exists, and a computed number where the denominator is not a stored field.
+ * `aov` is absent on purpose: its numerator is revenue rather than spend, so it does not share this
+ * family's provenance and reading it here would attribute spend's withholding to a revenue figure.
+ */
+const COST_PER_DENOMINATOR: Record<string, string | ((t: Record<string, number | null> | MetricTotals | undefined) => number)> = {
+  cpa: 'conversions',
+  cpc: 'clicks',
+  cpl: 'leads',
+  cpi: 'installs',
+  cpe: 'engagements',
+  cpm: (t) => Number((t as Record<string, number | null> | undefined)?.impressions ?? 0) / 1000,
 }
 
 export function dashboardMetrics(
@@ -406,7 +489,7 @@ export function dashboardMetrics(
   summary: Summary | undefined,
   ar: boolean,
 ): { primary: MetricItem[]; secondary: MetricItem[] } {
-  const layout = layoutFor(objective, path)
+  const layout = layoutFor(objective, path, summary?.objective_families_in_scope)
 
   const build = (keys: string[], lead: boolean): MetricItem[] =>
     keys

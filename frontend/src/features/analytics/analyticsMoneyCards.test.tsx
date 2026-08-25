@@ -41,7 +41,21 @@ function route(totals: Record<string, unknown>, currency: string | null = 'SAR')
   vi.mocked(getData).mockImplementation((path: string) => {
     if (path.includes('/metrics/summary')) {
       return Promise.resolve({
-        current: totals, previous: totals, delta: {}, reported: {}, commerce: null, currency,
+        current: totals,
+        previous: totals,
+        delta: {},
+        reported: {},
+        commerce: null,
+        currency,
+        rows_in_scope: true,
+        previous_rows_in_scope: true,
+        previous_range: { from: '2026-07-12', to: '2026-08-10' },
+        /*
+         * HEADLINE-SCOPE-001 — a scope holding only sales campaigns, which is production's shape and
+         * the case where money IS the headline. Without it the board shows the operational row and
+         * this file would be asserting on cards the page had no reason to render.
+         */
+        objective_families_in_scope: ['sales'],
         conversions_basis: {
           source: 'platform_reported' as const, label_ar: '', label_en: 'Platform-Reported',
           providers: ['snapchat'], may_double_count: false, is_unique_order_count: false as const,
@@ -55,7 +69,7 @@ function route(totals: Record<string, unknown>, currency: string | null = 'SAR')
   })
 }
 
-describe('the Analytics money cards obey one provenance', () => {
+describe('the board\'s money cards obey one provenance', () => {
   beforeEach(() => {
     signInWith(['campaigns.view'])
     useProject.getState().setCurrentProjectId('p1')
@@ -71,12 +85,12 @@ describe('the Analytics money cards obey one provenance', () => {
     route(WITHHELD_TOTALS)
     renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/app/analytics' })
 
-    // Spend and Revenue carry the platform's own figure, in its own currency.
-    expect(await screen.findByText('4,128.93 USD')).toBeInTheDocument()
-    expect(screen.getByText('12,969.03 USD')).toBeInTheDocument()
+    // Revenue carries the platform's own figure, in its own currency.
+    expect(await screen.findByText('12,969.03 USD')).toBeInTheDocument()
 
-    // And none of them reads as a zero in the project currency.
+    // And nothing on the row reads as a zero in the project currency.
     expect(screen.queryByText('0 SAR')).not.toBeInTheDocument()
+    expect(screen.queryByText('0.00 SAR')).not.toBeInTheDocument()
   })
 
   /**
@@ -88,24 +102,32 @@ describe('the Analytics money cards obey one provenance', () => {
     route(WITHHELD_TOTALS)
     renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/app/analytics' })
 
-    await screen.findByText('4,128.93 USD')
+    await screen.findByText('12,969.03 USD')
 
     // The aggregator's own roas was 0. The card must not show it.
-    expect(screen.queryByText('0.00x')).not.toBeInTheDocument()
-    expect(screen.queryByText('0x')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^0(\.00)?×$/)).not.toBeInTheDocument()
 
-    // 12969.03 / 4128.93 ≈ 3.14
+    // 12,969.03 / 4,128.93 ≈ 3.14
     expect(screen.getByText(/3\.1/)).toBeInTheDocument()
+
+    /*
+     * MONEY-TRUTH-003 — cost per result is spend over a count, so it carried spend's withholding and
+     * printed «0 SAR» beside a revenue card reading the truth. 4,128.93 / 102 = 40.48.
+     */
+    expect(screen.getByText('40.48 USD')).toBeInTheDocument()
   })
 
   it('refuses ROAS when the originals are in different currencies', async () => {
     route({ ...WITHHELD_TOTALS, money_original_currencies: 2 })
     renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/app/analytics' })
 
-    await screen.findByText('ROAS')
+    await screen.findByText(/Return on ad spend/)
 
     // A ratio across unlike units is not a number anybody measured.
     expect(screen.queryByText(/3\.1/)).not.toBeInTheDocument()
+
+    // And neither is a cost derived from the same ambiguous originals.
+    expect(screen.queryByText('40.48 USD')).not.toBeInTheDocument()
   })
 
   it('leaves genuinely converted money alone', async () => {
@@ -114,10 +136,10 @@ describe('the Analytics money cards obey one provenance', () => {
 
     // Wait for the LOADED strip, not for page chrome: a label exists before the data arrives, and
     // asserting on it passes for the wrong reason.
-    await screen.findByText('15K SAR')
+    await screen.findByText('46K SAR')
 
     // The aggregator's own ratio is used verbatim when the money converted cleanly.
-    expect(document.body.textContent).toContain('2.97x')
+    expect(document.body.textContent).toContain('2.97×')
 
     // Nothing claims the figure came from an unconvertible original.
     expect(screen.queryByText(/USD/)).not.toBeInTheDocument()

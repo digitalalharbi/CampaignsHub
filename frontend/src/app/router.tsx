@@ -9,7 +9,6 @@ import { RequireAuth } from '@/features/auth/RequireAuth'
 import { CampaignDetailPage } from '@/features/campaigns/CampaignDetailPage'
 import { CampaignsPage } from '@/features/campaigns/CampaignsPage'
 import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
-import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { LeadsPage } from '@/features/crm/LeadsPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
@@ -292,7 +291,18 @@ export const router = createBrowserRouter(withErrorBoundary([
         children: [{
         element: <AppShell />,
         children: [
-          { path: 'dashboard', element: <DashboardPage /> },
+          /*
+           * ANALYTICS-AS-DASHBOARD-001 — «لوحة التحكم» and «التحليلات» are one board.
+           *
+           * They had converged on the same filters over the same KPI strip, differing only in what
+           * each drew underneath — so a reader could ask one question on two screens and be answered
+           * twice, from two code paths, with nothing reconciling them. MOUNTED under both paths per
+           * ADR 0002 rather than copied: a second copy is how they diverged in the first place.
+           *
+           * `surface` only prefixes the filter testids, so the suite's assertions against
+           * `/app/dashboard` keep addressing the controls they always did.
+           */
+          { path: 'dashboard', element: <AnalyticsPage surface="dashboard" /> },
           { path: 'analytics', element: <AnalyticsPage /> },
           { path: 'system', element: <SystemStatusPage /> },
           { path: 'projects', element: <ProjectsPage /> },
