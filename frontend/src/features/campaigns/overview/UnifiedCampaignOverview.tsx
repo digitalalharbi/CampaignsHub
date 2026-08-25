@@ -226,6 +226,9 @@ export function UnifiedCampaignOverview({
   const isMarketing = variant === 'marketing'
   const lg = !compact // dashboard = larger, more readable typography; marketing preview stays compact
   const maxSpend = Math.max(1, ...vm.platforms.map((p) => p.spend))
+
+  /** The denominator the donut's own shares are read from — the same numbers its arcs are drawn from. */
+  const donutTotal = vm.spend.reduce((sum, d) => sum + (d.value > 0 ? d.value : 0), 0)
   const topN = isMarketing ? 3 : compact ? 4 : 6
   const donutH = isMarketing ? 150 : compact ? 168 : 208
   // Marketing is a COMPACT preview: 4 KPIs, platforms+donut side-by-side, 3 top campaigns — the deeper
@@ -308,6 +311,34 @@ export function UnifiedCampaignOverview({
               </PieChart>
             </ResponsiveContainer>
           </div>
+
+          {/*
+            DASH-DONUT-LEGEND-001 — the ring said which platform was biggest and never by how much.
+            
+            A donut without its shares is a shape: the reader can see Snapchat's arc is larger than
+            Meta's and cannot say whether that is 26% against 24% or 60% against 8% — which is the
+            only question the chart is asked. The share is computed from the same values the arcs are
+            drawn from, so the legend and the ring cannot disagree.
+            
+            Sorted by share, because a legend in arbitrary order makes the reader do the ranking the
+            chart exists to do for them.
+          */}
+          {donutTotal > 0 && (
+            <ul className="mt-2 space-y-1">
+              {[...vm.spend]
+                .filter((d) => d.value > 0)
+                .sort((a, b) => b.value - a.value)
+                .map((d) => (
+                  <li key={d.name} className={`flex items-center gap-2 ${lg ? 'text-xs' : 'text-[11px]'}`}>
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: providerColor(d.name) }} />
+                    <span className={`min-w-0 flex-1 truncate ${c.sub}`}>{providerName(d.name)}</span>
+                    <span className={`tnum shrink-0 font-semibold ${c.value}`}>
+                      {Math.round((d.value / donutTotal) * 100)}%
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          )}
         </div>
       </div>
 
