@@ -111,6 +111,14 @@ export function CampaignsPage() {
       currency: currencies.size === 1 ? [...currencies][0] : null,
       spentCurrency: spentCurrencies.size === 1 ? [...spentCurrencies][0] : null,
       currencyCount: currencies.size,
+      /*
+       * Whether there is a budget to speak about at all.
+       *
+       * Without this the card read «0 SAR» when no campaign has a budget — naming a currency for a
+       * figure that does not exist, which is the same invention `money()`'s SAR default caused on
+       * the CPA card. The first pass at this fix reintroduced it and an existing test caught it.
+       */
+      known: b.length > 0,
     }
   }, [budget.data])
   const topCampaigns = useMemo(
@@ -225,14 +233,18 @@ export function CampaignsPage() {
         />
         <StatCard
           label={ar ? 'الميزانية' : 'Budget'}
-          value={budgetTotals.currency === null && budgetTotals.currencyCount > 1
-            ? (ar ? `${budgetTotals.currencyCount} عملات` : `${budgetTotals.currencyCount} currencies`)
-            : money(budgetTotals.total, budgetTotals.currency ?? undefined)}
-          sub={budgetTotals.currency === null && budgetTotals.currencyCount > 1
-            ? (ar ? 'ميزانيات بعملات مختلفة — لا تُجمع' : 'Budgets in different currencies — not summed')
-            : ar
-              ? `مصروف ${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)}`
-              : `${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)} spent`}
+          value={!budgetTotals.known
+            ? '—'
+            : budgetTotals.currencyCount > 1
+              ? (ar ? `${budgetTotals.currencyCount} عملات` : `${budgetTotals.currencyCount} currencies`)
+              : money(budgetTotals.total, budgetTotals.currency ?? undefined)}
+          sub={!budgetTotals.known
+            ? (ar ? 'لم تُحدَّد ميزانية لأي حملة' : 'No campaign has a budget set')
+            : budgetTotals.currencyCount > 1
+              ? (ar ? 'ميزانيات بعملات مختلفة — لا تُجمع' : 'Budgets in different currencies — not summed')
+              : ar
+                ? `مصروف ${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)}`
+                : `${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)} spent`}
         />
         <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
         <StatCard label="CPA" value={cpaText} delta={cmp(d.cpa)} invert />
