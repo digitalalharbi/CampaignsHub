@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { fmtClock } from '@/lib/datetime'
 import { getData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardDescription, CardTitle } from '@/components/ui/Card'
@@ -53,7 +54,7 @@ export function SystemStatusPage() {
           </div>
           <p className="mt-3 text-xs text-text-muted">
             {t('data_source')}: {brand.name} API · {t('last_updated')}:{' '}
-            <span className="tnum">{new Date(health.dataUpdatedAt).toLocaleTimeString()}</span>
+            <span className="tnum">{fmtClock(health.dataUpdatedAt)}</span>
           </p>
         </Card>
 

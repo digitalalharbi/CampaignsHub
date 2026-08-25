@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { fmtClock } from '@/lib/datetime'
 
 /**
  * DEVELOPMENT-ONLY environment status. Polls the dev-only backend endpoint (hard-blocked in production).
@@ -37,7 +38,7 @@ export function DevStatusPage() {
         const r = await fetch('/api/v1/dev/status', { credentials: 'include', headers: { Accept: 'application/json' } })
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const j = await r.json()
-        if (alive) { setData(j.data as DevStatus); setErr(null); setAt(new Date().toLocaleTimeString()) }
+        if (alive) { setData(j.data as DevStatus); setErr(null); setAt(fmtClock(new Date())) }
       } catch (e) {
         if (alive) setErr(String(e))
       }

@@ -15,6 +15,22 @@ export function fmtDate(iso: string | null | undefined): string {
   return d.toLocaleDateString('en-CA')
 }
 
+/**
+ * `HH:mm:ss` (24h, Latin digits) or `—` — for a clock reading where only the time is the point.
+ *
+ * DATE-FORMAT-002 — three call sites used a bare `toLocaleTimeString()`, which takes the READER's
+ * locale. Under Arabic that renders «3:40:04 م»: an Arabic AM/PM marker beside Latin digits, which
+ * is the garbling this module's header warns about, on the page whose whole job is to state that
+ * the system is healthy.
+ */
+export function fmtClock(value: Date | string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '—'
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return '—'
+
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
 /** `YYYY-MM-DD HH:mm` (Gregorian, Latin digits, 24h) or `—` for empty/invalid. */
 export function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
