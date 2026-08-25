@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { providerLabel } from '@/features/campaigns/labels'
+import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Copy, Download, FileText, LayoutGrid, Link2, Loader2, Plus, RefreshCw, Rows3, Send, Share2, Trash2, SlidersHorizontal } from 'lucide-react'
@@ -952,9 +954,9 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
                         key={p}
                         type="button"
                         onClick={() => setScopeProviders((s) => (s.includes(p) ? s.filter((v) => v !== p) : [...s, p]))}
-                        className={`rounded-lg border px-2 py-1 text-xs font-semibold capitalize ${scopeProviders.includes(p) ? 'border-brand-500 bg-[var(--brand-background)] text-brand-700' : 'border-border text-text-secondary'}`}
+                        className={`rounded-lg border px-2 py-1 text-xs font-semibold ${scopeProviders.includes(p) ? 'border-brand-500 bg-[var(--brand-background)] text-brand-700' : 'border-border text-text-secondary'}`}
                       >
-                        {p}
+                        {providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
                       </button>
                     ))}
                   </div>

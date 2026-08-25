@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { providerLabel } from '@/features/campaigns/labels'
+import { canonicalPlatform } from '@/lib/platforms'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Check, Copy, Link2 } from 'lucide-react'
 import { createLiveLink, liveBuilderOptions } from './api'
@@ -99,7 +101,9 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const summary = useMemo(() => {
     const parts: string[] = []
     parts.push(campaigns.length === 0 ? (ar ? 'كل الحملات' : 'All campaigns') : `${campaigns.length} ${ar ? 'حملة' : 'campaigns'}`)
-    parts.push(providers.length === 0 ? (ar ? 'كل المنصات' : 'All platforms') : providers.join('، '))
+    parts.push(providers.length === 0
+      ? (ar ? 'كل المنصات' : 'All platforms')
+      : providers.map((p) => providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')).join(ar ? '، ' : ', '))
     parts.push(metrics.length === 0 ? (ar ? 'كل المؤشرات' : 'All metrics') : `${metrics.length} ${ar ? 'مؤشر' : 'metrics'}`)
     return parts.join(' · ')
   }, [campaigns, providers, metrics, ar])
@@ -165,8 +169,16 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
               </p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
+                {/*
+                  LIVELINK-PROVIDER-LABEL-001 — `capitalize` was disguising the raw key.
+                  
+                  `{p}` rendered the provider as stored and CSS title-cased it, so `meta` read as
+                  «Meta» and passed for a brand name. `google_ads` would have read «Google_ads», and
+                  in Arabic every chip was Latin on a page that is otherwise not. The class is gone
+                  with the raw value: a real label needs no cosmetic help.
+                */}
                 {options.data!.providers.map((p) => (
-                  <button key={p} type="button" onClick={() => toggle(setProviders, p)} className={`${chip(providers.includes(p))} capitalize`}>{p}</button>
+                  <button key={p} type="button" onClick={() => toggle(setProviders, p)} className={chip(providers.includes(p))}>{providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}</button>
                 ))}
               </div>
             )}
