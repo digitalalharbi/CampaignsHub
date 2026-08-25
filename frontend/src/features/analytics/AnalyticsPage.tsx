@@ -766,24 +766,58 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
   const rows = b.data ?? []
   return (
     <Panel title={ar ? 'تحليل الميزانية' : 'Budget analysis'} description={ar ? 'المخطط مقابل المصروف وسرعة الصرف (Pacing)' : 'Planned against spent, and how fast it is going (pacing)'} loading={b.isLoading} error={b.isError} empty={!b.isLoading && rows.length === 0}>
+      {/*
+        BUDGET-WITHHELD-001 — every figure here is now stated in the unit it is actually in.
+
+        `money()` defaults to SAR, and the row carried no currency, so a campaign budgeted in USD
+        read «80K SAR». Worse, `spent` was the aggregator's coalesced zero: on an account whose money
+        awaits a rate — production's, every row of it — this table reported 0 spent, 0% consumed and
+        pacing 0.00× against real spend. That is the one wrong number on this product somebody acts
+        on, because a campaign that has spent nothing and is pacing at zero is one they top up.
+
+        Pacing is blank rather than wrong when the plan and the spend are denominated differently,
+        and the row says which case it is instead of leaving a reader to guess at an empty cell.
+      */}
       <MetricTable
         head={ar ? ['الحملة', 'الميزانية', 'المصروف', 'المتبقي', 'الاستهلاك', 'السرعة', 'المتوقع'] : ['Campaign', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Pace', 'Projected']}
-        rows={rows.map((r) => [
-          <span key="n" className="font-semibold text-text-primary">{r.campaign_name}</span>,
-          money(r.budget),
-          money(r.spent),
-          money(r.remaining),
-          <div key="c" className="flex items-center gap-2">
-            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-secondary">
-              <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.min(100, (r.consumed_pct ?? 0) * 100)}%` }} />
-            </div>
-            <span className="tnum text-xs">{percent(r.consumed_pct, 0)}</span>
-          </div>,
-          <span key="p" className={`tnum font-semibold ${(r.pace ?? 0) > 1.2 ? 'text-danger' : (r.pace ?? 0) < 0.8 ? 'text-warning' : 'text-success'}`}>
-            {ratio(r.pace, '×')}
-          </span>,
-          money(r.projected_spend),
-        ])}
+        rows={rows.map((r) => {
+          const basisNote = r.pacing_basis === 'currency_mismatch'
+            ? (ar
+                ? `المصروف بعملة ${r.spent_currency ?? '—'} والميزانية بعملة ${r.budget_currency ?? '—'} — لا تُقارَنان`
+                : `Spent in ${r.spent_currency ?? '—'}, budgeted in ${r.budget_currency ?? '—'} — not comparable`)
+            : r.pacing_basis === 'no_budget'
+              ? (ar ? 'لا توجد ميزانية محددة لهذه الحملة' : 'No budget was set for this campaign')
+              : undefined
+
+          return [
+            <span key="n" className="font-semibold text-text-primary">{r.campaign_name}</span>,
+            money(r.budget, r.budget_currency ?? undefined),
+            <span key="s" title={r.spend_withheld ? (ar ? 'بعملة المنصة — التحويل غير متاح' : "In the platform's own currency — conversion unavailable") : undefined}>
+              {money(r.spent, r.spent_currency ?? undefined)}
+            </span>,
+            r.remaining === null
+              ? <span key="rm" className="text-text-muted" title={basisNote}>—</span>
+              : money(r.remaining, r.budget_currency ?? undefined),
+            r.consumed_pct === null
+              ? <span key="c" className="text-text-muted" title={basisNote}>—</span>
+              : (
+                <div key="c" className="flex items-center gap-2">
+                  <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-secondary">
+                    <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.min(100, r.consumed_pct * 100)}%` }} />
+                  </div>
+                  <span className="tnum text-xs">{percent(r.consumed_pct, 0)}</span>
+                </div>
+              ),
+            r.pace === null
+              ? <span key="p" className="text-text-muted" title={basisNote}>—</span>
+              : (
+                <span key="p" className={`tnum font-semibold ${r.pace > 1.2 ? 'text-danger' : r.pace < 0.8 ? 'text-warning' : 'text-success'}`}>
+                  {ratio(r.pace, '×')}
+                </span>
+              ),
+            money(r.projected_spend, r.spent_currency ?? undefined),
+          ]
+        })}
       />
     </Panel>
   )
