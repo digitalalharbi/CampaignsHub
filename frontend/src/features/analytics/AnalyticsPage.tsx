@@ -33,12 +33,17 @@ import { listCreatives } from '@/features/content/api'
 import { compact, money, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { plotSeries } from './timeseriesMoney'
+import { familyMoney, familyTotal, type FamilyRow } from './familyTotals'
+import { readMoney } from '@/lib/money/contract'
+
+/** The two KPI keys that are money rather than a quantity or a rate. */
+const MONEY_KPIS = new Set(['spend', 'revenue'])
 import { SavedViewsBar } from '@/features/dashboard/SavedViewsBar'
 import { useSavedViews, type SavedView } from '@/features/dashboard/savedViews'
 import { MetricStrip } from '@/components/ui/MetricStrip'
 import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import { useOverviewVm } from '@/features/campaigns/overview/useOverviewVm'
-import { dashboardMetrics } from './metricCatalog'
+import { SPECS, dashboardMetrics } from './metricCatalog'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -1206,7 +1211,13 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
     { key: 'awareness', ar: 'الوعي', en: 'Awareness', kpis: ['impressions', 'reach', 'frequency', 'cpm'] },
     { key: 'traffic', ar: 'الزيارات', en: 'Traffic', kpis: ['clicks', 'ctr', 'cpc'] },
     { key: 'engagement', ar: 'التفاعل', en: 'Engagement', kpis: ['engagements', 'engagement_rate'] },
-    { key: 'video', ar: 'المشاهدات', en: 'Video', kpis: ['video_views', 'completion_rate'] },
+    /*
+      `completion_rate` is not a metric this product has. The catalogue and the aggregator both call
+      it `video_completion_rate`, so this family's second KPI has always rendered «—» beneath the
+      key itself — a metric that looked unreported when it was only misspelt. `objectiveFamilies`
+      in `familyTotals.test.ts` now asserts every family names a key the catalogue defines.
+    */
+    { key: 'video', ar: 'المشاهدات', en: 'Video', kpis: ['video_views', 'video_completion_rate'] },
     { key: 'leads', ar: 'العملاء المحتملون', en: 'Leads', kpis: ['leads', 'conversion_rate'] },
     { key: 'sales', ar: 'المبيعات', en: 'Sales', kpis: ['conversions', 'revenue', 'roas'] },
     { key: 'app', ar: 'التطبيق', en: 'App', kpis: ['installs'] },
@@ -1253,19 +1264,49 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                 </div>
 
                 {/* The verdict metrics for THIS family — not the same row of KPIs for every objective. */}
+                {/*
+                  OBJECTIVE-TOTALS-001 — three defects in one reduce.
+
+                  It added every KPI together. Correct for a count and meaningless for a rate, and
+                  every family's list holds one: two sales campaigns returning 3× and 5× printed
+                  «8», and two at 1.2% CTR printed «2.4%». `familyTotal` rebuilds a rate from the
+                  summed bases, which is the rule `MetricsAggregator::withDerived()` already states
+                  on the server and this was the one place re-aggregating without it.
+
+                  It printed the metric KEY as the label, so the row read «conversions 176 revenue
+                  56,320 roas 15.36» in an Arabic page.
+
+                  And it formatted money with `toLocaleString` and no currency — «56,320» of
+                  nothing — over `spend`, which is the coalesced 0 on a withheld row. So a family
+                  whose money awaits a rate would have shown a confident zero next to a revenue the
+                  KPI strip states correctly.
+                */}
                 <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
                   {f.kpis.map((k) => {
-                    const total = f.campaigns.reduce<number | null>((t, r) => {
-                      const v = (r as unknown as Record<string, unknown>)[k]
-                      return typeof v === 'number' ? (t ?? 0) + v : t
-                    }, null)
+                    const rows = f.campaigns as unknown as FamilyRow[]
+                    const spec = SPECS[k]
+                    const money = MONEY_KPIS.has(k)
+                    const total = money
+                      ? readMoney(familyMoney(rows), k as 'spend' | 'revenue', currency, ar).amount
+                      : familyTotal(rows, k)
+                    const unit = money
+                      ? (readMoney(familyMoney(rows), k as 'spend' | 'revenue', currency, ar).currency ?? currency ?? '')
+                      : ''
 
                     return (
                       <div key={k} className="flex flex-col">
-                        <dt className="text-text-secondary">{k}</dt>
+                        <dt className="text-text-secondary">
+                          {spec ? (ar ? spec.label.ar : spec.label.en) : k}
+                        </dt>
                         <dd className="tnum text-text-primary" dir="ltr">
                           {/* Null stays «—»: an unavailable figure is not a figure of zero. */}
-                          {total === null ? '—' : total.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                          {total === null
+                            ? '—'
+                            : money
+                              ? `${total.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${unit}`.trim()
+                              : spec
+                                ? spec.format(total)
+                                : total.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                         </dd>
                       </div>
                     )

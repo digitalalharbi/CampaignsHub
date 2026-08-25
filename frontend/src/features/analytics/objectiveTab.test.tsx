@@ -77,12 +77,23 @@ describe('the objective analysis tab', () => {
     const awareness = within(await screen.findByTestId('objective-family-awareness'))
     const sales = within(screen.getByTestId('objective-family-sales'))
 
-    expect(awareness.getByText('reach')).toBeInTheDocument()
-    expect(awareness.getByText('frequency')).toBeInTheDocument()
+    /*
+      Asserted on the LABELS, not the metric keys.
+
+      This test used to look for `reach`, `frequency` and `roas` — the column names — which is what
+      the tab rendered, so it passed while the page showed a reader «conversions 176 revenue 56,320
+      roas 15.36» in an Arabic layout. A test that reads the identifier cannot tell a labelled page
+      from an unlabelled one; these are the catalogue's own labels, so it now can.
+
+      What the test is FOR is unchanged: an awareness family is not headlined with a return.
+    */
+    expect(awareness.getByText('Reach')).toBeInTheDocument()
+    expect(awareness.getByText('Frequency')).toBeInTheDocument()
+    expect(awareness.queryByText('Return on ad spend')).not.toBeInTheDocument()
     expect(awareness.queryByText('roas')).not.toBeInTheDocument()
 
-    expect(sales.getByText('roas')).toBeInTheDocument()
-    expect(sales.getByText('revenue')).toBeInTheDocument()
+    expect(sales.getByText('Return on ad spend')).toBeInTheDocument()
+    expect(sales.getByText('Order value')).toBeInTheDocument()
   })
 
   /** A family with no campaigns is absent, not an empty row implying zero performance. */
