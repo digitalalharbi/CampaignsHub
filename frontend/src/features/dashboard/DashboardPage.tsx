@@ -35,12 +35,10 @@ import { displaySpend, withheldCurrencyOf } from './platformMoney'
 import { MetricStrip } from '@/components/ui/MetricStrip'
 import { DataFreshness, PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
-import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
+import { sortPlatforms } from '@/lib/platforms'
 import { useProject } from '@/stores/project'
 import { listClientWorkspaces, listProjects } from '@/features/projects/api'
 import { MARKETING_PATH_KEYS, marketingPathLabel, objectiveLabel, objectivesForPath, pathOfObjective } from '@/features/campaigns/labels'
-import { CreativePulseSection } from '@/features/content/CreativePulseSection'
-import type { LibraryQuery } from '@/features/content/api'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
 /**
@@ -221,18 +219,6 @@ export function DashboardPage() {
     [providers, objectiveFilter, campaignIds],
   )
 
-  /** The same selection in the creative library's vocabulary (§15.11) — canonical platform keys. */
-  const creativeFilters: LibraryQuery = useMemo(
-    () => ({
-      from: range.from,
-      to: range.to,
-      providers: providers.length > 0 ? providers.map(canonicalPlatform) : undefined,
-      objectives: objectiveFilter.length > 0 ? objectiveFilter : undefined,
-      campaign_ids: campaignIds.length > 0 ? campaignIds : undefined,
-      project_ids: currentProjectId ? [currentProjectId] : undefined,
-    }),
-    [range.from, range.to, providers, objectiveFilter, campaignIds, currentProjectId],
-  )
 
   // Saved views (DASH-010-E-FE): apply restores objective + platforms + date range.
   const savedViews = useSavedViews()
@@ -580,6 +566,30 @@ export function DashboardPage() {
         hasRows={summary.data === undefined ? undefined : summary.data.rows_in_scope}
       />
 
+      {/*
+        DASH-ORDER-001 — the answer first, the working underneath.
+        
+        The page used to open on a day-by-day trend chart and a funnel, and put «which platform, which
+        campaign, where the money went» below them. That is the order the data was BUILT in, not the
+        order it is read in: an operator opening this page is asking which campaign is winning and
+        where the spend went, and was made to scroll past two charts explaining a shape they had not
+        been given yet.
+        
+        The comparisons now sit directly under the KPI row — platform bars, the spend donut and the
+        campaign table in one band — and the trend and funnel follow as the working behind them.
+      */}
+      {/* The comparisons, the details and the alerts — shared with the marketing preview. */}
+      <UnifiedCampaignOverview
+        vm={vm}
+        lang={ar ? 'ar' : 'en'}
+        headerRight={
+          <Link to="/app/analytics" className="inline-flex items-center gap-1 font-semibold text-text-secondary hover:text-text-primary">
+            {t.analytics} <ArrowUpRight size={14} aria-hidden />
+          </Link>
+        }
+      />
+
+
       {/* The analysis: what happened day by day, and where people stopped. */}
       <div className="grid gap-4 lg:grid-cols-3">
         <Panel title={t.trend} description={t.trendSub} className="lg:col-span-2" loading={series.isLoading} error={series.isError} empty={!series.isLoading && points.length === 0}>
@@ -677,17 +687,6 @@ export function DashboardPage() {
         </Panel>
       </div>
 
-      {/* The comparisons, the details and the alerts — shared with the marketing preview. */}
-      <UnifiedCampaignOverview
-        vm={vm}
-        lang={ar ? 'ar' : 'en'}
-        headerRight={
-          <Link to="/app/analytics" className="inline-flex items-center gap-1 font-semibold text-text-secondary hover:text-text-primary">
-            {t.analytics} <ArrowUpRight size={14} aria-hidden />
-          </Link>
-        }
-      />
-
       {/*
         UNIFIED-001 — the connected store, from the funnel's own service.
 
@@ -763,12 +762,37 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* §15.11 — the creative section, on this page's own filters, linking into the library. */}
-      <CreativePulseSection
-        libraryPath="/app/content"
-        axes={['clients', 'kinds']}
-        filters={creativeFilters}
-      />
+      {/*
+        DASH-CLUTTER-001 — an entire creative analysis lived here, and it was 62% of the page.
+        
+        «تحليل المحتوى الإعلاني» carried best image, best video, what the numbers say, fastest
+        growing, declining, fatigue, spend by content type and images-vs-video. The dashboard ran to
+        3,648px — three and a half screens — and everything below the first 1,375 of them was this
+        one section.
+        
+        All of it already exists twice over: the Content library IS that analysis, and Analytics has
+        a Creative tab reading the same rows. Three places answering one question is the clutter the
+        owner keeps asking to be rid of, and the cost fell on the surface that is supposed to answer
+        «how are we doing» at a glance.
+        
+        Nothing is lost — the link goes to the section that owns it, carrying nothing but the reader.
+      */}
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-bold text-text-primary">{ar ? 'أداء المحتوى' : 'Creative performance'}</h2>
+          <p className="mt-0.5 text-xs text-text-secondary">
+            {ar
+              ? 'أفضل الصور والفيديوهات، الإجهاد، والاتجاهات — في مكتبة المحتوى.'
+              : 'Best images and videos, fatigue and trends — in the content library.'}
+          </p>
+        </div>
+        <Link
+          to="/app/content"
+          className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-brand-300 hover:text-text-primary"
+        >
+          {ar ? 'افتح المحتوى' : 'Open content'} <ArrowUpRight size={13} aria-hidden />
+        </Link>
+      </div>
 
       <LivePerformanceNotice variant="compact" />
     </div>
