@@ -724,7 +724,18 @@ final class MetricsAggregator
 
         $platforms = $this->base($from, $to)->whereIn('daily_metrics.unified_campaign_id', $ids)
             ->select('daily_metrics.unified_campaign_id as campaign_id', 'daily_metrics.provider')
+            /*
+             * MONEY-TRUTH-002 — the per-platform split inside a campaign, carrying its provenance.
+             *
+             * `spend` here is the coalesced 0 on a withheld row, so a campaign's platform breakdown
+             * ranked every platform at nothing and sorted by that zero. The withheld original rides
+             * with it so the reader gets the same figure the strip above does.
+             */
             ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'), 0) AS spend")
+            ->selectRaw("COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_withheld_rows")
+            ->selectRaw("COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0) AS spend_original")
+            ->selectRaw("MIN(original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS money_original_currency")
+            ->selectRaw("COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS money_original_currencies")
             ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'conversions'), 0) AS conversions")
             ->groupBy('daily_metrics.unified_campaign_id', 'daily_metrics.provider')
             ->get()->groupBy('campaign_id');
@@ -747,7 +758,16 @@ final class MetricsAggregator
                     ->map(fn ($r) => ['date' => Carbon::parse($r->metric_date)->toDateString()] + $this->withDerived((array) $r))
                     ->values()->all(),
                 'platforms' => collect($platforms->get($id) ?? [])
-                    ->map(fn ($r) => ['provider' => $r->provider, 'spend' => round((float) $r->spend, 2), 'conversions' => round((float) $r->conversions, 2)])
+                    ->map(fn ($r) => [
+                        'provider' => $r->provider,
+                        'spend' => round((float) $r->spend, 2),
+                        'conversions' => round((float) $r->conversions, 2),
+                        // The reader needs all four to tell «spent nothing» from «cannot convert».
+                        'spend_withheld_rows' => (int) ($r->spend_withheld_rows ?? 0),
+                        'spend_original' => round((float) ($r->spend_original ?? 0), 2),
+                        'money_original_currency' => $r->money_original_currency ?? null,
+                        'money_original_currencies' => (int) ($r->money_original_currencies ?? 0),
+                    ])
                     ->sortByDesc('spend')->values()->all(),
                 'creatives' => $creatives[$id] ?? [],
             ];

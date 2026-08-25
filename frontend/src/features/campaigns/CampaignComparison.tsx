@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import { formatMoneyReading, readMoney } from '@/lib/money/contract'
+import { displaySpend } from '@/features/dashboard/platformMoney'
 import { Link } from 'react-router-dom'
 import { ImageOff, Info, TriangleAlert, X } from 'lucide-react'
 import { useCampaignComparison, type CompareCampaign } from './compareApi'
@@ -120,7 +122,16 @@ function ComparisonTable({ rows, locale, mixed, projectId }: {
     return lowerIsBetter ? Math.min(...real) : Math.max(...real)
   }
 
-  const spend = rows.map((r) => Number(r.totals.spend ?? 0))
+  /*
+    MONEY-TRUTH-002 — the spend row, and the unit it is stated in.
+
+    `Number(r.totals.spend ?? 0)` is the coalesced zero, and it was then labelled with the campaign's
+    `budget_currency` — the unit of the PLAN, not of the spend. Two different mistakes on one cell:
+    a campaign spending 2,500 USD against a riyal budget read «0 SAR».
+
+    `totals` carries the withheld provenance, so the contract can answer both.
+  */
+  const spendReadings = rows.map((r) => readMoney(r.totals as Record<string, unknown>, 'spend', null, true))
   const results = rows.map((r) => {
     const m = resultModel(r.objective)
     return m ? Number(r.totals[m.metric] ?? 0) : null
@@ -159,7 +170,7 @@ function ComparisonTable({ rows, locale, mixed, projectId }: {
           <tbody>
             <tr className="border-b border-border">
               <td className="p-3 text-text-secondary">الإنفاق</td>
-              {rows.map((r, i) => <td key={r.campaign_id} className="tnum p-3 text-end text-text-primary">{money(spend[i], r.budget_currency ?? 'SAR')}</td>)}
+              {rows.map((r, i) => <td key={r.campaign_id} className="tnum p-3 text-end text-text-primary">{formatMoneyReading(spendReadings[i], money)}</td>)}
             </tr>
             <tr className="border-b border-border">
               <td className="p-3 text-text-secondary">النتائج <span className="text-xs text-text-muted">(حسب هدف كل حملة)</span></td>
@@ -251,7 +262,16 @@ function PlatformSplit({ rows }: { rows: CompareCampaign[] }) {
     <ChartCard title="توزيع الإنفاق حسب المنصة" subtitle="لكل حملة على حدة">
       <div className="space-y-3">
         {rows.map((r) => {
-          const total = r.platforms.reduce((a, p) => a + p.spend, 0)
+          /*
+            MONEY-TRUTH-002 — read the figure that is real, then divide by it.
+
+            `p.spend` is the coalesced 0 when no rate exists, so on such an account every campaign
+            here totalled 0, the «total > 0» guard hid the whole chart, and the shares that would
+            have been drawn divided by zero. `displaySpend` is the same reader the dashboard's
+            platform rows use.
+          */
+          const spendOf = (p: (typeof r.platforms)[number]) => displaySpend(p)
+          const total = r.platforms.reduce((a, p) => a + spendOf(p), 0)
           return (
             <div key={r.campaign_id}>
               <div className="flex items-center justify-between text-xs">
@@ -262,14 +282,14 @@ function PlatformSplit({ rows }: { rows: CompareCampaign[] }) {
                 <>
                   <div className="mt-1 flex h-2.5 overflow-hidden rounded-full bg-surface-secondary">
                     {r.platforms.map((p) => (
-                      <span key={p.provider} title={`${p.provider} — ${compact(p.spend)}`} style={{ width: `${(p.spend / total) * 100}%`, background: platformColor(p.provider) }} />
+                      <span key={p.provider} title={`${p.provider} — ${compact(spendOf(p))}`} style={{ width: `${(spendOf(p) / total) * 100}%`, background: platformColor(p.provider) }} />
                     ))}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-text-muted">
                     {r.platforms.map((p) => (
                       <span key={p.provider} className="inline-flex items-center gap-1">
                         <span className="h-2 w-2 rounded-full" style={{ background: platformColor(p.provider) }} />
-                        {p.provider} <span className="tnum">{Math.round((p.spend / total) * 100)}%</span>
+                        {p.provider} <span className="tnum">{Math.round((spendOf(p) / total) * 100)}%</span>
                       </span>
                     ))}
                   </div>
