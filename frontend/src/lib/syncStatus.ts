@@ -17,8 +17,24 @@
  * the product could not place are figures missing from a client's report. `awaiting_assignment` is
  * amber too: nothing is broken, but nothing will happen until somebody chooses a project.
  */
+/**
+ * FRESHNESS-STATUS-001 — two vocabularies reach this module, and only one was mapped.
+ *
+ * A sync RUN reports how the last attempt went: `running`, `success`, `partial_mapping`,
+ * `awaiting_assignment`. A SOURCE reports how current its data is: `fresh`, `stale`,
+ * `awaiting_credentials`. `no_data` and `failed` belong to both.
+ *
+ * `DataFreshnessService::verdict()` returns the second set, and the metrics controller sends it as
+ * `last_sync_status` — so the data-quality table fed freshness words into a map of run words. The
+ * pill prints whatever it is given, so «fresh» appeared as the status of every healthy platform, in
+ * English, on the tab whose subject is whether the numbers can be trusted.
+ *
+ * Both sets are named here rather than the caller translating between them: they are genuinely
+ * different answers to different questions, and collapsing them would lose that.
+ */
 export const SYNC_STATUSES = [
   'running', 'success', 'no_data', 'partial_mapping', 'failed', 'awaiting_assignment',
+  'fresh', 'stale', 'awaiting_credentials',
 ] as const
 
 export type SyncStatus = (typeof SYNC_STATUSES)[number]
@@ -35,6 +51,21 @@ export interface SyncStatusMeaning {
 }
 
 const MEANINGS: Record<SyncStatus, SyncStatusMeaning> = {
+  fresh: {
+    tone: 'success', ar: 'حديثة', en: 'Fresh',
+    hint_ar: 'بيانات هذه المنصة محدَّثة حتى آخر يوم مكتمل.',
+    hint_en: "This platform's data is current to the last complete day.",
+  },
+  stale: {
+    tone: 'warning', ar: 'متأخرة', en: 'Stale',
+    hint_ar: 'مضى وقت على آخر يوم وصلت فيه بيانات من هذه المنصة — الأرقام أقدم مما تبدو.',
+    hint_en: 'It has been a while since this platform last sent a day — the figures are older than they look.',
+  },
+  awaiting_credentials: {
+    tone: 'neutral', ar: 'بانتظار بيانات الاعتماد', en: 'Awaiting credentials',
+    hint_ar: 'لم تُهيَّأ هذه المنصة بعد، فلا يوجد ما يُزامَن. ليست عطلًا.',
+    hint_en: 'This platform is not configured yet, so there is nothing to sync. Not a fault.',
+  },
   running: {
     tone: 'neutral', ar: 'قيد التنفيذ', en: 'Running',
     hint_ar: 'بدأت ولم تنتهِ بعد.', hint_en: 'Started, not finished yet.',
