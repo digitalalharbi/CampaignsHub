@@ -223,8 +223,25 @@ test.describe('the advertiser portal', () => {
     for (const href of hrefs) {
       await openSection(page, href)
       await expect(page.locator('main')).toBeVisible({ timeout: 20000 })
-      await expect.poll(async () => (await page.locator('main').innerText()).trim().length, { timeout: 20000 })
-        .toBeGreaterThan(0)
+
+      /*
+       * Wait for the section to SETTLE, not merely to be non-empty.
+       *
+       * The first version of this test polled for «any text at all», which a heading satisfies
+       * instantly — so it read `main` before the section's queries resolved, found the header and
+       * nothing else, and passed. Reintroducing a known leak on purpose did not fail it, which is
+       * how that was discovered: a guard that cannot fail is not a guard.
+       *
+       * Two identical consecutive reads means the content has stopped arriving. That is a fact about
+       * this page rather than a sleep long enough to usually work.
+       */
+      let previous = ''
+      await expect.poll(async () => {
+        const current = (await page.locator('main').innerText()).trim()
+        const settled = current.length > 0 && current === previous
+        previous = current
+        return settled
+      }, { timeout: 20000, intervals: [250] }).toBe(true)
 
       const found = await page.locator('main').evaluate((root, allowed) => {
         const out = new Set<string>()
