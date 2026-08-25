@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -354,7 +355,7 @@ export function SharedCreativeSection({
             <InsightList insights={data.insights} t={t} ar={ar} permissions={permissions} />
           )}
 
-          <Freshness data={data} t={t} />
+          <Freshness data={data} t={t} ar={ar} />
         </>
       )}
 
@@ -749,7 +750,7 @@ function InsightList({
   )
 }
 
-function Freshness({ data, t }: { data: { freshness: CreativePulse['freshness'] }; t: Copy }) {
+function Freshness({ data, t, ar }: { data: { freshness: CreativePulse['freshness'] }; t: Copy; ar: boolean }) {
   const f = data.freshness
 
   return (
@@ -762,7 +763,7 @@ function Freshness({ data, t }: { data: { freshness: CreativePulse['freshness'] 
       </span>
       {f.providers.map((p) => (
         <span key={p.provider}>
-          <span className="text-text-muted capitalize">{p.provider}:</span>{' '}
+          <span className="text-text-muted">{providerLabel(canonicalPlatform(p.provider), ar ? 'ar' : 'en')}:</span>{' '}
           <b className="tnum font-semibold text-text-primary" dir="ltr">
             {p.last_synced_at ? fmtDate(p.last_synced_at) : t.noSync}
           </b>

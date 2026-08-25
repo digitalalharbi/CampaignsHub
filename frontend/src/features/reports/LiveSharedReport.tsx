@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { providerLabel } from '@/features/campaigns/labels'
+import { canonicalPlatform } from '@/lib/platforms'
+import { fmtDateTime } from '@/lib/datetime'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import {
   ChartCard,
@@ -207,7 +210,7 @@ export function LiveSharedReport({
                 type="button"
                 data-testid={`live-platform-${p}`}
                 onClick={() => toggle(providers, setProviders, p)}
-                className={`rounded-xl border px-2.5 py-1.5 text-xs font-semibold capitalize transition-colors ${
+                className={`rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
                   providers.includes(p)
                     ? 'border-transparent text-white'
                     : 'border-border text-text-secondary hover:bg-surface-hover'
@@ -431,11 +434,16 @@ function FreshnessStrip({
     <div data-testid="live-freshness" className="grid gap-2">
       <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary">
         {freshness.map((f) => (
-          <span key={f.provider} className="capitalize">
-            <span className="text-text-muted">{f.provider}:</span>{' '}
+          <span key={f.provider}>
+            {/*
+              LIVELINK-PROVIDER-LABEL-001 — on the page a CLIENT opens.
+              `capitalize` on a raw key made `meta` read as «Meta»; `google_ads` would read
+              «Google_ads». A real label needs no cosmetic help.
+            */}
+            <span className="text-text-muted">{providerLabel(canonicalPlatform(f.provider), ar ? 'ar' : 'en')}:</span>{' '}
             <b className="font-semibold text-text-primary">
               {f.data_as_of
-                ? new Date(f.data_as_of).toLocaleString(ar ? 'ar-SA' : 'en-GB')
+                ? fmtDateTime(f.data_as_of)
                 : ar
                   ? 'بانتظار بيانات الاعتماد'
                   : 'Awaiting credentials'}
