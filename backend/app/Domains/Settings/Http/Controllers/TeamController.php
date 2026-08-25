@@ -38,13 +38,37 @@ final class TeamController extends Controller
                 'id' => $u->uuid,
                 'name' => $u->name,
                 'email' => $u->email,
-                'roles' => $u->roles->map(fn ($r) => ['slug' => (string) $r->slug, 'name' => (string) $r->name])->values(),
+                'roles' => $u->roles->map(fn ($r) => [
+                    'slug' => (string) $r->slug,
+                    'name' => (string) $r->name,
+                    /*
+                     * ROLE-LABEL-001 — whether this name is the product's or the customer's.
+                     *
+                     * A system role is seeded in English («Tenant Owner», «Team Member») and belongs
+                     * to the product, so it should be read in the reader's language. A role a tenant
+                     * created carries the name THEY typed, and translating that would rename their
+                     * work. The frontend cannot tell them apart from the name alone.
+                     */
+                    'is_system' => (bool) $r->is_system,
+                ])->values(),
                 'is_owner' => $u->roles->contains('slug', 'tenant-owner'),
                 'disabled' => $u->disabled_at !== null,
                 'last_login_at' => optional($u->last_login_at)->toIso8601String(),
                 'two_factor_enabled' => (bool) $u->two_factor_enabled,
             ])->values(),
-            'roles' => $roles->map(fn ($r) => ['slug' => (string) $r->slug, 'name' => (string) $r->name])->values(),
+            'roles' => $roles->map(fn ($r) => [
+                'slug' => (string) $r->slug,
+                'name' => (string) $r->name,
+                /*
+                     * ROLE-LABEL-001 — whether this name is the product's or the customer's.
+                     *
+                     * A system role is seeded in English («Tenant Owner», «Team Member») and belongs
+                     * to the product, so it should be read in the reader's language. A role a tenant
+                     * created carries the name THEY typed, and translating that would rename their
+                     * work. The frontend cannot tell them apart from the name alone.
+                     */
+                'is_system' => (bool) $r->is_system,
+            ])->values(),
             /*
              * People who have been invited and are not here yet — TEAM-INVITE-001.
              *

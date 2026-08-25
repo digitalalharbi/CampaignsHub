@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Services;
 
 use App\Domains\Disclaimers\Services\DisclaimerResolver;
+use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
@@ -387,14 +388,14 @@ final class ReportGenerator
         $rated = collect($platforms)->filter(fn ($p) => ($p[$metric['key']] ?? null) !== null && (float) ($p['spend'] ?? 0) > 0);
         if ($rated->isNotEmpty()) {
             $best = ($metric['lower_is_better'] ? $rated->sortBy($metric['key']) : $rated->sortByDesc($metric['key']))->first();
-            $out[] = ['severity' => 'positive', 'title' => "أفضل {$metric['label_ar']} على {$best['provider']}", 'platform' => $best['provider'],
+            $out[] = ['severity' => 'positive', 'title' => 'أفضل '.$metric['label_ar'].' على '.ProviderDisplayName::short($best['provider']), 'platform' => $best['provider'],
                 'kpi' => $metric['label_ar'], 'value' => $lens->formatRanking((float) $best[$metric['key']], $currency),
                 'detail' => 'أفضل أداء على المؤشر الذي تُقاس به هذه الحملات.'];
 
             // «Below average» needs somebody to be below it: with one platform there is no average.
             if ($rated->count() > 1) {
                 $worst = ($metric['lower_is_better'] ? $rated->sortByDesc($metric['key']) : $rated->sortBy($metric['key']))->first();
-                $out[] = ['severity' => 'warning', 'title' => "{$worst['provider']} دون المتوسط", 'platform' => $worst['provider'],
+                $out[] = ['severity' => 'warning', 'title' => ProviderDisplayName::short($worst['provider']).' دون المتوسط', 'platform' => $worst['provider'],
                     'kpi' => $metric['label_ar'], 'value' => $lens->formatRanking((float) $worst[$metric['key']], $currency),
                     'detail' => 'يحتاج مراجعة الاستهداف والمحتوى.'];
             }
@@ -445,13 +446,13 @@ final class ReportGenerator
             $best = ($metric['lower_is_better'] ? $rated->sortBy($metric['key']) : $rated->sortByDesc($metric['key']))->first();
             $worthScaling = ! $lens->judgesOnRevenue() || (float) $best['roas'] > 1;
             if ($worthScaling) {
-                $out[] = ['severity' => 'positive', 'title' => "زيادة ميزانية {$best['provider']} تدريجيًا", 'platform' => $best['provider'],
+                $out[] = ['severity' => 'positive', 'title' => 'زيادة ميزانية '.ProviderDisplayName::short($best['provider']).' تدريجيًا', 'platform' => $best['provider'],
                     'action' => 'scale', 'detail' => "أفضل {$metric['label_ar']} — وسّع بحذر مع مراقبة مرحلة التعلّم.", 'kpi' => $metric['label_ar']];
             }
 
             if ($rated->count() > 1) {
                 $worst = ($metric['lower_is_better'] ? $rated->sortByDesc($metric['key']) : $rated->sortBy($metric['key']))->first();
-                $out[] = ['severity' => 'warning', 'title' => "تحسين استهداف {$worst['provider']}", 'platform' => $worst['provider'],
+                $out[] = ['severity' => 'warning', 'title' => 'تحسين استهداف '.ProviderDisplayName::short($worst['provider']), 'platform' => $worst['provider'],
                     'action' => 'optimize', 'detail' => "أضعف {$metric['label_ar']} — راجع الجمهور والمحتوى والصفحة.", 'kpi' => $metric['label_ar']];
             }
         }

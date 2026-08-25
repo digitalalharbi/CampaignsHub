@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
@@ -39,13 +40,20 @@ final class PlatformOverviewController extends Controller
      * while the report engine led with Snapchat is exactly the drift that made a customer hunt for
      * the same platform in a different position on every screen.
      */
+    /**
+     * REPORT-PROVIDER-NAME-001 — moved to {@see ProviderDisplayName}, which now owns these names.
+     *
+     * `ReportGenerator` needed the same names to stop printing «meta» inside a client's report, and
+     * a second copy would have drifted. Kept as an alias so existing callers of this constant are
+     * unchanged, and sliced to the ad platforms this screen lists — the stores are on their own.
+     */
     public const PLATFORMS = [
-        'snapchat' => ['ar' => 'سناب شات', 'en' => 'Snapchat Ads'],
-        'tiktok' => ['ar' => 'تيك توك', 'en' => 'TikTok Ads'],
-        'meta' => ['ar' => 'ميتا (فيسبوك وإنستقرام)', 'en' => 'Meta'],
-        'google' => ['ar' => 'إعلانات جوجل', 'en' => 'Google Ads'],
-        'x' => ['ar' => 'منصة X', 'en' => 'X Ads'],
-        'linkedin' => ['ar' => 'لينكدإن', 'en' => 'LinkedIn Ads'],
+        'snapchat' => ProviderDisplayName::NAMES['snapchat'],
+        'tiktok' => ProviderDisplayName::NAMES['tiktok'],
+        'meta' => ProviderDisplayName::NAMES['meta'],
+        'google' => ProviderDisplayName::NAMES['google'],
+        'x' => ProviderDisplayName::NAMES['x'],
+        'linkedin' => ProviderDisplayName::NAMES['linkedin'],
     ];
 
     /** What a connected platform can do. Listed even when awaiting credentials, so the gap is explicit. */
