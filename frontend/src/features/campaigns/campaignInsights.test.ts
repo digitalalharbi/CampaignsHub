@@ -82,8 +82,15 @@ describe('needs-attention rules', () => {
   })
 
   it('flags overspend against the planned budget and reports the percentage', () => {
-    const flag = attentionFlags(campaign({ total_budget: 1000 }), { spend: 1250, conversions: 9 }).find((f) => f.code === 'over_budget')
+    // Reporting currency (SAR) equals the campaign budget currency, so the converted spend is comparable.
+    const flag = attentionFlags(campaign({ total_budget: 1000 }), { spend: 1250, conversions: 9 }, 'SAR').find((f) => f.code === 'over_budget')
     expect(flag?.ar).toContain('125%')
+  })
+
+  it('does NOT flag overspend when the reporting currency differs from the budget currency', () => {
+    // 5,000 USD reported (converted) against a 1,000 SAR budget — not a comparison anyone can make.
+    const codes = attentionFlags(campaign({ total_budget: 1000, budget_currency: 'SAR' }), { spend: 5000, conversions: 9 }, 'USD').map((f) => f.code)
+    expect(codes).not.toContain('over_budget')
   })
 
   it('says data is missing instead of pretending a campaign is healthy', () => {
@@ -105,5 +112,44 @@ describe('needs-attention rules', () => {
     const high = attentionFlags(campaign({ external_campaigns_count: 3 }), { spend: 500, conversions: 0 })
     const minor = attentionFlags(campaign({ status: 'paused' }), { spend: 5, conversions: 1 })
     expect(attentionRank(high)).toBeGreaterThan(attentionRank(minor))
+  })
+})
+
+describe('PARTIAL-WITHHELD-001 — flags read money by provenance, not the coalesced 0', () => {
+  // Money the platform spent but no rate could convert: `spend` coalesces to 0, provenance says otherwise.
+  const withheld = { spend: 0, spend_withheld_rows: 4, spend_original: 500, money_original_currency: 'USD', money_original_currencies: 1, conversions: 0 }
+  // Some converted (1,000) beside some withheld (500 USD) — no single figure.
+  const partial = { spend: 1000, spend_withheld_rows: 4, spend_original: 500, money_original_currency: 'USD', money_original_currencies: 1, conversions: 5 }
+
+  it('a withheld spend is NOT «active but spent nothing»', () => {
+    const codes = attentionFlags(campaign({ status: 'active' }), withheld).map((f) => f.code)
+    expect(codes).not.toContain('active_no_spend')
+    // It DID spend and produced no results, so that flag (a presence question) still fires.
+    expect(codes).toContain('spend_no_results')
+  })
+
+  it('a genuine measured zero still flags «active but spent nothing»', () => {
+    const codes = attentionFlags(campaign({ status: 'active' }), { spend: 0, spend_withheld_rows: 0, conversions: 0 }).map((f) => f.code)
+    expect(codes).toContain('active_no_spend')
+  })
+
+  it('a withheld spend on a paused campaign flags «paused with spend»', () => {
+    const codes = attentionFlags(campaign({ status: 'paused' }), withheld).map((f) => f.code)
+    expect(codes).toContain('paused_with_spend')
+  })
+
+  it('over-budget never fires on a partial scope — the converted subset is not the spend', () => {
+    // 1,000 converted is below the 1,000 budget only by coincidence; the real spend is more, but it
+    // is not a single comparable figure, so no over-budget verdict may be issued.
+    const codes = attentionFlags(campaign({ total_budget: 900, budget_currency: 'SAR' }), partial).map((f) => f.code)
+    expect(codes).not.toContain('over_budget')
+  })
+
+  it('over-budget fires when a withheld spend in the budget currency exceeds it', () => {
+    const codes = attentionFlags(
+      campaign({ total_budget: 400, budget_currency: 'USD' }),
+      { spend: 0, spend_withheld_rows: 4, spend_original: 500, money_original_currency: 'USD', money_original_currencies: 1, conversions: 3 },
+    ).map((f) => f.code)
+    expect(codes).toContain('over_budget')
   })
 })
