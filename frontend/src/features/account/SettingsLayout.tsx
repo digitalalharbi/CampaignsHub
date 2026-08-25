@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Building2, ExternalLink, FileText, Palette, Plug, Tags, Users } from 'lucide-react'
+import { Building2, ExternalLink, Palette, Plug, Users } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -19,7 +19,18 @@ const GROUPS = [
     ar: 'الهوية والمحتوى', en: 'Identity & content',
     items: [
       { to: '/settings/branding', ar: 'الهوية', en: 'Brand identity', icon: Palette },
-      { to: '/settings/taxonomies', ar: 'التصنيفات والخيارات', en: 'Taxonomies & options', icon: Tags },
+      /*
+       * PAGES-001, applied to the two entries it missed.
+       *
+       * «التصنيفات والخيارات» and «ملاحظات البوابات» both route to `<Navigate to="/admin/settings">`,
+       * and a tenant cannot enter `/admin` — so the portal guard turned them around and dropped the
+       * reader on the dashboard. Clicking a settings tab and landing on the dashboard reads as the
+       * app losing your place, not as a refusal.
+       *
+       * The reasoning above already removed «الواجهة الرئيسية والبوابات» for exactly this, and these
+       * two share its destination. They belong to the platform console, where its own navigation
+       * lists them.
+       */
     ],
   },
   {
@@ -32,7 +43,6 @@ const GROUPS = [
        * at a path that redirects into `/admin` — a console a tenant administrator cannot enter. A link
        * whose only outcome is a refusal is a dead link with a label on it.
        */
-      { to: '/settings/portals', ar: 'ملاحظات البوابات', en: 'Portal notes', icon: FileText },
       { to: '/app/integrations', ar: 'التكاملات', en: 'Integrations', icon: Plug, external: true },
     ],
   },
