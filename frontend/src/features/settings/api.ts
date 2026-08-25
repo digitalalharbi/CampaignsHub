@@ -82,7 +82,7 @@ export interface TeamMember {
   id: string
   name: string
   email: string
-  roles: { slug: string; name: string }[]
+  roles: { slug: string; name: string; is_system?: boolean }[]
   is_owner: boolean
   disabled: boolean
   last_login_at: string | null
@@ -99,7 +99,7 @@ export interface TeamInvitation {
 }
 export interface TeamData {
   members: TeamMember[]
-  roles: { slug: string; name: string }[]
+  roles: { slug: string; name: string; is_system?: boolean }[]
   invitations: TeamInvitation[]
 }
 
