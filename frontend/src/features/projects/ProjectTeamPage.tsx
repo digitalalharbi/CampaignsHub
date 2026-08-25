@@ -13,21 +13,43 @@ import { EmptyState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { usePortalPath } from '@/app/portalPath'
 import { useT } from '@/lib/i18n'
+import { useUi } from '@/stores/ui'
 
-const ROLES = [
-  'account_manager',
-  'media_buyer',
-  'analyst',
-  'content',
-  'finance',
-  'client_admin',
-  'client_approver',
-  'client_viewer',
-  'viewer',
-]
+/**
+ * PROJECT-ROLE-LABEL-001 — the role picker offered its own column values.
+ *
+ * `options={ROLES.map((r) => ({ value: r, label: r }))}` — the label WAS the key, so an operator
+ * assigning somebody to a project chose between «account_manager» and «media_buyer» in an otherwise
+ * Arabic page. Unlike a tenant role, none of these is customer-named: the list is fixed in
+ * `ProjectMembershipController::ROLES`, so every one of them can and should be written properly.
+ *
+ * `projectRoles.test.ts` asserts this map matches that PHP list exactly, so a role added on one side
+ * and not the other fails a test instead of reaching an operator as an identifier.
+ */
+export const PROJECT_ROLE_LABELS: Record<string, { ar: string; en: string }> = {
+  account_manager: { ar: 'مدير الحساب', en: 'Account manager' },
+  media_buyer: { ar: 'مشتري وسائط', en: 'Media buyer' },
+  analyst: { ar: 'محلّل', en: 'Analyst' },
+  content: { ar: 'محتوى', en: 'Content' },
+  finance: { ar: 'مالية', en: 'Finance' },
+  client_admin: { ar: 'مسؤول من جهة العميل', en: 'Client admin' },
+  client_approver: { ar: 'معتمِد من جهة العميل', en: 'Client approver' },
+  client_viewer: { ar: 'مُطّلع من جهة العميل', en: 'Client viewer' },
+  viewer: { ar: 'مُطّلع', en: 'Viewer' },
+}
+
+export function projectRoleLabel(role: string, ar: boolean): string {
+  const label = PROJECT_ROLE_LABELS[role]
+
+  // An unrecognised role shows as itself: a value the product does not know is worth seeing.
+  return label ? (ar ? label.ar : label.en) : role
+}
+
+const ROLES = Object.keys(PROJECT_ROLE_LABELS)
 
 export function ProjectTeamPage() {
   const t = useT()
+  const ar = useUi((s) => s.locale) === 'ar'
   const portalPath = usePortalPath()
   const queryClient = useQueryClient()
   const { projectId = '' } = useParams()
@@ -83,7 +105,7 @@ export function ProjectTeamPage() {
             />
           </Field>
           <Field label={t('role')}>
-            <Select value={role} onChange={(e) => setRole(e.target.value)} options={ROLES.map((r) => ({ value: r, label: r }))} />
+            <Select value={role} onChange={(e) => setRole(e.target.value)} options={ROLES.map((r) => ({ value: r, label: projectRoleLabel(r, ar) }))} />
           </Field>
           <Button loading={addMutation.isPending} disabled={!userId} onClick={() => addMutation.mutate()}>
             <UserPlus size={15} /> {t('add')}

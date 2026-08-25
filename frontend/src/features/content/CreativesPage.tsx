@@ -735,7 +735,7 @@ export function CreativesPage() {
         panel so the metrics move up. A grid where SOME creatives have assets keeps every panel, so
         the ones that are missing stay visibly missing rather than being quietly levelled.
       */}
-      {creatives.length > 0 && view === 'grid' && !anyPreview && (
+      {creatives.length > 0 && !anyPreview && (
         <p data-testid="creatives-no-previews" className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary">
           {t.noPreview} — {t.noPreviewAll}
         </p>
@@ -781,7 +781,16 @@ export function CreativesPage() {
             <thead className="bg-surface-hover text-start text-xs text-text-secondary">
               <tr>
                 <th className="p-2" />
-                <th className="p-2 text-start">{t.preview}</th>
+                {/*
+                  CONTENT-NO-PREVIEW-001, in the table.
+                  
+                  The grid stopped reserving space for an asset nobody returned; this column did
+                  not, so a Meta-only result was a strip of «لا تتوفر معاينة» repeated down the
+                  page, pushing spend and results to the right on a narrow screen. Dropped only
+                  when NOTHING in the result has an asset, so a mixed set keeps the column and the
+                  missing ones stay visibly missing.
+                */}
+                {anyPreview && <th className="p-2 text-start">{t.preview}</th>}
                 <th className="p-2 text-start">{t.name}</th>
                 <th className="p-2 text-start">{t.platform}</th>
                 <th className="p-2 text-start">{t.campaign}</th>
@@ -830,7 +839,7 @@ export function CreativesPage() {
                         onChange={() => toggleSelected(creative.id)}
                       />
                     </td>
-                    <td className="p-2">
+                    {anyPreview && <td className="p-2">
                       {poster ? (
                         <img
                           src={poster}
@@ -859,7 +868,7 @@ export function CreativesPage() {
                           {t.noPreview}
                         </span>
                       )}
-                    </td>
+                    </td>}
                     <td className="p-2" onClick={(e) => e.stopPropagation()}>
                       <Link to={`${creative.id}${libraryAddress}`} className="text-start font-medium text-text-primary underline-offset-2 hover:underline">
                         {creative.name}

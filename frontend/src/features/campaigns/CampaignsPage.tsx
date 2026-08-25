@@ -81,11 +81,45 @@ export function CampaignsPage() {
     () => CAMPAIGN_STATUSES.map((s) => ({ name: campaignStatusLabel(s, locale), value: counts[s] ?? 0 })).filter((d) => d.value > 0),
     [counts, locale],
   )
+  /*
+   * CAMP-BUDGET-CURRENCY-001 — «الميزانية 80K · مصروف 3.7K». Eighty thousand of what?
+   *
+   * Both figures were rendered with `compact()`, which states a magnitude and no unit, on a card
+   * beside KPI cards that do name their currency. And they were summed across campaigns without
+   * asking whether those campaigns share one: adding a riyal budget to a dollar budget produces a
+   * number that is not money.
+   *
+   * `budgetPacing` now returns `budget_currency` and `spent_currency` per row (BUDGET-WITHHELD-001),
+   * so both questions can be answered instead of assumed. A mixed set is refused rather than summed
+   * — the card says how many currencies are in play, which is the honest headline for that case.
+   */
   const budgetTotals = useMemo(() => {
     const b = budget.data ?? []
+
+    const currencies = new Set(b.map((r) => r.budget_currency).filter((c): c is string => typeof c === 'string' && c !== ''))
+    const spentCurrencies = new Set(b.map((r) => r.spent_currency).filter((c): c is string => typeof c === 'string' && c !== ''))
+
     const total = b.reduce((a, r) => a + Number(r.budget ?? 0), 0)
     const spent = b.reduce((a, r) => a + Number(r.spent ?? 0), 0)
-    return { total, spent, remaining: total - spent, consumed: total > 0 ? spent / total : 0 }
+
+    return {
+      total,
+      spent,
+      remaining: total - spent,
+      consumed: total > 0 ? spent / total : 0,
+      /** Null when the campaigns disagree — then no single figure can be stated. */
+      currency: currencies.size === 1 ? [...currencies][0] : null,
+      spentCurrency: spentCurrencies.size === 1 ? [...spentCurrencies][0] : null,
+      currencyCount: currencies.size,
+      /*
+       * Whether there is a budget to speak about at all.
+       *
+       * Without this the card read «0 SAR» when no campaign has a budget — naming a currency for a
+       * figure that does not exist, which is the same invention `money()`'s SAR default caused on
+       * the CPA card. The first pass at this fix reintroduced it and an existing test caught it.
+       */
+      known: b.length > 0,
+    }
   }, [budget.data])
   const topCampaigns = useMemo(
     () => (metricCampaigns.data ?? []).slice(0, 6).map((c) => ({ label: String(c.campaign_name ?? '—'), spend: Number(c.spend ?? 0), platform: String(c.provider ?? '') })),
@@ -197,7 +231,21 @@ export function CampaignsPage() {
           sub={(counts.paused ?? 0) > 0 ? (ar ? 'تحتاج مراجعة' : 'Need a look') : (ar ? 'لا شيء متوقف' : 'None paused')}
           tone={(counts.paused ?? 0) > 0 ? 'warning' : undefined}
         />
-        <StatCard label={ar ? 'الميزانية' : 'Budget'} value={compact(budgetTotals.total)} sub={ar ? `مصروف ${compact(budgetTotals.spent)}` : `${compact(budgetTotals.spent)} spent`} />
+        <StatCard
+          label={ar ? 'الميزانية' : 'Budget'}
+          value={!budgetTotals.known
+            ? '—'
+            : budgetTotals.currencyCount > 1
+              ? (ar ? `${budgetTotals.currencyCount} عملات` : `${budgetTotals.currencyCount} currencies`)
+              : money(budgetTotals.total, budgetTotals.currency ?? undefined)}
+          sub={!budgetTotals.known
+            ? (ar ? 'لم تُحدَّد ميزانية لأي حملة' : 'No campaign has a budget set')
+            : budgetTotals.currencyCount > 1
+              ? (ar ? 'ميزانيات بعملات مختلفة — لا تُجمع' : 'Budgets in different currencies — not summed')
+              : ar
+                ? `مصروف ${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)}`
+                : `${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)} spent`}
+        />
         <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
         <StatCard label="CPA" value={cpaText} delta={cmp(d.cpa)} invert />
         <StatCard label="ROAS" value={roasText} delta={cmp(d.roas)} />

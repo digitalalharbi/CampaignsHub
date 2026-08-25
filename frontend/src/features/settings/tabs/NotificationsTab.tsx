@@ -115,7 +115,16 @@ export function NotificationsTab() {
   }
 
   return (
-    <div className="space-y-6">
+    /*
+      SETTINGS-MOBILE-OVERFLOW-001 — `min-w-0` so the table below can actually scroll itself.
+
+      This sits inside a flex column, and a flex item's `min-width` defaults to `auto` — meaning it
+      refuses to shrink below its widest child. Its widest child is a `min-w-[560px]` table, so on a
+      375px phone this block was 461px and took the page sideways with it. The table already had an
+      `overflow-x-auto` wrapper; that wrapper could not clip anything while its ancestor was being
+      sized by the very content it was meant to contain.
+    */
+    <div className="min-w-0 space-y-6">
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
         <h2 className="text-xl font-bold text-text-primary">{ar ? 'تفضيلات الإشعارات' : 'Notification preferences'}</h2>
         <p className="mt-1 max-w-2xl text-sm leading-7 text-text-secondary">
