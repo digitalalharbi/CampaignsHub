@@ -21,7 +21,8 @@ const COPY = {
     tab_alerts: 'التنبيهات', tab_rules: 'القواعد', tab_prefs: 'التفضيلات', tab_deliveries: 'سجل التسليم',
     all: 'الكل', active: 'نشِطة', snoozed: 'مؤجّلة', resolved: 'مُغلقة', none: 'لا يوجد شيء هنا.',
     no_match: 'لا نتائج تطابق البحث أو الفلاتر.', search_ph: 'ابحث في التنبيهات…',
-    sum_open: 'مفتوحة', sum_critical: 'حرِجة', sum_snoozed: 'مؤجّلة', sum_resolved: 'مُغلقة', sum_open_hint: 'تحتاج إجراء',
+    sum_open: 'مفتوحة', sum_critical: 'حرِجة', sum_snoozed: 'مؤجّلة', sum_resolved: 'مُغلقة', sum_open_hint: 'تحتاج إجراء', sum_open_clear: 'لا شيء مفتوح',
+    none_clear: 'لا توجد تنبيهات مفتوحة — لم تُطلق أي قاعدة نشطة في هذا المشروع.',
     resolve: 'إغلاق', snooze: 'تأجيل', create_task: 'إنشاء مهمة', task_created: 'أُنشئت المهمة',
     severity: 'الخطورة', source: 'المصدر', value: 'القيمة', threshold: 'الحد', triggered: 'أُطلق',
     sev_info: 'معلومة', sev_warning: 'تحذير', sev_critical: 'حرِج',
@@ -41,7 +42,8 @@ const COPY = {
     tab_alerts: 'Alerts', tab_rules: 'Rules', tab_prefs: 'Preferences', tab_deliveries: 'Delivery log',
     all: 'All', active: 'Active', snoozed: 'Snoozed', resolved: 'Resolved', none: 'Nothing here.',
     no_match: 'No alerts match your search or filters.', search_ph: 'Search alerts…',
-    sum_open: 'Open', sum_critical: 'Critical', sum_snoozed: 'Snoozed', sum_resolved: 'Resolved', sum_open_hint: 'Need action',
+    sum_open: 'Open', sum_critical: 'Critical', sum_snoozed: 'Snoozed', sum_resolved: 'Resolved', sum_open_hint: 'Need action', sum_open_clear: 'Nothing open',
+    none_clear: 'No open alerts — no active rule has fired for this project.',
     resolve: 'Resolve', snooze: 'Snooze', create_task: 'Create task', task_created: 'Task created',
     severity: 'Severity', source: 'Source', value: 'Value', threshold: 'Threshold', triggered: 'Triggered',
     sev_info: 'Info', sev_warning: 'Warning', sev_critical: 'Critical',
@@ -171,7 +173,18 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     <div className="flex flex-col gap-4">
       {/* Summary — status of the alert ledger at a glance. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryCard label={c.sum_open} value={summary.open} hint={c.sum_open_hint} tone="brand" />
+        {/*
+          ALERTS-COPY-001 — «تحتاج إجراء» under a zero, in the brand tone that means «look here».
+          The same defect as «متوقفة 0 / تحتاج مراجعة» on Campaigns: a caption asserting that action
+          is required while stating that none is. Both the hint and the tone follow the count, so an
+          empty ledger reads as the good news it is instead of an unactioned pile.
+        */}
+        <SummaryCard
+          label={c.sum_open}
+          value={summary.open}
+          hint={summary.open > 0 ? c.sum_open_hint : c.sum_open_clear}
+          tone={summary.open > 0 ? 'brand' : 'success'}
+        />
         <SummaryCard label={c.sum_critical} value={summary.critical} tone="danger" />
         <SummaryCard label={c.sum_snoozed} value={summary.snoozed} tone="warning" />
         <SummaryCard label={c.sum_resolved} value={summary.resolved} tone="success" />
@@ -247,7 +260,12 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
 
       {events.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">
-          {all.length === 0 ? c.none : c.no_match}
+          {/*
+            «لا يوجد شيء هنا» reads as a page that failed to load. An empty alert ledger is a
+            RESULT — nothing has fired — and saying which rules were watching is what tells the
+            reader the monitoring is on rather than absent.
+          */}
+          {all.length === 0 ? c.none_clear : c.no_match}
         </p>
       ) : (
         <ul className="flex flex-col gap-2">

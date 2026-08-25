@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { fmtDateTime } from '@/lib/datetime'
 import { ArrowRight, ChevronLeft, ChevronRight, CircleCheck, Image as ImageIcon, Info, LayoutGrid, OctagonAlert, Rows, TriangleAlert, Trophy } from 'lucide-react'
 import {
   ChartCard,
@@ -1140,7 +1141,7 @@ function DataQualitySlide({ data }: { data: ReportData }) {
         </div>
         <div className="rounded-2xl border border-border bg-surface-secondary p-3">
           <div className="text-xs text-text-muted">آخر مزامنة</div>
-          <div className="tnum font-bold text-text-primary">{f?.last_sync_at ? new Date(f.last_sync_at).toLocaleString('en-GB') : '—'}</div>
+          <div className="tnum font-bold text-text-primary">{f?.last_sync_at ? fmtDateTime(f.last_sync_at) : '—'}</div>
         </div>
         <div className="rounded-2xl border border-border bg-surface-secondary p-3">
           <div className="text-xs text-text-muted">أيام بلا بيانات</div>
@@ -1165,7 +1166,7 @@ function DataQualitySlide({ data }: { data: ReportData }) {
                   <td className={`p-2.5 ${(FRESHNESS_LABEL[s.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown).tone}`}>
                     {(FRESHNESS_LABEL[s.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown).ar}
                   </td>
-                  <td className="tnum p-2.5 text-text-secondary">{s.last_sync_at ? new Date(s.last_sync_at).toLocaleString('en-GB') : '—'}</td>
+                  <td className="tnum p-2.5 text-text-secondary">{s.last_sync_at ? fmtDateTime(s.last_sync_at) : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -1214,7 +1215,7 @@ function SnapshotAge({ data }: { data: ReportData }) {
         <>
           لقطة بتاريخ{' '}
           <span className="tnum font-semibold text-text-primary" dir="ltr">
-            {stamp?.toLocaleString('en-GB')}
+            {fmtDateTime(stamp?.toISOString() ?? null)}
           </span>
           {' '}— الأرقام كما كانت في ذلك الوقت، وليست أداءً حاليًا
         </>

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { fmtDateTime } from '@/lib/datetime'
 import { AlertTriangle } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { money, num, ratio } from '@/features/analytics/format'
@@ -245,7 +246,7 @@ export function UnifiedCampaignOverview({
           <StatusBadge status={vm.dataStatus} variant={variant} words={w} />
         </div>
         <div className={`flex items-center gap-3 text-xs ${c.muted}`}>
-          <span>{w.lastSync}: {vm.lastSyncAt ? new Date(vm.lastSyncAt).toLocaleString('en-GB') : '—'}</span>
+          <span>{w.lastSync}: {vm.lastSyncAt ? fmtDateTime(vm.lastSyncAt) : '—'}</span>
           {headerRight}
         </div>
       </div>

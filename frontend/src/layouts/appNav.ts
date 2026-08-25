@@ -1,6 +1,17 @@
 import {
-  BarChart3, BellRing, CreditCard, FolderKanban, FolderOpen, Images,
-  LayoutDashboard, ListChecks, Megaphone, Plug, Settings, TrendingUp,
+  BarChart3,
+  BellRing,
+  CreditCard,
+  FolderKanban,
+  FolderOpen,
+  Images,
+  LayoutDashboard,
+  Lightbulb,
+  ListChecks,
+  Megaphone,
+  Plug,
+  Settings,
+  TrendingUp,
 } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
@@ -52,6 +63,7 @@ export const appNavGroups: readonly NavGroup[] = [
     leaves: [
       { to: '/app/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp, ent: 'analytics' },
       { to: '/app/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, ent: 'reports' },
+      { to: '/app/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb, ent: 'analytics' },
       { to: '/app/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing, ent: 'alerts' },
     ],
   },
