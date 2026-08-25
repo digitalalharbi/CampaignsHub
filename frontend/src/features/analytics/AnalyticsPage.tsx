@@ -659,7 +659,8 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
             rowCostPer(r, 'cpa', 'conversions'),
             rowRoas(r),
             percent(r.ctr, 2),
-            money(r.cpm),
+            // Derived from spend, so it carried spend's withholding — missed when this row was fixed.
+            rowCostPer(r, 'cpm', Number(r.impressions ?? 0) / 1000),
             percent(r.spend_share, 1),
           ])}
         />
@@ -704,11 +705,18 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
           rows={rows.map((r) => [
             <span key="n" className="font-semibold text-text-primary">{r.campaign_name ?? '—'}</span>,
             <PlatformCell key="p" provider={r.provider} />,
-            money(r.spend),
-            money(r.revenue),
+            /*
+             * MONEY-TRUTH-002, continued — this table sits directly beneath the platform table that
+             * was fixed for exactly this, and was left reading the raw fields. On an account whose
+             * money is withheld every campaign ranked as having spent 0 with a 0.00× return, in a
+             * ranking ordered BY spend, under a card stating the real total. Same rows, same
+             * provenance fields, same readers.
+             */
+            rowMoney(r, 'spend'),
+            rowMoney(r, 'revenue'),
             num(r.conversions),
-            money(r.cpa),
-            <span key="ro" className="tnum font-semibold">{ratio(r.roas)}</span>,
+            rowCostPer(r, 'cpa', 'conversions'),
+            <span key="ro" className="tnum font-semibold">{rowRoas(r)}</span>,
           ])}
         />
       </Panel>
@@ -720,6 +728,23 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const f = useFunnel(projectId, range, filters)
   const rows = f.data ?? []
+
+  /*
+   * FUNNEL-WITHHELD-001 (frontend half) — the unit the stage costs are in.
+   *
+   * Every `cost_per` divides the window's spend, and that spend is not always in the project's
+   * currency: when no rate exists it is the platform's own. `money()` defaults to SAR, so «تكلفة
+   * 22.03 SAR» appeared against dollars.
+   *
+   * Read from the summary rather than plumbed through the funnel's `meta`, because it is the same
+   * spend over the same window and the money contract already answers «what currency is this
+   * project's spend actually in» — a second path to the same answer is how two surfaces come to
+   * disagree.
+   */
+  // Named `summary`, not `s`: the stage rows below are mapped as `s`, and the shadow compiles.
+  const summary = useSummary(projectId, range, filters)
+  const spendReading = readMoney(summary.data?.current as Record<string, unknown> | undefined, 'spend', summary.data?.currency ?? null, ar)
+  const costCurrency = spendReading.currency ?? summary.data?.currency ?? undefined
   /*
    * FUNNEL-NULL-001 — scaled against the largest REPORTED count, not `rows[0].count`.
    *
@@ -753,7 +778,7 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
             )}
             <div className="w-40 shrink-0 text-end text-xs text-text-muted">
               {s.step_rate !== null && <span>{ar ? 'انتقال' : 'step'} {percent(s.step_rate, 0)}</span>}
-              {s.cost_per !== null && <span className="ms-2">{ar ? 'تكلفة' : 'cost'} {money(s.cost_per)}</span>}
+              {s.cost_per !== null && <span className="ms-2">{ar ? 'تكلفة' : 'cost'} {money(s.cost_per, costCurrency)}</span>}
             </div>
           </div>
         ))}

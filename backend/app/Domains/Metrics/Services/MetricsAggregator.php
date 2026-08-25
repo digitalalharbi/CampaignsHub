@@ -935,10 +935,30 @@ final class MetricsAggregator
         ];
         // Deliberately NOT wrapped in COALESCE — see the note above. The null IS the answer.
         $selects = array_map(fn ($s) => "SUM(value) FILTER (WHERE metric_key = '{$s}') AS {$s}", $stages);
+        /*
+         * FUNNEL-WITHHELD-001 — every `cost_per` on this chart divides this number.
+         *
+         * Coalesced to 0, so on an account whose money awaits a rate the funnel reported a cost of
+         * 0 for every stage — «0 per purchase» beside 218 purchases — while the KPI strip above it
+         * stated 4,803.17 USD. The withheld original is carried alongside, as `totals()` and now
+         * `budgetPacing()` both do, and the stage costs divide whichever figure is real.
+         */
         $selects[] = "COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'), 0) AS spend";
+        $selects[] = "COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_withheld_rows";
+        $selects[] = "COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0) AS spend_original";
+        $selects[] = "MIN(original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currency";
+        $selects[] = "COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currencies";
         $row = (array) $this->base($from, $to)->selectRaw(implode(', ', $selects))->first();
 
-        $spend = (float) ($row['spend'] ?? 0);
+        $converted = (float) ($row['spend'] ?? 0);
+        $withheldRows = (int) ($row['spend_withheld_rows'] ?? 0);
+        $original = (float) ($row['spend_original'] ?? 0);
+        $oneCurrency = (int) ($row['spend_original_currencies'] ?? 0) === 1;
+
+        // The figure that is real. A withheld total is only nameable when its rows agree on a currency.
+        $spendWithheld = $converted <= 0.0 && $withheldRows > 0 && $original > 0.0 && $oneCurrency;
+        $spend = $spendWithheld ? $original : $converted;
+        $spendCurrency = $spendWithheld ? ($row['spend_original_currency'] ?? null) : null;
         $out = [];
         $prev = null;
         $prevStage = null;
@@ -988,7 +1008,16 @@ final class MetricsAggregator
             }
         }
 
-        return ['stages' => $out, 'spend' => round($spend, 2)];
+        return [
+            'stages' => $out,
+            'spend' => round($spend, 2),
+            /*
+             * The unit the spend and every `cost_per` are in. Null means the reporting currency;
+             * a name means the platform's own, because no rate exists to convert it yet.
+             */
+            'spend_currency' => $spendCurrency,
+            'spend_withheld' => $spendWithheld,
+        ];
     }
 
     /**
