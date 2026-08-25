@@ -14,11 +14,24 @@ import { useUi } from '@/stores/ui'
 /** Server error key → input id, so the ErrorSummary can focus the offending control. */
 const GENERAL_FIELD_IDS: Record<string, string> = { name: 'org-name', 'general.logo_url': 'logo', 'general.contact_email': 'cemail' }
 
-const ACCOUNT_LABELS: Record<string, { ar: string; en: string }> = {
-  agency: { ar: 'وكالة', en: 'Agency' },
+/**
+ * SETTINGS-ACCOUNT-TYPE-001 — every value `AccountType` can send, labelled.
+ *
+ * This map was written against a guessed key list and drifted from the enum: it carried `in_house`
+ * where PHP says `in_house_team`, and had no entry at all for `self_serve_company`. The select falls
+ * back to the raw value, so two of the five options rendered as `in_house_team` and
+ * `self_serve_company` — database keys, in a dropdown, on the settings page.
+ *
+ * The keys are the cases of `backend/app/Domains/Accounts/Enums/AccountType.php`, which the API
+ * returns verbatim from `AccountType::values()`. `GeneralTab.test.tsx` asserts this map covers them
+ * all, so a case added there fails a test instead of quietly reaching a customer as an identifier.
+ */
+export const ACCOUNT_LABELS: Record<string, { ar: string; en: string }> = {
   freelancer: { ar: 'مستقل', en: 'Freelancer' },
-  in_house: { ar: 'فريق داخلي', en: 'In-house team' },
+  agency: { ar: 'وكالة', en: 'Agency' },
+  in_house_team: { ar: 'فريق تسويق داخلي', en: 'In-house team' },
   brand: { ar: 'علامة تجارية', en: 'Brand' },
+  self_serve_company: { ar: 'شركة تدير حساباتها بنفسها', en: 'Self-serve company' },
 }
 const NUMBER_LABELS: Record<string, { ar: string; en: string }> = {
   latin: { ar: 'أرقام لاتينية (123)', en: 'Latin digits (123)' },
