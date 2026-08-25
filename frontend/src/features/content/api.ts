@@ -140,6 +140,14 @@ export interface CreativeCard {
   /** The metrics this creative is judged on, chosen by its objective — never a fixed KPI set. */
   headline_metrics: string[]
   metrics: CreativeMetrics | null
+  /**
+   * Whether this creative's AD delivered in the window — a fact about the AD, never a figure.
+   *
+   * It decides which sentence an empty card gets: a creative whose ad ran while the platform named
+   * no creative-level figures did not «fail to run», and saying so is false in the direction that
+   * costs money. No ad metric is copied onto the creative anywhere (CONTENT-AD-DELIVERED-001).
+   */
+  ad_delivered: boolean
   fatigue: CreativeFatigue
 }
 

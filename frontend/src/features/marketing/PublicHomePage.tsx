@@ -6,6 +6,7 @@ import {
   Megaphone, ShieldCheck, Sparkles, Target, UserCircle, Wallet,
 } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
+import { FooterContact } from './FooterContact'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { HeroSection } from './HeroSection'
 import { journeyTo } from './journeys'
@@ -460,10 +461,8 @@ export function PublicHomePage() {
               <span className="font-heading font-extrabold">CampaignsHub</span>
             </div>
             <p className="mt-3 max-w-sm text-sm leading-relaxed text-text-secondary">{c.footer.tagline}</p>
-            <p className="mt-3 text-sm text-text-secondary">
-              {c.footer.contactLabel}:{' '}
-              <a href={`mailto:${c.footer.email}`} className="font-semibold text-brand-600 hover:underline" dir="ltr">{c.footer.email}</a>
-            </p>
+
+            <FooterContact locale={locale} />
           </div>
 
           {c.footer.groups.map((group) => (

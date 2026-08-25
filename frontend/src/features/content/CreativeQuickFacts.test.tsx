@@ -51,6 +51,7 @@ const card = (): CreativeCard => ({
   objective: 'sales',
   path: 'conversion',
   headline_metrics: ['spend', 'conversions', 'cpa', 'roas'],
+  ad_delivered: false,
   metrics: metrics(),
   fatigue: { status: 'watch', signals: [], reason_ar: 'انخفض معدل النقر', reason_en: 'CTR has fallen' },
 })

@@ -70,6 +70,23 @@ final class MetricsController extends Controller
              */
             'reported' => $this->scoped($request)->reportedKeys($from, $to),
             /*
+             * METRICS-EMPTY-SCOPE-001 — «no rows here» is not «the platform does not report this».
+             *
+             * `reportedKeys()` answers by asking which metric keys are PRESENT in the scope, so an
+             * empty scope returns every key false — and the strip renders «لم ترسله المنصة» under
+             * each one. Narrow the objective filter to a family this project never bought and the
+             * dashboard states that the platform sends no impressions, which is a claim about a
+             * connector derived from an absence of campaigns.
+             *
+             * That is what «تغيير الأهداف يجعل كل شيء فارغًا» looks like from the inside: not a
+             * broken screen, a screen confidently saying something false.
+             *
+             * So the payload carries whether the SCOPE holds anything at all. A reader with no rows
+             * shows one honest sentence about the filter; only a scope that HAS rows may speak about
+             * what the platform did or did not report inside it.
+             */
+            'rows_in_scope' => $this->scoped($request)->hasRows($from, $to),
+            /*
              * MONEY-TRUTH-001 — the currency the converted figures are IN.
              *
              * It was in `meta` only, and `meta` is not carried through the summary hook, so every

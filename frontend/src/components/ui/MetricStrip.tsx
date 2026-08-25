@@ -266,6 +266,7 @@ export function MetricStrip({
   secondary = [],
   comparisonLabel,
   note,
+  hasRows,
 }: {
   id: string
   ar: boolean
@@ -277,8 +278,52 @@ export function MetricStrip({
   comparisonLabel?: string
   /** Freshness, a caveat, whatever the row needs said beside it rather than under each card. */
   note?: string
+  /**
+   * METRICS-EMPTY-SCOPE-001 — whether the current filters match any row at all.
+   *
+   * `false` replaces the whole row with one sentence about the FILTER. Left undefined by callers
+   * that have no scope to speak of, which keeps every existing use unchanged.
+   */
+  hasRows?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
+
+  /*
+   * An empty scope has no standing to describe a connector.
+   *
+   * Every card's absence is read from `reported`, which answers «which metric keys are present in
+   * this scope» — so with no rows at all it answers every key false and fourteen cards say «لم
+   * ترسله المنصة». That is a claim about Meta and Snapchat derived from an absence of CAMPAIGNS,
+   * and it is what «تغيير الأهداف يجعل كل شيء فارغًا» looks like from the inside: not a broken
+   * screen, a screen confidently saying something false.
+   *
+   * One true sentence about the filter replaces all of them.
+   */
+  if (hasRows === false) {
+    return (
+      <section data-testid={`${id}-metrics`} className="space-y-2">
+        {(comparisonLabel || note) && (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-text-secondary">
+            {comparisonLabel && <span data-testid={`${id}-metrics-comparison`}>{comparisonLabel}</span>}
+            {note && <span data-testid={`${id}-metrics-note`}>{note}</span>}
+          </div>
+        )}
+        <div
+          data-testid={`${id}-metrics-empty-scope`}
+          className="rounded-xl border border-dashed border-border bg-surface-secondary/40 px-4 py-6 text-center"
+        >
+          <p className="text-sm font-semibold text-text-primary">
+            {ar ? 'لا توجد بيانات ضمن هذه الفلاتر' : 'No data matches these filters'}
+          </p>
+          <p className="mt-1 text-xs text-text-secondary">
+            {ar
+              ? 'جرّب توسيع الفترة أو تغيير الهدف أو المنصة. هذا ليس نقصًا في بيانات المنصة.'
+              : 'Try widening the period, or changing the objective or platform. This is not a gap in the platform’s data.'}
+          </p>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section data-testid={`${id}-metrics`} className="space-y-2">

@@ -425,6 +425,21 @@ final class MetricsAggregator
      *
      * @return array<string, bool>
      */
+    /**
+     * Whether this SCOPE holds any metric row at all in the window.
+     *
+     * Separate from `reportedKeys()` on purpose, and asked before it. That method answers «which
+     * metric keys are present», which is a question about the platform — and over an empty scope it
+     * answers every key false, which a reader renders as «the platform does not report this». An
+     * empty scope has no standing to say anything about a connector.
+     *
+     * `exists()` rather than a count: the caller only needs to know whether to speak.
+     */
+    public function hasRows(Carbon $from, Carbon $to): bool
+    {
+        return $this->base($from, $to)->exists();
+    }
+
     public function reportedKeys(Carbon $from, Carbon $to): array
     {
         $present = $this->base($from, $to)

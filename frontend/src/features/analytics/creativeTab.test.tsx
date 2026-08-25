@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { AnalyticsPage } from './AnalyticsPage'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
@@ -35,8 +35,12 @@ const CREATIVE = {
   },
 }
 
+const requested: string[] = []
+
 function route(creatives: unknown[]) {
+  requested.length = 0
   vi.mocked(getData).mockImplementation(async (url: string) => {
+    requested.push(url)
     if (url.includes('/creatives')) return { creatives, currency: 'SAR', page: 1, per_page: 24, total: creatives.length, period: { from: '', to: '' }, filters: {} } as never
     if (url.includes('/summary')) return { current: {}, previous: {}, delta: {}, currency: 'SAR', provenance: { source: 'live', live_rows: 1, demo_rows: 0 } } as never
     if (url.includes('disclaimer')) return null as never
@@ -46,9 +50,19 @@ function route(creatives: unknown[]) {
 
 async function openCreative() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-  fireEvent.click(await screen.findByText('Creative analysis'))
+  fireEvent.click(await screen.findByRole('tab', { name: 'Creative' }))
 }
 
+/**
+ * ANALYTICS-CREATIVE-SCOPE-001 — the tab took only `projectId` and `range`.
+ *
+ * So selecting TikTok left it listing META creatives with Meta's figures, under a filter bar that
+ * said TikTok. The filter was not weak here, it was decorative — and a table that contradicts the
+ * control above it is worse than an empty one, because the reader cannot tell which is lying.
+ *
+ * Asserted on the REQUEST rather than on the rows: what matters is that the choice reaches the
+ * server, and a fixture that returns the same rows either way would pass a row assertion.
+ */
 describe('the creative analysis tab', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -88,5 +102,24 @@ describe('the creative analysis tab', () => {
 
     expect(table).toHaveTextContent('—')
     expect(table).not.toHaveTextContent('0.00%')
+  })
+})
+
+describe('the creative tab and the filter bar', () => {
+  it('sends the chosen platform to the server instead of ignoring it', async () => {
+    route([])
+    renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('tab', { name: 'Creative' }))
+
+    await waitFor(() => expect(requested.some((u) => u.includes('/creatives'))).toBe(true))
+
+    fireEvent.click(screen.getByTestId('analytics-platform-tiktok'))
+
+    // The library speaks `providers`; the metrics API speaks `provider`. The translation is the
+    // point of the fix, so the assertion names the library's spelling.
+    await waitFor(() => {
+      const creativeCalls = requested.filter((u) => u.includes('/creatives'))
+      expect(creativeCalls.join(' | ')).toContain('providers')
+    })
   })
 })
