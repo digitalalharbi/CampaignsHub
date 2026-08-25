@@ -39,5 +39,5 @@ export function listRecommendations(
   if (filters.priority && filters.priority !== 'all') q.set('priority', filters.priority)
 
   const suffix = q.toString() ? `?${q}` : ''
-  return getData<Recommendation[]>(`/v1/projects/${projectId}/recommendations${suffix}`)
+  return getData<Recommendation[]>(`/projects/${projectId}/recommendations${suffix}`)
 }
