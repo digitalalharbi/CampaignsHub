@@ -651,7 +651,24 @@ export function DashboardPage() {
                       {t.unreported}
                     </div>
                   )}
-                  <span className="tnum w-12 text-end text-xs text-text-muted">{s.step_rate === null ? '' : percent(s.step_rate, 0)}</span>
+                  {/*
+                    FUNNEL-NOT-NESTED-001 — a step over 100% is flagged, not printed as a conversion.
+
+                    3,048 checkouts against 1,806 add-to-carts is 166%, and a funnel that widens is
+                    telling the reader these two events do not nest — not that 166% of people
+                    converted. The figure stays visible because it is real; the «▲» and the tooltip
+                    say why it is not a drop-off.
+                  */}
+                  <span
+                    className={`tnum w-12 text-end text-xs ${s.exceeds_previous ? 'text-warning' : 'text-text-muted'}`}
+                    title={s.exceeds_previous
+                      ? (ar
+                          ? 'هذه المرحلة أكبر من التي فوقها — الحدثان لا يتداخلان (شراء مباشر، أو نافذة إسناد مختلفة).'
+                          : 'This stage counted more than the one above it — the two events do not nest (buy-now flows, or a different attribution window).')
+                      : undefined}
+                  >
+                    {s.step_rate === null ? '' : `${s.exceeds_previous ? '▲ ' : ''}${percent(s.step_rate, 0)}`}
+                  </span>
                 </div>
                 )
               })

@@ -232,6 +232,46 @@ final class MetricsTest extends TestCase
      * The window with rows is asserted in the same test, because a flag that is always false would
      * pass a test that only ever looks at the empty case.
      */
+    /**
+     * FUNNEL-NOT-NESTED-001 — a stage that counted MORE than the one above it is not a drop-off.
+     *
+     * Production reports 3,048 checkouts against 1,806 add-to-carts. Both are real; the events do
+     * not nest — a buy-now flow reaches checkout without an add-to-cart, and each is attributed on
+     * its own window. A funnel assumes each stage is a subset of the one above, and for that pair
+     * the assumption is false.
+     *
+     * The screen printed «166%» as a conversion and «-66%» as a drop-off. The second is not a
+     * quantity that exists.
+     */
+    public function test_a_stage_larger_than_the_one_above_it_reports_no_drop_off(): void
+    {
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'impressions', 1000, '2026-06-01'),
+            $this->metric($this->projectA->id, 'clicks', 100, '2026-06-01'),
+            $this->metric($this->projectA->id, 'add_to_cart', 18, '2026-06-01'),
+            // More checkouts than baskets — exactly the shape production reports.
+            $this->metric($this->projectA->id, 'checkout', 30, '2026-06-01'),
+            $this->metric($this->projectA->id, 'purchases', 2, '2026-06-01'),
+        ]);
+
+        $stages = collect($this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/funnel?from=2026-06-01&to=2026-06-02")
+            ->assertOk()
+            ->json('data'))->keyBy('stage');
+
+        // The ratio is still reported — hiding it would hide a real fact about the account.
+        $this->assertEqualsWithDelta(30 / 18, (float) $stages['checkout']['step_rate'], 0.001);
+        $this->assertTrue($stages['checkout']['exceeds_previous']);
+
+        // But there was no drop, so none is claimed. «-66%» is not a quantity.
+        $this->assertNull($stages['checkout']['drop_off']);
+
+        // A stage that genuinely narrowed is untouched and still reports its drop.
+        $this->assertFalse($stages['purchases']['exceeds_previous']);
+        $this->assertNotNull($stages['purchases']['drop_off']);
+        $this->assertGreaterThan(0, (float) $stages['purchases']['drop_off']);
+    }
+
     public function test_the_summary_says_whether_the_scope_holds_anything_at_all(): void
     {
         app(UpsertDailyMetrics::class)->handle([

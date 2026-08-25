@@ -198,6 +198,18 @@ export interface FunnelStage {
    *  above it in theory. Null on the first reported stage, and on an unreported one. */
   from_stage: string | null
   step_rate: number | null
+  /**
+   * FUNNEL-NOT-NESTED-001 — this stage counted MORE than the one above it.
+   *
+   * Production reports 3,048 checkouts against 1,806 add-to-carts. Both figures are real; the events
+   * simply do not nest — a buy-now flow reaches checkout without an add-to-cart, and each event is
+   * attributed on its own window. A funnel assumes every stage is a subset of the one above, and for
+   * that pair the assumption is false.
+   *
+   * The screen used to print «166%» as a step and «-66%» as a drop-off, which is not a quantity.
+   */
+  exceeds_previous?: boolean
+  /** Null when the stage exceeded the one above it: there was no drop to measure. */
   drop_off: number | null
   cost_per: number | null
 }
