@@ -52,9 +52,17 @@ export function SettingsLayout() {
   const ar = useUi((s) => s.locale) === 'ar'
 
   return (
-    <div className="grid w-full gap-6 lg:grid-cols-[240px_1fr]">
-      <nav aria-label={ar ? 'إعدادات النظام' : 'System settings'} className="lg:sticky lg:top-20 lg:h-fit lg:self-start">
-        <div className="flex gap-3 overflow-x-auto pb-1 lg:flex-col lg:gap-4 lg:overflow-visible lg:pb-0">
+    <div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-[240px_1fr]">
+      {/*
+        SETTINGS-MOBILE-OVERFLOW-001 — the settings page scrolled sideways on a phone.
+
+        The row of section tabs already had `overflow-x-auto` to scroll within itself, and it could
+        not: a grid item's `min-width` defaults to `auto`, so this nav sized itself to its widest
+        content — 411px inside a 375px viewport — and took the whole page with it. `min-w-0` is what
+        lets the declared overflow actually clip, on the nav and on the scroller inside it.
+      */}
+      <nav aria-label={ar ? 'إعدادات النظام' : 'System settings'} className="min-w-0 lg:sticky lg:top-20 lg:h-fit lg:self-start">
+        <div className="flex min-w-0 gap-3 overflow-x-auto pb-1 lg:flex-col lg:gap-4 lg:overflow-visible lg:pb-0">
           {GROUPS.map((group) => (
             <div key={group.en} className="flex shrink-0 gap-1 lg:flex-col">
               <span className="hidden px-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-text-muted lg:block">
