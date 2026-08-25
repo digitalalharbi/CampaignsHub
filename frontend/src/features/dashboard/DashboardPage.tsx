@@ -31,6 +31,7 @@ import { dashboardMetrics } from '@/features/analytics/metricCatalog'
 import { dash, funnelStageLabel } from '@/features/analytics/metricLabels'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
+import { displaySpend, withheldCurrencyOf } from './platformMoney'
 import { MetricStrip } from '@/components/ui/MetricStrip'
 import { DataFreshness, PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
@@ -300,20 +301,63 @@ export function DashboardPage() {
    * `kpis` is empty on purpose: the objective-aware `MetricStrip` above owns the KPI row now, and
    * two rows of headline figures on one page is two answers to the same question.
    */
+  /*
+   * DASH-PLATFORM-MONEY-001 — three hardcoded values, all three visibly wrong on a live project.
+   *
+   * The summary card read «4,768.84 USD» and the platform comparison directly beneath it read
+   * «0 SAR», with an empty spend donut and a flat spend/revenue chart. One project, one window, two
+   * answers — and the reader has no way to know which to believe.
+   *
+   *   currency: 'SAR'   — this account reports in USD. The label was a guess, and it was wrong.
+   *   dataStatus: 'demo' — stamped «معاينة توضيحية ببيانات تجريبية» across a project holding 1,956
+   *                        live rows and zero demo rows. `ANALYTICS-PROVENANCE-001` made this badge
+   *                        derive from the data everywhere else; this call site never got the memo.
+   *   spend: p.spend    — the coalesced 0. `PlatformRow` extends `MoneyProvenance` and the backend
+   *                        has been sending `spend_original`, `spend_withheld_rows` and
+   *                        `money_original_currency` per provider all along. The view model dropped
+   *                        them on the floor.
+   *
+   * FX-001 withholds a converted figure when no rate exists rather than inventing one, so `spend` is
+   * legitimately 0 here. What was NOT legitimate was rendering that 0 under a currency this account
+   * does not report in, beside a card showing the true amount.
+   */
+  const platformRows = platforms.data ?? []
+
+  /*
+   * The currency the comparison is actually denominated in.
+   *
+   * When every row is withheld in one currency, that currency IS the figure's currency — and it is
+   * what the summary card above already prints. A mixture of originals has no single name, so the
+   * project's own currency stays and each withheld row falls back to «—» rather than being summed
+   * under a label that fits none of them.
+   */
+  const withheldCurrency = useMemo(() => withheldCurrencyOf(platformRows), [platformRows])
+
   const vm: OverviewVM = useMemo(
     () => ({
-      currency: 'SAR',
-      dataStatus: 'demo',
+      currency: withheldCurrency ?? summary.data?.currency ?? 'SAR',
+      /*
+       * Derived, like every other surface. `provenance.source` is `live` when the rows are the
+       * customer's own, and a live project carries no warning — which is the whole point of the
+       * badge existing.
+       */
+      /*
+       * `DataStatus` has three cases — demo, live, stale — and «mixed» is not one of them. A project
+       * holding demo rows BESIDE real ones must still carry the warning, because the totals add them
+       * together, so mixed maps to `demo` rather than being widened with a cast. A cast here would
+       * have put a value through the type that the badge has no branch for.
+       */
+      dataStatus: summary.data?.provenance?.source === 'live' ? 'live' : 'demo',
       lastSyncAt: lastSync ?? null,
       kpis: [],
-      platforms: (platforms.data ?? []).map((p) => ({
+      platforms: platformRows.map((p) => ({
         key: p.provider,
         name: p.provider,
-        spend: p.spend,
+        spend: displaySpend(p),
         results: 0,
         roas: p.roas ?? null,
       })),
-      spend: (platforms.data ?? []).map((p) => ({ name: p.provider, value: p.spend })),
+      spend: platformRows.map((p) => ({ name: p.provider, value: displaySpend(p) })),
       topCampaigns: (campaigns.data ?? []).slice(0, 6).map((c) => ({
         id: String(c.campaign_id),
         name: c.campaign_name ?? '—',
