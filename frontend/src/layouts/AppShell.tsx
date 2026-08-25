@@ -86,6 +86,23 @@ export function AppShell() {
   return (
     <PortalFrame
       railWidth={sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'}
+      /*
+        DASH-WIDTH-001 — the operational portal is not a reading measure.
+        
+        `PortalFrame` caps content at 1440px, which is right for a page of prose and wrong for this
+        one. On a 2000px screen it left roughly 560px of empty margin beside a dashboard whose whole
+        purpose is putting spend, platforms, the funnel and the campaign table in view together —
+        so the panels stacked into a tall column while a third of the screen sat unused.
+        
+        1920 rather than `none`: the cap still exists, because a KPI row stretched across an
+        ultrawide becomes four numbers separated by a hand-span, and a table row that wide costs the
+        eye the trip back to the campaign name. This is the widest layout the grid was designed for,
+        not the absence of one.
+        
+        The prop already existed for exactly this — «Portals with dense tables use the wide one».
+        This portal is the dense one and had never asked.
+      */
+      contentWidth="max-w-[1920px]"
       tabs={APP_TABS}
       moreGroups={moreGroups}
       /*
