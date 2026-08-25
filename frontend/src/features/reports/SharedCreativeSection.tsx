@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Image as ImageIcon, LayoutGrid, Lightbulb, Rows3, TrendingDown, TrendingUp, Video } from 'lucide-react'
@@ -756,14 +757,14 @@ function Freshness({ data, t }: { data: { freshness: CreativePulse['freshness'] 
       <span>
         <span className="text-text-muted">{t.freshness}:</span>{' '}
         <b className="tnum font-semibold text-text-primary" dir="ltr">
-          {f.last_synced_at ? new Date(f.last_synced_at).toLocaleString('en-GB') : t.noSync}
+          {f.last_synced_at ? fmtDateTime(f.last_synced_at) : t.noSync}
         </b>
       </span>
       {f.providers.map((p) => (
         <span key={p.provider}>
           <span className="text-text-muted capitalize">{p.provider}:</span>{' '}
           <b className="tnum font-semibold text-text-primary" dir="ltr">
-            {p.last_synced_at ? new Date(p.last_synced_at).toLocaleDateString('en-GB') : t.noSync}
+            {p.last_synced_at ? fmtDate(p.last_synced_at) : t.noSync}
           </b>
         </span>
       ))}

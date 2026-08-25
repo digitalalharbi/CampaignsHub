@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
   Bar,
   BarChart,
@@ -795,7 +796,7 @@ function QualityTab({ projectId, range, filters }: TabProps) {
         rows={rows.map((r) => [
           <PlatformCell key="p" provider={r.provider} />,
           r.latest_metric_date ?? '—',
-          r.last_sync_at ? new Date(r.last_sync_at).toLocaleString('en-GB') : '—',
+          r.last_sync_at ? fmtDateTime(r.last_sync_at) : '—',
           num(r.days_with_data),
           r.missing_days === null ? '—'
             : r.missing_days > 0 ? <span key="m" className="font-semibold text-warning">{r.missing_days}</span> : '0',
@@ -1367,7 +1368,7 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
                   <td className="p-2 tnum" dir="ltr">{metricOrDash(cr.metrics?.clicks ?? null)}</td>
                   <td className="p-2 tnum" dir="ltr">{rateOrDash(cr.metrics?.ctr ?? null)}</td>
                   <td className="p-2 text-text-secondary" dir="ltr">
-                    {cr.freshness?.last_active_at ? new Date(cr.freshness.last_active_at).toLocaleDateString('en-GB') : '—'}
+                    {cr.freshness?.last_active_at ? fmtDate(cr.freshness.last_active_at) : '—'}
                   </td>
                 </tr>
               ))}
