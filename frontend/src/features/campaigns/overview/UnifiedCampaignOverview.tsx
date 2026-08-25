@@ -226,6 +226,9 @@ export function UnifiedCampaignOverview({
   const isMarketing = variant === 'marketing'
   const lg = !compact // dashboard = larger, more readable typography; marketing preview stays compact
   const maxSpend = Math.max(1, ...vm.platforms.map((p) => p.spend))
+
+  /** The denominator the donut's own shares are read from — the same numbers its arcs are drawn from. */
+  const donutTotal = vm.spend.reduce((sum, d) => sum + (d.value > 0 ? d.value : 0), 0)
   const topN = isMarketing ? 3 : compact ? 4 : 6
   const donutH = isMarketing ? 150 : compact ? 168 : 208
   // Marketing is a COMPACT preview: 4 KPIs, platforms+donut side-by-side, 3 top campaigns — the deeper
@@ -272,57 +275,19 @@ export function UnifiedCampaignOverview({
       </div>
       )}
 
-      <div className={`grid gap-3 ${isMarketing ? 'sm:grid-cols-3' : compact ? '' : 'lg:grid-cols-3'}`}>
-        {/* Platform comparison (spend bars + ROAS) */}
-        <div className={`rounded-xl border p-3 ${c.card} ${isMarketing ? 'sm:col-span-2' : compact ? '' : 'lg:col-span-2'}`}>
-          <div className={`mb-2 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.platformComparison}</div>
-          <div className="space-y-2">
-            {vm.platforms.map((p) => (
-              <div key={p.key} className="flex items-center gap-2">
-                <span className={`flex w-20 shrink-0 items-center gap-1.5 ${lg ? 'text-sm' : 'text-xs'} ${c.sub}`}>
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: providerColor(p.key) }} />
-                  {providerName(p.key)}
-                </span>
-                <div className={`h-5 flex-1 overflow-hidden rounded-md ${c.track}`}>
-                  <div className="h-full rounded-md" style={{ width: `${Math.max(4, (p.spend / maxSpend) * 100)}%`, background: providerColor(p.key) }} />
-                </div>
-                <span className={`tnum w-20 text-end ${lg ? 'text-sm' : 'text-xs'} ${c.sub}`}>{money(p.spend, currency)}</span>
-                <span className={`tnum w-14 text-end text-xs font-semibold ${c.value}`}>{p.roas === null ? '—' : `${ratio(p.roas)}`}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Spend distribution donut */}
-        <div className={`rounded-xl border p-3 ${c.card}`}>
-          <div className={`mb-1 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.spendDistribution}</div>
-          <div style={{ height: donutH }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={vm.spend} dataKey="value" nameKey="name" innerRadius={compact ? 40 : 50} outerRadius={compact ? 64 : 80} paddingAngle={2}>
-                  {vm.spend.map((d) => (
-                    <Cell key={d.name} fill={providerColor(d.name)} stroke={variant === 'marketing' ? 'transparent' : 'var(--surface)'} strokeWidth={2} />
-                  ))}
-                </Pie>
-                <Tooltip {...tooltip} formatter={(v: number) => money(v, currency)} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
       {/*
-        `min-w-0` on the grid ITEM is what makes the scroller below work (APP-100).
+        DASH-BAND-001 — «أي حملة» و«أي منصة» و«أين ذهب المال» في شريط واحد.
 
-        A grid item defaults to `min-width: auto`, so it refuses to shrink under its content: the
-        table's `min-w-[420px]` pushed this column to 420px on a 375px phone, the whole page went
-        with it, and `overflow-x-auto` never got the chance to clip anything. The heading and the
-        two panels beside it were dragged along, which is why the offending element looked like a
-        title rather than a table.
+        The campaign table sat a band below the two charts, so the three questions an operator opens
+        this page with were answered in two places and compared by scrolling. They share a row now.
+
+        The marketing preview keeps its old shape — comparison across two columns, table on a full
+        row beneath — because that variant is a narrow teaser with no room for a table beside two
+        charts.
       */}
-      <div className={`grid gap-3 ${compact ? '' : 'lg:grid-cols-3'}`}>
+      <div className={`grid gap-3 ${isMarketing ? 'sm:grid-cols-3' : compact ? '' : 'lg:grid-cols-3'}`}>
         {/* Top campaigns */}
-        <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:col-span-2'}`}>
+        <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${isMarketing ? 'sm:col-span-3' : ''}`}>
           <div className={`mb-1 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.topCampaigns}</div>
           <div className="overflow-x-auto">
             <table className={`w-full min-w-[420px] ${lg ? 'text-sm' : 'text-xs'}`}>
@@ -357,10 +322,95 @@ export function UnifiedCampaignOverview({
           </div>
         </div>
 
+        {/* Platform comparison (spend bars + ROAS) */}
+        <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${isMarketing ? 'sm:col-span-2' : ''}`}>
+          <div className={`mb-2 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.platformComparison}</div>
+          <div className="space-y-2">
+            {vm.platforms.map((p) => (
+              <div key={p.key} className="flex items-center gap-2">
+                <span className={`flex w-20 shrink-0 items-center gap-1.5 ${lg ? 'text-sm' : 'text-xs'} ${c.sub}`}>
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: providerColor(p.key) }} />
+                  {providerName(p.key)}
+                </span>
+                <div className={`h-5 flex-1 overflow-hidden rounded-md ${c.track}`}>
+                  <div className="h-full rounded-md" style={{ width: `${Math.max(4, (p.spend / maxSpend) * 100)}%`, background: providerColor(p.key) }} />
+                </div>
+                <span className={`tnum w-20 text-end ${lg ? 'text-sm' : 'text-xs'} ${c.sub}`}>{money(p.spend, currency)}</span>
+                <span className={`tnum w-14 text-end text-xs font-semibold ${c.value}`}>{p.roas === null ? '—' : `${ratio(p.roas)}`}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Spend distribution donut */}
+        <div className={`rounded-xl border p-3 ${c.card}`}>
+          <div className={`mb-1 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.spendDistribution}</div>
+          <div style={{ height: donutH }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={vm.spend} dataKey="value" nameKey="name" innerRadius={compact ? 40 : 50} outerRadius={compact ? 64 : 80} paddingAngle={2}>
+                  {vm.spend.map((d) => (
+                    <Cell key={d.name} fill={providerColor(d.name)} stroke={variant === 'marketing' ? 'transparent' : 'var(--surface)'} strokeWidth={2} />
+                  ))}
+                </Pie>
+                <Tooltip {...tooltip} formatter={(v: number) => money(v, currency)} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/*
+            DASH-DONUT-LEGEND-001 — the ring said which platform was biggest and never by how much.
+            
+            A donut without its shares is a shape: the reader can see Snapchat's arc is larger than
+            Meta's and cannot say whether that is 26% against 24% or 60% against 8% — which is the
+            only question the chart is asked. The share is computed from the same values the arcs are
+            drawn from, so the legend and the ring cannot disagree.
+            
+            Sorted by share, because a legend in arbitrary order makes the reader do the ranking the
+            chart exists to do for them.
+          */}
+          {donutTotal > 0 && (
+            <ul className="mt-2 space-y-1">
+              {[...vm.spend]
+                .filter((d) => d.value > 0)
+                .sort((a, b) => b.value - a.value)
+                .map((d) => (
+                  <li key={d.name} className={`flex items-center gap-2 ${lg ? 'text-xs' : 'text-[11px]'}`}>
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: providerColor(d.name) }} />
+                    <span className={`min-w-0 flex-1 truncate ${c.sub}`}>{providerName(d.name)}</span>
+                    <span className={`tnum shrink-0 font-semibold ${c.value}`}>
+                      {Math.round((d.value / donutTotal) * 100)}%
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/*
+        `min-w-0` on the grid ITEM is what makes the scroller below work (APP-100).
+
+        A grid item defaults to `min-width: auto`, so it refuses to shrink under its content: the
+        table's `min-w-[420px]` pushed this column to 420px on a 375px phone, the whole page went
+        with it, and `overflow-x-auto` never got the chance to clip anything. The heading and the
+        two panels beside it were dragged along, which is why the offending element looked like a
+        title rather than a table.
+      */}
+      {/*
+        DASH-BAND-001 — a row, not a column.
+
+        These panels were stacked in one column beside the campaign table. The table moved up into
+        the band above, which left them alone in a two-column grid with one column blank. A flex row
+        instead of a fixed column count keeps the row full whether the creatives panel renders or
+        not — `topCreatives` is conditional, so a `grid-cols-3` here would blank a third of the row
+        on every project without creative-grain data.
+      */}
+      <div>
         {/* Needs attention + key alerts + top creatives — dashboard detail only (hidden on the compact marketing preview) */}
         {!isMarketing && (
-        <div className="space-y-3">
-          <div className={`rounded-xl border p-3 ${c.card}`}>
+        <div className={`flex flex-col gap-3 ${compact ? '' : 'lg:flex-row lg:items-start'}`}>
+          <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:flex-1'}`}>
             <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.needsAttention}</div>
             {vm.needsAttention.length === 0 ? (
               <p className={`text-xs ${c.muted}`}>{w.nothingNeedsAttention}</p>
@@ -375,7 +425,7 @@ export function UnifiedCampaignOverview({
               </ul>
             )}
           </div>
-          <div className={`rounded-xl border p-3 ${c.card}`}>
+          <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:flex-1'}`}>
             <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.topAlerts}</div>
             {vm.alerts.length === 0 ? (
               <p className={`text-xs ${c.muted}`}>{w.noCriticalAlerts}</p>
@@ -391,7 +441,7 @@ export function UnifiedCampaignOverview({
             )}
           </div>
           {vm.topCreatives && vm.topCreatives.length > 0 && (
-            <div className={`rounded-xl border p-3 ${c.card}`}>
+            <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:flex-1'}`}>
               <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.topCreatives}</div>
               <ul className="space-y-1.5">
                 {vm.topCreatives.slice(0, 3).map((cr) => (
