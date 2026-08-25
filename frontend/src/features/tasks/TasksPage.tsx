@@ -120,7 +120,19 @@ export function TasksPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SummaryCard label={c.sum_total} value={summary.total} tone="brand" unknown={q.isError} />
         <SummaryCard label={c.sum_open} value={summary.open} tone="info" unknown={q.isError} />
-        <SummaryCard label={c.sum_overdue} value={summary.overdue} tone="danger" unknown={q.isError} />
+        {/*
+          ALERTS-COPY-001, on the tasks board — nothing overdue is good news, painted red.
+
+          `tone="danger"` was unconditional, so a team that is fully on schedule met a red card
+          announcing it. Colour is a judgement, and a red zero spends the reader's attention on the
+          one number that did not need it — which is how people learn to stop looking at red.
+        */}
+        <SummaryCard
+          label={c.sum_overdue}
+          value={summary.overdue}
+          tone={summary.overdue > 0 ? 'danger' : 'success'}
+          unknown={q.isError}
+        />
         <SummaryCard label={c.sum_done} value={summary.done} tone="success" unknown={q.isError} />
       </div>
 
