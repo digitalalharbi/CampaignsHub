@@ -65,6 +65,9 @@ export interface AttentionMetrics {
   impressions?: number | null
 }
 
+/** Any one of these above zero means figures ARE reaching this campaign, link or no link. */
+const MEASURABLE_KEYS = ['spend', 'conversions', 'leads', 'installs', 'clicks', 'impressions', 'engagements', 'reach'] as const
+
 /**
  * Rules are deliberately conservative: each one fires only when the data actually proves the problem.
  * "No metrics at all" is reported as an unknown-state flag rather than silently looking healthy —
@@ -76,12 +79,36 @@ export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefin
   const model = resultModel(c.objective)
   const results = model ? Number(m?.[model.metric] ?? 0) : null
 
+  /*
+   * CAMP-UNLINKED-001 — «لا يمكن قياس أدائها», on a campaign whose performance was on screen.
+   *
+   * The flag fired on `external_campaigns_count === 0` and asserted that nothing could be measured.
+   * But metrics reach a campaign through `unified_campaign_id`, which does not require an
+   * `external_campaigns` row — so a campaign showing 176 results and a 15.36× return was labelled
+   * unmeasurable in the same view that measured it.
+   *
+   * The link and the data are two different facts. Missing link with no data is the real problem the
+   * flag was written for. Missing link WITH data is a bookkeeping gap: the figures are trustworthy,
+   * and what is absent is the mapping that lets the platform's own campaign be opened beside them.
+   * Saying the second as though it were the first teaches readers to disbelieve the flag.
+   */
   if ((c.external_campaigns_count ?? 0) === 0) {
-    flags.push({
-      code: 'unlinked', severity: 'high',
-      ar: 'غير مرتبطة بأي حملة على منصة إعلانية — لا يمكن قياس أدائها',
-      en: 'Not linked to any ad-platform campaign — its performance cannot be measured',
+    const measured = MEASURABLE_KEYS.some((k) => {
+      const v = m?.[k]
+      return typeof v === 'number' && v > 0
     })
+
+    flags.push(measured
+      ? {
+          code: 'unlinked_but_measured', severity: 'medium',
+          ar: 'غير مرتبطة بحملة على منصة إعلانية — الأرقام تصل، لكن لا يمكن فتح الحملة على المنصة',
+          en: 'Not linked to an ad-platform campaign — the figures arrive, but the platform campaign cannot be opened beside them',
+        }
+      : {
+          code: 'unlinked', severity: 'high',
+          ar: 'غير مرتبطة بأي حملة على منصة إعلانية — لا يمكن قياس أدائها',
+          en: 'Not linked to any ad-platform campaign — its performance cannot be measured',
+        })
   }
 
   if (c.status === 'active' && spend === 0) {

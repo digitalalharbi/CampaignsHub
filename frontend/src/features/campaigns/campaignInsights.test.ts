@@ -27,10 +27,45 @@ describe('objective-aware results', () => {
 })
 
 describe('needs-attention rules', () => {
-  it('reports a campaign with no linked platform campaign as unmeasurable', () => {
-    const flags = attentionFlags(campaign({ external_campaigns_count: 0 }), { spend: 100, conversions: 5 })
+  /**
+   * CAMP-UNLINKED-001 — the link and the data are two different facts.
+   *
+   * This test used to pass `spend: 100, conversions: 5` and assert «unmeasurable», which is what
+   * the rule said and the opposite of what those figures mean. It pinned the claim in place: a
+   * campaign showing 176 results and a 15.36× return was labelled unmeasurable in the same view
+   * that measured it.
+   */
+  it('reports a campaign with no link AND no figures as unmeasurable', () => {
+    const flags = attentionFlags(campaign({ external_campaigns_count: 0 }), { spend: 0, conversions: 0 })
+
     expect(flags.map((f) => f.code)).toContain('unlinked')
     expect(flags.find((f) => f.code === 'unlinked')?.severity).toBe('high')
+  })
+
+  it('does not call a campaign unmeasurable while its figures are on the screen', () => {
+    const flags = attentionFlags(campaign({ external_campaigns_count: 0 }), { spend: 100, conversions: 5 })
+    const codes = flags.map((f) => f.code)
+
+    expect(codes).not.toContain('unlinked')
+    expect(codes).toContain('unlinked_but_measured')
+
+    // A bookkeeping gap, not a data outage — so it must not shout like one.
+    expect(flags.find((f) => f.code === 'unlinked_but_measured')?.severity).toBe('medium')
+    expect(flags.find((f) => f.code === 'unlinked_but_measured')?.ar).not.toContain('لا يمكن قياس')
+  })
+
+  it('counts any reported metric as evidence the figures arrive, not spend alone', () => {
+    // An awareness campaign with impressions and no spend recorded is still being measured.
+    const codes = attentionFlags(campaign({ external_campaigns_count: 0 }), { impressions: 5000 }).map((f) => f.code)
+
+    expect(codes).toContain('unlinked_but_measured')
+  })
+
+  it('says nothing about linking when a campaign IS linked', () => {
+    const codes = attentionFlags(campaign({ external_campaigns_count: 2 }), { spend: 100, conversions: 5 }).map((f) => f.code)
+
+    expect(codes).not.toContain('unlinked')
+    expect(codes).not.toContain('unlinked_but_measured')
   })
 
   it('flags spend with zero results using the objective’s own result metric', () => {
@@ -60,7 +95,14 @@ describe('needs-attention rules', () => {
   })
 
   it('ranks high-severity problems above a pile of minor ones', () => {
-    const high = attentionFlags(campaign({ external_campaigns_count: 0 }), { spend: 100, conversions: 4 })
+    /*
+      A campaign spending with nothing to show for it — high severity on its own merits.
+
+      This used to use an unlinked campaign carrying spend and conversions, which CAMP-UNLINKED-001
+      re-graded to medium: the figures arrive, only the mapping is missing. The ranking rule being
+      tested here is unchanged; the fixture just has to be a real high-severity case.
+    */
+    const high = attentionFlags(campaign({ external_campaigns_count: 3 }), { spend: 500, conversions: 0 })
     const minor = attentionFlags(campaign({ status: 'paused' }), { spend: 5, conversions: 1 })
     expect(attentionRank(high)).toBeGreaterThan(attentionRank(minor))
   })
