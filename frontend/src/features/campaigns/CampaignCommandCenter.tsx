@@ -32,7 +32,7 @@ import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, Platfo
  * The ratio goes in raw. If a figure ever arrives already scaled to 0–100, convert it at the source
  * rather than reintroducing a second multiplication here.
  */
-import { compact, money, moneyFromTotals, num, percent, ratio, rowCostPer, trend } from '@/features/analytics/format'
+import { compact, money, moneyFromTotals, num, percent, ratio, rowCostPer, rowMoney, rowRoas, trend } from '@/features/analytics/format'
 import { readRoas } from '@/lib/money/contract'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
@@ -224,8 +224,9 @@ export function CampaignPerformanceTab({ campaign, projectId, range, locale }: {
       </div>
       {bestWorst && (
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl border border-border bg-surface p-3"><span className="text-[11px] uppercase text-text-muted">أفضل يوم</span><div className="tnum text-sm font-bold">{bestWorst.best.date} · {money(bestWorst.best.revenue, cur)}</div></div>
-          <div className="rounded-xl border border-border bg-surface p-3"><span className="text-[11px] uppercase text-text-muted">أضعف يوم</span><div className="tnum text-sm font-bold">{bestWorst.worst.date} · {money(bestWorst.worst.revenue, cur)}</div></div>
+          {/* Daily revenue carries the same withholding as the total it sums into. */}
+          <div className="rounded-xl border border-border bg-surface p-3"><span className="text-[11px] uppercase text-text-muted">أفضل يوم</span><div className="tnum text-sm font-bold">{bestWorst.best.date} · {rowMoney(bestWorst.best as never, 'revenue', cur)}</div></div>
+          <div className="rounded-xl border border-border bg-surface p-3"><span className="text-[11px] uppercase text-text-muted">أضعف يوم</span><div className="tnum text-sm font-bold">{bestWorst.worst.date} · {rowMoney(bestWorst.worst as never, 'revenue', cur)}</div></div>
         </div>
       )}
     </div>
@@ -411,7 +412,7 @@ export function CampaignPlatformsTab({
   onUnlink: (externalId: string) => void; unlinkingId?: string; canUpdate: boolean
 }) {
   const platforms = useCampaignPlatforms(projectId, campaign.id, range)
-  const cur = campaign.budget_currency || 'SAR'
+  // The platform figures below state their own currency now, so the plan's unit is not needed here.
 
   // Only providers that have a linked external campaign appear (never an unlinked platform).
   const providers = useMemo(() => [...new Set(linked.map((e) => e.provider))], [linked])
@@ -450,10 +451,20 @@ export function CampaignPlatformsTab({
                 <span className="text-[11px] text-text-muted">آخر مزامنة: {lastSync ? fmtDate(lastSync) : '—'}</span>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <MiniStat label="الإنفاق" value={money(Number(m?.spend ?? 0), cur)} />
+                {/*
+                  MONEY-TRUTH-002 — the per-platform panel read the raw fields, and named them with
+                  the BUDGET's currency.
+
+                  Two mistakes in one cell: `m.spend` is the aggregator's coalesced 0 on a withheld
+                  row, and `cur` is `campaign.budget_currency` — the unit of the plan, not of the
+                  spend. A campaign budgeted in SAR whose platform reports USD showed the wrong
+                  figure under the wrong unit. `byProvider()` is the same query the analytics
+                  Platforms tab reads, and it carries the provenance; these are its readers.
+                */}
+                <MiniStat label="الإنفاق" value={rowMoney(m, 'spend')} />
                 <MiniStat label="النتائج" value={num(m?.conversions ?? 0)} />
-                <MiniStat label="CPA" value={money(m?.cpa ?? null, cur)} />
-                <MiniStat label="ROAS" value={ratio(m?.roas ?? null)} />
+                <MiniStat label="CPA" value={rowCostPer(m, 'cpa', 'conversions')} />
+                <MiniStat label="ROAS" value={rowRoas(m)} />
                 <MiniStat label="المساهمة" value={m?.spend_share != null ? percent(m.spend_share, 0) : '—'} />
                 <MiniStat label="CTR" value={percent(m?.ctr ?? 0)} />
                 <MiniStat label="حملات خارجية" value={String(externals.length)} />
