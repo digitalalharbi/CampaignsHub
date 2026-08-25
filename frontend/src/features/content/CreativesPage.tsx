@@ -9,6 +9,7 @@ import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReas
 import { imageLoading } from './format'
 import { creativeMoney } from './creativeMoney'
 import { VideoPoster } from './VideoPoster'
+import { anyDisplayablePreview } from './previewPresence'
 import {
   groupCreatives,
   libraryQueryString,
@@ -116,6 +117,7 @@ const COPY = {
     grouped: 'مجمَّع عبر المنصات',
     cards: (n: number) => `${n} بطاقات`,
     noPreview: 'لا تتوفر معاينة',
+    noPreviewAll: 'لم تُرجع المنصة ملف أي محتوى في هذه النتيجة؛ الأرقام أدناه كاملة.',
     lastSync: 'آخر مزامنة',
     never: 'لم تتم بعد',
     showing: 'المعروض',
@@ -191,6 +193,7 @@ const COPY = {
     grouped: 'Grouped across platforms',
     cards: (n: number) => `${n} cards`,
     noPreview: 'No preview available',
+    noPreviewAll: 'The platform returned no creative file for anything in this result; the figures below are complete.',
     lastSync: 'Last sync',
     never: 'Not yet',
     showing: 'Showing',
@@ -411,6 +414,14 @@ export function CreativesPage() {
 
   const data = libraryQuery.data
   const creatives = data?.creatives ?? []
+
+  /**
+   * CONTENT-NO-PREVIEW-001 — does ANY creative in this result carry a displayable asset?
+   *
+   * Computed over the whole result rather than per card, because the question the layout is asking
+   * is «is the preview column worth reserving at all», and one card cannot answer it.
+   */
+  const anyPreview = useMemo(() => anyDisplayablePreview(creatives), [creatives])
   const options = data?.filters
   const total = data?.total ?? 0
   const perPage = data?.per_page ?? 24
@@ -712,6 +723,24 @@ export function CreativesPage() {
         </div>
       )}
 
+      {/*
+        CONTENT-NO-PREVIEW-001 — the same sentence, four times, in four large empty boxes.
+
+        Every card reserves a 16:9 panel for the asset. When the platform returns no asset for ANY
+        creative in the result — which is every Meta result today, because the ad API does not hand
+        back the creative file — the grid becomes rows of identical grey rectangles each repeating
+        «لا تتوفر معاينة», and the numbers people came for are pushed below the fold.
+    
+        The fact is not hidden: it is stated ONCE, above the grid, and the cards drop the reserved
+        panel so the metrics move up. A grid where SOME creatives have assets keeps every panel, so
+        the ones that are missing stay visibly missing rather than being quietly levelled.
+      */}
+      {creatives.length > 0 && view === 'grid' && !anyPreview && (
+        <p data-testid="creatives-no-previews" className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary">
+          {t.noPreview} — {t.noPreviewAll}
+        </p>
+      )}
+
       {creatives.length > 0 && view === 'grid' && (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {creatives.map((creative, index) => (
@@ -726,6 +755,7 @@ export function CreativesPage() {
                 selected={selected.includes(creative.id)}
                 onSelect={() => toggleSelected(creative.id)}
                 onOpen={() => setViewerIndex(index)}
+                showPreviewPanel={anyPreview}
                 detailsTo={`${creative.id}${libraryAddress}`}
               />
             </li>
@@ -940,9 +970,12 @@ function CreativeGridCard({
   selected,
   onSelect,
   onOpen,
+  showPreviewPanel = true,
   detailsTo,
 }: {
   creative: CreativeCard
+  /** False when nothing in the result has an asset — the reserved 16:9 panel is then dead space. */
+  showPreviewPanel?: boolean
   /** CREATIVE-MONEY-TRUTH-001 — stated by the payload, never assumed by the card. */
   currency: string | null
   /** CONTENT-STATE-SEMANTICS-001 — what the sync recorded for THIS creative's provider. */
@@ -981,7 +1014,7 @@ function CreativeGridCard({
           type="button"
           onClick={onOpen}
           aria-label={`${t.open}: ${creative.name}`}
-          className="block aspect-video w-full bg-surface-hover"
+          className={showPreviewPanel ? 'block aspect-video w-full bg-surface-hover' : 'block w-full bg-surface-hover'}
         >
           {poster ? (
             <img
@@ -1008,11 +1041,24 @@ function CreativeGridCard({
               className="h-full w-full object-cover"
               onUnavailable={() => setBrokenVideo(true)}
             />
-          ) : (
+          ) : showPreviewPanel ? (
             <span className="flex h-full flex-col items-center justify-center gap-1 p-3 text-center text-xs text-text-secondary">
               <span>{t.noPreview}</span>
               {note && <span className="text-[11px] opacity-80">{note}</span>}
             </span>
+          ) : (
+            /*
+             * CONTENT-NO-PREVIEW-001 — the PANEL goes, the reason stays.
+             *
+             * A first pass dropped this branch entirely and took the note with it. The absences are
+             * not interchangeable: «the platform does not hand back the file» and «the link carries
+             * a credential, so we will not show it» are different facts about this creative, and the
+             * second is one the reader needs in order to stop looking for the asset. One line, no
+             * reserved box.
+             */
+            note && (
+              <span className="block px-3 py-1.5 text-start text-[11px] text-text-secondary">{note}</span>
+            )
           )}
         </button>
 

@@ -16,7 +16,7 @@ import { ChartCard, PlatformDonutChart, ProgressRing, RankingBarChart, SpendReve
 import { useBudget, useCampaigns, usePlatforms, useSummary, useTimeseries } from '@/features/analytics/api'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { ProvenanceBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
-import { compact, money, num, ratio } from '@/features/analytics/format'
+import { compact, money, num, rowCostPer, rowRoas } from '@/features/analytics/format'
 import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
@@ -119,6 +119,29 @@ export function CampaignsPage() {
   const d = summary.data?.delta ?? {}
 
   /*
+   * CAMP-MONEY-001 — this row read the aggregator's zero, in a currency it assumed.
+   *
+   * `money(k?.cpa)` took the coalesced figure and formatted it with the helper's SAR default, so on
+   * an account reporting in USD with no rate available the card printed «0 SAR» over real spend —
+   * the defect MONEY-TRUTH-001 fixed on the dashboard and the analytics board, still shipping here.
+   * `ratio(k?.roas)` did the same one derivation down and printed «0.00x».
+   *
+   * Read through the canonical helpers, so this screen cannot disagree with the two that already
+   * read the same totals correctly.
+   */
+  const cpaText = rowCostPer(k, 'cpa', 'conversions', summary.data?.currency ?? null)
+  const roasText = rowRoas(k)
+
+  /*
+   * CAMP-COMPARE-001 — a delta is absent when there is nothing to compare against, not «unchanged».
+   *
+   * `undefined` removes the pill; `null` renders the «— —» that made a missing comparison window
+   * look like a flat month. Same reading the board uses, from the same field.
+   */
+  const comparable = summary.data?.previous_rows_in_scope !== false
+  const cmp = (v: number | null | undefined) => (comparable ? v ?? null : undefined)
+
+  /*
    * No project chosen yet — a CHOICE, not a broken page (AGENCY-006).
    *
    * Reached differently in each portal, which is why the copy names the control rather than the
@@ -164,11 +187,20 @@ export function CampaignsPage() {
       {/* Summary cards — CURRENT PROJECT only */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <StatCard label={ar ? 'نشطة' : 'Active'} value={String(counts.active ?? 0)} sub={ar ? `${counts.total} إجمالًا` : `${counts.total} in total`} tone="success" />
-        <StatCard label={ar ? 'متوقفة' : 'Paused'} value={String(counts.paused ?? 0)} sub={ar ? 'تحتاج مراجعة' : 'Need a look'} tone="warning" />
+        {/*
+          CAMP-COPY-001 — «تحتاج مراجعة» under a zero asserted that nothing needed reviewing and
+          that it needed reviewing. The caption follows the count, and the warning tone with it.
+        */}
+        <StatCard
+          label={ar ? 'متوقفة' : 'Paused'}
+          value={String(counts.paused ?? 0)}
+          sub={(counts.paused ?? 0) > 0 ? (ar ? 'تحتاج مراجعة' : 'Need a look') : (ar ? 'لا شيء متوقف' : 'None paused')}
+          tone={(counts.paused ?? 0) > 0 ? 'warning' : undefined}
+        />
         <StatCard label={ar ? 'الميزانية' : 'Budget'} value={compact(budgetTotals.total)} sub={ar ? `مصروف ${compact(budgetTotals.spent)}` : `${compact(budgetTotals.spent)} spent`} />
-        <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={d.conversions} />
-        <StatCard label="CPA" value={money(k?.cpa ?? null)} delta={d.cpa} invert />
-        <StatCard label="ROAS" value={ratio(k?.roas ?? null)} delta={d.roas} />
+        <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
+        <StatCard label="CPA" value={cpaText} delta={cmp(d.cpa)} invert />
+        <StatCard label="ROAS" value={roasText} delta={cmp(d.roas)} />
       </div>
 
       {/* View switcher — the five modes of CAMPAIGN-010. */}
