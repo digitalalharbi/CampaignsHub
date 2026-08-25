@@ -9,6 +9,7 @@ import { RequireAuth } from '@/features/auth/RequireAuth'
 import { CampaignDetailPage } from '@/features/campaigns/CampaignDetailPage'
 import { CampaignsPage } from '@/features/campaigns/CampaignsPage'
 import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
+import { RecommendationsPage } from '@/features/recommendations/RecommendationsPage'
 import { LeadsPage } from '@/features/crm/LeadsPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
@@ -304,6 +305,13 @@ export const router = createBrowserRouter(withErrorBoundary([
            */
           { path: 'dashboard', element: <AnalyticsPage surface="dashboard" /> },
           { path: 'analytics', element: <AnalyticsPage /> },
+          /*
+           * RECOMMENDATIONS-001 — this address answered 404 while the records existed.
+           *
+           * Every recommendation carried a priority, an owner, a due date and an evidence line, and
+           * was reachable only by opening its campaign. The field was written and never acted on.
+           */
+          { path: 'recommendations', element: <RecommendationsPage /> },
           { path: 'system', element: <SystemStatusPage /> },
           { path: 'projects', element: <ProjectsPage /> },
           { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
