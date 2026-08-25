@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import { attributionWindow } from './attributionWindow'
+import { providerLabel } from '@/features/campaigns/labels'
+import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDateTime } from '@/lib/datetime'
 import { ArrowRight, ChevronLeft, ChevronRight, CircleCheck, Image as ImageIcon, Info, LayoutGrid, OctagonAlert, Rows, TriangleAlert, Trophy } from 'lucide-react'
 import {
@@ -365,7 +368,7 @@ function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
       <div>
         <div className="text-sm opacity-80">{meta.clientName ?? 'تقرير الأداء'}</div>
         <h1 className="mt-1 text-4xl font-extrabold sm:text-5xl">{meta.reportName}</h1>
-        <div className="mt-3 flex flex-wrap gap-2">{meta.platforms.map((p) => <span key={p} className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold">{p}</span>)}</div>
+        <div className="mt-3 flex flex-wrap gap-2">{meta.platforms.map((p) => <span key={p} className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold">{providerLabel(canonicalPlatform(p), 'ar')}</span>)}</div>
       </div>
       <div className="flex flex-wrap gap-4 text-sm opacity-90">
         <span>الفترة: <span className="tnum">{data.period.from} → {data.period.to}</span></span>
@@ -396,7 +399,7 @@ function NoteCard({ note }: { note: NoteCardData }) {
         </div>
         {note.detail && <p className="mt-0.5 text-xs leading-relaxed text-text-secondary">{note.detail}</p>}
         <div className="mt-1 flex flex-wrap gap-1.5">
-          {note.platform && <span className="inline-flex items-center gap-1 text-[11px] text-text-muted"><span className="h-2 w-2 rounded-full" style={{ background: platformColor(note.platform) }} />{note.platform}</span>}
+          {note.platform && <span className="inline-flex items-center gap-1 text-[11px] text-text-muted"><span className="h-2 w-2 rounded-full" style={{ background: platformColor(note.platform) }} />{providerLabel(canonicalPlatform(note.platform), 'ar')}</span>}
           {note.kpi && <span className="text-[11px] text-text-muted">· {note.kpi}</span>}
         </div>
       </div>
@@ -1220,8 +1223,9 @@ function SnapshotAge({ data }: { data: ReportData }) {
           {' '}— الأرقام كما كانت في ذلك الوقت، وليست أداءً حاليًا
         </>
       )}
+      {/* ATTRIBUTION-WINDOW-001 — the reader of this footer cannot decode a platform's parameter name. */}
       {data.attribution_window ? (
-        <span className="ms-2 opacity-80">· أساس الإسناد: {data.attribution_window}</span>
+        <span className="ms-2 opacity-80">· أساس الإسناد: {attributionWindow(data.attribution_window, true).text}</span>
       ) : null}
 
       {/*

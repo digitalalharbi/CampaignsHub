@@ -3,6 +3,8 @@ import { CheckCircle2, EyeOff, XCircle } from 'lucide-react'
 import { listAnnotations, setAnnotationStatus, type ReportAnnotation } from './api'
 import { Skeleton } from '@/components/ui/States'
 import { platformColor } from '@/features/analytics/components'
+import { providerLabel } from '@/features/campaigns/labels'
+import { canonicalPlatform } from '@/lib/platforms'
 
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   draft: { label: 'مسودة', cls: 'bg-surface-secondary text-text-muted' },
@@ -37,7 +39,8 @@ export function AnnotationsPanel({ projectId, reportId }: { projectId: string; r
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold text-text-primary">{a.text_ar ?? '—'}</div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-text-muted">
-                  {a.platform && <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: platformColor(a.platform) }} />{a.platform}</span>}
+                  {/* The dot was localized and the word was not — «meta · العائد على الإنفاق». */}
+                  {a.platform && <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: platformColor(a.platform) }} />{providerLabel(canonicalPlatform(a.platform), 'ar')}</span>}
                   {a.kpi && <span>· {a.kpi}</span>}
                   <span className={`rounded-full px-1.5 py-0.5 font-semibold ${s.cls}`}>{s.label}</span>
                 </div>
