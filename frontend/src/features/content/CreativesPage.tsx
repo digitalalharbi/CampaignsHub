@@ -238,10 +238,27 @@ const FATIGUE_LABEL: Record<FatigueStatus, { ar: string; en: string }> = {
   insufficient_data: { ar: 'بيانات غير كافية', en: 'Insufficient data' },
 }
 
-const KIND_LABEL: Record<string, { ar: string; en: string }> = {
+/**
+ * CONTENT-KIND-LABEL-001 — the creative's type, in words.
+ *
+ * The library badge has always said «فيديو»; the creative DETAIL page rendered `preview.kind`
+ * straight, so opening a creative to read about it showed «نوع المحتوى video» — the one screen
+ * dedicated to describing an asset naming its type in the database's words.
+ *
+ * Exported so the detail page reads this map rather than growing a second one three lines long,
+ * which is how the label maps in this codebase have drifted every previous time.
+ */
+export const KIND_LABEL: Record<string, { ar: string; en: string }> = {
   image: { ar: 'صورة', en: 'Image' },
   video: { ar: 'فيديو', en: 'Video' },
   carousel: { ar: 'دوّار', en: 'Carousel' },
+}
+
+/** An unknown kind shows as itself: a format the product does not recognise is worth seeing. */
+export function creativeKindLabel(kind: string | null | undefined, ar: boolean): string {
+  if (!kind) return '—'
+  const label = KIND_LABEL[kind]
+  return label ? (ar ? label.ar : label.en) : kind
 }
 
 /**
