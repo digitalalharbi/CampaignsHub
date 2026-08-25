@@ -1,4 +1,4 @@
-import { moneyState, type MoneyTotals } from '@/lib/money/contract'
+import { moneyState, spendComparableAmount, type MoneyTotals } from '@/lib/money/contract'
 import type { UnifiedCampaign } from './types'
 
 /**
@@ -79,7 +79,7 @@ const MEASURABLE_KEYS = ['spend', 'conversions', 'leads', 'installs', 'clicks', 
  * "No metrics at all" is reported as an unknown-state flag rather than silently looking healthy —
  * but it is never dressed up as a performance problem.
  */
-export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefined): AttentionFlag[] {
+export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefined, reportingCurrency?: string | null): AttentionFlag[] {
   const flags: AttentionFlag[] = []
   const model = resultModel(c.objective)
   const results = model ? Number(m?.[model.metric] ?? 0) : null
@@ -97,13 +97,14 @@ export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefin
    */
   const spendMoney = moneyState(m as MoneyTotals | undefined, 'spend')
   const spendReported = spendMoney.state !== 'zero' && spendMoney.state !== 'absent'
-  const budgetCurrency = (c.budget_currency ?? '').toUpperCase()
-  const spendAmount =
-    spendMoney.state === 'complete_converted' || spendMoney.state === 'zero'
-      ? spendMoney.converted ?? 0
-      : spendMoney.state === 'complete_withheld' && spendMoney.originalCurrency !== null && spendMoney.originalCurrency.toUpperCase() === budgetCurrency
-        ? spendMoney.original
-        : null
+  // The over-budget AMOUNT comparison needs a single spend figure in the BUDGET's currency — the same
+  // contract rule the command centre uses, never assuming reporting == budget currency.
+  const spendAmount = spendComparableAmount(
+    m as MoneyTotals | undefined,
+    'spend',
+    reportingCurrency ?? null,
+    c.budget_currency ?? null,
+  )
 
   /*
    * CAMP-UNLINKED-001 — «لا يمكن قياس أدائها», on a campaign whose performance was on screen.

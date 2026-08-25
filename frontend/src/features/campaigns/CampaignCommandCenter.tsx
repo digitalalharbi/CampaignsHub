@@ -33,7 +33,7 @@ import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, Platfo
  * rather than reintroducing a second multiplication here.
  */
 import { compact, money, moneyFromTotals, num, percent, ratio, rowCostPer, rowMoney, rowRoas, trend } from '@/features/analytics/format'
-import { moneyState, rankableMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
+import { rankableMoney, readRoas, spendComparableAmount, type MoneyTotals } from '@/lib/money/contract'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { providerLabel } from './labels'
@@ -49,20 +49,18 @@ function costLabel(objective: string): string {
 /**
  * PARTIAL-WITHHELD-001 — spend as ONE figure in the budget's currency, or null.
  *
- * Budget-vs-spend derivations (remaining, utilization, budget-risk) need a single spend total in the
- * same currency as the budget. A partial or mixed scope has no single figure, and a withheld spend
- * is in the platform's own currency — comparing it to a riyal budget is riyals-minus-dollars. Any of
- * those ⇒ null, and every caller must render «unavailable» rather than pace against a subset or a 0.
+ * Budget-vs-spend derivations (remaining, utilization, pacing, forecast, budget-risk) need a single
+ * spend total in the same currency as the budget. This delegates to the money contract rather than
+ * re-deciding comparability here: a converted total is in the project's REPORTING currency, which is
+ * not necessarily the campaign's budget currency, so the reporting currency has to be supplied and
+ * checked. Assuming the two match is how «المتبقي» came to be a riyal budget minus a dollar spend.
  */
-function spendInBudgetCurrency(totals: MoneyTotals | undefined, budgetCurrency: string): number | null {
-  const s = moneyState(totals, 'spend')
-  if (s.state === 'zero') return 0
-  // A converted total is in the project's reporting currency, which this card states in `budgetCurrency`.
-  if (s.state === 'complete_converted') return s.converted ?? 0
-  if (s.state === 'complete_withheld') {
-    return s.originalCurrency !== null && s.originalCurrency.toUpperCase() === budgetCurrency.toUpperCase() ? s.original : null
-  }
-  return null // partial, mixed_currency, absent
+function spendInBudgetCurrency(
+  totals: MoneyTotals | undefined,
+  budgetCurrency: string,
+  reportingCurrency: string | null,
+): number | null {
+  return spendComparableAmount(totals, 'spend', reportingCurrency, budgetCurrency)
 }
 
 function deltaTone(key: Sparkable, delta: number | null | undefined): 'up' | 'down' | 'flat' {
@@ -116,7 +114,7 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
   // PARTIAL-WITHHELD-001 — المتبقي/الاستهلاك يقارنان المصروف بالميزانية، فيلزمهما رقم مصروف
   // واحد بعملة الميزانية. سياق جزئي/مختلط، أو مصروف محتجَز بعملة أخرى، لا يوفّره ⇒ كلاهما غير
   // متاح (لا «الميزانية − الجزء المحوَّل» ولا «الميزانية − صفر»).
-  const spendVsBudget = spendInBudgetCurrency(k, cur)
+  const spendVsBudget = spendInBudgetCurrency(k, cur, summary.data?.currency ?? null)
   const remaining = budget != null && spendVsBudget != null ? budget - spendVsBudget : null
   const utilization = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
 
@@ -169,7 +167,7 @@ export function CampaignExecutiveSummary({ campaign, projectId, range, locale }:
     // PARTIAL-WITHHELD-001 — budget risk must not read a partial/withheld spend as a low utilization.
     // No single spend figure in the budget currency ⇒ util is null and the «almost exhausted» claim
     // simply cannot fire, rather than firing wrong or staying silent because a subset looked small.
-    const spendVsBudget = spendInBudgetCurrency(k as MoneyTotals | undefined, campaign.budget_currency || 'SAR')
+    const spendVsBudget = spendInBudgetCurrency(k as MoneyTotals | undefined, campaign.budget_currency || 'SAR', summary.data?.currency ?? null)
     const util = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
     return {
       topResult: k ? `${num(k.conversions)} نتيجة · ${ratio(k.roas)} ROAS` : '—',
@@ -293,7 +291,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
   // PARTIAL-WITHHELD-001 — DISPLAY the spend through the contract (partial ⇒ «—», withheld ⇒ its own
   // currency), and do the budget MATH only from a single spend figure in the budget currency.
   const spendRead = moneyFromTotals(summary.data?.current, 'spend', true, cur)
-  const spendVsBudget = spendInBudgetCurrency(summary.data?.current, cur)
+  const spendVsBudget = spendInBudgetCurrency(summary.data?.current, cur, summary.data?.currency ?? null)
   const remaining = budget != null && spendVsBudget != null ? budget - spendVsBudget : null
   const util = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
 

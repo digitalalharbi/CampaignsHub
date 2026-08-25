@@ -92,3 +92,55 @@ describe('the campaign command centre over a partially-withheld spend', () => {
     expect(within(forecast).getByText('—')).toBeInTheDocument()
   })
 })
+
+/**
+ * The neighbouring defect, restored from #107.
+ *
+ * A `complete_converted` scope HAS a single spend figure, so the state check above passes it — but
+ * that figure is denominated in the project's REPORTING currency, which is a different field from
+ * the campaign's `budget_currency`. Reading it as the budget's unit makes «المتبقي» a SAR budget
+ * minus a USD spend, printed under a SAR label. Nothing about the number looks wrong on screen,
+ * which is exactly why it needs a test rather than an eye.
+ */
+const CONVERTED_USD = {
+  impressions: 50_000, clicks: 800, conversions: 40,
+  spend: 5000, revenue: 0, roas: 0, cpa: 0, cpc: 0, cpm: 0, ctr: 0.02,
+  spend_original: 0, spend_withheld_rows: 0,
+  revenue_original: 0, revenue_withheld_rows: 0,
+  money_original_currency: null, money_original_currencies: 0,
+}
+
+function routeConverted(currency: string | null) {
+  vi.mocked(getData).mockImplementation((path: string) => {
+    if (path.includes('/summary')) {
+      return Promise.resolve({ current: CONVERTED_USD, delta: {}, currency })
+    }
+    return Promise.resolve([])
+  })
+}
+
+describe('the command centre when reporting currency and budget currency differ', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    signInWith(['campaigns.view'])
+  })
+  afterEach(() => signOut())
+
+  it('refuses to pace a USD-reported spend against a SAR budget', async () => {
+    routeConverted('USD')
+    renderWithProviders(<CampaignKpis campaign={campaign} projectId="p1" range={range} />)
+
+    // 5,000 USD against an 800 SAR budget is not 625% consumed and not −4,200 remaining.
+    const remaining = (await screen.findByText('المتبقي')).parentElement as HTMLElement
+    expect(within(remaining).getByText('—')).toBeInTheDocument()
+    expect(screen.queryByText(/استهلاك/)).not.toBeInTheDocument()
+  })
+
+  it('still paces normally when the two currencies agree — the guard refuses units, not spend', async () => {
+    routeConverted('SAR')
+    renderWithProviders(<CampaignKpis campaign={campaign} projectId="p1" range={range} />)
+
+    // Same 5,000, now genuinely in the budget's currency: the comparison is available again.
+    expect(await screen.findByText(/استهلاك/)).toBeInTheDocument()
+  })
+})

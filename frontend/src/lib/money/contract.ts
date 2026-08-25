@@ -215,6 +215,44 @@ export function aggregateMoney(
 }
 
 /**
+ * The spend as ONE figure in `targetCurrency`, or null — the single comparability rule.
+ *
+ * A budget comparison is subtraction, so both sides must be the same unit. Two independent fields
+ * decide that: the scope's money state, and which currency its figure is actually denominated in.
+ * A converted total is in the project's REPORTING currency, which is not required to equal the
+ * campaign's `budget_currency` — a project reporting in SAR may hold a campaign budgeted in USD.
+ * Reading the converted number as if it were the budget's unit computes «budget − spend» across two
+ * currencies and prints the result as money.
+ *
+ * So: a converted total counts only when the reporting currency IS the target; a withheld total only
+ * when its own original currency is; partial and mixed have no single figure at all. Anything else
+ * is null, and every caller renders «unavailable» rather than pacing against a number nobody can
+ * compare. `rankableMoney` answers the neighbouring question for charts — which rows share an axis —
+ * and deliberately may drop rows; this one never drops anything, because a total that omits part of
+ * its scope is not that scope's total.
+ */
+export function spendComparableAmount(
+  totals: MoneyTotals | undefined,
+  key: 'spend' | 'revenue',
+  reportingCurrency: string | null,
+  targetCurrency: string | null,
+): number | null {
+  if (targetCurrency === null || targetCurrency === '') return null
+  const target = targetCurrency.toUpperCase()
+  const s = moneyState(totals as MoneyTotals, key)
+  if (s.state === 'zero') return 0
+  if (s.state === 'complete_converted') {
+    return reportingCurrency !== null && reportingCurrency !== '' && reportingCurrency.toUpperCase() === target
+      ? s.converted ?? 0
+      : null
+  }
+  if (s.state === 'complete_withheld') {
+    return s.originalCurrency !== null && s.originalCurrency.toUpperCase() === target ? s.original : null
+  }
+  return null // partial, mixed_currency, absent
+}
+
+/**
  * Per-row money values for a ranking or share chart — DROP AND DISCLOSE, not all-or-nothing.
  *
  * A chart is not a total, and the two do not fail the same way. `aggregateMoney()` refuses the whole

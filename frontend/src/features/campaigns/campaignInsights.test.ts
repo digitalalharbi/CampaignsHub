@@ -82,8 +82,21 @@ describe('needs-attention rules', () => {
   })
 
   it('flags overspend against the planned budget and reports the percentage', () => {
-    const flag = attentionFlags(campaign({ total_budget: 1000 }), { spend: 1250, conversions: 9 }).find((f) => f.code === 'over_budget')
+    const flag = attentionFlags(campaign({ total_budget: 1000 }), { spend: 1250, conversions: 9 }, 'SAR').find((f) => f.code === 'over_budget')
     expect(flag?.ar).toContain('125%')
+  })
+
+  it('does NOT flag overspend when the reporting currency differs from the budget currency', () => {
+    // 5,000 USD reported (converted) against a 1,000 SAR budget — not a comparison anyone can make.
+    // Restored from #107: #110 inlined the state check without the currency check, so this fired.
+    const codes = attentionFlags(campaign({ total_budget: 1000, budget_currency: 'SAR' }), { spend: 5000, conversions: 9 }, 'USD').map((f) => f.code)
+    expect(codes).not.toContain('over_budget')
+  })
+
+  it('does NOT flag overspend when no reporting currency is known at all', () => {
+    // A converted figure whose unit nobody stated cannot be compared to a budget that named one.
+    const codes = attentionFlags(campaign({ total_budget: 1000, budget_currency: 'SAR' }), { spend: 5000, conversions: 9 }).map((f) => f.code)
+    expect(codes).not.toContain('over_budget')
   })
 
   it('says data is missing instead of pretending a campaign is healthy', () => {

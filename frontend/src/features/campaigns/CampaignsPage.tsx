@@ -187,10 +187,12 @@ export function CampaignsPage() {
 
   const attention = useMemo(
     () => campaigns
-      .map((c) => ({ c, flags: attentionFlags(c, metricsByCampaign.get(c.id)) }))
+      .map((c) => ({ c, flags: attentionFlags(c, metricsByCampaign.get(c.id), summary.data?.currency ?? null) }))
       .filter((x) => x.flags.length > 0)
       .sort((a, b) => attentionRank(b.flags) - attentionRank(a.flags)),
-    [campaigns, metricsByCampaign],
+    // The reporting currency decides whether an over-budget comparison is possible at all, so the
+    // flags must recompute when it arrives — otherwise the first render's «no verdict» would stick.
+    [campaigns, metricsByCampaign, summary.data?.currency],
   )
 
   const toggleCompare = (id: string) =>
