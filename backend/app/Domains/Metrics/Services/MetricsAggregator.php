@@ -991,14 +991,51 @@ final class MetricsAggregator
         return ['stages' => $out, 'spend' => round($spend, 2)];
     }
 
-    /** Planned vs spent budget with pacing (over/under) and a linear end-of-period projection. */
+    /**
+     * Planned vs spent budget with pacing (over/under) and a linear end-of-period projection.
+     *
+     * ## BUDGET-WITHHELD-001 — «you have spent nothing» is the one lie somebody acts on
+     *
+     * `spent` was `COALESCE(SUM(value) FILTER (spend), 0)`. FX-001 stores `value = null` when no
+     * rate exists, so on an account whose money is entirely withheld — which is production's, every
+     * row of it — this returned 0 for every campaign. The table then reported 0 spent, 0% consumed,
+     * pacing 0.00× and the full budget remaining, against 4,803.17 USD that had actually been spent.
+     *
+     * Every other surface that read that zero printed a wrong number. This one invites an action:
+     * a campaign shown as having spent nothing and pacing at zero is a campaign somebody tops up.
+     *
+     * So the withheld original is carried alongside, exactly as `totals()` carries it, and the
+     * pacing arithmetic below uses whichever figure is real.
+     *
+     * ## The unit has to match, or the ratio is not one
+     *
+     * `total_budget` is denominated in the campaign's `budget_currency`; a withheld spend is in the
+     * platform's `original_currency`. Dividing one by the other produces a number with no meaning,
+     * so `consumed_pct`, `pace` and `remaining` are withheld — null, with `pacing_basis` naming the
+     * reason — unless the two agree. `spent` itself is still stated, because what was spent is a
+     * fact regardless of what it can be compared against.
+     */
     public function budgetPacing(Carbon $from, Carbon $to, Carbon $today): array
     {
+        /*
+         * The currency a CONVERTED sum is expressed in — read from the rows themselves rather than
+         * assumed, for the same reason `rangeCurrency()` exists: a helper that defaults to a market's
+         * currency states the wrong unit the first time a project reports in another one, silently.
+         */
+        $reportingCurrency = $this->base($from, $to)
+            ->whereNotNull('project_currency')
+            ->value('project_currency');
+
         $spentByCampaign = $this->base($from, $to)
             ->select('unified_campaign_id')
             ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'), 0) AS spent")
+            ->selectRaw("COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_withheld_rows")
+            ->selectRaw("COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0) AS spend_original")
+            ->selectRaw("MIN(original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currency")
+            ->selectRaw("COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currencies")
             ->groupBy('unified_campaign_id')
-            ->pluck('spent', 'unified_campaign_id');
+            ->get()
+            ->keyBy('unified_campaign_id');
 
         $periodDays = max(1, $from->diffInDays($to) + 1);
         $elapsedDays = max(1, $from->diffInDays($today->min($to)) + 1);
@@ -1016,19 +1053,59 @@ final class MetricsAggregator
         $rows = [];
         foreach ($campaigns as $c) {
             $budget = (float) ($c->total_budget ?? 0);
-            $spent = (float) ($spentByCampaign[$c->id] ?? 0);
+            $budgetCurrency = $c->budget_currency;
+            $row = $spentByCampaign[$c->id] ?? null;
+
+            $converted = (float) ($row->spent ?? 0);
+            $withheldRows = (int) ($row->spend_withheld_rows ?? 0);
+            $original = (float) ($row->spend_original ?? 0);
+            $originalCurrency = $row->spend_original_currency ?? null;
+            $oneCurrency = (int) ($row->spend_original_currencies ?? 0) === 1;
+
+            /*
+             * The figure that is REAL, and the unit it is in.
+             *
+             * A converted sum is in the project's reporting currency. A withheld one is in the
+             * platform's, and only nameable when the withheld rows agree on a single currency —
+             * a total across two is not an amount.
+             */
+            $withheld = $converted <= 0.0 && $withheldRows > 0 && $original > 0.0 && $oneCurrency;
+            $spent = $withheld ? $original : $converted;
+            $spentCurrency = $withheld ? $originalCurrency : $reportingCurrency;
+
+            /*
+             * Comparable only when spend and budget are denominated the same. Otherwise the ratio
+             * divides riyals by dollars and reads as a verdict — so it is refused, and says why.
+             */
+            $comparable = $budget > 0
+                && is_string($spentCurrency)
+                && is_string($budgetCurrency)
+                && strtoupper($spentCurrency) === strtoupper($budgetCurrency);
+
             $expected = $budget * $elapsedFraction;
             $projected = $elapsedFraction > 0 ? $spent / $elapsedFraction : $spent;
+
             $rows[] = [
                 'campaign_id' => $c->id,
                 'campaign_name' => $c->name,
                 'status' => $c->status,
                 'budget' => round($budget, 2),
+                'budget_currency' => $budgetCurrency,
                 'spent' => round($spent, 2),
-                'remaining' => round($budget - $spent, 2),
-                'consumed_pct' => $budget > 0 ? round($spent / $budget, 4) : null,
-                'pace' => $expected > 0 ? round($spent / $expected, 3) : null, // >1 over-pacing, <1 under
+                'spent_currency' => $spentCurrency,
+                'spend_withheld' => $withheld,
+                'remaining' => $comparable ? round($budget - $spent, 2) : null,
+                'consumed_pct' => $comparable ? round($spent / $budget, 4) : null,
+                'pace' => $comparable && $expected > 0 ? round($spent / $expected, 3) : null, // >1 over-pacing
                 'projected_spend' => round($projected, 2),
+                /*
+                 * Why pacing is absent, when it is. `comparable` — computed. `currency_mismatch` —
+                 * the spend is real but denominated differently from the plan. `no_budget` — nobody
+                 * set one, so there is nothing to pace against.
+                 */
+                'pacing_basis' => $comparable
+                    ? 'comparable'
+                    : ($budget > 0 ? 'currency_mismatch' : 'no_budget'),
             ];
         }
         usort($rows, fn ($a, $b) => ($b['pace'] ?? 0) <=> ($a['pace'] ?? 0));
