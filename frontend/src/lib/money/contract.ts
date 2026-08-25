@@ -64,6 +64,10 @@ const NOTES = {
     ar: 'مبالغ بعملات متعددة لا يمكن جمعها أو تحويلها',
     en: 'Amounts in several currencies that cannot be summed or converted',
   },
+  partial: {
+    ar: 'جزء من المبلغ محوَّل وجزء بانتظار سعر صرف — لا يوجد إجمالي واحد',
+    en: 'Part of the amount is converted and part awaits an FX rate — there is no single total',
+  },
   derivedFromOriginal: {
     ar: 'محسوب من المبلغ الأصلي — التحويل غير متاح',
     en: 'Derived from the original amount — conversion unavailable',
@@ -75,24 +79,60 @@ const note = (key: keyof typeof NOTES, ar: boolean): string => (ar ? NOTES[key].
 const num = (v: unknown): number => Number(v ?? 0)
 
 /**
- * Whether the money behind `key` was withheld, and in what.
+ * PARTIAL-WITHHELD-001 — the six things a scope's money can be, one axis above `MetricAvailability`.
  *
- * `money_original_currencies !== 1` is refused rather than labelled: a sum across currencies is not
- * a quantity of anything, and printing it beside one currency's name states a figure nobody measured.
+ * `MetricAvailability` describes ONE figure's provenance. This describes how a SUM composed: a scope
+ * can hold rows that converted AND rows that did not, and the sum of the two is not a figure. The old
+ * `withholding()` collapsed this to a boolean and answered «withheld» the moment any row was withheld,
+ * which let `readMoney` return only the withheld original — and, mirrored on the client, let a caller
+ * return only the CONVERTED subset the moment any row converted. Both drop half the scope's money and
+ * present the rest as the whole. Six states, and only three of them are a single number.
  */
-function withholding(totals: MoneyTotals, key: string): { withheld: boolean; original: number; currency: string | null; mixed: boolean } {
+export type MoneyState =
+  | 'complete_converted'         // every row converted to the reporting currency
+  | 'complete_withheld'          // every withheld row shares one currency, none converted
+  | 'partial'                    // some converted + some withheld — NO single total
+  | 'mixed_currency'             // withheld rows span >1 currency — NO single total
+  | 'absent'                     // never reported
+  | 'zero'                       // measured as nothing
+
+/** The resolved money composition of `key` over a scope. `amount`/`currency` are set only when a single figure exists. */
+export type MoneyScope = {
+  state: MoneyState
+  /** The converted sum in the reporting currency, when any converted money exists (else null). */
+  converted: number | null
+  /** The summed original of the withheld rows (0 when none). */
+  original: number
+  /** The single currency the withheld rows agree on, when they do (else null). */
+  originalCurrency: string | null
+}
+
+/**
+ * Resolve how the money behind `key` composed across the scope — the ONE place the rule lives.
+ *
+ * `money_original_currencies !== 1` among withheld rows is `mixed_currency`: a sum across currencies is
+ * not a quantity. A converted amount coexisting with withheld rows is `partial`: there is real money in
+ * two units and no rate to join them, so there is no honest single total — the surfaces fail closed.
+ */
+export function moneyState(totals: MoneyTotals, key: 'spend' | 'revenue'): MoneyScope {
   const t = bag(totals)
   const rows = num(t?.[`${key}_withheld_rows`])
   const original = num(t?.[`${key}_original`])
-  const currency = t?.money_original_currency
-  const count = num(t?.money_original_currencies)
+  const currencyRaw = t?.money_original_currency
+  const currencies = num(t?.money_original_currencies)
+  const currency = typeof currencyRaw === 'string' && currencyRaw !== '' ? currencyRaw : null
 
-  if (rows <= 0 || original <= 0) return { withheld: false, original: 0, currency: null, mixed: false }
-  if (count !== 1 || typeof currency !== 'string' || currency === '') {
-    return { withheld: true, original, currency: null, mixed: true }
-  }
+  const raw = t?.[key]
+  const convertedAmount = raw === null || raw === undefined ? null : Number(raw)
+  const hasConverted = convertedAmount !== null && convertedAmount > 0
+  const hasWithheld = rows > 0 && original > 0
 
-  return { withheld: true, original, currency, mixed: false }
+  if (hasWithheld && currencies !== 1) return { state: 'mixed_currency', converted: convertedAmount, original, originalCurrency: null }
+  if (hasWithheld && hasConverted) return { state: 'partial', converted: convertedAmount, original, originalCurrency: currency }
+  if (hasWithheld) return { state: 'complete_withheld', converted: convertedAmount, original, originalCurrency: currency }
+  if (convertedAmount === null) return { state: 'absent', converted: null, original: 0, originalCurrency: null }
+  if (convertedAmount === 0) return { state: 'zero', converted: 0, original: 0, originalCurrency: null }
+  return { state: 'complete_converted', converted: convertedAmount, original: 0, originalCurrency: null }
 }
 
 /**
@@ -108,16 +148,23 @@ export function readMoney(
   reportingCurrency: string | null,
   ar: boolean,
 ): MoneyReading {
-  const w = withholding(totals, key)
+  const s = moneyState(totals, key)
 
-  if (w.mixed) return { kind: 'unavailable', amount: null, currency: null, note: note('mixed', ar) }
-  if (w.withheld) return { kind: 'withheld', amount: w.original, currency: w.currency, note: note('unconvertible', ar) }
-
-  const value = bag(totals)?.[key]
-  if (value === null || value === undefined) return { kind: 'absent', amount: null, currency: null, note: null }
-
-  const n = Number(value)
-  return { kind: n === 0 ? 'zero' : 'converted', amount: n, currency: reportingCurrency, note: null }
+  switch (s.state) {
+    case 'mixed_currency':
+      return { kind: 'unavailable', amount: null, currency: null, note: note('mixed', ar) }
+    case 'partial':
+      // Real money in two units with no rate to join them — not a single figure. Fail closed.
+      return { kind: 'unavailable', amount: null, currency: null, note: note('partial', ar) }
+    case 'complete_withheld':
+      return { kind: 'withheld', amount: s.original, currency: s.originalCurrency, note: note('unconvertible', ar) }
+    case 'absent':
+      return { kind: 'absent', amount: null, currency: null, note: null }
+    case 'zero':
+      return { kind: 'zero', amount: 0, currency: reportingCurrency, note: null }
+    case 'complete_converted':
+      return { kind: 'converted', amount: s.converted as number, currency: reportingCurrency, note: null }
+  }
 }
 
 /**
@@ -143,11 +190,13 @@ export function readCostPer(
   reportingCurrency: string | null,
   ar: boolean,
 ): MoneyReading {
-  const w = withholding(totals, 'spend')
+  const s = moneyState(totals, 'spend')
 
-  if (w.mixed) return { kind: 'unavailable', amount: null, currency: null, note: note('mixed', ar) }
+  // A cost-per whose numerator is only partly convertible cannot be stated from the converted subset.
+  if (s.state === 'mixed_currency') return { kind: 'unavailable', amount: null, currency: null, note: note('mixed', ar) }
+  if (s.state === 'partial') return { kind: 'unavailable', amount: null, currency: null, note: note('partial', ar) }
 
-  if (w.withheld) {
+  if (s.state === 'complete_withheld') {
     const d = typeof denominator === 'number' ? denominator : num(bag(totals)?.[denominator])
 
     // No denominator means no rate to state — «unavailable», not zero and not infinity.
@@ -155,8 +204,8 @@ export function readCostPer(
 
     return {
       kind: 'withheld',
-      amount: w.original / d,
-      currency: w.currency,
+      amount: s.original / d,
+      currency: s.originalCurrency,
       note: note('derivedFromOriginal', ar),
     }
   }
@@ -176,14 +225,23 @@ export function readCostPer(
  * than a number that looks like a verdict.
  */
 export function readRoas(totals: MoneyTotals, ar: boolean): { kind: MoneyReading['kind']; value: number | null; note: string | null } {
-  const spend = withholding(totals, 'spend')
-  const revenue = withholding(totals, 'revenue')
+  const spend = moneyState(totals, 'spend')
+  const revenue = moneyState(totals, 'revenue')
 
-  if (spend.mixed || revenue.mixed) return { kind: 'unavailable', value: null, note: note('mixed', ar) }
+  if (spend.state === 'mixed_currency' || revenue.state === 'mixed_currency') {
+    return { kind: 'unavailable', value: null, note: note('mixed', ar) }
+  }
+  // A partial side has no single figure, so no ratio can be formed for the whole scope.
+  if (spend.state === 'partial' || revenue.state === 'partial') {
+    return { kind: 'unavailable', value: null, note: note('partial', ar) }
+  }
 
-  if (spend.withheld || revenue.withheld) {
-    // Both sides must be present, and in the SAME currency, or the ratio is between unlike units.
-    if (!spend.withheld || !revenue.withheld || spend.currency === null || spend.currency !== revenue.currency) {
+  const spendWithheld = spend.state === 'complete_withheld'
+  const revenueWithheld = revenue.state === 'complete_withheld'
+
+  if (spendWithheld || revenueWithheld) {
+    // The exception: both COMPLETE and in the SAME currency, or the ratio is between unlike units.
+    if (!spendWithheld || !revenueWithheld || spend.originalCurrency === null || spend.originalCurrency !== revenue.originalCurrency) {
       return { kind: 'unavailable', value: null, note: note('unconvertible', ar) }
     }
     if (spend.original <= 0) return { kind: 'unavailable', value: null, note: note('unconvertible', ar) }

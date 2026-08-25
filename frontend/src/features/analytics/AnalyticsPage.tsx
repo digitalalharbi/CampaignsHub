@@ -823,14 +823,20 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
                 : `Spent in ${r.spent_currency ?? '—'}, budgeted in ${r.budget_currency ?? '—'} — not comparable`)
             : r.pacing_basis === 'no_budget'
               ? (ar ? 'لا توجد ميزانية محددة لهذه الحملة' : 'No budget was set for this campaign')
-              : undefined
+              : r.pacing_basis === 'partial'
+                ? (ar ? 'جزء من المصروف محوَّل وجزء بانتظار سعر صرف — لا يوجد إجمالي واحد' : 'Part of the spend is converted and part awaits an FX rate — no single total')
+                : r.pacing_basis === 'mixed_currency'
+                  ? (ar ? 'المصروف بعملات متعددة لا يمكن جمعها' : 'Spend is in several currencies that cannot be summed')
+                  : undefined
 
           return [
             <span key="n" className="font-semibold text-text-primary">{r.campaign_name}</span>,
             money(r.budget, r.budget_currency ?? undefined),
-            <span key="s" title={r.spend_withheld ? (ar ? 'بعملة المنصة — التحويل غير متاح' : "In the platform's own currency — conversion unavailable") : undefined}>
-              {money(r.spent, r.spent_currency ?? undefined)}
-            </span>,
+            r.spent === null
+              ? <span key="s" className="text-text-muted" title={basisNote}>—</span>
+              : <span key="s" title={r.spend_withheld ? (ar ? 'بعملة المنصة — التحويل غير متاح' : "In the platform's own currency — conversion unavailable") : undefined}>
+                  {money(r.spent, r.spent_currency ?? undefined)}
+                </span>,
             r.remaining === null
               ? <span key="rm" className="text-text-muted" title={basisNote}>—</span>
               : money(r.remaining, r.budget_currency ?? undefined),
@@ -851,7 +857,9 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
                   {ratio(r.pace, '×')}
                 </span>
               ),
-            money(r.projected_spend, r.spent_currency ?? undefined),
+            r.projected_spend === null
+              ? <span key="pr" className="text-text-muted" title={basisNote}>—</span>
+              : money(r.projected_spend, r.spent_currency ?? undefined),
           ]
         })}
       />
