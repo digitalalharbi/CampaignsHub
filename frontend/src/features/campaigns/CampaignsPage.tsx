@@ -119,8 +119,16 @@ export function CampaignsPage() {
     return {
       total,
       spent,
-      remaining: total - spent,
-      consumed: total > 0 ? spent / total : 0,
+      remaining: spentWithheldCount === 0 ? total - spent : null,
+      /*
+       * Null when any row's spend could not be summed — the ratio would mix two populations.
+       *
+       * `total` is every campaign's budget; `spent` is now only the campaigns whose spend is a real
+       * converted figure. Dividing one by the other with a withheld row present understates
+       * consumption and overstates what is left, which is the same refusal `comparableSpend()` makes
+       * on the campaign command centre: a budget is not paced against a partial spend.
+       */
+      consumed: spentWithheldCount === 0 && total > 0 ? spent / total : null,
       /** Null when the campaigns disagree — then no single figure can be stated. */
       currency: currencies.size === 1 ? [...currencies][0] : null,
       spentCurrency: spentCurrencies.size === 1 ? [...spentCurrencies][0] : null,
@@ -158,7 +166,26 @@ export function CampaignsPage() {
         .slice(0, 6),
     [metricCampaigns.data],
   )
-  const platformDonut = (platforms.data ?? []).map((p) => ({ name: String(p.provider), value: Number(p.spend ?? 0) }))
+  /*
+   * PARTIAL-WITHHELD-001 — the donut sizes slices by a real converted figure, or leaves them out.
+   *
+   * The same chart, and the same defect, as the client link's «توزيع الإنفاق» (LiveSharedReport):
+   * `Number(p.spend ?? 0)` draws a platform whose spend was withheld as a slice of ZERO — the reader
+   * sees a platform that spent nothing, and a centre total short by exactly that spend. A slice is a
+   * magnitude on one currency axis, so a platform with no comparable magnitude has no honest size
+   * there. Those platforms are left off and COUNTED, and the card's subtitle says how many, rather
+   * than a chart that quietly describes less spend than the account made.
+   */
+  const platformSpend = useMemo(() => {
+    const rows = (platforms.data ?? []).map((p) => {
+      const r = readMoney(p, 'spend', null, false)
+      const value = r.kind === 'converted' || r.kind === 'zero' ? r.amount : null
+      return { name: String(p.provider), value }
+    })
+    const data = rows.filter((r): r is { name: string; value: number } => r.value != null)
+    return { data, withheldCount: rows.length - data.length }
+  }, [platforms.data])
+  const platformDonut = platformSpend.data
 
   // Per-campaign metric slice, keyed by campaign id — the needs-attention rules read from this and
   // report "no data" rather than assuming a campaign without metrics is healthy.
@@ -317,7 +344,16 @@ export function CampaignsPage() {
             <ChartCard title={ar ? 'الإنفاق مقابل الإيرادات' : 'Spend vs revenue'} subtitle={ar ? 'اتجاه المشروع' : 'How the project is trending'} className="lg:col-span-2">
               {timeseries.isLoading ? <Skeleton className="h-[200px]" /> : <SpendRevenueAreaChart data={(timeseries.data ?? []) as unknown as Array<Record<string, unknown>>} height={200} />}
             </ChartCard>
-            <ChartCard title={ar ? 'توزيع الإنفاق' : 'Where the spend went'} subtitle={ar ? 'حسب المنصة' : 'By platform'}>
+            <ChartCard
+              title={ar ? 'توزيع الإنفاق' : 'Where the spend went'}
+              subtitle={
+                platformSpend.withheldCount > 0
+                  ? (ar
+                      ? `حسب المنصة — ${platformSpend.withheldCount} غير محتسَبة`
+                      : `By platform — ${platformSpend.withheldCount} withheld`)
+                  : (ar ? 'حسب المنصة' : 'By platform')
+              }
+            >
               {platforms.isLoading ? <Skeleton className="h-[200px]" /> : <PlatformDonutChart data={platformDonut} centerLabel={ar ? 'الإجمالي' : 'Total'} centerValue={compact(platformDonut.reduce((a, b) => a + b.value, 0))} height={200} />}
             </ChartCard>
           </div>
@@ -326,7 +362,12 @@ export function CampaignsPage() {
               {statusDonut.length ? <PlatformDonutChart data={statusDonut} colorBy="series" centerLabel={ar ? 'الحملات' : 'Campaigns'} centerValue={String(counts.total)} height={190} /> : <EmptyState title={ar ? 'لا حملات' : 'No campaigns'} />}
             </ChartCard>
             <ChartCard title={ar ? 'أفضل الحملات' : 'Best campaigns'} subtitle={ar ? 'حسب الإنفاق' : 'By spend'} className="lg:col-span-2">
-              {topCampaigns.length >= 2 ? <RankingBarChart data={topCampaigns} bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]} horizontal height={190} colorByPlatform /> : <div className="flex h-[190px] items-center justify-center"><ProgressRing value={budgetTotals.consumed} sublabel={`${compact(budgetTotals.spent)} / ${compact(budgetTotals.total)}`} size={140} tone={budgetTotals.consumed > 0.95 ? 'danger' : 'brand'} /></div>}
+              {topCampaigns.length >= 2
+                ? <RankingBarChart data={topCampaigns} bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]} horizontal height={190} colorByPlatform />
+                : budgetTotals.consumed != null
+                  ? <div className="flex h-[190px] items-center justify-center"><ProgressRing value={budgetTotals.consumed} sublabel={`${compact(budgetTotals.spent)} / ${compact(budgetTotals.total)}`} size={140} tone={budgetTotals.consumed > 0.95 ? 'danger' : 'brand'} /></div>
+                  /* No comparable spend for every campaign — a ring drawn anyway would read as «barely spent». */
+                  : <div className="flex h-[190px] items-center justify-center"><EmptyState title={ar ? 'لا يمكن حساب الاستهلاك' : 'Consumption cannot be computed'} description={ar ? 'إنفاق بعض الحملات بعملة لا سعر صرف لها، فلا يُقارَن بالميزانية.' : 'Some campaigns spent in a currency with no rate available, so it cannot be paced against the budget.'} /></div>}
             </ChartCard>
           </div>
           {attention.length > 0 && (
