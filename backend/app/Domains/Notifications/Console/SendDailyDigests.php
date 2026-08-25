@@ -40,7 +40,7 @@ final class SendDailyDigests extends Command
         {--force : Ignore the recipient’s chosen hour (still idempotent per period)}
         {--date= : The day to summarise, YYYY-MM-DD. Defaults to the recipient’s yesterday}';
 
-    protected $description = 'Send each recipient their daily and weekly digests at their own local hour.';
+    protected $description = 'Send each recipient their daily, weekly and monthly digests at their own local hour.';
 
     public function handle(DigestDispatcher $dispatcher): int
     {
@@ -104,6 +104,26 @@ final class SendDailyDigests extends Command
                 $state === 'sent' ? $sent++ : $skipped++;
                 $this->line("{$user->email} weekly: {$state}");
             }
+
+            /*
+             * EMAIL-INTELLIGENCE-001 — the monthly goes out on the FIRST of the month, and reports
+             * the month that just finished.
+             *
+             * Sending on the 1st for the previous month is the only arrangement where the figures
+             * are complete when they arrive. Reporting the current month on the 1st would be a
+             * report about a few hours, and reporting it on the 31st would be a report the reader
+             * cannot compare with anything, because the previous one covered a different number of
+             * days.
+             *
+             * `--force` sends the month currently in progress, which is what a manual run is for;
+             * the idempotency key is the calendar month either way, so it can only land once.
+             */
+            if (in_array('monthly', $digests, true) && ($this->option('force') || $local->day === 1)) {
+                $month = $this->option('force') ? $day->copy() : $day->copy()->subMonthNoOverflow();
+                $state = $dispatcher->sendMonthly($user, $tenantId, $month, $locale);
+                $state === 'sent' ? $sent++ : $skipped++;
+                $this->line("{$user->email} monthly: {$state}");
+            }
         }
 
         $this->info("digests sent={$sent} other={$skipped}");
@@ -124,7 +144,7 @@ final class SendDailyDigests extends Command
         $chosen = $row->digests === null ? [] : (array) json_decode((string) $row->digests, true);
 
         return array_values(array_filter(
-            ['daily', 'weekly'],
+            ['daily', 'weekly', 'monthly'],
             static fn (string $kind): bool => ($chosen[$kind] ?? false) === true,
         ));
     }
