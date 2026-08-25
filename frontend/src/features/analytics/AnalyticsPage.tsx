@@ -1124,11 +1124,24 @@ function Basis({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+/**
+ * PLATFORM-CELL-001 — the cell whose entire job is to name a platform printed its key.
+ *
+ * Three tables use this — platforms, campaign ranking and data quality — so «meta» appeared as the
+ * platform name beside an accounts table on the next tab reading «ميتا», and in the filter chips
+ * above them, which have always used `providerLabel`. The dot was localized and the word was not.
+ *
+ * The same reader as everywhere else. `canonicalPlatform` first, because the breakdowns return the
+ * provider as stored (`google_ads`) while the labels are keyed canonically (`google`) — a mismatch
+ * that would have fallen back to the key and looked exactly like the defect being fixed.
+ */
 function PlatformCell({ provider }: { provider: string }) {
+  const ar = useAr()
+
   return (
     <span className="inline-flex items-center gap-1.5 font-semibold text-text-primary">
       <span className="h-2.5 w-2.5 rounded-full" style={{ background: platformColor(provider) }} />
-      {provider}
+      {providerLabel(canonicalPlatform(provider), ar ? 'ar' : 'en')}
     </span>
   )
 }
