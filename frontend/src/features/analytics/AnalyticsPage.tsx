@@ -261,12 +261,23 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
 
   return (
     <div className="space-y-5">
+      {/*
+        The page names the surface the reader arrived at, not the file it lives in.
+
+        One component now answers both «لوحة التحكم» and «التحليلات». Left as it was, clicking the
+        first rail item — the one most people open first — landed on a heading saying «التحليلات»,
+        which reads as a mis-click. Same board, two doors, and each door says where it went.
+      */}
       <PageIntro
-        testid="analytics-intro"
-        title={ar ? 'التحليلات' : 'Analytics'}
-        purpose={ar
-          ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
-          : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
+        testid={`${surface}-intro`}
+        title={surface === 'dashboard' ? (ar ? 'لوحة التحكم' : 'Dashboard') : (ar ? 'التحليلات' : 'Analytics')}
+        purpose={surface === 'dashboard'
+          ? (ar
+              ? 'حالة الحساب الآن: الإنفاق والنتائج والعائد، ثم المنصات والحملات والقمع — كل رقم بأساسه.'
+              : 'Where the account stands: spend, results and return, then platforms, campaigns and the funnel — every figure with its basis.')
+          : ar
+            ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
+            : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
         badges={<ProvenanceBadge provenance={provenanceSummary.data?.provenance} />}
       />
 
