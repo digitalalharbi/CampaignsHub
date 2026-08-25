@@ -65,6 +65,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
         Route::get('campaigns/{campaign}/activity', [CampaignActivityController::class, 'index'])->name('activity');
         Route::get('campaigns/{campaign}/alerts', [CampaignAlertsController::class, 'index'])->name('alerts');
         Route::get('campaigns/{campaign}/reports', [CampaignReportsController::class, 'index'])->name('reports');
+        Route::get('recommendations', [CampaignAnnotationController::class, 'projectIndex'])->name('recommendations.index');
         Route::get('campaigns/{campaign}/annotations', [CampaignAnnotationController::class, 'index'])->name('annotations.index');
         Route::post('campaigns/{campaign}/annotations', [CampaignAnnotationController::class, 'store'])->name('annotations.store');
         Route::match(['put', 'patch'], 'campaigns/{campaign}/annotations/{annotation}', [CampaignAnnotationController::class, 'update'])->name('annotations.update');

@@ -40,6 +40,50 @@ final class CampaignAnnotationController extends Controller
         return ApiResponse::success($rows, 'Campaign annotations.');
     }
 
+    /**
+     * RECOMMENDATIONS-001 — every recommendation in the project, across its campaigns.
+     *
+     * `index()` above answers for ONE campaign, which is the right shape for the campaign page and
+     * the wrong shape for the question people actually ask: «what should we act on». There was no
+     * screen for that at all — `/app/recommendations` answered 404 — while the records existed,
+     * carried a priority, an assignee and a due date, and were readable only by opening campaigns
+     * one at a time.
+     *
+     * This SURFACES stored annotations. It generates nothing: a recommendation here was written by
+     * somebody and carries their evidence, and a screen that invented advice from the same figures
+     * would be indistinguishable from one that reported it.
+     *
+     * The campaign's name is joined because a recommendation read outside its campaign page has lost
+     * the one piece of context that makes it actionable.
+     */
+    public function projectIndex(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+
+        $rows = CampaignAnnotation::query()
+            ->leftJoin('unified_campaigns', 'unified_campaigns.id', '=', 'campaign_annotations.campaign_id')
+            ->when(
+                $request->string('kind')->toString(),
+                fn ($q, $k) => $q->where('campaign_annotations.kind', $k),
+                fn ($q) => $q->where('campaign_annotations.kind', 'recommendation'),
+            )
+            ->when($request->string('status')->toString(), fn ($q, $st) => $q->where('campaign_annotations.status', $st))
+            ->when($request->string('priority')->toString(), fn ($q, $pr) => $q->where('campaign_annotations.priority', $pr))
+            ->select('campaign_annotations.*', 'unified_campaigns.name as campaign_name')
+            ->orderByRaw("CASE campaign_annotations.priority
+                WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END")
+            ->latest('campaign_annotations.created_at')
+            ->limit(200)
+            ->get()
+            ->map(fn (CampaignAnnotation $a) => $this->shape($a) + [
+                'campaign_id' => $a->campaign_id,
+                'campaign_name' => $a->getAttribute('campaign_name'),
+            ])
+            ->all();
+
+        return ApiResponse::success($rows, 'Project recommendations.');
+    }
+
     public function store(Request $request, string $project, string $campaign, AuditLogger $audit): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('campaigns.update'), 403);
