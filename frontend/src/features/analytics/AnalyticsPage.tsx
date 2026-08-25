@@ -1216,7 +1216,7 @@ export type SortValues = Array<number | string | null>
  * Nulls sort last in BOTH directions on purpose: «this platform does not report CPM» is not the
  * cheapest CPM, and letting it win an ascending sort is how an absence gets read as a best result.
  */
-function MetricTable({
+export function MetricTable({
   head,
   rows,
   values,
