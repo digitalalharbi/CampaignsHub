@@ -1,3 +1,4 @@
+import { moneyState, type MoneyTotals } from '@/lib/money/contract'
 import type { UnifiedCampaign } from './types'
 
 /**
@@ -63,6 +64,11 @@ export interface AttentionMetrics {
   clicks?: number | null
   engagements?: number | null
   impressions?: number | null
+  // PARTIAL-WITHHELD-001 — money provenance, so a withheld spend is never read as «no spend».
+  spend_withheld_rows?: number | null
+  spend_original?: number | null
+  money_original_currency?: string | null
+  money_original_currencies?: number | null
 }
 
 /** Any one of these above zero means figures ARE reaching this campaign, link or no link. */
@@ -75,9 +81,29 @@ const MEASURABLE_KEYS = ['spend', 'conversions', 'leads', 'installs', 'clicks', 
  */
 export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefined): AttentionFlag[] {
   const flags: AttentionFlag[] = []
-  const spend = Number(m?.spend ?? 0)
   const model = resultModel(c.objective)
   const results = model ? Number(m?.[model.metric] ?? 0) : null
+
+  /*
+   * PARTIAL-WITHHELD-001 — classify the spend by what each flag actually needs.
+   *
+   * PRESENCE («was there spend at all?»): a withheld/partial spend IS spend, even though its coalesced
+   * value is 0 — so `spendReported` reads the money state, not `spend === 0`. Only a measured zero or
+   * a truly absent figure is «no spend».
+   *
+   * AMOUNT («is spend over budget?»): a comparison needs a single spend figure in the budget's own
+   * currency. A partial/mixed scope, or a withheld spend in another currency, has none — so
+   * `spendAmount` is null and the over-budget flag simply cannot fire on a number nobody can compare.
+   */
+  const spendMoney = moneyState(m as MoneyTotals | undefined, 'spend')
+  const spendReported = spendMoney.state !== 'zero' && spendMoney.state !== 'absent'
+  const budgetCurrency = (c.budget_currency ?? '').toUpperCase()
+  const spendAmount =
+    spendMoney.state === 'complete_converted' || spendMoney.state === 'zero'
+      ? spendMoney.converted ?? 0
+      : spendMoney.state === 'complete_withheld' && spendMoney.originalCurrency !== null && spendMoney.originalCurrency.toUpperCase() === budgetCurrency
+        ? spendMoney.original
+        : null
 
   /*
    * CAMP-UNLINKED-001 — «لا يمكن قياس أدائها», on a campaign whose performance was on screen.
@@ -111,7 +137,7 @@ export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefin
         })
   }
 
-  if (c.status === 'active' && spend === 0) {
+  if (c.status === 'active' && !spendReported) {
     flags.push({
       code: 'active_no_spend', severity: 'high',
       ar: 'نشطة بلا إنفاق في الفترة المحددة',
@@ -119,7 +145,7 @@ export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefin
     })
   }
 
-  if (spend > 0 && results !== null && results === 0) {
+  if (spendReported && results !== null && results === 0) {
     flags.push({
       code: 'spend_no_results', severity: 'high',
       ar: `إنفاق بلا ${model?.labelAr ?? 'نتائج'}`,
@@ -127,7 +153,7 @@ export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefin
     })
   }
 
-  if (c.status === 'paused' && spend > 0) {
+  if (c.status === 'paused' && spendReported) {
     flags.push({
       code: 'paused_with_spend', severity: 'medium',
       ar: 'متوقفة رغم وجود إنفاق مسجَّل في الفترة',
@@ -136,11 +162,12 @@ export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefin
   }
 
   const budget = Number(c.total_budget ?? 0)
-  if (budget > 0 && spend > budget) {
+  // Amount comparison — only when spend is a single figure in the budget's currency (else no verdict).
+  if (budget > 0 && spendAmount !== null && spendAmount > budget) {
     flags.push({
       code: 'over_budget', severity: 'high',
-      ar: `تجاوزت الميزانية المخططة (${Math.round((spend / budget) * 100)}%)`,
-      en: `Over its planned budget (${Math.round((spend / budget) * 100)}%)`,
+      ar: `تجاوزت الميزانية المخططة (${Math.round((spendAmount / budget) * 100)}%)`,
+      en: `Over its planned budget (${Math.round((spendAmount / budget) * 100)}%)`,
     })
   }
 
