@@ -923,6 +923,25 @@ final class MetricsAggregator
             // conversion rate, and neither is «a share of a step the platform never sent».
             $ratio = $count !== null && $prev !== null && $prev > 0 ? $count / $prev : null;
 
+            /*
+             * FUNNEL-NOT-NESTED-001 — a step larger than the one above it is not a drop-off.
+             *
+             * Production reports 3,048 checkouts against 1,806 add-to-carts, so this ratio is 1.66.
+             * The arithmetic is right and the reading was not: the screen said «166%» as a funnel
+             * step and «-66%» as a drop-off, which is a quantity that does not exist.
+             *
+             * The figures are both real. These events simply do not nest — a buy-now flow reaches
+             * checkout without an add-to-cart, and the platform attributes each event on its own
+             * window. A funnel assumes every stage is a subset of the one above it, and for this
+             * pair that assumption is false.
+             *
+             * So the ratio is still reported, because hiding it would hide a real fact about the
+             * account, and `drop_off` is refused rather than inverted into a negative. `exceeds_previous`
+             * says which stages broke the assumption, so the reader is told rather than left to
+             * work out why a funnel widened.
+             */
+            $exceeds = $ratio !== null && $ratio > 1;
+
             $out[] = [
                 'stage' => $s,
                 'label' => $labels[$s],
@@ -930,7 +949,8 @@ final class MetricsAggregator
                 'count' => $count,
                 'from_stage' => $count !== null ? $prevStage : null,
                 'step_rate' => $ratio !== null ? round($ratio, 4) : null,
-                'drop_off' => $ratio !== null ? round(1 - $ratio, 4) : null,
+                'exceeds_previous' => $exceeds,
+                'drop_off' => $ratio !== null && ! $exceeds ? round(1 - $ratio, 4) : null,
                 'cost_per' => $count !== null && $count > 0 ? round($spend / $count, 2) : null,
             ];
 

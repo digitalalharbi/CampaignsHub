@@ -300,20 +300,79 @@ export function DashboardPage() {
    * `kpis` is empty on purpose: the objective-aware `MetricStrip` above owns the KPI row now, and
    * two rows of headline figures on one page is two answers to the same question.
    */
+  /*
+   * DASH-PLATFORM-MONEY-001 — three hardcoded values, all three visibly wrong on a live project.
+   *
+   * The summary card read «4,768.84 USD» and the platform comparison directly beneath it read
+   * «0 SAR», with an empty spend donut and a flat spend/revenue chart. One project, one window, two
+   * answers — and the reader has no way to know which to believe.
+   *
+   *   currency: 'SAR'   — this account reports in USD. The label was a guess, and it was wrong.
+   *   dataStatus: 'demo' — stamped «معاينة توضيحية ببيانات تجريبية» across a project holding 1,956
+   *                        live rows and zero demo rows. `ANALYTICS-PROVENANCE-001` made this badge
+   *                        derive from the data everywhere else; this call site never got the memo.
+   *   spend: p.spend    — the coalesced 0. `PlatformRow` extends `MoneyProvenance` and the backend
+   *                        has been sending `spend_original`, `spend_withheld_rows` and
+   *                        `money_original_currency` per provider all along. The view model dropped
+   *                        them on the floor.
+   *
+   * FX-001 withholds a converted figure when no rate exists rather than inventing one, so `spend` is
+   * legitimately 0 here. What was NOT legitimate was rendering that 0 under a currency this account
+   * does not report in, beside a card showing the true amount.
+   */
+  const platformRows = platforms.data ?? []
+
+  /*
+   * The currency the comparison is actually denominated in.
+   *
+   * When every row is withheld in one currency, that currency IS the figure's currency — and it is
+   * what the summary card above already prints. A mixture of originals has no single name, so the
+   * project's own currency stays and each withheld row falls back to «—» rather than being summed
+   * under a label that fits none of them.
+   */
+  const withheldCurrency = useMemo(() => {
+    const names = new Set(
+      platformRows
+        .filter((p) => (p.spend_withheld_rows ?? 0) > 0 && typeof p.money_original_currency === 'string')
+        .map((p) => p.money_original_currency as string),
+    )
+
+    return names.size === 1 ? [...names][0] : null
+  }, [platformRows])
+
+  /** The amount this row can honestly show: the converted figure, or the original that was withheld. */
+  const displaySpend = (p: (typeof platformRows)[number]): number => {
+    if (typeof p.spend === 'number' && p.spend > 0) return p.spend
+
+    const withheld = (p.spend_withheld_rows ?? 0) > 0 && (p.spend_original ?? 0) > 0
+    return withheld ? Number(p.spend_original) : (p.spend ?? 0)
+  }
+
   const vm: OverviewVM = useMemo(
     () => ({
-      currency: 'SAR',
-      dataStatus: 'demo',
+      currency: withheldCurrency ?? summary.data?.currency ?? 'SAR',
+      /*
+       * Derived, like every other surface. `provenance.source` is `live` when the rows are the
+       * customer's own, and a live project carries no warning — which is the whole point of the
+       * badge existing.
+       */
+      /*
+       * `DataStatus` has three cases — demo, live, stale — and «mixed» is not one of them. A project
+       * holding demo rows BESIDE real ones must still carry the warning, because the totals add them
+       * together, so mixed maps to `demo` rather than being widened with a cast. A cast here would
+       * have put a value through the type that the badge has no branch for.
+       */
+      dataStatus: summary.data?.provenance?.source === 'live' ? 'live' : 'demo',
       lastSyncAt: lastSync ?? null,
       kpis: [],
-      platforms: (platforms.data ?? []).map((p) => ({
+      platforms: platformRows.map((p) => ({
         key: p.provider,
         name: p.provider,
-        spend: p.spend,
+        spend: displaySpend(p),
         results: 0,
         roas: p.roas ?? null,
       })),
-      spend: (platforms.data ?? []).map((p) => ({ name: p.provider, value: p.spend })),
+      spend: platformRows.map((p) => ({ name: p.provider, value: displaySpend(p) })),
       topCampaigns: (campaigns.data ?? []).slice(0, 6).map((c) => ({
         id: String(c.campaign_id),
         name: c.campaign_name ?? '—',
@@ -607,7 +666,24 @@ export function DashboardPage() {
                       {t.unreported}
                     </div>
                   )}
-                  <span className="tnum w-12 text-end text-xs text-text-muted">{s.step_rate === null ? '' : percent(s.step_rate, 0)}</span>
+                  {/*
+                    FUNNEL-NOT-NESTED-001 — a step over 100% is flagged, not printed as a conversion.
+
+                    3,048 checkouts against 1,806 add-to-carts is 166%, and a funnel that widens is
+                    telling the reader these two events do not nest — not that 166% of people
+                    converted. The figure stays visible because it is real; the «▲» and the tooltip
+                    say why it is not a drop-off.
+                  */}
+                  <span
+                    className={`tnum w-12 text-end text-xs ${s.exceeds_previous ? 'text-warning' : 'text-text-muted'}`}
+                    title={s.exceeds_previous
+                      ? (ar
+                          ? 'هذه المرحلة أكبر من التي فوقها — الحدثان لا يتداخلان (شراء مباشر، أو نافذة إسناد مختلفة).'
+                          : 'This stage counted more than the one above it — the two events do not nest (buy-now flows, or a different attribution window).')
+                      : undefined}
+                  >
+                    {s.step_rate === null ? '' : `${s.exceeds_previous ? '▲ ' : ''}${percent(s.step_rate, 0)}`}
+                  </span>
                 </div>
                 )
               })
