@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Copy, Download, FileText, LayoutGrid, Link2, Loader2, Plus, RefreshCw, Rows3, Send, Share2, Trash2, SlidersHorizontal } from 'lucide-react'
 import {
@@ -488,7 +489,7 @@ function ReportRowView({
         </span>
         {report.status === 'failed' && report.error && <div className="mt-1 max-w-[220px] truncate text-xs text-danger" title={report.error}>{report.error}</div>}
       </td>
-      <td className="tnum p-3 text-text-muted">{report.created_at ? new Date(report.created_at).toLocaleDateString('en-GB') : '—'}</td>
+      <td className="tnum p-3 text-text-muted">{report.created_at ? fmtDate(report.created_at) : '—'}</td>
       <td className="p-3">
         <div className="flex items-center justify-end gap-1">
           {report.status === 'completed' && (
@@ -1063,7 +1064,7 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
                     {s.password_protected && <span className="text-xs text-text-muted">🔒 {ar ? 'محمي' : 'Protected'}</span>}
                     {s.hide_spend && <span className="text-xs text-text-muted">{ar ? 'إنفاق مخفي' : 'Spend hidden'}</span>}
                     <span className="tnum text-xs text-text-muted">{s.view_count} {ar ? 'مشاهدة' : 'views'}</span>
-                    {s.expires_at && <span className="tnum text-xs text-text-muted">{ar ? 'ينتهي' : 'expires'} {new Date(s.expires_at).toLocaleDateString('en-GB')}</span>}
+                    {s.expires_at && <span className="tnum text-xs text-text-muted">{ar ? 'ينتهي' : 'expires'} {fmtDate(s.expires_at)}</span>}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <button onClick={() => setLogsFor(s.id)} className="text-xs font-semibold text-text-secondary hover:underline">
@@ -1153,7 +1154,7 @@ function ShareAccessHistory({
                     <span className={l.action === 'denied' ? 'font-semibold text-danger' : ''}>{label(l.action)}</span>
                     {l.detail && <span className="ms-1 text-xs text-text-muted">({l.detail})</span>}
                   </td>
-                  <td className="tnum p-2 text-xs text-text-secondary">{new Date(l.created_at).toLocaleString('en-GB')}</td>
+                  <td className="tnum p-2 text-xs text-text-secondary">{fmtDateTime(l.created_at)}</td>
                   <td className="tnum p-2 text-xs text-text-muted">{l.ip ?? '—'}</td>
                 </tr>
               ))}

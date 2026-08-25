@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { fmtDate } from '@/lib/datetime'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
 import { SlideBody, type Meta, type ReportData, type Slide } from './InteractiveReport'
@@ -116,7 +117,7 @@ export function PrintReport() {
   const landscape = type === 'presentation'
   const period = d.period ? `${d.period.from} → ${d.period.to}` : ''
   const mode = (d.mode as string) === 'live' ? 'Live' : 'Snapshot'
-  const updated = d.generated_at ? new Date(String(d.generated_at)).toLocaleDateString('en-GB') : ''
+  const updated = d.generated_at ? fmtDate(String(d.generated_at)) : ''
   const total = slides.length
 
   return (

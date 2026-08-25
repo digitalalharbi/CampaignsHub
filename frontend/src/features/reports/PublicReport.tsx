@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { fmtDateTime } from '@/lib/datetime'
 import { useParams } from 'react-router-dom'
 import { Download, Lock } from 'lucide-react'
 import { fetchSharedReport, sharedDownloadUrl } from './api'
@@ -216,7 +217,7 @@ function ReportMetaStrip({ report }: { report: Shared }) {
   const objective = typeof d.objective === 'string' ? d.objective : undefined
   const mode = (d.mode as string) === 'live' ? 'Live' : 'Snapshot'
   const items: Array<[string, string]> = [
-    ['آخر تحديث', report.generated_at ? new Date(report.generated_at).toLocaleString('en-GB') : '—'],
+    ['آخر تحديث', report.generated_at ? fmtDateTime(report.generated_at) : '—'],
     ['الفترة', period?.from && period?.to ? `${period.from} → ${period.to}` : '—'],
     ['العملة', report.currency],
     ['مصدر البيانات', String((d.data_source as string) ?? 'daily_metrics')],
