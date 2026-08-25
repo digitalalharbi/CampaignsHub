@@ -11,7 +11,7 @@ import {
 import { PolicyNote } from '@/features/legal/PolicyFooter'
 
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
-const COPY = {
+export const COPY = {
   ar: {
     title: 'الاشتراكات', subtitle: 'اطّلع على خطة المستأجر الحالية والاستهلاك مقابل الحدود، وبدّل الخطة.',
     no_permission: 'لا تملك صلاحية عرض الاشتراكات.',
@@ -25,7 +25,10 @@ const COPY = {
     st_active: 'نشِط', st_trialing: 'فترة تجريبية', st_past_due: 'متأخّر السداد', st_canceled: 'مُلغى',
     features: 'المزايا',
     m_projects: 'المشاريع', m_team_members: 'أعضاء الفريق', m_connections: 'الربط', m_reports_per_month: 'التقارير / شهر',
+    m_clients: 'العملاء', m_ad_accounts: 'الحسابات الإعلانية',
     f_support: 'الدعم', f_ai_assist: 'مساعد الذكاء', f_white_label: 'العلامة البيضاء', yes: 'نعم', no: 'لا',
+    f_reports: 'التقارير', f_campaign_tracking: 'تتبّع الحملات',
+    sup_community: 'مجتمع المستخدمين', sup_email: 'بريد إلكتروني', sup_priority: 'أولوية',
     review: 'مراجعة التغيير', cancel: 'إلغاء',
     quote_title: 'تفاصيل تغيير الباقة',
     quote_loading: 'جارٍ حساب الفرق…',
@@ -67,7 +70,10 @@ const COPY = {
     st_active: 'Active', st_trialing: 'Trialing', st_past_due: 'Past due', st_canceled: 'Canceled',
     features: 'Features',
     m_projects: 'Projects', m_team_members: 'Team members', m_connections: 'Connections', m_reports_per_month: 'Reports / month',
+    m_clients: 'Clients', m_ad_accounts: 'Ad accounts',
     f_support: 'Support', f_ai_assist: 'AI assist', f_white_label: 'White-label', yes: 'Yes', no: 'No',
+    f_reports: 'Reports', f_campaign_tracking: 'Campaign tracking',
+    sup_community: 'Community', sup_email: 'Email', sup_priority: 'Priority',
     review: 'Review this change', cancel: 'Cancel',
     quote_title: 'What this change costs',
     quote_loading: 'Working out the difference…',
@@ -111,15 +117,37 @@ function statusLabel(status: string, c: Copy): string {
   return map[status] ?? status
 }
 
-function metricLabel(metric: string, c: Copy): string {
+/**
+ * SUBSCRIPTION-LABELS-001 — every key `SubscriptionPlanSeeder` can send, labelled.
+ *
+ * The usage table read «clients 1 4 5» and a plan card read «reports نعم» and «campaign tracking
+ * نعم», with the support tier rendered as `community` / `email` / `priority` — English identifiers
+ * inside Arabic rows, on the page a customer reads before paying. The maps had been written against
+ * a subset of the seeder's keys and the fallbacks (`?? metric`, `?? key.replace(/_/g, ' ')`) printed
+ * the rest.
+ *
+ * `subscriptionLabels.test.ts` asserts these cover the seeder's key sets, so a plan gaining a
+ * feature fails a test rather than showing a customer a column name.
+ */
+export function metricLabel(metric: string, c: Copy): string {
   const map: Record<string, string> = {
-    projects: c.m_projects, team_members: c.m_team_members, connections: c.m_connections, reports_per_month: c.m_reports_per_month,
+    projects: c.m_projects, team_members: c.m_team_members, connections: c.m_connections,
+    reports_per_month: c.m_reports_per_month, clients: c.m_clients, ad_accounts: c.m_ad_accounts,
   }
   return map[metric] ?? metric
 }
 
-function featureLabel(key: string, c: Copy): string {
-  const map: Record<string, string> = { support: c.f_support, ai_assist: c.f_ai_assist, white_label: c.f_white_label }
+/** A feature's VALUE, when it is a named tier rather than a yes/no. */
+export function featureValueLabel(value: string, c: Copy): string {
+  const map: Record<string, string> = { community: c.sup_community, email: c.sup_email, priority: c.sup_priority }
+  return map[value] ?? value
+}
+
+export function featureLabel(key: string, c: Copy): string {
+  const map: Record<string, string> = {
+    support: c.f_support, ai_assist: c.f_ai_assist, white_label: c.f_white_label,
+    reports: c.f_reports, campaign_tracking: c.f_campaign_tracking,
+  }
   return map[key] ?? key.replace(/_/g, ' ')
 }
 
@@ -401,7 +429,7 @@ function PlanCard({
             <li key={key} className="flex items-center justify-between gap-2">
               <span>{featureLabel(key, c)}</span>
               <span className="font-semibold text-text-primary">
-                {typeof value === 'boolean' ? (value ? c.yes : c.no) : String(value)}
+                {typeof value === 'boolean' ? (value ? c.yes : c.no) : featureValueLabel(String(value), c)}
               </span>
             </li>
           ))}
