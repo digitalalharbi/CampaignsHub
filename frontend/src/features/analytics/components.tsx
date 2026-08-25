@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react'
-import { Area, AreaChart, ResponsiveContainer } from 'recharts'
+import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { compact, percent, trend } from './format'
 import type { Trend } from './format'
+
+const AXIS = { stroke: 'var(--text-muted)', fontSize: 12 }
 
 /** Brand-consistent series colors (CSS vars resolve in light + dark). */
 export const SERIES = {
@@ -237,3 +239,54 @@ export const tooltipProps = {
 }
 
 export { compact }
+
+/**
+ * ANALYTICS-TRUTH-002 — one rate, one axis, one scale.
+ *
+ * ROAS, CPA and CTR were drawn as three lines on a shared axis. «3.20x», «21.96 USD» and «0.72%»
+ * have no common unit, so two of the three were pressed flat against the floor and the chart could
+ * only ever be read for the largest of them. Worse, the values arrived derived from a coalesced
+ * zero, so what actually shipped was a single flat line at 0 under a title naming three metrics.
+ *
+ * A small panel each: the series keeps its own domain, the reader gets the shape, and the current
+ * value is printed rather than being estimated off an axis.
+ */
+export function RateTrend({
+  title,
+  data,
+  dataKey,
+  color,
+  loading,
+  error,
+  format,
+}: {
+  title: string
+  data: Array<Record<string, unknown>>
+  dataKey: string
+  color: string
+  loading?: boolean
+  error?: boolean
+  format: (v: number) => string
+}) {
+  const values = data.map((r) => r[dataKey]).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+  const latest = values.length > 0 ? values[values.length - 1] : null
+
+  return (
+    <Panel title={title} loading={loading} error={error} empty={!loading && values.length === 0}>
+      <div className="mb-1 tnum text-xl font-extrabold leading-none text-text-primary">
+        {latest === null ? '—' : format(latest)}
+      </div>
+      <div className="h-36">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+            <XAxis dataKey="date" tick={AXIS} tickFormatter={(v) => String(v).slice(5)} minTickGap={28} />
+            <YAxis tick={AXIS} width={44} domain={['auto', 'auto']} tickFormatter={(v) => format(Number(v))} />
+            <Tooltip {...tooltipProps} formatter={(v: number) => format(v)} />
+            <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </Panel>
+  )
+}

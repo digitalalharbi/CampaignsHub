@@ -435,6 +435,33 @@ final class MetricsAggregator
      *
      * `exists()` rather than a count: the caller only needs to know whether to speak.
      */
+    /**
+     * HEADLINE-SCOPE-001 — the distinct objective families the rows in this scope belong to.
+     *
+     * Derived through `CampaignObjective::family()`, the same mapping the campaign breakdown uses,
+     * so «what family is this campaign» has one answer in the codebase and not two.
+     *
+     * @return list<string>
+     */
+    public function objectiveFamiliesInScope(Carbon $from, Carbon $to): array
+    {
+        $objectives = $this->base($from, $to)
+            ->join('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
+            ->distinct()
+            ->pluck('unified_campaigns.objective');
+
+        $families = [];
+        foreach ($objectives as $objective) {
+            $family = $objective === null
+                ? ObjectiveFamily::Unknown
+                : (CampaignObjective::tryFrom((string) $objective)?->family() ?? ObjectiveFamily::Unknown);
+
+            $families[$family->value] = true;
+        }
+
+        return array_keys($families);
+    }
+
     public function hasRows(Carbon $from, Carbon $to): bool
     {
         return $this->base($from, $to)->exists();

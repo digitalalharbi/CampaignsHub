@@ -142,6 +142,22 @@ export interface Summary {
    * says one true thing about the FILTER instead.
    */
   rows_in_scope: boolean
+  /**
+   * ANALYTICS-COMPARE-001 — whether the comparison window holds any rows to compare against.
+   *
+   * A delta is null both when a metric did not move off a base of zero and when there IS no previous
+   * period. The cards rendered the same «— —» for each, under a heading promising a comparison. This
+   * says which, so the page can state «no previous period» once rather than six mute dashes.
+   */
+  previous_rows_in_scope: boolean
+  previous_range: { from: string; to: string }
+  /**
+   * HEADLINE-SCOPE-001 — the objective families the rows in scope actually belong to.
+   *
+   * «كل الأهداف» describes the filter, not the data. A project whose campaigns are all Sales has one
+   * objective in scope either way, and the headline row follows this rather than the filter value.
+   */
+  objective_families_in_scope: string[]
   commerce: CommerceSummary | null
   conversions_basis: ConversionsBasis
   /**

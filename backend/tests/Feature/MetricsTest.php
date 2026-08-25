@@ -272,6 +272,80 @@ final class MetricsTest extends TestCase
         $this->assertGreaterThan(0, (float) $stages['purchases']['drop_off']);
     }
 
+    /**
+     * ANALYTICS-COMPARE-001 — «— —» meant two different things and said neither.
+     *
+     * A delta is null when a metric did not move off a base of zero AND when there is no previous
+     * period at all. Production holds 15 days of rows behind a 30-day range, so every comparison
+     * window falls before the first row that exists — and six cards printed six mute dashes under a
+     * heading promising a comparison.
+     */
+    public function test_the_summary_says_whether_there_is_a_previous_period_to_compare_against(): void
+    {
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'spend', 100, '2026-06-10'),
+            $this->metric($this->projectA->id, 'spend', 120, '2026-06-11'),
+        ]);
+
+        // A window whose preceding window also holds rows.
+        $comparable = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/summary?from=2026-06-11&to=2026-06-11")
+            ->assertOk()->json('data');
+
+        $this->assertTrue($comparable['previous_rows_in_scope']);
+        $this->assertSame('2026-06-10', $comparable['previous_range']['from']);
+
+        // The production shape: the whole comparison window sits before the first row.
+        $noPrevious = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/summary?from=2026-06-10&to=2026-06-11")
+            ->assertOk()->json('data');
+
+        $this->assertFalse(
+            $noPrevious['previous_rows_in_scope'],
+            'There are no rows before 2026-06-10, so there is nothing for this period to be measured against.',
+        );
+        $this->assertSame('2026-06-08', $noPrevious['previous_range']['from']);
+        $this->assertSame('2026-06-09', $noPrevious['previous_range']['to']);
+    }
+
+    /**
+     * HEADLINE-SCOPE-001 — «كل الأهداف» describes the filter, not the rows.
+     *
+     * The board withholds cost-per and return from a mixed scope, because a CPA across a brand
+     * budget and a sales budget divides one objective's money by another objective's events. It was
+     * applying that to any UNNARROWED scope — so a project whose campaigns are all sales was refused
+     * its own return on ad spend on the grounds that it might be something else.
+     */
+    public function test_the_summary_reports_which_objective_families_the_scope_actually_holds(): void
+    {
+        $sales = UnifiedCampaign::create(['tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id, 'name' => 'Sales', 'objective' => 'sales', 'status' => 'active']);
+
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'spend', 100, '2026-06-20', ['unified' => $sales->id, 'camp' => 'ext-sales']),
+        ]);
+
+        $onlySales = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/summary?from=2026-06-20&to=2026-06-20")
+            ->assertOk()->json('data');
+
+        $this->assertSame(['sales'], $onlySales['objective_families_in_scope']);
+
+        $awareness = UnifiedCampaign::create(['tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id, 'name' => 'Brand', 'objective' => 'awareness', 'status' => 'active']);
+
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'spend', 60, '2026-06-20', ['unified' => $awareness->id, 'camp' => 'ext-aware']),
+        ]);
+
+        $mixed = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/summary?from=2026-06-20&to=2026-06-20")
+            ->assertOk()->json('data');
+
+        $families = $mixed['objective_families_in_scope'];
+        sort($families);
+
+        $this->assertSame(['awareness', 'sales'], $families, 'Two families in scope stays a mixed scope.');
+    }
+
     public function test_the_summary_says_whether_the_scope_holds_anything_at_all(): void
     {
         app(UpsertDailyMetrics::class)->handle([

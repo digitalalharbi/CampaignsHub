@@ -87,6 +87,43 @@ final class MetricsController extends Controller
              */
             'rows_in_scope' => $this->scoped($request)->hasRows($from, $to),
             /*
+             * ANALYTICS-COMPARE-001 — whether a comparison was POSSIBLE, not merely whether it moved.
+             *
+             * Every delta above divides by the previous period's figure and returns null when that
+             * figure is 0. Both «this metric did not change from a base of nothing» and «there is no
+             * previous period at all» arrive at the card as the same null, and the card renders the
+             * same «— —» for each.
+             *
+             * Production has 15 days of rows and offers a 30-day range, so the whole comparison
+             * window falls before the first row that exists. Six cards then print six mute dashes
+             * under a heading that promises «مقارنة بالفترة السابقة» — the page states a comparison
+             * it never had the data to make, and gives the reader no way to tell that from a flat
+             * month.
+             *
+             * The scope answers it directly: a comparison window with no rows cannot be compared
+             * against, and the page says so once instead of six times in a notation for «unchanged».
+             */
+            'previous_rows_in_scope' => $this->scoped($request)->hasRows($prevFrom, $prevTo),
+            'previous_range' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()],
+            /*
+             * HEADLINE-SCOPE-001 — the headline follows what is IN scope, not what the filter says.
+             *
+             * `layoutFor('all', 'all')` returns the operational row — spend, impressions, clicks,
+             * CTR — and deliberately withholds cost-per and return, because a CPA computed across a
+             * brand budget and a sales budget divides one objective's money by another objective's
+             * events. That reasoning is right and it was being applied to the wrong question.
+             *
+             * «كل الأهداف» is a statement about the FILTER. A project whose campaigns are all Sales
+             * has one objective in scope whether or not the reader narrowed to it, and the board was
+             * withholding ROAS and cost per order from it on the grounds that the scope might be
+             * mixed — when the rows themselves say it is not.
+             *
+             * So the scope reports the families it actually contains. One family means the board can
+             * headline that family's own metrics; several still means the operational row, for the
+             * original and unchanged reason.
+             */
+            'objective_families_in_scope' => $this->scoped($request)->objectiveFamiliesInScope($from, $to),
+            /*
              * MONEY-TRUTH-001 — the currency the converted figures are IN.
              *
              * It was in `meta` only, and `meta` is not carried through the summary hook, so every
