@@ -57,7 +57,7 @@ connection is where the remaining defects will surface.
 | Encrypted credential storage | `Models/IntegrationCredential`, `OAuth/TokenVault` | `VERIFIED` — encrypted payload, never logged, never returned by an API |
 | OAuth state | `OAuth/AuthorizationState` | `VERIFIED` — TTL 15 min (`state_ttl_minutes`) |
 | Webhook signature | `Webhooks/WebhookSignature` | `VERIFIED` — HMAC-SHA256 compared with `hash_equals`, not `===`; Zid's basic-auth header compared whole |
-| Webhook ledger | `Models/IntegrationWebhookEvent`, `Webhooks/WebhookIngest` | `IMPLEMENTED_NOT_VERIFIED` — records provider, body, payload, `signature_verified` |
+| Webhook ledger + **idempotency** | `Models/IntegrationWebhookEvent`, `Webhooks/WebhookIngest` | `VERIFIED` — unique index on `(provider, fingerprint)`, insert-before-work, savepoint-scoped duplicate recovery returning the existing row |
 | Rate limits / retry / backoff | `Support/PlatformHttp` (+14 files) | `IMPLEMENTED_NOT_VERIFIED` |
 | Pagination / cursors | `Reporting/ReportingWindow` + per-connector (`MAX_PAGES`) | `IMPLEMENTED_NOT_VERIFIED` |
 | Idempotent upsert | `Metrics/UpsertDailyMetrics` (+24 files) | `VERIFIED` — exercised continuously by Snapchat |
@@ -118,21 +118,34 @@ figures are never projected downward onto creatives to fill it.
 
 ## 4. Real readiness gaps
 
-Everything above is either done or waiting on a secret. These are the items that would genuinely
-require code when a credential arrives, and they are the actual backlog:
+Everything in §2–§3 is either done or waiting on a secret. These are the items that would genuinely
+require code, and they are the actual backlog.
+
+**Two candidates were withdrawn after checking the code rather than a grep.** They are recorded here
+because a false gap is more expensive than a missing one: it sends someone to build a second
+implementation of something that already works.
 
 | id | gap | why it matters |
 |---|---|---|
-| `READY-1` | **Webhook replay protection and idempotency are not explicit.** `WebhookIngest::record` stores every delivery with `signature_verified`, but nothing rejects a replayed body or de-duplicates a redelivered event id. | Salla and Zid both retry deliveries. A retried «order paid» that lands twice is double-counted revenue — and revenue is the number reconciliation is judged on. |
-| `READY-2` | **CPV (cost per video view) does not exist** in `metricCatalog.ts`, though the objective spec names it for Video. `cpa/cpl/cpc/cpm/cpe/cpi` all exist. | The Video objective currently headlines `cpm`, which prices an impression, not a view. |
-| `READY-3` | **`ObjectiveTab` in `AnalyticsPage.tsx` carries a private, weaker copy of the objective→KPI map** that `metricCatalog.ts` already owns as `OBJECTIVE_LAYOUTS`/`layoutFor`. The local copy omits `cpl`, `cpa`, `cpe`, `cpi`, `aov`, `landing_page_views`, `registrations`. | This is the "no raw metric logic inside the interfaces" rule being broken in the one screen the rule exists for. Two maps will keep diverging. |
-| `READY-4` | **`ObjectiveTab` asserts `money_original_currencies: 1`** when summing withheld spend across a family, and takes the currency from the *first* withheld campaign. On a partial family it discards the converted half and prints the withheld half as the total. | Same defect class as `PARTIAL-WITHHELD-001`: a total that omits part of its scope, plus a fabricated claim that one currency is involved. |
+| `READY-2` | **The Video objective headlines `cpm`, the price of an impression, not of a view.** `cost_per_view` already exists end-to-end — `EntityMetricsAggregator` computes it as spend ÷ `video_views`, `analytics/api.ts` types it, `content/metrics.ts` labels it «تكلفة المشاهدة» and counts it as money. It is simply not in `metricCatalog.ts`'s video layout. | A video campaign is bought for views, and is currently priced by impressions on the one screen meant to judge it by its own objective. The metric is there; the layout does not reach for it. |
+| `READY-3` | **`ObjectiveTab` in `AnalyticsPage.tsx` keeps a private objective→KPI map.** `metricCatalog.ts` already owns the canonical one as `OBJECTIVE_LAYOUTS`/`layoutFor`; `AnalyticsPage` imports only `SPECS, dashboardMetrics` and hardcodes its own eight families, omitting `cpl`, `cpa`, `cpe`, `cpi`, `aov`, `landing_page_views` and `registrations`. | This is the "no raw metric logic inside the interfaces" rule being broken in the one screen the rule exists for. Two maps drift, and the weaker one is the one on screen. |
+| `READY-4` | **`ObjectiveTab` asserts `money_original_currencies: 1`** while summing withheld spend across a family, takes the currency from the *first* withheld campaign, and on a partial family discards the converted half and prints the withheld half as the family total. | The same defect class as `PARTIAL-WITHHELD-001`: a total that omits part of its scope, plus a fabricated claim that only one currency is involved. |
 
-`READY-3` and `READY-4` sit in `AnalyticsPage.tsx`, which is being changed by PRs in flight. They are
+### Withdrawn, and why
+
+| withdrawn | what the code actually does |
+|---|---|
+| ~~webhook replay / idempotency missing~~ | **Fully implemented, and enforced by the database.** `integration_webhook_events` has a unique index on `(provider, fingerprint)`; `WebhookIngest::record` inserts *before* doing any work, catches `UniqueConstraintViolationException` inside a savepoint, and returns `duplicate: true` with the existing row. The fingerprint is the provider's own event id when present — what a retry preserves — and a SHA-256 of the raw body when not. The migration's own comment states it: «The unique index IS the idempotency guarantee.» |
+| ~~CPV does not exist~~ | Narrowed to `READY-2`. The metric exists and is computed; only the analytics video layout omits it. |
+
+Both were produced by grepping for the words `replay`, `idempot` and `cpv`. The code says
+`duplicate`, `fingerprint` and `cost_per_view`. **Absence of the word is not absence of the
+behaviour** — the same failure this project has already recorded three times in `RESUME_STATE.md` §5,
+here committed by the audit instrument itself.
+
+`READY-3` and `READY-4` sit in `AnalyticsPage.tsx`, which PRs in flight are changing. They are
 recorded here and will be fixed on fresh main after those land, rather than opened as a competing
 implementation.
-
----
 
 ## 5. What "ready" will mean when credentials arrive
 
