@@ -32,7 +32,36 @@ final class DigestPresenter
     /** Metrics whose absence must be stated rather than shown as zero. */
     private const COUNTS = ['impressions', 'clicks', 'conversions', 'purchases', 'leads', 'reach', 'landing_page_views'];
 
-    public function __construct(private readonly string $locale = 'ar') {}
+    public function __construct(
+        private readonly string $locale = 'ar',
+        /**
+         * How many days the digest covers, so the copy can name the comparison it actually made.
+         *
+         * The verdicts said «مقارنة بالأمس» / «against yesterday» whatever the window was. Once the
+         * daily digest reports a week (EMAIL-DAILY-WINDOW-001) that sentence is simply false, and a
+         * weekly or monthly email carrying it was already false before that. A digest that misnames
+         * its own comparison teaches the reader to distrust the number beside it.
+         */
+        private readonly int $windowDays = 1,
+    ) {}
+
+    /**
+     * What this digest compared itself against, in words.
+     *
+     * Derived from the window rather than passed as a label, so a new rhythm cannot arrive with the
+     * wrong sentence attached.
+     */
+    public function comparedWith(): string
+    {
+        $ar = $this->ar();
+
+        return match (true) {
+            $this->windowDays <= 1 => $ar ? 'بالأمس' : 'yesterday',
+            $this->windowDays <= 7 => $ar ? 'بالأسبوع السابق' : 'the previous week',
+            $this->windowDays <= 31 => $ar ? 'بالشهر السابق' : 'the previous month',
+            default => $ar ? 'بالفترة السابقة' : 'the previous period',
+        };
+    }
 
     private function ar(): bool
     {
@@ -171,8 +200,8 @@ final class DigestPresenter
             return [
                 'tone' => 'warn',
                 'text' => $this->ar()
-                    ? 'ارتفعت تكلفة النتيجة أكثر من الربع مقارنة بالأمس — ابدأ من المنصة الأضعف أدناه.'
-                    : 'Cost per result rose by more than a quarter against yesterday — start with the weakest platform below.',
+                    ? 'ارتفعت تكلفة النتيجة أكثر من الربع مقارنة '.$this->comparedWith().' — ابدأ من المنصة الأضعف أدناه.'
+                    : 'Cost per result rose by more than a quarter against '.$this->comparedWith().' — start with the weakest platform below.',
             ];
         }
 
@@ -180,16 +209,16 @@ final class DigestPresenter
             return [
                 'tone' => 'good',
                 'text' => $this->ar()
-                    ? 'انخفضت تكلفة النتيجة أكثر من الربع مقارنة بالأمس — تحقق مما تغيّر وثبّته.'
-                    : 'Cost per result fell by more than a quarter against yesterday — find what changed and keep it.',
+                    ? 'انخفضت تكلفة النتيجة أكثر من الربع مقارنة '.$this->comparedWith().' — تحقق مما تغيّر وثبّته.'
+                    : 'Cost per result fell by more than a quarter against '.$this->comparedWith().' — find what changed and keep it.',
             ];
         }
 
         return [
             'tone' => 'neutral',
             'text' => $this->ar()
-                ? 'لا شيء يستدعي تدخلًا اليوم — الأرقام ضمن مدى الأمس.'
-                : 'Nothing needs you today — the figures are within yesterday’s range.',
+                ? 'لا شيء يستدعي تدخلًا الآن — الأرقام ضمن مدى '.$this->comparedWith().'.'
+                : 'Nothing needs you now — the figures are within the range of '.$this->comparedWith().'.',
         ];
     }
 
