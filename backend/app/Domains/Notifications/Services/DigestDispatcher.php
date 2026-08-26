@@ -43,6 +43,9 @@ final class DigestDispatcher
     /** Beyond this a failure is left alone: retrying a broken template every hour is not a fix. */
     private const MAX_ATTEMPTS = 3;
 
+    /** The daily email reports a WEEK, compared with the week before — see {@see sendDaily()}. */
+    public const DAILY_WINDOW_DAYS = 7;
+
     public function __construct(
         private readonly DigestScope $scope,
         private readonly DailyDigest $daily,
@@ -51,13 +54,27 @@ final class DigestDispatcher
     ) {}
 
     /**
-     * Send one person their daily digest for `$day`, or record why not.
+     * The seven days ending on `$day`, against the seven before them — EMAIL-DAILY-WINDOW-001.
+     *
+     * This used to report `$day` alone, which made the daily email a report on ONE day compared with
+     * the day before it. Two days is the noisiest comparison paid media offers: a weekend, a payday,
+     * one campaign starting or a single provider syncing late moves it enough to look like a trend,
+     * and a reader who acts on that is reacting to the calendar. Seven against seven contains a whole
+     * week in each side, so both windows hold the same weekdays and a change means something changed.
+     *
+     * What is NOT changed is the rhythm or the ledger key: this still sends once per day, keyed on
+     * `$day`, so the unique index that stops a second copy keeps working exactly as before. Only the
+     * span the email reports on widens. The comparison window follows automatically —
+     * {@see DailyDigest::buildRange()} always takes the same number of days immediately before.
      *
      * @return string the state written to the ledger
      */
     public function sendDaily(User $user, string $tenantId, Carbon $day, string $locale = 'ar'): string
     {
-        return $this->send($user, $tenantId, 'daily', $day->toDateString(), $day->copy()->startOfDay(), $day->copy()->endOfDay(), $locale);
+        $end = $day->copy()->endOfDay();
+        $start = $end->copy()->subDays(self::DAILY_WINDOW_DAYS - 1)->startOfDay();
+
+        return $this->send($user, $tenantId, 'daily', $day->toDateString(), $start, $end, $locale);
     }
 
     /**
