@@ -33,6 +33,9 @@ const CAMPAIGN = {
 
 /** impressions 1,282,024 · clicks 26,918 → CTR 2.1% · conversions 1,291 → conv rate 4.8% */
 const SUMMARY = {
+  // Reporting currency matches the campaign budget (SAR), so utilization is comparable — the money
+  // contract will not pace spend against budget across two currencies (PARTIAL-WITHHELD-001).
+  currency: 'SAR',
   current: {
     impressions: 1_282_024, clicks: 26_918, conversions: 1_291, spend: 36_000, revenue: 439_000,
     roas: 12.08, cpa: 28, ctr: 0.021, cpc: 1.34, cpm: 28,

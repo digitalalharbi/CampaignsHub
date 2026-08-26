@@ -340,6 +340,8 @@ final class MetricsController extends Controller
                 'spend' => $funnel['spend'],
                 'spend_currency' => $funnel['spend_currency'],
                 'spend_withheld' => $funnel['spend_withheld'],
+                // Why spend/cost_per are what they are — «partial» / «mixed_currency» read as blanks otherwise.
+                'spend_state' => $funnel['spend_state'],
             ],
         );
     }

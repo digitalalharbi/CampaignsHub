@@ -70,7 +70,20 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         ...(password ? { password } : {}),
         ...(expiresAt ? { expires_at: expiresAt } : {}),
       }),
-    onSuccess: (r) => setCreated(`${window.location.origin}${r.url}`),
+    /*
+     * SHARE-LINK-DOUBLE-ORIGIN-001 — the copied link had its host twice.
+     *
+     * `ShareService::urlFor()` returns the ABSOLUTE link — `https://campaignshub.io/r/…` — while
+     * this prepended `window.location.origin` to it, producing
+     * `https://campaignshub.iohttps://campaignshub.io/r/…`. Every link this builder produced was
+     * broken before it left the operator's screen.
+     *
+     * `ReportsPage` was fixed for exactly this and says why in its own comment: the server states
+     * the canonical host, because assembling it from the tab means an operator reviewing on staging
+     * or localhost sends a client a host only they can reach. This builder is newer and repeated the
+     * mistake the older one had already corrected.
+     */
+    onSuccess: (r) => setCreated(r.url),
   })
 
   /*
