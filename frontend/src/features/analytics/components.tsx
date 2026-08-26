@@ -16,13 +16,22 @@ export const SERIES = {
   clicks: 'var(--teal)',
   neutral: 'var(--text-muted)',
 }
+/*
+ * Platform identities, read from the token layer so each theme can state them.
+ *
+ * They were literals, and two of them — TikTok `#000000` and X `#111111` — were the brand's true
+ * black. On the dark ground that is a donut slice you cannot see, a legend dot that reads as a hole
+ * and a bar of zero apparent length, in every screen that draws a platform. The tokens keep the
+ * exact brand value in light and swap in each brand's own light-on-dark mark for dark.
+ */
 export const PLATFORM_COLORS: Record<string, string> = {
-  meta: '#1877f2',
-  google: '#ea4335',
-  tiktok: '#000000',
-  snapchat: '#f7b500',
-  x: '#111111',
-  linkedin: '#0a66c2',
+  meta: 'var(--platform-meta)',
+  google: 'var(--platform-google)',
+  google_ads: 'var(--platform-google)',
+  tiktok: 'var(--platform-tiktok)',
+  snapchat: 'var(--platform-snapchat)',
+  x: 'var(--platform-x)',
+  linkedin: 'var(--platform-linkedin)',
 }
 export const platformColor = (p: string) => PLATFORM_COLORS[p] ?? 'var(--brand-500)'
 
