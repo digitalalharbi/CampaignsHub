@@ -43,10 +43,25 @@ use Illuminate\Support\Carbon;
 final class ReportingCurrency
 {
     /**
-     * Advertising reporting is SAR unless a client says otherwise — the home market, and the currency
-     * every dashboard, report and client link in this product is read in.
+     * MONEY-USD-001 — advertising reporting is USD unless a client workspace says otherwise.
+     *
+     * This was SAR, and the consequence was not cosmetic. Every ad platform this product speaks to
+     * bills and reports in USD at account level, so converting into SAR required a USD→SAR rate for
+     * every monetary row — and where no rate could be vouched for, FX-001 correctly refused to
+     * invent one and stored `value = null`. The money was then WITHHELD everywhere, which is honest
+     * and useless: production carries thousands of spend rows whose figures nobody can read, because
+     * the reporting currency asked a question the rate table could not answer.
+     *
+     * With USD as the reporting currency a USD account's spend needs no rate at all — the original
+     * and the reporting currency are the same, the conversion is identity, and the figure is simply
+     * readable. An account genuinely billing in another currency still needs a real rate and still
+     * fails closed without one. Nothing about that rule changes; what changes is that the common case
+     * stops being the failing case.
+     *
+     * A client workspace with an explicit `default_currency` is untouched — this is only the answer
+     * when nobody has stated one.
      */
-    public const DEFAULT = 'SAR';
+    public const DEFAULT = 'USD';
 
     /** @var array<string, string> project id → reporting currency, memoised per request */
     private array $projects = [];
