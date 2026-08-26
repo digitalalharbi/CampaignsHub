@@ -33,8 +33,9 @@ import { listCreatives } from '@/features/content/api'
 import { compact, money, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { plotSeries } from './timeseriesMoney'
+import { orderRows } from './tableSort'
 import { familyMoney, familyTotal, type FamilyRow } from './familyTotals'
-import { readMoney } from '@/lib/money/contract'
+import { readCostPer, readMoney, readRoas } from '@/lib/money/contract'
 
 /** The two KPI keys that are money rather than a quantity or a rate. */
 const MONEY_KPIS = new Set(['spend', 'revenue'])
@@ -663,6 +664,18 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
             rowCostPer(r, 'cpm', Number(r.impressions ?? 0) / 1000),
             percent(r.spend_share, 1),
           ])}
+          /* The raw figures behind those cells, so the header can sort what the eye is comparing. */
+          values={rows.map((r) => [
+            providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+            readMoney(r, 'spend', null, ar).amount,
+            r.conversions ?? null,
+            readCostPer(r, 'cpa', 'conversions', null, ar).amount,
+            readRoas(r, ar).value,
+            r.ctr ?? null,
+            readCostPer(r, 'cpm', Number(r.impressions ?? 0) / 1000, null, ar).amount,
+            r.spend_share ?? null,
+          ])}
+          initialSort={{ column: 1, dir: 'desc' }}
         />
       </Panel>
     </div>
@@ -718,6 +731,16 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
             rowCostPer(r, 'cpa', 'conversions'),
             <span key="ro" className="tnum font-semibold">{rowRoas(r)}</span>,
           ])}
+          values={rows.map((r) => [
+            r.campaign_name ?? '',
+            providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+            readMoney(r, 'spend', null, ar).amount,
+            readMoney(r, 'revenue', null, ar).amount,
+            r.conversions ?? null,
+            readCostPer(r, 'cpa', 'conversions', null, ar).amount,
+            readRoas(r, ar).value,
+          ])}
+          initialSort={{ column: 2, dir: 'desc' }}
         />
       </Panel>
     </div>
@@ -862,6 +885,17 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
               : money(r.projected_spend, r.spent_currency ?? undefined),
           ]
         })}
+        values={rows.map((r) => [
+          r.campaign_name,
+          r.budget ?? null,
+          r.spent ?? null,
+          r.remaining,
+          r.consumed_pct,
+          r.pace,
+          r.projected_spend ?? null,
+        ])}
+        /* Fastest-burning first: a campaign about to overrun is why somebody opens this table. */
+        initialSort={{ column: 5, dir: 'desc' }}
       />
     </Panel>
   )
@@ -893,6 +927,16 @@ function QualityTab({ projectId, range, filters }: TabProps) {
            */
           <SyncStatusPill key="s" status={r.last_sync_status} ar={ar} />,
         ])}
+        values={rows.map((r) => [
+          providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+          r.latest_metric_date ?? null,
+          r.last_sync_at ?? null,
+          r.days_with_data ?? null,
+          r.missing_days,
+          r.last_sync_status ?? null,
+        ])}
+        /* Most missing days first: the platform with the biggest hole is the reason to open this. */
+        initialSort={{ column: 4, dir: 'desc' }}
       />
       <p className="mt-3 text-xs text-text-muted">{ar ? 'لا يتم جمع Reach عبر المنصات كوصول فريد — يُعرض لكل منصة على حدة.' : 'Reach is not summed across platforms as unique reach — it is shown per platform.'}</p>
       </Panel>
@@ -1154,24 +1198,92 @@ function PlatformCell({ provider }: { provider: string }) {
   )
 }
 
-function MetricTable({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
+/** One row's sortable values, positionally matched to its cells. `null` sorts last in both directions. */
+export type SortValues = Array<number | string | null>
+
+/**
+ * TABLE-SORT-ALIGN-001 — every analytics table, sortable and squarely aligned.
+ *
+ * ## Alignment
+ *
+ * Header and cell were both `text-end`, which measured as a drift of exactly 0 on all eleven tables
+ * — they were never misaligned in the DOM. But `text-end` under `dir="rtl"` means the LEFT edge of
+ * the cell, so a number sat as far from its Arabic heading as the column is wide, and read as
+ * belonging to no column in particular. Numeric columns are centred now: header and body share one
+ * alignment, so the association is unmistakable at a glance.
+ *
+ * `tnum` stays, because it is what keeps digits the same width; centring only moves where the block
+ * of digits sits, it does not stagger them.
+ *
+ * ## Sorting
+ *
+ * Cells are `ReactNode` — a bar, a pill, a link — so they cannot be compared. `values` carries the
+ * raw figure per cell, positionally matched, and the caller passes the same source it rendered from.
+ * A table with no `values` is simply not sortable rather than sortable-and-wrong.
+ *
+ * Nulls sort last in BOTH directions on purpose: «this platform does not report CPM» is not the
+ * cheapest CPM, and letting it win an ascending sort is how an absence gets read as a best result.
+ */
+export function MetricTable({
+  head,
+  rows,
+  values,
+  initialSort,
+}: {
+  head: string[]
+  rows: React.ReactNode[][]
+  values?: SortValues[]
+  /** Column index to sort by on first render, and its direction. */
+  initialSort?: { column: number; dir: 'asc' | 'desc' }
+}) {
+  const [sort, setSort] = useState<{ column: number; dir: 'asc' | 'desc' } | null>(initialSort ?? null)
+
+  const order = useMemo(
+    () => (values && sort ? orderRows(values, sort.column, sort.dir) : rows.map((_, i) => i)),
+    [rows, values, sort],
+  )
+
+  const toggle = (i: number) => {
+    if (!values) return
+    setSort((prev) => (prev?.column === i ? { column: i, dir: prev.dir === 'desc' ? 'asc' : 'desc' } : { column: i, dir: 'desc' }))
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr className="border-b border-border text-text-muted">
-            {head.map((h, i) => (
-              <th key={i} className={`py-2 font-semibold ${i === 0 ? 'text-start' : 'text-end'}`}>
-                {h}
-              </th>
-            ))}
+            {head.map((h, i) => {
+              const align = i === 0 ? 'text-start' : 'text-center'
+              const active = sort?.column === i
+
+              return (
+                <th key={i} className={`py-2 font-semibold ${align}`} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+                  {values ? (
+                    <button
+                      type="button"
+                      onClick={() => toggle(i)}
+                      className={`inline-flex items-center gap-1 hover:text-text-primary ${active ? 'text-text-primary' : ''}`}
+                      data-testid={`sort-${i}`}
+                    >
+                      {h}
+                      {/* The arrow only appears on the column actually in force, so the row does not
+                          look like six competing sort states. */}
+                      <span aria-hidden className={active ? '' : 'opacity-0 group-hover:opacity-40'}>
+                        {active ? (sort.dir === 'asc' ? '↑' : '↓') : '↕'}
+                      </span>
+                    </button>
+                  ) : h}
+                </th>
+              )
+            })}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} className="border-b border-border last:border-0 hover:bg-surface-secondary">
-              {r.map((cell, j) => (
-                <td key={j} className={`py-2.5 ${j === 0 ? 'text-start' : 'tnum text-end'}`}>
+          {order.map((rowIndex) => (
+            <tr key={rowIndex} className="border-b border-border last:border-0 hover:bg-surface-secondary">
+              {rows[rowIndex].map((cell, j) => (
+                <td key={j} className={`py-2.5 ${j === 0 ? 'text-start' : 'tnum text-center'}`}>
                   {cell}
                 </td>
               ))}
