@@ -33,7 +33,7 @@ import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, Platfo
  * rather than reintroducing a second multiplication here.
  */
 import { compact, money, moneyFromTotals, num, percent, ratio, rowCostPer, rowMoney, rowRoas, trend } from '@/features/analytics/format'
-import { rankableMoney, readRoas, spendComparableAmount, type MoneyTotals } from '@/lib/money/contract'
+import { rankableMoney, readRoas, resolveMoneySeries, spendComparableAmount, type MoneyTotals } from '@/lib/money/contract'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { providerLabel } from './labels'
@@ -202,6 +202,9 @@ export function CampaignPerformanceTab({ campaign, projectId, range, locale }: {
   const platforms = useCampaignPlatforms(projectId, campaign.id, range)
   const cur = campaign.budget_currency || 'SAR'
   const series = perf.data ?? []
+  // PARTIAL-WITHHELD-001 (d/f) — the spend/revenue trend plots EFFECTIVE money in one currency, or
+  // «—»: a trend cannot drop a withheld/partial day the way the donut drops a platform.
+  const moneySeries = resolveMoneySeries(series as unknown as Array<Record<string, unknown>>, ['spend', 'revenue'], cur)
 
   const bestWorst = useMemo(() => {
     const withRev = series.filter((p) => p.revenue != null)
@@ -245,7 +248,9 @@ export function CampaignPerformanceTab({ campaign, projectId, range, locale }: {
   return (
     <div className="space-y-4">
       <ChartCard title={ar ? 'الإنفاق مقابل الإيرادات' : 'Spend vs revenue'} subtitle={ar ? 'الاتجاه اليومي لهذه الحملة' : 'This campaign, day by day'}>
-        <SpendRevenueAreaChart data={series as unknown as Array<Record<string, unknown>>} height={240} currency={cur} />
+        {moneySeries === null
+          ? <div className="flex h-[240px] items-center justify-center text-center text-sm text-text-muted">{ar ? 'الإنفاق/الإيراد عبر الزمن غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend/revenue over time unavailable — amounts await a rate or span currencies'}</div>
+          : <SpendRevenueAreaChart data={moneySeries.rows} height={240} currency={moneySeries.currency ?? cur} />}
       </ChartCard>
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard title={ar ? 'النتائج' : 'Results'} subtitle={ar ? 'الاتجاه اليومي' : 'Day by day'}>
@@ -294,6 +299,8 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
   const spendVsBudget = spendInBudgetCurrency(summary.data?.current, cur, summary.data?.currency ?? null)
   const remaining = budget != null && spendVsBudget != null ? budget - spendVsBudget : null
   const util = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
+  // PARTIAL-WITHHELD-001 (d/f) — planned-vs-actual trend plots effective money in one currency, or «—».
+  const moneySeries = resolveMoneySeries((perf.data ?? []) as unknown as Array<Record<string, unknown>>, ['spend', 'revenue'], cur)
 
   const pacing = useMemo(() => {
     if (!campaign.starts_on || !campaign.ends_on || budget == null) return null
@@ -343,7 +350,9 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
           </div>
         </ChartCard>
         <ChartCard title="المخطط مقابل الفعلي" subtitle="الاتجاه التراكمي" className="lg:col-span-2">
-          {perf.data && perf.data.length ? <SpendRevenueAreaChart data={perf.data as unknown as Array<Record<string, unknown>>} height={190} currency={cur} /> : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">لا بيانات</div>}
+          {moneySeries === null
+            ? <div className="flex h-[190px] items-center justify-center text-center text-sm text-text-muted">{locale === 'ar' ? 'الإنفاق/الإيراد عبر الزمن غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend/revenue over time unavailable — amounts await a rate or span currencies'}</div>
+            : moneySeries.rows.length ? <SpendRevenueAreaChart data={moneySeries.rows} height={190} currency={moneySeries.currency ?? cur} /> : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">لا بيانات</div>}
         </ChartCard>
       </div>
 
