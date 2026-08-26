@@ -34,8 +34,20 @@ OAuth exchange and the two sync calls inside one class per platform.
 
 ## 2. Per-platform status
 
-All six extend `AwaitingCredentialsConnector`, so they share exactly the same honest behaviour. The
-differences are only in what each platform's real implementation will have to do.
+> **SUPERSEDED — see `INTEGRATION_READINESS_MATRIX.md` (INTEG-READINESS-001).**
+>
+> This section describes a tree in which all six connectors extend `AwaitingCredentialsConnector`
+> and every capability cell is empty. Neither is true any more: that class no longer exists, and all
+> six extend `ApiAdvertisingConnector` with real endpoint, pagination and attribution handling —
+> Snapchat has been serving production data through it. Two store connectors (Salla, Zid) exist that
+> this section predates entirely.
+>
+> Acting on the table below would mean rebuilding what is already built. It is kept for the record
+> of what was true when it was written. **§7–§10 below remain accurate** and hold the per-provider
+> corrections the matrix cites.
+
+All six extended `AwaitingCredentialsConnector`, so they shared exactly the same honest behaviour.
+The differences were only in what each platform's real implementation would have to do.
 
 | Platform | Connector | Registry key | OAuth | Accounts | Campaigns | Ad sets / ads | Insights | Blocking item |
 |---|---|---|---|---|---|---|---|---|
