@@ -58,8 +58,13 @@ GAP-3  Alerts missing: CTR/results decline · campaign stopped · sync STALE · 
 GAP-4  READY-3: ObjectiveTab duplicates metricCatalog's OBJECTIVE_LAYOUTS, weaker
 GAP-5  NUMERAL-PREFERENCE-002: 52 remaining Intl.NumberFormat('en-US')/toFixed sites → lib/numerals
 GAP-6  Email settings: recipients · weekly day · monthly day · thresholds · last/next send · log
-GAP-7  Reports: audit before claiming — executive, per-platform, ad/ad-set/creative detail,
-       best/worst by objective, store-confirmed vs platform-reported
+GAP-7  Reports — audited 2026-08-26, INVESTIGATION_REQUIRED resolved into concrete work:
+       InteractiveReport  1258 ln  platform·campaign·creative·funnel·objective·attribution·best/worst  OK
+       LiveSharedReport    521 ln  platform·campaign·funnel·store — MISSING creative, objective,
+                                   attribution, best/worst. This is the CLIENT-facing shareable one.
+       PublicReport        236 ln  broad coverage                                                  OK
+       PrintDocument       224 ln  MISSING creative, store, best/worst
+       No ad / ad-set detail in ANY report surface.
 GAP-8  Dark-mode sweep after #116: InteractiveReport, CreativeViewer, modals, tables, charts, forms
 ```
 
