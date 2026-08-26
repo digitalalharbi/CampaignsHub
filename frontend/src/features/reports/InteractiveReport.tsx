@@ -53,6 +53,8 @@ export interface ReportData {
   platforms: Row[]
   campaigns: Row[]
   top_creatives?: Row[]
+  /** REPORT-WORST-CREATIVES-001 — measured underperformers, never merely unmeasured ones. */
+  worst_creatives?: Row[]
   platform_notes?: Record<string, { strengths: string[]; weaknesses: string[] }>
   /**
    * The leader board, ranked on the metric this report's money was buying (§14.6).
@@ -680,6 +682,22 @@ function ScreenshotSlide({ platform }: { platform: string }) {
 
 function CreativesSlide({ data, platform }: { data: ReportData; platform: string }) {
   const items = (data.top_creatives ?? []).filter((c) => c.provider === platform).slice(0, 3)
+
+  /*
+   * REPORT-WORST-CREATIVES-001 — what to stop, beside what to keep.
+   *
+   * A report that lists only winners tells a reader what to scale and never what to cut, and cutting
+   * is the cheaper decision. The backend ranks these by the SAME objective-aware metric as the
+   * leaders, and excludes anything the platform did not measure on it — «no ROAS reported» is not
+   * «returned nothing», and a client's report is the last place to blur those.
+   *
+   * A creative can only appear in one list. With two or three creatives on a platform the best is
+   * arithmetically also the worst, and printing the same card under both headings reads as a bug.
+   */
+  const bestIds = new Set(items.map((c) => String(c.campaign_name ?? '')))
+  const weak = (data.worst_creatives ?? [])
+    .filter((c) => c.provider === platform && !bestIds.has(String(c.campaign_name ?? '')))
+    .slice(0, 3)
   const medal = ['from-amber-400 to-amber-600', 'from-slate-300 to-slate-500', 'from-orange-400 to-orange-600']
   return (
     <div>
@@ -703,6 +721,27 @@ function CreativesSlide({ data, platform }: { data: ReportData; platform: string
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {weak.length > 0 && (
+        <div className="mt-5">
+          <Title platform={platform} sub="بنفس مقياس هدف الحملة — ومقصورة على ما قاسته المنصة فعلًا">أضعف المحتويات — {platform}</Title>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {weak.map((c, idx) => (
+              <div key={idx} className="flex flex-col overflow-hidden rounded-2xl border border-danger/30 bg-surface-secondary">
+                <div className="flex flex-1 flex-col gap-2 p-3">
+                  <div className="truncate font-bold text-text-primary" title={String(c.campaign_name ?? '')}>{String(c.campaign_name ?? '—')}</div>
+                  <div className="grid grid-cols-2 gap-1.5 text-xs">
+                    {creativeReadings(c, data.objective, data.reported_by_platform?.[platform] ?? data.reported).map((r) => (
+                      <span key={r.key} className="rounded-lg bg-surface px-2 py-1">{r.label} <b className="tnum">{readingText(r.reading)}</b></span>
+                    ))}
+                  </div>
+                  <div className="mt-auto rounded-lg bg-[var(--negative-background)] px-2 py-1.5 text-xs text-danger">{String(c.reason ?? '')}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -992,11 +1031,12 @@ function BudgetSlide({ data }: { data: ReportData }) {
                     <tr key={i} className="border-b border-border last:border-0">
                       <td className="py-2 font-semibold text-text-primary">{String(r.campaign_name ?? '—')}</td>
                       <td className="tnum py-2 text-end">{money(Number(r.budget ?? 0), data.currency)}</td>
-                      <td className="tnum py-2 text-end">{money(Number(r.spent ?? 0), data.currency)}</td>
-                      <td className="tnum py-2 text-end">{money(Number(r.remaining ?? 0), data.currency)}</td>
+                      {/* PARTIAL-WITHHELD-001 — a null spend/remaining/projected is «no single figure», not «0». */}
+                      <td className="tnum py-2 text-end">{r.spent === null || r.spent === undefined ? '—' : money(Number(r.spent), data.currency)}</td>
+                      <td className="tnum py-2 text-end">{r.remaining === null || r.remaining === undefined ? '—' : money(Number(r.remaining), data.currency)}</td>
                       <td className="tnum py-2 text-end">{r.consumed_pct !== null && r.consumed_pct !== undefined ? percent(Number(r.consumed_pct), 0) : '—'}</td>
                       <td className={`tnum py-2 text-end font-semibold ${pace > 1.1 ? 'text-danger' : pace < 0.9 && pace > 0 ? 'text-warning' : 'text-text-primary'}`}>{pace ? pace.toFixed(2) : '—'}</td>
-                      <td className="tnum py-2 text-end">{money(Number(r.projected_spend ?? 0), data.currency)}</td>
+                      <td className="tnum py-2 text-end">{r.projected_spend === null || r.projected_spend === undefined ? '—' : money(Number(r.projected_spend), data.currency)}</td>
                     </tr>
                   )
                 })}

@@ -8,6 +8,9 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Metrics\Models\CurrencyRate;
@@ -25,6 +28,8 @@ use Database\Seeders\MetricDefinitionSeeder;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
 use Tests\TestCase;
 
@@ -432,6 +437,138 @@ final class MetricsTest extends TestCase
         $this->assertNull($row['consumed_pct']);
         $this->assertNull($row['pace']);
         $this->assertNull($row['remaining']);
+    }
+
+    /** A real account chain — `external_campaigns.external_account_id` is a foreign key. */
+    private function adAccount(string $provider, string $externalId, string $name, string $currency): ExternalAccount
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $credential = new IntegrationCredential(['provider' => $provider, 'credential_scope' => 'project_only', 'credential_type' => 'oauth', 'status' => 'active']);
+        $credential->setPayload('token-'.$provider);
+        $credential->save();
+
+        $connection = ProviderConnection::create([
+            'credential_id' => $credential->id, 'provider' => $provider,
+            'connection_name' => $provider.' connection', 'scope' => 'project_only', 'status' => 'connected',
+        ]);
+
+        $account = ExternalAccount::create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id, 'provider' => $provider,
+            'account_type' => 'ad_account', 'external_id' => $externalId, 'name' => $name,
+            'status' => 'active', 'currency' => $currency,
+        ]);
+
+        app(TenantContext::class)->forget();
+
+        return $account;
+    }
+
+    /**
+     * BUDGET-ACCOUNTS-001 — spend per ad account against the ceiling the PLATFORM enforces.
+     *
+     * The budget screen only ever compared spend to a plan typed into this product. The figure that
+     * actually stops delivery is the platform's own cap, which arrives on `external_campaigns` and
+     * was never read.
+     */
+    public function test_account_budgets_measure_spend_against_the_platform_cap(): void
+    {
+        $account = $this->adAccount('snapchat', 'acct-cap-1', 'Razzah Self Serve', 'USD');
+
+        // One campaign with a lifetime cap, one with only a daily cap, one with neither.
+        foreach ([['ext-cap-a', 1000.0, null], ['ext-cap-b', null, 100.0], ['ext-cap-c', null, null]] as [$ext, $life, $daily]) {
+            DB::table('external_campaigns')->insert([
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $this->tenant->id,
+                'project_id' => $this->projectA->id,
+                'external_account_id' => $account->id,
+                'provider' => 'snapchat',
+                'external_id' => $ext,
+                'name' => $ext,
+                'lifetime_budget' => $life,
+                'daily_budget' => $daily,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        DailyMetric::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->projectA->id,
+            'external_account_id' => $account->id,
+            'external_campaign_id' => $this->uid('ext-cap-a'),
+            'provider' => 'snapchat',
+            'metric_key' => 'spend',
+            'metric_date' => '2026-06-02',
+            'value' => null,
+            'original_amount' => 600,
+            'original_currency' => 'USD',
+        ]);
+
+        $rows = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/budget-accounts?from=2026-06-01&to=2026-06-02")
+            ->assertOk()->json('data');
+
+        $this->assertCount(1, $rows);
+        $row = $rows[0];
+
+        $this->assertSame('Razzah Self Serve', $row['account_name']);
+
+        // The withheld original, not the coalesced zero.
+        $this->assertSame(600.0, (float) $row['spent']);
+        $this->assertTrue($row['spend_withheld']);
+        $this->assertSame('USD', $row['spent_currency']);
+
+        // 1,000 lifetime + (100 daily × 2 days) = 1,200. The uncapped campaign adds nothing.
+        $this->assertSame(1200.0, (float) $row['cap']);
+        $this->assertSame(600.0, (float) $row['remaining']);
+        $this->assertSame(0.5, (float) $row['consumed_pct']);
+
+        // Two of three campaigns state a cap, so the ceiling is partial and says so.
+        $this->assertSame(3, $row['campaigns']);
+        $this->assertSame(2, $row['capped_campaigns']);
+    }
+
+    /** A ceiling nobody stated is null, never zero — zero reads as «nothing left to spend». */
+    public function test_account_budgets_state_no_cap_rather_than_a_zero_one(): void
+    {
+        $account = $this->adAccount('meta', 'acct-nocap', 'No cap', 'SAR');
+
+        DB::table('external_campaigns')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->projectA->id,
+            'external_account_id' => $account->id,
+            'provider' => 'meta',
+            'external_id' => 'ext-nocap',
+            'name' => 'ext-nocap',
+            'lifetime_budget' => null,
+            'daily_budget' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DailyMetric::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->projectA->id,
+            'external_account_id' => $account->id,
+            'external_campaign_id' => $this->uid('ext-nocap'),
+            'provider' => 'meta',
+            'metric_key' => 'spend',
+            'metric_date' => '2026-06-02',
+            'value' => 250,
+        ]);
+
+        $row = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/budget-accounts?from=2026-06-01&to=2026-06-02")
+            ->assertOk()->json('data')[0];
+
+        $this->assertSame(250.0, (float) $row['spent']);
+        $this->assertNull($row['cap'], 'No campaign stated a ceiling, so there is none to state.');
+        $this->assertNull($row['consumed_pct']);
+        $this->assertNull($row['remaining']);
+        $this->assertNull($row['pace']);
+        $this->assertSame(0, $row['capped_campaigns']);
     }
 
     public function test_the_summary_says_whether_the_scope_holds_anything_at_all(): void
@@ -1039,5 +1176,146 @@ final class MetricsTest extends TestCase
             ->json('meta');
 
         $this->assertSame('AED', $meta['currency'], 'the response must report the project’s real currency, not SAR');
+    }
+
+    // ── PARTIAL-WITHHELD-001 — some money converts, some awaits a rate: NO single total ───────────
+
+    /** One spend row, `value` set when converted and null (with an original) when withheld. */
+    private function spendRow(string $projectId, ?string $campaignId, string $provider, ?float $value, ?float $original, ?string $currency, string $date, string $tag): void
+    {
+        DailyMetric::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $projectId,
+            'unified_campaign_id' => $campaignId,
+            'external_account_id' => $this->uid('acc-'.$tag),
+            'external_campaign_id' => $this->uid('ext-'.$tag),
+            'provider' => $provider,
+            'metric_key' => 'spend',
+            'metric_date' => $date,
+            'value' => $value,
+            'original_amount' => $original,
+            'original_currency' => $currency,
+        ]);
+    }
+
+    /**
+     * CASE A (budget pacing) — 1,000 converted + 500 USD withheld is not «1,000 spent».
+     *
+     * Once ANY spend converted, the old rule used the converted subset and paced against it as though
+     * it were the whole campaign. There is no single spend figure here, so every pacing derivation is
+     * refused and the reason is «partial», not a plausible-looking 1,000.
+     */
+    public function test_partial_spend_has_no_single_total_and_pacing_fails_closed(): void
+    {
+        $campaign = UnifiedCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'name' => 'Partial', 'objective' => 'sales', 'status' => 'active',
+            'total_budget' => 10000, 'budget_currency' => 'SAR',
+        ]);
+
+        $this->spendRow($this->projectA->id, $campaign->id, 'meta', 1000.0, null, null, '2026-06-10', 'conv');
+        $this->spendRow($this->projectA->id, $campaign->id, 'snapchat', null, 500.0, 'USD', '2026-06-11', 'wh');
+
+        $row = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/budget?from=2026-06-01&to=2026-06-30")
+            ->assertOk()->json('data')[0];
+
+        $this->assertSame('partial', $row['spend_state']);
+        $this->assertNull($row['spent'], 'a partial spend is not a single figure');
+        $this->assertNull($row['consumed_pct']);
+        $this->assertNull($row['remaining']);
+        $this->assertNull($row['pace']);
+        $this->assertNull($row['projected_spend']);
+        $this->assertSame('partial', $row['pacing_basis']);
+    }
+
+    /** CASE A (funnel) — a cost-per divides one spend figure; a partial spend is not one, so it is null. */
+    public function test_partial_spend_funnel_states_no_cost_per(): void
+    {
+        $campaign = UnifiedCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'name' => 'Partial funnel', 'objective' => 'sales', 'status' => 'active',
+        ]);
+
+        $this->spendRow($this->projectA->id, $campaign->id, 'meta', 1000.0, null, null, '2026-06-10', 'fconv');
+        $this->spendRow($this->projectA->id, $campaign->id, 'snapchat', null, 500.0, 'USD', '2026-06-11', 'fwh');
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'purchases', 20, '2026-06-10', ['unified' => $campaign->id, 'camp' => 'fp']),
+        ]);
+
+        $res = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/funnel?from=2026-06-01&to=2026-06-30")
+            ->assertOk();
+
+        $this->assertSame('partial', $res->json('meta.spend_state'));
+        $this->assertNull($res->json('meta.spend'), 'no single spend total on partial money');
+        $purchase = collect($res->json('data'))->firstWhere('stage', 'purchases');
+        $this->assertNotNull($purchase['count']);
+        $this->assertNull($purchase['cost_per'], 'cost per purchase must be unavailable, not computed from the converted subset');
+    }
+
+    /** CASE C — all withheld in one currency is a real total, and its cost-per divides the original. */
+    public function test_all_withheld_single_currency_funnel_costs_from_the_original(): void
+    {
+        $campaign = UnifiedCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id,
+            'name' => 'All withheld', 'objective' => 'sales', 'status' => 'active',
+        ]);
+
+        $this->spendRow($this->projectA->id, $campaign->id, 'snapchat', null, 500.0, 'USD', '2026-06-10', 'cwh');
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'purchases', 10, '2026-06-10', ['unified' => $campaign->id, 'camp' => 'cp']),
+        ]);
+
+        $res = $this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/funnel?from=2026-06-01&to=2026-06-30")
+            ->assertOk();
+
+        $this->assertSame('complete_withheld', $res->json('meta.spend_state'));
+        $this->assertSame(500.0, (float) $res->json('meta.spend'));
+        $this->assertSame('USD', $res->json('meta.spend_currency'));
+        $purchase = collect($res->json('data'))->firstWhere('stage', 'purchases');
+        $this->assertSame(50.0, (float) $purchase['cost_per'], '500 USD / 10 purchases, in the withheld currency');
+    }
+
+    /** Comparison — a campaign's platform split orders by REAL money when the platforms share a currency. */
+    public function test_compare_platform_ranking_orders_withheld_by_real_money(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $c = UnifiedCampaign::create(['project_id' => $this->projectA->id, 'name' => 'Split', 'objective' => 'sales', 'status' => 'active']);
+        $other = UnifiedCampaign::create(['project_id' => $this->projectA->id, 'name' => 'Other', 'objective' => 'sales', 'status' => 'active']);
+        app(TenantContext::class)->forget();
+
+        // Both withheld, both USD: tiktok 900 must rank above meta 300 — not the arbitrary coalesced-0 order.
+        $this->spendRow($this->projectA->id, $c->id, 'meta', null, 300.0, 'USD', '2026-06-01', 'pm');
+        $this->spendRow($this->projectA->id, $c->id, 'tiktok', null, 900.0, 'USD', '2026-06-01', 'pt');
+
+        $row = collect($this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/compare?from=2026-06-01&to=2026-06-02&campaign_ids[]={$c->id}&campaign_ids[]={$other->id}")
+            ->assertOk()->json('data.campaigns'))->firstWhere('campaign_id', $c->id);
+
+        $this->assertSame('by_spend', $row['platform_ranking']);
+        $this->assertSame(['tiktok', 'meta'], collect($row['platforms'])->pluck('provider')->all());
+    }
+
+    /** Comparison — platforms in different currencies cannot be ranked by money; a deterministic order, no fake ranking. */
+    public function test_compare_platform_ranking_is_deterministic_when_currencies_are_not_comparable(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $c = UnifiedCampaign::create(['project_id' => $this->projectA->id, 'name' => 'CrossCur', 'objective' => 'sales', 'status' => 'active']);
+        $other = UnifiedCampaign::create(['project_id' => $this->projectA->id, 'name' => 'Other', 'objective' => 'sales', 'status' => 'active']);
+        app(TenantContext::class)->forget();
+
+        // meta withheld USD 900, tiktok withheld EUR 300 — a dollar cannot outrank a euro. No money ranking.
+        $this->spendRow($this->projectA->id, $c->id, 'meta', null, 900.0, 'USD', '2026-06-01', 'xm');
+        $this->spendRow($this->projectA->id, $c->id, 'tiktok', null, 300.0, 'EUR', '2026-06-01', 'xt');
+
+        $row = collect($this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/compare?from=2026-06-01&to=2026-06-02&campaign_ids[]={$c->id}&campaign_ids[]={$other->id}")
+            ->assertOk()->json('data.campaigns'))->firstWhere('campaign_id', $c->id);
+
+        $this->assertSame('unavailable', $row['platform_ranking']);
+        // Deterministic (provider-alphabetical), NOT a monetary order that would put 900 first.
+        $this->assertSame(['meta', 'tiktok'], collect($row['platforms'])->pluck('provider')->all());
     }
 }
