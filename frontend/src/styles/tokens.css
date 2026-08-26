@@ -53,6 +53,20 @@
   --brand-background: #eafaf4;
 
   /* ---- Elevation (soft, restrained) ---- */
+  /*
+   * Platform brand colours — THEME-DARK-PRIMARY-001.
+   *
+   * These are identities, not palette choices, so they are declared once and used wherever a
+   * platform is drawn: donut slices, bar fills, legend dots, the rail beside an integration. Two of
+   * them are monochrome, which is why they are tokens rather than constants — see the dark block.
+   */
+  --platform-meta: #1877f2;
+  --platform-google: #ea4335;
+  --platform-tiktok: #000000;
+  --platform-snapchat: #f7b500;
+  --platform-x: #111111;
+  --platform-linkedin: #0a66c2;
+
   --shadow-small: 0 1px 2px rgba(13, 21, 38, 0.05), 0 1px 1px rgba(13, 21, 38, 0.03);
   --shadow-medium: 0 4px 16px rgba(13, 21, 38, 0.06), 0 1px 3px rgba(13, 21, 38, 0.04);
   --shadow-large: 0 18px 44px rgba(13, 21, 38, 0.12), 0 4px 10px rgba(13, 21, 38, 0.05);
@@ -142,6 +156,15 @@
   --info-background: rgba(96, 165, 250, 0.14);
   --purple-background: rgba(196, 181, 253, 0.14);
   --brand-background: rgba(20, 195, 154, 0.13);
+
+  /*
+   * TikTok and X are monochrome brands whose primary is black — `#000000` and `#111111` sit on a
+   * `#0a0e14` page as an invisible slice, an unreadable legend dot and a bar with no bar. Both
+   * publish a light-on-dark form of the same mark, which is what these are; the other four read
+   * perfectly well on this ground and keep their exact brand value.
+   */
+  --platform-tiktok: #f1f5f9;
+  --platform-x: #e7e9ea;
 
   --shadow-small: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-medium: 0 4px 16px rgba(0, 0, 0, 0.35);

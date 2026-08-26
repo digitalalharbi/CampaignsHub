@@ -229,6 +229,33 @@ export interface FunnelStage {
   drop_off: number | null
   cost_per: number | null
 }
+/**
+ * BUDGET-ACCOUNTS-001 — one ad account, and the ceiling the platform will actually enforce.
+ *
+ * `BudgetRow` measures a campaign against the plan somebody typed into this product. This measures
+ * an account against `external_campaigns.lifetime_budget` (and a daily budget across the window's
+ * days), which is the figure that stops delivery.
+ */
+export interface AccountBudgetRow {
+  account_id: string
+  /** Null when the account has been removed since these rows were ingested — its spend is still real. */
+  account_name: string | null
+  provider: string
+  spent: number
+  spent_currency: string | null
+  spend_withheld: boolean
+  /** Null when no campaign on this account states a ceiling — never 0, which reads as «nothing left». */
+  cap: number | null
+  remaining: number | null
+  consumed_pct: number | null
+  /** >1 means this account reaches its ceiling before the window ends, at the current rate. */
+  pace: number | null
+  projected_spend: number
+  campaigns: number
+  /** How many of them stated a ceiling, so a partial cap cannot be read as a total. */
+  capped_campaigns: number
+}
+
 export interface BudgetRow {
   campaign_id: string
   campaign_name: string
@@ -577,6 +604,8 @@ export const useAccounts = (p: string | null, r: Range, f?: MetricFilters) =>
 export const useCampaigns = (p: string | null, r: Range, f?: MetricFilters) => useMetric<CampaignRow[]>('campaigns', p, r, 'campaigns', f)
 export const useFunnel = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FunnelStage[]>('funnel', p, r, 'funnel', f)
 export const useBudget = (p: string | null, r: Range, f?: MetricFilters) => useMetric<BudgetRow[]>('budget', p, r, 'budget', f)
+export const useAccountBudgets = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<AccountBudgetRow[]>('budget-accounts', p, r, 'budget-accounts', f)
 export const useFreshness = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FreshnessRow[]>('freshness', p, r, 'freshness', f)
 export const useNormalization = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Normalization>('normalization', p, r, 'normalization', f)
 export const useAttribution = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Attribution>('attribution', p, r, 'attribution', f)
