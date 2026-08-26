@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aggregateMoney, moneyState, rankableMoney, readMoney, readCostPer, readRoas } from './contract'
+import { aggregateMoney, moneyState, rankableMoney, readMoney, readCostPer, readRoas, resolveMoneySeries } from './contract'
 
 /**
  * PARTIAL-WITHHELD-001 — the contract must distinguish «some converted + some withheld» from «all
@@ -169,5 +169,50 @@ describe('rankableMoney — a chart drops and discloses where a total fails clos
     expect(rankableMoney([PARTIAL], 'spend', 'SAR')).toBeNull()
     // «No rows yet» is the caller's own empty state, not «this money cannot be shown».
     expect(rankableMoney([], 'spend', 'SAR')).toEqual({ values: [], currency: 'SAR', dropped: 0 })
+  })
+})
+
+/**
+ * PARTIAL-WITHHELD-001 (d/f) — a money TIMESERIES fails closed where a donut drops-and-discloses.
+ *
+ * A trend line is a claim in one currency at every point; it cannot omit a day and stay honest, so a
+ * single partial/withheld/cross-currency point closes the whole series to «unavailable». Contrast
+ * `rankableMoney`, which keeps the comparable rows and reports how many it dropped.
+ */
+describe('resolveMoneySeries — a chartable money timeseries, or null', () => {
+  it('all-converted days pass through with the reporting currency', () => {
+    const rows = [
+      { date: 'd1', spend: 100, revenue: 300, spend_withheld_rows: 0, revenue_withheld_rows: 0 },
+      { date: 'd2', spend: 200, revenue: 500, spend_withheld_rows: 0, revenue_withheld_rows: 0 },
+    ]
+    const r = resolveMoneySeries(rows, ['spend', 'revenue'], 'SAR')!
+    expect(r.currency).toBe('SAR')
+    expect(r.rows.map((x) => x.spend)).toEqual([100, 200])
+  })
+
+  it('a fully-withheld series is replaced by ORIGINAL values in their own currency, not a coalesced 0', () => {
+    const rows = [
+      { date: 'd1', spend: 0, spend_original: 400, spend_withheld_rows: 2, revenue: 0, revenue_original: 1200, revenue_withheld_rows: 2, money_original_currency: 'USD', money_original_currencies: 1 },
+    ]
+    const r = resolveMoneySeries(rows, ['spend', 'revenue'], 'SAR')!
+    expect(r.currency).toBe('USD')
+    expect(r.rows[0].spend).toBe(400) // NOT 0
+    expect(r.rows[0].revenue).toBe(1200)
+  })
+
+  it('a partial day (some rows converted, some withheld) makes the WHOLE series unavailable', () => {
+    const rows = [
+      { date: 'd1', spend: 1000, revenue: 3000, spend_withheld_rows: 0, revenue_withheld_rows: 0 },
+      { date: 'd2', spend: 1000, spend_original: 500, spend_withheld_rows: 2, revenue: 3000, revenue_withheld_rows: 0, money_original_currency: 'USD', money_original_currencies: 1 },
+    ]
+    expect(resolveMoneySeries(rows, ['spend', 'revenue'], 'SAR')).toBeNull()
+  })
+
+  it('spend and revenue in different currencies cannot share one chart', () => {
+    const rows = [
+      { date: 'd1', spend: 100, spend_withheld_rows: 0, revenue: 0, revenue_original: 900, revenue_withheld_rows: 2, money_original_currency: 'USD', money_original_currencies: 1 },
+    ]
+    // spend converted (SAR) beside revenue withheld (USD) → two currencies → null.
+    expect(resolveMoneySeries(rows, ['spend', 'revenue'], 'SAR')).toBeNull()
   })
 })
