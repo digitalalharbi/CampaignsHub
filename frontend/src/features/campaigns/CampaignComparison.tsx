@@ -272,6 +272,35 @@ function PlatformSplit({ rows }: { rows: CompareCampaign[] }) {
           */
           const spendOf = (p: (typeof r.platforms)[number]) => displaySpend(p)
           const total = r.platforms.reduce((a, p) => a + spendOf(p), 0)
+
+          /*
+           * MONEY-TRUTH-002 — proportion bars are a ranking, and a ranking needs one currency.
+           *
+           * When the server reports `platform_ranking: 'unavailable'` — a converted platform beside a
+           * withheld one, or two withheld currencies — summing `displaySpend` across them is a
+           * cross-currency total, and drawing shares from it invents the very ranking the backend
+           * refused to. The platforms are still listed with each one's real figure, but no bar and no
+           * share, because there is no single denominator they can honestly divide.
+           */
+          if (r.platform_ranking === 'unavailable') {
+            return (
+              <div key={r.campaign_id}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-text-primary">{r.name}</span>
+                  <span className="text-[11px] text-text-muted">لا يمكن ترتيبها بعملة واحدة</span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-text-muted">
+                  {r.platforms.map((p) => (
+                    <span key={p.provider} className="inline-flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full" style={{ background: platformColor(p.provider) }} />
+                      {p.provider} <span className="tnum">{compact(spendOf(p))}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )
+          }
+
           return (
             <div key={r.campaign_id}>
               <div className="flex items-center justify-between text-xs">
