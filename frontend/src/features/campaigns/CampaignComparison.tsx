@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { formatMoneyReading, readMoney } from '@/lib/money/contract'
+import { formatMoneyReading, readMoney, resolveMoneySeries } from '@/lib/money/contract'
 import { displaySpend } from '@/features/dashboard/platformMoney'
 import { Link } from 'react-router-dom'
 import { ImageOff, Info, TriangleAlert, X } from 'lucide-react'
@@ -234,24 +234,40 @@ function ComparisonTable({ rows, locale, mixed, projectId }: {
 
 /** Daily spend per campaign on one axis — the trend requirement of CAMPAIGN-020. */
 function TrendComparison({ rows }: { rows: CompareCampaign[] }) {
+  /*
+   * PARTIAL-WITHHELD-001 — each line is a campaign's daily spend, and the chart states one currency
+   * for all. So every campaign's series is resolved to effective money (withheld → original, never a
+   * coalesced 0), and they must all share one currency. If any is not resolvable, or they disagree on
+   * currency, the trend is unavailable rather than lines drawn from zeros or across units.
+   */
+  const resolved = useMemo(
+    () => rows.map((r) => ({ id: r.campaign_id, ms: resolveMoneySeries(r.series as Array<Record<string, unknown>>, ['spend'], null) })),
+    [rows],
+  )
+  const comparable = useMemo(() => {
+    if (resolved.some((x) => x.ms === null)) return false
+    const currencies = new Set(resolved.map((x) => x.ms!.currency).filter((c): c is string => c != null))
+    return currencies.size <= 1
+  }, [resolved])
   const merged = useMemo(() => {
+    if (!comparable) return []
+    const byCampaign = new Map(resolved.map((x) => [x.id, new Map(x.ms!.rows.map((row) => [String(row.date), Number(row.spend ?? 0)]))]))
     const dates = new Set<string>()
-    for (const r of rows) for (const p of r.series) dates.add(String(p.date))
+    for (const x of resolved) for (const row of x.ms!.rows) dates.add(String(row.date))
     return [...dates].sort().map((date) => {
       const point: Record<string, unknown> = { date }
-      for (const r of rows) {
-        const hit = r.series.find((p) => String(p.date) === date)
-        point[r.campaign_id] = Number(hit?.spend ?? 0)
-      }
+      for (const r of rows) point[r.campaign_id] = byCampaign.get(r.campaign_id)?.get(date) ?? 0
       return point
     })
-  }, [rows])
+  }, [resolved, comparable, rows])
 
   return (
     <ChartCard title="اتجاه الإنفاق اليومي" subtitle="كل حملة على حدة خلال نفس الفترة">
-      {merged.length === 0
-        ? <EmptyState title="لا توجد نقاط زمنية في هذه الفترة" />
-        : <MetricLineChart data={merged} series={rows.map((r) => ({ key: r.campaign_id, name: r.name, kind: 'money' as const }))} height={230} />}
+      {!comparable
+        ? <p className="flex h-[230px] items-center justify-center text-center text-sm text-text-muted">اتجاه الإنفاق غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة لا تُرسم تحت عملة واحدة</p>
+        : merged.length === 0
+          ? <EmptyState title="لا توجد نقاط زمنية في هذه الفترة" />
+          : <MetricLineChart data={merged} series={rows.map((r) => ({ key: r.campaign_id, name: r.name, kind: 'money' as const }))} height={230} />}
     </ChartCard>
   )
 }

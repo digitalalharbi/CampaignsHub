@@ -153,4 +153,28 @@ describe('the spend charts over withheld money', () => {
     expect(await screen.findByText('1.0K / 5.0K')).toBeInTheDocument()
     expect(screen.queryByText(/Budget consumption unavailable/i)).not.toBeInTheDocument()
   })
+
+  /*
+   * PARTIAL-WITHHELD-001 (d/f) — the spend/revenue TREND fails closed, unlike the donut beside it.
+   *
+   * A donut drops a withheld platform and discloses the count; a trend line cannot omit a day without
+   * stating a false dip, so one withheld day closes the whole series to «unavailable» rather than
+   * drawing that day at the coalesced 0.
+   */
+  it('renders the trend as unavailable when a day is withheld, never a false line at zero', async () => {
+    vi.mocked(getData).mockImplementation((path: string) => {
+      if (path.includes('/metrics/summary')) return Promise.resolve(SUMMARY)
+      if (path.includes('/metrics/budget')) return Promise.resolve([budgetRow({ campaign_id: 'c1', spent: 1000 })])
+      if (path.includes('/metrics/timeseries')) return Promise.resolve([
+        { date: '2026-08-01', spend: 1000, revenue: 0, spend_withheld_rows: 0, revenue_withheld_rows: 0 },
+        // A day the platform reported in USD with no rate — converted beside it ⇒ not one currency.
+        { date: '2026-08-02', spend: 0, spend_original: 500, spend_withheld_rows: 1, revenue: 0, revenue_withheld_rows: 0, money_original_currency: 'USD', money_original_currencies: 1 },
+      ])
+      return Promise.resolve([])
+    })
+    renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
+    await openOverview()
+
+    expect(await screen.findByText(/Spend\/revenue over time unavailable/i)).toBeInTheDocument()
+  })
 })

@@ -320,6 +320,49 @@ export function rankableMoney(
 }
 
 /**
+ * Resolve a timeseries into EFFECTIVE money a chart may plot, or null when it may not.
+ *
+ * A money line/area is a claim in ONE currency at EVERY point. Plotting the raw/coalesced `spend`
+ * draws a withheld day as 0 (its real value lives in the original-amount provenance) and a partial or
+ * mixed day as a fabricated figure — a false trend, which is worse than no trend.
+ *
+ * Unlike a donut, a trend line cannot DROP a point and stay honest: a gap day reads as a real dip,
+ * not as an omission the reader was told about. So where `rankableMoney` keeps the comparable rows
+ * and discloses a count, a series fails CLOSED — the moment any point is not a single figure in the
+ * one shared currency (`rankableMoney` reports that as a dropped row), the whole series is «—». For
+ * each money key every row must be a single figure in one currency, and the keys must agree on that
+ * currency (SAR spend beside USD revenue is not one chart). When they do, each key is REPLACED by its
+ * effective value (withheld→original, converted→converted, zero→0) and the currency returned.
+ */
+export function resolveMoneySeries<T extends Record<string, unknown>>(
+  rows: T[],
+  keys: Array<'spend' | 'revenue'>,
+  reportingCurrency: string | null,
+): { rows: T[]; currency: string | null } | null {
+  const perKey = new Map<string, { values: Array<number | null>; currency: string | null }>()
+  for (const key of keys) {
+    const r = rankableMoney(rows as MoneyTotals[], key, reportingCurrency)
+    // null ⇒ nothing comparable; dropped > 0 ⇒ some point is partial/mixed/cross-currency. A trend
+    // tolerates neither, so either one closes the whole series.
+    if (r === null || r.dropped > 0) return null
+    perKey.set(key, r)
+  }
+
+  const currencies = new Set(keys.map((k) => perKey.get(k)!.currency).filter((c): c is string => c !== null))
+  if (currencies.size > 1) return null // the money keys are in different currencies
+  const currency = currencies.size === 1 ? [...currencies][0] : reportingCurrency
+
+  const out = rows.map((row, i) => {
+    const copy: Record<string, unknown> = { ...row }
+    // Guarded above: dropped === 0, so every value is a real number, not null.
+    for (const key of keys) copy[key] = perKey.get(key)!.values[i]
+    return copy as T
+  })
+
+  return { rows: out, currency }
+}
+
+/**
  * A cost-per metric — CPA, CPC, CPM, CPL, CPE, CPI, CPV, cost per landing-page view.
  *
  * The numerator is money, so the provenance is the SPEND's. When spend is withheld the aggregator's
