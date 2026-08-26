@@ -263,18 +263,24 @@ export interface BudgetRow {
   budget: number
   /** The campaign's plan is denominated in this; a spend in another currency cannot be paced against it. */
   budget_currency: string | null
-  spent: number
+  /** Null when there is no single spend figure — a partial or mixed-currency scope (see `spend_state`). */
+  spent: number | null
   /** BUDGET-WITHHELD-001 — the unit `spent` is actually in, which is not always the project's. */
   spent_currency: string | null
   /** True when `spent` is the platform's own figure because no rate exists to convert it. */
   spend_withheld: boolean
+  /** PARTIAL-WITHHELD-001 — the money composition behind `spent`. */
+  spend_state?: 'complete_converted' | 'complete_withheld' | 'partial' | 'mixed_currency' | 'absent' | 'zero'
   /** Null when spend and budget are denominated differently — see `pacing_basis`. */
   remaining: number | null
   consumed_pct: number | null
   pace: number | null
-  projected_spend: number
-  /** `comparable` — pacing computed. `currency_mismatch` — real spend, different unit. `no_budget` — none set. */
-  pacing_basis: 'comparable' | 'currency_mismatch' | 'no_budget'
+  projected_spend: number | null
+  /**
+   * `comparable` — pacing computed. `currency_mismatch` — real spend, different unit. `no_budget` —
+   * none set. `partial` / `mixed_currency` — no single spend figure exists to pace at all.
+   */
+  pacing_basis: 'comparable' | 'currency_mismatch' | 'no_budget' | 'partial' | 'mixed_currency'
 }
 /**
  * One source behind the project's figures — an ad platform OR a connected store (UNIFIED-001).

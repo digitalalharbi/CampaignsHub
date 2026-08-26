@@ -8,7 +8,9 @@ use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Services\CreativeFunnel;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Metrics\Enums\MoneyState;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\ValueObjects\MoneyScope;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Support\AdPlatforms;
 use Illuminate\Database\Query\Builder;
@@ -757,7 +759,7 @@ final class MetricsAggregator
                 'series' => collect($series->get($id) ?? [])
                     ->map(fn ($r) => ['date' => Carbon::parse($r->metric_date)->toDateString()] + $this->withDerived((array) $r))
                     ->values()->all(),
-                'platforms' => collect($platforms->get($id) ?? [])
+                'platforms' => $this->rankPlatformsByMoney(collect($platforms->get($id) ?? [])
                     ->map(fn ($r) => [
                         'provider' => $r->provider,
                         'spend' => round((float) $r->spend, 2),
@@ -767,11 +769,95 @@ final class MetricsAggregator
                         'spend_original' => round((float) ($r->spend_original ?? 0), 2),
                         'money_original_currency' => $r->money_original_currency ?? null,
                         'money_original_currencies' => (int) ($r->money_original_currencies ?? 0),
-                    ])
-                    ->sortByDesc('spend')->values()->all(),
+                    ])->all()),
+                // Whether the platform bars are a real money ranking or a deterministic fallback order.
+                'platform_ranking' => $this->platformsComparable(collect($platforms->get($id) ?? [])
+                    ->map(fn ($r) => [
+                        'spend' => (float) $r->spend,
+                        'spend_withheld_rows' => (int) ($r->spend_withheld_rows ?? 0),
+                        'spend_original' => (float) ($r->spend_original ?? 0),
+                        'money_original_currency' => $r->money_original_currency ?? null,
+                        'money_original_currencies' => (int) ($r->money_original_currencies ?? 0),
+                    ])->all()) ? 'by_spend' : 'unavailable',
                 'creatives' => $creatives[$id] ?? [],
             ];
         }, $ids));
+    }
+
+    /**
+     * MONEY-TRUTH-002 — order a campaign's per-platform split by REAL money, never by the coalesced 0.
+     *
+     * `sortByDesc('spend')` ranked every platform of a withheld campaign at nothing and drew the bars
+     * in an arbitrary order, then the client rendered `spend_original` into that arbitrary order — a
+     * ranking that looked earned and was not. Ordering goes through the one money contract: each
+     * platform's effective figure, when the platforms are comparable in a single currency. When they
+     * are not — a converted platform beside a withheld one, or two withheld in different currencies —
+     * there is no honest monetary ranking, so a DETERMINISTIC order (by provider) is kept instead of
+     * inventing one, and `platform_ranking` says which it is.
+     *
+     * @param  list<array<string,mixed>>  $platforms
+     * @return list<array<string,mixed>>
+     */
+    private function rankPlatformsByMoney(array $platforms): array
+    {
+        if (! $this->platformsComparable($platforms)) {
+            usort($platforms, fn ($a, $b) => strcmp((string) $a['provider'], (string) $b['provider']));
+
+            return $platforms;
+        }
+
+        usort($platforms, function ($a, $b) {
+            $av = $this->platformMoney($a)->amount() ?? 0.0;
+            $bv = $this->platformMoney($b)->amount() ?? 0.0;
+
+            // Amount desc, then provider asc so the order is total and stable on ties.
+            return $bv <=> $av ?: strcmp((string) $a['provider'], (string) $b['provider']);
+        });
+
+        return $platforms;
+    }
+
+    /** The money composition of one platform-split row. */
+    private function platformMoney(array $p): MoneyScope
+    {
+        return MoneyScope::of(
+            (float) ($p['spend'] ?? 0),
+            (int) ($p['spend_withheld_rows'] ?? 0),
+            (float) ($p['spend_original'] ?? 0),
+            (int) ($p['money_original_currencies'] ?? 0),
+            $p['money_original_currency'] ?? null,
+        );
+    }
+
+    /**
+     * Whether these platform rows can be ranked by one money figure.
+     *
+     * False the moment any row has no single figure (partial / mixed currency), or the rows do not
+     * agree on a currency basis — converted rows are in the reporting currency (one shared basis),
+     * a withheld row is in its own. A pure zero ranks against anything. More than one non-zero basis
+     * is riyals-versus-dollars, which is not a ranking.
+     *
+     * @param  list<array<string,mixed>>  $platforms
+     */
+    private function platformsComparable(array $platforms): bool
+    {
+        $bases = [];
+        foreach ($platforms as $p) {
+            $scope = $this->platformMoney($p);
+            if (! $scope->hasSingleTotal()) {
+                return false; // partial / mixed currency — no figure to rank at all
+            }
+            $basis = match ($scope->state) {
+                MoneyState::CompleteConverted => '__reporting__',
+                MoneyState::CompleteWithheld => (string) $scope->originalCurrency,
+                default => null, // zero — comparable with any basis
+            };
+            if ($basis !== null) {
+                $bases[$basis] = true;
+            }
+        }
+
+        return count($bases) <= 1;
     }
 
     /**
@@ -970,15 +1056,19 @@ final class MetricsAggregator
         $selects[] = "COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currencies";
         $row = (array) $this->base($from, $to)->selectRaw(implode(', ', $selects))->first();
 
-        $converted = (float) ($row['spend'] ?? 0);
-        $withheldRows = (int) ($row['spend_withheld_rows'] ?? 0);
-        $original = (float) ($row['spend_original'] ?? 0);
-        $oneCurrency = (int) ($row['spend_original_currencies'] ?? 0) === 1;
-
-        // The figure that is real. A withheld total is only nameable when its rows agree on a currency.
-        $spendWithheld = $converted <= 0.0 && $withheldRows > 0 && $original > 0.0 && $oneCurrency;
-        $spend = $spendWithheld ? $original : $converted;
-        $spendCurrency = $spendWithheld ? ($row['spend_original_currency'] ?? null) : null;
+        // The figure that is real, through the one money contract. `Partial` (some converted + some
+        // withheld) and `MixedCurrency` have no single total, so `amount()` is null and every
+        // `cost_per` below refuses rather than dividing the converted subset alone.
+        $scope = MoneyScope::of(
+            (float) ($row['spend'] ?? 0),
+            (int) ($row['spend_withheld_rows'] ?? 0),
+            (float) ($row['spend_original'] ?? 0),
+            (int) ($row['spend_original_currencies'] ?? 0),
+            $row['spend_original_currency'] ?? null,
+        );
+        $spend = $scope->amount();
+        $spendCurrency = $scope->currency(null);
+        $spendWithheld = $scope->state === MoneyState::CompleteWithheld;
         $out = [];
         $prev = null;
         $prevStage = null;
@@ -1018,7 +1108,8 @@ final class MetricsAggregator
                 'step_rate' => $ratio !== null ? round($ratio, 4) : null,
                 'exceeds_previous' => $exceeds,
                 'drop_off' => $ratio !== null && ! $exceeds ? round(1 - $ratio, 4) : null,
-                'cost_per' => $count !== null && $count > 0 ? round($spend / $count, 2) : null,
+                // No single spend total (partial / mixed currency) ⇒ no cost-per to state.
+                'cost_per' => $spend !== null && $count !== null && $count > 0 ? round($spend / $count, 2) : null,
             ];
 
             // Only a reported stage becomes the denominator for the next one.
@@ -1030,13 +1121,16 @@ final class MetricsAggregator
 
         return [
             'stages' => $out,
-            'spend' => round($spend, 2),
+            // Null when there is no single total (partial / mixed currency) — not a coalesced zero.
+            'spend' => $spend !== null ? round($spend, 2) : null,
             /*
              * The unit the spend and every `cost_per` are in. Null means the reporting currency;
              * a name means the platform's own, because no rate exists to convert it yet.
              */
             'spend_currency' => $spendCurrency,
             'spend_withheld' => $spendWithheld,
+            // Why spend/cost_per are what they are — so the reader sees «partial», not a blank.
+            'spend_state' => $scope->state->value,
         ];
     }
 
@@ -1198,34 +1292,39 @@ final class MetricsAggregator
             $budgetCurrency = $c->budget_currency;
             $row = $spentByCampaign[$c->id] ?? null;
 
-            $converted = (float) ($row->spent ?? 0);
-            $withheldRows = (int) ($row->spend_withheld_rows ?? 0);
-            $original = (float) ($row->spend_original ?? 0);
-            $originalCurrency = $row->spend_original_currency ?? null;
-            $oneCurrency = (int) ($row->spend_original_currencies ?? 0) === 1;
-
             /*
-             * The figure that is REAL, and the unit it is in.
+             * The figure that is REAL, and the unit it is in — through the one money contract.
              *
-             * A converted sum is in the project's reporting currency. A withheld one is in the
-             * platform's, and only nameable when the withheld rows agree on a single currency —
-             * a total across two is not an amount.
+             * A converted sum is in the project's reporting currency; a withheld one in the platform's,
+             * nameable only when the withheld rows agree on a currency. `Partial` (some converted + some
+             * withheld) and `MixedCurrency` have NO single figure — `amount()` is null, and every
+             * pacing derivation below refuses rather than pacing against the converted subset alone,
+             * which is the one number an operator tops a campaign up on.
              */
-            $withheld = $converted <= 0.0 && $withheldRows > 0 && $original > 0.0 && $oneCurrency;
-            $spent = $withheld ? $original : $converted;
-            $spentCurrency = $withheld ? $originalCurrency : $reportingCurrency;
+            $scope = MoneyScope::of(
+                (float) ($row->spent ?? 0),
+                (int) ($row->spend_withheld_rows ?? 0),
+                (float) ($row->spend_original ?? 0),
+                (int) ($row->spend_original_currencies ?? 0),
+                $row->spend_original_currency ?? null,
+            );
+            $spent = $scope->amount();
+            $spentCurrency = $scope->currency($reportingCurrency);
+            $hasSpend = $spent !== null;
 
             /*
-             * Comparable only when spend and budget are denominated the same. Otherwise the ratio
-             * divides riyals by dollars and reads as a verdict — so it is refused, and says why.
+             * Comparable only when a single spend figure exists AND it is denominated like the budget.
+             * Otherwise the ratio divides riyals by dollars, or by nothing at all — refused, with the
+             * reason carried in `pacing_basis`.
              */
-            $comparable = $budget > 0
+            $comparable = $hasSpend
+                && $budget > 0
                 && is_string($spentCurrency)
                 && is_string($budgetCurrency)
                 && strtoupper($spentCurrency) === strtoupper($budgetCurrency);
 
             $expected = $budget * $elapsedFraction;
-            $projected = $elapsedFraction > 0 ? $spent / $elapsedFraction : $spent;
+            $projected = $hasSpend ? ($elapsedFraction > 0 ? $spent / $elapsedFraction : $spent) : null;
 
             $rows[] = [
                 'campaign_id' => $c->id,
@@ -1233,21 +1332,24 @@ final class MetricsAggregator
                 'status' => $c->status,
                 'budget' => round($budget, 2),
                 'budget_currency' => $budgetCurrency,
-                'spent' => round($spent, 2),
+                'spent' => $hasSpend ? round($spent, 2) : null,
                 'spent_currency' => $spentCurrency,
-                'spend_withheld' => $withheld,
+                'spend_withheld' => $scope->state === MoneyState::CompleteWithheld,
+                'spend_state' => $scope->state->value,
                 'remaining' => $comparable ? round($budget - $spent, 2) : null,
                 'consumed_pct' => $comparable ? round($spent / $budget, 4) : null,
                 'pace' => $comparable && $expected > 0 ? round($spent / $expected, 3) : null, // >1 over-pacing
-                'projected_spend' => round($projected, 2),
+                'projected_spend' => $projected !== null ? round($projected, 2) : null,
                 /*
                  * Why pacing is absent, when it is. `comparable` — computed. `currency_mismatch` —
                  * the spend is real but denominated differently from the plan. `no_budget` — nobody
-                 * set one, so there is nothing to pace against.
+                 * set one. `partial`/`mixed_currency` — there is no single spend figure to pace at all.
                  */
                 'pacing_basis' => $comparable
                     ? 'comparable'
-                    : ($budget > 0 ? 'currency_mismatch' : 'no_budget'),
+                    : (! $hasSpend
+                        ? $scope->state->value
+                        : ($budget > 0 ? 'currency_mismatch' : 'no_budget')),
             ];
         }
         usort($rows, fn ($a, $b) => ($b['pace'] ?? 0) <=> ($a['pace'] ?? 0));
