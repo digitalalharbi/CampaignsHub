@@ -43,23 +43,36 @@ use Illuminate\Support\Carbon;
 final class ReportingCurrency
 {
     /**
-     * MONEY-USD-001 — advertising reporting is USD unless a client workspace says otherwise.
+     * MONEY-USD-001 — USD is the reporting and comparison currency, not an assumption about sources.
      *
-     * This was SAR, and the consequence was not cosmetic. Every ad platform this product speaks to
-     * bills and reports in USD at account level, so converting into SAR required a USD→SAR rate for
-     * every monetary row — and where no rate could be vouched for, FX-001 correctly refused to
-     * invent one and stored `value = null`. The money was then WITHHELD everywhere, which is honest
-     * and useless: production carries thousands of spend rows whose figures nobody can read, because
-     * the reporting currency asked a question the rate table could not answer.
+     * ## What this constant is, and is not
      *
-     * With USD as the reporting currency a USD account's spend needs no rate at all — the original
-     * and the reporting currency are the same, the conversion is identity, and the figure is simply
-     * readable. An account genuinely billing in another currency still needs a real rate and still
-     * fails closed without one. Nothing about that rule changes; what changes is that the common case
-     * stops being the failing case.
+     * It is the currency figures are COMPARED in when a client workspace has not stated its own. It
+     * is not a claim about what any provider bills in. An ad account's own currency is provider
+     * truth — USD, SAR, EUR, GBP or anything else it publishes — and is read from the account, never
+     * inferred from the platform's name.
      *
-     * A client workspace with an explicit `default_currency` is untouched — this is only the answer
-     * when nobody has stated one.
+     * ## Why USD rather than SAR
+     *
+     * A single comparison currency is what lets two accounts be added together at all. USD is the
+     * one this product reports in, so an account already publishing USD converts at par — the
+     * converter returns an `identity` rate for `from === to`, which is not a lookup and not a claim
+     * about any publisher. An account in any other currency needs a real rate for the metric's date
+     * and, without one, FX-001 still refuses to invent it: `value` is null, the money is withheld,
+     * and the original amount and currency survive so the row converts itself the day a rate exists.
+     *
+     * That behaviour is unchanged. What changes is which conversions are needed, not which are
+     * allowed.
+     *
+     * A workspace with an explicit `default_currency` is untouched. This is only the answer when
+     * nobody has stated one.
+     *
+     * ## Not yet complete — MONEY-USD-002
+     *
+     * Projects already carrying SAR, and rows already normalised with `project_currency = SAR`, are
+     * NOT changed by this constant. Re-normalising them from their preserved originals is a separate,
+     * idempotent backfill that must not double-convert and must not touch rows already in USD. Until
+     * that ships, MONEY-USD is PARTIAL.
      */
     public const DEFAULT = 'USD';
 
