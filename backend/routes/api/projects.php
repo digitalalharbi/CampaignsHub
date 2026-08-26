@@ -89,6 +89,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // REPORT-OBJECTIVE-001: spend and results split by marketing path, Direct and Blended apart.
     Route::get('metrics/objective-performance', [MetricsController::class, 'objectivePerformance'])->name('metrics.objective');
     Route::get('metrics/budget', [MetricsController::class, 'budget'])->name('metrics.budget');
+    Route::get('metrics/budget-accounts', [MetricsController::class, 'budgetAccounts'])->name('metrics.budget-accounts');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
     // NORM-001: what was done to the numbers before they were shown — currency, timezone, attribution,
     // source, objective comparability, and the canonical metric catalogue.

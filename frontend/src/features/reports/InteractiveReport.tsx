@@ -1031,11 +1031,12 @@ function BudgetSlide({ data }: { data: ReportData }) {
                     <tr key={i} className="border-b border-border last:border-0">
                       <td className="py-2 font-semibold text-text-primary">{String(r.campaign_name ?? '—')}</td>
                       <td className="tnum py-2 text-end">{money(Number(r.budget ?? 0), data.currency)}</td>
-                      <td className="tnum py-2 text-end">{money(Number(r.spent ?? 0), data.currency)}</td>
-                      <td className="tnum py-2 text-end">{money(Number(r.remaining ?? 0), data.currency)}</td>
+                      {/* PARTIAL-WITHHELD-001 — a null spend/remaining/projected is «no single figure», not «0». */}
+                      <td className="tnum py-2 text-end">{r.spent === null || r.spent === undefined ? '—' : money(Number(r.spent), data.currency)}</td>
+                      <td className="tnum py-2 text-end">{r.remaining === null || r.remaining === undefined ? '—' : money(Number(r.remaining), data.currency)}</td>
                       <td className="tnum py-2 text-end">{r.consumed_pct !== null && r.consumed_pct !== undefined ? percent(Number(r.consumed_pct), 0) : '—'}</td>
                       <td className={`tnum py-2 text-end font-semibold ${pace > 1.1 ? 'text-danger' : pace < 0.9 && pace > 0 ? 'text-warning' : 'text-text-primary'}`}>{pace ? pace.toFixed(2) : '—'}</td>
-                      <td className="tnum py-2 text-end">{money(Number(r.projected_spend ?? 0), data.currency)}</td>
+                      <td className="tnum py-2 text-end">{r.projected_spend === null || r.projected_spend === undefined ? '—' : money(Number(r.projected_spend), data.currency)}</td>
                     </tr>
                   )
                 })}

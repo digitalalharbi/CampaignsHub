@@ -229,6 +229,33 @@ export interface FunnelStage {
   drop_off: number | null
   cost_per: number | null
 }
+/**
+ * BUDGET-ACCOUNTS-001 — one ad account, and the ceiling the platform will actually enforce.
+ *
+ * `BudgetRow` measures a campaign against the plan somebody typed into this product. This measures
+ * an account against `external_campaigns.lifetime_budget` (and a daily budget across the window's
+ * days), which is the figure that stops delivery.
+ */
+export interface AccountBudgetRow {
+  account_id: string
+  /** Null when the account has been removed since these rows were ingested — its spend is still real. */
+  account_name: string | null
+  provider: string
+  spent: number
+  spent_currency: string | null
+  spend_withheld: boolean
+  /** Null when no campaign on this account states a ceiling — never 0, which reads as «nothing left». */
+  cap: number | null
+  remaining: number | null
+  consumed_pct: number | null
+  /** >1 means this account reaches its ceiling before the window ends, at the current rate. */
+  pace: number | null
+  projected_spend: number
+  campaigns: number
+  /** How many of them stated a ceiling, so a partial cap cannot be read as a total. */
+  capped_campaigns: number
+}
+
 export interface BudgetRow {
   campaign_id: string
   campaign_name: string
@@ -236,18 +263,24 @@ export interface BudgetRow {
   budget: number
   /** The campaign's plan is denominated in this; a spend in another currency cannot be paced against it. */
   budget_currency: string | null
-  spent: number
+  /** Null when there is no single spend figure — a partial or mixed-currency scope (see `spend_state`). */
+  spent: number | null
   /** BUDGET-WITHHELD-001 — the unit `spent` is actually in, which is not always the project's. */
   spent_currency: string | null
   /** True when `spent` is the platform's own figure because no rate exists to convert it. */
   spend_withheld: boolean
+  /** PARTIAL-WITHHELD-001 — the money composition behind `spent`. */
+  spend_state?: 'complete_converted' | 'complete_withheld' | 'partial' | 'mixed_currency' | 'absent' | 'zero'
   /** Null when spend and budget are denominated differently — see `pacing_basis`. */
   remaining: number | null
   consumed_pct: number | null
   pace: number | null
-  projected_spend: number
-  /** `comparable` — pacing computed. `currency_mismatch` — real spend, different unit. `no_budget` — none set. */
-  pacing_basis: 'comparable' | 'currency_mismatch' | 'no_budget'
+  projected_spend: number | null
+  /**
+   * `comparable` — pacing computed. `currency_mismatch` — real spend, different unit. `no_budget` —
+   * none set. `partial` / `mixed_currency` — no single spend figure exists to pace at all.
+   */
+  pacing_basis: 'comparable' | 'currency_mismatch' | 'no_budget' | 'partial' | 'mixed_currency'
 }
 /**
  * One source behind the project's figures — an ad platform OR a connected store (UNIFIED-001).
@@ -571,6 +604,8 @@ export const useAccounts = (p: string | null, r: Range, f?: MetricFilters) =>
 export const useCampaigns = (p: string | null, r: Range, f?: MetricFilters) => useMetric<CampaignRow[]>('campaigns', p, r, 'campaigns', f)
 export const useFunnel = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FunnelStage[]>('funnel', p, r, 'funnel', f)
 export const useBudget = (p: string | null, r: Range, f?: MetricFilters) => useMetric<BudgetRow[]>('budget', p, r, 'budget', f)
+export const useAccountBudgets = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<AccountBudgetRow[]>('budget-accounts', p, r, 'budget-accounts', f)
 export const useFreshness = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FreshnessRow[]>('freshness', p, r, 'freshness', f)
 export const useNormalization = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Normalization>('normalization', p, r, 'normalization', f)
 export const useAttribution = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Attribution>('attribution', p, r, 'attribution', f)
