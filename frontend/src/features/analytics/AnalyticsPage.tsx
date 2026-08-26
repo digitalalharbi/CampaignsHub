@@ -14,6 +14,7 @@ import {
   YAxis,
 } from 'recharts'
 import {
+  useAccountBudgets,
   useBudget,
   useAccounts,
   useCampaigns,
@@ -819,11 +820,113 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
   )
 }
 
+/**
+ * BUDGET-ACCOUNTS-001 — how close each ad account is to the ceiling the platform enforces.
+ *
+ * The campaign table below answers «is this campaign pacing to the plan we typed». This answers the
+ * question that actually interrupts delivery: an account reaching the cap its platform holds stops
+ * spending, whatever the plan said. It rolls up to the account because that is where the payment
+ * method and the cap live.
+ *
+ * An account whose campaigns state no ceiling shows «لم تُرسل» rather than a bar at 0% — no cap is
+ * not an exhausted cap, and a progress bar at zero says the opposite of what is true.
+ */
+function AccountBudgets({ projectId, range, filters }: TabProps) {
+  const ar = useAr()
+  const q = useAccountBudgets(projectId, range, filters)
+  const rows = q.data ?? []
+
+  /** Near the ceiling, or heading past it before the window ends — the two reasons to intervene. */
+  const atRisk = rows.filter((r) => (r.consumed_pct !== null && r.consumed_pct >= 0.8) || (r.pace !== null && r.pace > 1))
+
+  return (
+    <Panel
+      title={ar ? 'الحسابات الإعلانية مقابل حدّ المنصة' : 'Ad accounts against the platform ceiling'}
+      description={ar
+        ? 'الحدّ الذي تفرضه المنصة هو ما يوقف الصرف فعليًا — لا الخطة المكتوبة هنا.'
+        : 'The ceiling the platform enforces is what actually stops delivery — not the plan typed here.'}
+      loading={q.isLoading}
+      error={q.isError}
+      empty={!q.isLoading && rows.length === 0}
+    >
+      {atRisk.length > 0 && (
+        <p data-testid="budget-at-risk" className="mb-3 rounded-lg border border-warning/40 bg-[var(--warning-background)] px-3 py-2 text-xs text-text-primary">
+          <span className="font-semibold">{ar ? 'تنبيه: ' : 'Heads up: '}</span>
+          {ar
+            ? `${atRisk.length} حساب اقترب من حدّه أو يسير لتجاوزه قبل نهاية الفترة.`
+            : `${atRisk.length} account(s) are near their ceiling or on course to pass it before the period ends.`}
+        </p>
+      )}
+
+      <MetricTable
+        head={ar
+          ? ['الحساب', 'المنصة', 'المصروف', 'حدّ المنصة', 'المتبقي', 'الاستهلاك', 'السرعة', 'المتوقع', 'الحملات']
+          : ['Account', 'Platform', 'Spent', 'Platform cap', 'Remaining', 'Consumed', 'Pace', 'Projected', 'Campaigns']}
+        rows={rows.map((r) => {
+          const unit = r.spent_currency ?? undefined
+          const noCap = ar ? 'لم تُرسل' : 'Not sent'
+
+          return [
+            <span key="a" className="font-semibold text-text-primary">
+              {r.account_name ?? (ar ? 'حساب لم يعد متاحًا' : 'Account no longer available')}
+            </span>,
+            providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+            <span key="s" title={r.spend_withheld ? (ar ? 'بعملة المنصة — التحويل غير متاح' : "In the platform's own currency") : undefined}>
+              {money(r.spent, unit)}
+            </span>,
+            r.cap === null
+              ? <span key="c" className="text-text-muted" title={ar ? 'لم تُصرّح أي حملة على هذا الحساب بحدّ' : 'No campaign on this account states a ceiling'}>{noCap}</span>
+              : money(r.cap, unit),
+            r.remaining === null ? <span key="rm" className="text-text-muted">—</span> : money(r.remaining, unit),
+            r.consumed_pct === null
+              ? <span key="cp" className="text-text-muted">—</span>
+              : (
+                <span key="cp" className="inline-flex items-center gap-2">
+                  <span className="h-1.5 w-14 overflow-hidden rounded-full bg-surface-secondary">
+                    <span
+                      className={`block h-full rounded-full ${r.consumed_pct >= 0.9 ? 'bg-danger' : r.consumed_pct >= 0.8 ? 'bg-warning' : 'bg-brand-500'}`}
+                      style={{ width: `${Math.min(100, r.consumed_pct * 100)}%` }}
+                    />
+                  </span>
+                  <span className="tnum text-xs">{percent(r.consumed_pct, 0)}</span>
+                </span>
+              ),
+            r.pace === null
+              ? <span key="p" className="text-text-muted">—</span>
+              : <span key="p" className={`tnum font-semibold ${r.pace > 1 ? 'text-danger' : r.pace > 0.9 ? 'text-warning' : 'text-success'}`}>{ratio(r.pace, '×')}</span>,
+            money(r.projected_spend, unit),
+            <span key="n" className="tnum">
+              {r.capped_campaigns < r.campaigns
+                ? `${r.campaigns} (${ar ? `${r.capped_campaigns} بحدّ` : `${r.capped_campaigns} capped`})`
+                : String(r.campaigns)}
+            </span>,
+          ]
+        })}
+        values={rows.map((r) => [
+          r.account_name ?? '',
+          providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+          r.spent,
+          r.cap,
+          r.remaining,
+          r.consumed_pct,
+          r.pace,
+          r.projected_spend,
+          r.campaigns,
+        ])}
+        /* Most consumed first: the account about to stop delivering is why this table is open. */
+        initialSort={{ column: 5, dir: 'desc' }}
+      />
+    </Panel>
+  )
+}
+
 function BudgetTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const b = useBudget(projectId, range, filters)
   const rows = b.data ?? []
   return (
+    <div className="space-y-4">
+    <AccountBudgets projectId={projectId} range={range} filters={filters} />
     <Panel title={ar ? 'تحليل الميزانية' : 'Budget analysis'} description={ar ? 'المخطط مقابل المصروف وسرعة الصرف (Pacing)' : 'Planned against spent, and how fast it is going (pacing)'} loading={b.isLoading} error={b.isError} empty={!b.isLoading && rows.length === 0}>
       {/*
         BUDGET-WITHHELD-001 — every figure here is now stated in the unit it is actually in.
@@ -898,6 +1001,7 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
         initialSort={{ column: 5, dir: 'desc' }}
       />
     </Panel>
+    </div>
   )
 }
 
