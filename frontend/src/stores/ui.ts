@@ -66,8 +66,21 @@ const initialCollapsed = (() => {
   }
 })()
 
-// Arabic and light are the product defaults, and stay the answer for a first-time visitor.
-const initialTheme = remembered<Theme>(THEME_KEY, ['light', 'dark'], 'light')
+/*
+ * THEME-DARK-PRIMARY-001 — dark is the product, light is a preference.
+ *
+ * Dark is the reference design this interface is composed against: layered surfaces, restrained
+ * borders, chart and KPI palettes mixed for a dark ground. Light is a complete second set, offered
+ * because some people work in bright rooms — not the original from which dark was derived.
+ *
+ * So a first-time visitor gets dark, and `prefers-color-scheme` is deliberately NOT consulted. A
+ * reader whose laptop is in light mode for their mail client has not thereby chosen a theme for this
+ * product, and letting the OS decide would mean the same account looks like two different products
+ * depending on which machine opened it. Only an explicit choice here changes the answer, and once
+ * made it is remembered.
+ */
+const initialTheme = remembered<Theme>(THEME_KEY, ['light', 'dark'], 'dark')
+// Arabic remains the product default for language.
 const initialLocale = remembered<Locale>(LOCALE_KEY, ['ar', 'en'], 'ar')
 
 export const useUi = create<UiState>((set, get) => ({
