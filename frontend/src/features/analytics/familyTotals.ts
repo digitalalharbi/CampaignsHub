@@ -174,7 +174,11 @@ export function familyTotal(rows: FamilyRow[], key: string): number | null {
  * (`rowMoney`) then applies the same rule it applies everywhere — a partial or multi-currency scope
  * has no single figure and fails closed to «—».
  */
-export function familySpend(rows: FamilyRow[]): MoneyTotals {
+// `NonNullable`, deliberately: `MoneyTotals` includes `undefined` so that readers can be handed a
+// scope that does not exist. This function always produces a scope — an empty family is «zero rows»,
+// not «no answer» — and typing it as `MoneyTotals` would make every caller re-check a value that can
+// never be absent.
+export function familySpend(rows: FamilyRow[]): NonNullable<MoneyTotals> {
   const currencies = new Set<string>()
 
   for (const r of rows) {
@@ -189,5 +193,5 @@ export function familySpend(rows: FamilyRow[]): MoneyTotals {
     // Named only when exactly one is involved; naming one of several is how a EUR total gets a USD label.
     money_original_currency: currencies.size === 1 ? [...currencies][0]! : null,
     money_original_currencies: currencies.size,
-  } as MoneyTotals
+  } as NonNullable<MoneyTotals>
 }
