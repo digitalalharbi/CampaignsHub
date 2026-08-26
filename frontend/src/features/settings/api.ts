@@ -121,7 +121,7 @@ export function useTeamActions() {
 
 // ---- Notification preferences --------------------------------------------------------------------
 
-export type Rhythm = 'immediate' | 'daily' | 'weekly'
+export type Rhythm = 'immediate' | 'daily' | 'weekly' | 'monthly'
 
 /** One message this product can send, as the server describes it — MAIL-011. */
 export interface CatalogueType {
@@ -149,7 +149,7 @@ export interface NotifPrefs {
   frequency: 'realtime' | 'hourly' | 'daily'
   project_ids: string[] | null
   projects: { id: string; name: string; client_name: string | null }[]
-  digests: { daily: boolean; weekly: boolean; alerts: boolean }
+  digests: { daily: boolean; weekly: boolean; monthly: boolean; alerts: boolean }
   available_digests: string[]
   timezone: string
   locale: 'ar' | 'en'

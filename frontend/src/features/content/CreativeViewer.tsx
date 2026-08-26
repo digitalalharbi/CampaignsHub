@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CreativeCarousel } from './CreativeCarousel'
 import { ChevronLeft, ChevronRight, Minus, Plus, RotateCcw, X } from 'lucide-react'
 import { CreativeVideoPlayer } from './CreativeVideoPlayer'
 import { CreativeQuickFacts } from './CreativeQuickFacts'
@@ -155,11 +156,30 @@ export function CreativeViewer({
    * control, in the sense the contract forbids. Deriving both from one value makes the two agree by
    * construction rather than by two conditions being kept in step.
    */
-  const showing: 'video' | 'image' | 'none' =
-    preview.state !== 'available' ? 'none' : preview.video_url ? 'video' : preview.image_url ? 'image' : 'none'
+  const showing: 'video' | 'image' | 'cards' | 'none' =
+    preview.state !== 'available'
+      ? 'none'
+      : preview.video_url
+        ? 'video'
+        : preview.image_url
+          ? 'image'
+          /*
+           * CONTENT-VIEWER-CARDS-001 — a Story Ad is its cards, and the modal never showed them.
+           *
+           * `CreativePresenter` builds `cards` for multi-card formats — Snapchat Story Ads and
+           * carousels — and `CreativeCarousel` renders them. It was mounted only on the full detail
+           * PAGE, so opening one of these from the library gave a single asset or an empty «no
+           * preview» box, and its actual content was reachable only by leaving the library. A
+           * carousel with no single hero image is not a creative without a preview; it is a creative
+           * whose preview is a sequence.
+           */
+          : (preview.cards?.length ?? 0) > 0
+            ? 'cards'
+            : 'none'
 
   return (
     <div
+      data-testid="creative-viewer"
       role="dialog"
       aria-modal="true"
       aria-label={t.viewer}
@@ -215,6 +235,10 @@ export function CreativeViewer({
               style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
               className="max-h-[70vh] max-w-full object-contain transition-transform"
             />
+          ) : showing === 'cards' ? (
+            <div className="w-full max-w-3xl">
+              <CreativeCarousel preview={preview} locale={ar ? 'ar' : 'en'} />
+            </div>
           ) : (
             <div className="max-w-md rounded-lg border border-white/15 bg-white/5 p-6 text-center text-sm text-white/80">
               <p className="font-medium">{t.noPreview}</p>
