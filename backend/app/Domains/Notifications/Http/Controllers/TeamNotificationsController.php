@@ -167,6 +167,7 @@ final class TeamNotificationsController extends Controller
         return [
             'daily' => ($digests['daily'] ?? false) === true,
             'weekly' => ($digests['weekly'] ?? false) === true,
+            'monthly' => ($digests['monthly'] ?? false) === true,
             'alerts' => ($digests['alerts'] ?? false) === true,
         ];
     }

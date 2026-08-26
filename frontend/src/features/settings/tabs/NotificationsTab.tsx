@@ -21,6 +21,7 @@ const RHYTHM_LABELS: Record<Rhythm, { ar: string; en: string }> = {
   immediate: { ar: 'فور حدوثه', en: 'As it happens' },
   daily: { ar: 'مع الملخص اليومي', en: 'With the daily summary' },
   weekly: { ar: 'مع الملخص الأسبوعي', en: 'With the weekly summary' },
+  monthly: { ar: 'مع الملخص الشهري', en: 'With the monthly summary' },
 }
 
 /**
@@ -111,6 +112,7 @@ export function NotificationsTab() {
     const r = p.types[t.key]?.rhythm
     if (r === 'daily' && !p.digests.daily) return 'daily'
     if (r === 'weekly' && !p.digests.weekly) return 'weekly'
+    if (r === 'monthly' && !p.digests.monthly) return 'monthly'
     return null
   }
 
@@ -241,7 +243,7 @@ export function NotificationsTab() {
                                 {stranded && (
                                   <p className="mt-1 max-w-xs text-[13px] leading-6 text-warning">
                                     {ar
-                                      ? `لن تصلك هذه الرسالة لأن ${stranded === 'daily' ? 'الملخص اليومي' : 'الملخص الأسبوعي'} غير مفعّل لديك.`
+                                      ? `لن تصلك هذه الرسالة لأن ${stranded === 'daily' ? 'الملخص اليومي' : stranded === 'weekly' ? 'الملخص الأسبوعي' : 'الملخص الشهري'} غير مفعّل لديك.`
                                       : `This will not reach you: your ${stranded} summary is switched off.`}
                                   </p>
                                 )}

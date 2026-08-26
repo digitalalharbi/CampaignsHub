@@ -41,6 +41,14 @@ export interface CompareCampaign {
     money_original_currency?: string | null
     money_original_currencies?: number | null
   }>
+  /**
+   * MONEY-TRUTH-002 — whether the platform bars are a real money ranking.
+   *
+   * `by_spend` when the platforms share a currency and were ordered by effective spend; `unavailable`
+   * when they do not (a converted platform beside a withheld one, or two withheld currencies), where
+   * the order is deterministic-by-provider and must not be read as a spend ranking.
+   */
+  platform_ranking?: 'by_spend' | 'unavailable'
   creatives: CompareCreative[]
 }
 

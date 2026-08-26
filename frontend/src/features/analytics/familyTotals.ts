@@ -16,7 +16,7 @@
  * rows' `spend_original` and `spend_withheld_rows` instead produces a family-level payload the
  * contract can read, which is what makes «4,803.17 USD» reachable here as well as on the strip.
  */
-import type { MoneyFields } from '@/lib/money/contract'
+import { moneyState, type MoneyFields } from '@/lib/money/contract'
 
 /** A campaign row as the breakdown returns it. */
 export type FamilyRow = MoneyFields & Record<string, unknown>
@@ -102,23 +102,50 @@ export function familyTotal(rows: FamilyRow[], key: string): number | null {
   const money = familyMoney(rows)
 
   /*
-   * A money base reads through the contract, so a withheld original stands in for the coalesced 0.
-   * The quotient is then in the original currency — and for a RATIO like ROAS, identical to what it
-   * would be after conversion, which is why it survives a missing rate at all.
+   * A money base reads through the contract, so it fails closed exactly where the contract does:
+   * a single figure for `complete_converted`/`zero`/`complete_withheld`, and null for `partial`,
+   * `mixed_currency` and `absent` — because those have no single total, and returning the converted
+   * subset (PARTIAL-WITHHELD-001) presents part of the scope's money as the whole.
    */
   const base = (name: string): number | null => {
     if (name === 'spend' || name === 'revenue') {
-      const converted = money[name]
-      if (typeof converted === 'number' && converted > 0) return converted
-
-      const withheld = Number(money[`${name}_withheld_rows` as keyof MoneyFields] ?? 0)
-      const original = Number(money[`${name}_original` as keyof MoneyFields] ?? 0)
-      if (withheld > 0 && original > 0 && money.money_original_currencies === 1) return original
-
-      return converted ?? null
+      const s = moneyState(money, name)
+      switch (s.state) {
+        case 'complete_converted':
+        case 'zero':
+          return s.converted
+        case 'complete_withheld':
+          return s.original
+        default:
+          return null // partial, mixed_currency, absent — not a single number
+      }
     }
 
     return sumBase(rows, name)
+  }
+
+  /*
+   * ROAS is the one ratio that survives a missing rate — but ONLY when spend and revenue are each a
+   * single figure in COMPATIBLE units for the same scope. Both converted, or both withheld in one
+   * shared currency. A converted spend beside a withheld revenue divides unlike units; a partial or
+   * mixed side has no figure at all. Any of those → unavailable, never a ratio from one subset.
+   */
+  if (key === 'roas') {
+    const sp = moneyState(money, 'spend')
+    const rev = moneyState(money, 'revenue')
+    if (sp.state === 'complete_converted' && rev.state === 'complete_converted' && (sp.converted ?? 0) > 0) {
+      return (rev.converted as number) / (sp.converted as number)
+    }
+    if (
+      sp.state === 'complete_withheld' &&
+      rev.state === 'complete_withheld' &&
+      sp.originalCurrency !== null &&
+      sp.originalCurrency === rev.originalCurrency &&
+      sp.original > 0
+    ) {
+      return rev.original / sp.original
+    }
+    return null
   }
 
   const over = base(rate.over)

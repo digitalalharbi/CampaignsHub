@@ -65,7 +65,13 @@ final class NotificationPreferenceController extends Controller
      * same question — «what may reach my inbox on its own?» — and a row written before it existed
      * has no `alerts` key, which reads as «never asked» exactly as it should.
      */
-    private const DIGESTS = ['daily', 'weekly', 'alerts'];
+    /*
+     * EMAIL-INTELLIGENCE-001 — `monthly` joins the rhythms a recipient can choose.
+     *
+     * Ordered by period so the settings list reads as a scale rather than an arbitrary set. `alerts`
+     * stays last because it is not a period at all — it is «mail me findings as they happen».
+     */
+    private const DIGESTS = ['daily', 'weekly', 'monthly', 'alerts'];
 
     public function __construct(
         private readonly NotificationChoices $choices,

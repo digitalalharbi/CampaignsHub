@@ -340,6 +340,8 @@ final class MetricsController extends Controller
                 'spend' => $funnel['spend'],
                 'spend_currency' => $funnel['spend_currency'],
                 'spend_withheld' => $funnel['spend_withheld'],
+                // Why spend/cost_per are what they are — «partial» / «mixed_currency» read as blanks otherwise.
+                'spend_state' => $funnel['spend_state'],
             ],
         );
     }
@@ -375,6 +377,26 @@ final class MetricsController extends Controller
         return ApiResponse::success(
             $this->scoped($request)->budgetPacing($from, $to, Carbon::today()),
             'Budget pacing.',
+            meta: $this->meta($from, $to),
+        );
+    }
+
+    /**
+     * BUDGET-ACCOUNTS-001 — the same window, rolled up to the account that holds the payment method.
+     *
+     * Separate from `budget` rather than folded into it: that one answers «is this campaign pacing
+     * to the plan we typed», this one answers «how close is this account to the ceiling the platform
+     * will actually enforce». Different questions, different rows, and merging them would produce a
+     * table where a column means one thing on some rows and something else on others.
+     */
+    public function budgetAccounts(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        return ApiResponse::success(
+            $this->scoped($request)->accountBudgets($from, $to),
+            'Account budgets.',
             meta: $this->meta($from, $to),
         );
     }

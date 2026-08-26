@@ -107,6 +107,15 @@ final class ReportGenerator
 
         $topCreatives = $this->ranking->rank($objective, $campaigns);
 
+        /*
+         * REPORT-WORST-CREATIVES-001 — a report that only lists winners never says what to stop.
+         *
+         * Judged by the same objective-aware metric as the leaders, and excluding anything the
+         * platform did not measure on that metric: «no ROAS reported» is not «returned nothing», and
+         * a client's report is the last place to blur the two.
+         */
+        $worstCreatives = $this->ranking->worst($objective, $campaigns);
+
         $data = [
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'currency' => $report->currency,
@@ -135,6 +144,7 @@ final class ReportGenerator
             'best' => $this->leaders($lens, $platforms, $campaigns, $report->currency),
             'campaigns' => $campaigns,
             'top_creatives' => $topCreatives,
+            'worst_creatives' => $worstCreatives,
             'creative_level' => 'campaign', // ad-level arrives once connectors provide it
             'platform_notes' => $this->platformNotes($lens, $platforms, $report->currency),
             /*

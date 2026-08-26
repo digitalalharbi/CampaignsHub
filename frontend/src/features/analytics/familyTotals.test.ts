@@ -108,6 +108,49 @@ describe('the objective families name metrics that exist', () => {
     }
   })
 
+  /**
+   * PARTIAL-WITHHELD-001 — a family holding a converted campaign AND a withheld one has no single
+   * spend, so no cost-per may be computed from the converted subset alone.
+   */
+  it('CASE A — a partial family spend makes every cost-per unavailable', () => {
+    const rows = [
+      campaign({ spend: 1000 }), // converted, in the reporting currency
+      campaign({ spend: 0, spend_withheld_rows: 1, spend_original: 500, money_original_currency: 'USD', money_original_currencies: 1 }),
+    ]
+
+    expect(familyMoney(rows).money_original_currency).toBe('USD')
+    expect(familyTotal(rows, 'cpa')).toBeNull()
+    expect(familyTotal(rows, 'cpm')).toBeNull()
+    expect(familyTotal(rows, 'cpc')).toBeNull()
+  })
+
+  it('CASE C — ROAS survives when spend and revenue are both withheld in one currency', () => {
+    const rows = [
+      campaign({
+        spend: 0, spend_withheld_rows: 1, spend_original: 500,
+        revenue: 0, revenue_withheld_rows: 1, revenue_original: 1500,
+        money_original_currency: 'USD', money_original_currencies: 1,
+      }),
+    ]
+
+    expect(familyTotal(rows, 'roas')).toBe(3)
+  })
+
+  it('refuses ROAS when a converted spend meets a withheld revenue — unlike units', () => {
+    const rows = [
+      campaign({ spend: 1000 }), // converted
+      campaign({ revenue: 0, revenue_withheld_rows: 1, revenue_original: 3000, money_original_currency: 'USD', money_original_currencies: 1 }),
+    ]
+
+    expect(familyTotal(rows, 'roas')).toBeNull()
+  })
+
+  it('CASE D — an all-converted family is unchanged', () => {
+    const rows = [campaign({ spend: 1000, revenue: 3000, roas: 3, conversions: 10, cpa: 100 })]
+    expect(familyTotal(rows, 'roas')).toBe(3)
+    expect(familyTotal(rows, 'cpa')).toBe(100)
+  })
+
   it('can total every metric the families ask for', () => {
     const rows = [{ impressions: 1000, clicks: 10, spend: 50, reach: 800, engagements: 5, video_views: 100, video_completions: 40, leads: 2, conversions: 3, revenue: 200, installs: 1, purchases: 3 }]
 

@@ -75,7 +75,26 @@ final class DigestDispatcher
         return $this->send($user, $tenantId, 'weekly', $end->format('o-\WW'), $start, $end, $locale);
     }
 
-    /** One send, for either rhythm. */
+    /**
+     * EMAIL-INTELLIGENCE-001 — the completed month, sent once.
+     *
+     * The period key is the calendar month (`2026-08`), so a run on any day inside it converges on
+     * the same ledger row and the same unique-index guarantee that already protects daily and
+     * weekly. Everything else is the daily path: one builder, one scope, the same honest states.
+     *
+     * The window is the WHOLE month `$inMonth` falls in, not «the last 30 days». A monthly report
+     * that slides is not comparable to the one before it, and comparability is the only reason to
+     * send a monthly report rather than a weekly one.
+     */
+    public function sendMonthly(User $user, string $tenantId, Carbon $inMonth, string $locale = 'ar'): string
+    {
+        $start = $inMonth->copy()->startOfMonth()->startOfDay();
+        $end = $inMonth->copy()->endOfMonth()->endOfDay();
+
+        return $this->send($user, $tenantId, 'monthly', $start->format('Y-m'), $start, $end, $locale);
+    }
+
+    /** One send, for any of the three rhythms. */
     private function send(
         User $user,
         string $tenantId,

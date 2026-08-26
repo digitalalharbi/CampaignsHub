@@ -14,6 +14,7 @@ import {
   YAxis,
 } from 'recharts'
 import {
+  useAccountBudgets,
   useBudget,
   useAccounts,
   useCampaigns,
@@ -33,8 +34,9 @@ import { listCreatives } from '@/features/content/api'
 import { compact, money, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { plotSeries } from './timeseriesMoney'
+import { orderRows } from './tableSort'
 import { familyMoney, familyTotal, type FamilyRow } from './familyTotals'
-import { readMoney } from '@/lib/money/contract'
+import { readCostPer, readMoney, readRoas } from '@/lib/money/contract'
 
 /** The two KPI keys that are money rather than a quantity or a rate. */
 const MONEY_KPIS = new Set(['spend', 'revenue'])
@@ -663,6 +665,18 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
             rowCostPer(r, 'cpm', Number(r.impressions ?? 0) / 1000),
             percent(r.spend_share, 1),
           ])}
+          /* The raw figures behind those cells, so the header can sort what the eye is comparing. */
+          values={rows.map((r) => [
+            providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+            readMoney(r, 'spend', null, ar).amount,
+            r.conversions ?? null,
+            readCostPer(r, 'cpa', 'conversions', null, ar).amount,
+            readRoas(r, ar).value,
+            r.ctr ?? null,
+            readCostPer(r, 'cpm', Number(r.impressions ?? 0) / 1000, null, ar).amount,
+            r.spend_share ?? null,
+          ])}
+          initialSort={{ column: 1, dir: 'desc' }}
         />
       </Panel>
     </div>
@@ -718,6 +732,16 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
             rowCostPer(r, 'cpa', 'conversions'),
             <span key="ro" className="tnum font-semibold">{rowRoas(r)}</span>,
           ])}
+          values={rows.map((r) => [
+            r.campaign_name ?? '',
+            providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+            readMoney(r, 'spend', null, ar).amount,
+            readMoney(r, 'revenue', null, ar).amount,
+            r.conversions ?? null,
+            readCostPer(r, 'cpa', 'conversions', null, ar).amount,
+            readRoas(r, ar).value,
+          ])}
+          initialSort={{ column: 2, dir: 'desc' }}
         />
       </Panel>
     </div>
@@ -796,11 +820,113 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
   )
 }
 
+/**
+ * BUDGET-ACCOUNTS-001 — how close each ad account is to the ceiling the platform enforces.
+ *
+ * The campaign table below answers «is this campaign pacing to the plan we typed». This answers the
+ * question that actually interrupts delivery: an account reaching the cap its platform holds stops
+ * spending, whatever the plan said. It rolls up to the account because that is where the payment
+ * method and the cap live.
+ *
+ * An account whose campaigns state no ceiling shows «لم تُرسل» rather than a bar at 0% — no cap is
+ * not an exhausted cap, and a progress bar at zero says the opposite of what is true.
+ */
+function AccountBudgets({ projectId, range, filters }: TabProps) {
+  const ar = useAr()
+  const q = useAccountBudgets(projectId, range, filters)
+  const rows = q.data ?? []
+
+  /** Near the ceiling, or heading past it before the window ends — the two reasons to intervene. */
+  const atRisk = rows.filter((r) => (r.consumed_pct !== null && r.consumed_pct >= 0.8) || (r.pace !== null && r.pace > 1))
+
+  return (
+    <Panel
+      title={ar ? 'الحسابات الإعلانية مقابل حدّ المنصة' : 'Ad accounts against the platform ceiling'}
+      description={ar
+        ? 'الحدّ الذي تفرضه المنصة هو ما يوقف الصرف فعليًا — لا الخطة المكتوبة هنا.'
+        : 'The ceiling the platform enforces is what actually stops delivery — not the plan typed here.'}
+      loading={q.isLoading}
+      error={q.isError}
+      empty={!q.isLoading && rows.length === 0}
+    >
+      {atRisk.length > 0 && (
+        <p data-testid="budget-at-risk" className="mb-3 rounded-lg border border-warning/40 bg-[var(--warning-background)] px-3 py-2 text-xs text-text-primary">
+          <span className="font-semibold">{ar ? 'تنبيه: ' : 'Heads up: '}</span>
+          {ar
+            ? `${atRisk.length} حساب اقترب من حدّه أو يسير لتجاوزه قبل نهاية الفترة.`
+            : `${atRisk.length} account(s) are near their ceiling or on course to pass it before the period ends.`}
+        </p>
+      )}
+
+      <MetricTable
+        head={ar
+          ? ['الحساب', 'المنصة', 'المصروف', 'حدّ المنصة', 'المتبقي', 'الاستهلاك', 'السرعة', 'المتوقع', 'الحملات']
+          : ['Account', 'Platform', 'Spent', 'Platform cap', 'Remaining', 'Consumed', 'Pace', 'Projected', 'Campaigns']}
+        rows={rows.map((r) => {
+          const unit = r.spent_currency ?? undefined
+          const noCap = ar ? 'لم تُرسل' : 'Not sent'
+
+          return [
+            <span key="a" className="font-semibold text-text-primary">
+              {r.account_name ?? (ar ? 'حساب لم يعد متاحًا' : 'Account no longer available')}
+            </span>,
+            providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+            <span key="s" title={r.spend_withheld ? (ar ? 'بعملة المنصة — التحويل غير متاح' : "In the platform's own currency") : undefined}>
+              {money(r.spent, unit)}
+            </span>,
+            r.cap === null
+              ? <span key="c" className="text-text-muted" title={ar ? 'لم تُصرّح أي حملة على هذا الحساب بحدّ' : 'No campaign on this account states a ceiling'}>{noCap}</span>
+              : money(r.cap, unit),
+            r.remaining === null ? <span key="rm" className="text-text-muted">—</span> : money(r.remaining, unit),
+            r.consumed_pct === null
+              ? <span key="cp" className="text-text-muted">—</span>
+              : (
+                <span key="cp" className="inline-flex items-center gap-2">
+                  <span className="h-1.5 w-14 overflow-hidden rounded-full bg-surface-secondary">
+                    <span
+                      className={`block h-full rounded-full ${r.consumed_pct >= 0.9 ? 'bg-danger' : r.consumed_pct >= 0.8 ? 'bg-warning' : 'bg-brand-500'}`}
+                      style={{ width: `${Math.min(100, r.consumed_pct * 100)}%` }}
+                    />
+                  </span>
+                  <span className="tnum text-xs">{percent(r.consumed_pct, 0)}</span>
+                </span>
+              ),
+            r.pace === null
+              ? <span key="p" className="text-text-muted">—</span>
+              : <span key="p" className={`tnum font-semibold ${r.pace > 1 ? 'text-danger' : r.pace > 0.9 ? 'text-warning' : 'text-success'}`}>{ratio(r.pace, '×')}</span>,
+            money(r.projected_spend, unit),
+            <span key="n" className="tnum">
+              {r.capped_campaigns < r.campaigns
+                ? `${r.campaigns} (${ar ? `${r.capped_campaigns} بحدّ` : `${r.capped_campaigns} capped`})`
+                : String(r.campaigns)}
+            </span>,
+          ]
+        })}
+        values={rows.map((r) => [
+          r.account_name ?? '',
+          providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+          r.spent,
+          r.cap,
+          r.remaining,
+          r.consumed_pct,
+          r.pace,
+          r.projected_spend,
+          r.campaigns,
+        ])}
+        /* Most consumed first: the account about to stop delivering is why this table is open. */
+        initialSort={{ column: 5, dir: 'desc' }}
+      />
+    </Panel>
+  )
+}
+
 function BudgetTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const b = useBudget(projectId, range, filters)
   const rows = b.data ?? []
   return (
+    <div className="space-y-4">
+    <AccountBudgets projectId={projectId} range={range} filters={filters} />
     <Panel title={ar ? 'تحليل الميزانية' : 'Budget analysis'} description={ar ? 'المخطط مقابل المصروف وسرعة الصرف (Pacing)' : 'Planned against spent, and how fast it is going (pacing)'} loading={b.isLoading} error={b.isError} empty={!b.isLoading && rows.length === 0}>
       {/*
         BUDGET-WITHHELD-001 — every figure here is now stated in the unit it is actually in.
@@ -823,14 +949,20 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
                 : `Spent in ${r.spent_currency ?? '—'}, budgeted in ${r.budget_currency ?? '—'} — not comparable`)
             : r.pacing_basis === 'no_budget'
               ? (ar ? 'لا توجد ميزانية محددة لهذه الحملة' : 'No budget was set for this campaign')
-              : undefined
+              : r.pacing_basis === 'partial'
+                ? (ar ? 'جزء من المصروف محوَّل وجزء بانتظار سعر صرف — لا يوجد إجمالي واحد' : 'Part of the spend is converted and part awaits an FX rate — no single total')
+                : r.pacing_basis === 'mixed_currency'
+                  ? (ar ? 'المصروف بعملات متعددة لا يمكن جمعها' : 'Spend is in several currencies that cannot be summed')
+                  : undefined
 
           return [
             <span key="n" className="font-semibold text-text-primary">{r.campaign_name}</span>,
             money(r.budget, r.budget_currency ?? undefined),
-            <span key="s" title={r.spend_withheld ? (ar ? 'بعملة المنصة — التحويل غير متاح' : "In the platform's own currency — conversion unavailable") : undefined}>
-              {money(r.spent, r.spent_currency ?? undefined)}
-            </span>,
+            r.spent === null
+              ? <span key="s" className="text-text-muted" title={basisNote}>—</span>
+              : <span key="s" title={r.spend_withheld ? (ar ? 'بعملة المنصة — التحويل غير متاح' : "In the platform's own currency — conversion unavailable") : undefined}>
+                  {money(r.spent, r.spent_currency ?? undefined)}
+                </span>,
             r.remaining === null
               ? <span key="rm" className="text-text-muted" title={basisNote}>—</span>
               : money(r.remaining, r.budget_currency ?? undefined),
@@ -851,11 +983,25 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
                   {ratio(r.pace, '×')}
                 </span>
               ),
-            money(r.projected_spend, r.spent_currency ?? undefined),
+            r.projected_spend === null
+              ? <span key="pr" className="text-text-muted" title={basisNote}>—</span>
+              : money(r.projected_spend, r.spent_currency ?? undefined),
           ]
         })}
+        values={rows.map((r) => [
+          r.campaign_name,
+          r.budget ?? null,
+          r.spent ?? null,
+          r.remaining,
+          r.consumed_pct,
+          r.pace,
+          r.projected_spend ?? null,
+        ])}
+        /* Fastest-burning first: a campaign about to overrun is why somebody opens this table. */
+        initialSort={{ column: 5, dir: 'desc' }}
       />
     </Panel>
+    </div>
   )
 }
 
@@ -885,6 +1031,16 @@ function QualityTab({ projectId, range, filters }: TabProps) {
            */
           <SyncStatusPill key="s" status={r.last_sync_status} ar={ar} />,
         ])}
+        values={rows.map((r) => [
+          providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+          r.latest_metric_date ?? null,
+          r.last_sync_at ?? null,
+          r.days_with_data ?? null,
+          r.missing_days,
+          r.last_sync_status ?? null,
+        ])}
+        /* Most missing days first: the platform with the biggest hole is the reason to open this. */
+        initialSort={{ column: 4, dir: 'desc' }}
       />
       <p className="mt-3 text-xs text-text-muted">{ar ? 'لا يتم جمع Reach عبر المنصات كوصول فريد — يُعرض لكل منصة على حدة.' : 'Reach is not summed across platforms as unique reach — it is shown per platform.'}</p>
       </Panel>
@@ -1146,24 +1302,92 @@ function PlatformCell({ provider }: { provider: string }) {
   )
 }
 
-function MetricTable({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
+/** One row's sortable values, positionally matched to its cells. `null` sorts last in both directions. */
+export type SortValues = Array<number | string | null>
+
+/**
+ * TABLE-SORT-ALIGN-001 — every analytics table, sortable and squarely aligned.
+ *
+ * ## Alignment
+ *
+ * Header and cell were both `text-end`, which measured as a drift of exactly 0 on all eleven tables
+ * — they were never misaligned in the DOM. But `text-end` under `dir="rtl"` means the LEFT edge of
+ * the cell, so a number sat as far from its Arabic heading as the column is wide, and read as
+ * belonging to no column in particular. Numeric columns are centred now: header and body share one
+ * alignment, so the association is unmistakable at a glance.
+ *
+ * `tnum` stays, because it is what keeps digits the same width; centring only moves where the block
+ * of digits sits, it does not stagger them.
+ *
+ * ## Sorting
+ *
+ * Cells are `ReactNode` — a bar, a pill, a link — so they cannot be compared. `values` carries the
+ * raw figure per cell, positionally matched, and the caller passes the same source it rendered from.
+ * A table with no `values` is simply not sortable rather than sortable-and-wrong.
+ *
+ * Nulls sort last in BOTH directions on purpose: «this platform does not report CPM» is not the
+ * cheapest CPM, and letting it win an ascending sort is how an absence gets read as a best result.
+ */
+export function MetricTable({
+  head,
+  rows,
+  values,
+  initialSort,
+}: {
+  head: string[]
+  rows: React.ReactNode[][]
+  values?: SortValues[]
+  /** Column index to sort by on first render, and its direction. */
+  initialSort?: { column: number; dir: 'asc' | 'desc' }
+}) {
+  const [sort, setSort] = useState<{ column: number; dir: 'asc' | 'desc' } | null>(initialSort ?? null)
+
+  const order = useMemo(
+    () => (values && sort ? orderRows(values, sort.column, sort.dir) : rows.map((_, i) => i)),
+    [rows, values, sort],
+  )
+
+  const toggle = (i: number) => {
+    if (!values) return
+    setSort((prev) => (prev?.column === i ? { column: i, dir: prev.dir === 'desc' ? 'asc' : 'desc' } : { column: i, dir: 'desc' }))
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr className="border-b border-border text-text-muted">
-            {head.map((h, i) => (
-              <th key={i} className={`py-2 font-semibold ${i === 0 ? 'text-start' : 'text-end'}`}>
-                {h}
-              </th>
-            ))}
+            {head.map((h, i) => {
+              const align = i === 0 ? 'text-start' : 'text-center'
+              const active = sort?.column === i
+
+              return (
+                <th key={i} className={`py-2 font-semibold ${align}`} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+                  {values ? (
+                    <button
+                      type="button"
+                      onClick={() => toggle(i)}
+                      className={`inline-flex items-center gap-1 hover:text-text-primary ${active ? 'text-text-primary' : ''}`}
+                      data-testid={`sort-${i}`}
+                    >
+                      {h}
+                      {/* The arrow only appears on the column actually in force, so the row does not
+                          look like six competing sort states. */}
+                      <span aria-hidden className={active ? '' : 'opacity-0 group-hover:opacity-40'}>
+                        {active ? (sort.dir === 'asc' ? '↑' : '↓') : '↕'}
+                      </span>
+                    </button>
+                  ) : h}
+                </th>
+              )
+            })}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} className="border-b border-border last:border-0 hover:bg-surface-secondary">
-              {r.map((cell, j) => (
-                <td key={j} className={`py-2.5 ${j === 0 ? 'text-start' : 'tnum text-end'}`}>
+          {order.map((rowIndex) => (
+            <tr key={rowIndex} className="border-b border-border last:border-0 hover:bg-surface-secondary">
+              {rows[rowIndex].map((cell, j) => (
+                <td key={j} className={`py-2.5 ${j === 0 ? 'text-start' : 'tnum text-center'}`}>
                   {cell}
                 </td>
               ))}

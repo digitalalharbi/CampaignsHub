@@ -41,6 +41,81 @@ final class CreativeRankingService
         return array_map(fn ($i) => $i + ['reason' => $reason($i, $avgCpa, $avgCtr)], array_slice($items, 0, $limit));
     }
 
+    /**
+     * REPORT-WORST-CREATIVES-001 — the creatives spending money and returning least.
+     *
+     * A report that only lists winners tells a reader what to keep and never what to stop, and
+     * stopping is the cheaper decision. This is `rank()` read from the other end, by the same
+     * objective-aware metric — an awareness creative is judged on CPM, a sales one on ROAS — so
+     * «worst» always means worst at the thing the money was spent to buy.
+     *
+     * A creative whose ranking metric is NULL is excluded rather than placed last. It sorts last in
+     * `rank()` because an absence must not win, and by the same reasoning it must not lose either:
+     * «the platform reported no ROAS for this creative» is not «this creative returned nothing», and
+     * naming it the worst performer in a client's report would be a claim nobody measured.
+     *
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array<string, mixed>>
+     */
+    public function worst(string $objective, array $items, int $limit = 5): array
+    {
+        [$sortKey, $direction] = $this->strategy($objective);
+
+        // Spending, and actually measured on the metric it is being judged by.
+        $measured = array_values(array_filter(
+            $items,
+            fn ($i) => (float) ($i['spend'] ?? 0) > 0 && ($i[$sortKey] ?? null) !== null,
+        ));
+
+        if ($measured === []) {
+            return [];
+        }
+
+        $avgCpa = $this->average($measured, 'cpa');
+        $avgCtr = $this->average($measured, 'ctr');
+
+        // The same order as `rank()`, reversed: worst is the far end of «best».
+        usort($measured, function ($a, $b) use ($sortKey, $direction) {
+            $cmp = ($a[$sortKey] ?? 0) <=> ($b[$sortKey] ?? 0);
+
+            return $direction === 'desc' ? $cmp : -$cmp;
+        });
+
+        $reason = $this->weakness($objective);
+
+        return array_map(
+            fn ($i) => $i + ['reason' => $reason($i, $avgCpa, $avgCtr)],
+            array_slice($measured, 0, $limit),
+        );
+    }
+
+    /**
+     * Why this creative is on the list — the figure that put it there, not a verdict.
+     *
+     * @return callable(array<string, mixed>, ?float, ?float): string
+     */
+    private function weakness(string $objective): callable
+    {
+        return match ($objective) {
+            'awareness', 'video' => fn ($i) => sprintf('أعلى تكلفة ألف ظهور (CPM %s) في هذه الفترة.', $this->fmt($i['cpm'] ?? null)),
+            'traffic' => fn ($i, $avgCpa, $avgCtr) => sprintf(
+                'أقل CTR (%s)%s.',
+                $this->pct($i['ctr'] ?? null),
+                $avgCtr && ($i['ctr'] ?? 0) < $avgCtr ? ' دون متوسط الحملة' : '',
+            ),
+            'leads', 'app_installs' => fn ($i, $avgCpa) => sprintf(
+                'أعلى تكلفة نتيجة (CPA %s)%s.',
+                $this->fmt($i['cpa'] ?? null),
+                $avgCpa && ($i['cpa'] ?? 0) > $avgCpa ? ' فوق متوسط الحملة' : '',
+            ),
+            default => fn ($i, $avgCpa) => sprintf(
+                'أقل عائد على الإنفاق (ROAS %s×)%s.',
+                $this->num($i['roas'] ?? null),
+                $avgCpa && ($i['cpa'] ?? 0) > $avgCpa ? ' مع CPA فوق المتوسط' : '',
+            ),
+        };
+    }
+
     /** @return array{0:string,1:string,2:callable} sort key, direction, reason builder */
     private function strategy(string $objective): array
     {

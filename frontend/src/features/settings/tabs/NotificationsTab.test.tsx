@@ -49,8 +49,8 @@ function prefs(over: Partial<NotifPrefs> = {}): NotifPrefs {
       { id: 'p1', name: 'Q3 Launch', client_name: 'Acme' },
       { id: 'p2', name: 'Q3 Launch', client_name: 'Globex' },
     ],
-    digests: { daily: false, weekly: false, alerts: false },
-    available_digests: ['daily', 'weekly', 'alerts'],
+    digests: { daily: false, weekly: false, monthly: false, alerts: false },
+    available_digests: ['daily', 'weekly', 'monthly', 'alerts'],
     timezone: 'Asia/Riyadh',
     locale: 'ar',
     digest_hour: 8,
@@ -134,13 +134,13 @@ describe('the notification preferences centre', () => {
    * the other screen.
    */
   it('submits the timing and language settings it renders, so saving cannot clear them', async () => {
-    open(prefs({ digests: { daily: true, weekly: false, alerts: true }, timezone: 'Europe/London', digest_hour: 6, locale: 'en' }))
+    open(prefs({ digests: { daily: true, weekly: false, monthly: false, alerts: true }, timezone: 'Europe/London', digest_hour: 6, locale: 'en' }))
 
     fireEvent.click(screen.getByText('حفظ التفضيلات'))
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
     const body = mutateAsync.mock.calls[0]?.[0]
-    expect(body.digests).toEqual({ daily: true, weekly: false, alerts: true })
+    expect(body.digests).toEqual({ daily: true, weekly: false, monthly: false, alerts: true })
     expect(body.timezone).toBe('Europe/London')
     expect(body.digest_hour).toBe(6)
     expect(body.locale).toBe('en')

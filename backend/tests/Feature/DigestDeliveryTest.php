@@ -244,6 +244,80 @@ final class DigestDeliveryTest extends TestCase
         $this->assertSame($end->format('o-\WW'), DB::table('digest_sends')->where('kind', 'weekly')->value('period_key'));
     }
 
+    /**
+     * EMAIL-INTELLIGENCE-001 — the monthly covers a whole calendar month, once.
+     *
+     * The window is the month, not «the last 30 days»: a monthly report that slides is not
+     * comparable with the one before it, and comparability is the only reason to send a monthly
+     * report rather than another weekly.
+     */
+    public function test_the_monthly_covers_the_calendar_month_and_sends_once(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+
+        $dispatcher = app(DigestDispatcher::class);
+        $mid = Carbon::parse('2026-08-14');
+
+        $first = $dispatcher->sendMonthly($this->user, (string) $this->tenant->id, $mid);
+        // Any other day of the SAME month converges on the same row.
+        $second = $dispatcher->sendMonthly($this->user, (string) $this->tenant->id, Carbon::parse('2026-08-29'));
+
+        $this->assertSame('sent', $first);
+        $this->assertSame('already_sent', $second);
+
+        Mail::assertSent(DailyDigestMail::class, 1);
+        $this->assertSame(1, DB::table('digest_sends')->where('kind', 'monthly')->count());
+        $this->assertSame('2026-08', DB::table('digest_sends')->where('kind', 'monthly')->value('period_key'));
+    }
+
+    /**
+     * A different month is a different report — the guard must not swallow the next one.
+     *
+     * Asserted on the dedup BOUNDARY rather than on delivery. A month with no rows is skipped as an
+     * empty digest, which is correct and unrelated to what this test is for; asserting «sent» would
+     * make it a test about which months the seed happens to cover.
+     */
+    public function test_a_new_month_is_a_new_send(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+
+        $dispatcher = app(DigestDispatcher::class);
+        $tenantId = (string) $this->tenant->id;
+
+        $july = $dispatcher->sendMonthly($this->user, $tenantId, Carbon::parse('2026-07-10'));
+        $august = $dispatcher->sendMonthly($this->user, $tenantId, Carbon::parse('2026-08-10'));
+
+        // Neither was refused as a repeat of the other.
+        $this->assertNotSame('already_sent', $july);
+        $this->assertNotSame('already_sent', $august);
+
+        // And the same month IS refused, so the guard is on and keyed by the month.
+        $this->assertSame('already_sent', $dispatcher->sendMonthly($this->user, $tenantId, Carbon::parse('2026-08-27')));
+
+        $keys = DB::table('digest_sends')->where('kind', 'monthly')->pluck('period_key')->sort()->values()->all();
+        $this->assertSame(['2026-07', '2026-08'], $keys);
+    }
+
+    /** All three rhythms are separate rows: choosing all three means three emails. */
+    public function test_the_monthly_does_not_deduplicate_against_the_daily_or_weekly(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+
+        $dispatcher = app(DigestDispatcher::class);
+        // The day the sibling daily/weekly test uses — a fixed past date has no rows, and an empty
+        // digest is skipped rather than sent, which would make this assert the wrong thing.
+        $day = Carbon::today()->subDay();
+
+        $this->assertSame('sent', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, $day));
+        $this->assertSame('sent', $dispatcher->sendWeekly($this->user, (string) $this->tenant->id, $day));
+        $this->assertSame('sent', $dispatcher->sendMonthly($this->user, (string) $this->tenant->id, $day));
+
+        Mail::assertSent(DailyDigestMail::class, 3);
+    }
+
     /** Daily and weekly are separate rows: asking for both means two emails, not one deduped away. */
     public function test_the_daily_and_weekly_do_not_deduplicate_against_each_other(): void
     {
