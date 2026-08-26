@@ -1,5 +1,10 @@
 # Creative intelligence — what exists, and the three rankers that disagree
 
+> **Scope: universal.** Creative Intelligence is a core capability for EVERY objective — awareness,
+> traffic, engagement, video, leads, sales, app — on every platform and every report surface. Lead
+> Generation adds ranking *modes* on top where CRM provenance exists; it is not what this is for, and
+> the engine must never be biased toward lead campaigns.
+
 Read-only audit against `origin/main` at `266ab74`, by reading the tree. Implementation follows once
 the conflicting PRs land; nothing here counts as delivered.
 
