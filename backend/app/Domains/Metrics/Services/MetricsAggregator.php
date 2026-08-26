@@ -1135,6 +1135,99 @@ final class MetricsAggregator
     }
 
     /**
+     * BUDGET-ACCOUNTS-001 — spend per AD ACCOUNT, against whatever ceiling the platform states.
+     *
+     * The budget screen answered one question — «is this campaign pacing to its plan» — and the plan
+     * is a figure somebody typed into this product. It never showed the ceiling the PLATFORM
+     * enforces, which is the one that actually stops delivery, nor rolled spend up to the account
+     * that holds the payment method.
+     *
+     * The ceiling comes from `external_campaigns.lifetime_budget`, and where a campaign states only
+     * a daily budget, from that daily figure across the window's days — the platform's own two ways
+     * of capping, read as stored. A campaign stating neither contributes nothing rather than a zero,
+     * and `capped_campaigns` reports how many did state one, so a partial ceiling cannot be read as
+     * a total.
+     *
+     * Money goes through the same withheld/original treatment as everywhere else.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function accountBudgets(Carbon $from, Carbon $to): array
+    {
+        $days = max(1, $from->diffInDays($to) + 1);
+
+        $spend = $this->base($from, $to)
+            ->select('daily_metrics.external_account_id as account_id', 'daily_metrics.provider')
+            ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'), 0) AS spent")
+            ->selectRaw("COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_withheld_rows")
+            ->selectRaw("COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0) AS spend_original")
+            ->selectRaw("MIN(original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currency")
+            ->selectRaw("COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currencies")
+            ->groupBy('daily_metrics.external_account_id', 'daily_metrics.provider')
+            ->get();
+
+        $accountIds = $spend->pluck('account_id')->filter()->values();
+        if ($accountIds->isEmpty()) {
+            return [];
+        }
+
+        $caps = DB::table('external_campaigns')
+            ->whereIn('external_account_id', $accountIds->all())
+            ->selectRaw('external_account_id')
+            ->selectRaw('COALESCE(SUM(lifetime_budget), 0) + COALESCE(SUM(CASE WHEN lifetime_budget IS NULL THEN daily_budget END), 0) * ? AS cap', [$days])
+            ->selectRaw('COUNT(*) FILTER (WHERE lifetime_budget IS NOT NULL OR daily_budget IS NOT NULL) AS capped_campaigns')
+            ->selectRaw('COUNT(*) AS campaigns')
+            ->groupBy('external_account_id')
+            ->get()
+            ->keyBy('external_account_id');
+
+        $names = ExternalAccount::withoutGlobalScopes()
+            ->whereIn('id', $accountIds->all())
+            ->get(['id', 'name', 'currency'])
+            ->keyBy('id');
+
+        $elapsed = min(1.0, max(1, $from->diffInDays(Carbon::now()->min($to)) + 1) / $days);
+
+        $rows = [];
+        foreach ($spend as $r) {
+            $converted = (float) $r->spent;
+            $withheldRows = (int) $r->spend_withheld_rows;
+            $original = (float) $r->spend_original;
+            $oneCurrency = (int) $r->spend_original_currencies === 1;
+
+            $withheld = $converted <= 0.0 && $withheldRows > 0 && $original > 0.0 && $oneCurrency;
+            $spent = $withheld ? $original : $converted;
+
+            $cap = (float) ($caps[$r->account_id]->cap ?? 0);
+            $cappedCampaigns = (int) ($caps[$r->account_id]->capped_campaigns ?? 0);
+            $account = $names[$r->account_id] ?? null;
+
+            // A ceiling nobody stated is null, never zero — zero reads as «nothing left to spend».
+            $hasCap = $cap > 0.0 && $cappedCampaigns > 0;
+
+            $rows[] = [
+                'account_id' => (string) $r->account_id,
+                'account_name' => $account->name ?? null,
+                'provider' => $r->provider,
+                'spent' => round($spent, 2),
+                'spent_currency' => $withheld ? $r->spend_original_currency : ($account->currency ?? null),
+                'spend_withheld' => $withheld,
+                'cap' => $hasCap ? round($cap, 2) : null,
+                'remaining' => $hasCap ? round($cap - $spent, 2) : null,
+                'consumed_pct' => $hasCap ? round($spent / $cap, 4) : null,
+                'pace' => $hasCap && $elapsed > 0 ? round(($spent / $elapsed) / $cap, 3) : null,
+                'projected_spend' => $elapsed > 0 ? round($spent / $elapsed, 2) : round($spent, 2),
+                'campaigns' => (int) ($caps[$r->account_id]->campaigns ?? 0),
+                'capped_campaigns' => $cappedCampaigns,
+            ];
+        }
+
+        usort($rows, fn ($a, $b) => $b['spent'] <=> $a['spent']);
+
+        return $rows;
+    }
+
+    /**
      * Planned vs spent budget with pacing (over/under) and a linear end-of-period projection.
      *
      * ## BUDGET-WITHHELD-001 — «you have spent nothing» is the one lie somebody acts on
