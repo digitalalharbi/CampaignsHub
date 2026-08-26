@@ -167,6 +167,23 @@ jobs:
         # No `continue-on-error`, no retry wrapper: the script exits with the first non-zero code it
         # saw, and that code is the gate's verdict.
         run: npm run gate
+      # A 500 the gate saw, and could not explain.
+      #
+      # `expansion-surfaces.spec.ts` failed with «the server responded with a status of 500» on
+      # /app/integrations, twice on the same head. That sentence is the entire report: Playwright's
+      # artifacts describe the BROWSER's side — a status code and a screenshot of the resulting page
+      # — while the exception, its file, its line and its stack were written to the backend's log
+      # inside the runner and discarded when the job ended.
+      #
+      # Tailed inline as well as uploaded, so the next occurrence is readable from the run page
+      # instead of behind an artifact download.
+      - name: Backend log (why the server answered 500)
+        if: failure()
+        run: |
+          echo "::group::backend/storage/logs — last 200 lines"
+          tail -n 200 backend/storage/logs/*.log 2>/dev/null || echo "(no backend log was written)"
+          echo "::endgroup::"
+
       - name: Failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
@@ -175,4 +192,5 @@ jobs:
           path: |
             frontend/test-results/
             frontend/playwright-report/
+            backend/storage/logs/
           retention-days: 7
