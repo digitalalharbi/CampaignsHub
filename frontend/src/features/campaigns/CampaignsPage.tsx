@@ -17,7 +17,7 @@ import { useBudget, useCampaigns, usePlatforms, useSummary, useTimeseries } from
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { ProvenanceBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
 import { compact, money, num, rowCostPer, rowRoas } from '@/features/analytics/format'
-import { rankableMoney, type MoneyTotals } from '@/lib/money/contract'
+import { rankableMoney, resolveMoneySeries, type MoneyTotals } from '@/lib/money/contract'
 import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
@@ -173,6 +173,17 @@ export function CampaignsPage() {
       dropped: r.dropped,
     }
   }, [platforms.data, summary.data?.currency])
+
+  /*
+   * PARTIAL-WITHHELD-001 (d/f) — the spend/revenue trend must plot EFFECTIVE money in one currency,
+   * or nothing. Raw rows draw a withheld day as 0 and a partial day as a fabricated figure; a trend
+   * cannot drop a point and stay honest, so it fails closed to «unavailable» (unlike the donut/
+   * ranking above, which drop-and-disclose).
+   */
+  const moneySeries = useMemo(
+    () => resolveMoneySeries((timeseries.data ?? []) as unknown as Array<Record<string, unknown>>, ['spend', 'revenue'], summary.data?.currency ?? null),
+    [timeseries.data, summary.data?.currency],
+  )
 
   // Per-campaign metric slice, keyed by campaign id — the needs-attention rules read from this and
   // report "no data" rather than assuming a campaign without metrics is healthy.
@@ -331,7 +342,11 @@ export function CampaignsPage() {
           {/* Charts — all from the project-scoped metrics API. */}
           <div className="grid gap-4 lg:grid-cols-3">
             <ChartCard title={ar ? 'الإنفاق مقابل الإيرادات' : 'Spend vs revenue'} subtitle={ar ? 'اتجاه المشروع' : 'How the project is trending'} className="lg:col-span-2">
-              {timeseries.isLoading ? <Skeleton className="h-[200px]" /> : <SpendRevenueAreaChart data={(timeseries.data ?? []) as unknown as Array<Record<string, unknown>>} height={200} />}
+              {timeseries.isLoading
+                ? <Skeleton className="h-[200px]" />
+                : moneySeries === null
+                  ? <div className="flex h-[200px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'الإنفاق/الإيراد عبر الزمن غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend/revenue over time unavailable — amounts await a rate or span currencies'}</div>
+                  : <SpendRevenueAreaChart data={moneySeries.rows} currency={moneySeries.currency ?? undefined} height={200} />}
             </ChartCard>
             <ChartCard
               title={ar ? 'توزيع الإنفاق' : 'Where the spend went'}
