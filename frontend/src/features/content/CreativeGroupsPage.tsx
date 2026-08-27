@@ -524,14 +524,17 @@ function PlatformTable({
       <table className="w-full min-w-[32rem] text-start text-sm">
         <thead>
           <tr className="border-b border-border text-xs text-text-secondary">
+            {/* ANALYTICS-TABLES-001 — platform is prose and stays start-aligned; every count and metric
+                column is centred, heading and figure together, so a figure sits under its own heading in
+                both writing directions. */}
             <th scope="col" className="p-2 text-start font-medium">
               {t.platform}
             </th>
-            <th scope="col" className="p-2 text-start font-medium">
+            <th scope="col" className="p-2 text-center font-medium">
               {t.members}
             </th>
             {keys.map((key) => (
-              <th key={key} scope="col" className="p-2 text-start font-medium">
+              <th key={key} scope="col" className="p-2 text-center font-medium">
                 {metricLabel(key, locale)}
               </th>
             ))}
@@ -543,11 +546,11 @@ function PlatformTable({
               <th scope="row" className="p-2 text-start font-medium text-text-primary">
                 {providerLabel(line.provider, locale)}
               </th>
-              <td className="p-2 text-text-secondary" dir="ltr">
+              <td className="tnum p-2 text-center text-text-secondary" dir="ltr">
                 {line.creative_count}
               </td>
               {keys.map((key) => (
-                <td key={key} className="p-2 text-text-primary" dir="ltr">
+                <td key={key} className="tnum p-2 text-center text-text-primary" dir="ltr">
                   {formatMetric(metricState(line.metrics as CreativeMetrics | null, key), key, locale, group.currency)}
                 </td>
               ))}

@@ -899,9 +899,13 @@ function PathTable({ row, t, locale, currency }: { row: PathComparison; t: Copy;
         <table className="w-full min-w-[22rem] text-sm">
           <thead>
             <tr className="text-start text-xs text-text-muted">
+              {/* ANALYTICS-TABLES-001 — the metric NAME stays start-aligned because it is prose; the two
+                  value columns are centred, heading and figure together, so they line up under RTL as well as
+                  LTR. Transposed table (metric per row, creative type per column), so the rule is applied here
+                  rather than by using `MetricTable`. */}
               <th scope="col" className="py-1 text-start font-medium">{t.metric}</th>
-              <th scope="col" className="py-1 text-start font-medium">{t.image}</th>
-              <th scope="col" className="py-1 text-start font-medium">{t.video}</th>
+              <th scope="col" className="py-1 text-center font-medium">{t.image}</th>
+              <th scope="col" className="py-1 text-center font-medium">{t.video}</th>
             </tr>
           </thead>
           <tbody>
@@ -919,10 +923,10 @@ function PathTable({ row, t, locale, currency }: { row: PathComparison; t: Copy;
                   <th scope="row" className="py-1.5 text-start font-normal text-text-muted">
                     {metricLabel(metric, locale)}
                   </th>
-                  <td className={`py-1.5 ${imageWins ? 'font-semibold text-success' : 'text-text'}`}>
+                  <td className={`tnum py-1.5 text-center ${imageWins ? 'font-semibold text-success' : 'text-text'}`}>
                     {formatMetric(image, metric, locale, currency)}
                   </td>
-                  <td className={`py-1.5 ${videoWins ? 'font-semibold text-success' : 'text-text'}`}>
+                  <td className={`tnum py-1.5 text-center ${videoWins ? 'font-semibold text-success' : 'text-text'}`}>
                     {formatMetric(video, metric, locale, currency)}
                   </td>
                 </tr>
