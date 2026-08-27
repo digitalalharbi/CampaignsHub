@@ -1,0 +1,77 @@
+name: Money — Re-normalise Reporting Currency
+
+# MONEY-USD-002 — the only way to re-state historical money on production.
+#
+# `metrics:renormalise-currency` converts rows from `original_amount` / `original_currency` into the
+# canonical USD. It never reads `value`, which is what makes a second run a no-op rather than a second
+# conversion, and it skips rows already in the target. A row with no rate for its own metric date is
+# left withheld and reported, not guessed at.
+#
+# ## Why a workflow and not the deploy script
+#
+# This is a one-off re-statement of stored money, not part of releasing code. Putting it in
+# `deploy-production.sh` would run it on every push — harmless while it stays idempotent, and a
+# silent, unreviewed data write the first time somebody breaks that property. It runs when a person
+# asks, and the command is fixed here so the inputs can only ever be arguments.
+#
+# ## Dry run is the default, deliberately
+#
+# `apply` must be set to true by hand. The default run changes nothing and prints what it would do,
+# including which currency pairs have no rate — which is the number worth reading BEFORE writing,
+# because those rows come back withheld rather than converted.
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: 'Optional: one project id. Empty means every project.'
+        required: false
+        default: ''
+      chunk:
+        description: 'Rows per chunk'
+        required: false
+        default: '500'
+      apply:
+        description: 'WRITE the conversions. Leave false to dry-run and only report.'
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: production-money-renormalise
+  cancel-in-progress: false
+
+jobs:
+  renormalise:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Re-normalise on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          PROJECT: ${{ inputs.project }}
+          CHUNK: ${{ inputs.chunk }}
+          APPLY: ${{ inputs.apply }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: PROJECT,CHUNK,APPLY
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub/backend
+
+            args=""
+            # Quoted, and only ever appended as an argument — the command itself is fixed above.
+            [ -n "${PROJECT:-}" ] && args="$args --project=${PROJECT}"
+            [ -n "${CHUNK:-}" ] && args="$args --chunk=${CHUNK}"
+            if [ "${APPLY:-false}" = "true" ]; then
+              echo "== APPLY: this run WRITES =="
+              args="$args --apply"
+            else
+              echo "== DRY RUN: nothing will be written =="
+            fi
+
+            php artisan metrics:renormalise-currency $args

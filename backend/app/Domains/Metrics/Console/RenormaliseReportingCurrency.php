@@ -11,7 +11,10 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * MONEY-USD-002 — re-normalise historical money into the reporting currency, from the originals.
+ * MONEY-USD-002 — re-normalise historical money into the canonical USD, from the originals.
+ *
+ * The target is `ReportingCurrency::DEFAULT` for every project, not a per-project lookup. That is the
+ * point of MONEY-USD-001: one basis, so two projects remain addable.
  *
  * `MONEY-USD-001` changed what NEW rows normalise into. It deliberately left history alone: a
  * constant must not silently rewrite stored figures. This is the deliberate operation that does.
@@ -49,9 +52,9 @@ final class RenormaliseReportingCurrency extends Command
         {--apply : write the changes; without this the command only reports what it would do}
         {--chunk=500 : rows per batch}';
 
-    protected $description = 'Re-normalise stored money into each project\'s reporting currency, from the preserved originals.';
+    protected $description = 'Re-normalise stored money into the canonical reporting currency, from the preserved originals.';
 
-    public function handle(CurrencyConverter $rates, ReportingCurrency $reporting): int
+    public function handle(CurrencyConverter $rates): int
     {
         $apply = (bool) $this->option('apply');
         $target = ReportingCurrency::DEFAULT;
