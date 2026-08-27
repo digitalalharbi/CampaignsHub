@@ -55,6 +55,21 @@ final class ContributorCoverage
         Carbon $to,
         ?array $providers = null,
     ): AggregateCoverage {
+        /*
+         * Nobody can report a day that has not happened.
+         *
+         * The window a reader asks for routinely runs past today — «this month», «last 30 days» on the
+         * first of the month — and judging a provider against days in the future would mark every such
+         * view permanently partial, which is both false and the kind of warning people learn to ignore.
+         * Coverage is therefore measured against the last day it is REASONABLE to have figures for.
+         *
+         * Yesterday, not today: providers close a day before publishing it, and a sync that ran this
+         * morning has nothing to say about this afternoon. Expecting today would make every scope
+         * partial until tomorrow.
+         */
+        $expectedThrough = Carbon::yesterday()->startOfDay();
+        $to = $to->copy()->startOfDay()->gt($expectedThrough) ? $expectedThrough : $to->copy()->startOfDay();
+
         $expected = $this->expectedProviders($tenantId, $projectId, $from, $to, $providers);
 
         if ($expected === []) {
@@ -75,15 +90,49 @@ final class ContributorCoverage
                 continue;
             }
 
+            $run = $runs[$provider] ?? null;
+            /*
+             * Compared as DAYS, deliberately.
+             *
+             * `window_end` is a date and parses to midnight; a window's `to` routinely arrives as an
+             * end-of-day instant. Comparing them directly makes a sync that covered the final day look
+             * as though it stopped short of it by 23 hours and 59 minutes — the fractional-window
+             * off-by-one, and it marks a fully-synced provider partial every single time.
+             */
+            $covered = $run === null ? null : Carbon::parse((string) $run->window_end)->startOfDay();
+            $reachesWindow = $covered !== null
+                && ! $covered->lt($to->copy()->startOfDay()->subDays(self::STALE_TOLERANCE_DAYS));
+
             if (in_array($provider, $reported, true)) {
-                $states[$provider] = ContributionState::ReportedValue;
+                /*
+                 * Figures arrived — but figures for HOW MUCH of the window?
+                 *
+                 * This originally stopped here and called any provider with a row `ReportedValue`, and
+                 * a rehearsal against real data caught it: every provider had spend through the 18th
+                 * and a sync that covered only to the 18th, against a window ending on the 31st. The
+                 * total read «complete» while thirteen days were missing from every contributor — the
+                 * premature complete total, arrived at from the opposite direction to the one I was
+                 * guarding.
+                 *
+                 * Presence of a figure proves the provider reported SOMETHING. Only the checkpoint says
+                 * whether it reported everything asked for.
+                 */
+                $states[$provider] = $reachesWindow || $run === null
+                    ? ContributionState::ReportedValue
+                    : ContributionState::Partial;
+
+                if (! $reachesWindow && $run !== null) {
+                    $reasons[$provider] = sprintf(
+                        'Reported through %s; this window ends %s.',
+                        $covered->toDateString(),
+                        $to->toDateString(),
+                    );
+                }
 
                 continue;
             }
 
             // Expected, running, and nothing arrived. The evidence decides which absence this is.
-            $run = $runs[$provider] ?? null;
-
             if ($run === null) {
                 $states[$provider] = ContributionState::NotReported;
                 $reasons[$provider] = 'No sync run has ever covered this provider for this scope.';
@@ -98,9 +147,7 @@ final class ContributorCoverage
                 continue;
             }
 
-            $covered = Carbon::parse((string) $run->window_end);
-
-            if ($covered->lt($to->copy()->subDays(self::STALE_TOLERANCE_DAYS))) {
+            if (! $reachesWindow) {
                 $states[$provider] = ContributionState::Stale;
                 $reasons[$provider] = sprintf(
                     'Synced only through %s; this window ends %s.',

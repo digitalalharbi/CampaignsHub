@@ -132,6 +132,7 @@ final readonly class AggregateCoverage
     /** @param callable(ContributionState): bool $predicate */
     private function keysWhere(callable $predicate): array
     {
-        return array_values(array_keys(array_filter($this->contributors, $predicate)));
+        // `array_keys` already returns a list; wrapping it in `array_values` did nothing.
+        return array_keys(array_filter($this->contributors, $predicate));
     }
 }
