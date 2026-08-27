@@ -78,7 +78,13 @@ final class SendDailyDigests extends Command
                 continue;
             }
 
-            // «Yesterday» in the reader's own timezone — see the note above.
+            /*
+             * The window's LAST day, in the reader's own timezone — see the note above.
+             *
+             * Yesterday rather than today because today is still being written: a provider that syncs
+             * at 03:00 would make the same email different depending on the hour it went out. Since
+             * EMAIL-DAILY-WINDOW-001 this is the END of a seven-day window, not the whole report.
+             */
             $day = $this->option('date') !== null
                 ? Carbon::parse((string) $this->option('date'), $timezone)
                 : $local->copy()->subDay();

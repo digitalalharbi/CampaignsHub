@@ -13,19 +13,36 @@ test.describe('auth visual regression @visual', () => {
   for (const path of PAGES) {
     const slug = path.replace(/\//g, '') || 'root'
 
-    test(`${path} light matches baseline`, async ({ page }) => {
-      await page.emulateMedia({ colorScheme: 'light' })
-      await page.goto(path)
-      await page.waitForLoadState('networkidle')
-      await expect(page).toHaveScreenshot(`${slug}-light.png`, { fullPage: true, maxDiffPixelRatio: 0.02 })
-    })
+    /*
+     * THEME-DARK-PRIMARY-001 — each test states the theme it photographs.
+     *
+     * The light case used `emulateMedia({ colorScheme: 'light' })`, and this product deliberately
+     * does NOT consult `prefers-color-scheme` — so that call never set anything. It passed only
+     * because light happened to be the default, which means the light baseline was never a test of
+     * light; it was a test of «whatever the default is».
+     *
+     * The dark case clicked «Toggle theme» from the default — the same bug wearing the other shoe:
+     * it photographed «not the default». When dark became the default the two swapped, and simply
+     * refreshing the baselines would have locked in a test named `light` asserting a dark screenshot.
+     *
+     * Both now write the preference the product actually reads, before the app boots, and assert the
+     * rendered `data-theme` before any pixels are compared — so the name and the photograph cannot
+     * drift apart again.
+     */
+    for (const theme of ['light', 'dark'] as const) {
+      test(`${path} ${theme} matches baseline`, async ({ page }) => {
+        await page.addInitScript((t) => {
+          window.localStorage.setItem('campaign-hub-theme', t as string)
+        }, theme)
 
-    test(`${path} dark matches baseline`, async ({ page }) => {
-      await page.goto(path)
-      await page.getByRole('button', { name: 'Toggle theme' }).click()
-      await page.waitForTimeout(250)
-      await expect(page).toHaveScreenshot(`${slug}-dark.png`, { fullPage: true, maxDiffPixelRatio: 0.02 })
-    })
+        await page.goto(path)
+        await page.waitForLoadState('networkidle')
+
+        await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+
+        await expect(page).toHaveScreenshot(`${slug}-${theme}.png`, { fullPage: true, maxDiffPixelRatio: 0.02 })
+      })
+    }
   }
 })
 

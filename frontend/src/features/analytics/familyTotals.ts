@@ -17,6 +17,7 @@
  * contract can read, which is what makes «4,803.17 USD» reachable here as well as on the strip.
  */
 import { moneyState, type MoneyFields } from '@/lib/money/contract'
+import type { MoneyTotals } from '@/lib/money/contract'
 
 /** A campaign row as the breakdown returns it. */
 export type FamilyRow = MoneyFields & Record<string, unknown>
@@ -154,4 +155,43 @@ export function familyTotal(rows: FamilyRow[], key: string): number | null {
   if (over === null || under === null || under === 0) return null
 
   return (over / under) * (rate.scale ?? 1)
+}
+
+/**
+ * One objective family's spend, with the provenance the rows actually carry — READY-4.
+ *
+ * `ObjectiveTab` built this inline and asserted two things it had not checked: that every withheld
+ * campaign in the family shared a single currency (`money_original_currencies: 1`, hardcoded), and
+ * that the currency was whichever one the first withheld campaign happened to name. Two campaigns
+ * withheld in USD and EUR were summed and labelled with one of them.
+ *
+ * Worse, on a PARTIAL family — some campaigns converted, some withheld — it discarded the converted
+ * spend and printed the withheld half as the family's total. Half a scope presented as the scope is
+ * the defect the money contract exists to stop.
+ *
+ * This counts what is there and states it honestly: converted spend, how many rows were withheld,
+ * what they came to in their own units, and how many distinct currencies that involves. The reader
+ * (`rowMoney`) then applies the same rule it applies everywhere — a partial or multi-currency scope
+ * has no single figure and fails closed to «—».
+ */
+// `NonNullable`, deliberately: `MoneyTotals` includes `undefined` so that readers can be handed a
+// scope that does not exist. This function always produces a scope — an empty family is «zero rows»,
+// not «no answer» — and typing it as `MoneyTotals` would make every caller re-check a value that can
+// never be absent.
+export function familySpend(rows: FamilyRow[]): NonNullable<MoneyTotals> {
+  const currencies = new Set<string>()
+
+  for (const r of rows) {
+    const c = (r as { money_original_currency?: string | null }).money_original_currency
+    if ((r.spend_withheld_rows ?? 0) > 0 && typeof c === 'string' && c !== '') currencies.add(c.toUpperCase())
+  }
+
+  return {
+    spend: rows.reduce((t, r) => t + (typeof r.spend === 'number' ? r.spend : 0), 0),
+    spend_withheld_rows: rows.reduce((t, r) => t + (r.spend_withheld_rows ?? 0), 0),
+    spend_original: rows.reduce((t, r) => t + (r.spend_original ?? 0), 0),
+    // Named only when exactly one is involved; naming one of several is how a EUR total gets a USD label.
+    money_original_currency: currencies.size === 1 ? [...currencies][0]! : null,
+    money_original_currencies: currencies.size,
+  } as NonNullable<MoneyTotals>
 }

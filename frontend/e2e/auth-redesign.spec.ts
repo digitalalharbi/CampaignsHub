@@ -255,14 +255,24 @@ test('forgot password and create account both lead somewhere real', async ({ pag
   await expect(page).toHaveURL(/\/login/)
 })
 
-/** The redesign must hold in both writing directions and both themes. */
+/**
+ * The redesign must hold in both writing directions and both themes.
+ *
+ * THEME-DARK-PRIMARY-001 — this asserted both themes and exercised one. `emulateMedia` sets the
+ * `prefers-color-scheme` media feature, which this product deliberately ignores, so both passes
+ * of the loop rendered whatever the default was and the «dark» half never happened. The theme is
+ * now set the way the product reads it, before the page paints.
+ */
 test('layout survives RTL/LTR and light/dark without clipping', async ({ page }) => {
   await page.setViewportSize(LAPTOP)
-  await page.goto('/login')
-  await page.waitForLoadState('networkidle')
 
   for (const scheme of ['light', 'dark'] as const) {
-    await page.emulateMedia({ colorScheme: scheme })
+    await page.addInitScript((t) => {
+      window.localStorage.setItem('campaign-hub-theme', t as string)
+    }, scheme)
+    await page.goto('/login')
+    await page.waitForLoadState('networkidle')
+    await expect(page.locator('html')).toHaveAttribute('data-theme', scheme)
     for (let i = 0; i < 2; i++) {
       const m = await metrics(page)
       expect(m.hScroll, `no sideways scroll in ${m.dir}/${scheme}`).toBe(false)

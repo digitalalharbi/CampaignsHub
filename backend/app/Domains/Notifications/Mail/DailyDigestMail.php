@@ -63,7 +63,7 @@ final class DailyDigestMail extends Mailable
 
     public function envelope(): Envelope
     {
-        $p = new DigestPresenter($this->lang);
+        $p = new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1));
         $ar = $this->lang === 'ar';
         $totals = $this->digest['totals'] ?? [];
 
@@ -75,7 +75,9 @@ final class DailyDigestMail extends Mailable
         $when = match ($this->kind) {
             'monthly' => $ar ? 'هذا الشهر' : 'this month',
             'weekly' => $ar ? 'هذا الأسبوع' : 'this week',
-            default => $ar ? 'أمس' : 'yesterday',
+            // EMAIL-DAILY-WINDOW-001 — the daily email reports the last seven days, so «أمس» in the
+            // subject would name a span it does not cover. The rhythm is daily; the period is a week.
+            default => $ar ? 'آخر 7 أيام' : 'the last 7 days',
         };
 
         return new Envelope(
@@ -87,7 +89,7 @@ final class DailyDigestMail extends Mailable
 
     public function content(): Content
     {
-        $p = new DigestPresenter($this->lang);
+        $p = new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1));
         $ar = $this->lang === 'ar';
         $app = rtrim((string) config('brand.application_url'), '/');
         $site = Frontend::origin();

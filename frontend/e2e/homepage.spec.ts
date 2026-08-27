@@ -107,18 +107,25 @@ test.describe('homepage visual regression @visual', () => {
     await page.waitForLoadState('networkidle')
   }
 
-  test('/ light matches baseline', async ({ page }) => {
-    await page.emulateMedia({ colorScheme: 'light' })
-    await page.goto('/')
-    await homepageSettled(page)
-    await expect(page).toHaveScreenshot('home-light.png', { fullPage: true, maxDiffPixelRatio: 0.02 })
-  })
+  /*
+   * THEME-DARK-PRIMARY-001 — same correction as `auth-visual.spec.ts`.
+   *
+   * `emulateMedia` set nothing, because the product does not read `prefers-color-scheme`; and
+   * clicking the toggle photographed «not the default». Both tests were really testing the
+   * default from opposite sides, so changing the default swapped what they captured.
+   */
+  for (const theme of ['light', 'dark'] as const) {
+    test(`/ ${theme} matches baseline`, async ({ page }) => {
+      await page.addInitScript((t) => {
+        window.localStorage.setItem('campaign-hub-theme', t as string)
+      }, theme)
 
-  test('/ dark matches baseline', async ({ page }) => {
-    await page.goto('/')
-    await homepageSettled(page)
-    await page.getByRole('button', { name: 'Toggle theme' }).click()
-    await page.waitForTimeout(250)
-    await expect(page).toHaveScreenshot('home-dark.png', { fullPage: true, maxDiffPixelRatio: 0.02 })
-  })
+      await page.goto('/')
+      await homepageSettled(page)
+
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+
+      await expect(page).toHaveScreenshot(`home-${theme}.png`, { fullPage: true, maxDiffPixelRatio: 0.02 })
+    })
+  }
 })

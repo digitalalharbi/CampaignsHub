@@ -94,9 +94,27 @@ final class DailyDigest
             return ['sendable' => false, 'reason' => 'no_projects_in_scope', 'projects' => []];
         }
 
-        $days = max(1, $from->diffInDays($to) + 1);
+        /*
+         * DIGEST-PREV-WINDOW-001 — the comparison window must be the SAME LENGTH as the current one.
+         *
+         * Two faults compounded here, and both are invisible in the output because an oversized
+         * previous window just makes every trend read slightly worse.
+         *
+         * 1. `$to` is an `endOfDay()`, so `diffInDays` returned a FLOAT — 7.999999999988426 for a
+         *    seven-day window. `$days` was then fractional everywhere it was used.
+         * 2. `$prevFrom` counted back from `$prevTo` (the day BEFORE the window) instead of from
+         *    `$from`, which is one further day again.
+         *
+         * Together, a seven-day window compared itself against NINE days: 13–19 Aug against 4–12 Aug.
+         * Nine days of spend against seven is not a trend, it is a longer ruler — and it applied to
+         * every rhythm, daily, weekly and monthly alike.
+         *
+         * Counting from `startOfDay()` on both sides makes `$days` a whole number of calendar days,
+         * and `$prevFrom` is now `$from` minus exactly that many days.
+         */
+        $days = (int) max(1, $from->copy()->startOfDay()->diffInDays($to->copy()->startOfDay()) + 1);
         $prevTo = $from->copy()->subSecond();
-        $prevFrom = $prevTo->copy()->subDays($days)->startOfDay();
+        $prevFrom = $from->copy()->subDays($days)->startOfDay();
 
         $projects = Project::query()
             ->where('tenant_id', $tenantId)

@@ -1,4 +1,4 @@
-# START HERE — 2026-08-25, consolidation in flight
+# START HERE — 2026-08-26, money-truth consolidation in flight
 
 Read this file and `git log origin/main` first. **Do not re-audit the whole project.**
 Everything below is production evidence or a named local verification. Nothing here is inferred.
@@ -8,8 +8,31 @@ Everything below is production evidence or a named local verification. Nothing h
 ## 1. Current main
 
 ```
-origin/main = 09fc4a0  (#95 merged and deployed 2026-08-24)
+origin/main = 07c1a36  (#108 merged and deployed 2026-08-25)
+production  = https://campaignshub.io/app  serving assets/index-B9N6TxdQ.js  ← matches 07c1a36
 ```
+
+Everything from #97 through #108 landed after the section below was last written. The deploy ledger
+is per-commit: #104 was **closed unmerged and never deployed** (superseded by #105), and no deploy
+may be attributed to it.
+
+| PR | merge SHA | deploy |
+|---|---|---|
+| #97 | `1e5636b` | success |
+| #98 | `ad673a9` | success |
+| #99 | `ce8d90e` | success |
+| #100 | `61d3b20` | success |
+| #101 | `aa2434a` | success |
+| #102 | `e414956` | success |
+| #103 | `f20483a` | success |
+| #104 | — | **CLOSED, never merged, no deploy** |
+| #105 | `3dc0a4e` | success (after one SSH i/o timeout, re-run) |
+| #106 | `7147131` | success |
+| #108 | `07c1a36` | success (after one SSH i/o timeout, re-run) |
+
+The SSH `dial tcp … i/o timeout` on the deploy step has now recurred on three of eleven deploys, and
+the GitHub API has been timing out against the same host. Each succeeded on re-run, so it is not
+blocking — but it is an infrastructure signal, not noise.
 
 ## 2. Merged AND deployed, with the evidence that proved each
 
@@ -56,14 +79,40 @@ and never names their creatives. No ad figure is projected downward.
 All six connectors implement `fetchInsights`. **Only Snapchat** implements
 `ReportsCreativeInsights`, so creative-grain metrics are its alone by construction.
 
-## 4. Open — one consolidated path
+## 4. Open — reconciled 2026-08-26
+
+`#97` merged as `1e5636b` and carried #88, #92, #93 and #96 with it. All four were verified landed
+**per file** — not assumed from the consolidation note — and closed unmerged:
+
+| PR | how it was checked | result |
+|---|---|---|
+| #96 | patch reverse-applies cleanly to `main` | both files already there byte-for-byte |
+| #92 | blob comparison, all 6 files | `main == branch` |
+| #93 | blob comparison, 14 files | 8 identical; 6 landed then `main` moved further via #100/#101/#106/#108 |
+| #88 | describe-block present in `main` | landed, `main` since evolved past it |
+
+Re-merging any of them would drag those forward-fixes backwards.
+
+**#107 / #110 — one canonical money-truth result.** Both implemented `PARTIAL-WITHHELD-001` on
+different bases and answered a `complete_converted` scope differently. Reconciled by diffing the
+trees, not the descriptions: the backend model, Analytics, `InteractiveReport`, `CampaignComparison`
+and `compareApi` were already byte-identical; `rankMoney` was deliberately superseded by
+`rankableMoney` (drop-and-disclose); and `spendComparableAmount` — dropped by #110 as "duplicate or
+weaker" — was **genuinely missing and restored**, because it is the only check that a converted
+total is in the *budget's* currency. #107 is CLOSED unmerged; #110 is canonical.
 
 | PR | contains | state |
 |---|---|---|
-| #97 `release/consolidation` | #88, #92, #93, #96 merged cleanly, plus `CONTENT-TRUTH-001` and `METRICS-EMPTY-SCOPE-001` | backend ✅ frontend ✅ gate ⏳ |
+| #110 `fix/money-truth-partial-withheld` | canonical money truth, head `59ecc3e` | gate ⏳ |
+| #109 `track/reports` | sortable + squarely-aligned analytics tables, share-link origin | queued |
+| #111 `feat/email-monthly` | monthly digest rhythm | queued |
+| #112 `track/content-only` | Story-Ad cards in the creative viewer | queued |
+| #113 `track/budget` | per-account budget ceilings | queued |
+| #114 `track/report-depth` | worst-performing creatives | queued |
 
-Four PRs were each making the others stale at ~60 minutes per shuffle. They touch different areas
-and now travel together.
+They ship strictly one at a time — fresh base, exact-head gate, pinned merge, deploy for that same
+SHA, production verification — because two merges racing for `main` is how a deploy gets attributed
+to the wrong one.
 
 ## 5. Three false negatives this instrument produced — read before trusting it
 
@@ -88,10 +137,21 @@ require a positive marker.
   sanctioned command. `BLOCKED_OPERATIONAL_EVIDENCE`.
 - **Production browser verification of #97** — it is not deployed yet.
 
-## 7. Next session, in order
+## 7. Next, in order
 
-1. #97 gate → merge at exact head → deploy
-2. Production browser verify: platform chips re-scope data, 12 Analytics tabs reachable, rail
-   grouping, RTL/LTR, mobile/desktop, footer `mailto:`/`tel:` links
-3. Re-run diagnose; confirm the video posters and the three Content empty states on real creatives
-4. Decide what to do about `sbx-cmp-1` — it is the only remaining ad-stats refusal
+1. #110 gate → pinned merge → deploy same SHA → production verify
+2. Then #109 → #111 → #112 → #113 → #114, each rebased onto the freshly deployed main
+3. `READY-1` … `READY-4` from `INTEGRATION_READINESS_MATRIX.md` — the four real gaps that audit found
+4. Decide what to do about `sbx-cmp-1` — still the only remaining ad-stats refusal
+
+## 8. Integration readiness
+
+`INTEGRATION_READINESS_MATRIX.md` (INTEG-READINESS-001) is the source of truth for what connecting a
+provider now requires. The short version: **the foundation is built, not pending.** All eight
+providers — Meta, TikTok, Google Ads, Snapchat, X, LinkedIn, Salla, Zid — have endpoints, scopes and
+credential fields declared in config and read from the environment; OAuth carries PKCE and refresh;
+webhook signatures are HMAC-SHA256 compared with `hash_equals`. Only Snapchat has ever met its
+provider, and nothing about its success may be read across to the others.
+
+`AD_PLATFORM_INTEGRATIONS_AUDIT.md` §2 is **superseded** — it describes a tree where every connector
+was an awaiting-credentials stub, which would lead a reader to rebuild what exists.

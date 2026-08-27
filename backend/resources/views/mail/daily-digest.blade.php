@@ -65,7 +65,7 @@
                         {{ $p['verdict']['text'] }}
                     </div>
 
-                    {{-- What happened, and what changed against yesterday. --}}
+                    {{-- What happened, and what changed against the window before this one. --}}
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px;">
                         <tr>
                             @foreach ($p['kpis'] as $kpi)
