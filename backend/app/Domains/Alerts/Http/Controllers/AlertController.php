@@ -20,6 +20,24 @@ use Illuminate\Support\Carbon;
  */
 final class AlertController extends Controller
 {
+    /**
+     * What a person may create.
+     *
+     * Kept in lockstep with the `alert.type` taxonomy the picker reads — `TaxonomyEngineSeeder` says
+     * so in its own comment — because a value offered by the picker and refused by this list is a 422
+     * on a control the product itself drew.
+     *
+     * `sla_warning` is in this list and **nothing raises it**: not {@see AlertEvaluator}, not any
+     * event, not any job. (`EvaluateSla` in the Requests domain emits `request.sla_warning`, which is
+     * a different vocabulary in a different domain.) It stays creatable rather than being withdrawn
+     * here alone, because production has already seeded it as a picker option and removing only this
+     * end would trade a silent rule for a rejected form. Withdrawing it properly means the taxonomy
+     * option and this list moving together, in a change that owns the migration — recorded as
+     * ALERT-SLA-UNRAISED-001, not smuggled in here.
+     *
+     * Until then {@see AlertEvaluator::unevaluated()} logs when such a rule is swept, so a rule that
+     * cannot fire is at least visible to whoever reads the logs instead of silently reporting health.
+     */
     private const TYPES = [
         'budget_risk', 'cpa_increase', 'cpl_increase', 'roas_drop', 'no_results',
         'sync_failure', 'token_expiry', 'report_failed', 'sla_warning',
