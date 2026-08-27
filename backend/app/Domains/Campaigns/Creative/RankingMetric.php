@@ -152,13 +152,23 @@ final class RankingMetric
              * test pinning it. Reach and impressions stay as the volume context beside the verdict.
              */
             ObjectiveFamily::Awareness => ['primary' => 'cpm', 'secondary' => ['reach', 'impressions', 'frequency']],
-            ObjectiveFamily::Traffic => ['primary' => 'ctr', 'secondary' => ['clicks', 'cpc', 'landing_page_views']],
-            ObjectiveFamily::Engagement => ['primary' => 'engagement_rate', 'secondary' => ['engagements', 'cpe']],
+            ObjectiveFamily::Traffic => ['primary' => 'ctr', 'secondary' => ['cpc', 'clicks', 'landing_page_views']],
+            ObjectiveFamily::Engagement => ['primary' => 'engagement_rate', 'secondary' => ['cpe', 'engagements']],
             // Same reasoning: cost per view is the efficiency lens, completion rate the quality one
             // beside it. A view count on its own ranks by budget.
             ObjectiveFamily::Video => ['primary' => 'cost_per_view', 'secondary' => ['video_views', 'video_completion_rate', 'video_completions']],
-            ObjectiveFamily::Leads => ['primary' => 'cpl', 'secondary' => ['leads', 'conversion_rate']],
-            ObjectiveFamily::Sales => ['primary' => 'roas', 'secondary' => ['purchases', 'cpa', 'revenue', 'aov']],
+            /*
+             * Secondary ORDER is the fallback order when the primary is unreported, so it runs
+             * efficiency before volume — a count ranks by budget, which is the trap that made `reach`
+             * wrong for awareness.
+             *
+             * `cpa` sits here as the fallback, not the primary. A lead campaign's cost is its cost per
+             * lead, but `cpa` is this product's generic «cost per result» — exactly how the digest
+             * labels it — and several providers return only that for a lead form. Without it, a leads
+             * report carrying `cpa` and no `cpl` resolves to nothing and ranks nothing at all.
+             */
+            ObjectiveFamily::Leads => ['primary' => 'cpl', 'secondary' => ['cpa', 'conversion_rate', 'leads', 'qualified_leads']],
+            ObjectiveFamily::Sales => ['primary' => 'roas', 'secondary' => ['cpa', 'purchases', 'revenue', 'aov', 'conversion_rate']],
             ObjectiveFamily::App => ['primary' => 'cpi', 'secondary' => ['installs', 'registrations', 'in_app_events']],
             ObjectiveFamily::Unknown => ['primary' => null, 'secondary' => ['spend', 'impressions', 'clicks']],
         };
