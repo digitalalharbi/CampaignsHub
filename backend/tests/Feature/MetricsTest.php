@@ -1101,6 +1101,18 @@ final class MetricsTest extends TestCase
          */
         $emitted = array_values(array_diff($emitted, MetricsAggregator::moneyTruthKeys()));
 
+        /*
+         * The coverage annotations, subtracted on exactly the same grounds — AGGREGATION-TRUTH-001.
+         *
+         * `coverage`, `spend_coverage` and `revenue_coverage` say whether the figures beside them are
+         * the whole answer. They measure nothing, so a definition would offer «coverage» as a KPI
+         * somebody could chart, and «complete» does not plot against a Tuesday.
+         *
+         * This assertion is what caught them being added, which is the point of it: the exemption
+         * widens only from a NAMED source, and only on purpose.
+         */
+        $emitted = array_values(array_diff($emitted, MetricsAggregator::coverageKeys()));
+
         $missing = array_values(array_diff($emitted, $defined));
 
         $this->assertSame([], $missing, 'Every metric the dashboard computes needs a definition: '.implode(', ', $missing));

@@ -109,6 +109,24 @@ final class MetricsAggregator
         return array_keys(self::MONEY_TRUTH);
     }
 
+    /**
+     * The coverage annotations — AGGREGATION-TRUTH-001.
+     *
+     * Named, for the same reason `moneyTruthKeys()` is: these describe whether the figures beside them
+     * are the WHOLE answer, and they measure nothing themselves. A `MetricDefinition` for «coverage»
+     * would offer it as something a reader could chart, which it is not — you cannot plot «complete»
+     * against Tuesday.
+     *
+     * Kept as an explicit list so that adding an annotation later is a deliberate act rather than a
+     * quiet widening of the exemption that `MetricsTest` enforces.
+     *
+     * @return list<string>
+     */
+    public static function coverageKeys(): array
+    {
+        return ['coverage', 'spend_coverage', 'revenue_coverage'];
+    }
+
     public static function readKeys(): array
     {
         return array_values(array_unique([...array_keys(self::PIVOT), ...self::FUNNEL_STAGES]));
