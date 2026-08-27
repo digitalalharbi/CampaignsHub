@@ -60,7 +60,12 @@ final class EntityDailyMetricsTest extends TestCase
         $ws = ClientWorkspace::create([
             'tenant_id' => $this->tenant->id, 'name' => 'W', 'slug' => 'w-'.uniqid(),
             'mode' => 'managed', 'status' => 'active', 'client_status' => 'active',
-            // The production shape: the client reports in SAR, the account spends USD.
+            /*
+             * The production shape: the account spends riyals and the project reports in the
+             * canonical USD. `default_currency` is SAR and is deliberately ignored — it is a display
+             * preference, not the aggregation basis (MONEY-USD-001), and the `project_currency`
+             * assertion below is what would catch a regression that let it pick the basis again.
+             */
             'default_currency' => 'SAR',
         ]);
         $this->project = Project::create([
@@ -82,7 +87,7 @@ final class EntityDailyMetricsTest extends TestCase
             'external_id' => 'act-1',
             'name' => 'Snap',
             'status' => 'active',
-            'currency' => 'USD',
+            'currency' => 'SAR',
             // The connector refuses a window with no timezone, and is right to: a «day» without one
             // is ambiguous, and the live account reports on Asia/Riyadh.
             'timezone' => 'Asia/Riyadh',
@@ -107,10 +112,10 @@ final class EntityDailyMetricsTest extends TestCase
 
         $row = DB::table('entity_daily_metrics')->where('external_entity_id', 'sq-1')->first();
 
-        $this->assertNull($row->spend, 'No USD→SAR rate exists, so the figure must be withheld, not wrong.');
+        $this->assertNull($row->spend, 'No SAR→USD rate exists, so the figure must be withheld, not wrong.');
         $this->assertEqualsWithDelta(412.5, (float) $row->spend_original, 0.01);
-        $this->assertSame('USD', $row->original_currency);
-        $this->assertSame('SAR', $row->project_currency);
+        $this->assertSame('SAR', $row->original_currency);
+        $this->assertSame('USD', $row->project_currency);
 
         // Counts are not money and are never withheld.
         $this->assertEqualsWithDelta(90000, (float) $row->impressions, 0.01);
