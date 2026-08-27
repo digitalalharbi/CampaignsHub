@@ -35,7 +35,7 @@ import { compact, money, num, percent, ratio, rowCostPer, rowMoney, rowRoas } fr
 import { funnelStageLabel } from './metricLabels'
 import { plotSeries } from './timeseriesMoney'
 import { orderRows } from './tableSort'
-import { familyMoney, familyTotal, type FamilyRow } from './familyTotals'
+import { familyMoney, familyTotal, type FamilyRow, familySpend } from './familyTotals'
 import { readCostPer, readMoney, readRoas } from '@/lib/money/contract'
 
 /** The two KPI keys that are money rather than a quantity or a rate. */
@@ -45,7 +45,7 @@ import { useSavedViews, type SavedView } from '@/features/dashboard/savedViews'
 import { MetricStrip } from '@/components/ui/MetricStrip'
 import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import { useOverviewVm } from '@/features/campaigns/overview/useOverviewVm'
-import { SPECS, dashboardMetrics } from './metricCatalog'
+import { SPECS, dashboardMetrics, layoutFor } from './metricCatalog'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -1513,23 +1513,37 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
   const currency = s.data?.currency ?? null
   const rows = c.data ?? []
 
-  /** Ordered so the funnel reads top to bottom; a family with no campaigns is not shown at all. */
-  const FAMILIES: Array<{ key: string; ar: string; en: string; kpis: string[] }> = [
-    { key: 'awareness', ar: 'الوعي', en: 'Awareness', kpis: ['impressions', 'reach', 'frequency', 'cpm'] },
-    { key: 'traffic', ar: 'الزيارات', en: 'Traffic', kpis: ['clicks', 'ctr', 'cpc'] },
-    { key: 'engagement', ar: 'التفاعل', en: 'Engagement', kpis: ['engagements', 'engagement_rate'] },
-    /*
-      `completion_rate` is not a metric this product has. The catalogue and the aggregator both call
-      it `video_completion_rate`, so this family's second KPI has always rendered «—» beneath the
-      key itself — a metric that looked unreported when it was only misspelt. `objectiveFamilies`
-      in `familyTotals.test.ts` now asserts every family names a key the catalogue defines.
-    */
-    { key: 'video', ar: 'المشاهدات', en: 'Video', kpis: ['video_views', 'video_completion_rate'] },
-    { key: 'leads', ar: 'العملاء المحتملون', en: 'Leads', kpis: ['leads', 'conversion_rate'] },
-    { key: 'sales', ar: 'المبيعات', en: 'Sales', kpis: ['conversions', 'revenue', 'roas'] },
-    { key: 'app', ar: 'التطبيق', en: 'App', kpis: ['installs'] },
-    { key: 'unknown', ar: 'غير مصنَّف', en: 'Unclassified', kpis: ['impressions', 'clicks'] },
-  ]
+  /*
+   * READY-3 — the catalogue owns which KPIs an objective is judged by, and this kept its own copy.
+   *
+   * The private list named a narrower set than `metricCatalog`'s layouts: no `cpl` for leads, no
+   * `cpa`/`aov` for sales, no `cpe`, no `cpi`, no `landing_page_views`, no `registrations`. Two maps
+   * of the same thing drift, and the weaker one was the one on screen — a leads family judged
+   * without its cost per lead, on the single screen whose whole purpose is to judge each family by
+   * what it was bought for.
+   *
+   * `layoutFor` is what the rest of the product reads, so a metric added to an objective now appears
+   * here without anybody remembering this file exists.
+   *
+   * Ordered so the funnel reads top to bottom; a family with no campaigns is not shown at all.
+   */
+  const FAMILY_LABELS: Record<string, { ar: string; en: string }> = {
+    awareness: { ar: 'الوعي', en: 'Awareness' },
+    traffic: { ar: 'الزيارات', en: 'Traffic' },
+    engagement: { ar: 'التفاعل', en: 'Engagement' },
+    video: { ar: 'المشاهدات', en: 'Video' },
+    leads: { ar: 'العملاء المحتملون', en: 'Leads' },
+    sales: { ar: 'المبيعات', en: 'Sales' },
+    app: { ar: 'التطبيق', en: 'App' },
+    unknown: { ar: 'غير مصنَّف', en: 'Unclassified' },
+  }
+
+  const FAMILIES = Object.keys(FAMILY_LABELS).map((key) => ({
+    key,
+    ar: FAMILY_LABELS[key]!.ar,
+    en: FAMILY_LABELS[key]!.en,
+    kpis: layoutFor(key, key).primary,
+  }))
 
   const grouped = FAMILIES.map((f) => ({
     ...f,
@@ -1549,10 +1563,6 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
       >
         <div className="space-y-4" data-testid="objective-families">
           {grouped.map((f) => {
-            const spend = f.campaigns.reduce((t, r) => t + (typeof r.spend === 'number' ? r.spend : 0), 0)
-            const withheld = f.campaigns.reduce((t, r) => t + (r.spend_withheld_rows ?? 0), 0)
-            const original = f.campaigns.reduce((t, r) => t + (r.spend_original ?? 0), 0)
-            const money = f.campaigns.find((r) => (r.spend_withheld_rows ?? 0) > 0)
 
             return (
               <div key={f.key} className="rounded-xl border border-border p-3" data-testid={`objective-family-${f.key}`}>
@@ -1563,9 +1573,17 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                     {' · '}
                     <span className="tnum" dir="ltr">
                       {/* Withheld money keeps its own currency; a converted total uses the project's. */}
-                      {withheld > 0
-                        ? rowMoney({ spend: null, spend_withheld_rows: withheld, spend_original: original, money_original_currency: money?.money_original_currency ?? null, money_original_currencies: 1 }, 'spend', currency)
-                        : rowMoney({ spend }, 'spend', currency)}
+                      {/*
+                        READY-4 — this stated two things it had not checked.
+                        It hardcoded `money_original_currencies: 1`, asserting every withheld campaign in the family
+                        shared one currency, and took the currency NAME from whichever campaign was found first: two
+                        campaigns withheld in USD and EUR were summed and labelled with one of them.
+                        And on a PARTIAL family — some converted, some withheld — it dropped the converted spend
+                        entirely and printed the withheld half as the family's total.
+                        `familySpend` builds the real provenance from the rows, so a partial or multi-currency family
+                        fails closed to «—», exactly as every other total in this product does.
+                      */}
+                      {rowMoney(familySpend(f.campaigns as unknown as FamilyRow[]), 'spend', currency)}
                     </span>
                   </span>
                 </div>
@@ -1589,7 +1607,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                   KPI strip states correctly.
                 */}
                 <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
-                  {f.kpis.map((k) => {
+                  {f.kpis.map((k: string) => {
                     const rows = f.campaigns as unknown as FamilyRow[]
                     const spec = SPECS[k]
                     const money = MONEY_KPIS.has(k)
