@@ -1,11 +1,24 @@
 import { formatMoneyReading, type MoneyTotals, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
-/** Latin-digit formatters (project rule: numbers/dates/ids stay Latin even in Arabic UI). */
+import { formatFixed, formatNumber } from '@/lib/numerals'
+
+/**
+ * The display formatters — NUMERAL-PREFERENCE-001.
+ *
+ * These were «Latin-digit formatters (project rule: numbers/dates/ids stay Latin even in Arabic
+ * UI)». The rule still holds and is unchanged: choosing Arabic as the LANGUAGE does not change the
+ * numerals, because an Arabic screenshot has to stay comparable with the English one.
+ *
+ * What changed is that the product also ships a `number_format` preference, which nothing read.
+ * These now route through `@/lib/numerals`, so an explicit choice of Arabic digits actually reaches
+ * the screen while `locale === 'ar'` on its own still formats in Latin. Ids, ISO dates and currency
+ * codes never come through here and are unaffected.
+ */
 
 export function compact(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—'
   const abs = Math.abs(n)
-  if (abs >= 1_000_000) return (n / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1) + 'M'
-  if (abs >= 1_000) return (n / 1_000).toFixed(abs >= 10_000 ? 0 : 1) + 'K'
+  if (abs >= 1_000_000) return formatFixed(n / 1_000_000, abs >= 10_000_000 ? 0 : 1) + 'M'
+  if (abs >= 1_000) return formatFixed(n / 1_000, abs >= 10_000 ? 0 : 1) + 'K'
   /*
    * COMPACT-ZERO-001 — a real figure below one must not be rounded away to «0».
    *
@@ -16,8 +29,11 @@ export function compact(n: number | null | undefined): string {
    * A genuine zero still prints «0»: only a value the reader would otherwise be told is nothing
    * gains digits, and it gains only as many as it needs to stop being nothing.
    */
-  if (abs > 0 && abs < 1) return n.toFixed(abs < 0.01 ? 4 : 2)
-  return String(Math.round(n))
+  if (abs > 0 && abs < 1) return formatFixed(n, abs < 0.01 ? 4 : 2)
+
+  // `useGrouping: false` keeps a compact figure compact — «1234» not «1,234» — while still emitting
+  // the reader's own digits. Grouping belongs to `num()`, which is the exact-value formatter.
+  return formatNumber(Math.round(n), { useGrouping: false })
 }
 
 export function money(n: number | null | undefined, currency = 'SAR'): string {
@@ -46,7 +62,7 @@ export function money(n: number | null | undefined, currency = 'SAR'): string {
 export function moneyExact(n: number | null | undefined, currency = 'SAR'): string {
   if (n === null || n === undefined) return '—'
   if (Math.abs(n) < 1000 && !Number.isInteger(n)) {
-    return `${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)} ${currency}`
+    return `${formatFixed(n, 2)} ${currency}`
   }
 
   return `${num(n)} ${currency}`
@@ -54,17 +70,17 @@ export function moneyExact(n: number | null | undefined, currency = 'SAR'): stri
 
 export function num(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—'
-  return new Intl.NumberFormat('en-US').format(Math.round(n))
+  return formatNumber(Math.round(n))
 }
 
 export function ratio(n: number | null | undefined, suffix = 'x'): string {
   if (n === null || n === undefined) return '—'
-  return `${n.toFixed(2)}${suffix}`
+  return `${formatFixed(n, 2)}${suffix}`
 }
 
 export function percent(n: number | null | undefined, digits = 1): string {
   if (n === null || n === undefined) return '—'
-  return `${(n * 100).toFixed(digits)}%`
+  return `${formatFixed(n * 100, digits)}%`
 }
 
 export type Trend = 'up' | 'down' | 'flat'
