@@ -524,3 +524,77 @@ export async function verifyMobileThroughApi(
   })
   expect(verified.status(), 'the mobile code must be accepted').toBe(200)
 }
+
+/**
+ * A page is "empty" when the shell rendered and the content area did not.
+ *
+ * Measured AFTER the content area actually has something in it, because `goto` resolves on load and
+ * React renders after that — measuring immediately reports every page as empty, which is a broken
+ * test rather than a broken product.
+ */
+export async function contentLength(page: Page): Promise<number> {
+  const main = page.locator('main')
+  await expect(main).toBeVisible({ timeout: 20000 })
+  await expect
+    .poll(async () => (await main.innerText()).trim().length, { timeout: 20000 })
+    .toBeGreaterThan(0)
+
+  return (await main.innerText()).trim().length
+}
+
+/**
+ * Walk a rail, and let a failure NAME itself.
+ *
+ * ## Why this replaced a bare `for` loop
+ *
+ * The agency walk failed once on webkit with `locator('main')` not found — and the report said
+ * exactly that and nothing else. Which of the fifteen links? What did the browser have on screen?
+ * The screenshot answered the second question and made the first one worse: the document was
+ * **completely blank**. No shell, no navigation, no error boundary. That is not «a page rendered
+ * empty», which is what this test is for; it is the application never mounting, and the two need
+ * different people to look at them.
+ *
+ * A route that renders nothing still renders the shell around it, and would fail on all three
+ * browsers. So the interesting evidence is the one thing nobody collected: the URL the browser
+ * actually ended on, whether the document itself arrived, and what the console said while it did
+ * not. All three are captured here and thrown WITH the failure, so the next occurrence is a
+ * diagnosis instead of a hunt.
+ *
+ * Nothing is retried and no timeout is raised. The assertion is the same assertion.
+ */
+export async function walkRail(page: Page, hrefs: string[]): Promise<void> {
+  const problems: string[] = []
+  page.on('console', (m) => {
+    if (m.type() === 'error') problems.push(`console: ${m.text()}`)
+  })
+  page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`))
+  page.on('requestfailed', (r) => problems.push(`requestfailed: ${r.url()} — ${r.failure()?.errorText ?? '?'}`))
+
+  for (const href of hrefs) {
+    problems.length = 0
+
+    const response = await page.goto(href)
+
+    await expect(page.getByText(/later phase/i), `${href} is a placeholder`).toHaveCount(0)
+
+    try {
+      expect(await contentLength(page), `${href} rendered an empty page`).toBeGreaterThan(40)
+    } catch (failure) {
+      const body = (await page.locator('body').innerText().catch(() => '')).trim()
+
+      throw new Error(
+        [
+          `${href} did not render.`,
+          `  document status : ${response?.status() ?? 'no response'}`,
+          `  ended on        : ${page.url()}`,
+          `  <main> present  : ${(await page.locator('main').count()) > 0}`,
+          `  <nav> present   : ${(await page.locator('nav').count()) > 0}`,
+          `  body text       : ${body === '' ? '(the document is blank — the app never mounted)' : body.slice(0, 200)}`,
+          `  browser said    : ${problems.length === 0 ? '(nothing)' : problems.slice(0, 5).join(' | ')}`,
+          '',
+          String(failure),
+        ].join('\n'),
+      )
+    }
+  }
+}
