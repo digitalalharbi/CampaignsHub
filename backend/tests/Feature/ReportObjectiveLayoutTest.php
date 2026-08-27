@@ -366,6 +366,34 @@ final class ReportObjectiveLayoutTest extends TestCase
         $this->assertEqualsWithDelta(2000.0, (float) $data['ad_sets'][0]['spend'], 0.01);
     }
 
+    // ── REPORT-STORE-001 ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * A scoped report does NOT carry store ratios, and says why.
+     *
+     * ROAS, CPA and CAC each divide AD SPEND by a store figure, and `StoreFunnelService` answers for
+     * the whole project rather than for the report's scope. On a report narrowed to one platform the
+     * KPI cards show that platform's spend while a ROAS computed here would use all of it — two
+     * different spends on one page, with nothing telling the reader which is which.
+     */
+    public function test_a_scoped_report_withholds_the_store_ratios_and_names_the_reason(): void
+    {
+        $this->seedCampaign('Snap', CampaignObjective::Sales, $this->account('snapchat'), spend: 1000, orders: 10);
+
+        $data = $this->generate(['scope' => ['providers' => ['snapchat']]]);
+
+        if (($data['store'] ?? null) === null) {
+            $this->assertFalse((bool) ($data['store_connected'] ?? false), 'A project with no store must not report one.');
+
+            return;
+        }
+
+        $this->assertNull($data['store']['derived'], 'A scoped report published a ratio built from an unscoped spend.');
+        $this->assertSame('scoped_report', $data['store']['derived_withheld_reason']);
+        // The shop's own totals are facts about the SHOP and survive the narrowing.
+        $this->assertArrayHasKey('totals', $data['store']);
+    }
+
     private function everySentence(array $data): array
     {
         $out = [];

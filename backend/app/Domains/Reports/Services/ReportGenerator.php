@@ -206,10 +206,28 @@ final class ReportGenerator
              */
             'store' => $store === null ? null : [
                 'totals' => $store['totals'],
-                'derived' => $store['derived'],
-                'stages' => $store['stages'],
-                'comparisons' => $store['comparisons'],
                 'coverage' => $store['coverage'],
+                /*
+                 * `derived` — ROAS, CPA, CAC — only on an UNBOUNDED report, and this is not fussiness.
+                 *
+                 * Every one of those divides AD SPEND by a store figure, and `StoreFunnelService` is
+                 * not scoped: it answers for the whole project. On a report narrowed to one platform
+                 * the KPI cards show that platform's spend while a ROAS computed here would use all of
+                 * it — two different spends on one page, with nothing telling the reader which is which.
+                 * That is the same «a scope honoured by some sections and forgotten by the rest» defect
+                 * this file already warns about, and a money ratio is the worst place to reintroduce it.
+                 *
+                 * The shop's own totals stay either way. Revenue, orders, refunds and new customers are
+                 * facts about the SHOP, not about an ad platform, so narrowing the advertising scope
+                 * does not make them wrong.
+                 *
+                 * `stages` and `comparisons` are omitted for the same reason and are not rendered
+                 * anywhere; shipping unscoped per-platform breakdowns in the payload would only invite
+                 * a future section to display them beside scoped figures.
+                 */
+                'derived' => $scope->isUnbounded() ? $store['derived'] : null,
+                // Said out loud, so a reader is never left wondering why the ratios vanished.
+                'derived_withheld_reason' => $scope->isUnbounded() ? null : 'scoped_report',
             ],
             // Distinguishes «no store connected» from «a store that sold nothing», which are different
             // facts about the business and must not render the same way.
