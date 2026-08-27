@@ -33,7 +33,7 @@ use Tests\TestCase;
  * one shop and riyals through another had both added together, and the answer was a number in no
  * currency at all.
  *
- * `test_the_old_import_would_have_added_dollars_to_riyals` is the fail-first proof. It is written so
+ * `test_the_old_import_would_have_added_riyals_to_dollars` is the fail-first proof. It is written so
  * that it fails against the previous import — see its own note for the measurement.
  *
  * ## What is deliberately NOT here
@@ -44,6 +44,9 @@ use Tests\TestCase;
 final class CommerceReportingCurrencyTest extends TestCase
 {
     use RefreshDatabase;
+
+    /** 1/3.75 — the riyal's peg read the way this codebase converts, SAR into the canonical USD. */
+    private const SAR_USD = 0.2666666667;
 
     private Tenant $tenant;
 
@@ -56,7 +59,10 @@ final class CommerceReportingCurrencyTest extends TestCase
         $this->tenant = Tenant::create(['name' => 'Agency', 'slug' => 'cfx-agency', 'status' => 'active']);
         app(TenantContext::class)->setTenantId($this->tenant->id);
 
-        // The client the report is FOR decides the currency it is read in.
+        /*
+         * SAR deliberately, as a guard: revenue is reported in the canonical USD whatever a workspace
+         * prefers, so a store's money can be added to a campaign's. See MONEY-USD-001.
+         */
         $workspace = ClientWorkspace::create([
             'name' => 'Client', 'slug' => 'cfx-client', 'mode' => 'managed', 'default_currency' => 'SAR',
         ]);
@@ -68,35 +74,35 @@ final class CommerceReportingCurrencyTest extends TestCase
     // ── The claim ─────────────────────────────────────────────────────────────────────────────
 
     /**
-     * Two shops, two currencies, one report — and the total is in riyals.
+     * Two shops, two currencies, one report — and the total is in dollars.
      *
      * MEASURED against the previous import, not asserted about it: with the conversion removed, the
      * same two orders produced a revenue of **2000**, because `$1,000` and `1,000 SAR` were added as
-     * though they were the same thing. The truth at 3.75 is 4,750, and the difference is not a
+     * though they were the same thing. The truth at 0.2666… is 1,266.67, and the difference is not a
      * rounding argument — it is most of the number.
      */
-    public function test_the_old_import_would_have_added_dollars_to_riyals(): void
+    public function test_the_old_import_would_have_added_riyals_to_dollars(): void
     {
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
 
         $this->importOrder($this->store('usd-shop', 'USD'), 'o-usd', 1000.0, 'USD');
         $this->importOrder($this->store('sar-shop', 'SAR'), 'o-sar', 1000.0, 'SAR');
 
         $funnel = $this->funnel();
 
-        $this->assertEqualsWithDelta(4750.0, (float) $funnel['totals']['revenue'], 0.01, 'dollars are being added to riyals');
-        $this->assertSame('SAR', $funnel['totals']['reporting_currency']);
+        $this->assertEqualsWithDelta(1266.67, (float) $funnel['totals']['revenue'], 0.01, 'riyals are being added to dollars');
+        $this->assertSame('USD', $funnel['totals']['reporting_currency']);
     }
 
     /** A shop already selling in the reporting currency is recorded as converted at par, not as untouched. */
     public function test_a_same_currency_order_is_stamped_identity_rather_than_left_blank(): void
     {
-        $this->importOrder($this->store('sar-shop', 'SAR'), 'o1', 500.0, 'SAR');
+        $this->importOrder($this->store('usd-shop', 'USD'), 'o1', 500.0, 'USD');
 
         $order = CommerceOrder::withoutGlobalScopes()->firstOrFail();
 
-        $this->assertSame('SAR', $order->currency);
-        $this->assertSame('SAR', $order->original_currency);
+        $this->assertSame('USD', $order->currency);
+        $this->assertSame('USD', $order->original_currency);
         $this->assertEqualsWithDelta(500.0, (float) $order->total, 0.01);
         $this->assertEqualsWithDelta(500.0, (float) $order->original_total, 0.01);
         $this->assertEqualsWithDelta(1.0, (float) $order->exchange_rate, 0.000001);
@@ -107,9 +113,9 @@ final class CommerceReportingCurrencyTest extends TestCase
     /** Every monetary field on the order converts, at ONE rate, and the merchant's own figures survive. */
     public function test_every_monetary_field_on_an_order_is_converted_at_one_rate(): void
     {
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
 
-        $this->importOrder($this->store('usd-shop', 'USD'), 'o1', 1000.0, 'USD', extra: [
+        $this->importOrder($this->store('sar-shop', 'SAR'), 'o1', 1000.0, 'SAR', extra: [
             'subtotal' => 900.0,
             'shipping_total' => 50.0,
             'tax_total' => 50.0,
@@ -123,29 +129,29 @@ final class CommerceReportingCurrencyTest extends TestCase
             'subtotal' => 900.0, 'shipping_total' => 50.0, 'tax_total' => 50.0,
             'discount_total' => 100.0, 'total' => 1000.0, 'refunded_total' => 200.0,
         ] as $column => $original) {
-            $this->assertEqualsWithDelta($original * 3.75, (float) $order->{$column}, 0.01, "{$column} was not converted");
+            $this->assertEqualsWithDelta($original * self::SAR_USD, (float) $order->{$column}, 0.01, "{$column} was not converted");
             $this->assertEqualsWithDelta($original, (float) $order->{"original_{$column}"}, 0.01, "{$column} lost its original");
         }
 
-        $this->assertSame('USD', $order->original_currency);
-        $this->assertSame('SAR', $order->currency);
+        $this->assertSame('SAR', $order->original_currency);
+        $this->assertSame('USD', $order->currency);
         $this->assertSame('2026-06-01', $order->rate_date?->toDateString());
         $this->assertSame('ecb', $order->rate_source);
 
-        // Net revenue is stated in the reporting currency: (1000 − 200) × 3.75.
-        $this->assertEqualsWithDelta(3000.0, (float) $order->netRevenue(), 0.01);
+        // Net revenue is stated in the reporting currency: (1000 − 200) × 0.2666…
+        $this->assertEqualsWithDelta(213.33, (float) $order->netRevenue(), 0.01);
     }
 
     /** A currency neither of the pair is SAR or USD converts the same way — nothing is special-cased. */
     public function test_a_third_currency_converts_through_its_own_rate(): void
     {
-        $this->rate('AED', 'SAR', 1.02, '2026-06-01');
+        $this->rate('AED', 'USD', 0.2723, '2026-06-01');
 
         $this->importOrder($this->store('aed-shop', 'AED'), 'o1', 400.0, 'AED');
 
         $order = CommerceOrder::withoutGlobalScopes()->firstOrFail();
 
-        $this->assertEqualsWithDelta(408.0, (float) $order->total, 0.01);
+        $this->assertEqualsWithDelta(108.92, (float) $order->total, 0.01);
         $this->assertSame('AED', $order->original_currency);
     }
 
@@ -184,8 +190,8 @@ final class CommerceReportingCurrencyTest extends TestCase
      */
     public function test_a_total_shortened_by_a_withheld_order_reports_that_it_is_short(): void
     {
-        $shop = $this->store('mixed-shop', 'SAR');
-        $this->importOrder($shop, 'o-sar', 1000.0, 'SAR');
+        $shop = $this->store('mixed-shop', 'USD');
+        $this->importOrder($shop, 'o-usd', 1000.0, 'USD');
         $this->importOrder($shop, 'o-kwd', 300.0, 'KWD');
 
         $funnel = $this->funnel();
@@ -194,7 +200,7 @@ final class CommerceReportingCurrencyTest extends TestCase
         $this->assertSame(2, $funnel['totals']['orders'], 'the order itself is still counted');
         $this->assertSame(1, $funnel['coverage']['orders_with_money_withheld']);
         $this->assertSame(['KWD'], $funnel['coverage']['money_withheld_currencies']);
-        $this->assertSame('SAR', $funnel['coverage']['reporting_currency']);
+        $this->assertSame('USD', $funnel['coverage']['reporting_currency']);
     }
 
     /** The day a rate arrives, the next sweep converts what was withheld — nothing was lost. */
@@ -205,12 +211,12 @@ final class CommerceReportingCurrencyTest extends TestCase
 
         $this->assertNull(CommerceOrder::withoutGlobalScopes()->firstOrFail()->total);
 
-        $this->rate('KWD', 'SAR', 12.2, '2026-06-01');
+        $this->rate('KWD', 'USD', 3.25, '2026-06-01');
         $this->importOrder($shop, 'o1', 300.0, 'KWD');   // the same order, re-swept
 
         $order = CommerceOrder::withoutGlobalScopes()->firstOrFail();
 
-        $this->assertEqualsWithDelta(3660.0, (float) $order->total, 0.01);
+        $this->assertEqualsWithDelta(975.0, (float) $order->total, 0.01);
         $this->assertSame(1, CommerceOrder::withoutGlobalScopes()->count(), 'the re-sweep must stay idempotent');
     }
 
@@ -224,20 +230,20 @@ final class CommerceReportingCurrencyTest extends TestCase
      */
     public function test_an_order_uses_the_rate_of_the_day_it_was_placed(): void
     {
-        $this->rate('USD', 'SAR', 3.60, '2026-01-01');
-        $this->rate('USD', 'SAR', 4.00, '2026-06-01');
+        $this->rate('SAR', 'USD', 0.26, '2026-01-01');
+        $this->rate('SAR', 'USD', 0.28, '2026-06-01');
 
-        $shop = $this->store('usd-shop', 'USD');
-        $this->importOrder($shop, 'jan', 100.0, 'USD', placedAt: '2026-01-15');
-        $this->importOrder($shop, 'jun', 100.0, 'USD', placedAt: '2026-06-15');
+        $shop = $this->store('sar-shop', 'SAR');
+        $this->importOrder($shop, 'jan', 100.0, 'SAR', placedAt: '2026-01-15');
+        $this->importOrder($shop, 'jun', 100.0, 'SAR', placedAt: '2026-06-15');
 
         $january = CommerceOrder::withoutGlobalScopes()->where('external_id', 'jan')->firstOrFail();
         $june = CommerceOrder::withoutGlobalScopes()->where('external_id', 'jun')->firstOrFail();
 
-        $this->assertEqualsWithDelta(360.0, (float) $january->total, 0.01);
+        $this->assertEqualsWithDelta(26.0, (float) $january->total, 0.01);
         // Nearest on-or-before: January's order keeps January's quote even though June's exists.
         $this->assertSame('2026-01-01', $january->rate_date?->toDateString());
-        $this->assertEqualsWithDelta(400.0, (float) $june->total, 0.01);
+        $this->assertEqualsWithDelta(28.0, (float) $june->total, 0.01);
         $this->assertSame('2026-06-01', $june->rate_date?->toDateString());
     }
 
@@ -246,9 +252,9 @@ final class CommerceReportingCurrencyTest extends TestCase
     /** Counts are counts. A rate applied to a quantity would be nonsense that still looks like a number. */
     public function test_counts_are_never_multiplied_by_a_rate(): void
     {
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
 
-        $this->importOrder($this->store('usd-shop', 'USD'), 'o1', 1000.0, 'USD', extra: [
+        $this->importOrder($this->store('sar-shop', 'SAR'), 'o1', 1000.0, 'SAR', extra: [
             'items' => [[
                 'external_id' => 'i1', 'product_external_id' => null, 'name' => 'عباءة',
                 'quantity' => 3, 'unit_price' => 200.0, 'total' => 600.0,
@@ -259,17 +265,17 @@ final class CommerceReportingCurrencyTest extends TestCase
 
         $this->assertEqualsWithDelta(3.0, (float) $item->quantity, 0.0001, 'a quantity is not money');
         // The line converts at its ORDER's rate, so the best-seller table adds up to the revenue.
-        $this->assertEqualsWithDelta(2250.0, (float) $item->total, 0.01);
-        $this->assertEqualsWithDelta(750.0, (float) $item->unit_price, 0.01);
+        $this->assertEqualsWithDelta(160.0, (float) $item->total, 0.01);
+        $this->assertEqualsWithDelta(53.33, (float) $item->unit_price, 0.01);
         $this->assertEqualsWithDelta(600.0, (float) $item->original_total, 0.01);
     }
 
     /** Best sellers are ranked in the reporting currency, because the lines were converted with the order. */
     public function test_the_best_seller_table_is_in_the_reporting_currency(): void
     {
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
 
-        $this->importOrder($this->store('usd-shop', 'USD'), 'o1', 1000.0, 'USD', extra: [
+        $this->importOrder($this->store('sar-shop', 'SAR'), 'o1', 1000.0, 'SAR', extra: [
             'items' => [[
                 'external_id' => 'i1', 'product_external_id' => null, 'name' => 'عباءة',
                 'quantity' => 2, 'unit_price' => 500.0, 'total' => 1000.0,
@@ -279,29 +285,29 @@ final class CommerceReportingCurrencyTest extends TestCase
         $products = $this->funnel()['comparisons']['products'];
 
         $this->assertSame('عباءة', $products[0]['name']);
-        $this->assertEqualsWithDelta(3750.0, (float) $products[0]['revenue'], 0.01);
+        $this->assertEqualsWithDelta(266.67, (float) $products[0]['revenue'], 0.01);
         $this->assertEqualsWithDelta(2.0, (float) $products[0]['quantity'], 0.01);
     }
 
     /** An abandoned cart is money too, and follows the same rule. */
     public function test_an_abandoned_cart_is_converted_and_keeps_its_original(): void
     {
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
 
-        app(ImportStoreData::class)->abandonedCarts($this->store('usd-shop', 'USD'), (string) $this->project->id, [[
+        app(ImportStoreData::class)->abandonedCarts($this->store('sar-shop', 'SAR'), (string) $this->project->id, [[
             'external_id' => 'cart-1',
             'abandoned_at' => '2026-06-10 10:00:00',
-            'currency' => 'USD',
-            'total' => 80.0,
+            'currency' => 'SAR',
+            'total' => 300.0,
             'items_count' => 2,
         ]]);
 
         $cart = CommerceAbandonedCart::withoutGlobalScopes()->firstOrFail();
 
-        $this->assertEqualsWithDelta(300.0, (float) $cart->total, 0.01);
-        $this->assertEqualsWithDelta(80.0, (float) $cart->original_total, 0.01);
-        $this->assertSame('USD', $cart->original_currency);
-        $this->assertSame('SAR', $cart->currency);
+        $this->assertEqualsWithDelta(80.0, (float) $cart->total, 0.01);
+        $this->assertEqualsWithDelta(300.0, (float) $cart->original_total, 0.01);
+        $this->assertSame('SAR', $cart->original_currency);
+        $this->assertSame('USD', $cart->currency);
         $this->assertSame(2, (int) $cart->items_count, 'an item count is not money');
     }
 
@@ -354,31 +360,31 @@ final class CommerceReportingCurrencyTest extends TestCase
      */
     public function test_an_unlabelled_amount_falls_back_to_the_shop_and_records_the_assumption(): void
     {
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
 
-        $this->importOrder($this->store('usd-shop', 'USD'), 'o1', 100.0, currency: null);
+        $this->importOrder($this->store('sar-shop', 'SAR'), 'o1', 375.0, currency: null);
 
         $order = CommerceOrder::withoutGlobalScopes()->firstOrFail();
 
-        $this->assertSame('USD', $order->original_currency, "the shop's own currency stands in");
-        $this->assertEqualsWithDelta(375.0, (float) $order->total, 0.01);
+        $this->assertSame('SAR', $order->original_currency, "the shop's own currency stands in");
+        $this->assertEqualsWithDelta(100.0, (float) $order->total, 0.01);
     }
 
     /** Cancelled and refunded orders still behave, in the reporting currency. */
     public function test_refunds_and_cancellations_are_netted_after_conversion(): void
     {
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
 
-        $shop = $this->store('usd-shop', 'USD');
-        $this->importOrder($shop, 'refunded', 100.0, 'USD', extra: ['refunded_total' => 40.0]);
-        $this->importOrder($shop, 'cancelled', 100.0, 'USD', extra: ['cancelled_at' => '2026-06-11 09:00:00']);
+        $shop = $this->store('sar-shop', 'SAR');
+        $this->importOrder($shop, 'refunded', 375.0, 'SAR', extra: ['refunded_total' => 150.0]);
+        $this->importOrder($shop, 'cancelled', 375.0, 'SAR', extra: ['cancelled_at' => '2026-06-11 09:00:00']);
 
         $funnel = $this->funnel();
 
-        // Gross counts the live order only; net subtracts the refund; both in riyals.
-        $this->assertEqualsWithDelta(375.0, (float) $funnel['totals']['gross_revenue'], 0.01);
-        $this->assertEqualsWithDelta(225.0, (float) $funnel['totals']['revenue'], 0.01);
-        $this->assertEqualsWithDelta(150.0, (float) $funnel['totals']['refunded'], 0.01);
+        // Gross counts the live order only; net subtracts the refund; both in dollars.
+        $this->assertEqualsWithDelta(100.0, (float) $funnel['totals']['gross_revenue'], 0.01);
+        $this->assertEqualsWithDelta(60.0, (float) $funnel['totals']['revenue'], 0.01);
+        $this->assertEqualsWithDelta(40.0, (float) $funnel['totals']['refunded'], 0.01);
         $this->assertSame(1, $funnel['totals']['cancelled_orders']);
     }
 

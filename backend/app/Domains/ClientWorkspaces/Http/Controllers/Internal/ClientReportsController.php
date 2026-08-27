@@ -6,6 +6,7 @@ namespace App\Domains\ClientWorkspaces\Http\Controllers\Internal;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
@@ -81,7 +82,9 @@ final class ClientReportsController
                 'status' => 'processing',
                 'period_start' => $data['period_start'] ?? Carbon::today()->subDays(29),
                 'period_end' => $data['period_end'] ?? Carbon::today(),
-                'currency' => $c->default_currency ?? 'SAR',
+                // The client's own `default_currency` is a display preference; the figures in this
+                // report are aggregated in the canonical currency, so that is what labels them.
+                'currency' => ReportingCurrency::DEFAULT,
                 'created_by' => $request->user()->id,
             ]);
         } finally {
