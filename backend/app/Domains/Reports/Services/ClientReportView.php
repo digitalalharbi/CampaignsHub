@@ -149,7 +149,22 @@ final class ClientReportView
          * already the compressed version.
          */
         'observations',
-        'platform_comparison', 'budget', 'next_steps',
+        'platform_comparison', 'budget',
+        /*
+         * The shop, in the SHORT form too — REPORT-STORE-001.
+         *
+         * The ad-squad and ad slides are deliberately NOT here: they are operator grain, and a summary
+         * that opened with forty ad squads would bury the two figures it exists to carry. What the shop
+         * SOLD is the opposite case. For a merchant it is the headline, and an executive summary that
+         * reports the advertising spend without the revenue it was spent to earn is the same «half the
+         * business presented as the whole» this requirement exists to fix — in the version that gets
+         * forwarded and quoted, with no detail pages behind it to correct the impression.
+         *
+         * It renders only where a store is connected, so an advertising-only client's summary is
+         * unchanged.
+         */
+        'store_performance',
+        'next_steps',
     ];
 
     /**
