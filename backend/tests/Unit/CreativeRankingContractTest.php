@@ -44,10 +44,38 @@ final class CreativeRankingContractTest extends TestCase
                 "{$family->value}'s primary '{$spec['primary']}' is not in the registry"
             );
 
-            foreach ($spec['secondary'] as $s) {
-                $this->assertTrue(RankingMetric::isRankable($s), "secondary '{$s}' is not in the registry");
-            }
+            /*
+             * Secondaries are DISPLAY context, and are deliberately not required to be rankable.
+             *
+             * `frequency` is the case that proves the distinction: it belongs beside an awareness
+             * verdict — the spec names it — and it has no direction, because rising frequency is
+             * fatigue on prospecting and reach working as intended on retargeting. Requiring every
+             * secondary to be rankable would force it out of the layout, or force a direction onto it
+             * that makes half of all campaigns rank backwards.
+             *
+             * Passing one as a ranking override still fails closed: `RankingMetric::of()` throws.
+             */
+            $this->assertNotEmpty($spec['secondary'], "{$family->value} shows no context beside its verdict");
         }
+    }
+
+    public function test_awareness_and_video_rank_on_cost_rather_than_on_volume(): void
+    {
+        /*
+         * A reach-ordered list is a spend-ordered list wearing a different label: the creative that
+         * reached the most people is usually the one that was given the most budget. The same is true
+         * of a raw view count. Both objectives therefore lead with the efficiency metric, and keep the
+         * volume figures beside it as context.
+         */
+        $this->assertSame('cpm', RankingMetric::forObjective(ObjectiveFamily::Awareness)['primary']);
+        $this->assertContains('reach', RankingMetric::forObjective(ObjectiveFamily::Awareness)['secondary']);
+
+        $this->assertSame('cost_per_view', RankingMetric::forObjective(ObjectiveFamily::Video)['primary']);
+        $this->assertContains('video_completion_rate', RankingMetric::forObjective(ObjectiveFamily::Video)['secondary']);
+
+        // Both are lower-is-better, so «best» is the cheapest, not the biggest number.
+        $this->assertSame(RankingDirection::LowerIsBetter, RankingMetric::of('cpm')->direction);
+        $this->assertSame(RankingDirection::LowerIsBetter, RankingMetric::of('cost_per_view')->direction);
     }
 
     public function test_a_cost_metric_ranks_cheapest_first_and_a_return_metric_ranks_highest_first(): void

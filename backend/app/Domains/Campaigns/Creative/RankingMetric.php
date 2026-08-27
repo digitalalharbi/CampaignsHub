@@ -141,10 +141,22 @@ final class RankingMetric
     public static function forObjective(ObjectiveFamily $family): array
     {
         return match ($family) {
-            ObjectiveFamily::Awareness => ['primary' => 'reach', 'secondary' => ['impressions', 'cpm']],
+            /*
+             * Awareness ranks on COST, not on volume.
+             *
+             * `reach` was the first choice here and it is wrong for ranking a creative: the creative
+             * that reached the most people is usually the one that was given the most budget, so a
+             * reach-ordered list is a spend-ordered list wearing a different label. CPM answers the
+             * question a creative comparison is actually asking — which of these buys attention most
+             * cheaply — and it is what `CreativeRankingService` already ranked awareness by, with a
+             * test pinning it. Reach and impressions stay as the volume context beside the verdict.
+             */
+            ObjectiveFamily::Awareness => ['primary' => 'cpm', 'secondary' => ['reach', 'impressions', 'frequency']],
             ObjectiveFamily::Traffic => ['primary' => 'ctr', 'secondary' => ['clicks', 'cpc', 'landing_page_views']],
             ObjectiveFamily::Engagement => ['primary' => 'engagement_rate', 'secondary' => ['engagements', 'cpe']],
-            ObjectiveFamily::Video => ['primary' => 'video_completion_rate', 'secondary' => ['video_views', 'cost_per_view']],
+            // Same reasoning: cost per view is the efficiency lens, completion rate the quality one
+            // beside it. A view count on its own ranks by budget.
+            ObjectiveFamily::Video => ['primary' => 'cost_per_view', 'secondary' => ['video_views', 'video_completion_rate', 'video_completions']],
             ObjectiveFamily::Leads => ['primary' => 'cpl', 'secondary' => ['leads', 'conversion_rate']],
             ObjectiveFamily::Sales => ['primary' => 'roas', 'secondary' => ['purchases', 'cpa', 'revenue', 'aov']],
             ObjectiveFamily::App => ['primary' => 'cpi', 'secondary' => ['installs', 'registrations', 'in_app_events']],
