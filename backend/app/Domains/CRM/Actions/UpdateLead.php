@@ -22,7 +22,19 @@ final class UpdateLead
             $before = $lead->only(['name', 'email', 'source', 'status', 'estimated_value']);
             $previousStatus = $lead->status;
 
-            $lead->update($data->toAttributes());
+            /*
+             * LEAD-PROVENANCE-001 — an edit may never rewrite the acquisition event.
+             *
+             * The team corrects names, fixes phone numbers and moves statuses all day. None of that
+             * changes which creative produced the click. If an update could reach these columns, a
+             * campaign's measured performance would drift every time somebody tidied a record, and
+             * the report would stop being evidence of anything.
+             *
+             * Stripped here rather than guarded at the request layer, because this action is what
+             * both the API and any future importer go through, and a rule enforced at one entrance
+             * is a rule with another way in.
+             */
+            $lead->update(collect($data->toAttributes())->except(Lead::PROVENANCE)->all());
 
             if ($previousStatus !== $lead->status) {
                 $this->recordActivity->execute(
