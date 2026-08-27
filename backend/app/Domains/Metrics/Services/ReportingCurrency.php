@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Services;
 
 use App\Domains\Metrics\Models\MetricDefinition;
-use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
 
 /**
@@ -43,13 +42,39 @@ use Illuminate\Support\Carbon;
 final class ReportingCurrency
 {
     /**
-     * Advertising reporting is SAR unless a client says otherwise — the home market, and the currency
-     * every dashboard, report and client link in this product is read in.
+     * MONEY-USD-001 — USD is the reporting and comparison currency, not an assumption about sources.
+     *
+     * ## What this constant is, and is not
+     *
+     * It is the currency figures are COMPARED in when a client workspace has not stated its own. It
+     * is not a claim about what any provider bills in. An ad account's own currency is provider
+     * truth — USD, SAR, EUR, GBP or anything else it publishes — and is read from the account, never
+     * inferred from the platform's name.
+     *
+     * ## Why USD rather than SAR
+     *
+     * A single comparison currency is what lets two accounts be added together at all. USD is the
+     * one this product reports in, so an account already publishing USD converts at par — the
+     * converter returns an `identity` rate for `from === to`, which is not a lookup and not a claim
+     * about any publisher. An account in any other currency needs a real rate for the metric's date
+     * and, without one, FX-001 still refuses to invent it: `value` is null, the money is withheld,
+     * and the original amount and currency survive so the row converts itself the day a rate exists.
+     *
+     * That behaviour is unchanged. What changes is which conversions are needed, not which are
+     * allowed.
+     *
+     * A workspace's own `default_currency` does NOT override this. An earlier revision let it, and
+     * that put two aggregation bases in one column — see `forProject()` for why that cannot stand. A
+     * workspace may choose how money is DISPLAYED; it may not choose what it is summed in.
+     *
+     * ## Not yet complete — MONEY-USD-002
+     *
+     * Rows already normalised with `project_currency = SAR` are NOT changed by this constant.
+     * Re-normalising them from their preserved originals is `metrics:renormalise-currency`, which
+     * must not double-convert and must not touch rows already in USD. Until that has been run and
+     * verified across every surface, MONEY-USD is PARTIAL.
      */
-    public const DEFAULT = 'SAR';
-
-    /** @var array<string, string> project id → reporting currency, memoised per request */
-    private array $projects = [];
+    public const DEFAULT = 'USD';
 
     /** @var list<string>|null the monetary metric keys, read from the catalogue once */
     private ?array $monetary = null;
@@ -63,17 +88,27 @@ final class ReportingCurrency
      * projects reported in different currencies would make their portfolio total unaddable. Falling
      * back to SAR rather than to null keeps every monetary row self-describing.
      */
+    /**
+     * The currency this project's money is NORMALISED and COMPARED in — always USD.
+     *
+     * A workspace's `default_currency` deliberately does NOT override this, and an earlier revision
+     * of this method let it. That was wrong, and the reason is the whole point of having a canonical
+     * currency: `value` is the column every read path sums — the dashboard, analytics, the funnel,
+     * reports, the public links. If one workspace normalised into SAR and another into USD, two
+     * projects could not be added together, a platform comparison would be summing different units,
+     * and the same scope would answer differently depending on whose workspace asked. A per-workspace
+     * basis is not a preference; it is a second truth.
+     *
+     * So the aggregation basis is fixed. What a workspace may still choose is how figures are
+     * DISPLAYED, which is a presentation concern applied on the way out, over a single stored basis —
+     * not a different basis per tenant.
+     *
+     * The original amount and original currency remain on every monetary row, so nothing about the
+     * provider's own truth is lost by fixing the basis.
+     */
     public function forProject(string $projectId): string
     {
-        if (isset($this->projects[$projectId])) {
-            return $this->projects[$projectId];
-        }
-
-        $currency = Project::withoutGlobalScopes()
-            ->with('clientWorkspace:id,default_currency')
-            ->find($projectId)?->clientWorkspace?->default_currency;
-
-        return $this->projects[$projectId] = strtoupper((string) ($currency ?: self::DEFAULT));
+        return self::DEFAULT;
     }
 
     /** Whether this metric key is money at all — the catalogue decides, not a hard-coded list. */

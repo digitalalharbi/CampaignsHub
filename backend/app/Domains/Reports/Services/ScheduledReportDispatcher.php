@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
@@ -57,7 +58,7 @@ final class ScheduledReportDispatcher
             'status' => 'processing',
             'period_start' => $now->copy()->subDays(29)->toDateString(),
             'period_end' => $now->toDateString(),
-            'currency' => 'SAR',
+            'currency' => ReportingCurrency::DEFAULT,
             'created_by' => $schedule->created_by,
         ])->save();
         GenerateReportJob::dispatch((string) $report->id);
