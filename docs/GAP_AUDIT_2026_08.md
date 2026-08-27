@@ -85,18 +85,43 @@ card, sorting, nor a comparison. They are the largest single piece of remaining 
 
 ---
 
-## 4. Reports
+## 4. Reports — the earlier finding here was WRONG, and is corrected
 
-The surfaces exist: `InteractiveReport`, `LiveSharedReport`, `PublicReport`, `PrintReport` /
-`PrintDocument`, `SchedulesPanel`, `AnnotationsPanel`, `SharedAttributionSection`,
-`SharedCreativeSection`, `ReportScopePicker`.
+An earlier revision of this document recorded that `LiveSharedReport` — «the CLIENT-facing shareable
+one» — carried platform, campaign, funnel and store and was missing creative, objective, attribution
+and best/worst, while `InteractiveReport` had all of it. The conclusion drawn was that the report a
+client receives is the weaker of the two.
 
-Still to verify against the mission rather than assumed present: per-platform detail reports, an
-executive cross-platform summary, best/worst content *by objective*, and store-confirmed vs
-platform-reported side by side. Marked `INVESTIGATION_REQUIRED` — the files exist, which is not the
-same as the claim being satisfied, and this audit does not assert what it has not read.
+**That is false.** `LiveSharedReport` is not a page and is not routed. Both client routes —
+`/r/:token` and `/reports/share/:token` — render `PublicReport`, which COMPOSES `LiveSharedReport`
+(the live figures block) together with `InteractiveReport`, `SharedAttributionSection` and
+`SharedCreativeSection`. I compared one section against a whole page and reported the difference as
+a gap.
 
----
+What is actually true:
+
+| section | state |
+|---|---|
+| live figures | `LiveSharedReport`, always rendered |
+| full report body | `InteractiveReport`, rendered inside the same page |
+| attribution | `SharedAttributionSection`, rendered when the operator enables `sections.attribution` |
+| creative performance | `SharedCreativeSection`, rendered when the operator enables `creatives` — with `form` switching between an executive summary and the detailed library |
+
+The creative and attribution sections being conditional is a **feature**: the operator decides what a
+particular client link exposes, and `SharedCreativeView` enforces a visibility ceiling server-side so
+a link cannot be made to show more than it was granted.
+
+The remaining Reports work is therefore narrower than recorded, and is not «build creative analysis
+for client reports»:
+
+- **`REPORT-ADSET-001`** — no report surface carries ad-set or ad detail. That part of the original
+  finding stands.
+- **`REPORT-PRINT-001`** — `PrintDocument` omits creative and store. Stands.
+
+A false gap costs more than a missing one: it sends the next person to rebuild something that already
+works, and to duplicate a presenter the product deliberately shares. Recorded here rather than
+quietly deleted, for the same reason the withdrawn READY-1 and READY-2 are kept visible in
+`INTEGRATION_READINESS_MATRIX.md`.
 
 ## 5. Integrations
 
