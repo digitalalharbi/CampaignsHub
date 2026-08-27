@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Services;
 
 use App\Domains\Metrics\Models\EntityDailyMetric;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -56,6 +57,98 @@ final class EntityMetricsAggregator
     ];
 
     /**
+     * The report scope, held the way `MetricsAggregator` holds it: null means «unbounded».
+     *
+     * REPORT-ADSET-001 — these exist because a report applies its scope ONCE, to one engine, and every
+     * section reads that bounded engine. An ad-squad table that read this aggregator unbounded would
+     * contradict the KPI cards directly above it on a report scoped to one platform, and the reader
+     * would have no way to tell which of the two numbers was the real one. A scope honoured by some
+     * sections and forgotten by the rest is worse than no scope at all.
+     *
+     * @var list<string>|null
+     */
+    private ?array $providers = null;
+
+    /** @var list<string>|null */
+    private ?array $accountIds = null;
+
+    /** @var list<string>|null */
+    private ?array $campaignIds = null;
+
+    /** @var list<string>|null */
+    private ?array $adSetIds = null;
+
+    /** @var list<string>|null */
+    private ?array $objectives = null;
+
+    /**
+     * Return a copy bounded to these providers. Empty → unbounded, matching `MetricsAggregator`.
+     *
+     * @param  list<string>  $providers
+     */
+    public function forProviders(array $providers): self
+    {
+        $clone = clone $this;
+        $clone->providers = $providers === [] ? null : array_values($providers);
+
+        return $clone;
+    }
+
+    /**
+     * @param  list<string>  $accountIds
+     */
+    public function forAccounts(array $accountIds): self
+    {
+        $clone = clone $this;
+        $clone->accountIds = $accountIds === [] ? null : array_values($accountIds);
+
+        return $clone;
+    }
+
+    /**
+     * @param  list<string>  $campaignIds
+     */
+    public function forCampaigns(array $campaignIds): self
+    {
+        $clone = clone $this;
+        $clone->campaignIds = $campaignIds === [] ? null : array_values($campaignIds);
+
+        return $clone;
+    }
+
+    /**
+     * Bound to these ad squads.
+     *
+     * At the `ad` grain this narrows by PARENT, and at the `ad_set` grain by the squad's own id — the
+     * same list means «these squads» in both cases, which is what a reader who picked them expects.
+     *
+     * @param  list<string>  $adSetIds
+     */
+    public function forAdSets(array $adSetIds): self
+    {
+        $clone = clone $this;
+        $clone->adSetIds = $adSetIds === [] ? null : array_values($adSetIds);
+
+        return $clone;
+    }
+
+    /**
+     * Bound to campaigns carrying these objectives.
+     *
+     * Objective lives on the campaign, not on the metric row, so this resolves through
+     * `external_campaign_id` exactly as `MetricsAggregator::forObjectives()` does.
+     *
+     * @param  list<string>  $objectives
+     */
+    public function forObjectives(array $objectives): self
+    {
+        $clone = clone $this;
+        $clone->objectives = $objectives === [] ? null : array_values($objectives);
+
+        return $clone;
+    }
+
+    /**
      * One row per entity of this grain, for a project and window.
      *
      * @param  list<string>|null  $parentIds  narrow to children of these parents, for drill-down
@@ -99,6 +192,8 @@ final class EntityMetricsAggregator
             $query->where('is_demo', false);
         }
 
+        $this->bound($query, $entityType);
+
         if ($parentIds !== null) {
             // Empty set → match nothing, never «all». A drill-down into a campaign with no ad squads
             // must show none, not every ad squad in the project.
@@ -117,6 +212,69 @@ final class EntityMetricsAggregator
             ->get()
             ->map(fn ($row): array => $this->shape((array) $row->getAttributes()))
             ->all();
+    }
+
+    /**
+     * Narrow a query by the report scope. An empty set never means «all» — see below.
+     *
+     * @param  Builder<EntityDailyMetric>  $query
+     */
+    private function bound(Builder $query, string $entityType): void
+    {
+        /*
+         * A bound that resolved to an empty list matches NOTHING, and `whereIn` with `[]` already does
+         * exactly that. The dangerous direction is the other one: treating «the scope named these and
+         * none of them exist» as «show everything», which is how a report scoped away from a platform
+         * ends up printing it. `null` is the only thing that means unbounded here, and it is set only
+         * by an explicitly empty argument to the setters above.
+         */
+        if ($this->providers !== null) {
+            $query->whereIn('provider', $this->providers);
+        }
+
+        if ($this->accountIds !== null) {
+            $query->whereIn('external_account_id', $this->accountIds);
+        }
+
+        if ($this->campaignIds !== null) {
+            /*
+             * The scope speaks UNIFIED campaign ids; this table stores EXTERNAL ones.
+             *
+             * `MetricsAggregator` filters `daily_metrics.unified_campaign_id`, and
+             * `ReportScope::resolvedCampaignIds()` is built to match it — including
+             * `campaignIdsBehindAdSetsAndAds()`, which plucks `unified_campaign_id` outright. But
+             * `entity_daily_metrics.external_campaign_id` is `ExternalAdSet::external_campaign_id`,
+             * which is an `external_campaigns` row id. Comparing the two id spaces directly matches
+             * nothing, and «nothing» here does not read as a bug: the ad-squad table would render its
+             * honest «the platform reported no ad squads» empty state on every scoped report, which is
+             * a false statement about the platform rather than a visible error.
+             */
+            $query->whereIn(
+                'external_campaign_id',
+                DB::table('external_campaigns')
+                    ->select('id')
+                    ->whereIn('unified_campaign_id', $this->campaignIds),
+            );
+        }
+
+        if ($this->adSetIds !== null) {
+            // The squad's own id at the squad grain, its parent at the ad grain.
+            $query->whereIn(
+                $entityType === EntityDailyMetric::AD_SET ? 'entity_id' : 'external_ad_set_id',
+                $this->adSetIds,
+            );
+        }
+
+        if ($this->objectives !== null) {
+            // Objective lives on the campaign. This subquery selects `external_campaigns.id`, which IS
+            // the id space this table stores — unlike the campaign bound above, no translation needed.
+            $query->whereIn(
+                'external_campaign_id',
+                DB::table('external_campaigns')
+                    ->select('id')
+                    ->whereIn('objective', $this->objectives),
+            );
+        }
     }
 
     /** Whether this scope holds any real row — see DEMO-LIVE-AGGREGATION-ISOLATION-001. */
