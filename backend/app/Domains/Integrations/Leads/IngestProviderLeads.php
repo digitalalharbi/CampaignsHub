@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Leads;
 
+use App\Domains\CRM\Actions\LinkDuplicateLead;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Support\PhoneNumber;
@@ -46,6 +47,7 @@ final class IngestProviderLeads
     public function handle(string $tenantId, array $leads): array
     {
         $ingested = 0;
+        $duplicates = 0;
         $redelivered = 0;
         $uncontactable = 0;
 
@@ -64,14 +66,36 @@ final class IngestProviderLeads
                  * transaction — a backfill wrapping a batch, a test's RefreshDatabase — it is the
                  * recovery path that breaks. The same lesson `WebhookIngest` already records.
                  */
-                DB::transaction(fn () => Lead::create($this->attributes($tenantId, $lead)));
+                $created = DB::transaction(fn () => Lead::create($this->attributes($tenantId, $lead)));
                 $ingested++;
+
+                /*
+                 * LEAD-DEDUP-001 — link, never drop.
+                 *
+                 * Deliberately AFTER the insert and outside its savepoint. The lead is stored either
+                 * way: a duplicate is a real acquisition event that real money bought, and losing it
+                 * would understate what the spend produced. Linking only records what we have since
+                 * learned about who it is, so a failure here must not cost us the row.
+                 *
+                 * Counted separately from `ingested` because «received» and «unique» are different
+                 * figures, and a lead report that publishes one under the other's name is the same
+                 * class of defect as a total that omits a contributor.
+                 */
+                if (app(LinkDuplicateLead::class)->handle($created) !== null) {
+                    $duplicates++;
+                }
             } catch (UniqueConstraintViolationException) {
                 $redelivered++;
             }
         }
 
-        return ['ingested' => $ingested, 'redelivered' => $redelivered, 'uncontactable' => $uncontactable];
+        return [
+            'ingested' => $ingested,
+            'redelivered' => $redelivered,
+            'uncontactable' => $uncontactable,
+            // Of the ingested, how many were somebody we already had. Never subtracted from `ingested`.
+            'duplicates' => $duplicates,
+        ];
     }
 
     /**
