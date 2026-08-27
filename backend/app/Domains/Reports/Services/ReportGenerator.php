@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Commerce\Services\ProjectStores;
+use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Disclaimers\Services\DisclaimerResolver;
 use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use App\Domains\Metrics\Models\EntityDailyMetric;
@@ -41,6 +43,8 @@ final class ReportGenerator
         private readonly ReportObservations $observations,
         private readonly DataFreshnessService $freshness,
         private readonly EntityMetricsAggregator $entities,
+        private readonly ProjectStores $projectStores,
+        private readonly StoreFunnelService $storeFunnel,
     ) {}
 
     public function generate(Report $report): array
@@ -97,6 +101,25 @@ final class ReportGenerator
          * section that skipped the scope would contradict them and give the reader no way to tell
          * which figure was real.
          */
+        /*
+         * REPORT-STORE-001 — the merchant's own ledger, on the report that claims to summarise the
+         * period.
+         *
+         * `ReportGenerator` emitted no store data on any path, so neither the deck nor the A4 document
+         * could show it, and a client selling through Salla or Zid read a report about the advertising
+         * half of their business presented as the whole of it. Revenue, orders and refunds were already
+         * being computed by `StoreFunnelService` for the dashboard and the analytics tab; the report was
+         * simply not asking.
+         *
+         * Asked only when a store is actually connected. A store block on a project with no store is
+         * not an empty state — it is a section about something the customer does not have, and it would
+         * appear on every advertising-only report this product generates.
+         */
+        $hasStore = $this->projectStores->forProject((string) $report->tenant_id, (string) $report->project_id)->isNotEmpty();
+        $store = $hasStore
+            ? $this->storeFunnel->build((string) $report->tenant_id, (string) $report->project_id, $from, $to)
+            : null;
+
         $entities = $scope->applyToEntities($this->entities);
         $projectId = (string) $report->project_id;
         $adSets = $entities->byEntity($projectId, EntityDailyMetric::AD_SET, $from, $to);
@@ -118,7 +141,7 @@ final class ReportGenerator
         // Initialise the slide layout once (from the objective + connected platforms) if not authored yet.
         $config = $report->config;
         if (empty($config['slides'])) {
-            $config = $this->template->defaultConfig($objective, $providerList, $adSets !== [], $ads !== []);
+            $config = $this->template->defaultConfig($objective, $providerList, $adSets !== [], $ads !== [], $hasStore);
             $report->forceFill(['config' => $config, 'campaign_objective' => $objective])->saveQuietly();
         }
 
@@ -173,6 +196,24 @@ final class ReportGenerator
              * «this campaign had no ad squads». That distinction is the whole reason FX-001 and
              * CONTENT-AD-DELIVERED-001 exist; a new section does not get to reintroduce it.
              */
+            /*
+             * The store's own figures, with its coverage intact.
+             *
+             * `coverage` carries the withheld-money truth — the orders whose currency had no rate for
+             * their own day, and the currencies they were in. Dropping it here would hand the report a
+             * revenue total that looks complete and is short by an unstated amount, which is the exact
+             * failure COMMERCE-FX-001 exists to prevent. It travels with the total or not at all.
+             */
+            'store' => $store === null ? null : [
+                'totals' => $store['totals'],
+                'derived' => $store['derived'],
+                'stages' => $store['stages'],
+                'comparisons' => $store['comparisons'],
+                'coverage' => $store['coverage'],
+            ],
+            // Distinguishes «no store connected» from «a store that sold nothing», which are different
+            // facts about the business and must not render the same way.
+            'store_connected' => $hasStore,
             'ad_sets' => $adSets,
             'ads' => $ads,
             'entity_grains_reported' => [

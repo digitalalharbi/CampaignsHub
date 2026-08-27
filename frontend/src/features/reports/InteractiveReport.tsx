@@ -64,6 +64,19 @@ export interface ReportData {
    * about the platform, and printing the first when the second is true is a lie the reader has no
    * way to catch.
    */
+  /**
+   * REPORT-STORE-001 — the merchant's own ledger.
+   *
+   * `store_connected` is separate because «no store» and «a store that sold nothing» are different
+   * facts about the business. Absent `store` on a project with a shop means the period had no orders;
+   * absent on a project without one means the section does not apply at all.
+   */
+  store?: {
+    totals: Record<string, number | string | null>
+    derived?: Record<string, number | null>
+    coverage?: Record<string, unknown>
+  } | null
+  store_connected?: boolean
   ad_sets?: Row[]
   ads?: Row[]
   entity_grains_reported?: { ad_set?: boolean; ad?: boolean }
@@ -217,6 +230,7 @@ export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportDat
     case 'top_creatives': return <CreativesSlide data={data} platform={slide.platform!} />
     case 'platform_notes': return <NotesSlide data={data} platform={slide.platform!} />
     case 'platform_comparison': return <ComparisonSlide data={data} />
+    case 'store_performance': return <StoreSlide data={data} />
     case 'ad_set_performance': return <EntityGrainSlide data={data} grain="ad_set" />
     case 'ad_performance': return <EntityGrainSlide data={data} grain="ad" />
     case 'objective_performance': return <ObjectiveSplitSlide data={data} />
@@ -866,6 +880,66 @@ function EntityGrainSlide({ data, grain }: { data: ReportData; grain: 'ad_set' |
           </table>
         </div>
       </ChartCard>
+    </div>
+  )
+}
+
+/**
+ * What the SHOP sold, from the merchant's own ledger rather than from the platforms' claims.
+ *
+ * No report carried this until now, so a client selling through Salla or Zid read a report about the
+ * advertising half of their business presented as the whole of it.
+ *
+ * The withheld money travels with the total. `coverage` counts the orders whose currency had no rate
+ * for the day they were placed; those are missing from `revenue`, and a revenue figure that looks
+ * complete while being short by an unstated amount is the failure COMMERCE-FX-001 exists to prevent.
+ */
+function StoreSlide({ data }: { data: ReportData }) {
+  const store = data.store
+  const withheld = Number((store?.coverage as { orders_with_money_withheld?: number } | undefined)?.orders_with_money_withheld ?? 0)
+  const currencies = ((store?.coverage as { money_withheld_currencies?: string[] } | undefined)?.money_withheld_currencies ?? [])
+
+  if (!data.store_connected) {
+    // Not an empty state: a section about something this client does not have.
+    return null
+  }
+
+  if (!store) {
+    return (
+      <div data-testid="report-store">
+        <Title sub="من دفتر المتجر نفسه">أداء المتجر</Title>
+        <p className="rounded-xl border border-border bg-surface-secondary px-4 py-6 text-center text-sm text-text-secondary">
+          لم تُسجَّل أي طلبات في هذه الفترة.
+        </p>
+      </div>
+    )
+  }
+
+  const t = store.totals
+  return (
+    <div data-testid="report-store">
+      <Title sub="من دفتر المتجر نفسه">أداء المتجر</Title>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: 'الإيرادات', value: money(t.revenue as number, data.currency) },
+          { label: 'الطلبات', value: num(t.orders as number) },
+          { label: 'المرتجعات', value: money(t.refunded as number, data.currency) },
+          { label: 'عملاء جدد', value: num(t.new_customers as number) },
+        ].map((c) => (
+          <div key={c.label} className="rounded-xl border border-border bg-surface p-4">
+            <div className="text-xs text-text-muted">{c.label}</div>
+            <div className="tnum mt-1 text-xl font-bold text-text-primary">{c.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {withheld > 0 && (
+        /* Stated, not hidden: the revenue above is short by these orders, and by how many. */
+        <p className="mt-4 rounded-xl border border-border bg-surface-secondary px-4 py-3 text-sm text-text-secondary" data-testid="report-store-withheld">
+          {`${withheld} طلبًا لم يُحتسب في الإيرادات أعلاه: لا يوجد سعر صرف لعملتها في يوم الطلب`}
+          {currencies.length > 0 ? ` (${currencies.join('، ')})` : ''}
+        </p>
+      )}
     </div>
   )
 }
