@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Projects\Models\Project;
@@ -12,6 +15,7 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -31,6 +35,8 @@ final class EntityMetricsAggregatorTest extends TestCase
     private Project $project;
 
     private EntityMetricsAggregator $aggregator;
+
+    private ?string $accountId = null;
 
     protected function setUp(): void
     {
@@ -169,6 +175,176 @@ final class EntityMetricsAggregatorTest extends TestCase
         );
     }
 
+    // ── REPORT-ADSET-001: the report scope reaches this grain too ────────────────────────────────
+
+    /**
+     * THE TRAP, and the reason this test exists at all.
+     *
+     * A report applies its scope ONCE, to one engine, and every section reads that bounded engine.
+     * This aggregator is not that engine, so the ad-squad section has to be bounded by hand — and the
+     * two sides speak different id spaces. `MetricsAggregator` filters
+     * `daily_metrics.unified_campaign_id`, and `ReportScope::resolvedCampaignIds()` is built to match
+     * it. But `entity_daily_metrics.external_campaign_id` holds an `external_campaigns` row id.
+     *
+     * Comparing them directly matches nothing, and nothing does not read as a bug here: the section
+     * would render its honest «the platform reported no ad squads» empty state on every scoped
+     * report — a false statement about the platform rather than a visible error. That is why the
+     * translation is asserted rather than assumed.
+     */
+    public function test_a_campaign_bound_translates_from_unified_ids_to_this_tables_own(): void
+    {
+        [$unifiedId, $externalId] = $this->campaign('inside');
+        [$otherUnified, $otherExternal] = $this->campaign('outside');
+
+        $mine = (string) Str::uuid();
+        $theirs = (string) Str::uuid();
+        $this->row($mine, '2026-08-01', ['spend' => 100], $externalId);
+        $this->row($theirs, '2026-08-01', ['spend' => 900], $otherExternal);
+
+        // The scope names the UNIFIED id, which is what a report actually carries.
+        $rows = $this->aggregator->forCampaigns([$unifiedId])->byEntity(
+            $this->project->id, EntityDailyMetric::AD_SET,
+            Carbon::parse('2026-07-25'), Carbon::parse('2026-08-10'),
+        );
+
+        $this->assertCount(1, $rows, 'The bound matched nothing, so a scoped report would claim the platform sent no ad squads.');
+        $this->assertSame($mine, $rows[0]['entity_id']);
+        $this->assertEqualsWithDelta(100.0, (float) $rows[0]['spend'], 0.01);
+        $this->assertNotSame($otherUnified, $externalId, 'Fixture error: the two id spaces must differ for this test to mean anything.');
+    }
+
+    /** A provider bound keeps the section consistent with the KPI cards above it. */
+    public function test_a_provider_bound_narrows_this_grain(): void
+    {
+        $snap = (string) Str::uuid();
+        $meta = (string) Str::uuid();
+        $this->row($snap, '2026-08-01', ['spend' => 100]);
+        $this->row($meta, '2026-08-01', ['spend' => 400], provider: 'meta');
+
+        $rows = $this->aggregator->forProviders(['meta'])->byEntity(
+            $this->project->id, EntityDailyMetric::AD_SET,
+            Carbon::parse('2026-07-25'), Carbon::parse('2026-08-10'),
+        );
+
+        $this->assertCount(1, $rows);
+        $this->assertEqualsWithDelta(400.0, (float) $rows[0]['spend'], 0.01);
+    }
+
+    /**
+     * An unbounded aggregator answers for everything — the setters must not narrow by existing.
+     *
+     * `null` is the only thing that means unbounded, and it is what an empty argument produces. The
+     * dangerous direction is treating «the scope named these and none exist» as «show everything»,
+     * which is how a report scoped away from a platform ends up printing it.
+     */
+    public function test_an_empty_bound_is_unbounded_and_an_unmatched_bound_shows_nothing(): void
+    {
+        $id = (string) Str::uuid();
+        $this->row($id, '2026-08-01', ['spend' => 100]);
+
+        $unbounded = $this->aggregator->forProviders([])->forCampaigns([])->byEntity(
+            $this->project->id, EntityDailyMetric::AD_SET,
+            Carbon::parse('2026-07-25'), Carbon::parse('2026-08-10'),
+        );
+        $this->assertCount(1, $unbounded, 'An empty bound narrowed the scope instead of leaving it open.');
+
+        $unmatched = $this->aggregator->forProviders(['tiktok'])->byEntity(
+            $this->project->id, EntityDailyMetric::AD_SET,
+            Carbon::parse('2026-07-25'), Carbon::parse('2026-08-10'),
+        );
+        $this->assertSame([], $unmatched, 'A bound that matches nothing must show nothing, never everything.');
+    }
+
+    /** Bounds return copies: narrowing one section must not narrow the report's other sections. */
+    public function test_bounding_returns_a_copy_and_leaves_the_original_open(): void
+    {
+        $snap = (string) Str::uuid();
+        $meta = (string) Str::uuid();
+        $this->row($snap, '2026-08-01', ['spend' => 100]);
+        $this->row($meta, '2026-08-01', ['spend' => 400], provider: 'meta');
+
+        $bounded = $this->aggregator->forProviders(['meta']);
+        $this->assertCount(1, $bounded->byEntity(
+            $this->project->id, EntityDailyMetric::AD_SET,
+            Carbon::parse('2026-07-25'), Carbon::parse('2026-08-10'),
+        ));
+
+        $this->assertCount(2, $this->aggregator->byEntity(
+            $this->project->id, EntityDailyMetric::AD_SET,
+            Carbon::parse('2026-07-25'), Carbon::parse('2026-08-10'),
+        ), 'The setter mutated the shared instance, so one bounded section would silently bound the rest.');
+    }
+
+    /** One ad account for the campaigns to hang off — the column is NOT NULL and carries a key. */
+    private function account(): string
+    {
+        if ($this->accountId !== null) {
+            return $this->accountId;
+        }
+
+        $credential = new IntegrationCredential([
+            'provider' => 'snapchat', 'credential_scope' => 'project_only',
+            'credential_type' => 'oauth', 'status' => 'active',
+        ]);
+        $credential->setPayload('t');
+        $credential->save();
+
+        $connection = ProviderConnection::create([
+            'credential_id' => $credential->id, 'provider' => 'snapchat',
+            'connection_name' => 'snap', 'scope' => 'project_only', 'status' => 'connected',
+        ]);
+
+        $account = new ExternalAccount;
+        $account->forceFill([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'provider_connection_id' => $connection->getKey(),
+            'provider' => 'snapchat',
+            'account_type' => 'ad_account',
+            'external_id' => 'act-1',
+            'name' => 'Snap',
+            'status' => 'active',
+        ])->save();
+
+        return $this->accountId = (string) $account->id;
+    }
+
+    /**
+     * A unified campaign and the external campaign behind it.
+     *
+     * @return array{0: string, 1: string} [unified id, external id]
+     */
+    private function campaign(string $label): array
+    {
+        $unifiedId = (string) Str::uuid();
+        DB::table('unified_campaigns')->insert([
+            'id' => $unifiedId,
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'name' => "Campaign {$label}",
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $externalId = (string) Str::uuid();
+        DB::table('external_campaigns')->insert([
+            'id' => $externalId,
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'unified_campaign_id' => $unifiedId,
+            'external_account_id' => $this->account(),
+            'provider' => 'snapchat',
+            'external_id' => "ext-{$label}",
+            'name' => "Campaign {$label}",
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return [$unifiedId, $externalId];
+    }
+
     /** @param array<string,mixed> $values */
     private function row(
         string $entityId,
@@ -177,13 +353,14 @@ final class EntityMetricsAggregatorTest extends TestCase
         ?string $campaignId = null,
         bool $demo = false,
         string $window = 'default',
+        string $provider = 'snapchat',
     ): void {
         $model = new EntityDailyMetric;
         $model->forceFill([
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenant->id,
             'project_id' => $this->project->id,
-            'provider' => 'snapchat',
+            'provider' => $provider,
             'entity_type' => EntityDailyMetric::AD_SET,
             'entity_id' => $entityId,
             'external_entity_id' => 'sq-'.substr($entityId, 0, 6),
