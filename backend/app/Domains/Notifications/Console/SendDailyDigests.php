@@ -105,7 +105,7 @@ final class SendDailyDigests extends Command
              * the idempotency key is the ISO week, a `--force` run on any other day still converges
              * on the same single send.
              */
-            if (in_array('weekly', $digests, true) && ($this->option('force') || $local->isMonday())) {
+            if (in_array('weekly', $digests, true) && ($this->option('force') || $local->dayOfWeekIso === $this->weekday($row))) {
                 $state = $dispatcher->sendWeekly($user, $tenantId, $day->copy()->endOfDay(), $locale);
                 $state === 'sent' ? $sent++ : $skipped++;
                 $this->line("{$user->email} weekly: {$state}");
@@ -124,7 +124,7 @@ final class SendDailyDigests extends Command
              * `--force` sends the month currently in progress, which is what a manual run is for;
              * the idempotency key is the calendar month either way, so it can only land once.
              */
-            if (in_array('monthly', $digests, true) && ($this->option('force') || $local->day === 1)) {
+            if (in_array('monthly', $digests, true) && ($this->option('force') || $local->day === $this->monthday($row))) {
                 $month = $this->option('force') ? $day->copy() : $day->copy()->subMonthNoOverflow();
                 $state = $dispatcher->sendMonthly($user, $tenantId, $month, $locale);
                 $state === 'sent' ? $sent++ : $skipped++;
@@ -161,6 +161,33 @@ final class SendDailyDigests extends Command
      * One bad row would otherwise abort the sweep and silence everybody else's digest — a single
      * malformed preference taking down the feature for the whole installation.
      */
+    /**
+     * The weekday this recipient chose, ISO-8601 — EMAIL-SCHEDULE-001.
+     *
+     * Monday when unset, which is what the hard-coded `isMonday()` did, so no existing recipient's
+     * mail moves. Anything outside 1–7 falls back to Monday rather than silently never matching: a
+     * digest that stops arriving because a column holds 9 is a failure nobody would think to look for.
+     */
+    private function weekday(object $row): int
+    {
+        $day = (int) ($row->digest_weekday ?? 1);
+
+        return $day >= 1 && $day <= 7 ? $day : 1;
+    }
+
+    /**
+     * The day of the month this recipient chose.
+     *
+     * Capped at 28 for the reason the migration gives: a report set for the 30th would never arrive
+     * in February, and would do so silently.
+     */
+    private function monthday(object $row): int
+    {
+        $day = (int) ($row->digest_monthday ?? 1);
+
+        return $day >= 1 && $day <= 28 ? $day : 1;
+    }
+
     private function timezone(string $timezone): string
     {
         return in_array($timezone, timezone_identifiers_list(), true) ? $timezone : 'UTC';
