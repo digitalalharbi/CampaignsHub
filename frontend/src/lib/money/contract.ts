@@ -16,6 +16,19 @@
  */
 
 /** Everything a surface needs to render money honestly. */
+/**
+ * The currency every figure in this product is aggregated and compared in (MONEY-USD-001).
+ *
+ * This is NOT a display preference and not a per-workspace setting. `value` is the column every read
+ * path sums, so one basis is what makes two accounts — or two projects — addable at all. The backend
+ * fixes it in `ReportingCurrency::DEFAULT`; this is the same fact for the surfaces that have to name
+ * it when a payload does not.
+ *
+ * Reach for it only as a FALLBACK for a missing label. A payload that states its own currency is
+ * telling you something this constant cannot: which currency that particular figure is really in.
+ */
+export const CANONICAL_CURRENCY = 'USD'
+
 export type MoneyReading = {
   /** `converted` — a real figure in the reporting currency. `withheld` — real, in its own currency.
    *  `zero` — measured as nothing. `absent` — never reported. `unavailable` — cannot be stated. */

@@ -59,10 +59,12 @@ final class EntityMetricsAreActuallySyncedTest extends TestCase
         $this->assertEqualsWithDelta(90000, (float) $row->impressions, 0.01);
         $this->assertEqualsWithDelta(45000, (float) $row->reach, 0.01, 'Reach is reported, never approximated.');
 
-        // USD account, SAR project, no rate on file: withheld rather than mislabelled.
+        // Riyal account, a project reporting in the canonical USD, no rate on file: withheld rather
+        // than mislabelled. The account is SAR because a USD one converts at par and would prove
+        // nothing about withholding (MONEY-USD-001).
         $this->assertNull($row->spend);
         $this->assertEqualsWithDelta(412.5, (float) $row->spend_original, 0.01);
-        $this->assertSame('USD', $row->original_currency);
+        $this->assertSame('SAR', $row->original_currency);
     }
 
     /**
@@ -126,7 +128,7 @@ final class EntityMetricsAreActuallySyncedTest extends TestCase
             'external_id' => 'act-1',
             'name' => 'Snap',
             'status' => 'active',
-            'currency' => 'USD',
+            'currency' => 'SAR',
             'timezone' => 'Asia/Riyadh',
             'discovered_at' => Carbon::now(),
         ]);
