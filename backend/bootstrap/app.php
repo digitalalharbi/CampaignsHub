@@ -16,6 +16,7 @@ use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
+use App\Domains\Metrics\Console\RenormaliseReportingCurrency;
 use App\Domains\Notifications\Console\RenderMailPreviews;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
@@ -90,6 +91,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // INTEG-RUNTIME §7 — read-only: where a sync's rows stopped, with the four counts. Calls no
         // provider and writes nothing, which is what makes it safe to point at production.
         DiagnoseSyncCommand::class,
+        RenormaliseReportingCurrency::class,
         // INTEG-RUNTIME §7 — asks the provider over a chosen window and stores nothing, which is what
         // separates «the account was quiet» from «the request cannot return rows for this account».
         ProbeInsightsCommand::class,

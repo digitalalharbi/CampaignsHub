@@ -3,6 +3,19 @@ name: CI
 on:
   pull_request:
 
+# One run per pull request, and a new push cancels the one it supersedes.
+#
+# Without this, every push left its predecessor running: eleven open PRs were holding nineteen live
+# CI runs, three of them for the same branch at three different commits. The gate is a three-browser
+# Playwright suite that takes about an hour, so the superseded runs were not merely noise — they held
+# the runners, and the runs that mattered sat queued behind answers nobody was waiting for.
+#
+# Cancelling is safe precisely because a superseded run cannot gate anything: merges are pinned to a
+# tested head, so a green result for an older commit is never what lets a PR land.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     runs-on: ubuntu-latest
