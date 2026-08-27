@@ -1411,76 +1411,17 @@ export function MetricTable({
  * money. Every ratio renders through `metricOrDash`, which prints «—» for a null rather than a zero,
  * because a CPM that could not be computed is not a CPM of nothing.
  */
-function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad_set' | 'ad' }) {
-  const ar = useAr()
-  const q = useEntities(projectId, range, level, undefined, filters)
-  const rows = q.data?.entities ?? []
-  const currency = q.data?.currency ?? null
-
-  const heading = level === 'ad_set'
-    ? (ar ? 'المجموعات الإعلانية' : 'Ad sets')
-    : (ar ? 'الإعلانات' : 'Ads')
-
-  return (
-    <div className="space-y-4">
-      <Panel
-        title={heading}
-        description={ar ? 'مرتّبة حسب الظهور' : 'Ordered by impressions'}
-        loading={q.isLoading}
-        error={q.isError}
-        empty={!q.isLoading && rows.length === 0}
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-sm" data-testid={`entity-table-${level}`}>
-            <thead>
-              <tr className="border-b border-border text-start text-xs text-text-secondary">
-                <th className="p-2 text-start font-medium">{ar ? 'الاسم' : 'Name'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'الإنفاق' : 'Spend'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'الظهور' : 'Impressions'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'الوصول' : 'Reach'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'التكرار' : 'Frequency'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'النقرات' : 'Clicks'}</th>
-                <th className="p-2 text-start font-medium">CTR</th>
-                <th className="p-2 text-start font-medium">CPC</th>
-                <th className="p-2 text-start font-medium">CPM</th>
-                <th className="p-2 text-start font-medium">{ar ? 'النتائج' : 'Results'}</th>
-                <th className="p-2 text-start font-medium">CPA</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...rows]
-                .sort((a, b) => (b.impressions ?? 0) - (a.impressions ?? 0))
-                .map((row) => (
-                  <tr key={row.entity_id} className="border-b border-border/60">
-                    <td className="p-2">
-                      <div className="font-medium text-text-primary">
-                        {/* An entity the sweep has removed keeps its provider id rather than being
-                            called «Unknown», which would hide that it is gone. */}
-                        {row.name ?? row.external_id}
-                      </div>
-                      <div className="text-xs text-text-secondary">{row.external_id}</div>
-                    </td>
-                    <td className="p-2 tnum" dir="ltr">{rowMoney(row, 'spend', currency)}</td>
-                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.impressions)}</td>
-                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.reach)}</td>
-                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.frequency, 2)}</td>
-                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.clicks)}</td>
-                    <td className="p-2 tnum" dir="ltr">{rateOrDash(row.ctr)}</td>
-                    <td className="p-2 tnum" dir="ltr">{rowCostPer(row, 'cpc', row.clicks ?? 0, currency)}</td>
-                    <td className="p-2 tnum" dir="ltr">{rowCostPer(row, 'cpm', (row.impressions ?? 0) / 1000, currency)}</td>
-                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.conversions)}</td>
-                    <td className="p-2 tnum" dir="ltr">{rowCostPer(row, 'cpa', row.conversions ?? 0, currency)}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
-    </div>
-  )
-}
-
-/** A count, or «—». Never 0 for a figure nobody reported — that is a measurement nobody made. */
+/**
+ * A count, or «—». Never 0 for a figure nobody reported — that is a measurement nobody made.
+ *
+ * These live at module scope now. They were declared inside `EntityTab`, so `AccountsTab` reached
+ * them only by hoisting across a sibling's body — which held until the sibling was rewritten and
+ * took them with it. Two tabs sharing a formatter should not depend on which one happens to declare
+ * it.
+ *
+ * NUMERAL-PREFERENCE-002 note: these still format through `toLocaleString('en-US')` rather than the
+ * canonical numeral layer, and are in scope for that sweep.
+ */
 function metricOrDash(value: number | null | undefined, digits = 0): string {
   return typeof value === 'number'
     ? value.toLocaleString('en-US', { maximumFractionDigits: digits })
@@ -1492,20 +1433,100 @@ function rateOrDash(value: number | null | undefined): string {
   return typeof value === 'number' ? `${(value * 100).toFixed(2)}%` : '—'
 }
 
-/**
- * ANALYTICS-OBJECTIVE-VISIBLE-001 — campaigns judged by what they were bought to do.
- *
- * The objective work so far was a backend filter and a KPI list; nothing on screen let an operator
- * SEE the split. This groups the project's campaigns into the eight canonical families and headlines
- * each one with the metrics that family is actually judged by — reach and frequency for awareness,
- * leads and CPL for lead generation, purchases and ROAS for sales.
- *
- * The family comes from the payload, never from a mapping repeated here: `CampaignObjective::family()`
- * is the single definition, and a copy in TypeScript would drift the first time an objective is added.
- *
- * Money renders through the canonical reader, so a withheld figure states its own currency instead of
- * becoming a zero.
- */
+
+function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad_set' | 'ad' }) {
+  const ar = useAr()
+  const q = useEntities(projectId, range, level, undefined, filters)
+  const rows = q.data?.entities ?? []
+  const currency = q.data?.currency ?? null
+
+  const heading = level === 'ad_set'
+    ? (ar ? 'المجموعات الإعلانية' : 'Ad sets')
+    : (ar ? 'الإعلانات' : 'Ads')
+
+  /*
+   * ANALYTICS-TABLES-001 — the canonical table, for the same reasons as the Accounts tab.
+   *
+   * Hand-rolled, numeric columns `text-start` (so the figures and their headings sit against
+   * opposite edges under RTL), and unsortable — on the two levels where an operator most wants to
+   * re-order, because an ad set list is long and the interesting row is rarely the first one.
+   *
+   * Sorting reads the values array, so a withheld spend stays last in both directions instead of
+   * being read as zero, and a derived cost is sortable only where both its parts are real.
+   */
+  const head = [
+    ar ? 'الاسم' : 'Name',
+    ar ? 'الإنفاق' : 'Spend',
+    ar ? 'الظهور' : 'Impressions',
+    ar ? 'الوصول' : 'Reach',
+    ar ? 'التكرار' : 'Frequency',
+    ar ? 'النقرات' : 'Clicks',
+    'CTR',
+    'CPC',
+    'CPM',
+    ar ? 'النتائج' : 'Results',
+    'CPA',
+  ]
+
+  const cells = rows.map((row) => [
+    <div key={row.entity_id}>
+      <div className="font-medium text-text-primary">
+        {/* An entity the sweep has removed keeps its provider id rather than being called
+            «Unknown», which would hide that it is gone. */}
+        {row.name ?? row.external_id}
+      </div>
+      <div className="text-xs text-text-secondary">{row.external_id}</div>
+    </div>,
+    rowMoney(row, 'spend', currency),
+    metricOrDash(row.impressions),
+    metricOrDash(row.reach),
+    metricOrDash(row.frequency, 2),
+    metricOrDash(row.clicks),
+    rateOrDash(row.ctr),
+    rowCostPer(row, 'cpc', row.clicks ?? 0, currency),
+    rowCostPer(row, 'cpm', (row.impressions ?? 0) / 1000, currency),
+    metricOrDash(row.conversions),
+    rowCostPer(row, 'cpa', row.conversions ?? 0, currency),
+  ])
+
+  const money = (row: (typeof rows)[number]) => (typeof row.spend === 'number' ? row.spend : null)
+  const per = (row: (typeof rows)[number], denom: number) => {
+    const spend = money(row)
+
+    return spend !== null && denom > 0 ? spend / denom : null
+  }
+
+  const values: SortValues[] = rows.map((row) => [
+    row.name ?? row.external_id ?? '',
+    money(row),
+    row.impressions ?? null,
+    row.reach ?? null,
+    row.frequency ?? null,
+    row.clicks ?? null,
+    row.ctr ?? null,
+    per(row, row.clicks ?? 0),
+    per(row, (row.impressions ?? 0) / 1000),
+    row.conversions ?? null,
+    per(row, row.conversions ?? 0),
+  ])
+
+  return (
+    <div className="space-y-4">
+      <Panel
+        title={heading}
+        description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
+        loading={q.isLoading}
+        error={q.isError}
+        empty={!q.isLoading && rows.length === 0}
+      >
+        <div data-testid={`entity-table-${level}`}>
+          <MetricTable head={head} rows={cells} values={values} initialSort={{ column: 1, dir: 'desc' }} />
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
 function ObjectiveTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const c = useCampaigns(projectId, range, filters)
@@ -1708,38 +1729,47 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
         error={q.isError}
         empty={!q.isLoading && rows.length === 0}
       >
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-sm" data-testid="creative-analysis-table">
-            <thead>
-              <tr className="border-b border-border text-start text-xs text-text-secondary">
-                <th className="p-2 text-start font-medium">{ar ? 'المحتوى' : 'Creative'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'الحملة' : 'Campaign'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'الهدف' : 'Objective'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'الإنفاق' : 'Spend'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'الظهور' : 'Impressions'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'النقرات' : 'Clicks'}</th>
-                <th className="p-2 text-start font-medium">CTR</th>
-                <th className="p-2 text-start font-medium">{ar ? 'آخر نشاط' : 'Last active'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((cr) => (
-                <tr key={cr.id} className="border-b border-border/60">
-                  <td className="max-w-56 truncate p-2 font-medium text-text-primary">{cr.name}</td>
-                  <td className="max-w-40 truncate p-2 text-text-secondary">{cr.campaign_name ?? '—'}</td>
-                  <td className="p-2 text-text-secondary">{cr.objective ?? '—'}</td>
-                  {/* The canonical money reader: a withheld figure states its own currency. */}
-                  <td className="p-2 tnum" dir="ltr">{rowMoney(cr.metrics ?? undefined, 'spend', currency)}</td>
-                  <td className="p-2 tnum" dir="ltr">{metricOrDash(cr.metrics?.impressions ?? null)}</td>
-                  <td className="p-2 tnum" dir="ltr">{metricOrDash(cr.metrics?.clicks ?? null)}</td>
-                  <td className="p-2 tnum" dir="ltr">{rateOrDash(cr.metrics?.ctr ?? null)}</td>
-                  <td className="p-2 text-text-secondary" dir="ltr">
-                    {cr.freshness?.last_active_at ? fmtDate(cr.freshness.last_active_at) : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/*
+          ANALYTICS-TABLES-001 — the canonical table, last of the four hand-rolled ones.
+          Numeric columns were `text-start`, so under RTL the figures and their headings sat against
+          opposite edges; and the list could not be re-ordered, on the tab where «which creative did
+          best» is the entire question being asked.
+        */}
+        <div data-testid="creative-analysis-table">
+          <MetricTable
+            head={[
+              ar ? 'المحتوى' : 'Creative',
+              ar ? 'الحملة' : 'Campaign',
+              ar ? 'الهدف' : 'Objective',
+              ar ? 'الإنفاق' : 'Spend',
+              ar ? 'الظهور' : 'Impressions',
+              ar ? 'النقرات' : 'Clicks',
+              'CTR',
+              ar ? 'آخر نشاط' : 'Last active',
+            ]}
+            rows={rows.map((cr) => [
+              <span key={cr.id} className="block max-w-56 truncate font-medium text-text-primary">{cr.name}</span>,
+              <span key={`${cr.id}-c`} className="block max-w-40 truncate text-text-secondary">{cr.campaign_name ?? '—'}</span>,
+              cr.objective ?? '—',
+              rowMoney(cr.metrics ?? undefined, 'spend', currency),
+              metricOrDash(cr.metrics?.impressions ?? null),
+              metricOrDash(cr.metrics?.clicks ?? null),
+              rateOrDash(cr.metrics?.ctr ?? null),
+              cr.freshness?.last_active_at ? fmtDate(cr.freshness.last_active_at) : '—',
+            ])}
+            values={rows.map((cr) => [
+              cr.name ?? '',
+              cr.campaign_name ?? '',
+              cr.objective ?? '',
+              typeof cr.metrics?.spend === 'number' ? cr.metrics.spend : null,
+              cr.metrics?.impressions ?? null,
+              cr.metrics?.clicks ?? null,
+              cr.metrics?.ctr ?? null,
+              // A date sorts as a date, not as the string it is printed as.
+              cr.freshness?.last_active_at ? Date.parse(cr.freshness.last_active_at) : null,
+            ])}
+            initialSort={{ column: 3, dir: 'desc' }}
+          />
         </div>
       </Panel>
     </div>
@@ -1764,45 +1794,61 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
   const currency = s.data?.currency ?? null
   const rows = a.data ?? []
 
+  /*
+   * ANALYTICS-TABLES-001 — the canonical table, not a hand-rolled one.
+   *
+   * This built its own `<table>` and so missed everything `MetricTable` had learned. Its numeric
+   * columns were `text-start`: under RTL the figures sat against one edge while their headings sat
+   * against the other, which is the alignment defect #109 fixed everywhere it was already used. And
+   * the rows could not be sorted at all.
+   *
+   * It also said «مرتّبة حسب الإنفاق» — ordered by spend — while sorting by impressions. A caption
+   * that had drifted from its own list, with nothing in place to catch it.
+   *
+   * Sorting reads the values array; the rendered cells stay formatted strings, so money keeps its
+   * provenance and an absent figure stays «—» instead of sorting as a zero.
+   */
+  const head = [
+    ar ? 'الحساب' : 'Account',
+    ar ? 'المنصة' : 'Platform',
+    ar ? 'الإنفاق' : 'Spend',
+    ar ? 'الظهور' : 'Impressions',
+    ar ? 'النقرات' : 'Clicks',
+    'CTR',
+    'CPM',
+  ]
+
+  const cells = rows.map((r) => [
+    r.account_name ?? (ar ? 'حساب لم يعد متاحًا' : 'Account no longer available'),
+    providerLabel(r.provider, ar ? 'ar' : 'en'),
+    rowMoney(r, 'spend', currency),
+    metricOrDash(r.impressions),
+    metricOrDash(r.clicks),
+    rateOrDash(r.ctr),
+    rowCostPer(r, 'cpm', (r.impressions ?? 0) / 1000, currency),
+  ])
+
+  const values: SortValues[] = rows.map((r) => [
+    r.account_name ?? '',
+    providerLabel(r.provider, ar ? 'ar' : 'en'),
+    typeof r.spend === 'number' ? r.spend : null,
+    r.impressions ?? null,
+    r.clicks ?? null,
+    r.ctr ?? null,
+    // CPM is derived, so it is only sortable where both parts are real — never from a coalesced zero.
+    (r.impressions ?? 0) > 0 && typeof r.spend === 'number' ? r.spend / ((r.impressions ?? 0) / 1000) : null,
+  ])
+
   return (
     <Panel
       title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'}
-      description={ar ? 'مرتّبة حسب الإنفاق' : 'Ordered by spend'}
+      description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
       loading={a.isLoading}
       error={a.isError}
       empty={!a.isLoading && rows.length === 0}
     >
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm" data-testid="account-table">
-          <thead>
-            <tr className="border-b border-border text-start text-xs text-text-secondary">
-              <th className="p-2 text-start font-medium">{ar ? 'الحساب' : 'Account'}</th>
-              <th className="p-2 text-start font-medium">{ar ? 'المنصة' : 'Platform'}</th>
-              <th className="p-2 text-start font-medium">{ar ? 'الإنفاق' : 'Spend'}</th>
-              <th className="p-2 text-start font-medium">{ar ? 'الظهور' : 'Impressions'}</th>
-              <th className="p-2 text-start font-medium">{ar ? 'النقرات' : 'Clicks'}</th>
-              <th className="p-2 text-start font-medium">CTR</th>
-              <th className="p-2 text-start font-medium">CPM</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...rows]
-              .sort((x, y) => (y.impressions ?? 0) - (x.impressions ?? 0))
-              .map((r) => (
-                <tr key={`${r.account_id ?? 'none'}-${r.provider}`} className="border-b border-border/60">
-                  <td className="p-2 font-medium text-text-primary">
-                    {r.account_name ?? (ar ? 'حساب لم يعد متاحًا' : 'Account no longer available')}
-                  </td>
-                  <td className="p-2 text-text-secondary">{providerLabel(r.provider, ar ? 'ar' : 'en')}</td>
-                  <td className="p-2 tnum" dir="ltr">{rowMoney(r, 'spend', currency)}</td>
-                  <td className="p-2 tnum" dir="ltr">{metricOrDash(r.impressions)}</td>
-                  <td className="p-2 tnum" dir="ltr">{metricOrDash(r.clicks)}</td>
-                  <td className="p-2 tnum" dir="ltr">{rateOrDash(r.ctr)}</td>
-                  <td className="p-2 tnum" dir="ltr">{rowCostPer(r, 'cpm', (r.impressions ?? 0) / 1000, currency)}</td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+      <div data-testid="account-table">
+        <MetricTable head={head} rows={cells} values={values} initialSort={{ column: 2, dir: 'desc' }} />
       </div>
     </Panel>
   )
