@@ -4,11 +4,17 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Campaigns\Creative\RankingDirection;
+use App\Domains\Campaigns\Creative\RankingMetric;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
+
 /**
  * Ranks "top items" (campaigns today; ad-level once connectors provide it) by objective-appropriate
- * criteria and returns a human-readable REASON for each — never an opaque score. Sales ranks by ROAS,
- * awareness by reach/CPM, traffic by CTR/CPC, leads by CPA, video by completion. The caller decides
- * the level; this only orders + explains.
+ * criteria and returns a human-readable REASON for each — never an opaque score.
+ *
+ * WHICH criterion belongs to which objective is no longer decided here: `RankingMetric` owns that, so
+ * this report, the Pulse and the email digest cannot disagree about what «best» means. The caller
+ * decides the level; this orders by the canonical metric and explains the result in words.
  */
 final class CreativeRankingService
 {
@@ -116,15 +122,45 @@ final class CreativeRankingService
         };
     }
 
-    /** @return array{0:string,1:string,2:callable} sort key, direction, reason builder */
+    /**
+     * The metric, its direction, and the sentence that explains the verdict — CREATIVE-RANK-001.
+     *
+     * The first two now come from `RankingMetric`, the one place that knows what an objective is
+     * judged on and which way is better. This class decided both privately, and so did
+     * `CreativePulse` and `DigestCreatives`, with three different metric sets between them — `leads`
+     * in one of the three, `cpl` in none. «Best creative» was a different question depending on which
+     * screen asked it.
+     *
+     * What stays here is the REASON: prose, in Arabic, naming the figure that produced the verdict.
+     * That is a reporting concern and belongs to the report rather than to the ranking contract.
+     *
+     * The objective strings arriving here are the report's own vocabulary — `app_installs` rather
+     * than `app` — so they are mapped to the canonical family instead of being assumed to match.
+     *
+     * @return array{0:string,1:string,2:callable} sort key, direction, reason builder
+     */
     private function strategy(string $objective): array
     {
-        return match ($objective) {
-            'awareness', 'video' => ['cpm', 'asc', fn ($i) => sprintf('أعلى مدى بأقل CPM (%s).', $this->fmt($i['cpm'] ?? null))],
-            'traffic' => ['ctr', 'desc', fn ($i) => sprintf('أعلى CTR (%s) بتكلفة نقرة %s.', $this->pct($i['ctr'] ?? null), $this->fmt($i['cpc'] ?? null))],
-            'leads', 'app_installs' => ['cpa', 'asc', fn ($i, $avgCpa) => sprintf('أقل تكلفة نتيجة (CPA %s)%s.', $this->fmt($i['cpa'] ?? null), $avgCpa && ($i['cpa'] ?? INF) < $avgCpa ? ' أقل من متوسط الحملة' : '')],
-            default => ['roas', 'desc', fn ($i, $avgCpa) => sprintf('أعلى ROAS (%s×)%s.', $this->num($i['roas'] ?? null), $avgCpa && ($i['cpa'] ?? INF) < $avgCpa ? ' مع CPA أقل من المتوسط' : '')],
+        $family = ObjectiveFamily::tryFrom($objective) ?? match ($objective) {
+            'app_installs' => ObjectiveFamily::App,
+            'conversions', 'purchases' => ObjectiveFamily::Sales,
+            default => ObjectiveFamily::Sales,
         };
+
+        $key = RankingMetric::forObjective($family)['primary'] ?? 'roas';
+        $direction = RankingMetric::of($key)->direction === RankingDirection::LowerIsBetter ? 'asc' : 'desc';
+
+        $reason = match ($family) {
+            ObjectiveFamily::Awareness => fn ($i) => sprintf('أقل تكلفة ألف ظهور (CPM %s).', $this->fmt($i['cpm'] ?? null)),
+            ObjectiveFamily::Video => fn ($i) => sprintf('أقل تكلفة مشاهدة (%s).', $this->fmt($i['cost_per_view'] ?? null)),
+            ObjectiveFamily::Traffic => fn ($i) => sprintf('أعلى CTR (%s) بتكلفة نقرة %s.', $this->pct($i['ctr'] ?? null), $this->fmt($i['cpc'] ?? null)),
+            ObjectiveFamily::Leads => fn ($i) => sprintf('أقل تكلفة عميل محتمل (CPL %s).', $this->fmt($i['cpl'] ?? null)),
+            ObjectiveFamily::App => fn ($i) => sprintf('أقل تكلفة تثبيت (CPI %s).', $this->fmt($i['cpi'] ?? null)),
+            ObjectiveFamily::Engagement => fn ($i) => sprintf('أعلى معدل تفاعل (%s).', $this->pct($i['engagement_rate'] ?? null)),
+            default => fn ($i, $avgCpa = null) => sprintf('أعلى ROAS (%s×)%s.', $this->num($i['roas'] ?? null), $avgCpa && ($i['cpa'] ?? INF) < $avgCpa ? ' مع CPA أقل من المتوسط' : ''),
+        };
+
+        return [$key, $direction, $reason];
     }
 
     private function average(array $items, string $key): ?float
