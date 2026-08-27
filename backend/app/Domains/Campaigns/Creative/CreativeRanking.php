@@ -30,6 +30,52 @@ final class CreativeRanking
     public const NO_OBJECTIVE = 'no_objective';
 
     /**
+     * The metric to rank THIS set by — the objective's primary, unless nothing reports it.
+     *
+     * `CreativePulse` had this behaviour and it is worth keeping: a conversion campaign is judged on
+     * ROAS, but an account whose platform never returns revenue has no ROAS at all, and ranking every
+     * creative as «unmeasured» tells the reader nothing they can act on. It fell back to CPA, which
+     * that same account does report.
+     *
+     * Generalised here so every consumer gets it rather than one. The primary wins whenever any row
+     * reports it; otherwise the first secondary that is both rankable and actually present is used.
+     * If nothing in the layout is reported, null comes back and the caller says so — «this scope
+     * cannot be ranked» is an answer, and a better one than an arbitrary order.
+     *
+     * The fallback is deliberately availability-driven and not preference-driven: it asks what the
+     * provider returned, never what would look better.
+     *
+     * Row SHAPE is the caller's business. `CreativePulse` carries metrics under `metrics.<key>`, the
+     * report carries them flat, and a contract that assumed either would silently answer «nothing is
+     * reported» for the other — which is exactly what it did on the first attempt, sending every
+     * objective to its fallback. `$value` lets each consumer say how to read its own rows.
+     *
+     * @param  list<array<string,mixed>>  $rows
+     * @param  (callable(array<string,mixed>, string): mixed)|null  $value
+     */
+    public function resolveMetric(array $rows, ObjectiveFamily $family, ?callable $value = null): ?string
+    {
+        $value ??= static fn (array $r, string $key) => $r[$key] ?? null;
+        $layout = RankingMetric::forObjective($family);
+        $reported = static fn (string $key): bool => array_any(
+            $rows,
+            static fn (array $r): bool => is_numeric($value($r, $key)),
+        );
+
+        if ($layout['primary'] !== null && $reported($layout['primary'])) {
+            return $layout['primary'];
+        }
+
+        foreach ($layout['secondary'] as $key) {
+            if (RankingMetric::isRankable($key) && $reported($key)) {
+                return $key;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Order rows best-first for the objective they were bought for.
      *
      * @param  list<array<string,mixed>>  $rows  each carrying the metric keys, plus optional
