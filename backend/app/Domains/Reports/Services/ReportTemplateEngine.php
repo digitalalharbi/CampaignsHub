@@ -65,8 +65,9 @@ final class ReportTemplateEngine
     /**
      * @param  list<string>  $platforms  providers present in the data
      * @param  bool  $adSetsReported  whether any platform broke its figures down to the ad-squad grain
+     * @param  bool  $adsReported  the same question one rung further down
      */
-    public function defaultConfig(string $objective, array $platforms, bool $adSetsReported = false): array
+    public function defaultConfig(string $objective, array $platforms, bool $adSetsReported = false, bool $adsReported = false): array
     {
         $objective = array_key_exists($objective, self::METRIC_SETS) ? $objective : 'custom';
         $ordered = $this->orderPlatforms($platforms);
@@ -116,6 +117,11 @@ final class ReportTemplateEngine
          */
         if ($adSetsReported) {
             $slides[] = ['id' => 'ad_set_performance', 'type' => 'ad_set_performance', 'order' => $order++, 'visible' => true];
+        }
+
+        // The ad grain, on the same terms: only where a platform actually reported it.
+        if ($adsReported) {
+            $slides[] = ['id' => 'ad_performance', 'type' => 'ad_performance', 'order' => $order++, 'visible' => true];
         }
 
         // Cross-platform closing slides.

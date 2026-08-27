@@ -147,6 +147,19 @@ export function PrintDocument({
 
   const adSetsReported = data.entity_grains_reported?.ad_set ?? adSetRows.length > 0
 
+  const adRows = (data.ads ?? [])
+    .slice()
+    .sort((a, b) => Number(b.spend ?? 0) - Number(a.spend ?? 0))
+    .map((r: Row) => [
+      r.name ? String(r.name) : 'Unnamed ad',
+      money(r.spend == null ? null : Number(r.spend), currency),
+      nfmt(r.impressions == null ? null : Number(r.impressions)),
+      nfmt(r.clicks == null ? null : Number(r.clicks)),
+      r.ctr == null ? '—' : `${nfmt(Number(r.ctr) * 100, { maximumFractionDigits: 2 })}%`,
+    ])
+
+  const adsReported = data.entity_grains_reported?.ad ?? adRows.length > 0
+
   return (
     <div className="doc-root">
       <style>{DOC_CSS}</style>
@@ -191,6 +204,14 @@ export function PrintDocument({
           ? <Table head={['Ad set', 'Spend', 'Impressions', 'Clicks', 'CTR']} rows={adSetRows} />
           : <p className="doc-empty">The platform did not report ad-set level figures for this period.</p>}
       </section>
+
+      {/* Ads — the rung below the ad set, on the same terms */}
+      {adsReported && (
+        <section className="doc-section">
+          <h2>{n()}. Ads</h2>
+          <Table head={['Ad', 'Spend', 'Impressions', 'Clicks', 'CTR']} rows={adRows} />
+        </section>
+      )}
 
       {/*
         * Creative performance — present in the deck, absent here until now (REPORT-PRINT-001).

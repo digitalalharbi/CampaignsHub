@@ -384,3 +384,51 @@ describe('the ad-squad slide', () => {
     expect(screen.getByText('مجموعة بلا اسم على المنصة')).toBeInTheDocument()
   })
 })
+
+/**
+ * The ad grain, on the same terms — REPORT-ADSET-001 names both rungs.
+ *
+ * One component renders both, because they differ only in wording. Two near-identical tables is how
+ * the second one quietly stops matching the first: the empty-state rule, the unnamed-row rule and the
+ * ordering would each have to be remembered twice.
+ */
+describe('the ad slide', () => {
+  const slide: Slide = { id: 'ad_performance', type: 'ad_performance', order: 1, visible: true }
+
+  it('lists ads, highest spend first, with the ad wording', () => {
+    const withAds: ReportData = {
+      ...brand,
+      ads: [
+        { entity_id: 'a', name: 'فيديو ٩:١٦', spend: 300, impressions: 40_000, clicks: 150, ctr: 0.0037, conversions: 8 },
+        { entity_id: 'b', name: 'صورة ثابتة', spend: 800, impressions: 70_000, clicks: 260, ctr: 0.0037, conversions: 14 },
+      ],
+      entity_grains_reported: { ad: true },
+    }
+
+    render(<SlideBody slide={slide} data={withAds} meta={meta} />)
+
+    expect(screen.getByText('أداء الإعلانات')).toBeInTheDocument()
+    const names = screen.getAllByText(/فيديو|صورة/).map((n) => n.textContent)
+    expect(names[0]).toContain('صورة')
+  })
+
+  it('says the platform did not break out ads, rather than showing an empty table', () => {
+    render(<SlideBody slide={slide} data={{ ...brand, ads: [], entity_grains_reported: { ad: false } }} meta={meta} />)
+
+    expect(screen.getByText(/لم تُرجع المنصة تفاصيل على مستوى الإعلانات/)).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+
+  it('never prints a provider identifier for an unnamed ad', () => {
+    const unnamed: ReportData = {
+      ...brand,
+      ads: [{ entity_id: 'a', external_id: 'ad-3c91f0', name: null, spend: 300, impressions: 40_000, clicks: 150, ctr: 0.0037 }],
+      entity_grains_reported: { ad: true },
+    }
+
+    render(<SlideBody slide={slide} data={unnamed} meta={meta} />)
+
+    expect(screen.queryByText(/ad-3c91f0/)).not.toBeInTheDocument()
+    expect(screen.getByText('إعلان بلا اسم على المنصة')).toBeInTheDocument()
+  })
+})
