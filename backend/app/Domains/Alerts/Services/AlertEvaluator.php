@@ -435,8 +435,9 @@ final class AlertEvaluator
      * 50.00», which is not a cost increase; it is a rate arriving. The operator would be paged for
      * an FX gap.
      *
-     * So both windows must be fully converted — `spend_withheld_rows === 0` on each — or there is no
-     * verdict. This is the same rule the cards and the charts follow: a partial figure is not a
+     * So both windows must be fully converted — `spend_withheld_rows === 0` on each — AND completely
+     * covered, since a failed or stale provider leaves the same hole an unconverted one does. Either
+     * way there is no verdict. This is the same rule the cards and the charts follow: a partial figure is not a
      * smaller figure, and nothing may be derived from it.
      *
      * A zero previous cost is also refused: every increase from zero is infinite, and «up ∞%» is not
@@ -461,6 +462,28 @@ final class AlertEvaluator
                 $prev = $this->totalsFor((string) $c->id, $prevFrom, $prevTo);
 
                 // Either window holding withheld money has no comparable cost — no verdict, no alert.
+                /*
+                 * AGGREGATION-TRUTH-001 widened this guard, and the reason is the paging.
+                 *
+                 * It refused a verdict when money was withheld for want of an exchange rate, which was
+                 * right and too narrow: a provider whose sync FAILED produces exactly the same shape —
+                 * a total missing a contributor that should be in it — and the comparison then reads
+                 * «CPA rose from 12.00 to 50.00» when what actually happened is that a platform stopped
+                 * reporting. The operator gets paged for a broken connector wearing a cost increase's
+                 * name, which is the most expensive kind of false alarm: it is actionable, and every
+                 * action it suggests is wrong.
+                 *
+                 * Coverage answers the general question — is this total the whole answer — so both
+                 * windows must now be complete, not merely fully converted.
+                 */
+                $curComplete = ($cur['coverage']['state'] ?? 'complete') === 'complete';
+                $prevComplete = ($prev['coverage']['state'] ?? 'complete') === 'complete';
+
+                if (! $curComplete || ! $prevComplete) {
+                    // A closure over each campaign — `return` is this iteration's «no verdict».
+                    return;
+                }
+
                 if ((int) ($cur['spend_withheld_rows'] ?? 0) > 0 || (int) ($prev['spend_withheld_rows'] ?? 0) > 0) {
                     return;
                 }

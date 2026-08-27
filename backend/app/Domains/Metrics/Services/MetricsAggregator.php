@@ -8,10 +8,14 @@ use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Services\CreativeFunnel;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Metrics\Coverage\AggregateCoverage;
+use App\Domains\Metrics\Coverage\ContributorCoverage;
 use App\Domains\Metrics\Enums\MoneyState;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\ValueObjects\MoneyScope;
 use App\Domains\Projects\Concerns\ProjectScope;
+use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Support\AdPlatforms;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
@@ -407,7 +411,60 @@ final class MetricsAggregator
             array_keys($select),
         )))->first();
 
-        return $this->withDerived((array) $row);
+        $out = $this->withDerived((array) $row);
+
+        /*
+         * AGGREGATION-TRUTH-001 — the figures above are a SUM of what arrived. This says whether what
+         * arrived is everything that should have.
+         *
+         * It rides beside the numbers rather than changing them: a caller doing arithmetic still gets
+         * a scalar, and a caller about to print «total spend» can ask whether it is entitled to that
+         * word. Encoding the answer into the figure — as a null, or as a zero — is exactly how this
+         * defect got in, because `COALESCE(SUM(value), 0)` is right about arithmetic and silent about
+         * coverage, and the two needed separating rather than one of them being answered differently.
+         *
+         * `coverage` is scope-wide because the contributor question is: which PLATFORMS owed this
+         * window figures. Per-metric support is a different question and `reportedKeysByProvider()`
+         * already answers it.
+         */
+        $out['coverage'] = $this->coverage($from, $to);
+        // Money inherits it. Named per metric because a caller reads one figure, not the payload.
+        $out['spend_coverage'] = $out['coverage'];
+        $out['revenue_coverage'] = $out['coverage'];
+
+        return $out;
+    }
+
+    /**
+     * Who owed this window figures, and what state each of them is actually in.
+     *
+     * @return array<string, mixed>
+     */
+    private function coverage(Carbon $from, Carbon $to): array
+    {
+        $tenantId = app(TenantContext::class)->tenantId();
+
+        if ($tenantId === null) {
+            // No tenant in context — a platform-level read. Nothing is claimed rather than guessed.
+            return AggregateCoverage::complete()->toArray();
+        }
+
+        return app(ContributorCoverage::class)->forWindow(
+            $tenantId,
+            /*
+             * One project or none. A multi-project scope (the Client Command Center) spans several
+             * lifecycles at once, and answering «is this partial» across them would need a per-project
+             * answer rolled up — which is a real question and not this commit's. Passing null keeps
+             * the coverage scope-wide for the tenant rather than silently attributing one project's
+             * gaps to another's total.
+             */
+            $this->projectIds !== null && count($this->projectIds) === 1
+                ? $this->projectIds[0]
+                : app(ProjectContext::class)->projectId(),
+            $from,
+            $to,
+            $this->providers,
+        )->toArray();
     }
 
     /**
@@ -974,7 +1031,7 @@ final class MetricsAggregator
     /** @return list<array<string, mixed>> daily rows: date + requested base metrics + derived roas/cpa. */
     public function timeseries(Carbon $from, Carbon $to): array
     {
-        return $this->base($from, $to)
+        $series = $this->base($from, $to)
             ->select('metric_date')
             ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", self::PIVOT, array_keys(self::PIVOT))))
             ->groupBy('metric_date')
@@ -982,6 +1039,41 @@ final class MetricsAggregator
             ->get()
             ->map(fn ($r) => ['date' => Carbon::parse($r->metric_date)->toDateString()] + $this->withDerived((array) $r))
             ->all();
+
+        /*
+         * AGGREGATION-TRUTH-001 — eligibility is a question about EACH DAY, not about the window.
+         *
+         * A platform that stopped on the 15th was a contributor until the 15th and is not one after
+         * it. Judging the whole window at once gets both halves wrong in opposite directions: it
+         * either keeps the platform expected all month, so every later day reads as a shortfall and
+         * the chart draws a cliff nobody's budget fell off — or it drops the platform entirely and
+         * silently rewrites the days it really did spend.
+         *
+         * Each point therefore carries the contributors expected on ITS OWN date, so a renderer can
+         * tell «this day is lower» from «this day is missing someone».
+         */
+        $tenantId = app(TenantContext::class)->tenantId();
+
+        if ($tenantId === null) {
+            return $series;
+        }
+
+        $projectId = $this->projectIds !== null && count($this->projectIds) === 1
+            ? $this->projectIds[0]
+            : app(ProjectContext::class)->projectId();
+
+        $coverage = app(ContributorCoverage::class);
+
+        return array_map(function (array $point) use ($coverage, $tenantId, $projectId): array {
+            $day = Carbon::parse((string) $point['date']);
+            $onThatDay = $coverage->forWindow($tenantId, $projectId, $day, $day, $this->providers);
+
+            return $point + [
+                'expected_contributors' => $onThatDay->toArray()['expected_contributors'],
+                'coverage_state' => $onThatDay->isComplete() ? 'complete' : 'partial',
+                'excluded_contributors' => $onThatDay->degraded(),
+            ];
+        }, $series);
     }
 
     /** @return array<string, list<array<string,mixed>>> daily series per provider (for per-platform charts). */
