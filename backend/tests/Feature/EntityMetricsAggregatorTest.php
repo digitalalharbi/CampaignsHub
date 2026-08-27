@@ -275,6 +275,71 @@ final class EntityMetricsAggregatorTest extends TestCase
         ), 'The setter mutated the shared instance, so one bounded section would silently bound the rest.');
     }
 
+    /**
+     * The ad-set bound means «these squads» at BOTH grains, and reads a different column to say so.
+     *
+     * At the squad grain the id IS the row's `entity_id`; at the ad grain it is the row's PARENT,
+     * `external_ad_set_id`. One list, two columns — and getting it backwards fails silently in the
+     * direction that looks fine: asking for two squads at the ad grain would match on `entity_id`,
+     * find no ad whose own id is a squad id, and render «the platform reported no ads» over a campaign
+     * that was running perfectly well.
+     */
+    public function test_the_ad_set_bound_reads_the_squads_own_id_at_the_squad_grain(): void
+    {
+        $mine = (string) Str::uuid();
+        $theirs = (string) Str::uuid();
+        $this->row($mine, '2026-08-01', ['spend' => 100]);
+        $this->row($theirs, '2026-08-01', ['spend' => 900]);
+
+        $rows = $this->aggregator->forAdSets([$mine])->byEntity(
+            $this->project->id, EntityDailyMetric::AD_SET,
+            Carbon::parse('2026-07-25'), Carbon::parse('2026-08-10'),
+        );
+
+        $this->assertCount(1, $rows);
+        $this->assertSame($mine, $rows[0]['entity_id']);
+    }
+
+    /** …and the squad's id as the PARENT at the ad grain. */
+    public function test_the_ad_set_bound_reads_the_parent_at_the_ad_grain(): void
+    {
+        $squad = (string) Str::uuid();
+        $otherSquad = (string) Str::uuid();
+        $adInside = (string) Str::uuid();
+        $adOutside = (string) Str::uuid();
+
+        $this->adRow($adInside, $squad, '2026-08-01', ['spend' => 120]);
+        $this->adRow($adOutside, $otherSquad, '2026-08-01', ['spend' => 480]);
+
+        $rows = $this->aggregator->forAdSets([$squad])->byEntity(
+            $this->project->id, EntityDailyMetric::AD,
+            Carbon::parse('2026-07-25'), Carbon::parse('2026-08-10'),
+        );
+
+        $this->assertCount(1, $rows, 'The bound matched on the ad’s own id, so a live squad renders as reporting nothing.');
+        $this->assertSame($adInside, $rows[0]['entity_id']);
+        $this->assertEqualsWithDelta(120.0, (float) $rows[0]['spend'], 0.01);
+    }
+
+    /** One ad row, under a named parent squad. */
+    private function adRow(string $adId, string $adSetId, string $date, array $values): void
+    {
+        (new EntityDailyMetric)->forceFill([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'provider' => 'snapchat',
+            'entity_type' => EntityDailyMetric::AD,
+            'entity_id' => $adId,
+            'external_entity_id' => 'ad-'.substr($adId, 0, 6),
+            'external_ad_set_id' => $adSetId,
+            'metric_date' => $date,
+            'attribution_window' => 'default',
+            'is_demo' => false,
+            ...$values,
+        ])->save();
+    }
+
     /** One ad account for the campaigns to hang off — the column is NOT NULL and carries a key. */
     private function account(): string
     {
