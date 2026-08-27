@@ -191,6 +191,20 @@ export function AdPlatformsPanel() {
   const connectors = sortByPlatform(query.data ?? [], (c) => c.key)
 
   /*
+   * INTEG-STORES-001 — the two kinds are rendered apart, for the reason the API returns them apart.
+   *
+   * A store carries no `ad_account_id` and none of the five ad-platform states. Rendered as an
+   * ad-platform card those fields come out empty, and an empty ad-platform card reads as a platform
+   * that tried to connect and failed — a worse statement than the stores being missing from this page,
+   * which is the defect this requirement exists to fix.
+   *
+   * A row with no `kind` is treated as advertising: that is every row this endpoint returned before
+   * stores were added, and defaulting the other way would empty the page against an older backend.
+   */
+  const advertising = connectors.filter((c) => (c.kind ?? 'advertising') === 'advertising')
+  const stores = connectors.filter((c) => c.kind === 'commerce')
+
+  /*
    * ORCH-100 §39 §41 — where each authorisation has actually got to.
    *
    * Derived server-side from the record, so an authorisation left mid-way days ago still knows it is
@@ -307,7 +321,7 @@ export function AdPlatformsPanel() {
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {connectors.map((c) => (
+          {advertising.map((c) => (
             <ConnectorCard
               key={c.key}
               connector={c}
@@ -327,6 +341,52 @@ export function AdPlatformsPanel() {
           ))}
         </div>
       )}
+
+        {/*
+          * INTEG-STORES-001 — the other two things this product integrates with.
+          *
+          * Salla and Zid are declared in the same `ProviderCatalogue` as the ad platforms, carry the
+          * same credential fields and the same webhook configuration, and appeared nowhere here: a
+          * customer looking at «integrations» saw six of the eight and had no way to learn the other
+          * two existed.
+          *
+          * Their own section, with only the facts a store HAS — its state, when data last arrived and
+          * the error if there is one. No ad-account count and no account wizard: borrowing the
+          * ad-platform card would print those as blanks, and a blank on a connection card reads as a
+          * failure rather than as a field that does not apply.
+          */}
+        {!query.isLoading && !query.isError && !wizardConnectionId && stores.length > 0 && (
+          <div className="mt-8">
+            <h3 className="mb-3 text-sm font-semibold text-text-secondary" data-testid="stores-heading">
+              {ar ? 'المتاجر' : 'Stores'}
+            </h3>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {stores.map((c) => (
+                <Card key={c.key} data-testid="store-card" data-platform={c.key}>
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle>{c.label}</CardTitle>
+                    <Badge tone={LEGACY_META[c.status].tone} data-testid={`store-state-${c.key}`}>
+                      {ar ? LEGACY_META[c.status].ar : LEGACY_META[c.status].en}
+                    </Badge>
+                  </div>
+                  <CardDescription>
+                    {c.last_sync_error
+                      ? <span className="text-danger" data-testid={`store-error-${c.key}`}>{c.last_sync_error}</span>
+                      : c.last_synced_at
+                        ? <span data-testid={`store-synced-${c.key}`}>{c.last_synced_at.slice(0, 10)}</span>
+                        : (
+                          /* Never «0 orders» — nothing has arrived, and a zero would be a measurement. */
+                          <span data-testid={`store-never-synced-${c.key}`}>
+                            {ar ? 'لم تصل بيانات بعد' : 'No data has arrived yet'}
+                          </span>
+                        )}
+                  </CardDescription>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
     </section>
   )
 }
