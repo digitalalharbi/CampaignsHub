@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Services;
 
+use App\Domains\Campaigns\Creative\CreativeRanking;
+use App\Domains\Campaigns\Creative\RankingDirection;
+use App\Domains\Campaigns\Creative\RankingMetric;
 use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use Illuminate\Support\Carbon;
 
 /**
@@ -46,7 +50,10 @@ final class CreativePulse
     /** How many rows a list section carries. The full count travels beside it — never a silent cut. */
     private const LIST_LIMIT = 6;
 
-    public function __construct(private readonly CreativeMetrics $metrics) {}
+    public function __construct(
+        private readonly CreativeMetrics $metrics,
+        private readonly CreativeRanking $ranking,
+    ) {}
 
     /**
      * @param  list<array<string, mixed>>  $rows  presented creatives, with `previous` attached
@@ -187,13 +194,25 @@ final class CreativePulse
      */
     private function decisive(string $path, array $rows): array
     {
-        return match ($path) {
-            MarketingPath::Traffic->value => ['key' => 'ctr', 'higher_wins' => true],
-            MarketingPath::Conversion->value => $this->anyReported($rows, 'roas')
-                ? ['key' => 'roas', 'higher_wins' => true]
-                : ['key' => 'cpa', 'higher_wins' => false],
-            default => ['key' => 'cpm', 'higher_wins' => false],
-        };
+        /*
+         * CREATIVE-RANK-001 — the contract decides, and availability decides the fallback.
+         *
+         * This was a private three-way map over `MarketingPath`: traffic → CTR, conversion → ROAS or
+         * CPA, everything else → CPM. Coarser than the objective the creative was actually bought
+         * for, and a third different answer to «best creative» beside the report's and the digest's.
+         *
+         * The ROAS→CPA fallback it had was the good part and is not lost: `resolveMetric` now does it
+         * for every objective, because an account whose platform returns no revenue has no ROAS at
+         * all, and ranking every creative as «unmeasured» tells a reader nothing they can act on.
+         */
+        $family = $this->familyFor($path);
+        $key = $this->ranking->resolveMetric(
+            $rows,
+            $family,
+            static fn (array $row, string $metric) => $row['metrics'][$metric] ?? null,
+        ) ?? 'cpm';
+
+        return ['key' => $key, 'higher_wins' => RankingMetric::of($key)->direction === RankingDirection::HigherIsBetter];
     }
 
     /**
@@ -680,15 +699,20 @@ final class CreativePulse
     }
 
     /** @param list<array<string, mixed>> $rows */
-    private function anyReported(array $rows, string $key): bool
+    /**
+     * The objective family a marketing path stands for.
+     *
+     * A path is coarser than an objective — «conversion» covers both a sales campaign and a lead
+     * campaign, which are bought at different costs. Mapped explicitly so the widening is visible;
+     * where a row carries its own objective, the caller should prefer that.
+     */
+    private function familyFor(string $path): ObjectiveFamily
     {
-        foreach ($rows as $row) {
-            if (is_numeric($row['metrics'][$key] ?? null)) {
-                return true;
-            }
-        }
-
-        return false;
+        return match ($path) {
+            MarketingPath::Traffic->value => ObjectiveFamily::Traffic,
+            MarketingPath::Conversion->value => ObjectiveFamily::Sales,
+            default => ObjectiveFamily::Awareness,
+        };
     }
 
     /** @param list<array<string, mixed>> $rows */

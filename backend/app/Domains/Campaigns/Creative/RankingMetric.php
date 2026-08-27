@@ -168,6 +168,11 @@ final class RankingMetric
              * report carrying `cpa` and no `cpl` resolves to nothing and ranks nothing at all.
              */
             ObjectiveFamily::Leads => ['primary' => 'cpl', 'secondary' => ['cpa', 'conversion_rate', 'leads', 'qualified_leads']],
+            /*
+             * The same rule one line down: `cpa` precedes `purchases`. An account whose platform
+             * returns no revenue has no ROAS, and the honest next question is «what did each
+             * conversion cost», not «who got the most».
+             */
             ObjectiveFamily::Sales => ['primary' => 'roas', 'secondary' => ['cpa', 'purchases', 'revenue', 'aov', 'conversion_rate']],
             ObjectiveFamily::App => ['primary' => 'cpi', 'secondary' => ['installs', 'registrations', 'in_app_events']],
             ObjectiveFamily::Unknown => ['primary' => null, 'secondary' => ['spend', 'impressions', 'clicks']],

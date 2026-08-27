@@ -79,4 +79,49 @@ final class CreativeRankingParityTest extends TestCase
             $this->assertSame('asc', $direction, "cheapest must lead for '{$objective}'");
         }
     }
+
+    public function test_every_rankable_metric_can_be_named_in_a_digest(): void
+    {
+        /*
+         * The digest turned a metric into an Arabic sentence with its own four-entry map — roas, cpa,
+         * cpm, ctr — and returned null for anything else. Once the Pulse could rank on `cpl`, `cpi`,
+         * `cost_per_view` or `engagement_rate`, a lead, app, video or engagement campaign would have
+         * had its best creative silently unexplained: the email looks complete, minus a line nobody
+         * knew to expect.
+         *
+         * Every metric an objective can be ranked by must therefore carry a name in the registry.
+         */
+        foreach (self::REPORT_OBJECTIVES as $objective => $family) {
+            $layout = RankingMetric::forObjective($family);
+
+            foreach (array_merge([$layout['primary']], $layout['secondary']) as $key) {
+                if ($key === null || ! RankingMetric::isRankable($key)) {
+                    continue;
+                }
+
+                $spec = RankingMetric::of($key);
+                $this->assertNotSame('', $spec->labelAr, "'{$key}' has no Arabic name");
+                $this->assertNotSame('', $spec->labelEn, "'{$key}' has no English name");
+            }
+        }
+    }
+
+    public function test_the_fallback_prefers_efficiency_over_volume(): void
+    {
+        /*
+         * `resolveMetric` walks `secondary` in order when the primary is unreported, so that order is
+         * load-bearing. Sales listed `purchases` before `cpa`, and an account whose platform returns
+         * no revenue fell back to a purchase COUNT — which ranks by budget, the same trap that made
+         * `reach` wrong for awareness.
+         */
+        $sales = RankingMetric::forObjective(ObjectiveFamily::Sales)['secondary'];
+        $this->assertLessThan(
+            array_search('purchases', $sales, true),
+            array_search('cpa', $sales, true),
+            'cost must precede volume in the fallback order',
+        );
+
+        $traffic = RankingMetric::forObjective(ObjectiveFamily::Traffic)['secondary'];
+        $this->assertLessThan(array_search('clicks', $traffic, true), array_search('cpc', $traffic, true));
+    }
 }
