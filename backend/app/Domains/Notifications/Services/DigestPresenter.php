@@ -262,6 +262,34 @@ final class DigestPresenter
         'revenue' => ['ar' => 'قيمة الطلبات', 'en' => 'Order value', 'kind' => 'money'],
         'cpa' => ['ar' => 'تكلفة النتيجة', 'en' => 'Cost per result', 'kind' => 'money', 'lower_is_better' => true],
         'roas' => ['ar' => 'العائد على الإنفاق', 'en' => 'Return on ad spend', 'kind' => 'ratio'],
+        'aov' => ['ar' => 'متوسط قيمة الطلب', 'en' => 'Average order value', 'kind' => 'money'],
+
+        /*
+         * CREATIVE-RANK-002 — the objectives this table could not describe.
+         *
+         * A metric that reaches the renderer without an entry here gets no label, no unit, and
+         * `lower_is_better => false` by omission. So a leads digest could not name its own cost per
+         * lead, and had it arrived anyway a RISING CPL would have been coloured as an improvement —
+         * the direction defaulting to «up is good» because nobody had said otherwise.
+         *
+         * `layoutFor` already gives lead, app and engagement campaigns these as their primary KPI.
+         * The table was written when the product reported conversions and revenue, and never caught
+         * up with the objectives that came after.
+         */
+        'leads' => ['ar' => 'العملاء المحتملون', 'en' => 'Leads', 'kind' => 'count'],
+        'qualified_leads' => ['ar' => 'المؤهلون', 'en' => 'Qualified leads', 'kind' => 'count'],
+        'cpl' => ['ar' => 'تكلفة العميل المحتمل', 'en' => 'Cost per lead', 'kind' => 'money', 'lower_is_better' => true],
+        'conversion_rate' => ['ar' => 'معدل التحويل', 'en' => 'Conversion rate', 'kind' => 'percent'],
+        'engagements' => ['ar' => 'التفاعلات', 'en' => 'Engagements', 'kind' => 'count'],
+        'engagement_rate' => ['ar' => 'معدل التفاعل', 'en' => 'Engagement rate', 'kind' => 'percent'],
+        'cpe' => ['ar' => 'تكلفة التفاعل', 'en' => 'Cost per engagement', 'kind' => 'money', 'lower_is_better' => true],
+        'installs' => ['ar' => 'التثبيتات', 'en' => 'Installs', 'kind' => 'count'],
+        'registrations' => ['ar' => 'التسجيلات', 'en' => 'Registrations', 'kind' => 'count'],
+        'in_app_events' => ['ar' => 'أحداث داخل التطبيق', 'en' => 'In-app events', 'kind' => 'count'],
+        'cpi' => ['ar' => 'تكلفة التثبيت', 'en' => 'Cost per install', 'kind' => 'money', 'lower_is_better' => true],
+        'video_completions' => ['ar' => 'المشاهدات المكتملة', 'en' => 'Completions', 'kind' => 'count'],
+        'video_completion_rate' => ['ar' => 'معدل الإكمال', 'en' => 'Completion rate', 'kind' => 'percent'],
+        'cost_per_view' => ['ar' => 'تكلفة المشاهدة', 'en' => 'Cost per view', 'kind' => 'money', 'lower_is_better' => true],
     ];
 
     /**
