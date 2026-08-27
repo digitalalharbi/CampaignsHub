@@ -36,8 +36,22 @@ test.describe('CAMPAIGN-010 — five ways to read the same campaigns', () => {
     await page.goto('/app/campaigns')
     await expect(page.getByTestId('view-overview')).toBeVisible({ timeout: 20000 })
 
+    /*
+     * Wait for the view to have CHANGED, not merely for the page to have text.
+     *
+     * This polled `innerText().length > 200` after clicking, and the view it was leaving already
+     * satisfied that — so on a slow render it read the previous view's text and reported «the cards
+     * view is showing the overview» against a page that was working. The length check cannot tell the
+     * two views apart, which is the one thing the assertion afterwards depends on.
+     *
+     * `aria-pressed` is the button's own statement that the click landed, and it is already rendered.
+     * Waiting on it asserts the precondition instead of hoping for it: a click that genuinely fails
+     * still fails the test, and now says so as «the tab never became selected» rather than as a false
+     * accusation about the view.
+     */
     const read = async (mode: string) => {
       await page.getByTestId(`view-${mode}`).click()
+      await expect(page.getByTestId(`view-${mode}`)).toHaveAttribute('aria-pressed', 'true', { timeout: 20000 })
       await expect.poll(async () => (await page.locator('main').innerText()).length, { timeout: 20000 })
         .toBeGreaterThan(200)
       return page.locator('main').innerText()
@@ -55,6 +69,8 @@ test.describe('CAMPAIGN-010 — five ways to read the same campaigns', () => {
     await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
     await page.goto('/app/campaigns')
     await page.getByTestId('view-cards').click()
+    // The click landed, before anything is read from it — see `read()` above.
+    await expect(page.getByTestId('view-cards')).toHaveAttribute('aria-pressed', 'true', { timeout: 20000 })
     await expect.poll(async () => await page.getByTestId('campaign-card').count(), { timeout: 20000 })
       .toBeGreaterThan(0)
 
@@ -97,6 +113,8 @@ test.describe('CAMPDET-010 — the campaign in depth', () => {
     await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
     await page.goto('/app/campaigns')
     await page.getByTestId('view-cards').click()
+    // The click landed, before anything is read from it — see `read()` above.
+    await expect(page.getByTestId('view-cards')).toHaveAttribute('aria-pressed', 'true', { timeout: 20000 })
     await expect.poll(async () => await page.getByTestId('campaign-card').count(), { timeout: 20000 })
       .toBeGreaterThan(0)
     await page.getByTestId('campaign-card').filter({ hasNotText: 'E2E ' }).first().click()
@@ -148,6 +166,8 @@ test.describe('XREL-001 — where this campaign sits', () => {
     await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
     await page.goto('/app/campaigns')
     await page.getByTestId('view-cards').click()
+    // The click landed, before anything is read from it — see `read()` above.
+    await expect(page.getByTestId('view-cards')).toHaveAttribute('aria-pressed', 'true', { timeout: 20000 })
     await expect.poll(async () => await page.getByTestId('campaign-card').count(), { timeout: 20000 })
       .toBeGreaterThan(0)
     await page.getByTestId('campaign-card').filter({ hasNotText: 'E2E ' }).first().click()
