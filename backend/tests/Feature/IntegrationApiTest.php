@@ -44,7 +44,7 @@ final class IntegrationApiTest extends TestCase
      * is the surface that filters it, so «what this product integrates with» and «what a test can
      * drive» stay separate facts.
      */
-    public function test_index_lists_the_six_ad_platforms_and_no_local_fake(): void
+    public function test_index_lists_all_eight_providers_and_no_local_fake(): void
     {
         app(TenantContext::class)->forget();
 
@@ -57,11 +57,24 @@ final class IntegrationApiTest extends TestCase
         // The SET, sorted. The product's reading order is a rendering decision and is asserted where
         // it is made — `integrations.spec.ts`, against `@/lib/platforms`.
         sort($keys);
-        $this->assertSame(['google_ads', 'linkedin', 'meta', 'snapchat', 'tiktok', 'x'], $keys);
+        // INTEG-STORES-001 — eight, which is what this controller's own comment always said. It
+        // walked the advertising registry, so Salla and Zid — declared in the same catalogue, with the
+        // same credential fields — appeared nowhere on the Integration Center. A customer looking at
+        // «integrations» saw six of the eight things this product integrates with.
+        $this->assertSame(['google_ads', 'linkedin', 'meta', 'salla', 'snapchat', 'tiktok', 'x', 'zid'], $keys);
         $this->assertNotContains('sandbox', $keys);
 
         $meta = collect($data)->firstWhere('key', 'meta');
         $this->assertSame('awaiting_credentials', $meta['status']);
+        $this->assertSame('advertising', $meta['kind']);
+
+        // A store says what it is, and carries none of the ad-platform keys — a null `ad_account_id`
+        // would make it look like an ad platform that failed to connect, which is a worse lie than
+        // being absent was.
+        $zid = collect($data)->firstWhere('key', 'zid');
+        $this->assertSame('commerce', $zid['kind']);
+        $this->assertArrayNotHasKey('ad_account_id', $zid);
+        $this->assertArrayHasKey('status', $zid);
     }
 
     /**

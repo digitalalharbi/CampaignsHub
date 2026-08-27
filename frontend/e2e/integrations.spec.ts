@@ -26,6 +26,16 @@ test.describe('the integrations surface', () => {
    */
   const AD_PLATFORMS = ['snapchat', 'tiktok', 'meta', 'google_ads', 'x', 'linkedin']
 
+  /** The two stores, which complete the eight this product integrates with. */
+  const STORES = ['salla', 'zid']
+
+  /** The STORE CARDS — a separate section, deliberately not `platform-card`. */
+  async function storeKeys(page: import('@playwright/test').Page): Promise<string[]> {
+    return page.locator('[data-testid="store-card"]').evaluateAll((els) =>
+      els.map((el) => (el as HTMLElement).dataset.platform ?? '').filter(Boolean),
+    )
+  }
+
   /** The PLATFORM CARDS, in the order the page offers them. */
   async function platformKeys(page: import('@playwright/test').Page): Promise<string[]> {
     return page.locator('[data-testid="platform-card"]').evaluateAll((els) =>
@@ -39,6 +49,39 @@ test.describe('the integrations surface', () => {
     await expect.poll(async () => (await platformKeys(page)).length, { timeout: 20000 }).toBe(6)
 
     expect(await platformKeys(page)).toEqual(AD_PLATFORMS)
+  })
+
+  /**
+   * The other two of the eight — INTEG-STORES-001.
+   *
+   * Salla and Zid are declared in the same catalogue as the ad platforms and were reachable only
+   * through a separate Stores panel, so a customer on this page saw six of the eight things this
+   * product integrates with and had no way to learn the other two existed.
+   */
+  test('the two stores complete the eight, in their own section', async ({ page }) => {
+    await page.goto('/app/integrations')
+    await expect(page.locator('main')).toBeVisible()
+    await expect.poll(async () => (await storeKeys(page)).length, { timeout: 20000 }).toBe(2)
+
+    expect((await storeKeys(page)).sort()).toEqual([...STORES].sort())
+    await expect(page.getByTestId('stores-heading')).toBeVisible()
+  })
+
+  /**
+   * A store is not an ad platform that failed to connect.
+   *
+   * It has no ad account and none of the five ad-platform states. Rendered as an ad-platform card
+   * those fields come out blank, and a blank on a connection card reads as a failure rather than as a
+   * field that does not apply — which is why the store keys must NOT appear among the platform cards.
+   */
+  test('a store is never rendered as an ad platform', async ({ page }) => {
+    await page.goto('/app/integrations')
+    await expect.poll(async () => (await platformKeys(page)).length, { timeout: 20000 }).toBe(6)
+
+    const platforms = await platformKeys(page)
+    for (const store of STORES) {
+      expect(platforms).not.toContain(store)
+    }
   })
 
   /**
