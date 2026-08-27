@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
+use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
 use Illuminate\Support\Carbon;
@@ -277,6 +278,43 @@ final class ReportScope
         }
         if ($this->accountIds !== []) {
             $engine = $engine->forAccounts($this->accountIds);
+        }
+        if ($this->objectives !== [] || $this->paths !== []) {
+            $engine = $engine->forObjectives($this->objectivesIncludingPaths());
+        }
+
+        return $engine;
+    }
+
+    /**
+     * The same scope, applied to the ad-squad and ad grains.
+     *
+     * REPORT-ADSET-001 — a separate method because those grains live in `entity_daily_metrics`, which
+     * is a different table with a different shape and its own aggregator. The scope has to reach it
+     * anyway: a report applies its bounds ONCE and every section reads the result, and a section that
+     * quietly skipped them would contradict the KPI cards above it with no way for a reader to tell
+     * which number was real.
+     *
+     * `adSetIds` is passed through as its own axis rather than being collapsed into the campaigns
+     * behind it. `resolvedCampaignIds()` widens a squad selection to its whole campaign, which is
+     * correct for `daily_metrics` — that table has no finer grain to offer — and wrong here, where
+     * asking for two squads and receiving every squad in their campaign is a different answer.
+     */
+    public function applyToEntities(EntityMetricsAggregator $engine): EntityMetricsAggregator
+    {
+        $campaigns = $this->resolvedCampaignIds();
+
+        if ($campaigns !== null) {
+            $engine = $engine->forCampaigns($campaigns);
+        }
+        if ($this->providers !== []) {
+            $engine = $engine->forProviders($this->providers);
+        }
+        if ($this->accountIds !== []) {
+            $engine = $engine->forAccounts($this->accountIds);
+        }
+        if ($this->adSetIds !== []) {
+            $engine = $engine->forAdSets($this->adSetIds);
         }
         if ($this->objectives !== [] || $this->paths !== []) {
             $engine = $engine->forObjectives($this->objectivesIncludingPaths());
