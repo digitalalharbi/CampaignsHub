@@ -224,6 +224,25 @@ final class ObjectivePerformance
             'spend' => 0.0, 'impressions' => 0.0, 'clicks' => 0.0,
             'landing_page_views' => 0.0, 'orders' => 0.0, 'revenue' => 0.0,
             'campaigns' => [],
+            /*
+             * AGGREGATION-TRUTH-001 — these zeros describe an EMPTY PATH, not a quiet one.
+             *
+             * A project with no awareness campaign at all and a project whose awareness campaigns
+             * spent nothing produce the identical row, and they are different facts: the first has no
+             * contributor, the second has one that did nothing. Read as spend, the zeros say «we ran
+             * awareness and it cost nothing», which is a claim about money that was never budgeted.
+             *
+             * The figures stay zero because callers sum them and a null would break that arithmetic;
+             * the state travels beside them instead, which is the same separation `AggregateCoverage`
+             * makes. A surface that shows this path can now say «no campaigns on this path» rather
+             * than printing a row of zeros that invites a comparison against the paths that ran.
+             */
+            'coverage' => [
+                'state' => 'no_contributors',
+                'expected_contributors' => [],
+                'included_contributors' => [],
+                'excluded_contributors' => [],
+            ],
         ];
     }
 
