@@ -7,6 +7,7 @@ namespace App\Domains\Reports\Http\Controllers;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ShareService;
@@ -163,7 +164,7 @@ final class LiveReportBuilderController extends Controller
             'status' => 'completed',
             'period_start' => $data['from'],
             'period_end' => $data['to'],
-            'currency' => 'SAR',
+            'currency' => ReportingCurrency::DEFAULT,
             'created_by' => $request->user()->id,
             'generated_at' => Carbon::now(),
             /*

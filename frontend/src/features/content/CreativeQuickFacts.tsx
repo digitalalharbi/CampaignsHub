@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { useUi } from '@/stores/ui'
+import { CANONICAL_CURRENCY } from '@/lib/money/contract'
 
 /**
  * Everything needed to judge one creative, beside the creative — UX-CONTENT-001.
@@ -208,7 +209,7 @@ export function CreativeQuickFacts({
   const creative = data.creative
   const metrics: CreativeMetrics | null = data.metrics
   const previous: CreativeMetrics | null = data.previous
-  const currency = data.currency ?? 'SAR'
+  const currency = data.currency ?? CANONICAL_CURRENCY
   const copy = creative.copy
   const hasCopy = Boolean(copy.headline || copy.body || copy.cta || creative.destination_url)
   /*
