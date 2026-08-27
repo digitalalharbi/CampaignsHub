@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Campaigns\Creative\CreativeRanking;
 use App\Domains\Campaigns\Creative\RankingDirection;
 use App\Domains\Campaigns\Creative\RankingMetric;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
@@ -18,6 +19,14 @@ use App\Domains\Campaigns\Enums\ObjectiveFamily;
  */
 final class CreativeRankingService
 {
+    /** Metrics an operator scans for by their short name, and the prefix each verdict carries. */
+    private const ACRONYM = [
+        'roas' => 'ROAS ', 'cpa' => 'CPA ', 'cpl' => 'CPL ', 'cpc' => 'CPC ', 'cpm' => 'CPM ',
+        'cpe' => 'CPE ', 'cpi' => 'CPI ', 'ctr' => 'CTR ', 'aov' => 'AOV ', 'cost_per_view' => 'CPV ',
+    ];
+
+    public function __construct(private readonly CreativeRanking $ranking = new CreativeRanking) {}
+
     /** @param list<array<string, mixed>> $items rows with metric keys (spend, roas, cpa, ctr, ...) */
     public function rank(string $objective, array $items, int $limit = 5): array
     {
@@ -25,7 +34,7 @@ final class CreativeRankingService
         $avgCpa = $this->average($items, 'cpa');
         $avgCtr = $this->average($items, 'ctr');
 
-        [$sortKey, $direction, $reason] = $this->strategy($objective);
+        [$sortKey, $direction, $reason] = $this->strategy($objective, $items);
 
         usort($items, function ($a, $b) use ($sortKey, $direction) {
             $va = $a[$sortKey] ?? null;
@@ -65,7 +74,7 @@ final class CreativeRankingService
      */
     public function worst(string $objective, array $items, int $limit = 5): array
     {
-        [$sortKey, $direction] = $this->strategy($objective);
+        [$sortKey, $direction] = $this->strategy($objective, $items);
 
         // Spending, and actually measured on the metric it is being judged by.
         $measured = array_values(array_filter(
@@ -139,7 +148,7 @@ final class CreativeRankingService
      *
      * @return array{0:string,1:string,2:callable} sort key, direction, reason builder
      */
-    private function strategy(string $objective): array
+    private function strategy(string $objective, array $items = []): array
     {
         $family = ObjectiveFamily::tryFrom($objective) ?? match ($objective) {
             'app_installs' => ObjectiveFamily::App,
@@ -147,17 +156,57 @@ final class CreativeRankingService
             default => ObjectiveFamily::Sales,
         };
 
-        $key = RankingMetric::forObjective($family)['primary'] ?? 'roas';
-        $direction = RankingMetric::of($key)->direction === RankingDirection::LowerIsBetter ? 'asc' : 'desc';
+        /*
+         * Availability decides, within the objective's own layout.
+         *
+         * Ranking strictly by the primary ranks NOTHING when the provider did not return it — a
+         * leads report whose rows carry `cpa` but no `cpl` would come back empty, which is worse than
+         * the old private map it replaced. `resolveMetric` takes the primary when anything reports
+         * it and otherwise the first secondary that does, in efficiency-before-volume order.
+         */
+        $key = $this->ranking->resolveMetric($items, $family) ?? RankingMetric::forObjective($family)['primary'] ?? 'roas';
+        $spec = RankingMetric::of($key);
+        $direction = $spec->direction === RankingDirection::LowerIsBetter ? 'asc' : 'desc';
 
-        $reason = match ($family) {
-            ObjectiveFamily::Awareness => fn ($i) => sprintf('أقل تكلفة ألف ظهور (CPM %s).', $this->fmt($i['cpm'] ?? null)),
-            ObjectiveFamily::Video => fn ($i) => sprintf('أقل تكلفة مشاهدة (%s).', $this->fmt($i['cost_per_view'] ?? null)),
-            ObjectiveFamily::Traffic => fn ($i) => sprintf('أعلى CTR (%s) بتكلفة نقرة %s.', $this->pct($i['ctr'] ?? null), $this->fmt($i['cpc'] ?? null)),
-            ObjectiveFamily::Leads => fn ($i) => sprintf('أقل تكلفة عميل محتمل (CPL %s).', $this->fmt($i['cpl'] ?? null)),
-            ObjectiveFamily::App => fn ($i) => sprintf('أقل تكلفة تثبيت (CPI %s).', $this->fmt($i['cpi'] ?? null)),
-            ObjectiveFamily::Engagement => fn ($i) => sprintf('أعلى معدل تفاعل (%s).', $this->pct($i['engagement_rate'] ?? null)),
-            default => fn ($i, $avgCpa = null) => sprintf('أعلى ROAS (%s×)%s.', $this->num($i['roas'] ?? null), $avgCpa && ($i['cpa'] ?? INF) < $avgCpa ? ' مع CPA أقل من المتوسط' : ''),
+        /*
+         * The sentence names the figure that ACTUALLY produced the verdict.
+         *
+         * These were written per objective and each hardcoded its objective's primary — so a leads
+         * report ranked on `cpa`, because the provider returned no `cpl`, still read «أقل تكلفة عميل
+         * محتمل (CPL —)»: the right order explained by a figure that is not there. A reason that
+         * names a different number from the one that decided the order is worse than no reason.
+         *
+         * `RankingMetric` already carries the Arabic name and the direction, so the phrasing follows
+         * the metric — «أقل» for a cost, «أعلى» for a return — and a metric added to a layout is
+         * explained without editing this file.
+         */
+        $label = $spec->labelAr;
+        $lead = $spec->direction === RankingDirection::LowerIsBetter ? 'أقل' : 'أعلى';
+
+        $reason = function (array $i) use ($key, $label, $lead): string {
+            $value = $i[$key] ?? null;
+
+            if (! is_numeric($value)) {
+                // The row was ranked on something; if this one has no figure it was excluded, and
+                // claiming a verdict for it would be inventing one.
+                return sprintf('%s %s (—).', $lead, $label);
+            }
+
+            $shown = match ($key) {
+                'ctr', 'engagement_rate', 'conversion_rate', 'video_completion_rate' => $this->pct((float) $value),
+                'roas' => $this->num((float) $value).'×',
+                default => $this->fmt((float) $value),
+            };
+
+            /*
+             * The acronym travels with the Arabic name.
+             *
+             * «أقل تكلفة النتيجة (25)» is correct and unscannable: an operator reading a column of
+             * verdicts looks for CPA, CPL, ROAS. The label says what the figure means; the acronym
+             * is what they are searching for. Only the metrics that HAVE an acronym get one —
+             * `leads` or `reach` would read absurdly as «(LEADS 40)».
+             */
+            return sprintf('%s %s (%s%s).', $lead, $label, self::ACRONYM[$key] ?? '', $shown);
         };
 
         return [$key, $direction, $reason];
