@@ -16,6 +16,7 @@ import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
+import { CANONICAL_CURRENCY } from '@/lib/money/contract'
 
 /**
  * §15.6 — one creative, on its own page.
@@ -279,7 +280,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
   const data = detail.data
   const creative = data?.creative
   const metrics: CreativeMetrics | null = data?.metrics ?? null
-  const currency = data?.currency ?? 'SAR'
+  const currency = data?.currency ?? CANONICAL_CURRENCY
 
   const trendRows = useMemo(() => {
     if (!data) return []
