@@ -1411,76 +1411,17 @@ export function MetricTable({
  * money. Every ratio renders through `metricOrDash`, which prints «—» for a null rather than a zero,
  * because a CPM that could not be computed is not a CPM of nothing.
  */
-function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad_set' | 'ad' }) {
-  const ar = useAr()
-  const q = useEntities(projectId, range, level, undefined, filters)
-  const rows = q.data?.entities ?? []
-  const currency = q.data?.currency ?? null
-
-  const heading = level === 'ad_set'
-    ? (ar ? 'المجموعات الإعلانية' : 'Ad sets')
-    : (ar ? 'الإعلانات' : 'Ads')
-
-  return (
-    <div className="space-y-4">
-      <Panel
-        title={heading}
-        description={ar ? 'مرتّبة حسب الظهور' : 'Ordered by impressions'}
-        loading={q.isLoading}
-        error={q.isError}
-        empty={!q.isLoading && rows.length === 0}
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-sm" data-testid={`entity-table-${level}`}>
-            <thead>
-              <tr className="border-b border-border text-start text-xs text-text-secondary">
-                <th className="p-2 text-start font-medium">{ar ? 'الاسم' : 'Name'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'الإنفاق' : 'Spend'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'الظهور' : 'Impressions'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'الوصول' : 'Reach'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'التكرار' : 'Frequency'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'النقرات' : 'Clicks'}</th>
-                <th className="p-2 text-start font-medium">CTR</th>
-                <th className="p-2 text-start font-medium">CPC</th>
-                <th className="p-2 text-start font-medium">CPM</th>
-                <th className="p-2 text-start font-medium">{ar ? 'النتائج' : 'Results'}</th>
-                <th className="p-2 text-start font-medium">CPA</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...rows]
-                .sort((a, b) => (b.impressions ?? 0) - (a.impressions ?? 0))
-                .map((row) => (
-                  <tr key={row.entity_id} className="border-b border-border/60">
-                    <td className="p-2">
-                      <div className="font-medium text-text-primary">
-                        {/* An entity the sweep has removed keeps its provider id rather than being
-                            called «Unknown», which would hide that it is gone. */}
-                        {row.name ?? row.external_id}
-                      </div>
-                      <div className="text-xs text-text-secondary">{row.external_id}</div>
-                    </td>
-                    <td className="p-2 tnum" dir="ltr">{rowMoney(row, 'spend', currency)}</td>
-                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.impressions)}</td>
-                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.reach)}</td>
-                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.frequency, 2)}</td>
-                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.clicks)}</td>
-                    <td className="p-2 tnum" dir="ltr">{rateOrDash(row.ctr)}</td>
-                    <td className="p-2 tnum" dir="ltr">{rowCostPer(row, 'cpc', row.clicks ?? 0, currency)}</td>
-                    <td className="p-2 tnum" dir="ltr">{rowCostPer(row, 'cpm', (row.impressions ?? 0) / 1000, currency)}</td>
-                    <td className="p-2 tnum" dir="ltr">{metricOrDash(row.conversions)}</td>
-                    <td className="p-2 tnum" dir="ltr">{rowCostPer(row, 'cpa', row.conversions ?? 0, currency)}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
-    </div>
-  )
-}
-
-/** A count, or «—». Never 0 for a figure nobody reported — that is a measurement nobody made. */
+/**
+ * A count, or «—». Never 0 for a figure nobody reported — that is a measurement nobody made.
+ *
+ * These live at module scope now. They were declared inside `EntityTab`, so `AccountsTab` reached
+ * them only by hoisting across a sibling's body — which held until the sibling was rewritten and
+ * took them with it. Two tabs sharing a formatter should not depend on which one happens to declare
+ * it.
+ *
+ * NUMERAL-PREFERENCE-002 note: these still format through `toLocaleString('en-US')` rather than the
+ * canonical numeral layer, and are in scope for that sweep.
+ */
 function metricOrDash(value: number | null | undefined, digits = 0): string {
   return typeof value === 'number'
     ? value.toLocaleString('en-US', { maximumFractionDigits: digits })
@@ -1492,20 +1433,100 @@ function rateOrDash(value: number | null | undefined): string {
   return typeof value === 'number' ? `${(value * 100).toFixed(2)}%` : '—'
 }
 
-/**
- * ANALYTICS-OBJECTIVE-VISIBLE-001 — campaigns judged by what they were bought to do.
- *
- * The objective work so far was a backend filter and a KPI list; nothing on screen let an operator
- * SEE the split. This groups the project's campaigns into the eight canonical families and headlines
- * each one with the metrics that family is actually judged by — reach and frequency for awareness,
- * leads and CPL for lead generation, purchases and ROAS for sales.
- *
- * The family comes from the payload, never from a mapping repeated here: `CampaignObjective::family()`
- * is the single definition, and a copy in TypeScript would drift the first time an objective is added.
- *
- * Money renders through the canonical reader, so a withheld figure states its own currency instead of
- * becoming a zero.
- */
+
+function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad_set' | 'ad' }) {
+  const ar = useAr()
+  const q = useEntities(projectId, range, level, undefined, filters)
+  const rows = q.data?.entities ?? []
+  const currency = q.data?.currency ?? null
+
+  const heading = level === 'ad_set'
+    ? (ar ? 'المجموعات الإعلانية' : 'Ad sets')
+    : (ar ? 'الإعلانات' : 'Ads')
+
+  /*
+   * ANALYTICS-TABLES-001 — the canonical table, for the same reasons as the Accounts tab.
+   *
+   * Hand-rolled, numeric columns `text-start` (so the figures and their headings sit against
+   * opposite edges under RTL), and unsortable — on the two levels where an operator most wants to
+   * re-order, because an ad set list is long and the interesting row is rarely the first one.
+   *
+   * Sorting reads the values array, so a withheld spend stays last in both directions instead of
+   * being read as zero, and a derived cost is sortable only where both its parts are real.
+   */
+  const head = [
+    ar ? 'الاسم' : 'Name',
+    ar ? 'الإنفاق' : 'Spend',
+    ar ? 'الظهور' : 'Impressions',
+    ar ? 'الوصول' : 'Reach',
+    ar ? 'التكرار' : 'Frequency',
+    ar ? 'النقرات' : 'Clicks',
+    'CTR',
+    'CPC',
+    'CPM',
+    ar ? 'النتائج' : 'Results',
+    'CPA',
+  ]
+
+  const cells = rows.map((row) => [
+    <div key={row.entity_id}>
+      <div className="font-medium text-text-primary">
+        {/* An entity the sweep has removed keeps its provider id rather than being called
+            «Unknown», which would hide that it is gone. */}
+        {row.name ?? row.external_id}
+      </div>
+      <div className="text-xs text-text-secondary">{row.external_id}</div>
+    </div>,
+    rowMoney(row, 'spend', currency),
+    metricOrDash(row.impressions),
+    metricOrDash(row.reach),
+    metricOrDash(row.frequency, 2),
+    metricOrDash(row.clicks),
+    rateOrDash(row.ctr),
+    rowCostPer(row, 'cpc', row.clicks ?? 0, currency),
+    rowCostPer(row, 'cpm', (row.impressions ?? 0) / 1000, currency),
+    metricOrDash(row.conversions),
+    rowCostPer(row, 'cpa', row.conversions ?? 0, currency),
+  ])
+
+  const money = (row: (typeof rows)[number]) => (typeof row.spend === 'number' ? row.spend : null)
+  const per = (row: (typeof rows)[number], denom: number) => {
+    const spend = money(row)
+
+    return spend !== null && denom > 0 ? spend / denom : null
+  }
+
+  const values: SortValues[] = rows.map((row) => [
+    row.name ?? row.external_id ?? '',
+    money(row),
+    row.impressions ?? null,
+    row.reach ?? null,
+    row.frequency ?? null,
+    row.clicks ?? null,
+    row.ctr ?? null,
+    per(row, row.clicks ?? 0),
+    per(row, (row.impressions ?? 0) / 1000),
+    row.conversions ?? null,
+    per(row, row.conversions ?? 0),
+  ])
+
+  return (
+    <div className="space-y-4">
+      <Panel
+        title={heading}
+        description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
+        loading={q.isLoading}
+        error={q.isError}
+        empty={!q.isLoading && rows.length === 0}
+      >
+        <div data-testid={`entity-table-${level}`}>
+          <MetricTable head={head} rows={cells} values={values} initialSort={{ column: 1, dir: 'desc' }} />
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
 function ObjectiveTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const c = useCampaigns(projectId, range, filters)
