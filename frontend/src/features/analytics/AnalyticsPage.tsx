@@ -1764,45 +1764,61 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
   const currency = s.data?.currency ?? null
   const rows = a.data ?? []
 
+  /*
+   * ANALYTICS-TABLES-001 — the canonical table, not a hand-rolled one.
+   *
+   * This built its own `<table>` and so missed everything `MetricTable` had learned. Its numeric
+   * columns were `text-start`: under RTL the figures sat against one edge while their headings sat
+   * against the other, which is the alignment defect #109 fixed everywhere it was already used. And
+   * the rows could not be sorted at all.
+   *
+   * It also said «مرتّبة حسب الإنفاق» — ordered by spend — while sorting by impressions. A caption
+   * that had drifted from its own list, with nothing in place to catch it.
+   *
+   * Sorting reads the values array; the rendered cells stay formatted strings, so money keeps its
+   * provenance and an absent figure stays «—» instead of sorting as a zero.
+   */
+  const head = [
+    ar ? 'الحساب' : 'Account',
+    ar ? 'المنصة' : 'Platform',
+    ar ? 'الإنفاق' : 'Spend',
+    ar ? 'الظهور' : 'Impressions',
+    ar ? 'النقرات' : 'Clicks',
+    'CTR',
+    'CPM',
+  ]
+
+  const cells = rows.map((r) => [
+    r.account_name ?? (ar ? 'حساب لم يعد متاحًا' : 'Account no longer available'),
+    providerLabel(r.provider, ar ? 'ar' : 'en'),
+    rowMoney(r, 'spend', currency),
+    metricOrDash(r.impressions),
+    metricOrDash(r.clicks),
+    rateOrDash(r.ctr),
+    rowCostPer(r, 'cpm', (r.impressions ?? 0) / 1000, currency),
+  ])
+
+  const values: SortValues[] = rows.map((r) => [
+    r.account_name ?? '',
+    providerLabel(r.provider, ar ? 'ar' : 'en'),
+    typeof r.spend === 'number' ? r.spend : null,
+    r.impressions ?? null,
+    r.clicks ?? null,
+    r.ctr ?? null,
+    // CPM is derived, so it is only sortable where both parts are real — never from a coalesced zero.
+    (r.impressions ?? 0) > 0 && typeof r.spend === 'number' ? r.spend / ((r.impressions ?? 0) / 1000) : null,
+  ])
+
   return (
     <Panel
       title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'}
-      description={ar ? 'مرتّبة حسب الإنفاق' : 'Ordered by spend'}
+      description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
       loading={a.isLoading}
       error={a.isError}
       empty={!a.isLoading && rows.length === 0}
     >
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm" data-testid="account-table">
-          <thead>
-            <tr className="border-b border-border text-start text-xs text-text-secondary">
-              <th className="p-2 text-start font-medium">{ar ? 'الحساب' : 'Account'}</th>
-              <th className="p-2 text-start font-medium">{ar ? 'المنصة' : 'Platform'}</th>
-              <th className="p-2 text-start font-medium">{ar ? 'الإنفاق' : 'Spend'}</th>
-              <th className="p-2 text-start font-medium">{ar ? 'الظهور' : 'Impressions'}</th>
-              <th className="p-2 text-start font-medium">{ar ? 'النقرات' : 'Clicks'}</th>
-              <th className="p-2 text-start font-medium">CTR</th>
-              <th className="p-2 text-start font-medium">CPM</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...rows]
-              .sort((x, y) => (y.impressions ?? 0) - (x.impressions ?? 0))
-              .map((r) => (
-                <tr key={`${r.account_id ?? 'none'}-${r.provider}`} className="border-b border-border/60">
-                  <td className="p-2 font-medium text-text-primary">
-                    {r.account_name ?? (ar ? 'حساب لم يعد متاحًا' : 'Account no longer available')}
-                  </td>
-                  <td className="p-2 text-text-secondary">{providerLabel(r.provider, ar ? 'ar' : 'en')}</td>
-                  <td className="p-2 tnum" dir="ltr">{rowMoney(r, 'spend', currency)}</td>
-                  <td className="p-2 tnum" dir="ltr">{metricOrDash(r.impressions)}</td>
-                  <td className="p-2 tnum" dir="ltr">{metricOrDash(r.clicks)}</td>
-                  <td className="p-2 tnum" dir="ltr">{rateOrDash(r.ctr)}</td>
-                  <td className="p-2 tnum" dir="ltr">{rowCostPer(r, 'cpm', (r.impressions ?? 0) / 1000, currency)}</td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+      <div data-testid="account-table">
+        <MetricTable head={head} rows={cells} values={values} initialSort={{ column: 2, dir: 'desc' }} />
       </div>
     </Panel>
   )
