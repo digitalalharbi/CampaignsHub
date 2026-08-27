@@ -15,6 +15,7 @@ use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Turns raw signals into alerts, honestly and without storms.
@@ -30,6 +31,38 @@ use Illuminate\Support\Facades\DB;
  */
 final class AlertEvaluator
 {
+    /**
+     * The types THIS evaluator raises on a schedule.
+     *
+     * `AlertController::TYPES` is what a person may create; this is what actually gets evaluated, and
+     * the two drifted. `cpa_increase` and `cpl_increase` were accepted by the controller, labelled in
+     * the alerts page («ارتفاع CPA»), named in this class's own docblock — and fell through `match`'s
+     * `default => []`. The rule saved, listed as active, and could never fire. A silent no-op is worse
+     * than a missing feature: the operator believes they are covered.
+     *
+     * `AlertEvaluatorCoverageTest` asserts PERIODIC + EVENT_DRIVEN + UNRAISED equals the controller's set,
+     * so the two cannot drift apart again without a red test.
+     */
+    public const PERIODIC = [
+        'budget_risk', 'cpa_increase', 'cpl_increase', 'roas_drop',
+        'no_results', 'sync_failure', 'token_expiry',
+    ];
+
+    /** Raised by the thing that failed, not by a sweep — a report failing is an event, not a threshold. */
+    public const EVENT_DRIVEN = ['report_failed'];
+
+    /**
+     * Creatable, and raised by nothing at all — ALERT-SLA-UNRAISED-001.
+     *
+     * `sla_warning` is offered by the picker and accepted by the controller, and no code anywhere
+     * raises it. (`EvaluateSla` emits `request.sla_warning` in the Requests domain — a different
+     * vocabulary.) Withdrawing it means moving the `alert.type` taxonomy option and the controller
+     * list together, with a migration for the options already seeded in production; doing only part
+     * of that turns a silent rule into a rejected form. It is named here so the coverage test can
+     * assert it is KNOWN rather than merely missing.
+     */
+    public const UNRAISED = ['sla_warning'];
+
     /** alert rule type → notification type (the notification center's vocabulary). */
     private const NOTIFICATION_TYPE = [
         'budget_risk' => 'budget_risk',
@@ -83,7 +116,9 @@ final class AlertEvaluator
             'budget_risk' => $this->budgetRisks($rule, $now),
             'no_results' => $this->noResults($rule, $now),
             'roas_drop' => $this->roasDrops($rule, $now),
-            default => [],
+            'cpa_increase' => $this->costPerIncreases($rule, $now, 'cpa', 'conversions'),
+            'cpl_increase' => $this->costPerIncreases($rule, $now, 'cpl', 'leads'),
+            default => $this->unevaluated($rule),
         };
 
         $raised = 0;
@@ -368,6 +403,98 @@ final class AlertEvaluator
     private function totalsFor(string $campaignId, Carbon $from, Carbon $to): array
     {
         return $this->metrics->acrossProjects()->forCampaign($campaignId)->totals($from, $to);
+    }
+
+    /**
+     * A rule nobody evaluates, said out loud.
+     *
+     * `default => []` returned «no breaches», which is indistinguishable from «this rule is fine» —
+     * the same shape as every other defect in this product's history: absence of evidence rendered
+     * as evidence of absence. An unhandled type is a bug in this class, and now it says so where the
+     * operator's logs will show it, while still returning no breaches so the sweep continues.
+     */
+    private function unevaluated(AlertRule $rule): array
+    {
+        Log::warning('Alert rule type has no evaluator; the rule can never fire.', [
+            'alert_rule_id' => (string) $rule->id,
+            'type' => $rule->type,
+            'periodic_types' => self::PERIODIC,
+        ]);
+
+        return [];
+    }
+
+    /**
+     * A cost per result that got worse — CPA or CPL, period over period.
+     *
+     * ## Why this cannot simply read `totals()['cpa']`
+     *
+     * `spend` is `COALESCE(SUM(value), 0)`, so a window whose money the provider withheld sums to
+     * ZERO, and `cpa` is then `0 / conversions` = `0.00` — a real-looking figure for a cost nobody
+     * knows. Comparing a withheld window against a converted one produces «CPA rose from 0.00 to
+     * 50.00», which is not a cost increase; it is a rate arriving. The operator would be paged for
+     * an FX gap.
+     *
+     * So both windows must be fully converted — `spend_withheld_rows === 0` on each — or there is no
+     * verdict. This is the same rule the cards and the charts follow: a partial figure is not a
+     * smaller figure, and nothing may be derived from it.
+     *
+     * A zero previous cost is also refused: every increase from zero is infinite, and «up ∞%» is not
+     * a threshold anyone set.
+     *
+     * @param  'cpa'|'cpl'  $key
+     */
+    private function costPerIncreases(AlertRule $rule, Carbon $now, string $key, string $resultKey): array
+    {
+        $pct = (float) ($rule->threshold['pct'] ?? 25);
+        $days = (int) ($rule->threshold['days'] ?? 7);
+        $out = [];
+        $curFrom = $now->copy()->subDays($days);
+        $prevFrom = $now->copy()->subDays($days * 2);
+        $prevTo = $now->copy()->subDays($days + 1);
+        $label = strtoupper($key);
+
+        UnifiedCampaign::query()
+            ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
+            ->get()->each(function (UnifiedCampaign $c) use ($curFrom, $now, $prevFrom, $prevTo, $pct, $key, $resultKey, $label, &$out) {
+                $cur = $this->totalsFor((string) $c->id, $curFrom, $now);
+                $prev = $this->totalsFor((string) $c->id, $prevFrom, $prevTo);
+
+                // Either window holding withheld money has no comparable cost — no verdict, no alert.
+                if ((int) ($cur['spend_withheld_rows'] ?? 0) > 0 || (int) ($prev['spend_withheld_rows'] ?? 0) > 0) {
+                    return;
+                }
+
+                $now_ = $cur[$key] ?? null;
+                $was = $prev[$key] ?? null;
+
+                if ($now_ === null || $was === null || $was <= 0) {
+                    return;
+                }
+
+                $rise = ($now_ - $was) / $was * 100;
+
+                if ($rise < $pct) {
+                    return;
+                }
+
+                $out[] = [
+                    'entity_type' => UnifiedCampaign::class,
+                    'entity_id' => (string) $c->id,
+                    'project_id' => (string) $c->project_id,
+                    'title' => $label.' increased',
+                    'message' => $c->name.' '.$label.' rose from '.round($was, 2).' to '.round($now_, 2)
+                        .' ('.round($rise).'% up) on '.(int) ($cur[$resultKey] ?? 0).' '.$resultKey.'.',
+                    'context' => [
+                        $key.'_current' => round($now_, 4),
+                        $key.'_previous' => round($was, 4),
+                        'rise_pct' => round($rise, 2),
+                        $resultKey => (int) ($cur[$resultKey] ?? 0),
+                    ],
+                ];
+            });
+
+        return $out;
     }
 
     /** ROAS (revenue / spend) for a campaign over a date range, or null when there was no spend. */
