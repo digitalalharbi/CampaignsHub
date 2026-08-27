@@ -22,6 +22,14 @@ export interface Connector {
   ad_account_id: string | null
   last_synced_at: string | null
   last_sync_error: string | null
+  /**
+   * Which KIND of thing this is — INTEG-STORES-001.
+   *
+   * A store carries no `ad_account_id` and none of the five ad-platform states, so it must not be
+   * rendered as an ad platform: an ad-platform card with those fields empty reads as a platform that
+   * failed to connect, which is a worse lie than the store being absent was.
+   */
+  kind?: 'advertising' | 'commerce'
   /** Present only for the six ad platforms; the sandbox and analytics connectors keep the old shape. */
   is_ad_platform?: boolean
   state?: PlatformState
