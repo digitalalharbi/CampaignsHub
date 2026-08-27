@@ -715,17 +715,6 @@ final class CreativePulse
         };
     }
 
-    private function anyReported(array $rows, string $key): bool
-    {
-        foreach ($rows as $row) {
-            if (is_numeric($row['metrics'][$key] ?? null)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     /** @param list<array<string, mixed>> $rows */
     private function sum(array $rows, string $key): ?float
     {
