@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Reports\Jobs\GenerateReportExportJob;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
@@ -77,7 +78,6 @@ final class ReportController extends Controller
             'audience' => ['nullable', Rule::in(['client', 'internal', 'executive'])],
             'period_start' => ['nullable', 'date'],
             'period_end' => ['nullable', 'date'],
-            'currency' => ['nullable', 'string', 'size:3'],
             'config' => ['nullable', 'array'],
             'scope' => ['nullable', 'array'],
         ]);
@@ -94,7 +94,12 @@ final class ReportController extends Controller
             'status' => 'processing',
             'period_start' => $data['period_start'] ?? Carbon::today()->subDays(29),
             'period_end' => $data['period_end'] ?? Carbon::today(),
-            'currency' => $data['currency'] ?? 'SAR',
+            /*
+             * The canonical currency, not a choice. Every figure in a report comes from the
+             * aggregator already normalised to it, and this column only LABELS them — so accepting a
+             * currency here would have printed USD totals under whatever three letters were sent.
+             */
+            'currency' => ReportingCurrency::DEFAULT,
             'config' => $data['config'] ?? null,
             /*
              * What the report covers, from the moment it is created (§14.5).
