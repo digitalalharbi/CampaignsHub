@@ -189,6 +189,67 @@ final class AggregationTruthTest extends TestCase
         );
     }
 
+    // ── J: partial window — found by rehearsing against real data, not by reasoning ──────────────
+
+    /**
+     * A provider that reported SOME of the window has not reported the window.
+     *
+     * This is the case I got wrong. The first implementation asked «did this provider send figures»
+     * and stopped there, so any single row made it a full contributor. Rehearsing the contract against
+     * a real project caught it: every platform had spend through the 18th and a sync that covered only
+     * to the 18th, against a window ending later — and the total announced itself complete while
+     * thirteen days were missing from every contributor.
+     *
+     * Presence of a figure proves a provider reported SOMETHING. Only the checkpoint says whether it
+     * reported everything that was asked for.
+     */
+    public function test_a_provider_that_covered_only_part_of_the_window_is_not_a_full_contributor(): void
+    {
+        $meta = $this->account('meta', 'meta-half');
+        $this->campaign($meta, 'meta-cmp', status: 'active');
+        $this->spend('meta', 'meta-half', 800, '2026-08-05', account: $meta);
+        // Its sync stopped inside the window, so the later days never arrived.
+        $this->syncRun('meta', '2026-08-01', '2026-08-10', 'success');
+
+        $totals = $this->totals();
+
+        $this->assertEqualsWithDelta(800.0, (float) $totals['spend'], 0.01, 'The figures it did send must still count.');
+        $this->assertSame(
+            'partial',
+            $totals['coverage']['state'] ?? null,
+            'A provider that covered ten days of the window was treated as having covered all of it.',
+        );
+    }
+
+    /**
+     * A window running into the future is not evidence against anybody.
+     *
+     * «This month» on the third of the month asks for days that have not happened. Judging a provider
+     * against them would mark every forward-looking view permanently partial — false, and the kind of
+     * warning people learn to scroll past, which costs the real ones their meaning.
+     */
+    public function test_days_that_have_not_happened_are_not_counted_against_coverage(): void
+    {
+        $this->spend('snapchat', 'snap', 1000, Carbon::yesterday()->toDateString());
+        $account = ExternalAccount::withoutGlobalScopes()->where('provider', 'snapchat')->first();
+        $this->syncRun('snapchat', Carbon::now()->subDays(30)->toDateString(), Carbon::yesterday()->toDateString(), 'success');
+
+        app(ProjectContext::class)->setProjectId($this->project->id);
+        $totals = app(MetricsAggregator::class)->totals(
+            Carbon::now()->subDays(30),
+            // Deliberately a fortnight into the future.
+            Carbon::now()->addDays(14),
+        );
+        app(ProjectContext::class)->forget();
+
+        $this->assertNotNull($account);
+        $this->assertSame(
+            'complete',
+            $totals['coverage']['state'] ?? null,
+            'A provider synced through yesterday was called incomplete for not reporting next week.',
+        );
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────────────────────────
 
     private function totals(): array

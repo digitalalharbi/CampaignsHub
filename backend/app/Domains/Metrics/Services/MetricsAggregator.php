@@ -418,7 +418,17 @@ final class MetricsAggregator
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
     }
 
-    /** @return array<string, float> base sums + derived KPIs for the period. */
+    /**
+     * Base sums, derived KPIs, and the annotations that say what they are worth.
+     *
+     * The values are NOT all floats and have not been since the money-truth keys arrived:
+     * `money_original_currency` is a string, `spend_withheld_rows` an int, and since
+     * AGGREGATION-TRUTH-001 the coverage blocks are nested arrays. The old `array<string, float>` was
+     * describing an earlier version of this method, and widening it here is the type catching up with
+     * the payload rather than being loosened to silence an analyser.
+     *
+     * @return array<string, mixed> base sums + derived KPIs + money-truth and coverage annotations
+     */
     public function totals(Carbon $from, Carbon $to): array
     {
         $select = array_merge(self::PIVOT, self::MONEY_TRUTH);
