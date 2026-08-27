@@ -66,8 +66,9 @@ final class ReportTemplateEngine
      * @param  list<string>  $platforms  providers present in the data
      * @param  bool  $adSetsReported  whether any platform broke its figures down to the ad-squad grain
      * @param  bool  $adsReported  the same question one rung further down
+     * @param  bool  $storeConnected  whether this project sells through a shop at all
      */
-    public function defaultConfig(string $objective, array $platforms, bool $adSetsReported = false, bool $adsReported = false): array
+    public function defaultConfig(string $objective, array $platforms, bool $adSetsReported = false, bool $adsReported = false, bool $storeConnected = false): array
     {
         $objective = array_key_exists($objective, self::METRIC_SETS) ? $objective : 'custom';
         $ordered = $this->orderPlatforms($platforms);
@@ -122,6 +123,17 @@ final class ReportTemplateEngine
         // The ad grain, on the same terms: only where a platform actually reported it.
         if ($adsReported) {
             $slides[] = ['id' => 'ad_performance', 'type' => 'ad_performance', 'order' => $order++, 'visible' => true];
+        }
+
+        /*
+         * REPORT-STORE-001 — the shop's own ledger, where there is a shop.
+         *
+         * Gated on the store EXISTING rather than on it having sold: a period with no orders is a fact
+         * worth printing to a merchant, whereas a store section on an advertising-only project is a
+         * page about something the customer does not have.
+         */
+        if ($storeConnected) {
+            $slides[] = ['id' => 'store_performance', 'type' => 'store_performance', 'order' => $order++, 'visible' => true];
         }
 
         // Cross-platform closing slides.

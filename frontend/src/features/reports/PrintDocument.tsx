@@ -160,6 +160,18 @@ export function PrintDocument({
 
   const adsReported = data.entity_grains_reported?.ad ?? adRows.length > 0
 
+  const store = data.store
+  const storeWithheld = Number((store?.coverage as { orders_with_money_withheld?: number } | undefined)?.orders_with_money_withheld ?? 0)
+  const storeRows: (string | number)[][] = store
+    ? [
+        ['Revenue', money(store.totals.revenue as number, currency)],
+        ['Gross revenue', money(store.totals.gross_revenue as number, currency)],
+        ['Refunded', money(store.totals.refunded as number, currency)],
+        ['Orders', nfmt(store.totals.orders as number)],
+        ['New customers', nfmt(store.totals.new_customers as number)],
+      ]
+    : []
+
   return (
     <div className="doc-root">
       <style>{DOC_CSS}</style>
@@ -204,6 +216,30 @@ export function PrintDocument({
           ? <Table head={['Ad set', 'Spend', 'Impressions', 'Clicks', 'CTR']} rows={adSetRows} />
           : <p className="doc-empty">The platform did not report ad-set level figures for this period.</p>}
       </section>
+
+      {/*
+        * The shop's own ledger — REPORT-STORE-001.
+        *
+        * Only where a store exists. A period with no orders is worth printing to a merchant; a store
+        * section on an advertising-only client is a page about something they do not have.
+        *
+        * The withheld count travels with the revenue: those orders are MISSING from the figure above,
+        * and a revenue total that looks complete while being short by an unstated amount is the failure
+        * COMMERCE-FX-001 exists to prevent.
+        */}
+      {data.store_connected && (
+        <section className="doc-section">
+          <h2>{n()}. Store</h2>
+          {storeRows.length > 0
+            ? <Table head={['Measure', 'Value']} rows={storeRows} />
+            : <p className="doc-empty">No orders were recorded in this period.</p>}
+          {storeWithheld > 0 && (
+            <p className="doc-empty" data-testid="doc-store-withheld">
+              {`${storeWithheld} order(s) are not counted in the revenue above: no exchange rate exists for their currency on the day they were placed.`}
+            </p>
+          )}
+        </section>
+      )}
 
       {/* Ads — the rung below the ad set, on the same terms */}
       {adsReported && (

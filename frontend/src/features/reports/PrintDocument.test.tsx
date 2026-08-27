@@ -128,3 +128,60 @@ describe('the sections the deck had and the document did not', () => {
     expect(screen.getByText('Unnamed ad set')).toBeInTheDocument()
   })
 })
+
+/**
+ * REPORT-STORE-001 — the merchant's ledger, and the money the report is short by.
+ *
+ * No report carried store figures at all: a client selling through Salla or Zid read a report about
+ * the advertising half of their business presented as the whole of it.
+ */
+describe('the store section', () => {
+  const withStore = (coverage: Record<string, unknown> = {}) => ({
+    ...base,
+    store_connected: true,
+    store: {
+      totals: { revenue: 41000, gross_revenue: 44000, refunded: 3000, orders: 120, new_customers: 44 },
+      coverage,
+    },
+  }) as ReportData
+
+  it('prints the shop’s own figures when a store is connected', () => {
+    doc(withStore())
+
+    expect(screen.getByText('Store', { exact: false })).toBeInTheDocument()
+    expect(screen.getByText('Orders')).toBeInTheDocument()
+  })
+
+  /**
+   * A store section on an advertising-only client is a page about something they do not have — which
+   * is different from a shop that sold nothing, and must not render the same way.
+   */
+  it('omits the section entirely for a client with no store', () => {
+    doc({ ...base, store_connected: false } as ReportData)
+
+    expect(screen.queryByText('Store', { exact: false })).not.toBeInTheDocument()
+  })
+
+  it('says a connected store sold nothing, rather than printing an empty table', () => {
+    doc({ ...base, store_connected: true, store: null } as ReportData)
+
+    expect(screen.getByText(/No orders were recorded/)).toBeInTheDocument()
+  })
+
+  /**
+   * The revenue above is SHORT by these orders. A total that looks complete while missing an unstated
+   * amount is exactly what COMMERCE-FX-001 exists to prevent, so the count travels with the figure.
+   */
+  it('states how many orders are missing from the revenue, and why', () => {
+    doc(withStore({ orders_with_money_withheld: 4, money_withheld_currencies: ['KWD'] }))
+
+    expect(screen.getByTestId('doc-store-withheld')).toHaveTextContent(/4 order\(s\) are not counted/)
+    expect(screen.getByTestId('doc-store-withheld')).toHaveTextContent(/no exchange rate/i)
+  })
+
+  it('says nothing about withholding when nothing was withheld', () => {
+    doc(withStore({ orders_with_money_withheld: 0 }))
+
+    expect(screen.queryByTestId('doc-store-withheld')).not.toBeInTheDocument()
+  })
+})
