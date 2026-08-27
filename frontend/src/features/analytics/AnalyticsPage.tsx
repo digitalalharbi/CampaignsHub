@@ -1729,38 +1729,47 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
         error={q.isError}
         empty={!q.isLoading && rows.length === 0}
       >
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-sm" data-testid="creative-analysis-table">
-            <thead>
-              <tr className="border-b border-border text-start text-xs text-text-secondary">
-                <th className="p-2 text-start font-medium">{ar ? 'المحتوى' : 'Creative'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'الحملة' : 'Campaign'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'الهدف' : 'Objective'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'الإنفاق' : 'Spend'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'الظهور' : 'Impressions'}</th>
-                <th className="p-2 text-start font-medium">{ar ? 'النقرات' : 'Clicks'}</th>
-                <th className="p-2 text-start font-medium">CTR</th>
-                <th className="p-2 text-start font-medium">{ar ? 'آخر نشاط' : 'Last active'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((cr) => (
-                <tr key={cr.id} className="border-b border-border/60">
-                  <td className="max-w-56 truncate p-2 font-medium text-text-primary">{cr.name}</td>
-                  <td className="max-w-40 truncate p-2 text-text-secondary">{cr.campaign_name ?? '—'}</td>
-                  <td className="p-2 text-text-secondary">{cr.objective ?? '—'}</td>
-                  {/* The canonical money reader: a withheld figure states its own currency. */}
-                  <td className="p-2 tnum" dir="ltr">{rowMoney(cr.metrics ?? undefined, 'spend', currency)}</td>
-                  <td className="p-2 tnum" dir="ltr">{metricOrDash(cr.metrics?.impressions ?? null)}</td>
-                  <td className="p-2 tnum" dir="ltr">{metricOrDash(cr.metrics?.clicks ?? null)}</td>
-                  <td className="p-2 tnum" dir="ltr">{rateOrDash(cr.metrics?.ctr ?? null)}</td>
-                  <td className="p-2 text-text-secondary" dir="ltr">
-                    {cr.freshness?.last_active_at ? fmtDate(cr.freshness.last_active_at) : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/*
+          ANALYTICS-TABLES-001 — the canonical table, last of the four hand-rolled ones.
+          Numeric columns were `text-start`, so under RTL the figures and their headings sat against
+          opposite edges; and the list could not be re-ordered, on the tab where «which creative did
+          best» is the entire question being asked.
+        */}
+        <div data-testid="creative-analysis-table">
+          <MetricTable
+            head={[
+              ar ? 'المحتوى' : 'Creative',
+              ar ? 'الحملة' : 'Campaign',
+              ar ? 'الهدف' : 'Objective',
+              ar ? 'الإنفاق' : 'Spend',
+              ar ? 'الظهور' : 'Impressions',
+              ar ? 'النقرات' : 'Clicks',
+              'CTR',
+              ar ? 'آخر نشاط' : 'Last active',
+            ]}
+            rows={rows.map((cr) => [
+              <span key={cr.id} className="block max-w-56 truncate font-medium text-text-primary">{cr.name}</span>,
+              <span key={`${cr.id}-c`} className="block max-w-40 truncate text-text-secondary">{cr.campaign_name ?? '—'}</span>,
+              cr.objective ?? '—',
+              rowMoney(cr.metrics ?? undefined, 'spend', currency),
+              metricOrDash(cr.metrics?.impressions ?? null),
+              metricOrDash(cr.metrics?.clicks ?? null),
+              rateOrDash(cr.metrics?.ctr ?? null),
+              cr.freshness?.last_active_at ? fmtDate(cr.freshness.last_active_at) : '—',
+            ])}
+            values={rows.map((cr) => [
+              cr.name ?? '',
+              cr.campaign_name ?? '',
+              cr.objective ?? '',
+              typeof cr.metrics?.spend === 'number' ? cr.metrics.spend : null,
+              cr.metrics?.impressions ?? null,
+              cr.metrics?.clicks ?? null,
+              cr.metrics?.ctr ?? null,
+              // A date sorts as a date, not as the string it is printed as.
+              cr.freshness?.last_active_at ? Date.parse(cr.freshness.last_active_at) : null,
+            ])}
+            initialSort={{ column: 3, dir: 'desc' }}
+          />
         </div>
       </Panel>
     </div>
