@@ -36,11 +36,12 @@ use Tests\TestCase;
  * `creative_daily_metrics` did not. `AccountMetricsSyncer` calls `UpsertCreativeDailyMetrics`
  * directly with the connector's rows, and the table had no currency column at all — `spend` and
  * `revenue` were bare decimals defaulting to 0. Snapchat reports in the ad account's currency, so
- * production stored USD figures, and `CreativePulseSection` rendered them under a hard-coded «SAR».
+ * production stored the account's own figures, and `CreativePulseSection` rendered them under a
+ * hard-coded currency label.
  *
  * That is worse than the withheld-zero this product already fixed once: not a missing number, a
- * WRONG one wearing the right number's label. 4,308.60 USD shown as «4,309 SAR» understates spend
- * by roughly 3.75× and reads as a measured fact.
+ * WRONG one wearing the right number's label. 4,128.93 SAR shown as «4,129 USD» overstates spend by
+ * roughly 3.75× and reads as a measured fact.
  */
 final class CreativeMoneyTruthTest extends TestCase
 {
@@ -66,11 +67,15 @@ final class CreativeMoneyTruthTest extends TestCase
         $ws = ClientWorkspace::create([
             'tenant_id' => $this->tenant->id, 'name' => 'W', 'slug' => 'w-'.uniqid(),
             'mode' => 'managed', 'status' => 'active', 'client_status' => 'active',
-            // The reporting currency comes from the CLIENT — one client's projects must stay addable.
+            /*
+             * SAR, and deliberately ignored: the reporting currency is the canonical USD for every
+             * project (MONEY-USD-001). Kept here as a guard — if a workspace preference is ever
+             * allowed to pick the basis again, `project_currency` below stops reading USD.
+             */
             'default_currency' => 'SAR',
         ]);
 
-        // The production shape: the project reports in SAR, the ad account spends in USD.
+        // The production shape: the project reports in the canonical USD, the ad account spends in riyals.
         $this->project = Project::create([
             'tenant_id' => $this->tenant->id, 'client_workspace_id' => $ws->id,
             'name' => 'P', 'status' => 'active',
@@ -91,7 +96,7 @@ final class CreativeMoneyTruthTest extends TestCase
             'external_id' => 'act-1',
             'name' => 'Snap',
             'status' => 'active',
-            'currency' => 'USD',
+            'currency' => 'SAR',
             'discovered_at' => Carbon::now(),
         ]);
 
@@ -103,9 +108,10 @@ final class CreativeMoneyTruthTest extends TestCase
     }
 
     /**
-     * The production case exactly: USD spend, SAR project, no rate on file.
+     * The production case exactly: spend in the account's own currency, a project reporting in USD,
+     * and no rate on file.
      *
-     * The number must be withheld rather than stored as a figure the UI will label SAR.
+     * The number must be withheld rather than stored as a figure the UI will label USD.
      */
     public function test_unconvertible_money_is_withheld_not_stored_as_the_wrong_currency(): void
     {
@@ -117,13 +123,13 @@ final class CreativeMoneyTruthTest extends TestCase
 
         $row = DB::table('creative_daily_metrics')->where('creative_id', $creative->id)->first();
 
-        $this->assertNull($row->spend, 'A USD figure stored as a bare number becomes «SAR» on the card.');
+        $this->assertNull($row->spend, 'A riyal figure stored as a bare number becomes «USD» on the card.');
         $this->assertNull($row->revenue);
 
         $this->assertEqualsWithDelta(4128.93, (float) $row->spend_original, 0.01);
         $this->assertEqualsWithDelta(12969.03, (float) $row->revenue_original, 0.01);
-        $this->assertSame('USD', $row->original_currency, 'Without this the row can never convert itself later.');
-        $this->assertSame('SAR', $row->project_currency);
+        $this->assertSame('SAR', $row->original_currency, 'Without this the row can never convert itself later.');
+        $this->assertSame('USD', $row->project_currency);
 
         // Counts are not money and are never withheld.
         $this->assertEqualsWithDelta(2884062, (float) $row->impressions, 0.01);
@@ -132,24 +138,24 @@ final class CreativeMoneyTruthTest extends TestCase
     /** With a rate on file the figure is converted, and the original is still kept. */
     public function test_money_is_converted_when_a_rate_exists(): void
     {
-        $this->rate('USD', 'SAR', '2026-08-01', 3.75);
+        $this->rate('SAR', 'USD', '2026-08-01', 0.2666666667);
         $creative = $this->creative('cr-1');
 
         app(UpsertCreativeDailyMetrics::class)->execute($this->account, [
-            ['campaign_id' => 'cr-1', 'date' => '2026-08-01', 'spend' => 100.0],
+            ['campaign_id' => 'cr-1', 'date' => '2026-08-01', 'spend' => 750.0],
         ]);
 
         $row = DB::table('creative_daily_metrics')->where('creative_id', $creative->id)->first();
 
-        $this->assertEqualsWithDelta(375.0, (float) $row->spend, 0.01);
-        $this->assertEqualsWithDelta(100.0, (float) $row->spend_original, 0.01);
-        $this->assertSame('USD', $row->original_currency);
+        $this->assertEqualsWithDelta(200.0, (float) $row->spend, 0.01);
+        $this->assertEqualsWithDelta(750.0, (float) $row->spend_original, 0.01);
+        $this->assertSame('SAR', $row->original_currency);
     }
 
     /** An account already reporting in the project's currency needs no rate and is not withheld. */
     public function test_same_currency_needs_no_rate(): void
     {
-        $this->account->update(['currency' => 'SAR']);
+        $this->account->update(['currency' => 'USD']);
         $creative = $this->creative('cr-1');
 
         app(UpsertCreativeDailyMetrics::class)->execute($this->account, [
@@ -159,7 +165,7 @@ final class CreativeMoneyTruthTest extends TestCase
         $row = DB::table('creative_daily_metrics')->where('creative_id', $creative->id)->first();
 
         $this->assertEqualsWithDelta(500.0, (float) $row->spend, 0.01);
-        $this->assertSame('SAR', $row->original_currency);
+        $this->assertSame('USD', $row->original_currency);
     }
 
     /**
@@ -222,7 +228,7 @@ final class CreativeMoneyTruthTest extends TestCase
         $this->assertNull($figures['spend']);
         $this->assertSame(1, $figures['spend_withheld_rows']);
         $this->assertEqualsWithDelta(4128.93, (float) $figures['spend_original'], 0.01);
-        $this->assertSame('USD', $figures['money_original_currency']);
+        $this->assertSame('SAR', $figures['money_original_currency']);
         $this->assertSame(1, $figures['money_original_currencies'], 'One currency, so it can be named exactly.');
 
         // Counts are untouched — they were never money.
@@ -255,7 +261,7 @@ final class CreativeMoneyTruthTest extends TestCase
         $this->assertNull($row->spend, 'The figure was never in the project currency.');
         $this->assertEqualsWithDelta(4128.93, (float) $row->spend_original, 0.01, 'The amount must survive.');
         $this->assertEqualsWithDelta(12969.03, (float) $row->revenue_original, 0.01);
-        $this->assertSame('USD', $row->original_currency, 'One Snapchat account on the project, so it is knowable.');
+        $this->assertSame('SAR', $row->original_currency, 'One Snapchat account on the project, so it is knowable.');
     }
 
     /** «Running it twice changes nothing» — the claim most likely to be wrong, and the most costly. */
@@ -272,7 +278,7 @@ final class CreativeMoneyTruthTest extends TestCase
 
         $this->assertSame(['moved' => 0, 'currencies' => 0], $second, 'A second pass had work to do.');
         $this->assertEqualsWithDelta(4128.93, (float) $row->spend_original, 0.01, 'The amount was overwritten by a null.');
-        $this->assertSame('USD', $row->original_currency);
+        $this->assertSame('SAR', $row->original_currency);
     }
 
     /**
@@ -310,7 +316,7 @@ final class CreativeMoneyTruthTest extends TestCase
         $row = DB::table('creative_daily_metrics')->where('creative_id', $creative->id)->first();
 
         $this->assertEqualsWithDelta(500.0, (float) $row->spend_original, 0.01, 'The amount is still kept.');
-        $this->assertNull($row->original_currency, 'USD and EUR on one project — the row cannot say which.');
+        $this->assertNull($row->original_currency, 'SAR and EUR on one project — the row cannot say which.');
     }
 
     /** A row the new pipeline already wrote correctly must not be touched. */
