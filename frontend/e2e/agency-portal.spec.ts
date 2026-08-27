@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { AUTH, untranslatedChrome } from './helpers'
+import { AUTH, untranslatedChrome, walkRail } from './helpers'
 
 /**
  * `/agency` is the agency's portal, and it is not the advertiser's with extra links (AGENCY-100).
@@ -41,13 +41,21 @@ test.describe('the agency portal', () => {
      */
     test.setTimeout(15_000 + hrefs.length * 8_000)
 
-    for (const href of hrefs) {
-      await page.goto(href)
-      const main = page.locator('main')
-      await expect(main).toBeVisible({ timeout: 20000 })
-      await expect.poll(async () => (await main.innerText()).trim().length, { timeout: 20000 })
-        .toBeGreaterThan(40)
-    }
+    /*
+     * `walkRail` rather than a bare loop — the same walk `portal-audit.spec.ts` already uses.
+     *
+     * This test failed on webkit reporting `locator('main')` not found, and that sentence is all it
+     * reported. Which of the links? What was on screen? The last time somebody chased this the
+     * screenshot showed a COMPLETELY BLANK document — no shell, no navigation, not even the error
+     * boundary — which is the application failing to mount, not a page rendering empty. Those are
+     * different faults for different people, and the bare loop could not tell them apart.
+     *
+     * `walkRail` names the href, the document status, the URL the browser ended on, whether `<main>`
+     * and `<nav>` exist, the body text, and anything the console, the page or a request said while
+     * it failed. Nothing is retried and no timeout is raised: the assertion is the same assertion,
+     * and it now arrives with the evidence attached.
+     */
+    await walkRail(page, hrefs)
   })
 
   /**
