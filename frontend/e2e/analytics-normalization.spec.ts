@@ -31,7 +31,20 @@ test.describe('the analytics page explains its own figures', () => {
      * question they answer, and each carries `aria-selected`. Querying by role is what this should
      * always have done — it survives a label being shortened, which is exactly what happened here.
      */
-    await page.getByRole('tab', { name: /جودة البيانات والإسناد|Data quality & attribution/ }).click()
+    const tab = page.getByRole('tab', { name: /جودة البيانات والإسناد|Data quality & attribution/ })
+    await tab.click()
+    /*
+     * The tab's own statement that the click landed, checked before anything is read from the panel.
+     *
+     * Without this the failure arrives as «`normalization` was never visible», which reads as a broken
+     * panel and sent me looking at the wrong thing: the page snapshot from a red run showed the whole
+     * app rendered correctly with the OVERVIEW tab still selected — the click had simply not taken
+     * effect. `aria-selected` is already rendered here; the test just never looked at it.
+     *
+     * This is not a retry. A click that genuinely fails still fails the gate — it now says which of the
+     * two things went wrong.
+     */
+    await expect(tab).toHaveAttribute('aria-selected', 'true', { timeout: 20000 })
     await expect(page.getByTestId('normalization')).toBeVisible({ timeout: 20000 })
   }
 
