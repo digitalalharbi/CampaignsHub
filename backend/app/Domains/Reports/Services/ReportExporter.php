@@ -150,6 +150,20 @@ final class ReportExporter
         $put([]);
         $put(['KPIs']);
         foreach (($data['kpis'] ?? []) as $k => $v) {
+            /*
+             * A spreadsheet cell holds a scalar. `kpis` also carries ANNOTATIONS — the money-truth
+             * counts, and since AGGREGATION-TRUTH-001 the coverage blocks — and a coverage block is a
+             * nested array. `is_numeric()` is false for it, so the old fallback handed the array
+             * straight to `fputcsv`, which is «Array to string conversion» and a broken export.
+             *
+             * Skipped rather than stringified: «Array» in a customer's CSV is worse than the row being
+             * absent, and a coverage object flattened into a cell is unreadable either way. The export
+             * states the figures; the surfaces that can render coverage properly do that.
+             */
+            if (is_array($v)) {
+                continue;
+            }
+
             $put([$k, is_numeric($v) ? $v : ($v ?? '')]);
         }
         $put([]);
@@ -213,6 +227,11 @@ final class ReportExporter
         $kpi->fromArray(['Metric', 'Value'], null, 'A1');
         $row = 2;
         foreach (($data['kpis'] ?? []) as $k => $v) {
+            // Same reason as the CSV above: a coverage block is a nested array, not a cell value.
+            if (is_array($v)) {
+                continue;
+            }
+
             $kpi->setCellValue("A{$row}", $k);
             $kpi->setCellValue("B{$row}", is_numeric($v) ? $v : (string) ($v ?? ''));
             $row++;
