@@ -14,6 +14,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Jobs\GenerateReportJob;
@@ -29,6 +30,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -298,6 +300,72 @@ final class ReportObjectiveLayoutTest extends TestCase
      *
      * @return array<string,string>
      */
+    // ── REPORT-ADSET-001 ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The report carries the rungs below the campaign, and says whether the platform sent them.
+     *
+     * `entity_daily_metrics` has held the ad-squad and ad grains since ANALYTICS-DRILLDOWN-001, and
+     * every report ignored both: a reader could scope a report to one ad squad and be shown only the
+     * campaign it sits in.
+     */
+    public function test_a_report_carries_the_ad_squad_grain_and_says_the_platform_sent_it(): void
+    {
+        $external = $this->seedCampaign('Sales', CampaignObjective::Sales, $this->account('snapchat'), spend: 1000, orders: 20, revenue: 5000);
+        $this->seedAdSquad($external, 'alpha', 400);
+        $this->seedAdSquad($external, 'beta', 600);
+
+        $data = $this->generate();
+
+        $this->assertCount(2, $data['ad_sets'], 'The report dropped a grain it already stores.');
+        $this->assertTrue($data['entity_grains_reported']['ad_set']);
+        $this->assertEqualsWithDelta(
+            1000.0,
+            array_sum(array_map(fn ($r) => (float) $r['spend'], $data['ad_sets'])),
+            0.01,
+        );
+    }
+
+    /**
+     * No ad squads is reported as «the platform did not break it down», never as an empty table.
+     *
+     * An empty list has two causes a reader cannot tell apart and must not be asked to: the scope
+     * genuinely holds no ad squads, or no connected platform reports at that grain. Printing an empty
+     * table for the second says something false about the platform, which is the exact failure
+     * CONTENT-AD-DELIVERED-001 and FX-001 both exist to prevent.
+     */
+    public function test_a_platform_that_never_broke_it_down_is_distinguishable_from_having_none(): void
+    {
+        $this->seedCampaign('Sales', CampaignObjective::Sales, $this->account('snapchat'), spend: 1000, orders: 20);
+
+        $data = $this->generate();
+
+        $this->assertSame([], $data['ad_sets']);
+        $this->assertFalse(
+            $data['entity_grains_reported']['ad_set'],
+            'Without this flag the section prints an empty table that reads as «this campaign had no ad squads».',
+        );
+    }
+
+    /**
+     * The scope reaches this grain too, or the section contradicts the cards above it.
+     *
+     * A report scoped to one platform whose ad-squad table still counted the other would disagree
+     * with its own KPI cards, and the reader would have no way to tell which number was real.
+     */
+    public function test_the_scope_bounds_the_ad_squad_table_as_it_bounds_everything_else(): void
+    {
+        $snap = $this->seedCampaign('Snap', CampaignObjective::Sales, $this->account('snapchat'), spend: 1000, orders: 10);
+        $meta = $this->seedCampaign('Meta', CampaignObjective::Sales, $this->account('meta'), spend: 2000, orders: 20);
+        $this->seedAdSquad($snap, 'snap-squad', 1000);
+        $this->seedAdSquad($meta, 'meta-squad', 2000);
+
+        $data = $this->generate(['scope' => ['providers' => ['meta']]]);
+
+        $this->assertCount(1, $data['ad_sets'], 'The ad-squad table ignored the scope the KPI cards obeyed.');
+        $this->assertEqualsWithDelta(2000.0, (float) $data['ad_sets'][0]['spend'], 0.01);
+    }
+
     private function everySentence(array $data): array
     {
         $out = [];
@@ -364,7 +432,7 @@ final class ReportObjectiveLayoutTest extends TestCase
         float $orders = 0,
         float $revenue = 0,
         bool $declared = true,
-    ): void {
+    ): ExternalCampaign {
         $this->holdingTenant((string) $this->tenant->id);
 
         $campaign = UnifiedCampaign::withoutGlobalScopes()->create([
@@ -407,5 +475,32 @@ final class ReportObjectiveLayoutTest extends TestCase
                 'value' => $value,
             ]);
         }
+
+        return $external;
+    }
+
+    /** One ad squad under a campaign, at the grain `entity_daily_metrics` holds. */
+    private function seedAdSquad(ExternalCampaign $external, string $name, float $spend): string
+    {
+        $id = (string) Str::uuid();
+
+        (new EntityDailyMetric)->forceFill([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $external->external_account_id,
+            'provider' => $external->provider,
+            'entity_type' => EntityDailyMetric::AD_SET,
+            'entity_id' => $id,
+            'external_entity_id' => 'sq-'.$name,
+            'external_campaign_id' => $external->id,
+            'metric_date' => Carbon::parse('2026-07-10')->toDateString(),
+            'attribution_window' => 'default',
+            'is_demo' => false,
+            'spend' => $spend,
+            'impressions' => 1000,
+        ])->save();
+
+        return $id;
     }
 }

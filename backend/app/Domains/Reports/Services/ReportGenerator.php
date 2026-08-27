@@ -6,7 +6,9 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Disclaimers\Services\DisclaimerResolver;
 use App\Domains\Integrations\Catalogue\ProviderDisplayName;
+use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Services\DataFreshnessService;
+use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\Report;
@@ -38,6 +40,7 @@ final class ReportGenerator
         private readonly DisclaimerResolver $disclaimers,
         private readonly ReportObservations $observations,
         private readonly DataFreshnessService $freshness,
+        private readonly EntityMetricsAggregator $entities,
     ) {}
 
     public function generate(Report $report): array
@@ -84,6 +87,20 @@ final class ReportGenerator
 
         $platforms = $agg->byProvider($from, $to);
         $campaigns = $agg->byCampaign($from, $to);
+
+        /*
+         * REPORT-ADSET-001 — the two rungs below the campaign, bounded by the SAME scope.
+         *
+         * `entity_daily_metrics` has carried both since ANALYTICS-DRILLDOWN-001 and no report has ever
+         * read them, so a report could be scoped to an ad squad and then show only the campaign that
+         * squad sits in. `applyToEntities()` is what keeps this consistent with the KPI cards: a
+         * section that skipped the scope would contradict them and give the reader no way to tell
+         * which figure was real.
+         */
+        $entities = $scope->applyToEntities($this->entities);
+        $projectId = (string) $report->project_id;
+        $adSets = $entities->byEntity($projectId, EntityDailyMetric::AD_SET, $from, $to);
+        $ads = $entities->byEntity($projectId, EntityDailyMetric::AD, $from, $to);
 
         /*
          * What this report is FOR, and therefore what it may claim (§14.6).
@@ -146,6 +163,22 @@ final class ReportGenerator
             'top_creatives' => $topCreatives,
             'worst_creatives' => $worstCreatives,
             'creative_level' => 'campaign', // ad-level arrives once connectors provide it
+            /*
+             * The rungs below the campaign, and — separately — whether the platform reported them.
+             *
+             * An empty list has two causes a reader cannot distinguish and must not be asked to: the
+             * scope genuinely contains no ad squads, or no connected platform breaks its figures down
+             * that far. `reported` says which, so the section can state «لم ترجع المنصة تفاصيل على
+             * مستوى المجموعات الإعلانية لهذه الفترة» rather than print an empty table that reads as
+             * «this campaign had no ad squads». That distinction is the whole reason FX-001 and
+             * CONTENT-AD-DELIVERED-001 exist; a new section does not get to reintroduce it.
+             */
+            'ad_sets' => $adSets,
+            'ads' => $ads,
+            'entity_grains_reported' => [
+                'ad_set' => $adSets !== [],
+                'ad' => $ads !== [],
+            ],
             'platform_notes' => $this->platformNotes($lens, $platforms, $report->currency),
             /*
              * `funnel` stays the stage LIST, and the spend it is derived from rides beside it.
