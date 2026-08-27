@@ -206,11 +206,15 @@ final class EntityMetricsAggregator
             $query->where('attribution_window', $attributionWindow);
         }
 
-        return $query
+        $rows = $query
             ->groupBy('entity_id', 'external_entity_id', 'external_campaign_id', 'external_ad_set_id')
             ->selectRaw(implode(', ', $select))
-            ->get()
-            ->map(fn ($row): array => $this->shape((array) $row->getAttributes()))
+            ->get();
+
+        $names = $this->namesFor($entityType, $rows->pluck('entity_id')->all());
+
+        return $rows
+            ->map(fn ($row): array => $this->shape((array) $row->getAttributes(), $names))
             ->all();
     }
 
@@ -277,6 +281,36 @@ final class EntityMetricsAggregator
         }
     }
 
+    /**
+     * The entities' own names, so nothing downstream has to print an identifier.
+     *
+     * `entity_daily_metrics` stores `external_entity_id` — the provider's id, like `sq-8f21c0`. It is
+     * the right thing to KEY on and the wrong thing to show: a client report captioned «sq-8f21c0» is
+     * a raw key in visible UI, and the reader cannot tell which ad squad it means. Loaded in one
+     * query per grain rather than joined, because the grouped aggregate above must not gain a row per
+     * name collision.
+     *
+     * A missing name is left absent rather than filled with the id: the caller decides how to say
+     * «this squad has no name on file», and substituting the key would hide that it happened.
+     *
+     * @param  list<string>  $entityIds
+     * @return array<string, string>
+     */
+    private function namesFor(string $entityType, array $entityIds): array
+    {
+        if ($entityIds === []) {
+            return [];
+        }
+
+        $table = $entityType === EntityDailyMetric::AD ? 'external_ads' : 'external_ad_sets';
+
+        return DB::table($table)
+            ->whereIn('id', $entityIds)
+            ->pluck('name', 'id')
+            ->map(static fn ($name): string => (string) $name)
+            ->all();
+    }
+
     /** Whether this scope holds any real row — see DEMO-LIVE-AGGREGATION-ISOLATION-001. */
     private function hasLiveRows(string $projectId, string $entityType): bool
     {
@@ -291,15 +325,18 @@ final class EntityMetricsAggregator
      * One entity's figures, with the ratios derived only where their inputs allow it.
      *
      * @param  array<string,mixed>  $row
+     * @param  array<string,string>  $names
      * @return array<string,mixed>
      */
-    private function shape(array $row): array
+    private function shape(array $row, array $names = []): array
     {
         $num = static fn (string $key): ?float => is_numeric($row[$key] ?? null) ? (float) $row[$key] : null;
 
         $out = [
             'entity_id' => (string) ($row['entity_id'] ?? ''),
             'external_id' => (string) ($row['external_entity_id'] ?? ''),
+            // Absent, not the id — see `namesFor()`. A caller must be able to tell the two apart.
+            'name' => $names[(string) ($row['entity_id'] ?? '')] ?? null,
             'campaign_id' => $row['external_campaign_id'] ?? null,
             'ad_set_id' => $row['external_ad_set_id'] ?? null,
             'active_days' => (int) ($row['active_days'] ?? 0),
